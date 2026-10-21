@@ -723,3 +723,10 @@ Add-ons	Дополнения
 Extension cars, custom livery	Машины-дополнения, своя ливрея
 Add-ons (other cars)	Дополнения (другие машины)
 The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.	VAZ-2108, которая идёт вместе с модом, тоже имеет карточку во вкладке «Дополнения» (ярлык «Дополнения» в боковой панели, под «Моды»): тот же шаблон, та же ливрея.
+Several objects: Ctrl + click to pick them, Ctrl+A for all; the gizmo moves them together. Magnet (M): 1 m grid and 15° steps. Ctrl+C / Ctrl+V copy from one map to another.	Несколько объектов: Ctrl + клик, чтобы выбрать, Ctrl+A — все; гизмо двигает их вместе. Магнит (M): сетка 1 м и шаг 15°. Ctrl+C / Ctrl+V копируют из одной карты в другую.
+Light: colour, intensity, range; “only at night” turns it on when the sun goes down.	Свет: цвет, яркость, дальность; «только ночью» включает его после заката.
+Vegetation (B): a brush that plants trees and bushes from the game's forests; Shift to erase.	Растительность (B): кисть, сажающая деревья и кусты из лесов игры; Shift — стереть.
+Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-fit to it.	Скульптинг рельефа (T): поднимать, копать, выравнивать, сглаживать землю игры; дороги подстраиваются.
+Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.	Дороги: плоские поперёк с насыпью, разметка по центру или по краям; точка на точке другой дороги соединяет их.
+Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.	Работающие группы: нажми на объект игры; дверь, ручка… копируется вместе с автоматами или скрывается целиком.
+Objects, roads, terrain, plants, lights, co-op	Объекты, дороги, рельеф, растения, свет, кооператив

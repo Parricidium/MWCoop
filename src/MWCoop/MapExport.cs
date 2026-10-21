@@ -110,7 +110,7 @@ namespace MWCoop
         static readonly string[] KindText = { "Sol et relief", "Routes et chemins", "Batiments et objets", "Arbres et vegetation" };
 
         struct Item { public MeshRenderer R; public Mesh M; public int Kind; }
-        class Inst { public int Mesh; public Matrix4x4 T; public int[] Mats; public int Kind; public string Name, Path; public bool World; public Matrix4x4 R; }   // (World : sommets du maillage en coordonnees monde -- lot -- et R le repere de l'objet)
+        class Inst { public int Mesh; public Matrix4x4 T; public int[] Mats; public int Kind; public string Name, Path; public bool World; public Matrix4x4 R; public int[] Units; }   // (World : sommets du maillage en coordonnees monde -- lot -- et R le repere de l'objet)
 
         static readonly Dictionary<int, int> meshIndex = new Dictionary<int, int>();       // maillage du jeu -> numero
         static readonly List<long> meshOffsets = new List<long>();
@@ -272,6 +272,42 @@ namespace MWCoop
             return string.Join("/", parts.ToArray());
         }
 
+        // ---------------------------------------------------------------- ensembles qui fonctionnent (format 4, editeur)
+        // Pour chaque objet : jusqu'a 3 de ses parents (lui compris, 6 niveaux au plus, jamais la racine) dont le sous-arbre a
+        // des automates PlayMaker et au plus 80 rendus -- une porte et sa poignee, une boite aux lettres... L'editeur les
+        // propose a copier (Instantiate dans le mod : automates compris) ou a masquer en entier.
+        class Unit { public string Path, Name; public int Renders; public string[] Fsms; public Matrix4x4 T; }
+        static readonly List<Unit> units = new List<Unit>();
+        static readonly Dictionary<Transform, int> unitOf = new Dictionary<Transform, int>();
+        static int[] UnitsOf(Transform t)
+        {
+            var l = new List<int>();
+            int depth = 0;
+            for (Transform a = t; a != null && a.parent != null && depth < 6 && l.Count < 3; a = a.parent, depth++)
+            {
+                int u;
+                if (!unitOf.TryGetValue(a, out u))
+                {
+                    u = -1;
+                    PlayMakerFSM[] f = a.GetComponentsInChildren<PlayMakerFSM>(true);
+                    if (f.Length > 0)
+                    {
+                        int rn = a.GetComponentsInChildren<Renderer>(true).Length;
+                        if (rn > 0 && rn <= 80)
+                        {
+                            var names = new List<string>();
+                            foreach (PlayMakerFSM x in f) { string n = x.gameObject.name + ":" + x.FsmName; if (!names.Contains(n) && names.Count < 8) names.Add(n); }
+                            u = units.Count;
+                            units.Add(new Unit { Path = UniquePath(a), Name = a.name, Renders = rn, Fsms = names.ToArray(), T = a.localToWorldMatrix });
+                        }
+                    }
+                    unitOf[a] = u;
+                }
+                if (u >= 0) l.Add(u);
+            }
+            return l.Count > 0 ? l.ToArray() : null;
+        }
+
         // ..._LOD2 -> 2 ; 0 sinon
         static int LodName(string n)
         {
@@ -334,7 +370,7 @@ namespace MWCoop
                 meshIndex[id] = mi;
             }
             if (mi < 0) return;
-            insts.Add(new Inst { Mesh = mi, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform) });
+            insts.Add(new Inst { Mesh = mi, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform), Units = UnitsOf(r.transform) });
         }
 
         // ---------------------------------------------------------------- objets regroupes (lots statiques)
@@ -357,7 +393,7 @@ namespace MWCoop
                     if (idx >= 0)
                     {
                         batchedFile++;
-                        insts.Add(new Inst { Mesh = idx, T = Matrix4x4.identity, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform), World = true, R = r.localToWorldMatrix });
+                        insts.Add(new Inst { Mesh = idx, T = Matrix4x4.identity, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform), World = true, R = r.localToWorldMatrix, Units = UnitsOf(r.transform) });
                         return;
                     }
                 }
@@ -380,7 +416,7 @@ namespace MWCoop
                 if (ci >= 0)
                 {
                     batchedCollider++;
-                    insts.Add(new Inst { Mesh = ci, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform) });
+                    insts.Add(new Inst { Mesh = ci, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform), Units = UnitsOf(r.transform) });
                     return;
                 }
             }
@@ -469,7 +505,7 @@ namespace MWCoop
         static void WriteJson(string path)
         {
             var sb = new StringBuilder(1 << 20);
-            sb.Append("{\"format\":3,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
+            sb.Append("{\"format\":4,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
             sb.Append(",\"mod\":").Append(S(Version.Text)).Append(",\"date\":").Append(S(DateTime.Now.ToString("yyyy-MM-dd HH:mm")));
             Transform pl = Game.PlayerT;
             if (pl != null) sb.Append(",\"joueur\":[").Append(F(pl.position.x)).Append(',').Append(F(pl.position.y)).Append(',').Append(F(pl.position.z)).Append(']');
@@ -519,6 +555,7 @@ namespace MWCoop
                 sb.Append("],\"x\":[");
                 for (int k = 0; k < o.Mats.Length; k++) sb.Append(k > 0 ? "," : "").Append(o.Mats[k]);
                 sb.Append("],\"p\":").Append(S(o.Path));
+                if (o.Units != null) { sb.Append(",\"u\":["); for (int k = 0; k < o.Units.Length; k++) sb.Append(k > 0 ? "," : "").Append(o.Units[k]); sb.Append(']'); }
                 if (o.World)
                 {
                     sb.Append(",\"r\":[");
@@ -526,6 +563,17 @@ namespace MWCoop
                     sb.Append(']');
                 }
                 sb.Append('}');
+            }
+            sb.Append("],\"unites\":[");
+            for (int i = 0; i < units.Count; i++)
+            {
+                Unit u = units[i];
+                if (i > 0) sb.Append(',');
+                sb.Append("{\"p\":").Append(S(u.Path)).Append(",\"n\":").Append(S(u.Name)).Append(",\"r\":").Append(u.Renders).Append(",\"f\":[");
+                for (int k = 0; k < u.Fsms.Length; k++) sb.Append(k > 0 ? "," : "").Append(S(u.Fsms[k]));
+                sb.Append("],\"t\":[");
+                for (int rr = 0; rr < 3; rr++) for (int cc = 0; cc < 4; cc++) sb.Append(rr + cc > 0 ? "," : "").Append(F(u.T[rr, cc]));
+                sb.Append("]}");
             }
             sb.Append("]}");
             string tmp = path + ".tmp";

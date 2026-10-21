@@ -2524,3 +2524,10 @@ Textures: in the properties, Change — a game texture or your own image (PNG, J
 Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.	التجميع ينشئ ملف .mwcmap صغيراً: نماذجك وطرقك وصورك فقط. تُعاد بناء النسخ وخامات اللعبة من لعبة كل لاعب: لا يُشارَك أي ملف من اللعبة.
 Objects, roads, water, textures, co-op	أغراض، طرق، ماء، خامات، لعب جماعي
 The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.	سيارة VAZ-2108 المرفقة مع المود لها أيضاً بطاقتها في تبويب الإضافات (اختصار الإضافات في الشريط الجانبي، تحت المودات): القالب نفسه والطلاء نفسه.
+Several objects: Ctrl + click to pick them, Ctrl+A for all; the gizmo moves them together. Magnet (M): 1 m grid and 15° steps. Ctrl+C / Ctrl+V copy from one map to another.	عدة أغراض: Ctrl + نقرة لاختيارها، Ctrl+A للكل؛ يحرّكها المقبض معاً. المغناطيس (M): شبكة 1 م وخطوات 15°. Ctrl+C / Ctrl+V للنسخ من خريطة إلى أخرى.
+Light: colour, intensity, range; “only at night” turns it on when the sun goes down.	الضوء: اللون والشدة والمدى؛ «ليلاً فقط» يُضيئه عند غروب الشمس.
+Vegetation (B): a brush that plants trees and bushes from the game's forests; Shift to erase.	النباتات (B): فرشاة تزرع أشجاراً وشجيرات من غابات اللعبة؛ Shift للمحو.
+Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-fit to it.	نحت التضاريس (T): رفع أرض اللعبة وحفرها وتسويتها وتنعيمها؛ الطرق تتكيف معها.
+Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.	الطرق: مستوية بالعرض مع منحدرات، وخطوط في الوسط أو على الحواف؛ نقطة توضع على نقطة طريق آخر تربطهما.
+Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.	مجموعات تعمل: انقر على غرض من اللعبة؛ باب أو مقبض… يُنسخ بآلياته أو يُخفى كلياً.
+Objects, roads, terrain, plants, lights, co-op	أغراض، طرق، تضاريس، نباتات، أضواء، لعب جماعي

@@ -307,6 +307,7 @@ function onHostMessage(e) {
   else if (m.type === "modele") edition && edition.onModel(m);
   else if (m.type === "image") edition && edition.onImage(m);
   else if (m.type === "images") edition && edition.onImages(m);
+  else if (m.type === "fichiersCopies") edition && edition.onFichiersCopies(m);
   else if (m.type === "compile") edition && edition.onCompiled(m);
   else if (m.type === "enregistre") $("save-state").textContent = m.ok ? T("enregistre") : T("enregistrementEchec");
   else if (m.type === "verification") onVerif(m);

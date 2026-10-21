@@ -2542,4 +2542,11 @@ static const wchar_t *const kRu[][2] = {
     { L"Extension cars, custom livery", L"Машины-дополнения, своя ливрея" },
     { L"Add-ons (other cars)", L"Дополнения (другие машины)" },
     { L"The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.", L"VAZ-2108, которая идёт вместе с модом, тоже имеет карточку во вкладке «Дополнения» (ярлык «Дополнения» в боковой панели, под «Моды»): тот же шаблон, та же ливрея." },
+    { L"Several objects: Ctrl + click to pick them, Ctrl+A for all; the gizmo moves them together. Magnet (M): 1 m grid and 15° steps. Ctrl+C / Ctrl+V copy from one map to another.", L"Несколько объектов: Ctrl + клик, чтобы выбрать, Ctrl+A — все; гизмо двигает их вместе. Магнит (M): сетка 1 м и шаг 15°. Ctrl+C / Ctrl+V копируют из одной карты в другую." },
+    { L"Light: colour, intensity, range; “only at night” turns it on when the sun goes down.", L"Свет: цвет, яркость, дальность; «только ночью» включает его после заката." },
+    { L"Vegetation (B): a brush that plants trees and bushes from the game's forests; Shift to erase.", L"Растительность (B): кисть, сажающая деревья и кусты из лесов игры; Shift — стереть." },
+    { L"Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-fit to it.", L"Скульптинг рельефа (T): поднимать, копать, выравнивать, сглаживать землю игры; дороги подстраиваются." },
+    { L"Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.", L"Дороги: плоские поперёк с насыпью, разметка по центру или по краям; точка на точке другой дороги соединяет их." },
+    { L"Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.", L"Работающие группы: нажми на объект игры; дверь, ручка… копируется вместе с автоматами или скрывается целиком." },
+    { L"Objects, roads, terrain, plants, lights, co-op", L"Объекты, дороги, рельеф, растения, свет, кооператив" },
 };

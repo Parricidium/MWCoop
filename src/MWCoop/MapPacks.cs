@@ -47,7 +47,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            root = null; Objects = Hidden = Packs = 0; job = null;
+            root = null; Objects = Hidden = Packs = 0; job = null; lamps.Clear(); suns = null; hiddenUnits.Clear();
             loadAt = Game.LevelName == "GAME" && !MapExport.Active ? Time.realtimeSinceStartup + Config.GetFloat("Test", "CartesDelai", 6f) : -1;
             if (loadAt < 0) return;
             string d = LoadDir(false);
@@ -58,6 +58,8 @@ namespace MWCoop
         // cartes (0,36 s d'un bloc avant le 20/10).
         public static void Update()
         {
+            NightLamps();
+            KeepHidden();
             if (job != null)
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -80,19 +82,188 @@ namespace MWCoop
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int frames = 0;
             root = new GameObject("MWCoop-Cartes");
-            roots = null; meshCache.Clear(); gameTex = null; gameMat = null; packTex.Clear();
+            roots = null; meshCache.Clear(); plantCache.Clear(); gameTex = null; gameMat = null; allTex = false; packTex.Clear();
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
             foreach (string f in files)
             {
                 Pack p = Begin(f);
                 if (p == null) continue;
                 foreach (string l in p.Lines) { Line(p, l); frames++; yield return true; }
+                foreach (string c in p.ReliefTargets) { ApplyRelief(p, c); frames++; yield return true; }
                 End(p);
                 Packs++;
             }
             SceneBatches.Close();
             TestPhoto();
+            ProbeWater();
+            ProbeUnits();
+            ProbeHeights();
             Log.Info("cartes : " + Packs + "/" + files.Length + " carte(s), " + Objects + " objet(s) ajoute(s), " + Hidden + " objet(s) du jeu masque(s) en " + sw.ElapsedMilliseconds + " ms (" + frames + " etapes)");
+        }
+
+        // ---------------------------------------------------------------- relief sculpte
+        // relief-cible <chemin> (un objet du sol touche) ; relief <monter|creuser|aplanir|adoucir> <x> <z> <rayon> <force> <y> :
+        // les traits du pinceau de l'editeur, rejoues dans l'ordre sur une copie du maillage du sol (affichage et collision) --
+        // meme calcul que l'editeur (edition.js reliefStroke).
+        static void ApplyRelief(Pack p, string path)
+        {
+            try
+            {
+                Transform t = Resolve(path);
+                MeshFilter mf = t != null ? t.GetComponent<MeshFilter>() : null;
+                if (mf == null || mf.sharedMesh == null) { if (p.Missing++ < 10) Log.Warn("cartes : " + p.Name + " : sol « " + path + " » introuvable"); return; }
+                Mesh src = mf.sharedMesh, m = Sculpt(src, t, p.Strokes);
+                if (m == null) return;
+                mf.sharedMesh = m;
+                MeshCollider mc = t.GetComponent<MeshCollider>();
+                if (mc != null && mc.sharedMesh != null)
+                {
+                    Mesh cm = mc.sharedMesh == src ? m : Sculpt(mc.sharedMesh, t, p.Strokes);
+                    if (cm != null) { mc.sharedMesh = null; mc.sharedMesh = cm; }
+                }
+                if (Config.Testing) Log.Info("cartes : " + p.Name + " : sol " + path + " sculpte (" + p.Strokes.Count + " trait(s), " + m.vertexCount + " sommets)");
+            }
+            catch (Exception e) { Log.Warn("cartes : " + p.Name + " : relief " + path + " : " + e.Message); }
+        }
+        static Mesh Sculpt(Mesh src, Transform t, List<string[]> strokes)
+        {
+            Vector3[] v = src.vertices;
+            if (v == null || v.Length == 0) return null;
+            int n = v.Length;
+            var xs = new double[n]; var ys = new double[n]; var zs = new double[n];
+            for (int i = 0; i < n; i++) { Vector3 w = t.TransformPoint(v[i]); xs[i] = w.x; ys[i] = w.y; zs[i] = w.z; }
+            foreach (string[] f in strokes)
+                Stroke(xs, ys, zs, f[1], double.Parse(f[2], CultureInfo.InvariantCulture), double.Parse(f[3], CultureInfo.InvariantCulture),
+                       double.Parse(f[4], CultureInfo.InvariantCulture), double.Parse(f[5], CultureInfo.InvariantCulture), double.Parse(f[6], CultureInfo.InvariantCulture));
+            var nv = new Vector3[n];
+            for (int i = 0; i < n; i++) nv[i] = t.InverseTransformPoint(new Vector3((float)xs[i], (float)ys[i], (float)zs[i]));
+            Mesh m = UnityEngine.Object.Instantiate(src);
+            m.name = src.name + " (sculpte)";
+            m.vertices = nv;
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            return m;
+        }
+        static void Stroke(double[] xs, double[] ys, double[] zs, string mode, double x, double z, double r, double f, double y)
+        {
+            double r2 = r * r, k = Math.Min(1.0, f / 2.0), mean = 0, ws = 0;
+            if (mode == "adoucir")
+                for (int i = 0; i < xs.Length; i++) { double d2 = (xs[i] - x) * (xs[i] - x) + (zs[i] - z) * (zs[i] - z); if (d2 < r2) { double w = (1 - d2 / r2) * (1 - d2 / r2); mean += w * ys[i]; ws += w; } }
+            if (ws > 0) mean /= ws;
+            for (int i = 0; i < xs.Length; i++)
+            {
+                double d2 = (xs[i] - x) * (xs[i] - x) + (zs[i] - z) * (zs[i] - z);
+                if (d2 >= r2) continue;
+                double w = (1 - d2 / r2) * (1 - d2 / r2);
+                if (mode == "monter") ys[i] += f * w;
+                else if (mode == "creuser") ys[i] -= f * w;
+                else if (mode == "aplanir") ys[i] += (y - ys[i]) * k * w;
+                else if (mode == "adoucir" && ws > 0) ys[i] += (mean - ys[i]) * k * w;
+            }
+        }
+
+        // ---------------------------------------------------------------- ensembles qui fonctionnent (format 4 de l'editeur)
+        // objet unite <chemin> ... : copie entiere (Instantiate : automates, declencheurs, collisions compris) ; les morceaux
+        // regroupes par le jeu (Combined Mesh) y sont refaits dans leur repere, sans LODGroup. Pas synchronise en co-op : chacun
+        // a sa copie qui marche pour lui. masque-unite <chemin> : l'ensemble eteint (re-eteint si le jeu le rallume : LOD).
+        static readonly List<GameObject> hiddenUnits = new List<GameObject>();
+        static float hideCheck;
+        static void KeepHidden()
+        {
+            if (hiddenUnits.Count == 0 || Time.realtimeSinceStartup < hideCheck) return;
+            hideCheck = Time.realtimeSinceStartup + 2f;
+            foreach (GameObject g in hiddenUnits) if (g != null && g.activeSelf) g.SetActive(false);
+        }
+        static GameObject UnitCopy(string path)
+        {
+            Transform t = Resolve(path);
+            if (t == null) return null;
+            var clone = (GameObject)UnityEngine.Object.Instantiate(t.gameObject);
+            clone.name = t.name;
+            clone.SetActive(true);
+            foreach (LODGroup lod in clone.GetComponentsInChildren<LODGroup>(true)) UnityEngine.Object.DestroyImmediate(lod);
+            foreach (MeshRenderer cr in clone.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                MeshFilter cf = cr.GetComponent<MeshFilter>();
+                if (cf == null || cf.sharedMesh == null || !cf.sharedMesh.name.StartsWith("Combined Mesh")) continue;
+                string rel = "";
+                for (Transform x = cr.transform; x != clone.transform; x = x.parent) rel = rel.Length == 0 ? x.name : x.name + "/" + rel;
+                Transform orig = rel.Length == 0 ? t : t.Find(rel);
+                MeshRenderer or = orig != null ? orig.GetComponent<MeshRenderer>() : null;
+                SceneBatches.Open("cartes");
+                Mesh m = or != null ? SceneBatches.LocalMesh(or, cf.sharedMesh, true) : null;
+                Material[] mats = cr.sharedMaterials;
+                GameObject g = cr.gameObject;
+                UnityEngine.Object.DestroyImmediate(cr); UnityEngine.Object.DestroyImmediate(cf);
+                if (m == null) continue;
+                g.AddComponent<MeshFilter>().sharedMesh = m;
+                g.AddComponent<MeshRenderer>().sharedMaterials = mats;
+            }
+            return clone;
+        }
+
+        // eau « du lac » (MSC) : la matiere du lac et son WaterTile (reflets du PlanarReflection du lac) sur notre plan d'eau
+        static void LakeWater(GameObject go)
+        {
+            MeshRenderer mr = go.GetComponent<MeshRenderer>();
+            if (mr == null || mr.sharedMaterial == null || mr.sharedMaterial.name != "MWCoop eau lac") return;
+            Transform lake = Resolve("MAP/LakeNice/Lake");
+            MeshRenderer[] tiles = lake != null ? lake.GetComponentsInChildren<MeshRenderer>(true) : null;
+            MeshRenderer tile = tiles != null && tiles.Length > 0 ? tiles[0] : null;
+            if (tile == null) return;   // (pas de lac : l'eau simple reste)
+            mr.sharedMaterial = tile.sharedMaterial;
+            foreach (Component c in tile.GetComponents<Component>())
+            {
+                if (c == null || c.GetType().Name != "WaterTile") continue;
+                Component w = go.AddComponent(c.GetType());
+                foreach (System.Reflection.FieldInfo fi in c.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)) fi.SetValue(w, fi.GetValue(c));
+            }
+        }
+
+        // ---------------------------------------------------------------- lumieres
+        // lumiere <pos> <r g b> <intensite> <portee> <nuit 0|1> <ombres 0|1> [<nom>] : lumiere ponctuelle ; « nuit » : allumee
+        // quand le soleil du jeu (lumiere directionnelle) est sous l'horizon ou presque eteint
+        static readonly List<Light> lamps = new List<Light>();
+        static Light[] suns;
+        static float lampCheck;
+        static void Lamp(Pack p, string[] f)
+        {
+            var go = new GameObject(f.Length > 7 ? f[7] : "lumiere");
+            go.transform.parent = p.Group.transform;
+            go.transform.position = V3(f[1]);
+            var l = go.AddComponent<Light>();
+            l.type = LightType.Point;
+            string[] c = f[2].Split(' ');
+            l.color = new Color(Fl(c[0]), Fl(c[1]), Fl(c[2]));
+            l.intensity = Fl(f[3]);
+            l.range = Fl(f[4]);
+            l.shadows = f[6] == "1" ? LightShadows.Soft : LightShadows.None;
+            l.renderMode = LightRenderMode.ForcePixel;
+            if (f[5] == "1") { lamps.Add(l); l.enabled = IsNight(); }
+        }
+        static bool IsNight()
+        {
+            if (suns == null)
+            {
+                var l = new List<Light>();
+                foreach (Light x in UnityEngine.Object.FindObjectsOfType<Light>()) if (x.type == LightType.Directional && (root == null || !x.transform.IsChildOf(root.transform))) l.Add(x);
+                suns = l.ToArray();
+            }
+            float best = 0f; bool up = false;
+            foreach (Light x in suns)
+            {
+                if (x == null || !x.enabled || !x.gameObject.activeInHierarchy) continue;
+                best = Mathf.Max(best, x.intensity);
+                if (x.transform.forward.y < -0.08f && x.intensity > 0.25f) up = true;
+            }
+            return !up || best < 0.25f;
+        }
+        static void NightLamps()
+        {
+            if (lamps.Count == 0 || Time.realtimeSinceStartup < lampCheck) return;
+            lampCheck = Time.realtimeSinceStartup + 2f;
+            bool night = IsNight();
+            foreach (Light l in lamps) if (l != null) l.enabled = night;
         }
 
         // ---------------------------------------------------------------- un paquet
@@ -102,6 +273,7 @@ namespace MWCoop
             public string Name, File; public Dictionary<string, byte[]> Z; public string[] Lines;
             public Dictionary<string, Part> Parts = new Dictionary<string, Part>(); public List<string[]> MatLines = new List<string[]>();
             public GameObject Group, Last; public int Objs, Missing, Hid;
+            public List<string> ReliefTargets = new List<string>(); public List<string[]> Strokes = new List<string[]>();
         }
 
         static Pack Begin(string file)
@@ -142,7 +314,8 @@ namespace MWCoop
                 else if (f[0] == "objet" && f.Length >= 7)
                 {
                     p.Last = null;
-                    GameObject go = f[1] == "jeu" ? GameCopy(f[2], f.Length > 8 ? f[8] : null) : ModelObject(f[2], p.Parts);
+                    string plant = f.Length > 9 && f[9].StartsWith("plante ") ? f[9].Substring(7) : null;
+                    GameObject go = f[1] == "jeu" ? GameCopy(f[2], f.Length > 8 && f[8] != "-" ? f[8] : null, plant) : f[1] == "unite" ? UnitCopy(f[2]) : ModelObject(f[2], p.Parts);
                     if (go == null) { if (p.Missing++ < 10) Log.Warn("cartes : " + p.Name + " : " + f[2] + " introuvable ici"); return; }
                     go.name = f.Length > 7 ? f[7] : go.name;
                     go.transform.parent = p.Group.transform;
@@ -150,6 +323,7 @@ namespace MWCoop
                     go.transform.rotation = Q(f[4]);
                     go.transform.localScale = V3(f[5]);
                     Collide(go, f[6]);
+                    if (f[1] == "modele") LakeWater(go);
                     p.Objs++;
                     p.Last = go;
                     if (Config.Testing)
@@ -161,7 +335,11 @@ namespace MWCoop
                     }
                 }
                 else if (f[0] == "habit" && f.Length >= 3 && p.Last != null) Habit(p, p.Last, f[1], f[2], f.Length > 3 ? f[3] : null);
+                else if (f[0] == "lumiere" && f.Length >= 7) { Lamp(p, f); p.Objs++; }
                 else if (f[0] == "masque" && f.Length >= 2) { if (Hide(f[1])) p.Hid++; }
+                else if (f[0] == "masque-unite" && f.Length >= 2) { Transform u = Resolve(f[1]); if (u != null) { u.gameObject.SetActive(false); hiddenUnits.Add(u.gameObject); p.Hid++; } }
+                else if (f[0] == "relief-cible" && f.Length >= 2) p.ReliefTargets.Add(f[1]);
+                else if (f[0] == "relief" && f.Length >= 7) p.Strokes.Add(f);
             }
             catch (Exception e) { if (p.Missing++ < 10) Log.Warn("cartes : " + p.Name + " : ligne « " + f[0] + " » : " + e.Message); }
         }
@@ -170,6 +348,70 @@ namespace MWCoop
         {
             Objects += p.Objs; Hidden += p.Hid;
             Log.Info("cartes : " + p.Name + " : " + p.Objs + " objet(s), " + p.Hid + " masque(s)" + (p.Missing > 0 ? ", " + p.Missing + " introuvable(s)" : ""));
+        }
+
+        // [Test] SondeEau=1 : objets d'eau du jeu (noms, composants, declencheurs, automates) dans le journal -- pour l'eau vraie
+        // de l'editeur (nager, couler)
+        static void ProbeWater()
+        {
+            if (Config.GetInt("Test", "SondeEau", 0) == 0) return;
+            int n = 0;
+            foreach (Transform t in Game.RootSet(true))
+                foreach (Transform c in t.GetComponentsInChildren<Transform>(true))
+                {
+                    string nm = c.name.ToLowerInvariant();
+                    if (!(nm.Contains("water") || nm.Contains("swim") || nm.Contains("lake") || nm.Contains("drown") || nm.Contains("vesi") || nm.Contains("uima") || nm.Contains("river") || nm.Contains("ice"))) continue;
+                    var comps = new List<string>();
+                    foreach (Component k in c.GetComponents<Component>())
+                    {
+                        if (k == null || k is Transform) continue;
+                        string d = k.GetType().Name;
+                        Collider col = k as Collider;
+                        if (col != null) d += (col.isTrigger ? "(trigger " : "(") + col.bounds.size.ToString("F0") + ")";
+                        PlayMakerFSM fsm = k as PlayMakerFSM;
+                        if (fsm != null) d += "(" + fsm.FsmName + ")";
+                        comps.Add(d);
+                    }
+                    if (comps.Count == 0) continue;
+                    Log.Info("sonde eau : " + Recon.Path(c) + " [" + (c.gameObject.activeInHierarchy ? "actif" : "eteint") + ", calque " + c.gameObject.layer + ", " + c.position.ToString("F0") + "] " + string.Join(", ", comps.ToArray()));
+                    if (++n >= 120) return;
+                }
+        }
+
+        // [Test] SondeHauteur=x,z;x,z... : hauteur du sol (collision) sous ces points -- relief sculpte
+        static void ProbeHeights()
+        {
+            string o = Config.Get("Test", "SondeHauteur", "");
+            if (o.Length == 0) return;
+            foreach (string pt in o.Split(';'))
+            {
+                string[] xz = pt.Split(',');
+                if (xz.Length < 2) continue;
+                var from = new Vector3(Fl(xz[0]), 200f, Fl(xz[1]));
+                RaycastHit[] hs = Physics.RaycastAll(from, Vector3.down, 400f);
+                Array.Sort(hs, (x, y) => x.distance.CompareTo(y.distance));
+                var l = new List<string>();
+                foreach (RaycastHit h in hs) if (!h.collider.isTrigger && l.Count < 3) l.Add(h.point.y.ToString("F2") + " " + h.collider.name);
+                Log.Info("sonde hauteur : (" + xz[0] + ", " + xz[1] + ") " + (l.Count > 0 ? string.Join(" ; ", l.ToArray()) : "rien"));
+            }
+        }
+
+        // [Test] SondeUnite=<chemin>;<chemin>... : parents d'un objet, rendus et automates de chacun (copies fonctionnelles)
+        static void ProbeUnits()
+        {
+            string o = Config.Get("Test", "SondeUnite", "");
+            if (o.Length == 0) return;
+            foreach (string path in o.Split(';'))
+            {
+                Transform t = Resolve(path.Trim());
+                if (t == null) { Log.Info("sonde unite : " + path + " introuvable"); continue; }
+                for (Transform a = t; a != null; a = a.parent)
+                {
+                    var fsms = new List<string>();
+                    foreach (PlayMakerFSM f in a.GetComponentsInChildren<PlayMakerFSM>(true)) if (fsms.Count < 10) fsms.Add(f.gameObject.name + ":" + f.FsmName);
+                    Log.Info("sonde unite : " + Recon.Path(a) + " -- " + a.GetComponentsInChildren<Renderer>(true).Length + " rendu(s), " + a.GetComponentsInChildren<Collider>(true).Length + " collision(s), automates " + string.Join(" ", fsms.ToArray()));
+                }
+            }
         }
 
         // [Test] CartesPhoto=x,y,z,cx,cy,cz : photo d'essai (cartes\photo.png) d'une camera en (x, y, z) qui regarde (cx, cy, cz)
@@ -236,14 +478,18 @@ namespace MWCoop
             return cur;
         }
 
-        static GameObject GameCopy(string path, string center)
+        static GameObject GameCopy(string path, string center, string plant)
         {
             Transform t = Resolve(path);
             MeshRenderer r = t != null ? t.GetComponent<MeshRenderer>() : null;
             MeshFilter mf = t != null ? t.GetComponent<MeshFilter>() : null;
             if (r == null || mf == null || mf.sharedMesh == null) return null;
             Mesh mesh;
-            if (!meshCache.TryGetValue(path + "|" + center, out mesh))
+            if (plant != null)   // (plante d'une foret : pinceau de vegetation de l'editeur)
+            {
+                if (!meshCache.TryGetValue(path + "|plante " + plant, out mesh)) meshCache[path + "|plante " + plant] = mesh = PlantMesh(mf.sharedMesh, t, V3(plant));
+            }
+            else if (!meshCache.TryGetValue(path + "|" + center, out mesh))
             {
                 mesh = mf.sharedMesh;
                 if (mesh.name.StartsWith("Combined Mesh"))   // (lot : relu dans le fichier de la scene, ramene dans le repere de l'objet)
@@ -274,6 +520,95 @@ namespace MWCoop
             return go;
         }
         static readonly Dictionary<GameObject, Mesh> colliderOf = new Dictionary<GameObject, Mesh>();
+
+        // Plantes d'une foret du jeu (un maillage de quads croises, deux ou trois par arbre) : composantes reliees par leurs
+        // sommets, regroupees quand leurs centres sont a moins de 35 cm -- meme calcul, meme ordre que l'editeur
+        // (edition.js plantClusters) ; la plante la plus proche de « key » (repere du maillage), posee par son pied.
+        class Cluster { public Vector3 C; public List<int> Tris = new List<int>(); }
+        static readonly Dictionary<Mesh, List<Cluster>> plantCache = new Dictionary<Mesh, List<Cluster>>();
+        static long CellKey(int x, int y, int z) { return ((long)(x & 0x1FFFFF) << 42) | ((long)(y & 0x1FFFFF) << 21) | (long)(z & 0x1FFFFF); }
+        static Mesh PlantMesh(Mesh src, Transform t, Vector3 key)
+        {
+            if (src.name.StartsWith("Combined Mesh")) return null;
+            Vector3[] v = src.vertices;
+            var subOf = new List<int>(); var tri = new List<int>();
+            for (int sm = 0; sm < src.subMeshCount; sm++) { int[] tt = src.GetTriangles(sm); for (int i = 0; i + 2 < tt.Length; i += 3) { tri.Add(tt[i]); tri.Add(tt[i + 1]); tri.Add(tt[i + 2]); subOf.Add(sm); } }
+            int nt = subOf.Count;
+            List<Cluster> clusters;
+            if (!plantCache.TryGetValue(src, out clusters))
+            {
+                var par = new int[v.Length];
+                for (int i = 0; i < par.Length; i++) par[i] = i;
+                Func<int, int> find = x => { while (par[x] != x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+                for (int k = 0; k < nt; k++) { int a = find(tri[k * 3]); par[find(tri[k * 3 + 1])] = a; par[find(tri[k * 3 + 2])] = a; }
+                var comps = new Dictionary<int, int>(); var mn = new List<Vector3>(); var mx = new List<Vector3>(); var ctris = new List<List<int>>();
+                for (int k = 0; k < nt; k++)
+                {
+                    int root = find(tri[k * 3]), ci;
+                    if (!comps.TryGetValue(root, out ci)) { ci = mn.Count; comps[root] = ci; mn.Add(new Vector3(1e9f, 1e9f, 1e9f)); mx.Add(new Vector3(-1e9f, -1e9f, -1e9f)); ctris.Add(new List<int>()); }
+                    ctris[ci].Add(k);
+                    for (int c = 0; c < 3; c++) { Vector3 p = v[tri[k * 3 + c]]; mn[ci] = Vector3.Min(mn[ci], p); mx[ci] = Vector3.Max(mx[ci], p); }
+                }
+                clusters = new List<Cluster>();
+                var cells = new Dictionary<long, List<Cluster>>();
+                for (int ci = 0; ci < mn.Count; ci++)
+                {
+                    // (centres dans le repere de l'editeur : z inverse, comme ses calculs)
+                    Vector3 ce = new Vector3((mn[ci].x + mx[ci].x) / 2f, (mn[ci].y + mx[ci].y) / 2f, -(mn[ci].z + mx[ci].z) / 2f);
+                    int kx = Mathf.FloorToInt(ce.x / 0.5f), ky = Mathf.FloorToInt(ce.y / 0.5f), kz = Mathf.FloorToInt(ce.z / 0.5f);
+                    Cluster hit = null;
+                    for (int dx = -1; dx <= 1 && hit == null; dx++) for (int dy = -1; dy <= 1 && hit == null; dy++) for (int dz = -1; dz <= 1 && hit == null; dz++)
+                    {
+                        List<Cluster> l;
+                        if (!cells.TryGetValue(CellKey(kx + dx, ky + dy, kz + dz), out l)) continue;
+                        foreach (Cluster cl in l) if ((cl.C - ce).magnitude < 0.35f) { hit = cl; break; }
+                    }
+                    if (hit == null)
+                    {
+                        hit = new Cluster { C = ce }; clusters.Add(hit);
+                        long ck = CellKey(kx, ky, kz); List<Cluster> l;
+                        if (!cells.TryGetValue(ck, out l)) cells[ck] = l = new List<Cluster>();
+                        l.Add(hit);
+                    }
+                    hit.Tris.AddRange(ctris[ci]);
+                }
+                plantCache[src] = clusters;
+            }
+            Vector3 want = new Vector3(key.x, key.y, -key.z);
+            Cluster best = null; float bd = float.MaxValue;
+            foreach (Cluster cl in clusters) { float d = (cl.C - want).sqrMagnitude; if (d < bd) { bd = d; best = cl; } }
+            if (best == null) return null;
+            // pied : l'axe du maillage qui monte dans le monde (ligne y de la matrice), au plus bas ; centre de la boite ailleurs
+            Vector4 row = t.localToWorldMatrix.GetRow(1);
+            int up = Mathf.Abs(row.y) > Mathf.Abs(row.x) ? 1 : 0; if (Mathf.Abs(row.z) > Mathf.Abs(row[up])) up = 2;
+            Vector3 bmn = new Vector3(1e9f, 1e9f, 1e9f), bmx = new Vector3(-1e9f, -1e9f, -1e9f);
+            foreach (int k in best.Tris) for (int c = 0; c < 3; c++) { Vector3 p = v[tri[k * 3 + c]]; bmn = Vector3.Min(bmn, p); bmx = Vector3.Max(bmx, p); }
+            Vector3 o = (bmn + bmx) / 2f; o[up] = row[up] >= 0 ? bmn[up] : bmx[up];
+            Vector3[] n0 = src.normals; Vector2[] uv0 = src.uv, uv20 = src.uv2; Color[] c0 = src.colors; Vector4[] t0 = src.tangents;   // (couleurs des sommets : l'ombrage du feuillage)
+            bool hasC = c0 != null && c0.Length == v.Length, hasU2 = uv20 != null && uv20.Length == v.Length, hasT = t0 != null && t0.Length == v.Length;
+            var map = new Dictionary<int, int>(); var nv = new List<Vector3>(); var nn = new List<Vector3>(); var nuv = new List<Vector2>();
+            var nc = new List<Color>(); var nuv2 = new List<Vector2>(); var ntg = new List<Vector4>();
+            var subs = new List<int>[src.subMeshCount];
+            for (int sm = 0; sm < subs.Length; sm++) subs[sm] = new List<int>();
+            foreach (int k in best.Tris)
+                for (int c = 0; c < 3; c++)
+                {
+                    int vi = tri[k * 3 + c], j;
+                    if (!map.TryGetValue(vi, out j))
+                    {
+                        j = nv.Count; map[vi] = j; nv.Add(v[vi] - o); nn.Add(n0 != null && n0.Length == v.Length ? n0[vi] : Vector3.up); nuv.Add(uv0 != null && uv0.Length == v.Length ? uv0[vi] : Vector2.zero);
+                        if (hasC) nc.Add(c0[vi]); if (hasU2) nuv2.Add(uv20[vi]); if (hasT) ntg.Add(t0[vi]);
+                    }
+                    subs[subOf[k]].Add(j);
+                }
+            var m = new Mesh { name = src.name + " (plante)" };
+            m.vertices = nv.ToArray(); m.normals = nn.ToArray(); m.uv = nuv.ToArray();
+            if (hasC) m.colors = nc.ToArray(); if (hasU2) m.uv2 = nuv2.ToArray(); if (hasT) m.tangents = ntg.ToArray();
+            m.subMeshCount = subs.Length;
+            for (int sm = 0; sm < subs.Length; sm++) m.SetTriangles(subs[sm].ToArray(), sm);
+            m.RecalculateBounds();
+            return m;
+        }
 
         // aucune | boite (la boite du maillage) | forme (le maillage s'il est lisible, sinon celui de la collision de l'objet du
         // jeu, sinon la boite)
@@ -356,6 +691,7 @@ namespace MWCoop
                 var m = new Material(gm); m.mainTextureScale = Vector2.Scale(gm.mainTextureScale, sc);
                 return m;
             }
+            if (tex == "eau:lac") { var lw = new Material(Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Diffuse()); lw.name = "MWCoop eau lac"; lw.color = new Color(0.1f, 0.2f, 0.27f, 0.78f); return lw; }
             if (tex.StartsWith("eau:"))
             {
                 var w = new Material(Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Transparent/Diffuse") ?? Diffuse());
@@ -385,14 +721,31 @@ namespace MWCoop
         static Dictionary<string, Texture2D> gameTex;
         static Dictionary<string, Material> gameMat;
         static readonly Dictionary<string, Texture2D> packTex = new Dictionary<string, Texture2D>();
+        // Textures du jeu par leur nom : d'abord celles des matieres (quelques centaines d'objets ; ce sont elles que l'editeur
+        // propose), toutes les textures chargees seulement en dernier recours -- FindObjectsOfTypeAll<Texture2D> prenait 93 ms
+        // d'un bloc au chargement des cartes (1.4.0).
+        static bool allTex;
         static Texture2D GameTex(string name)
         {
             if (gameTex == null)
             {
                 gameTex = new Dictionary<string, Texture2D>();
+                GameMat("");
+                foreach (Material m in gameMat.Values)
+                    foreach (string prop in new[] { "_MainTex", "_Detail" })
+                    {
+                        Texture2D t = m.HasProperty(prop) ? m.GetTexture(prop) as Texture2D : null;
+                        if (t != null && !gameTex.ContainsKey(t.name)) gameTex[t.name] = t;
+                    }
+            }
+            Texture2D r;
+            if (gameTex.TryGetValue(name, out r)) return r;
+            if (!allTex)
+            {
+                allTex = true;
                 foreach (Texture2D t in Resources.FindObjectsOfTypeAll<Texture2D>()) if (t != null && !gameTex.ContainsKey(t.name)) gameTex[t.name] = t;
             }
-            Texture2D r; return gameTex.TryGetValue(name, out r) ? r : null;
+            return gameTex.TryGetValue(name, out r) ? r : null;
         }
         static Material GameMat(string name)
         {

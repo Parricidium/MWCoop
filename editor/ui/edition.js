@@ -26,6 +26,7 @@ export class Edition {
     this.proj = data;
     this.proj.objets = this.proj.objets || [];
     this.proj.masques = this.proj.masques || [];
+    this.proj.relief = this.proj.relief || [];
     for (const o of this.proj.objets) nextId = Math.max(nextId, (o.id | 0) + 1);
     this.root = new THREE.Group();
     this.root.name = "ajouts";
@@ -38,21 +39,26 @@ export class Edition {
     // gizmo
     const tc = this.tc = new TransformControls(viewer.camera, viewer.renderer.domElement);
     tc.setSize(0.9);
-    tc.addEventListener("dragging-changed", e => { viewer.blockPick = e.value; if (!e.value) this.commit(); });
-    tc.addEventListener("objectChange", () => { this.fromNode(this.sel && this.sel.rec); this.renderProps(true); });
+    tc.addEventListener("dragging-changed", e => { viewer.blockPick = e.value; if (e.value) this.multiStart(); else { this.multiEnd(); this.commit(); this.showGrid(); } });
+    tc.addEventListener("objectChange", () => { if (this.multi.length) this.multiMove(); else this.fromNode(this.sel && this.sel.rec); this.renderProps(true); });
     viewer.scene.add(tc);
-    viewer.onPick = hit => this.pick(hit);
+    this.multi = [];          // autres ajouts choisis (Ctrl + clic), en plus de sel.rec
+    this.pivot = new THREE.Object3D(); viewer.scene.add(this.pivot);
+    this.snap = false;
+    viewer.onPick = (hit, e) => this.pick(hit, e);
     viewer.onDouble = e => this.onDouble(e);
     viewer.onPointer = (e, ph) => this.pointer(e, ph);
     viewer.onDispose = () => this.dispose();
     this.key = e => this.onKey(e);
     window.addEventListener("keydown", this.key);
-    this.snapshot = JSON.stringify({ objets: this.proj.objets, masques: this.proj.masques });
+    this.snapshot = this.snapshotOf();
   }
+  snapshotOf() { return JSON.stringify({ objets: this.proj.objets, masques: this.proj.masques, relief: this.proj.relief }); }
 
   // ---------------------------------------------------------------- chargement
   start() {
     if (!this.v.info.objets.length || this.v.info.format < 2) this.ui.warn(T("cacheAncien"));
+    if (this.proj.relief.length) this.replayRelief();
     for (const rec of this.proj.objets) this.build(rec);
     this.applyMasks();
     this.renderTools();
@@ -73,6 +79,8 @@ export class Edition {
       node.add(this.gameMesh(idx, rec));
     } else if (rec.type === "modele") this.loadModel(rec, node);
     else if (rec.type === "route") { const m = this.roadMesh(rec, false); if (m) node.add(m); }
+    else if (rec.type === "lumiere") this.lightNode(rec, node);
+    else if (rec.type === "unite") this.unitNode(rec, node);
     else if (rec.type === "eau") {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 4, 4).rotateX(-Math.PI / 2), rec.surface ? this.habitMat(rec.surface) : this.habitMat({ k: "eau" }));
       m.userData.cuit = true;
@@ -88,7 +96,8 @@ export class Edition {
     const ob = this.v.info.objets[idx];
     let g = this.v.geoOf(ob.m);
     if (ob.r) g = this.localGeo(idx).g;
-    const mats = this.v.matsFor(ob, g);
+    if (rec && rec.src.plante) g = this.plantGeo(idx, rec.src.plante);
+    const mats = this.v.matsFor(ob, rec && rec.src.plante ? this.v.geoOf(ob.m) : g);   // (plante : les matieres de toute la foret, par rang)
     if (rec && rec.subs) mats.forEach((m, s) => { const h = rec.subs[s] || rec.subs["*"]; if (h) mats[s] = this.habitMat(h, m); });
     const m = new THREE.Mesh(g, mats.length === 1 ? mats[0] : mats);
     return m;
@@ -190,27 +199,154 @@ export class Edition {
   }
 
   duplicate() {
-    const rec = this.sel && this.sel.rec;
-    if (!rec) return;
-    const c = JSON.parse(JSON.stringify(rec));
-    c.id = nextId++;
-    c.pos = [c.pos[0] + 2, c.pos[1], c.pos[2] + 2];
-    if (c.type === "route") { c.pos = [0, 0, 0]; for (const pt of c.pts) pt.p = [pt.p[0] + 4, pt.p[1], pt.p[2] + 4]; }
-    this.proj.objets.push(c);
-    this.build(c);
-    this.select({ rec: c });
+    const recs = this.selected();
+    if (!recs.length) return;
+    const copies = recs.map(rec => {
+      const c = JSON.parse(JSON.stringify(rec));
+      c.id = nextId++;
+      shiftRec(c, 2, 2);
+      this.proj.objets.push(c);
+      this.build(c);
+      return c;
+    });
+    this.select({ rec: copies[0] });
+    this.multi = copies.slice(1); this.attachGizmo(); this.renderList(); this.renderProps();
     this.commit();
   }
 
   remove() {
-    const rec = this.sel && this.sel.rec;
-    if (!rec) return;
-    this.proj.objets = this.proj.objets.filter(o => o !== rec);
-    const n = this.nodes.get(rec.id);
-    if (n) { this.root.remove(n); this.nodes.delete(rec.id); }
+    const recs = this.selected();
+    if (!recs.length) return;
+    for (const rec of recs) {
+      this.proj.objets = this.proj.objets.filter(o => o !== rec);
+      const n = this.nodes.get(rec.id);
+      if (n) { if (this.tc.object === n) this.tc.detach(); this.root.remove(n); this.nodes.delete(rec.id); }
+    }
     this.select(null);
     this.commit();
   }
+
+  // ---------------------------------------------------------------- multi-selection, aimantation, presse-papiers
+  selected() { return this.sel && this.sel.rec ? [this.sel.rec].concat(this.multi.filter(r => r !== this.sel.rec)) : []; }
+  toggleSel(rec) {
+    if (!this.sel || !this.sel.rec) { this.select({ rec }); return; }
+    if (rec === this.sel.rec) {
+      if (!this.multi.length) { this.select(null); return; }
+      const next = this.multi.shift();
+      this.select({ rec: next }, true);
+      return;
+    }
+    const i = this.multi.indexOf(rec);
+    if (i >= 0) this.multi.splice(i, 1); else this.multi.push(rec);
+    this.select(this.sel, true);
+  }
+  // le gizmo : sur l'ajout choisi, ou sur un pivot au centre de la selection
+  attachGizmo() {
+    const sel = this.sel;
+    const on = sel && sel.rec && !["route", "select", "veg", "relief"].includes(this.mode) && !sel.face;
+    if (on && this.multi.length) {
+      const c = new THREE.Vector3(), recs = this.selected();
+      for (const r of recs) c.add(this.recCenter(r));
+      this.pivot.position.copy(c.multiplyScalar(1 / recs.length)); this.pivot.quaternion.identity(); this.pivot.scale.set(1, 1, 1);
+      this.pivot.updateMatrixWorld(true);
+      this.tc.attach(this.pivot); this.tc.setMode(this.mode || "translate");
+    } else if (on && sel.rec.type !== "route") { this.tc.attach(this.nodes.get(sel.rec.id)); this.tc.setMode(this.mode || "translate"); }
+    else this.tc.detach();
+    this.applySnap();
+  }
+  recCenter(r) {
+    if (r.type === "route") { const c = new THREE.Vector3(); for (const pt of r.pts) c.add(U.posTo(pt.p, new THREE.Vector3())); return r.pts.length ? c.multiplyScalar(1 / r.pts.length) : c; }
+    return U.posTo(r.pos, new THREE.Vector3());
+  }
+  multiStart() {
+    if (!this.multi.length) return;
+    this.pivot.updateMatrixWorld(true);
+    this.mstart = { pivot: this.pivot.matrix.clone().invert(), recs: this.selected().map(r => {
+      const n = this.nodes.get(r.id); n.updateMatrix();
+      return { r, m: n.matrix.clone(), pts: r.type === "route" ? JSON.parse(JSON.stringify(r.pts)) : null };
+    }) };
+  }
+  multiMove() {
+    if (!this.mstart) return;
+    this.pivot.updateMatrix();
+    const d = this.pivot.matrix.clone().multiply(this.mstart.pivot);
+    for (const s of this.mstart.recs) {
+      if (s.r.type === "route") {
+        s.r.pts = s.pts.map(pt => {
+          const P = U.posTo(pt.p, new THREE.Vector3()), P2 = P.clone().applyMatrix4(d);
+          const o = { p: U.posFrom(P2) };
+          for (const k of ["h", "hi"]) if (pt[k]) o[k] = U.posFrom(P.clone().add(U.posTo(pt[k], new THREE.Vector3())).applyMatrix4(d).sub(P2)).map(x => x);
+          return o;
+        });
+        this.rebuildRoad(s.r, true);
+        continue;
+      }
+      const n = this.nodes.get(s.r.id);
+      d.clone().multiply(s.m).decompose(n.position, n.quaternion, n.scale);
+      n.updateMatrixWorld(true);
+      this.fromNode(s.r);
+    }
+  }
+  multiEnd() {
+    if (!this.mstart) return;
+    for (const s of this.mstart.recs) if (s.r.type === "route") this.rebuildRoad(s.r, false);
+    this.mstart = null;
+    this.attachGizmo();
+  }
+  toggleSnap() { this.snap = !this.snap; this.applySnap(); this.showGrid(); this.renderTools(); }
+  applySnap() {
+    this.tc.setTranslationSnap(this.snap ? 1 : null);
+    this.tc.setRotationSnap(this.snap ? rad(15) : null);
+    this.tc.setScaleSnap(this.snap ? 0.25 : null);
+  }
+  // grille de 1 m sous la selection quand l'aimant est mis
+  showGrid() {
+    if (this.grid) { this.v.scene.remove(this.grid); this.grid.geometry.dispose(); this.grid = null; }
+    const recs = this.selected();
+    if (!this.snap || !recs.length) return;
+    const c = this.recCenter(recs[0]), n = this.nodes.get(recs[0].id);
+    const b = n ? new THREE.Box3().setFromObject(n) : null;
+    this.grid = new THREE.GridHelper(80, 80, 0xffd23f, 0x888888);
+    this.grid.material.transparent = true; this.grid.material.opacity = 0.35; this.grid.material.depthWrite = false;
+    this.grid.position.set(Math.round(c.x), b && !b.isEmpty() ? b.min.y + 0.02 : c.y, Math.round(c.z));
+    this.grid.userData.noPick = true;
+    this.v.scene.add(this.grid);
+  }
+  // presse-papiers entre cartes (meme jeu pour les copies d'objets du jeu) : Ctrl+C / Ctrl+V
+  copySel() {
+    const recs = this.selected();
+    if (!recs.length) return;
+    const c = new THREE.Vector3(); for (const r of recs) c.add(this.recCenter(r)); c.multiplyScalar(1 / recs.length);
+    try { localStorage.setItem("mwc-editeur-presse-papiers", JSON.stringify({ jeu: this.proj.jeu, dossier: this.dossier, centre: U.posFrom(c), recs })); } catch { }
+    this.ui.warn(T("copies", recs.length));
+  }
+  async paste() {
+    let clip = null;
+    try { clip = JSON.parse(localStorage.getItem("mwc-editeur-presse-papiers") || "null"); } catch { }
+    if (!clip || !clip.recs || !clip.recs.length) return;
+    const recs = clip.recs.filter(r => r.type !== "jeu" || clip.jeu === this.proj.jeu);
+    if (recs.length < clip.recs.length) this.ui.warn(T("collerAutreJeu"));
+    if (!recs.length) return;
+    const files = [];
+    for (const r of recs) {
+      if (r.type === "modele") files.push("modeles/" + r.src.fichier);
+      for (const h of [r.habit, r.surface].concat(Object.values(r.subs || {}), (r.faces || []).map(f => f.habit))) if (h && h.k === "img") files.push(h.f);
+    }
+    if (files.length && clip.dossier !== this.dossier) await new Promise(res => { this.onCopied = res; this.send({ type: "copierFichiers", de: clip.dossier, vers: this.dossier, fichiers: files }); setTimeout(res, 8000); });
+    const target = this.spot(), c = U.posTo(clip.centre, new THREE.Vector3()), dx = target.x - c.x, dz = -(target.z - c.z);
+    const made = recs.map(r => {
+      const n = JSON.parse(JSON.stringify(r));
+      n.id = nextId++;
+      shiftRec(n, dx, dz);
+      this.proj.objets.push(n);
+      this.build(n);
+      return n;
+    });
+    this.select({ rec: made[0] });
+    this.multi = made.slice(1); this.attachGizmo(); this.renderList(); this.renderProps();
+    this.commit();
+  }
+  onFichiersCopies() { if (this.onCopied) { const f = this.onCopied; this.onCopied = null; f(); } }
 
   dropToGround(rec, node) {
     node = node || this.nodes.get(rec.id);
@@ -236,35 +372,37 @@ export class Edition {
     this.renderProps();
   }
   applyMasks() {
-    const set = new Set(this.proj.masques.map(m => m.p));
+    const set = new Set(this.proj.masques.filter(m => !m.u).map(m => m.p)), pres = this.proj.masques.filter(m => m.u).map(m => m.p);
     this.v.instMeshes.forEach((mesh, i) => {
       if (!mesh) return;
-      const masked = set.has(this.v.info.objets[i].p);
+      const p = this.v.info.objets[i].p;
+      const masked = set.has(p) || (p && pres.some(q => p === q || p.startsWith(q + "/")));
       if (masked && !mesh.userData.masked) { mesh.visible = false; mesh.userData.masked = true; this.v.setHidden(i, true); }
       else if (!masked && mesh.userData.masked) { mesh.visible = true; delete mesh.userData.masked; this.v.setHidden(i, false); }
     });
   }
 
   // ---------------------------------------------------------------- selection
-  pick(hit) {
-    if (!hit) { this.select(null); return; }
+  pick(hit, e) {
+    if (!hit) { if (!(e && (e.ctrlKey || e.shiftKey))) this.select(null); return; }
     let o = hit.object;
     while (o && !o.userData.rec && o.parent) o = o.parent;
-    if (o && o.userData.rec) this.select({ rec: o.userData.rec });
+    if (o && o.userData.rec && e && (e.ctrlKey || e.shiftKey)) this.toggleSel(o.userData.rec);
+    else if (o && o.userData.rec) this.select({ rec: o.userData.rec });
     else if (hit.object.userData.idx !== undefined) this.select({ idx: hit.object.userData.idx, point: hit.point });
     else this.select(null);
   }
 
-  select(sel) {
+  select(sel, keepMulti) {
     if (!sel || !sel.rec || !this.sel || this.sel.rec !== sel.rec) this.anchorSel = sel && sel.rec && sel.rec.type === "route" ? this.anchorSel : undefined;
+    if (!keepMulti) this.multi = [];
     this.sel = sel;
     if (this.box) { this.v.scene.remove(this.box); this.box.geometry.dispose(); this.box = null; }
-    const gizmo = sel && sel.rec && sel.rec.type !== "route" && !["route", "select"].includes(this.mode);   // (route : ses points, pas le gizmo)
-    if (gizmo) { this.tc.attach(this.nodes.get(sel.rec.id)); this.tc.setMode(this.mode || "translate"); }
-    else this.tc.detach();
+    this.attachGizmo();
     this.showRoadUi();
     if (sel && sel.idx !== undefined) { this.box = new THREE.BoxHelper(this.v.instMeshes[sel.idx], 0xffffff); this.box.userData.noPick = true; this.v.scene.add(this.box); }
     this.showFace(sel);
+    this.showGrid();
     this.renderList();
     this.renderProps();
     this.renderTools();
@@ -273,9 +411,11 @@ export class Edition {
   setMode(m) {
     if (this.drawing && m !== "route") { const d = this.drawing; this.drawing = null; if (d.pts.length < 2) { this.select({ rec: d }); this.remove(); } else this.commit(); }
     this.mode = m;
-    this.v.o.canvas.style.cursor = m === "route" ? "crosshair" : "";
-    if (m === "select" || m === "route") { this.tc.enabled = false; this.tc.visible = false; }
-    else { this.tc.enabled = true; this.tc.visible = true; this.tc.setMode(m); if (this.sel && this.sel.rec && this.sel.rec.type !== "route") this.tc.attach(this.nodes.get(this.sel.rec.id)); }
+    this.v.o.canvas.style.cursor = m === "route" || m === "veg" || m === "relief" ? "crosshair" : "";
+    if (m !== "veg" && m !== "relief" && this.ring) this.ring.visible = false;
+    if (m === "select" || m === "route" || m === "veg" || m === "relief") { this.tc.enabled = false; this.tc.visible = false; }
+    else { this.tc.enabled = true; this.tc.visible = true; this.tc.setMode(m); }
+    this.attachGizmo();
     this.renderTools();
   }
 
@@ -289,7 +429,7 @@ export class Edition {
 
   // ---------------------------------------------------------------- historique et enregistrement
   commit() {
-    const snap = JSON.stringify({ objets: this.proj.objets, masques: this.proj.masques });
+    const snap = this.snapshotOf();
     if (snap === this.snapshot) return;
     this.hist.push(this.snapshot);
     if (this.hist.length > 200) this.hist.shift();
@@ -309,6 +449,9 @@ export class Edition {
     for (const n of this.nodes.values()) this.root.remove(n);
     this.nodes.clear();
     this.proj.objets = d.objets; this.proj.masques = d.masques;
+    const reliefChanged = JSON.stringify(d.relief || []) !== JSON.stringify(this.proj.relief);
+    this.proj.relief = d.relief || [];
+    if (reliefChanged) this.replayRelief();
     for (const rec of this.proj.objets) this.build(rec);
     this.applyMasks();
     const rec = selId !== null ? this.proj.objets.find(o => o.id === selId) : null;
@@ -332,15 +475,22 @@ export class Edition {
     if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); e.shiftKey ? this.redo() : this.undo(); return; }
     if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); this.redo(); return; }
     if ((e.ctrlKey || e.metaKey) && k === "d") { e.preventDefault(); this.duplicate(); return; }
+    if ((e.ctrlKey || e.metaKey) && k === "c") { e.preventDefault(); this.copySel(); return; }
+    if ((e.ctrlKey || e.metaKey) && k === "v") { e.preventDefault(); this.paste(); return; }
+    if ((e.ctrlKey || e.metaKey) && k === "a") { e.preventDefault(); if (this.proj.objets.length) { this.select({ rec: this.proj.objets[0] }); this.multi = this.proj.objets.slice(1); this.attachGizmo(); this.renderList(); this.renderProps(); } return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (this.mode === "route" && (k === "escape" || k === "enter")) { this.endRoad(); return; }
+    if ((this.mode === "veg" || this.mode === "relief") && k === "escape") { this.setMode("translate"); this.renderProps(); return; }
     if ((k === "delete" || k === "suppr" || k === "backspace") && this.removeAnchor()) return;
     if (k === "v") this.setMode("select");
     else if (k === "p") this.startRoad();
+    else if (k === "b") this.mode === "veg" ? this.setMode("translate") : this.startVeg();
+    else if (k === "t") this.mode === "relief" ? this.setMode("translate") : this.startRelief();
     else if (k === "g") this.setMode("translate");
     else if (k === "r") this.setMode("rotate");
     else if (k === "s") this.setMode("scale");
     else if (k === "f") this.focus();
+    else if (k === "m") this.toggleSnap();
     else if (k === "delete" || k === "suppr") this.remove();
     else if (k === "escape") this.select(null);
   }
@@ -373,7 +523,11 @@ export class Edition {
       + b("import", "import", T("tImporter"), "", false)
       + b("route", "road", T("tRoute"), "P", mode === "route")
       + b("eau", "water", T("tEau"), "", false)
+      + b("lumiere", "bulb", T("tLumiere"), "", false)
+      + b("veg", "tree", T("tVegetation"), "B", mode === "veg")
+      + b("relief", "mountain", T("tRelief"), "T", mode === "relief")
       + `<span class="sep"></span>`
+      + b("aimant", "magnet", T("tAimant"), "M", this.snap)
       + b("undo", "undo", T("tAnnuler"), "Ctrl+Z", false, !this.hist.length)
       + b("redo", "redo", T("tRetablir"), "Ctrl+Y", false, !this.future.length);
     el.querySelectorAll("button[data-t]").forEach(btn => btn.onclick = () => {
@@ -383,6 +537,10 @@ export class Edition {
       else if (t === "import") this.importModel();
       else if (t === "route") this.mode === "route" ? this.endRoad() : this.startRoad();
       else if (t === "eau") this.addWater();
+      else if (t === "lumiere") this.addLight();
+      else if (t === "veg") this.mode === "veg" ? this.setMode("translate") : this.startVeg();
+      else if (t === "relief") this.mode === "relief" ? this.setMode("translate") : this.startRelief();
+      else if (t === "aimant") this.toggleSnap();
       else if (t === "undo") this.undo();
       else if (t === "redo") this.redo();
     });
@@ -391,16 +549,20 @@ export class Edition {
   renderList() {
     const el = this.ui.list;
     if (!el) return;
-    const sel = this.sel && this.sel.rec;
+    const sel = this.sel && this.sel.rec, multi = new Set(this.multi);
     let h = `<div class="ph sub">${esc(T("mesAjouts"))}<span class="n">${this.proj.objets.length}</span></div>`;
     if (!this.proj.objets.length) h += `<p class="empty">${esc(T("ajoutsVide"))}</p>`;
-    h += this.proj.objets.map(o => `<button class="row${o === sel ? " sel" : ""}${o.manque ? " manque" : ""}" data-id="${o.id}">${ICON[{ modele: "import", route: "road", eau: "water" }[o.type] || "box"]}<span>${esc(o.nom)}</span><span class="n">${T({ modele: "importe", route: "tagRoute", eau: "tagEau" }[o.type] || "jeu")}</span></button>`).join("");
+    const veg = this.proj.objets.filter(o => o.veg).length;
+    if (veg) h += `<button class="row" data-veg="1">${ICON.tree}<span>${esc(T("tVegetation"))}</span><span class="n">${veg}</span></button>`;
+    h += this.proj.objets.filter(o => !o.veg).map(o => `<button class="row${o === sel || multi.has(o) ? " sel" : ""}${o.manque ? " manque" : ""}" data-id="${o.id}">${ICON[{ modele: "import", route: "road", eau: "water", lumiere: "bulb", unite: "gear" }[o.type] || "box"]}<span>${esc(o.nom)}</span><span class="n">${T({ modele: "importe", route: "tagRoute", eau: "tagEau", lumiere: "tagLumiere", unite: "tagUnite" }[o.type] || "jeu")}</span></button>`).join("");
     if (this.proj.masques.length) {
       h += `<div class="ph sub">${esc(T("masques"))}<span class="n">${this.proj.masques.length}</span></div>`;
-      h += this.proj.masques.map((m, i) => `<div class="row dim">${ICON.eyeoff}<span>${esc(m.n)}</span><button class="mini" data-unmask="${i}">${esc(T("reafficher"))}</button></div>`).join("");
+      h += this.proj.masques.map((m, i) => `<div class="row dim">${ICON.eyeoff}<span>${esc(m.n)}${m.u ? " · " + esc(T("tagUnite")) : ""}</span><button class="mini" data-unmask="${i}">${esc(T("reafficher"))}</button></div>`).join("");
     }
     el.innerHTML = h;
-    el.querySelectorAll("button[data-id]").forEach(b => b.onclick = () => { const rec = this.proj.objets.find(o => o.id == b.dataset.id); if (rec) { this.select({ rec }); } });
+    el.querySelectorAll("button[data-id]").forEach(b => b.onclick = ev => { const rec = this.proj.objets.find(o => o.id == b.dataset.id); if (!rec) return; if (ev.ctrlKey || ev.shiftKey) this.toggleSel(rec); else this.select({ rec }); });
+    const vb = el.querySelector("button[data-veg]");
+    if (vb) vb.onclick = () => this.startVeg();
     el.querySelectorAll("button[data-unmask]").forEach(b => b.onclick = () => { this.proj.masques.splice(+b.dataset.unmask, 1); this.applyMasks(); this.commit(); this.renderProps(); });
   }
 
@@ -413,6 +575,8 @@ export class Edition {
       el.querySelectorAll("input[data-f]").forEach(i => { if (document.activeElement !== i) i.value = vals[i.dataset.f]; });
       return;
     }
+    if (this.mode === "veg" && (!s || !s.rec)) { this.vegProps(el); return; }
+    if (this.mode === "relief" && (!s || !s.rec)) { this.reliefProps(el); return; }
     if (!s) { el.innerHTML = `<div class="ph">${esc(T("proprietes"))}</div><p class="empty pad">${esc(T("propsVide"))}</p>`; return; }
     if (s.idx !== undefined) {
       const ob = this.v.info.objets[s.idx], masked = this.isMasked(s.idx);
@@ -421,13 +585,26 @@ export class Edition {
         <div class="kv"><span>${esc(T("chemin"))}</span><span>${esc(ob.p || "—")}</span></div>
         <button class="btn pri wide" data-a="copier">${ICON.box}${esc(T("copierCarte"))}</button>
         <button class="btn wide" data-a="masquer">${masked ? ICON.eye : ICON.eyeoff}${esc(masked ? T("reafficher") : T("masquerCarte"))}</button>
-        <p class="hint">${esc(T("copierAide"))}</p></div>`;
+        <p class="hint">${esc(T("copierAide"))}</p></div>${this.unitsOf(s.idx).length ? `<div class="sec"><div class="sl">${esc(T("unitesTitre"))}</div>${this.unitsOf(s.idx).map(u => `<div class="look"><span class="lk"><b>${esc(u.n)}</b><small>${esc(T("uniteInfo", u.r, u.f.map(x => x.split(":")[1]).filter((x, i, a) => a.indexOf(x) === i).slice(0, 4).join(", ")))}</small></span><button class="mini" data-uc="${u.i}">${esc(T("uniteCopier"))}</button><button class="mini" data-um="${u.i}">${esc(this.isUnitMasked(u.p) ? T("reafficher") : T("uniteMasquer"))}</button></div>`).join("")}<p class="hint">${esc(T("unitesAide"))}</p></div>` : ""}`;
+      el.querySelectorAll("[data-uc]").forEach(b => b.onclick = () => this.addUnit(+b.dataset.uc));
+      el.querySelectorAll("[data-um]").forEach(b => b.onclick = () => this.toggleUnitMask(this.v.info.unites[+b.dataset.um]));
       el.querySelector('[data-a="copier"]').onclick = () => this.addGame(s.idx, true);
       el.querySelector('[data-a="masquer"]').onclick = () => this.toggleMask(s.idx);
       return;
     }
     const rec = s.rec, v = this.values(rec);
+    if (this.multi.length && !s.face) {
+      const n = this.selected().length;
+      el.innerHTML = `<div class="ph">${esc(T("proprietes"))}</div><div class="sec"><b class="nm">${esc(T("selMulti", n))}</b><p class="hint">${esc(T("selMultiAide"))}</p>
+        <button class="btn wide" data-a="sol">${ICON.down}${esc(T("poserSol"))}</button></div>
+        <div class="sec row2"><button class="btn" data-a="dup">${ICON.copy}${esc(T("dupliquer"))}</button><button class="btn danger" data-a="suppr">${ICON.trash}${esc(T("supprimer"))}</button></div>`;
+      el.querySelector('[data-a="sol"]').onclick = () => { for (const r of this.selected()) if (r.type !== "route") this.dropToGround(r); this.commit(); this.attachGizmo(); };
+      el.querySelector('[data-a="dup"]').onclick = () => this.duplicate();
+      el.querySelector('[data-a="suppr"]').onclick = () => this.remove();
+      return;
+    }
     if (rec.type === "route") { this.roadProps(el, rec); return; }
+    if (rec.type === "lumiere") { this.lightProps(el, rec); return; }
     const num = (f, c) => `<label class="num"><b style="color:${c}">${f.slice(-1).toUpperCase()}</b><input data-f="${f}" value="${v[f]}" inputmode="decimal" spellcheck="false"></label>`;
     el.innerHTML = `<div class="ph">${esc(T("proprietes"))}</div>
       <div class="sec"><label class="sl" for="p-nom">${esc(T("nom"))}</label><input id="p-nom" class="txt" value="${esc(rec.nom)}" spellcheck="false">
@@ -457,12 +634,18 @@ export class Edition {
       <div class="sec"><label class="sl" for="p-larg">${esc(T("largeur"))} (m)</label><input id="p-larg" class="txt" value="${rec.largeur || 6}" inputmode="decimal" spellcheck="false"></div>
       <div class="sec"><div class="sl">${esc(T("revetement"))}</div><div class="chips">${presets.map((h, i) => `<button class="mini${rec.surface && rec.surface.ref === h.ref ? " on" : ""}" data-pre="${i}">${esc(h.nom)}</button>`).join("")}</div>
         ${this.lookSection(Object.assign({}, { rec }))}</div>
+      <div class="sec"><div class="sl">${esc(T("marquage"))}</div><div class="seg">${["aucun", "centre", "bords", "tout"].map(c => `<button data-mq="${c}" class="${(rec.marquage || "aucun") === c ? "on" : ""}">${esc(T("mq_" + c))}</button>`).join("")}</div>
+        <label class="cb"><input type="checkbox" id="p-plat"${rec.plat !== false ? " checked" : ""}><span>${esc(T("routePlate"))}</span></label>
+        <label class="cb"><input type="checkbox" id="p-talus"${rec.talus !== false ? " checked" : ""}><span>${esc(T("routeTalus"))}</span></label></div>
       <div class="sec"><div class="sl">${esc(T("collisions"))}</div><div class="seg">${["aucune", "forme"].map(c => `<button data-col="${c}" class="${rec.col === c ? "on" : ""}">${esc(T("col_" + c))}</button>`).join("")}</div></div>
       <p class="hint pad">${esc(T("routeAide"))}</p>
       <div class="sec row2"><button class="btn" data-a="dup">${ICON.copy}${esc(T("dupliquer"))}</button><button class="btn danger" data-a="suppr">${ICON.trash}${esc(T("supprimer"))}</button></div>`;
     el.querySelector("#p-nom").onchange = e => { rec.nom = e.target.value.trim() || rec.nom; this.commit(); };
     el.querySelector("#p-larg").onchange = e => { const w = parseFloat(e.target.value.replace(",", ".")); if (isFinite(w) && w > 0.5 && w < 60) { rec.largeur = w; this.rebuildRoad(rec, false); this.commit(); } this.renderProps(); };
     el.querySelectorAll("[data-pre]").forEach(b => b.onclick = () => { rec.surface = presets[+b.dataset.pre]; this.rebuildRoad(rec, false); this.commit(); this.renderProps(); });
+    el.querySelectorAll("[data-mq]").forEach(b => b.onclick = () => { rec.marquage = b.dataset.mq; this.rebuildRoad(rec, false); this.commit(); this.renderProps(); });
+    el.querySelector("#p-plat").onchange = e => { rec.plat = e.target.checked; this.rebuildRoad(rec, false); this.commit(); };
+    el.querySelector("#p-talus").onchange = e => { rec.talus = e.target.checked; this.rebuildRoad(rec, false); this.commit(); };
     el.querySelectorAll("[data-col]").forEach(b => b.onclick = () => { rec.col = b.dataset.col; this.commit(); this.renderProps(); });
     el.querySelector('[data-a="dup"]').onclick = () => this.duplicate();
     el.querySelector('[data-a="suppr"]').onclick = () => this.remove();
@@ -579,8 +762,14 @@ export class Edition {
     for (const rec of p.objets) {
       if (rec.manque) continue;
       if (rec.type === "jeu") {
-        lines.push(["objet", "jeu", rec.src.p, v3(rec.pos), v3(rec.rot), v3(rec.ech), rec.col, cl(rec.nom)].concat(rec.src.c ? [v3(rec.src.c)] : []).join("\t"));
+        lines.push(["objet", "jeu", rec.src.p, v3(rec.pos), v3(rec.rot), v3(rec.ech), rec.col, cl(rec.nom)].concat(rec.src.plante ? [rec.src.c ? v3(rec.src.c) : "-", "plante " + v3(rec.src.plante)] : rec.src.c ? [v3(rec.src.c)] : []).join("\t"));
         for (const [sub, h] of Object.entries(rec.subs || {})) lines.push(["habit", sub, await this.packRef(h, files)].concat(h.rep ? [h.rep.map(f).join(" ")] : []).join("\t"));
+        continue;
+      }
+      if (rec.type === "unite") { lines.push(["objet", "unite", rec.src.p, v3(rec.pos), v3(rec.rot), v3(rec.ech), rec.col || "aucune", cl(rec.nom)].join("\t")); continue; }
+      if (rec.type === "lumiere") {
+        const hx = (rec.couleur || "#ffffff").replace("#", ""), rgb = [0, 2, 4].map(i => parseInt(hx.slice(i, i + 2), 16) / 255);   // (valeurs du code couleur : le jeu est en espace gamma)
+        lines.push(["lumiere", v3(rec.pos), rgb.map(f).join(" "), f(rec.intensite), f(rec.portee), rec.nuit ? 1 : 0, rec.ombres ? 1 : 0, cl(rec.nom)].join("\t"));
         continue;
       }
       // modeles, routes, eau : maillages cuits ici (tenues et faces comprises : une matiere par sous-maillage) ; un meme
@@ -612,7 +801,13 @@ export class Edition {
       const ids = modelIds.get(key);
       if (ids.length) lines.push(["objet", "modele", ids.join(","), v3(rec.pos), v3(rec.rot), v3(rec.ech), rec.col || "aucune", cl(rec.nom)].join("\t"));
     }
-    for (const m of p.masques) lines.push("masque\t" + m.p);
+    for (const m of p.masques) lines.push((m.u ? "masque-unite\t" : "masque\t") + m.p);
+    if (p.relief && p.relief.length) {   // (sol sculpte : les objets du sol touches, puis les traits dans l'ordre)
+      const cibles = new Set();
+      for (const st of p.relief) for (const idx of this.terrainObjects()) { const b = this.terrainWorld(idx).box; if (!(st.x + st.r < b[0] || st.x - st.r > b[1] || st.z + st.r < b[2] || st.z - st.r > b[3])) cibles.add(this.v.info.objets[idx].p); }
+      for (const c of cibles) lines.push("relief-cible\t" + c);
+      for (const st of p.relief) lines.push(["relief", st.m, f(st.x), f(st.z), f(st.r), f(st.f), f(st.y)].join("\t"));
+    }
     files["carte.txt"] = b64(new TextEncoder().encode(lines.join("\n") + "\n"));
     const slug = (p.nom || "carte").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "carte";
     this.send({ type: "compiler", dossier: this.dossier, jeu: p.jeu, nomFichier: slug + "-" + (p.version || "1.0").replace(/[^0-9A-Za-z.]+/g, "") + ".mwcmap", fichiers: files });
@@ -677,7 +872,7 @@ export class Edition {
     const ms = this.v.info.matieres, out = [];
     // (eau : l'eau simple d'abord -- celle du jeu, Water4, depend des scripts de reflet du lac et sort grise sur un plan a nous)
     if (type === "eau") out.push({ k: "eau", nom: T("eauSimple"), ref: "eau:" });
-    const want = type === "eau" ? [/^Water4Simple$/i, /^Water4Adv/i] : [/^ROAD$/, /^ASPHALT$/i, /^mwc_asphalt$/i, /^GRAVEL$/i, /^DIRTROAD$/i, /^mwc_dirtroad$/i, /^mwc_iceroad$/i];
+    const want = type === "talus" ? [/^ROADSIDE$/i, /^mwc_dirtroad$/i, /^GRAVEL$/i] : type === "eau" ? [/^Water4Simple$/i, /^Water4Adv/i] : [/^ROAD$/, /^ASPHALT$/i, /^mwc_asphalt$/i, /^GRAVEL$/i, /^DIRTROAD$/i, /^mwc_dirtroad$/i, /^mwc_iceroad$/i];
     for (const re of want) { const mi = ms.findIndex(m => re.test(m.n)); if (mi >= 0 && !out.some(h => h.mi === mi)) out.push({ k: "mat", mi, nom: ms[mi].n, ref: "mat:" + ms[mi].n }); }
     return out;
   }
@@ -704,6 +899,329 @@ export class Edition {
     this.select({ rec });
     this.setMode("scale");
     this.commit();
+  }
+
+  // ---------------------------------------------------------------- relief sculpte (demande de JD, 21/10)
+  // Le sol du jeu (Grass1/Grass2/Fields de MSC, Grass de MWC : maillages lisibles, non regroupes) modifie par des traits de
+  // pinceau gardes dans le projet (proj.relief : { m: monter|creuser|aplanir|adoucir, x, z, r, f, y }, repere d'Unity) ; le mod
+  // rejoue les memes traits sur le sol de chaque joueur (MapPacks.ApplyRelief). Attenuation (1 - d2/r2)^2 ; aplanir : vers la
+  // hauteur du clic ; adoucir : vers la hauteur moyenne du cercle.
+  terrainObjects() {
+    if (this.terrIdx) return this.terrIdx;
+    const o = this.v.info.objets, ms = this.v.info.matieres;
+    this.terrIdx = [];
+    o.forEach((x, i) => { if (x.k === 0 && !x.r && x.p && x.x.some(mi => ms[mi] && /^(TERRAIN|SNOW)$/i.test(ms[mi].n))) this.terrIdx.push(i); });
+    return this.terrIdx;
+  }
+  // sommets d'un objet du sol en coordonnees du monde d'Unity, et le retour vers la geometrie (repere three du maillage)
+  terrainWorld(idx) {
+    this.terrW = this.terrW || new Map();
+    if (this.terrW.has(idx)) return this.terrW.get(idx);
+    const mesh = this.v.instMeshes[idx], g = mesh.geometry, P = g.attributes.position, M = mesh.matrix, n = P.count;
+    this.reliefOrig = this.reliefOrig || new Map();
+    if (!this.reliefOrig.has(idx)) this.reliefOrig.set(idx, P.array.slice());
+    const xs = new Float64Array(n), ys = new Float64Array(n), zs = new Float64Array(n), v = new THREE.Vector3();
+    let mnx = 1e18, mxx = -1e18, mnz = 1e18, mxz = -1e18;
+    for (let k = 0; k < n; k++) { v.fromBufferAttribute(P, k).applyMatrix4(M); xs[k] = v.x; ys[k] = v.y; zs[k] = -v.z; mnx = Math.min(mnx, v.x); mxx = Math.max(mxx, v.x); mnz = Math.min(mnz, -v.z); mxz = Math.max(mxz, -v.z); }
+    const w = { xs, ys, zs, box: [mnx, mxx, mnz, mxz], inv: M.clone().invert() };
+    this.terrW.set(idx, w);
+    return w;
+  }
+  writeTerrain(idx) {
+    const w = this.terrW.get(idx), mesh = this.v.instMeshes[idx], g = mesh.geometry, P = g.attributes.position, v = new THREE.Vector3();
+    for (let k = 0; k < P.count; k++) { v.set(w.xs[k], w.ys[k], -w.zs[k]).applyMatrix4(w.inv); P.setXYZ(k, v.x, v.y, v.z); }
+    P.needsUpdate = true;
+    g.computeVertexNormals(); g.computeBoundingSphere(); g.computeBoundingBox();
+    this.v.refreshObject(idx);
+  }
+  applyStroke(st, write) {
+    const touched = [];
+    for (const idx of this.terrainObjects()) {
+      const w = this.terrainWorld(idx), b = w.box;
+      if (st.x + st.r < b[0] || st.x - st.r > b[1] || st.z + st.r < b[2] || st.z - st.r > b[3]) continue;
+      if (reliefStroke(w.xs, w.ys, w.zs, st)) touched.push(idx);
+    }
+    if (write) for (const idx of touched) this.writeTerrain(idx);
+    this.hcache = null;
+    return touched;
+  }
+  replayRelief() {
+    if (this.reliefOrig) for (const [idx, arr] of this.reliefOrig) { const P = this.v.instMeshes[idx].geometry.attributes.position; P.array.set(arr); P.needsUpdate = true; }
+    this.terrW = new Map();
+    const all = new Set();
+    for (const st of this.proj.relief) for (const idx of this.applyStroke(st, false)) all.add(idx);
+    if (this.reliefOrig) for (const idx of this.reliefOrig.keys()) all.add(idx);
+    for (const idx of all) { this.terrainWorld(idx); this.writeTerrain(idx); }
+  }
+  reliefState() { return this.relief || (this.relief = { m: "monter", r: 10, f: 0.4 }); }
+  startRelief() { this.reliefState(); this.setMode("relief"); this.select(null); this.renderProps(); }
+  reliefPointer(e, ph) {
+    const R = this.reliefState();
+    if (ph === "down") {
+      if (e.button !== 0 || e.altKey) return false;
+      const p = this.groundPoint(e.clientX, e.clientY);
+      if (!p) return true;
+      this.sculpting = { p, y: p.y, t: 0 };
+      this.reliefDab(p, e.shiftKey);
+      return true;
+    }
+    if (ph === "move") {
+      const p = this.groundPoint(e.clientX, e.clientY);
+      this.showBrush(p, R.r, this.mode === "relief");
+      if (this.sculpting && p && (p.distanceTo(this.sculpting.p) > R.r * 0.3 || performance.now() - this.sculpting.t > 150)) { this.sculpting.p = p; this.reliefDab(p, e.shiftKey); }
+      return !!this.sculpting;
+    }
+    if (ph === "up") {
+      if (!this.sculpting) return false;
+      this.sculpting = null;
+      for (const r of this.proj.objets) if (r.type === "route") this.rebuildRoad(r, false);   // (les routes suivent le nouveau sol)
+      this.commit();
+      return true;
+    }
+    return false;
+  }
+  reliefDab(p, inverse) {
+    const R = this.reliefState();
+    let m = R.m;
+    if (inverse && m === "monter") m = "creuser"; else if (inverse && m === "creuser") m = "monter";
+    const st = { m, x: r3(p.x), z: r3(-p.z), r: R.r, f: R.f, y: r3(this.sculpting ? this.sculpting.y : p.y) };
+    this.sculpting.t = performance.now();
+    const touched = this.applyStroke(st, true);
+    if (touched.length) this.proj.relief.push(st);
+    else if (!this.warnedRelief) { this.warnedRelief = true; this.ui.warn(T("reliefHors")); }
+  }
+  reliefProps(el) {
+    const R = this.reliefState(), n = this.proj.relief.length;
+    el.innerHTML = `<div class="ph">${esc(T("tRelief"))}</div>
+      <div class="sec"><div class="seg">${["monter", "creuser", "aplanir", "adoucir"].map(m => `<button data-rm="${m}" class="${R.m === m ? "on" : ""}">${esc(T("rl_" + m))}</button>`).join("")}</div></div>
+      <div class="sec"><label class="sl" for="r-r">${esc(T("vegRayon"))} : ${R.r} m</label><input id="r-r" type="range" min="2" max="60" value="${R.r}">
+        <label class="sl" for="r-f">${esc(T("reliefForce"))} : ${R.f} m</label><input id="r-f" type="range" min="1" max="30" value="${Math.round(R.f * 10)}"></div>
+      <p class="hint pad">${esc(T("reliefAide"))}</p>
+      <div class="sec"><div class="hint">${esc(T("reliefCompte", n))}</div><button class="btn wide danger" data-a="tout"${n ? "" : " disabled"}>${ICON.trash}${esc(T("reliefToutEffacer"))}</button></div>`;
+    el.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { R.m = b.dataset.rm; this.renderProps(); });
+    el.querySelector("#r-r").oninput = e => { R.r = +e.target.value; el.querySelector('label[for="r-r"]').textContent = T("vegRayon") + " : " + R.r + " m"; };
+    el.querySelector("#r-f").oninput = e => { R.f = +e.target.value / 10; el.querySelector('label[for="r-f"]').textContent = T("reliefForce") + " : " + R.f + " m"; };
+    el.querySelector('[data-a="tout"]').onclick = () => { this.proj.relief = []; this.replayRelief(); for (const r of this.proj.objets) if (r.type === "route") this.rebuildRoad(r, false); this.commit(); this.renderProps(); };
+  }
+
+  // ---------------------------------------------------------------- vegetation au pinceau (demande de JD, 21/10)
+  // Les forets du jeu (TREES1, BUSHES2...) sont UN maillage chacune : des quads croises (deux par arbre, meme axe). Une plante =
+  // les quads dont les centres se touchent (moins de 35 cm). Le paquet garde le centre de la plante dans le repere du maillage
+  // (« plante x y z », repere d'Unity) : le mod refait les memes plantes et prend la plus proche (MapPacks.PlantMesh).
+  upAxis(ob) {   // axe du maillage qui monte dans le monde (ligne y de la matrice d'Unity), en repere three (z inverse)
+    const t = ob.t, row = [t[4], t[5], -t[6]];
+    let a = 0; for (let i = 1; i < 3; i++) if (Math.abs(row[i]) > Math.abs(row[a])) a = i;
+    return { a, sign: Math.sign(row[a]) || 1 };
+  }
+  plantClusters(idx) {
+    this.plants = this.plants || new Map();
+    if (this.plants.has(idx)) return this.plants.get(idx);
+    const g = this.v.geoOf(this.v.info.objets[idx].m), P = g.attributes.position, I = g.index.array, nv = P.count, nt = I.length / 3;
+    const par = new Int32Array(nv); for (let i = 0; i < nv; i++) par[i] = i;
+    const f = x => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+    for (let t = 0; t < nt; t++) { const a = f(I[t * 3]); par[f(I[t * 3 + 1])] = a; par[f(I[t * 3 + 2])] = a; }
+    const comps = new Map(), order = [];
+    for (let t = 0; t < nt; t++) {
+      const r = f(I[t * 3]);
+      let c = comps.get(r);
+      if (!c) { c = { mn: [1e9, 1e9, 1e9], mx: [-1e9, -1e9, -1e9], tris: [] }; comps.set(r, c); order.push(c); }
+      c.tris.push(t);
+      for (let k = 0; k < 3; k++) { const v = I[t * 3 + k]; for (let a = 0; a < 3; a++) { const x = P.array[v * 3 + a]; if (x < c.mn[a]) c.mn[a] = x; if (x > c.mx[a]) c.mx[a] = x; } }
+    }
+    const cells = new Map(), clusters = [];
+    for (const c of order) {
+      const ce = [0, 1, 2].map(a => (c.mn[a] + c.mx[a]) / 2), key = ce.map(x => Math.floor(x / 0.5));
+      let hit = null;
+      for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) for (let dz = -1; dz <= 1 && !hit; dz++) {
+        for (const cl of cells.get((key[0] + dx) + "," + (key[1] + dy) + "," + (key[2] + dz)) || []) if (Math.hypot(cl.c[0] - ce[0], cl.c[1] - ce[1], cl.c[2] - ce[2]) < 0.35) { hit = cl; break; }
+      }
+      if (!hit) { hit = { c: ce, tris: [] }; clusters.push(hit); const k = key.join(","); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(hit); }
+      for (const t of c.tris) hit.tris.push(t);
+    }
+    this.plants.set(idx, clusters);
+    return clusters;
+  }
+  // geometrie d'une plante (repere du maillage, three), posee par son pied ; cle : centre dans le repere d'Unity
+  plantGeo(idx, key) {
+    this.pgeo = this.pgeo || new Map();
+    const k = idx + "|" + key.join(",");
+    if (this.pgeo.has(k)) return this.pgeo.get(k);
+    const ob = this.v.info.objets[idx], g0 = this.v.geoOf(ob.m), cls = this.plantClusters(idx), want = [key[0], key[1], -key[2]];
+    let best = cls[0], bd = 1e18;
+    for (const c of cls) { const d = (c.c[0] - want[0]) ** 2 + (c.c[1] - want[1]) ** 2 + (c.c[2] - want[2]) ** 2; if (d < bd) { bd = d; best = c; } }
+    const P = g0.attributes.position, N = g0.attributes.normal, UV = g0.attributes.uv, I = g0.index.array;
+    const grp = new Int32Array(I.length / 3);
+    for (const gr of g0.groups) for (let t = gr.start / 3; t < (gr.start + gr.count) / 3; t++) grp[t] = gr.materialIndex;
+    const tris = best.tris.slice().sort((a, b) => grp[a] - grp[b] || a - b);
+    const pos = [], nor = [], uv = [], mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+    for (const t of tris) for (let c = 0; c < 3; c++) { const v = I[t * 3 + c]; for (let a = 0; a < 3; a++) { const x = P.array[v * 3 + a]; pos.push(x); mn[a] = Math.min(mn[a], x); mx[a] = Math.max(mx[a], x); } if (N) nor.push(N.getX(v), N.getY(v), N.getZ(v)); if (UV) uv.push(UV.getX(v), UV.getY(v)); }
+    const up = this.upAxis(ob), o = [0, 1, 2].map(a => a === up.a ? (up.sign > 0 ? mn[a] : mx[a]) : (mn[a] + mx[a]) / 2);
+    for (let i = 0; i < pos.length; i++) pos[i] -= o[i % 3];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    if (N) g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); else g.computeVertexNormals();
+    if (UV) g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    for (let j = 0; j < tris.length;) { let e = j; while (e < tris.length && grp[tris[e]] === grp[tris[j]]) e++; g.addGroup(j * 3, (e - j) * 3, grp[tris[j]]); j = e; }
+    this.pgeo.set(k, g);
+    return g;
+  }
+  // pinceau : especes (objets du jeu : forets ou objets seuls), rayon, densite, ecart de taille, collisions
+  brushState() {
+    if (!this.brush) {
+      const o = this.v.info.objets, esp = [];
+      o.forEach((x, i) => { if (x.k === 3 && !x.r && x.p && /^(TREES|BUSHES)/.test(x.n) && !esp.some(j => o[j].n === x.n) && esp.length < 3) esp.push(i); });
+      this.brush = { especes: esp, rayon: 6, densite: 4, variation: 0.25, col: "aucune" };
+    }
+    return this.brush;
+  }
+  startVeg() { this.brushState(); this.setMode("veg"); this.select(null); this.renderProps(); }
+  // une touche du pinceau autour du point p (three) ; Maj : efface les plantes du pinceau dans le rayon
+  dab(p, erase) {
+    const b = this.brushState(), o = this.v.info.objets;
+    if (erase) {
+      const gone = this.proj.objets.filter(r => r.veg && Math.hypot(r.pos[0] - p.x, -r.pos[2] - p.z) < b.rayon);
+      for (const r of gone) { this.proj.objets.splice(this.proj.objets.indexOf(r), 1); const n = this.nodes.get(r.id); if (n) { this.root.remove(n); this.nodes.delete(r.id); } }
+      return gone.length;
+    }
+    if (!b.especes.length) { this.ui.warn(T("vegSansEspece")); return 0; }
+    let made = 0;
+    for (let i = 0; i < b.densite; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * b.rayon;
+      const x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d, y = this.heightAt(x, z, p.y);
+      if (y === null) continue;
+      const idx = b.especes[Math.floor(Math.random() * b.especes.length)], ob = o[idx];
+      const m = Viewer.mat(ob.t), q = new THREE.Quaternion(), sc = new THREE.Vector3(), tr = new THREE.Vector3();
+      m.decompose(tr, q, sc);
+      q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2));
+      const k = 1 + (Math.random() * 2 - 1) * b.variation;
+      const rec = { id: nextId++, nom: ob.n, type: "jeu", veg: true, pos: U.posFrom(new THREE.Vector3(x, y - 0.05, z)), rot: U.rotFrom(q), ech: [r3(sc.x * k), r3(sc.y * k), r3(sc.z * k)], col: b.col };
+      const cls = this.plantClusters(idx);
+      if (cls.length > 1) { const c = cls[Math.floor(Math.random() * cls.length)].c; rec.src = { p: ob.p, n: ob.n, plante: [r3(c[0]), r3(c[1]), r3(-c[2])] }; }
+      else rec.src = { p: ob.p, n: ob.n };
+      this.proj.objets.push(rec);
+      this.build(rec);
+      made++;
+    }
+    return made;
+  }
+  vegPointer(e, ph) {
+    if (ph === "down") {
+      if (e.button !== 0 || e.altKey) return false;
+      const p = this.groundPoint(e.clientX, e.clientY);
+      if (p) { this.dab(p, e.shiftKey); this.painting = { p }; }
+      return true;
+    }
+    if (ph === "move") {
+      const p = this.groundPoint(e.clientX, e.clientY);
+      this.showBrush(p);
+      if (this.painting && p && p.distanceTo(this.painting.p) > this.brushState().rayon * 0.6) { this.dab(p, e.shiftKey); this.painting.p = p; }
+      return !!this.painting;
+    }
+    if (ph === "up") { if (!this.painting) return false; this.painting = null; this.commit(); this.renderList(); return true; }
+    return false;
+  }
+  showBrush(p, radius, on) {
+    if (!this.ring) {
+      this.ring = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x7cf2c4, transparent: true, opacity: 0.8, depthTest: false }));
+      this.ring.renderOrder = 10; this.ring.userData.noPick = true; this.v.scene.add(this.ring);
+    }
+    this.ring.visible = !!p && (on !== undefined ? on : this.mode === "veg");
+    if (p) { this.ring.position.set(p.x, p.y + 0.15, p.z); this.ring.scale.setScalar(radius || this.brushState().rayon); }
+  }
+  vegProps(el) {
+    const b = this.brushState(), o = this.v.info.objets, n = this.proj.objets.filter(r => r.veg).length;
+    el.innerHTML = `<div class="ph">${esc(T("tVegetation"))}</div>
+      <div class="sec"><div class="sl">${esc(T("vegEspeces"))}</div><div class="chips">${b.especes.map((i, j) => `<button class="mini on" data-esp="${j}" title="${esc(T("retirer"))}">${esc(o[i].n)} ×</button>`).join("")}</div>
+        <button class="btn wide" data-a="esp">${ICON.box}${esc(T("vegAjouterEspece"))}</button></div>
+      <div class="sec"><label class="sl" for="b-r">${esc(T("vegRayon"))} : ${b.rayon} m</label><input id="b-r" type="range" min="1" max="40" value="${b.rayon}">
+        <label class="sl" for="b-d">${esc(T("vegDensite"))} : ${b.densite}</label><input id="b-d" type="range" min="1" max="30" value="${b.densite}">
+        <label class="sl" for="b-v">${esc(T("vegVariation"))} : ${Math.round(b.variation * 100)} %</label><input id="b-v" type="range" min="0" max="60" value="${Math.round(b.variation * 100)}"></div>
+      <div class="sec"><div class="sl">${esc(T("collisions"))}</div><div class="seg">${["aucune", "forme"].map(c => `<button data-col="${c}" class="${b.col === c ? "on" : ""}">${esc(T("col_" + c))}</button>`).join("")}</div></div>
+      <p class="hint pad">${esc(T("vegAide"))}</p>
+      <div class="sec"><div class="hint">${esc(T("vegCompte", n))}</div><button class="btn wide danger" data-a="tout"${n ? "" : " disabled"}>${ICON.trash}${esc(T("vegToutEffacer"))}</button></div>`;
+    el.querySelectorAll("[data-esp]").forEach(x => x.onclick = () => { b.especes.splice(+x.dataset.esp, 1); this.renderProps(); });
+    el.querySelector('[data-a="esp"]').onclick = () => this.openPalette(i => { if (!b.especes.includes(i)) b.especes.push(i); this.renderProps(); });
+    const rg = (id, f, k) => el.querySelector(id).oninput = e => { b[f] = +e.target.value * k; el.querySelector(`label[for="${id.slice(1)}"]`).textContent = T({ rayon: "vegRayon", densite: "vegDensite", variation: "vegVariation" }[f]) + " : " + (f === "variation" ? Math.round(b[f] * 100) + " %" : b[f] + (f === "rayon" ? " m" : "")); };
+    rg("#b-r", "rayon", 1); rg("#b-d", "densite", 1); rg("#b-v", "variation", 0.01);
+    el.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { b.col = x.dataset.col; this.renderProps(); });
+    el.querySelector('[data-a="tout"]').onclick = () => { for (const r of this.proj.objets.filter(r => r.veg)) { const nd = this.nodes.get(r.id); if (nd) { this.root.remove(nd); this.nodes.delete(r.id); } } this.proj.objets = this.proj.objets.filter(r => !r.veg); this.commit(); this.renderProps(); };
+  }
+
+  // ---------------------------------------------------------------- ensembles qui fonctionnent (carte format 4)
+  // Un objet du jeu et ses voisins qui ont des automates (porte et poignee, boite aux lettres...) : info.unites[u] = { p, n,
+  // r (rendus), f (automates), t (matrice) } ; copie entiere (le mod fait Instantiate) ou masquage entier.
+  unitsOf(idx) { const ob = this.v.info.objets[idx], U2 = this.v.info.unites || []; return (ob && ob.u ? ob.u : []).map(i => Object.assign({ i }, U2[i])).filter(u => u.p); }
+  addUnit(ui) {
+    const u = this.v.info.unites[ui], m = Viewer.mat(u.t), pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    m.decompose(pos, q, sc);
+    const rec = { id: nextId++, nom: u.n, type: "unite", src: { p: u.p, n: u.n }, pos: U.posFrom(pos), rot: U.rotFrom(q), ech: [r3(sc.x), r3(sc.y), r3(sc.z)], col: "aucune" };
+    this.proj.objets.push(rec);
+    this.build(rec);
+    this.select({ rec });
+    this.commit();
+    this.ui.warn(T("uniteCopiee"));
+  }
+  unitNode(rec, node) {
+    const U2 = this.v.info.unites || [], u = U2.find(x => x.p === rec.src.p);
+    if (!u) { rec.manque = true; node.add(placeholder()); return; }
+    const inv = Viewer.mat(u.t).invert(), pre = u.p + "/";
+    this.v.info.objets.forEach((o, i) => {
+      if (o.p !== u.p && !(o.p && o.p.startsWith(pre))) return;
+      const g = this.v.geoOf(o.m), mats = this.v.matsFor(o, g);
+      const m = new THREE.Mesh(g, mats.length === 1 ? mats[0] : mats);
+      m.matrixAutoUpdate = false;
+      m.matrix.copy(inv).multiply(o.r ? new THREE.Matrix4() : Viewer.mat(o.t));   // (regroupe : sommets dans le monde)
+      node.add(m);
+    });
+  }
+  isUnitMasked(p) { return this.proj.masques.some(m => m.u && m.p === p); }
+  toggleUnitMask(u) {
+    if (this.isUnitMasked(u.p)) this.proj.masques = this.proj.masques.filter(m => !(m.u && m.p === u.p));
+    else this.proj.masques.push({ p: u.p, n: u.n, u: true });
+    this.applyMasks(); this.commit(); this.renderProps();
+  }
+
+  // lumiere : boule lumineuse (choisissable) + vraie lumiere ponctuelle pour les 8 premieres et la choisie
+  addLight() {
+    const p = this.spot();
+    const rec = { id: nextId++, nom: T("lumiere"), type: "lumiere", pos: U.posFrom(p.add(new THREE.Vector3(0, 3, 0))), rot: [0, 0, 0, 1], ech: [1, 1, 1], couleur: "#ffd9a0", intensite: 1.5, portee: 12, nuit: true, ombres: false, col: "aucune" };
+    this.proj.objets.push(rec);
+    this.build(rec);
+    this.select({ rec });
+    this.commit();
+  }
+  lightNode(rec, node) {
+    const col = new THREE.Color(rec.couleur || "#ffffff");
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 12), new THREE.MeshBasicMaterial({ color: col }));
+    ball.userData.cuit = true; ball.userData.lumiere = true;
+    node.add(ball);
+    const n = this.proj.objets.filter(o => o.type === "lumiere").indexOf(rec);
+    if (n < 8 || (this.sel && this.sel.rec === rec)) {
+      const l = new THREE.PointLight(col, (rec.intensite || 1) * 25, rec.portee || 12, 2);
+      l.userData.noPick = true;
+      node.add(l);
+    }
+  }
+  lightProps(el, rec) {
+    el.innerHTML = `<div class="ph">${esc(T("proprietes"))}</div>
+      <div class="sec"><label class="sl" for="p-nom">${esc(T("nom"))}</label><input id="p-nom" class="txt" value="${esc(rec.nom)}" spellcheck="false"></div>
+      <div class="sec"><div class="sl">${esc(T("position"))} (m)</div><div class="xyz">${["px", "py", "pz"].map((f, i) => `<label class="num"><b style="color:${["#ff6e6e", "#7cf2c4", "#6aa8ff"][i]}">${f.slice(-1).toUpperCase()}</b><input data-f="${f}" value="${this.values(rec)[f]}" inputmode="decimal" spellcheck="false"></label>`).join("")}</div></div>
+      <div class="sec"><label class="sl" for="p-col">${esc(T("couleur"))}</label><input id="p-col" type="color" class="couleur" value="${esc(rec.couleur || "#ffffff")}">
+        <label class="sl" for="p-int">${esc(T("intensite"))}</label><input id="p-int" class="txt" value="${rec.intensite}" inputmode="decimal">
+        <label class="sl" for="p-por">${esc(T("portee"))} (m)</label><input id="p-por" class="txt" value="${rec.portee}" inputmode="decimal">
+        <label class="cb"><input type="checkbox" id="p-nuit"${rec.nuit ? " checked" : ""}><span>${esc(T("nuitSeule"))}</span></label>
+        <label class="cb"><input type="checkbox" id="p-omb"${rec.ombres ? " checked" : ""}><span>${esc(T("ombresLum"))}</span></label></div>
+      <div class="sec row2"><button class="btn" data-a="dup">${ICON.copy}${esc(T("dupliquer"))}</button><button class="btn danger" data-a="suppr">${ICON.trash}${esc(T("supprimer"))}</button></div>`;
+    const num = (id, f, lo, hi) => el.querySelector(id).onchange = e => { const x = parseFloat(e.target.value.replace(",", ".")); if (isFinite(x) && x >= lo && x <= hi) { rec[f] = x; this.rebuild(rec); this.commit(); } this.renderProps(); };
+    el.querySelector("#p-nom").onchange = e => { rec.nom = e.target.value.trim() || rec.nom; this.commit(); };
+    el.querySelectorAll("input[data-f]").forEach(i => i.onchange = () => this.setValue(rec, i.dataset.f, parseFloat(i.value.replace(",", "."))));
+    el.querySelector("#p-col").oninput = e => { rec.couleur = e.target.value; this.rebuild(rec); };
+    el.querySelector("#p-col").onchange = () => this.commit();
+    num("#p-int", "intensite", 0, 20); num("#p-por", "portee", 0.5, 200);
+    el.querySelector("#p-nuit").onchange = e => { rec.nuit = e.target.checked; this.commit(); };
+    el.querySelector("#p-omb").onchange = e => { rec.ombres = e.target.checked; this.commit(); };
+    el.querySelector('[data-a="dup"]').onclick = () => this.duplicate();
+    el.querySelector('[data-a="suppr"]').onclick = () => this.remove();
   }
 
   // point du sol sous le curseur (sol, routes, batiments du jeu)
@@ -760,28 +1278,72 @@ export class Edition {
         tans.push(tg);
       }
     }
-    const pos = [], uv = [], ind = [];
+    // troncons : centre, perpendiculaire, hauteurs du sol en travers ; route plate en travers (« plat », par defaut) au plus
+    // haut du sol sous elle : le sol ne la traverse plus ; talus de chaque cote jusqu'au sol (1,5 m, « talus ») ; marquages
+    const flat = rec.plat !== false, sections = [];
     let dist = 0;
     pts.forEach((c, j) => {
       if (j) dist += c.distanceTo(pts[j - 1]);
       const t = tans[j].setY(0); if (t.lengthSq() < 1e-8) t.copy(j ? pts[j].clone().sub(pts[j - 1]).setY(0) : new THREE.Vector3(1, 0, 0)); t.normalize();
-      const perp = new THREE.Vector3(-t.z, 0, t.x);
+      const perp = new THREE.Vector3(-t.z, 0, t.x), hs = [];
       for (let k = 0; k <= across; k++) {
         const q = c.clone().addScaledVector(perp, w * (k / across - 0.5));
         const y = preview ? null : this.heightAt(q.x, q.z, c.y);
-        pos.push(q.x, (y === null ? c.y : y) + 0.06, q.z);
-        if (alongU) uv.push(dist / (w * aspect) / tu, k / across / tv); else uv.push(k / across / tu, dist / w / tv);
+        hs.push(y === null ? c.y : y);
       }
-      if (j) for (let k = 0; k < across; k++) { const a = (j - 1) * (across + 1) + k, b = a + across + 1; ind.push(a, a + 1, b, a + 1, b + 1, b); }
+      const top = Math.max(...hs);
+      sections.push({ c, perp, dist, ys: hs.map(h => (flat ? top : h) + 0.06) });
     });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(ind);
-    g.computeVertexNormals();
-    const m = new THREE.Mesh(g, rec.surface ? this.habitMat(rec.surface) : new THREE.MeshLambertMaterial({ color: 0x555555 }));
-    m.userData.cuit = true;
-    return m;
+    const grp = new THREE.Group();
+    const strip = (cols, mat, uvOf) => {   // bande de colonnes (une liste de points par troncon)
+      const pos = [], uv = [], ind = [], nc = cols(sections[0]).length;
+      sections.forEach((sec, j) => {
+        cols(sec).forEach((q, k) => { pos.push(q.x, q.y, q.z); const u = uvOf(sec, k, nc); uv.push(u[0], u[1]); });
+        if (j) for (let k = 0; k + 1 < nc; k++) { const a = (j - 1) * nc + k, b = a + nc; ind.push(a, a + 1, b, a + 1, b + 1, b); }
+      });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(ind); g.computeVertexNormals();
+      const m = new THREE.Mesh(g, mat); m.userData.cuit = true; grp.add(m);
+    };
+    const at = (sec, off, y) => sec.c.clone().addScaledVector(sec.perp, off).setY(y);
+    const surf = rec.surface ? this.habitMat(rec.surface) : new THREE.MeshLambertMaterial({ color: 0x555555 });
+    strip(sec => sec.ys.map((y, k) => at(sec, w * (k / across - 0.5), y)), surf,
+      (sec, k) => alongU ? [sec.dist / (w * aspect) / tu, k / across / tv] : [k / across / tu, sec.dist / w / tv]);
+    if (rec.talus !== false && !preview) {
+      const side = this.surfacePresets("talus")[0], mat = side ? this.habitMat(side) : surf;
+      for (const sg of [-1, 1]) strip(sec => {
+        const e = sg < 0 ? 0 : across, off = w * (e / across - 0.5), o2 = off + sg * 1.6;
+        const q2 = at(sec, o2, 0), h2 = this.heightAt(q2.x, q2.z, sec.c.y);
+        const pair = [at(sec, off, sec.ys[e] - 0.01), at(sec, o2, (h2 === null ? sec.ys[e] - 0.6 : h2) - 0.05)];
+        return sg < 0 ? pair.reverse() : pair;   // (meme sens que la chaussee : faces vers le haut)
+      }, mat, (sec, k) => [k, sec.dist / 3]);
+    }
+    // marquages : ligne du centre en tirets (3 m sur 9), lignes de bord continues ; blancs, 1 cm au-dessus
+    if (rec.marquage && rec.marquage !== "aucun" && !preview) {
+      const white = this.markMat || (this.markMat = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
+      const lines = [];
+      if (rec.marquage === "centre" || rec.marquage === "tout") lines.push({ off: 0, dash: true });
+      if (rec.marquage === "bords" || rec.marquage === "tout") lines.push({ off: -w / 2 + 0.3, dash: false }, { off: w / 2 - 0.3, dash: false });
+      const pos = [], ind = [];
+      for (const ln of lines) for (let j = 1; j < sections.length; j++) {
+        const s0 = sections[j - 1], s1 = sections[j];
+        if (ln.dash && ((s0.dist + s1.dist) / 2) % 9 > 3) continue;
+        const yAt = (sec, off) => { const f = (off / w + 0.5) * across, k = Math.min(across - 1, Math.floor(f)), r = f - k; return sec.ys[k] * (1 - r) + sec.ys[k + 1] * r + 0.012; };
+        const b = pos.length / 3;
+        for (const sec of [s0, s1]) for (const d of [-0.06, 0.06]) { const q = at(sec, ln.off + d, yAt(sec, ln.off + d)); pos.push(q.x, q.y, q.z); }
+        ind.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+      }
+      if (pos.length) {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2));
+        g.setIndex(ind); g.computeVertexNormals();
+        const m = new THREE.Mesh(g, white); m.userData.cuit = true; grp.add(m);
+      }
+    }
+    return grp;
   }
   rebuildRoad(rec, preview) {
     const node = this.nodes.get(rec.id);
@@ -835,6 +1397,8 @@ export class Edition {
     return best;
   }
   pointer(e, ph) {
+    if (this.mode === "veg") return this.vegPointer(e, ph);
+    if (this.mode === "relief") return this.reliefPointer(e, ph);
     const road = this.sel && this.sel.rec && this.sel.rec.type === "route" ? this.sel.rec : null;
     if (ph === "down") {
       if (e.button !== 0 || e.altKey && this.mode !== "route") return false;
@@ -843,7 +1407,9 @@ export class Edition {
         if (hd) { this.dragH = Object.assign({ rec: road, x: e.clientX, y: e.clientY }, hd); this.anchorSel = hd.i; this.showRoadUi(); this.renderProps(); return true; }
       }
       if (this.mode !== "route") return false;
-      const p = this.groundPoint(e.clientX, e.clientY);
+      let p = this.groundPoint(e.clientX, e.clientY);
+      const snapTo = this.anchorNear(e, this.drawing);   // (raccord : le point d'une autre route a 12 px)
+      if (snapTo) p = snapTo;
       if (!p) return true;
       let rec = this.drawing;
       if (!rec) {
@@ -876,6 +1442,20 @@ export class Edition {
     if (ph === "up") { const d = this.dragH; this.dragH = null; this.rebuildRoad(d.rec, false); if (!this.drawing) this.commit(); this.renderProps(); return true; }
     return false;
   }
+  anchorNear(e, except) {
+    const r = this.v.o.canvas.getBoundingClientRect(), cam = this.v.camera;
+    let best = null, bd = 12;
+    for (const o of this.proj.objets) {
+      if (o.type !== "route" || o === except) continue;
+      for (const pt of o.pts) {
+        const P = U.posTo(pt.p, new THREE.Vector3()), s = P.clone().project(cam);
+        if (s.z > 1) continue;
+        const d = Math.hypot((s.x + 1) / 2 * r.width + r.left - e.clientX, (1 - s.y) / 2 * r.height + r.top - e.clientY);
+        if (d < bd) { bd = d; best = P; }
+      }
+    }
+    return best;
+  }
   removeAnchor() {
     const rec = this.sel && this.sel.rec;
     if (!rec || rec.type !== "route" || this.anchorSel === undefined) return false;
@@ -897,7 +1477,7 @@ export class Edition {
     const key = JSON.stringify(h) + (base && base.alphaTest ? "|cut" : "");
     if (this.hmats.has(key)) return this.hmats.get(key);
     let mat;
-    if (h.k === "eau") mat = new THREE.MeshLambertMaterial({ color: this.v.o.game === "msc" ? 0x3f6f96 : 0x8fb0cc, transparent: true, opacity: 0.72, depthWrite: false });
+    if (h.k === "eau" || h.k === "lac") mat = new THREE.MeshLambertMaterial({ color: this.v.o.game === "msc" ? 0x3f6f96 : 0x8fb0cc, transparent: true, opacity: 0.72, depthWrite: false });
     else if (h.k === "mat" && this.v.mats[h.mi]) {
       mat = this.v.mats[h.mi].clone();
       if (mat.map && h.rep) { mat.map = mat.map.clone(); mat.map.repeat.set(h.rep[0], h.rep[1]); mat.map.needsUpdate = true; }
@@ -1071,7 +1651,7 @@ export class Edition {
   // ---------------------------------------------------------------- palette des objets du jeu
   // recensement (catalogue.js) : categories aux noms generiques dans la langue de l'editeur, recherche par debut de mot ;
   // champ vide : toutes les categories, a deplier ; carte preparee avant la 1.3.0 (sans chemins) : refaire la preparation
-  openPalette() {
+  openPalette(onChoose) {
     const dlg = this.ui.palette;
     dlg.hidden = false;
     const input = dlg.querySelector("input"), list = dlg.querySelector(".plist");
@@ -1096,7 +1676,7 @@ export class Edition {
       }
       list.innerHTML = h || `<p class="empty">${esc(T("rienTrouve"))}</p>`;
       list.querySelectorAll("button[data-c]").forEach(b => b.onclick = () => { const id = b.dataset.c; open.has(id) ? open.delete(id) : open.add(id); draw(); });
-      list.querySelectorAll("button[data-i]").forEach(b => b.onclick = () => { dlg.hidden = true; this.addGame(+b.dataset.i, false); });
+      list.querySelectorAll("button[data-i]").forEach(b => b.onclick = () => { dlg.hidden = true; if (onChoose) onChoose(+b.dataset.i); else this.addGame(+b.dataset.i, false); });
     };
     input.value = "";
     input.oninput = draw;
@@ -1196,6 +1776,29 @@ function faceRegion(g, t0) {
   }
   return [...seen].sort((x, y) => x - y);
 }
+// un trait de relief sur des sommets (repere du monde d'Unity) ; vrai si un sommet a bouge -- meme calcul que MapPacks.Stroke
+function reliefStroke(xs, ys, zs, st) {
+  const r2 = st.r * st.r, k = Math.min(1, st.f / 2);
+  let mean = 0, ws = 0, any = false;
+  if (st.m === "adoucir") for (let i = 0; i < xs.length; i++) { const d2 = (xs[i] - st.x) ** 2 + (zs[i] - st.z) ** 2; if (d2 < r2) { const w = (1 - d2 / r2) ** 2; mean += w * ys[i]; ws += w; } }
+  if (ws) mean /= ws;
+  for (let i = 0; i < xs.length; i++) {
+    const d2 = (xs[i] - st.x) ** 2 + (zs[i] - st.z) ** 2;
+    if (d2 >= r2) continue;
+    const w = (1 - d2 / r2) ** 2;
+    if (st.m === "monter") ys[i] += st.f * w;
+    else if (st.m === "creuser") ys[i] -= st.f * w;
+    else if (st.m === "aplanir") ys[i] += (st.y - ys[i]) * k * w;
+    else if (st.m === "adoucir" && ws) ys[i] += (mean - ys[i]) * k * w;
+    any = true;
+  }
+  return any;
+}
+// deplace un ajout (repere d'Unity) : sa position, ou tous les points d'une route
+function shiftRec(r, dx, dz) {
+  if (r.type === "route") { r.pos = [0, 0, 0]; for (const pt of r.pts) pt.p = [pt.p[0] + dx, pt.p[1], pt.p[2] + dz]; }
+  else r.pos = [r.pos[0] + dx, r.pos[1], r.pos[2] + dz];
+}
 function isUnder(o, root) { for (; o; o = o.parent) if (o === root) return true; return false; }
 function norm(a) { a = ((a % 360) + 360) % 360; return a > 180.0001 ? a - 360 : a; }
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -1208,6 +1811,11 @@ const ICON = {
   box: sv('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>'),
   import: sv('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>'),
   road: sv('<path d="M8 3L4 21M16 3l4 18"/><path d="M12 4v3M12 10.5v3M12 17v3"/>'),
+  gear: sv('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>'),
+  mountain: sv('<path d="M3 19l6-10 4 6 2-3 6 7z"/><path d="M8.2 10.5l1.8 1.5 1.5-1"/>'),
+  tree: sv('<path d="M12 3l5 7h-3l4 6H6l4-6H7z"/><path d="M12 16v5"/>'),
+  bulb: sv('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>'),
+  magnet: sv('<path d="M6 4v7a6 6 0 0 0 12 0V4"/><path d="M6 8h4M14 8h4"/>'),
   water: sv('<path d="M3 15c2 0 2-1.5 4.5-1.5S10 15 12 15s2-1.5 4.5-1.5S19 15 21 15"/><path d="M3 19c2 0 2-1.5 4.5-1.5S10 19 12 19s2-1.5 4.5-1.5S19 19 21 19"/><path d="M12 3c2.5 3 4 5 4 6.5a4 4 0 0 1-8 0C8 8 9.5 6 12 3z"/>'),
   undo: sv('<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   redo: sv('<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),

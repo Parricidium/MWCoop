@@ -2526,4 +2526,11 @@ static const wchar_t *const kAr[][2] = {
     { L"Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.", L"التجميع ينشئ ملف .mwcmap صغيراً: نماذجك وطرقك وصورك فقط. تُعاد بناء النسخ وخامات اللعبة من لعبة كل لاعب: لا يُشارَك أي ملف من اللعبة." },
     { L"Objects, roads, water, textures, co-op", L"أغراض، طرق، ماء، خامات، لعب جماعي" },
     { L"The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.", L"سيارة VAZ-2108 المرفقة مع المود لها أيضاً بطاقتها في تبويب الإضافات (اختصار الإضافات في الشريط الجانبي، تحت المودات): القالب نفسه والطلاء نفسه." },
+    { L"Several objects: Ctrl + click to pick them, Ctrl+A for all; the gizmo moves them together. Magnet (M): 1 m grid and 15° steps. Ctrl+C / Ctrl+V copy from one map to another.", L"عدة أغراض: Ctrl + نقرة لاختيارها، Ctrl+A للكل؛ يحرّكها المقبض معاً. المغناطيس (M): شبكة 1 م وخطوات 15°. Ctrl+C / Ctrl+V للنسخ من خريطة إلى أخرى." },
+    { L"Light: colour, intensity, range; “only at night” turns it on when the sun goes down.", L"الضوء: اللون والشدة والمدى؛ «ليلاً فقط» يُضيئه عند غروب الشمس." },
+    { L"Vegetation (B): a brush that plants trees and bushes from the game's forests; Shift to erase.", L"النباتات (B): فرشاة تزرع أشجاراً وشجيرات من غابات اللعبة؛ Shift للمحو." },
+    { L"Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-fit to it.", L"نحت التضاريس (T): رفع أرض اللعبة وحفرها وتسويتها وتنعيمها؛ الطرق تتكيف معها." },
+    { L"Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.", L"الطرق: مستوية بالعرض مع منحدرات، وخطوط في الوسط أو على الحواف؛ نقطة توضع على نقطة طريق آخر تربطهما." },
+    { L"Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.", L"مجموعات تعمل: انقر على غرض من اللعبة؛ باب أو مقبض… يُنسخ بآلياته أو يُخفى كلياً." },
+    { L"Objects, roads, terrain, plants, lights, co-op", L"أغراض، طرق، تضاريس، نباتات، أضواء، لعب جماعي" },
 };

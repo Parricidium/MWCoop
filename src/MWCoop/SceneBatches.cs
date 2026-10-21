@@ -162,7 +162,7 @@ namespace MWCoop
         }
 
         // Maillage lisible d'un objet regroupe, dans le repere de son objet (copies des cartes de l'editeur) ; null sinon.
-        public static Mesh LocalMesh(MeshRenderer r, Mesh combined)
+        public static Mesh LocalMesh(MeshRenderer r, Mesh combined, bool transformFrame = false)   // (transformFrame : repere du transform -- copie d'un ensemble entier, ses enfants gardent leur place)
         {
             SceneFile.MeshData md; int[] subs;
             if (!Find(r, combined, out md, out subs)) return null;
@@ -172,7 +172,7 @@ namespace MWCoop
             // (le repere du rendu, comme l'export : MapExport « r » = Renderer.localToWorldMatrix, l'identite pour un objet
             // regroupe -- ses sommets sont deja dans le monde. Celui du transform (le vrai repere de l'objet, souvent tourne :
             // lit de MWC « Z en haut ») couchait ou dressait la copie : retour de Vaydon, 1.4.0, 20/10)
-            Matrix4x4 w2l = r.worldToLocalMatrix;
+            Matrix4x4 w2l = transformFrame ? r.transform.worldToLocalMatrix : r.worldToLocalMatrix;
             foreach (int s in subs)
             {
                 if (s < 0 || s >= md.Subs.Length) continue;

@@ -217,7 +217,7 @@ export class Viewer {
         }
         for (let i = p.start; i < p.start + p.count; i++) ind[q++] = from + seen.get(I[i]);
         let r = this.ranges.get(p.idx); if (!r) this.ranges.set(p.idx, r = []);
-        r.push({ b, from, n: loc.length });
+        r.push({ b, from, n: loc.length, loc: Uint32Array.from(loc) });
       });
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
@@ -234,6 +234,24 @@ export class Viewer {
     for (const mesh of this.instMeshes) if (mesh) mesh.layers.set(1);   // (plus dessines : le regroupe les remplace)
     this.merged = true;
   }
+  // objet dont les sommets ont change (relief sculpte) : ses morceaux du dessin regroupe recalcules
+  refreshObject(idx) {
+    const rs = this.ranges && this.ranges.get(idx), mesh = this.instMeshes[idx];
+    if (!rs || !mesh) return;
+    const g = mesh.geometry, P = g.attributes.position, N = g.attributes.normal, M = mesh.matrix, nm = new THREE.Matrix3().getNormalMatrix(M), v = new THREE.Vector3();
+    for (const r of rs) {
+      const pa = r.b.geo.attributes.position, na = r.b.geo.attributes.normal;
+      for (let j = 0; j < r.loc.length; j++) {
+        const k = r.loc[j], o = r.from + j;
+        v.fromBufferAttribute(P, k).applyMatrix4(M); pa.setXYZ(o, v.x, v.y, v.z);
+        if (N) { v.fromBufferAttribute(N, k).applyMatrix3(nm).normalize(); na.setXYZ(o, v.x, v.y, v.z); }
+      }
+      if (r.saved) r.saved = null;
+      pa.needsUpdate = true; if (na) na.needsUpdate = true;
+      r.b.geo.computeBoundingSphere();
+    }
+  }
+
   // objet masque / reaffiche dans le dessin regroupe
   setHidden(idx, hidden) {
     const rs = this.ranges && this.ranges.get(idx);
@@ -354,7 +372,7 @@ export class Viewer {
     ray.setFromCamera(v, this.camera);
     ray.far = 3000;
     const hits = ray.intersectObjects(this.groups.filter(g => g.visible).concat(this.extra ? [this.extra] : []), true).filter(h => h.object.visible && !h.object.userData.noPick);
-    if (this.onPick) { this.onPick(hits[0] || null); return; }
+    if (this.onPick) { this.onPick(hits[0] || null, e); return; }
     if (this.selBox) { this.scene.remove(this.selBox); this.selBox.geometry.dispose(); this.selBox = null; }
     const u = this.ui;
     if (!hits.length) { u.sel.innerHTML = `<p class="empty">${u.esc(T("selVide"))}</p>`; return; }

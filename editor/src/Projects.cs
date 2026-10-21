@@ -136,6 +136,26 @@ namespace EditeurCarte
             return "textures/" + dst;
         }
 
+        // Copie d'un fichier d'un projet a l'autre (modeles/x.obj et les fichiers du meme dossier : textures du modele ;
+        // textures/x.png) ; rien n'est ecrase.
+        public static bool CopyFile(string de, string vers, string rel)
+        {
+            string a = Dir(de), b = Dir(vers);
+            if (a == null || b == null || string.IsNullOrEmpty(rel) || rel.Contains("..") || Path.IsPathRooted(rel)) return false;
+            string src = Path.Combine(a, rel.Replace('/', '\\'));
+            if (!File.Exists(src)) return false;
+            string sd = Path.GetDirectoryName(src), dd = Path.Combine(b, Path.GetDirectoryName(rel.Replace('/', '\\')));
+            Directory.CreateDirectory(dd);
+            var list = new List<string> { src };
+            if (rel.StartsWith("modeles/")) list.AddRange(Directory.GetFiles(sd));
+            foreach (string f in list)
+            {
+                string to = Path.Combine(dd, Path.GetFileName(f));
+                if (!File.Exists(to)) File.Copy(f, to);
+            }
+            return true;
+        }
+
         public static List<object> Images(string dossier)
         {
             var l = new List<object>();
