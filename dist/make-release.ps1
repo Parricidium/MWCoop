@@ -113,9 +113,9 @@ if ($Publier) {
     # quand l'API de GitHub est injoignable ou saturee (joueurs russes, 21/10). Commit a part, a pousser avec main.
     if (-not $Nightly) {
         try {
-            gh api "repos/Parricidium/MWCoop/releases?per_page=40" | Out-File -FilePath "$PSScriptRootersions.json" -Encoding utf8
-            git add "$PSScriptRootersions.json"
-            git commit -q -m "versions.json $Version" -- "$PSScriptRootersions.json"
+            gh api "repos/Parricidium/MWCoop/releases?per_page=40" | Out-File -FilePath "$PSScriptRoot\versions.json" -Encoding utf8
+            git add "$PSScriptRoot\versions.json"
+            git commit -q -m "versions.json $Version" -- "$PSScriptRoot\versions.json"
             "versions.json : $Version en tete"
         } catch { Write-Warning "versions.json : $_" }
     }
