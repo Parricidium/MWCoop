@@ -975,7 +975,15 @@ namespace MWCoop
                 Transform hr = Bone("hand_right"), hl = Bone("hand_left");
                 handErrR = hr != null ? (hr.position - pr).magnitude : -1f; handErrL = hl != null ? (hl.position - pl).magnitude : -1f;
             }
-            if (gearT != null && wShift > 0.001f) ArmTo(true, gearT.position + car.up * 0.1f, wShift);
+            if (gearT != null && wShift > 0.001f)
+            {
+                // Pommeau : le haut du maillage du levier (GIFU : levier haut sous GearLever/Pivot/Lever ; SORBET : le pommeau au bout
+                // de Gearstick/Pivot) -- avant, 10 cm au-dessus du pivot, trop bas pour le camion (Menor, 21/10).
+                Vector3 knob = gearT.position + car.up * 0.1f;
+                Renderer kr = gearT.GetComponentInChildren<Renderer>();
+                if (kr != null) knob = kr.bounds.center + car.up * kr.bounds.extents.y;
+                ArmTo(true, knob, wShift);
+            }
         }
 
         float handErrR = -1f, handErrL = -1f, leanDeg, wStalk;
