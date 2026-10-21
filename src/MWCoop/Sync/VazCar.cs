@@ -80,7 +80,7 @@ namespace MWCoop
             public string Name; public float Power, PowerRpm, Torque, TorqueRpm, MaxRpm, Inertia = 0.15f, Final = 4.4f, Clutch = 420f;
             public float Mass, Com, Steer, Spring, Damp; public float[] Gears;
         }
-        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3;
+        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
@@ -166,7 +166,32 @@ namespace MWCoop
             Dome = new Vector3(0f, 1.20f, -0.30f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "Impreza 96 Gr. A", Power = 300f, PowerRpm = 5500f, Torque = 470f, TorqueRpm = 4000f, MaxRpm = 7500f,
                             Mass = 1130f, Com = 0.60f, Steer = 35f, Spring = 41600f, Damp = 2700f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
-        public static readonly Model[] Models = { null, Evo3, T16, Imp96 };   // (rempli : Vaz2108 au constructeur statique)
+        // Audi Sport Quattro 1984 Gr. B (JD 21/10, rally cars GrB/Squattro, Blomqvist) : moteur avant, integrale ; habitacle de
+        // la vue interieure du modele (redescendu de 10 cm sur la caisse) ; yeux au point de vue du modele rFactor (Eyepoint du
+        // cockpitinfo, redescendu comme l'habitacle : -0,36 ; 0,90 ; -0,10), tete 27 cm derriere ; frein a main : pas de levier modelise, la tige carbone de l'Evo III posee sur le tunnel
+        // (outils/rf1/t16e2_frein.py, decalee de (-0,05 ; -0,025 ; -0,333)) ; boutons en ligne sur le bloc d'interrupteurs du
+        // centre de la planche (y 0,435, z 0,335, face au pilote, a droite de la jante vue du siege), contact, starter, phares, warning. Tenue de route : 450 ch a
+        // 7 500 tr/min, 490 Nm a 5 500, rupteur 8 000, 1 100 kg, 58 % sur l'avant (cinq cylindres en porte-a-faux), braquage 38.
+        public static readonly Model Sq84 = new Model { Id = ModelSq, Folder = "sq84", Name = "Sport Quatro",
+            Head = new Vector3(-0.36f, 0.93f, -0.37f), Engine = new Vector3(0f, 0.55f, 1.45f),
+            BrakePivot = new Vector3(-0.10f, 0.25f, -0.02f), BrakeGrip = new Vector3(-0.125f, 0.575f, 0.022f), BrakeAngle = 1.4f,
+            Controls = new[] {
+                new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.020f, 0.435f, 0.342f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(0.012f, 0.435f, 0.342f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(0.044f, 0.435f, 0.342f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(0.076f, 0.435f, 0.342f)) },
+            Knobs = new[] {
+                new Knob { At = new Vector3(-0.020f, 0.435f, 0.331f), Normal = Vector3.back, Col = new Color(0.80f, 0.06f, 0.05f) },
+                new Knob { At = new Vector3(0.012f, 0.435f, 0.331f), Normal = Vector3.back, Col = new Color(0.10f, 0.25f, 0.85f), Choke = true, Path = "Functions/Dashboard/Choke/ButtonChoke" },
+                new Knob { At = new Vector3(0.044f, 0.435f, 0.331f), Normal = Vector3.back, Col = new Color(0.92f, 0.92f, 0.90f) },
+                new Knob { At = new Vector3(0.076f, 0.435f, 0.331f), Normal = Vector3.back, Col = new Color(0.95f, 0.45f, 0.05f) } },
+            Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
+                          "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
+                          "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
+            Dome = new Vector3(0f, 1.06f, -0.20f), HasDome = true, ControlSize = 0.024f,
+            Sp = new Spec { Name = "Sport Quattro Gr. B", Power = 450f, PowerRpm = 7500f, Torque = 490f, TorqueRpm = 5500f, MaxRpm = 8000f,
+                            Mass = 1100f, Com = 0.58f, Steer = 38f, Spring = 40000f, Damp = 2600f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles); }
