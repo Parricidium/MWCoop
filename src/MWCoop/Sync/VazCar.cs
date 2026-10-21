@@ -209,6 +209,7 @@ namespace MWCoop
             public GameObject Car;
             public Transform Body, SteerPivot, SorbetSteer, BrakePivot, SorbetBrake;
             public Quaternion SorbetSteerRest, SorbetBrakeRest;
+            public float SteerTurn, SteerRatio;   // (volant : angle pose, degres par unite de direction)
             public VazSound Sound;
             public VazFlaps Flaps;
             public FsmFloat BrakeKnob;
@@ -964,26 +965,38 @@ namespace MWCoop
             b.ChokeKnob.localPosition = b.ChokeRest + b.ChokeDir * (Mathf.Clamp(b.ChokeVal.Value, 1f, 2f) - 1f) * 0.025f;
         }
 
-        static System.Reflection.FieldInfo steerField;
         // Volant : angle de celui de la SORBET (cache), autour de l'axe de la colonne de la VAZ.
+        // Volant du modele : tourne de SteerRatio degres par unite de direction du controleur (AxisCarController.steering,
+        // -1..1, pose aussi par VehicleSync sur la voiture d'un autre joueur), sens de celui de la SORBET. Avant le 21/10 il
+        // recopiait la rotation du volant de la SORBET -- qui fait 270 degres de chaque cote et passe par le plus court
+        // chemin : au-dela d'un demi-tour il repartait dans l'autre sens (video de Vaydon). SteerRatio : releve sur la SORBET
+        // tant qu'elle est sous le demi-tour (270 sur la SORBET).
+        public static bool SteerLog;   // ([Test] VazBraquer : angle image par image)
         static void Steering(Built b)
         {
             if (b.SteerPivot == null || b.SorbetSteer == null) return;
-            // amplitude : celle du volant de la SORBET ; sens : celui de la direction du controleur (comme les voitures du pack
-            // prive de JD : l'axe du quaternion change de signe d'un cote a l'autre)
-            Quaternion d = Quaternion.Inverse(b.SorbetSteerRest) * b.SorbetSteer.localRotation;
-            float a; Vector3 ax;
-            d.ToAngleAxis(out a, out ax);
-            if (a > 180f) a = 360f - a;
             float input = 0f;
             if (b.Axis != null)
             {
                 if (steerField == null) steerField = b.Axis.GetType().GetField("steering");
                 object v = steerField != null ? steerField.GetValue(b.Axis) : null;
-                if (v is float) input = (float)v;
+                if (v is float) input = Mathf.Clamp((float)v, -1f, 1f);
             }
-            b.SteerPivot.localRotation = Quaternion.AngleAxis(-a * Mathf.Sign(input), b.SteerAxis);
+            if (Mathf.Abs(input) > 0.1f && Mathf.Abs(input) < 0.6f)
+            {
+                Quaternion d = Quaternion.Inverse(b.SorbetSteerRest) * b.SorbetSteer.localRotation;
+                float a; Vector3 ax;
+                d.ToAngleAxis(out a, out ax);
+                if (a > 180f) a = 360f - a;
+                if (a > 5f && a < 175f) b.SteerRatio = Mathf.Lerp(b.SteerRatio > 0f ? b.SteerRatio : a / Mathf.Abs(input), a / Mathf.Abs(input), 0.2f);
+            }
+            float turn = -input * (b.SteerRatio > 0f ? b.SteerRatio : 270f);
+            if (SteerLog) Log.Info("volant : direction " + input.ToString("F2") + " rapport " + b.SteerRatio.ToString("F0") + " angle " + turn.ToString("F0"));
+            b.SteerTurn = turn;
+            b.SteerPivot.localRotation = Quaternion.AngleAxis(turn, b.SteerAxis);
         }
+
+        static System.Reflection.FieldInfo steerField;
 
         static bool AnyOn(List<Light> ls)
         {

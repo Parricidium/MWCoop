@@ -362,7 +362,7 @@ namespace MWCoop
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
         static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone;
-        static int tourShot = -1;
+        static int tourShot = -1, braqueShot = -1;
         static Camera testCam;
         static int entryStep;
 
@@ -590,6 +590,34 @@ namespace MWCoop
                         testCam.transform.LookAt(c.TransformPoint(new Vector3(float.Parse(cv[3], ci), float.Parse(cv[4], ci), float.Parse(cv[5], ci))), c.up);
                     }
                     if (k > tourShot) { tourShot = k; Autotest.CaptureSoon("vaz-tour-" + k, 0.6f); }
+                }
+            }
+            // [Test] VazBraquer=1 : direction imposee (AxisCarController steerInput / steering) a 0,5 puis 1 puis -1 (deux secondes
+            // chacune a partir de 31 s), camera de VazCamPilote, captures vaz-braque-0..2 et angle du volant visible (volant de la
+            // SORBET au-dela d'un demi-tour, video de Vaydon, 21/10)
+            if (host && testStep == 2 && t > 31f && t < 38f && Config.GetInt("Test", "VazBraquer", 0) != 0)
+            {
+                Transform c = CarOf(Me);
+                Rent br; rents.TryGetValue(Me, out br);
+                int k = Mathf.Min(2, (int)((t - 31f) / 2f));
+                float sv = k == 0 ? 0.5f : k == 1 ? 1f : Mathf.Max(-1f, 1f - 2f * (t - 35f) / 1.2f);   // (vers -1 en 1,2 s : un volant ne saute pas)
+                AxisCarController acc = c != null ? c.GetComponent<AxisCarController>() : null;
+                if (acc != null) { acc.steerInput = sv; acc.steering = sv; }
+                VazCar.SteerLog = t > 34.9f && t < 36.4f;
+                string[] cv = Config.Get("Test", "VazCamPilote", "").Split(',');
+                if (c != null && cv.Length >= 6)
+                {
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    if (testCam == null) { testCam = new GameObject("MWCoop-CameraPilote").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.02f; testCam.fieldOfView = 60; }
+                    testCam.transform.position = c.TransformPoint(new Vector3(float.Parse(cv[0], ci), float.Parse(cv[1], ci), float.Parse(cv[2], ci)));
+                    testCam.transform.LookAt(c.TransformPoint(new Vector3(float.Parse(cv[3], ci), float.Parse(cv[4], ci), float.Parse(cv[5], ci))), c.up);
+                }
+                if (t > 31f + k * 2f + 1.5f && braqueShot < k)
+                {
+                    braqueShot = k;
+                    Autotest.CaptureSoon("vaz-braque-" + k, 0.1f);
+                    VazCar.Built bb = br != null ? br.Car : null;
+                    Log.Info("autotest vaz : braquage " + sv + " -> volant visible " + (bb != null ? bb.SteerTurn.ToString("F0") + " degres (rapport " + bb.SteerRatio.ToString("F0") + ")" : "?") + ", roue avant " + (acc != null ? acc.steering.ToString("F2") : "?"));
                 }
             }
             // [Test] VazFreinTest=1 : camera d'essai aux yeux du pilote ([Test] VazCamPilote=x,y,z,vx,vy,vz, repere de la voiture),
