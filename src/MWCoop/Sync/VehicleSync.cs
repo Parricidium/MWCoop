@@ -85,6 +85,7 @@ namespace MWCoop
             public float SettleUntil;           // reprise d'une copie (voiture redevenue physique ici) : bridee jusque-la
             public float CalmUntil;             // piece montee ou demontee (ici ou chez un autre) : garee, tenue calme jusque-la
             public Vector3 SettleVel, SettleAng;
+            public Vector3 ThawPos; public Quaternion ThawRot; public float GuardUntil; public int GuardHits;   // reprise : pose de depart, garde-fou
             public Dictionary<Joint, Vector2> JointsLater;   // attaches rendues cassables a SettleUntil seulement
             public float NextLog;
             public Drivetrain Dt;
@@ -1679,6 +1680,7 @@ namespace MWCoop
                     foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>())
                         if (rb != c.Body && !rb.isKinematic) { rb.velocity = c.Vel; rb.angularVelocity = c.AngVel; }
                     c.SettleUntil = now0 + 1.5f; c.SettleVel = c.Vel; c.SettleAng = c.AngVel;
+                    c.ThawPos = c.Body.position; c.ThawRot = c.Body.rotation; c.GuardUntil = now0 + 4f; c.GuardHits = 0;
                 }
                 else c.SettleUntil = now0;
                 if (Config.GetInt("Test", "SondeReprise", 0) != 0) Log.Info("voiture " + c.Key + " reprise : " + PartsProbe(c));
@@ -1793,6 +1795,8 @@ namespace MWCoop
                 if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy && !c.Framewise) Follow(c);
                 else if (c.Body != null && !c.Kinematic && c.SettleUntil > 0f) Settle(c);
             foreach (Car c in cars)
+                if (c.GuardUntil > 0f && c.Body != null && !c.Kinematic) ThawGuard(c);
+            foreach (Car c in cars)
                 if (c.CalmUntil > 0f && c.Body != null && !c.Kinematic) Calm(c);
             // Traces et fumee de glisse des roues de la copie (au pas physique, comme Wheel.CalcSkidmarks du jeu).
             float nowS = Time.realtimeSinceStartup;
@@ -1865,7 +1869,38 @@ namespace MWCoop
         }
 
         // Voiture tout juste reprise (voir SetKinematic) : vitesse verticale et rotation bridees ; puis attaches rendues.
-        static int settleLogs;
+        static int settleLogs, guardLogs;
+
+        // Garde-fou de la reprise (ruller, 20/10 : l'invite descend de la CORRIS, l'hote la reprend, calme pendant les 1,5 s de
+        // Settle, puis a la seconde ou les limites de casse reviennent, 11 attaches « incassables » cassent et la voiture part a
+        // 144 km/h sans personne au volant -- de nouveau chez l'invite, recale sur l'hote). Pendant 4 s apres une reprise, une
+        // voiture que personne ne conduit n'a pas a depasser la vitesse recue (+ marge) : son elan est retire a chaque pas ; si
+        // ca insiste (10 pas), elle est remise a sa pose de reprise, pieces et ouvrants a l'arret, et tenue calme 2 s.
+        static void ThawGuard(Car c)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now >= c.GuardUntil) { c.GuardUntil = 0f; return; }
+            if (c.Index == LocalDriving || c.RemoteDriver >= 0 || c.Index == owned || Remote(c, now)) { c.GuardUntil = 0f; return; }
+            Rigidbody b = c.Body;
+            Vector3 v = b.velocity, w = b.angularVelocity;
+            float lim = Mathf.Max(6f, c.SettleVel.magnitude * 1.5f + 3f), wlim = Mathf.Max(6f, c.SettleAng.magnitude * 1.5f + 3f);
+            if (!Finite(v) || !Finite(w)) return;   // (Sanitize s'en charge)
+            if (v.magnitude <= lim && w.magnitude <= wlim) return;
+            c.GuardHits++;
+            bool reset = c.GuardHits >= 10;
+            if (reset)
+            {
+                b.position = c.ThawPos; b.rotation = c.ThawRot;
+                b.transform.position = c.ThawPos; b.transform.rotation = c.ThawRot;
+                c.GuardHits = 0; c.CalmUntil = Mathf.Max(c.CalmUntil, now + 2f);
+            }
+            b.velocity = reset ? Vector3.zero : c.SettleVel; b.angularVelocity = reset ? Vector3.zero : c.SettleAng;
+            foreach (Rigidbody rb in b.GetComponentsInChildren<Rigidbody>())
+                if (rb != b && !rb.isKinematic) { rb.velocity = b.velocity; rb.angularVelocity = b.angularVelocity; }
+            if (guardLogs++ < 30)
+                Log.Warn("voiture " + c.Key + " propulsee apres sa reprise, personne au volant (" + v.magnitude.ToString("F1") + " m/s, " + w.magnitude.ToString("F1") + " rad/s, "
+                         + (now - (c.GuardUntil - 4f)).ToString("F2") + " s apres) : " + (reset ? "remise a sa pose de reprise, tenue calme 2 s" : "elan retire"));
+        }
         static void Settle(Car c)
         {
             float now = Time.realtimeSinceStartup;

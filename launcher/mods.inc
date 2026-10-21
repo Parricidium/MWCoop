@@ -333,12 +333,20 @@ static DWORD WINAPI MscInstallThread(void *param)
     auto fail = [](const std::string &w) { g_mscInstallWhy = w; TestLog("mods : installation de MSCLoader impossible : %s", w.c_str()); g_mscInstall = 3; return (DWORD)0; };
     std::string json;
     DWORD code = 0;
-    if (!HttpGet(L"https://api.github.com/repos/piotrulos/MSCModLoader/releases/latest", &json, L"", false, &code)) return fail("GitHub injoignable (HTTP " + std::to_string(code) + ")");
-    size_t z = json.find("/MSCLoader.zip\"");
-    size_t u = z == std::string::npos ? z : json.rfind("\"browser_download_url\"", z);
-    if (u == std::string::npos) return fail("MSCLoader.zip absent de la derniere version");
-    std::string url = JsonDecode(json, json.find('"', json.find(':', u) + 1));
-    std::string tag = JsonField(json, "tag_name", 0, json.size());
+    std::string url, tag;
+    if (!HttpGet(L"https://api.github.com/repos/piotrulos/MSCModLoader/releases/latest", &json, L"", false, &code)) {
+        // (API limitee -- 60 demandes par heure et par adresse, VPN ou reseau partage : 403/429 -- l'adresse directe de la derniere
+        // version n'est pas comptee ; Markos, 20/10 : « MSCLoader non installe : GitHub injoignable (HTTP 403) »)
+        if (code != 403 && code != 429) return fail("GitHub injoignable (HTTP " + std::to_string(code) + ")");
+        url = "https://github.com/piotrulos/MSCModLoader/releases/latest/download/MSCLoader.zip"; tag = "latest";
+        TestLog("mods : API GitHub limitee (HTTP %lu), derniere version prise a l'adresse directe", code);
+    } else {
+        size_t z = json.find("/MSCLoader.zip\"");
+        size_t u = z == std::string::npos ? z : json.rfind("\"browser_download_url\"", z);
+        if (u == std::string::npos) return fail("MSCLoader.zip absent de la derniere version");
+        url = JsonDecode(json, json.find('"', json.find(':', u) + 1));
+        tag = JsonField(json, "tag_name", 0, json.size());
+    }
     std::wstring tmp = MscTmp();
     SHCreateDirectoryExW(NULL, (tmp + L"pkg").c_str(), NULL);
     std::wstring zip = tmp + L"MSCLoader.zip";
