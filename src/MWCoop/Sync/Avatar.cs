@@ -763,6 +763,17 @@ namespace MWCoop
                         Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "SiegeDos2", 15f));
                         if (headBone != null) Turn(headBone, 0f, -Config.GetFloat("Test", "SiegeTete", 16f));
                     }
+                    else if (Game.Msc && mscLean > 0.5f)
+                    {
+                        // My Summer Car : bassin recule contre le dossier (SeatFit), buste penche vers l'avant d'autant pour que les yeux
+                        // restent a la camera du joueur ; tete redressee (regarde la route). [Test] MscDos : part du buste (0..1) -- 0 par
+                        // defaut : JD (dessin du 21/10) veut le buste droit contre le dossier, la tete haute pres du montant, les bras tendus
+                        // au volant (LeanToWheel penche juste ce qu'il faut) ; le bassin remonte de 5 cm (MscMonte).
+                        float part = Config.GetFloat("Test", "MscDos", 0.35f), a = mscLean * part;
+                        Turn(Bone("spine_middle"), 0f, a * 0.5f);
+                        Turn(Bone("spine_upper"), 0f, a * 0.5f);
+                        if (headBone != null) Turn(headBone, 0f, -a * 0.7f);
+                    }
                     else if (carName.ToUpperInvariant().Contains("MACHTWAGEN"))
                     {
                         // Famille du taxi (300D...) : buste un peu renverse contre le dossier, tete redressee -- les tetes depassaient
@@ -930,6 +941,11 @@ namespace MWCoop
                 steerCar = car; steerT = gearT = null;
                 foreach (MonoBehaviour m in car.GetComponentsInChildren<MonoBehaviour>(true))
                     if (m != null && m.GetType().Name == "SteeringWheel") { steerT = m.transform; break; }
+                // (My Summer Car : le composant SteeringWheel est au pied de la colonne (CarSteeringPivot, pres du plancher) ; la jante, c'est
+                // la piece « stock steering wheel » montee au bout -- les prises visaient 1,5 m sous le tableau de bord, 21/10)
+                if (Game.Msc && steerT != null)
+                    foreach (Transform w in steerT.GetComponentsInChildren<Transform>(true))
+                        if (w.name.ToLowerInvariant().Contains("steering wheel") && w.GetComponent<Renderer>() != null) { steerT = w; break; }
                 foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
                 {
                     if (t.name == "GearLever" || t.name == "gearlever") { gearT = t; break; }
@@ -1135,26 +1151,13 @@ namespace MWCoop
                 if (ll != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", ll.position + lc.forward * lf - lc.up * ld - lc.right * 0.05f);
                 return;
             }
-            if (Game.Msc && !rear && vehicleT != null && Config.GetInt("Test", "SansSiege", 0) == 0)
-            {
-                // My Summer Car : pas de collisionneur de siege (SATSUMA : les sieges sont des pieces ; HAYOSIKO : banquette dans le
-                // maillage de la cabine), l'animation de conduite restait brute -- jambes a l'horizontale a travers l'avant, corps
-                // decale (capture d'un joueur dans la SATSUMA, 21/10 ; essai HAYOSIKO). Pas de montee : genoux plies, pieds au
-                // plancher devant les hanches. [Test] MscPieds (avance, m), MscChute (descente).
-                Transform mc = vehicleT;
-                seatFitted = true;
-                float mf = Config.GetFloat("Test", "MscPieds", 0.45f), md = Config.GetFloat("Test", "MscChute", 0.32f);
-                Transform mr = Bone("thig_right"), ml = Bone("thig_left");
-                if (mr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", mr.position + mc.forward * mf - mc.up * md + mc.right * 0.04f);
-                if (ml != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", ml.position + mc.forward * mf - mc.up * md - mc.right * 0.04f);
-                return;
-            }
             // Passager d'une voiture ordinaire (SORBET, CORRIS, VAZ, addons, MSC...) : jambes repliees, pieds au plancher devant le
             // siege et un peu vers le milieu -- avec la pose de conduite (jambes allongees vers les pedales) la jambe exterieure
             // traversait la portiere (Menor, 14/10 : « plier la jambe pour qu'elle ne croise pas la carrosserie »).
             // [Test] PassagerPieds (avance, m), PassagerChute (descente), PassagerSerre (vers le milieu) ; [Coop] JambesPassager=0 : comme avant.
             bool generic = rear && !gifu && !taxi && !van && carName != null && !carName.StartsWith("JONNEZ") && Config.GetInt("Coop", "JambesPassager", 1) != 0;
-            if (carName == null || !gifu && !taxi && !van && !generic || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
+            bool mscDriver = Game.Msc && !rear;   // (My Summer Car : le conducteur passe par l'assise -- siege = piece de la SATSUMA, sinon jambes seules)
+            if (carName == null || !gifu && !taxi && !van && !generic && !mscDriver || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
             // (passager avant : enfonce de 30 cm dans le fauteuil sans ca -- assis comme le conducteur, dos arrondi, mains sur
             // les cuisses ; la couchette n'a pas de « Seats » : rien a faire)
             Transform car = vehicleT, pelvis = Bone("pelvis");
@@ -1203,7 +1206,20 @@ namespace MWCoop
                 float score = cc.y;   // (l'assise : la plus basse des deux pieces de ce cote)
                 if (score < best) { best = score; cushion = i; }
             }
-            if (cushion < 0) return;
+            if (cushion < 0)
+            {
+                // My Summer Car sans collisionneur de siege (HAYOSIKO : banquette dans le maillage de la cabine) : l'animation de
+                // conduite restait brute, jambes a l'horizontale a travers l'avant (essai du 21/10 ; capture d'un joueur dans la
+                // SATSUMA, dont les sieges sont des pieces : « seat driver(Clone) », assise trouvee comme sur MWC). Pas de montee :
+                // genoux plies, pieds au plancher devant les hanches. [Test] MscPieds (avance, m), MscChute (descente).
+                if (!mscDriver) return;
+                seatFitted = true;
+                float mf = Config.GetFloat("Test", "MscPieds", 0.45f), md = Config.GetFloat("Test", "MscChute", 0.32f);
+                Transform mr = Bone("thig_right"), ml = Bone("thig_left");
+                if (mr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", mr.position + car.forward * mf - car.up * md + car.right * 0.04f);
+                if (ml != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", ml.position + car.forward * mf - car.up * md - car.right * 0.04f);
+                return;
+            }
             float top = seatBox[cushion].max.y, back = seatBox[cushion].min.z;
             if (pl.z < back - 0.4f) return;   // (assis sur la couchette, derriere les sieges)
             Vector3 want = new Vector3(pl.x, top + Config.GetFloat("Test", "SiegeBassin", 0.02f), back + Config.GetFloat("Test", "SiegeRecul", 0.12f));
@@ -1213,6 +1229,17 @@ namespace MWCoop
             // 10 cm au plus (enfoncement reduit de moitie), sans recul.
             float lostY = 0f;   // (montee retiree : les pieds restent au plancher)
             if (taxi) { float full = d.y; d.y = Mathf.Clamp(d.y, -0.05f, Config.GetFloat("Test", "TaxiMonte", 0f)); lostY = Mathf.Max(0f, full - d.y); d.z = 0f; }
+            // (My Summer Car, SATSUMA : l'assise trouvee -- piece « seat driver » -- remontait le corps de 13 cm et le reculait de 33 :
+            // les yeux quittaient la camera du joueur, la tete dans le toit ; comme le taxi, 5 cm au plus, sans recul -- essai du 21/10)
+            // (JD, 21/10 : « appuye contre le siege, pieds sur les pedales, mains sur le volant » -- le recul jusqu'au dossier est garde
+            // (35 cm au plus) et le buste penche d'autant vers l'avant pour que les yeux restent a la camera du joueur : mscLean)
+            mscLean = 0f;
+            if (mscDriver && !taxi)
+            {
+                float full = d.y; d.y = Mathf.Clamp(d.y, -0.05f, Config.GetFloat("Test", "MscMonte", 0.05f)); lostY = Mathf.Max(0f, full - d.y);
+                d.z = Mathf.Clamp(d.z, -Config.GetFloat("Test", "MscRecul", 0.22f), 0.05f);
+                if (d.z < 0f) mscLean = Mathf.Asin(Mathf.Clamp01(-d.z / 0.75f)) * Mathf.Rad2Deg;
+            }
             if (Config.GetInt("Test", "JournalSiege", 0) != 0 && Time.frameCount % 300 < 6) Log.Info("siege : image " + Time.frameCount + " colonne " + (Bone("spine_middle") != null ? Bone("spine_middle").localEulerAngles.ToString("F1") : "?") + " racine " + vehicleT.InverseTransformPoint(Root.transform.position).ToString("F2") + " bassin " + pl.ToString("F2") + " voulu " + want.ToString("F2") + " ecart " + d.ToString("F2") + (d.sqrMagnitude > 0.64f ? " TROP LOIN" : ""));
             if (d.sqrMagnitude > 0.64f) return;   // (plus de 80 cm : pas ce siege)
             Transform ar = Bone("ankle_right"), al = Bone("ankle_left");
@@ -1222,9 +1249,22 @@ namespace MWCoop
             // (dos contre le dossier : buste incline apres la mesure des yeux au repos, dans le corps de la pose)
             // Cuisses sur l'assise, genoux plies, pieds aux pedales : chaque pied devant et sous sa hanche
             float fwd = Config.GetFloat("Test", "SiegePieds", 0.55f), down = Mathf.Max(0.2f, Config.GetFloat("Test", "SiegeChute", 0.5f) - lostY);
+            // (My Summer Car : plancher de la SATSUMA plus proche, le pied sortait sous la voiture avec 50 cm -- essai du 21/10)
+            if (mscDriver) { fwd = Config.GetFloat("Test", "MscPieds", 0.45f); down = Mathf.Max(0.15f, Config.GetFloat("Test", "MscChute", 0.32f) - lostY); }
+            if (mscDriver)
+            {
+                // (pieds sur les pedales quand la voiture en a -- SATSUMA : Pedals/pedal_throttle, pedal_clutch ; talon 8 cm derriere le
+                // patin, cheville 2 cm au-dessus)
+                Pedal mt = FindPedal(car, "pedal_throttle"), mc = FindPedal(car, "pedal_clutch");
+                Transform hr0 = Bone("thig_right"), hl0 = Bone("thig_left");
+                if (mt != null && hr0 != null) { Vector3 pad = mt.P.TransformPoint(mt.Pad); footRMsc = pad - car.forward * 0.08f + car.up * 0.02f; footRMscOn = true; }
+                if (mc != null && hl0 != null) { Vector3 pad = mc.P.TransformPoint(mc.Pad); footLMsc = pad - car.forward * 0.08f + car.up * 0.02f; footLMscOn = true; }
+            }
             Transform hr = Bone("thig_right"), hl = Bone("thig_left");
             Vector3 footR = hr != null ? hr.position + car.forward * fwd - car.up * down + car.right * 0.04f : Vector3.zero;
             Vector3 footL = hl != null ? hl.position + car.forward * fwd - car.up * down - car.right * 0.04f : Vector3.zero;
+            if (footRMscOn) { footR = footRMsc; footRMscOn = false; }
+            if (footLMscOn) { footL = footLMsc; footLMscOn = false; }
             if (ar != null && hr != null) Leg("thig_right", "knee_right", "ankle_right", footR);
             if (al != null && hl != null) Leg("thig_left", "knee_left", "ankle_left", footL);
         }
@@ -1343,6 +1383,8 @@ namespace MWCoop
         // Dosage selon la portee : 1 jusqu'a 105 % de la longueur du bras, 0 au-dela de 130 % (le bras, tendu, s'arrete a
         // sa longueur : la main au bord de la jante).
         bool seatFitted;   // (assis contre le dossier : bras tendus jusqu'au volant, dessin de JD)
+        float mscLean;     // (My Summer Car : buste penche en avant d'autant que le bassin a recule jusqu'au dossier, degres)
+        Vector3 footRMsc, footLMsc; bool footRMscOn, footLMscOn;   // (pieds sur les pedales trouvees, cette image)
         float Reachable(bool right, Vector3 at)
         {
             if (seatFitted) return 1f;
