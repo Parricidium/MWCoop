@@ -160,6 +160,14 @@ namespace EditeurCarte
                     }
                 case "importerModele": ImportModel(S(m, "dossier")); break;
                 case "importerImage": ImportImage(S(m, "dossier")); break;
+                case "copierFichiers":   // (coller dans une autre carte : modeles et images du projet d'origine)
+                    {
+                        int n = 0;
+                        if (m["fichiers"] is System.Collections.ArrayList)
+                            foreach (object f in (System.Collections.ArrayList)m["fichiers"]) try { if (Projects.CopyFile(S(m, "de"), S(m, "vers"), f as string)) n++; } catch { }
+                        Post(new Dictionary<string, object> { { "type", "fichiersCopies" }, { "n", n } });
+                        break;
+                    }
                 case "images": Post(new Dictionary<string, object> { { "type", "images" }, { "liste", Projects.Images(S(m, "dossier")) } }); break;
                 case "dossierProjet": { string d = Projects.Dir(S(m, "dossier")); if (d != null) OpenFolder(d); break; }
                 case "compiler": Compile(m); break;

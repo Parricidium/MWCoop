@@ -541,3 +541,10 @@ WED33	Textures: in the properties, Change — a game texture or your own image (
 WED34	Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.
 WED35	Objects, roads, water, textures, co-op
 VZW1	The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.
+WED36	Several objects: Ctrl + click to pick them, Ctrl+A for all; the gizmo moves them together. Magnet (M): 1 m grid and 15° steps. Ctrl+C / Ctrl+V copy from one map to another.
+WED37	Light: colour, intensity, range; “only at night” turns it on when the sun goes down.
+WED38	Vegetation (B): a brush that plants trees and bushes from the game's forests; Shift to erase.
+WED39	Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-fit to it.
+WED40	Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.
+WED41	Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.
+WED42	Objects, roads, terrain, plants, lights, co-op

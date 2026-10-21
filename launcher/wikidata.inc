@@ -905,6 +905,18 @@ static const WikiBlock kW_Editor[] = {
             L"Water: a body of water to place and stretch (Move, Scale)." },
     { WB_S, L"Textures : dans les propriétés, Changer — une texture du jeu ou ton image (PNG, JPG…), sur l'objet entier ou une de ses matières ; double-clic sur un modèle importé pour ne texturer qu'une face.",
             L"Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face." },
+    { WB_S, L"Plusieurs objets : Ctrl + clic pour les choisir, Ctrl+A pour tout prendre ; le gizmo les déplace ensemble. Aimant (M) : grille de 1 m et pas de 15°. Ctrl+C / Ctrl+V copient d'une carte à l'autre.",
+            L"Several objects: Ctrl + click to pick them, Ctrl+A for all; the gizmo moves them together. Magnet (M): 1 m grid and 15° steps. Ctrl+C / Ctrl+V copy from one map to another." },
+    { WB_S, L"Lumière : couleur, intensité, portée ; « seulement la nuit » l'allume quand le soleil se couche.",
+            L"Light: colour, intensity, range; “only at night” turns it on when the sun goes down." },
+    { WB_S, L"Végétation (B) : un pinceau qui plante des arbres et des buissons des forêts du jeu ; Maj pour effacer.",
+            L"Vegetation (B): a brush that plants trees and bushes from the game's forests; Shift to erase." },
+    { WB_S, L"Sculpter le terrain (T) : monter, creuser, aplanir, adoucir le sol du jeu ; les routes s'y recalent.",
+            L"Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-fit to it." },
+    { WB_S, L"Routes : plates en travers avec talus, marquage au centre ou sur les bords ; un point posé sur celui d'une autre route les raccorde.",
+            L"Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them." },
+    { WB_S, L"Ensembles qui fonctionnent : clique un objet du jeu ; une porte, une poignée… se copie avec ses automates, ou se masque en entier.",
+            L"Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely." },
     { WB_H, L"Compiler et jouer",
             L"Compile and play" },
     { WB_B, L"Compiler fait un petit fichier .mwcmap : tes modèles, tes routes et tes images seulement. Les copies et les textures du jeu sont refaites depuis le jeu de chacun : aucun fichier du jeu n'est partagé.",
@@ -951,6 +963,6 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(3, L"Le HUD en jeu", L"The in-game HUD", L"Vanilla, Carte, Anneaux ou Bandeau", L"Vanilla, Card, Rings or Strip", kW_Hud),   // (WA_HUD = 30)
     WART(0, L"Linux et Steam Deck", L"Linux and Steam Deck", L"Proton, option de lancement, limites", L"Proton, launch option, limits", kW_Linux),   // (WA_LINUX = 31)
     WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
-    WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, eau, textures, co-op", L"Objects, roads, water, textures, co-op", kW_Editor),   // (WA_EDITOR = 33)
+    WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, relief, végétation, lumières, co-op", L"Objects, roads, terrain, plants, lights, co-op", kW_Editor),   // (WA_EDITOR = 33)
     WARTG(WG_MWC, 2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34)
 };
