@@ -322,7 +322,7 @@ namespace MWCoop
                 if (sw != null) sw.SendEvent("WAKEUP");
                 Log.Info("autotest rallyevaz : semaine " + (wk != null ? wk.Value : -1) + ", samedi 9 h");
             }
-            if (vazTest <= 1 && t > 16f) { vazTest = 2; Log.Info("autotest rallyevaz : VAZ -> " + Vaz.Request(Session.IsHost ? 3 : 5)); }
+            if (vazTest <= 1 && t > 16f) { vazTest = 2; Log.Info("autotest rallyevaz : VAZ -> " + Vaz.Request(Session.IsHost ? 3 : 5, Config.GetInt("Test", "VazModele", 0))); }
             if (vazTest == 2 && t > 30f)
             {
                 vazTest = 3;

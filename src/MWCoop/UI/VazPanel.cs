@@ -355,14 +355,15 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode != "vazpanel" || (Session.Active && !Session.IsHost)) return;
-            if (testStep == 0 && t > 25f) { testStep = 1; Menu.Show(Menu.TabVaz); Autotest.CaptureSoon("vaz-panneau", 3f); Log.Info("autotest vazpanel : onglet ouvert"); }
-            if (testStep == 1 && t > 32f)
+            float d = Config.GetFloat("Test", "VazPanelT", 25f);   // ([Test] VazPanelT : ouverture plus tard, quand l'invite a sa voiture)
+            if (testStep == 0 && t > d) { testStep = 1; Menu.Show(Menu.TabVaz); Autotest.CaptureSoon("vaz-panneau", 3f); Log.Info("autotest vazpanel : onglet ouvert"); }
+            if (testStep == 1 && t > d + 7f)
             {
                 testStep = 2;
                 Log.Info("autotest vazpanel : surbrillance n " + hi + ", apercu " + (pv != null ? pv.GetComponentsInChildren<MeshRenderer>(true).Length + " maillages" : "sans objet")
                          + ", texture " + (rtReady && rt != null ? "rendue, " + renders + " rendus" : "JAMAIS rendue") + ", affiche " + shown);
             }
-            if (testStep == 2 && t > 35f) { testStep = 3; Menu.Hide(); }
+            if (testStep == 2 && t > d + 10f) { testStep = 3; Menu.Hide(); }
         }
     }
 }

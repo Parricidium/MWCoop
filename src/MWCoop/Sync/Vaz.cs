@@ -362,7 +362,7 @@ namespace MWCoop
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
         static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone;
-        static int tourShot = -1, braqueShot = -1; static bool rendusDone;
+        static int tourShot = -1, braqueShot = -1; static bool rendusDone, tourLog;
         static Camera testCam;
         static int entryStep;
 
@@ -572,10 +572,14 @@ namespace MWCoop
             }
             // [Test] VazTour=1 : tour de la voiture a la camera d'essai (3/4 avant, cote conducteur, 3/4 arriere, face, puis le
             // poste de conduite de [Test] VazCamPilote), une capture vaz-tour-<n> toutes les 2,5 s a partir de 31 s (addons, 21/10).
-            if (host && testStep == 2 && t > 31f && Config.GetInt("Test", "VazTour", 0) != 0)
+            // ([Test] VazTourAutre=1 : la voiture d'un autre joueur, prise de chez soi -- hote ou invite : livree vue par les autres)
+            bool tourAutre = Config.GetInt("Test", "VazTourAutre", 0) != 0;
+            if ((host || tourAutre) && testStep == 2 && t > (host ? 31f : 41f) && Config.GetInt("Test", "VazTour", 0) != 0)
             {
                 Transform c = CarOf(Me);
-                int k = (int)((t - 31f) / 2.5f);
+                if (tourAutre) foreach (int id in rents.Keys) if (id != Me && CarOf(id) != null) { c = CarOf(id); break; }
+                if (tourAutre && tourShot < 0 && !tourLog) { tourLog = true; Log.Info("autotest vaz : tour d'une autre voiture -> " + (c != null ? c.name : "aucune") + " (" + rents.Count + " location(s) ici)"); }
+                int k = (int)((t - (host ? 31f : 41f)) / 2.5f);
                 Vector3[] eye = { new Vector3(3.0f, 1.3f, 3.6f), new Vector3(-4.6f, 0.9f, 0f), new Vector3(-3.0f, 1.5f, -3.8f), new Vector3(0f, 1.0f, 5.2f), new Vector3(0f, 3.4f, -5.0f) };
                 string[] cv = Config.Get("Test", "VazCamPilote", "").Split(',');
                 if (c != null && k <= eye.Length)

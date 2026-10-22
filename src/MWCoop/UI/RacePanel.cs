@@ -84,10 +84,10 @@ namespace MWCoop
             y += P(42);
             // comment et quand
             string how = Lang.T(
-                "1. Prends ta voiture (onglet VAZ-2108) et va au circuit de la course sur glace.\n" +
+                "1. Prends ta voiture (F10, onglet VAZ-2108 ou Voitures) et va au circuit de la course sur glace.\n" +
                 "2. Vendredi 9 h - 15 h : gare ta voiture juste à côté de la tente d'inspection (moins de 10 m), puis remplis la feuille d'inscription (150 mk). Ensuite, roule aux essais : ton meilleur tour te place en qualifications.\n" +
                 "3. Samedi 9 h - 15 h : qualifications et repêchages. Dimanche 10 h - 15 h : demi-finales et finale. Sois au circuit avec ta voiture : au départ de ta manche, elle est posée sur ta place de la grille.",
-                "1. Take your car (VAZ-2108 tab) and drive to the ice race track.\n" +
+                "1. Take your car (F10, VAZ-2108 or Cars tab) and drive to the ice race track.\n" +
                 "2. Friday 9 am - 3 pm: park your car right next to the inspection tent (under 10 m), then fill in the registration form (150 mk). Then drive in practice: your best lap sets your qualifying place.\n" +
                 "3. Saturday 9 am - 3 pm: qualifying and pickups. Sunday 10 am - 3 pm: semifinals and final. Be at the track with your car: when your heat starts, it is put on your grid spot.");
             float hh = P(96);
@@ -104,7 +104,7 @@ namespace MWCoop
                 var r = new Rect(v.x, y, w, P(24));
                 if (en.Me) Style.Round(r, P(8), Kit.A(Kit.Ice, 0.08f));
                 Style.Text(new Rect(r.x + P(8), r.y, w * 0.34f, r.height), en.Name, 13, TextAnchor.MiddleLeft, en.Me ? Kit.Ice : Kit.Ink);
-                string what = !en.Registered ? Lang.T("pas inscrit", "not registered") : (en.Vaz ? "VAZ" : en.Number == 14 ? "Rivett" : "") + (en.Number > 0 ? " n° " + en.Number : "");
+                string what = !en.Registered ? Lang.T("pas inscrit", "not registered") : (en.Vaz ? en.Car : en.Number == 14 ? "Rivett" : "") + (en.Number > 0 ? " n° " + en.Number : "");
                 Style.Text(new Rect(r.x + w * 0.36f, r.y, w * 0.28f, r.height), what, 12, TextAnchor.MiddleLeft, en.Registered ? Kit.Green : Kit.Muted, false);
                 string res = (en.Lap > 0f ? Lang.T("tour ", "lap ") + Lap(en.Lap) : "") + (en.Pos > 0 ? (en.Lap > 0f ? " · " : "") + en.Heat + " " + en.Pos + Lang.T("e", "") : "");
                 Style.Text(new Rect(r.x + w * 0.64f, r.y, w * 0.36f - P(8), r.height), res, 12, TextAnchor.MiddleRight, Kit.Soft, false);
@@ -146,10 +146,10 @@ namespace MWCoop
                 y += P(42);
             }
             string how = Lang.T(
-                "1. Prends ta voiture (onglet VAZ-2108). Samedi 8 h - 12 h : gare-la pr\u00E8s de la tente de Fleetari (moins de 40 m), parle-lui et remplis la feuille (500 mk en Junior, 1000 mk en Amateur). Sans VAZ, c'est la Rivett et son inspection.\n" +
+                "1. Prends ta voiture (F10, onglet VAZ-2108 ou Voitures). Samedi 8 h - 12 h : gare-la pr\u00E8s de la tente de Fleetari (moins de 40 m), parle-lui et remplis la feuille (500 mk en Junior, 1000 mk en Amateur). Sans ta voiture, c'est la Rivett et son inspection.\n" +
                 "2. Tes heures de d\u00E9part s'affichent ici : SS1 samedi apr\u00E8s-midi, SS2 samedi soir, SS3 dimanche matin. Sois au d\u00E9part avec ta voiture (moins de 6 m de la ligne) \u00E0 ton heure.\n" +
                 "3. Entre les sp\u00E9ciales, laisse ta voiture au parc ferm\u00E9 (sinon : p\u00E9nalit\u00E9).",
-                "1. Take your car (VAZ-2108 tab). Saturday 8 am - 12 pm: park it near Fleetari's tent (under 40 m), talk to him and fill in the form (500 mk Junior, 1000 mk Amateur). Without a VAZ, it's the Rivett and its inspection.\n" +
+                "1. Take your car (F10, VAZ-2108 or Cars tab). Saturday 8 am - 12 pm: park it near Fleetari's tent (under 40 m), talk to him and fill in the form (500 mk Junior, 1000 mk Amateur). Without your own car, it's the Rivett and its inspection.\n" +
                 "2. Your start times show here: SS1 Saturday afternoon, SS2 Saturday evening, SS3 Sunday morning. Be at the start with your car (under 6 m from the line) at your time.\n" +
                 "3. Between stages, leave your car in parc ferme (otherwise: penalty).");
             float hh = P(84);

@@ -249,7 +249,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- etat pour l'interface
-        public class Entrant { public string Name; public bool Registered, Vaz, Me; public int Number; public float Lap; public string Heat; public int Pos; }
+        public class Entrant { public string Name; public bool Registered, Vaz, Me; public int Number; public float Lap; public string Heat; public int Pos; public string Car = "VAZ"; }   // (Car : nom court du modele de sa voiture -- Ebo III, Sport Quatro...)
 
         // Pilotes humains (inscrits d'abord) avec leur numero d'ici.
         public static List<Entrant> Entrants()
@@ -258,9 +258,10 @@ namespace MWCoop
             if (!enabled) return l;
             foreach (Human h in Ranked())
                 l.Add(new Entrant { Name = h.Name, Registered = h.Registered, Me = h.Id == Session.LocalId, Number = h.Registered ? NumOf(h) : 0,
-                                    Vaz = h.Registered && RentalNumber(h.Id) > 0 && Vaz.CarOf(h.Id) != null, Lap = h.Lap, Heat = h.Pos > 0 ? HeatName(h.Heat) : null, Pos = h.Pos });
+                                    Vaz = h.Registered && RentalNumber(h.Id) > 0 && Vaz.CarOf(h.Id) != null, Lap = h.Lap, Heat = h.Pos > 0 ? HeatName(h.Heat) : null, Pos = h.Pos,
+                                    Car = VazCar.ModelOf(Vaz.ModelOf(h.Id)).Name });
             if (l.Count == 0 && PlayerSync.InGame && lineups != null)
-                l.Add(new Entrant { Name = Session.Me != null ? Session.Me.Name : "?", Registered = Registered(), Me = true, Number = Registered() ? (myRental ? myNum : 14) : 0, Vaz = myRental && vazMine });
+                l.Add(new Entrant { Name = Session.Me != null ? Session.Me.Name : "?", Registered = Registered(), Me = true, Number = Registered() ? (myRental ? myNum : 14) : 0, Vaz = myRental && vazMine, Car = VazCar.ModelOf(Vaz.ModelOf(Session.LocalId)).Name });
             return l;
         }
 
@@ -311,11 +312,12 @@ namespace MWCoop
         // (ButtonConfirm -> 'State 16', comme le clic) ; bilan a 56 s (inscrit, VAZ, numero, location) et a 76 s (numeros
         // de l'hote, Cars[n], chronos). [Test] VazLoin=1 : la VAZ reste a 30 m (attendu : refus du jeu, xNoCar).
         static int vazTest; static bool mondeZero, mapShot;
+        static bool carsShot; static Camera shotCam;
         static void TestVaz(float t)
         {
             // [Test] MondeZero=1 : PlayerID pose a 0 a 5 s (nouvelle partie pas encore sauvegardee, comme chez JD)
             if (vazTest == 0 && t > 5f && Config.GetInt("Test", "MondeZero", 0) != 0 && !mondeZero) { mondeZero = true; FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID"); if (pid != null) pid.Value = 0f; Log.Info("autotest glacevaz : PlayerID = 0"); }
-            if (vazTest == 0 && t > (Session.IsHost ? 8f : 6f)) { vazTest = 1; Log.Info("autotest glacevaz : demande -> " + Vaz.Request(Session.IsHost ? 3 : 5)); }
+            if (vazTest == 0 && t > (Session.IsHost ? 8f : 6f)) { vazTest = 1; Log.Info("autotest glacevaz : demande -> " + Vaz.Request(Session.IsHost ? 3 : 5, Config.GetInt("Test", "VazModele", 0))); }
             // (« Faire venir » : le joueur pose a 2 m de la tente, sa VAZ amenee a cote de lui par l'hote, comme le bouton du F10)
             if (vazTest == 1 && t > 28f)
             {
@@ -358,6 +360,26 @@ namespace MWCoop
                 vazTest = 5;
                 Log.Info("autotest glacevaz : feuille " + (form != null ? form.ActiveStateName : "?") + ", inscrit " + MeRegistered + ", VAZ " + vazMine + ", numero " + myNum + ", location " + myRental + " (RentalNumber " + RentalNumber(Session.LocalId) + ")");
             }
+            // ([Test] GlaceVoitures=1 : vue des voitures des joueurs devant la tente, capture glace-voitures a 66 s -- planches du
+            // forum, JD 22/10)
+            if (vazTest == 5 && t > 66f && !carsShot && Config.GetInt("Test", "GlaceVoitures", 0) != 0)
+            {
+                carsShot = true;
+                Transform car = Vaz.CarOf(Session.LocalId);
+                if (car != null)
+                {
+                    if (shotCam == null) { shotCam = new GameObject("MWCoop-CameraForum").AddComponent<Camera>(); shotCam.depth = 100; shotCam.fieldOfView = 45; }
+                    string[] cv = Config.Get("Test", "GlaceCamera", "5.5,1.7,6.5,-1.5,0.5,0").Split(',');
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    // (repere a plat : avant et droite de la voiture dans le plan, hauteur du monde)
+                    Vector3 fw = car.forward; fw.y = 0f; fw.Normalize(); Vector3 rt = new Vector3(fw.z, 0f, -fw.x);
+                    System.Func<int, Vector3> P = i => car.position + rt * float.Parse(cv[i], ci) + Vector3.up * float.Parse(cv[i + 1], ci) + fw * float.Parse(cv[i + 2], ci);
+                    shotCam.transform.position = P(0);
+                    shotCam.transform.LookAt(P(3), Vector3.up);
+                    Autotest.CaptureSoon("glace-voitures", 0.8f);
+                }
+            }
+            if (carsShot && shotCam != null && t > 70f) { Object.Destroy(shotCam.gameObject); shotCam = null; }
             if (vazTest == 5 && t > 76f)
             {
                 vazTest = 6;
@@ -372,19 +394,21 @@ namespace MWCoop
                 foreach (Entrant e in Entrants()) es.Append(' ').Append(e.Name).Append(e.Registered ? "=inscrit" : "=-").Append(e.Vaz ? "/VAZ" : "").Append("/n").Append(e.Number);
                 Log.Info("autotest glacevaz : VAZ de l'hote" + sb + " ; numeros" + ns + " ; Cars[" + mn + "] = " + (slot != null ? slot.name : "-") + " ; pilotes" + es + " ; chronos '" + title + "' " + rows.Count + " lignes");
             }
-            // captures (hote) : onglet Course sur glace du F10 a 80 s, chronos en direct sur la ligne d'arrivee a 88 s
-            if (Session.IsHost && vazTest == 6 && t > 80f) { vazTest = 7; Menu.Show(Menu.TabRace); Autotest.CaptureSoon("glace-f10", 1.5f); }
+            // captures : onglet Course sur glace du F10 a 80 s (les deux), puis (hote) chronos en direct sur la ligne d'arrivee a 88 s
+            if (vazTest == 6 && t > 80f) { vazTest = 7; Menu.Show(Menu.TabRace); Autotest.CaptureSoon("glace-f10", 1.5f); }   // (invite aussi : son numero, ses chronos)
+            if (!Session.IsHost && vazTest == 7 && t > 86f) { vazTest = 11; Menu.Open = false; }
             if (Session.IsHost && vazTest == 7 && t > 86f)
             {
                 vazTest = 8; Menu.Open = false;
                 GameObject pl = GameObject.Find("PLAYER");
                 if (pl != null && lines != null) pl.transform.position = lines[2].center + Vector3.up * 3f + Vector3.right * 12f;
-                Autotest.CaptureSoon("glace-chronos", 3f);
+                showUntil = Time.realtimeSinceStartup + 8f;   // (tableau montre comme apres un passage sur la ligne)
+                Autotest.CaptureSoon("glace-chronos", 2f);
                 Log.Info("autotest glacevaz : au bord de la ligne d'arrivee, chronos " + (LiveOn ? "montres" : "caches") + ", essais " + Practice + ", zone " + zone.min.ToString("F0") + " - " + zone.max.ToString("F0"));
             }
-            if (Session.IsHost && vazTest == 8 && t > 89f && !mapShot) { mapShot = true; MapPanel.Open = true; Autotest.CaptureSoon("carte-glace", 1.5f); }
-            if (Session.IsHost && vazTest == 8 && t > 91.5f && mapShot) MapPanel.Open = false;
-            if (Session.IsHost && vazTest == 8 && t > 92f)
+            if (Session.IsHost && vazTest == 8 && t > 90f && !mapShot) { mapShot = true; MapPanel.Open = true; Autotest.CaptureSoon("carte-glace", 1.5f); }
+            if (Session.IsHost && vazTest == 8 && t > 92.5f && mapShot) MapPanel.Open = false;
+            if (Session.IsHost && vazTest == 8 && t > 93f)
             {
                 vazTest = 9;
                 GameObject pl = GameObject.Find("PLAYER");
