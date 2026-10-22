@@ -503,6 +503,7 @@ namespace MWCoop
                     break;
                 }
                 case "lippu": ticketDay = GameDay; L("essai : billet du jour " + ticketDay); break;
+                case "kartta": MapPanel.Open = a.Length < 3 || a[2] != "0"; break;   // kartta [0] : carte du F10 (M) ouverte / fermee
                 case "sonde":
                 {
                     // sonde x z0 z1 : le sol le long d'une ligne nord-sud (collider touche et hauteur, aux changements) -- emplacement
