@@ -72,7 +72,9 @@ namespace MWCoop
         public static List<string> Clips(string content)
         {
             var l = new List<string>();
-            foreach (string c in TapeFilm(content).Split('+')) if (c.Length > 0) l.Add(c);
+            string films = TapeFilm(content);
+            if (films.StartsWith("url:")) return l;   // (bobine « lien » : pas de film a soi, lue en continu -- KinoLinkki)
+            foreach (string c in films.Split('+')) if (c.Length > 0) l.Add(c);
             return l;
         }
 
@@ -269,14 +271,15 @@ namespace MWCoop
         public static bool ChatCommand(string text)
         {
             string low = text.ToLowerInvariant();
-            if (Active && root != null && ImportCommand(text)) return true;
+            if (Active && (root != null || kino != null) && ImportCommand(text)) return true;
+            if (Active && kino != null && LinkCommand(text)) return true;
             if (!(low.StartsWith("/titre") || low.StartsWith("/title"))) return false;
-            if (!Active || root == null) return false;
+            if (!Active || (root == null && kino == null)) return false;
             string title = text.Length > 6 ? text.Substring(6).Trim() : "";
             foreach (char c in new[] { '|', '~', ';', '\n', '\r' }) title = title.Replace(c, ' ');
             if (title.Length > 24) title = title.Substring(0, 24).Trim();
-            Esine tape = esineet.Find(e => e.Kind == KVhs && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform));
-            if (tape == null) { Chat.System(Lang.T("Prends d'abord une cassette VHS en main.", "Pick up a VHS tape first.")); return true; }
+            Esine tape = esineet.Find(e => (e.Kind == KVhs || e.Kind == KKela) && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform));
+            if (tape == null) { Chat.System(Lang.T("Prends d'abord une cassette VHS ou une bobine en main.", "Pick up a VHS tape or a film reel first.")); return true; }
             int i = tape.Data.IndexOf('~');
             string content = i < 0 ? tape.Data : tape.Data.Substring(0, i);
             if (content.Length == 0) content = "tyhja";

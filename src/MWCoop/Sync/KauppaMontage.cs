@@ -60,7 +60,7 @@ namespace MWCoop
         // « R ouvre le montage une fois ; ferme, il ne s'ouvre plus ».
         static bool mUnfocus;
         static float mWhyAt;   // (essai : R tenu simule)
-        static Esine HeldTape() { return esineet.Find(e => e.Kind == KVhs && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform)); }
+        static Esine HeldTape() { return esineet.Find(e => (e.Kind == KVhs || e.Kind == KKela) && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform)); }
 
         // R tenu : appele chaque image avec la cassette visee ou tenue (null : rien)
         static void TickMontageKey(Esine tape, float now)
@@ -365,6 +365,7 @@ namespace MWCoop
             int st = vPickPoll(sb, 1024);
             if (st == 1 || st == 0) return;
             picking = false;
+            if (pickReel != null) { Esine r = pickReel; pickReel = null; if (st == 2 && sb.Length > 0 && esineet.Contains(r)) StartImport(r, sb.ToString()); return; }   // (video choisie pour une bobine)
             if (st == 2 && sb.Length > 0)
             {
                 Config.Save("Boutique", "DossierVideos", sb.ToString());
@@ -407,7 +408,8 @@ namespace MWCoop
             float pad = Style.Px(22), W = Mathf.Min(Style.Px(980), Screen.width - Style.Px(32)), H = Mathf.Min(Style.Px(720), Screen.height - Style.Px(32));
             float x = Mathf.Round((Screen.width - W) / 2), y = Mathf.Round((Screen.height - H) / 2);
             if (e.type == EventType.Repaint) Style.Glass(new Rect(x, y, W, H), Style.Px(20));
-            Style.Title(new Rect(x + pad, y + Style.Px(12), W - 2 * pad, Style.Px(40)), Lang.T("MONTAGE DE LA CASSETTE", "TAPE EDITING"), Style.White, TextAnchor.MiddleLeft, 26);
+            bool reel = mTape.Kind == KKela;
+            Style.Title(new Rect(x + pad, y + Style.Px(12), W - 2 * pad, Style.Px(40)), reel ? Lang.T("BOBINE DE FILM", "FILM REEL") : Lang.T("MONTAGE DE LA CASSETTE", "TAPE EDITING"), Style.White, TextAnchor.MiddleLeft, 26);
             if (MButton(new Rect(x + W - pad - Style.Px(130), y + Style.Px(16), Style.Px(130), Style.Px(34)), Lang.T("FERMER (Échap)", "CLOSE (Esc)"), false, e)) { CloseMontage(); Style.Alpha = 1f; return; }
             float cy = y + Style.Px(64);
             // titre
@@ -438,7 +440,8 @@ namespace MWCoop
             {
                 Style.Fill(pr, Color.black);
                 if (mClips.Count > 0 && mTex != null && mFrame >= 0) GUI.DrawTexture(pr, mTex, ScaleMode.ScaleToFit, false);
-                else Style.Text(pr, mMissing ? Lang.T("Film en cours de réception…", "Film still arriving…") : Lang.T("CASSETTE VIERGE", "BLANK TAPE"), 20, TextAnchor.MiddleCenter, Style.Dim);
+                else if (reel && TapeFilm(mTape.Data).StartsWith("url:")) Style.Text(pr, Lang.T("LIEN : ", "LINK: ") + TapeFilm(mTape.Data).Substring(4), 15, TextAnchor.MiddleCenter, Style.Accent, false, true);
+                else Style.Text(pr, mMissing ? Lang.T("Film en cours de réception…", "Film still arriving…") : reel ? Lang.T("BOBINE VIERGE", "BLANK REEL") : Lang.T("CASSETTE VIERGE", "BLANK TAPE"), 20, TextAnchor.MiddleCenter, Style.Dim);
             }
             // colonne de droite : infos et lecture
             float rx = pr.xMax + pad, rw = x + W - pad - rx, ry = cy;
@@ -460,6 +463,7 @@ namespace MWCoop
             ry += bh + gap;
             if (MButton(new Rect(rx, ry, hw, bh), Lang.T("TOUT", "ALL"), false, e, have)) { mA = 0f; mB = mTotal; }
             if (MButton(new Rect(rx + hw + gap, ry, hw, bh), Lang.T("ALLER AU DÉBUT", "GO TO START"), false, e, have)) Seek(mA);
+            if (reel) DrawReelExtras(rx, ry + bh + gap * 3, rw, e);   // (importer une video, lien : KinoLinkki)
             // barre de temps
             float ty = cy + ph + Style.Px(16);
             var bar = new Rect(x + pad, ty, W - 2 * pad, Style.Px(30));
@@ -496,7 +500,7 @@ namespace MWCoop
             if (mConfirm != 0 && now > mConfirmUntil) mConfirm = 0;
             if (MButton(new Rect(x + pad, ay, aw, Style.Px(42)), mConfirm == 1 ? Lang.T("SÛR ? CLIQUE ENCORE", "SURE? CLICK AGAIN") : Lang.T("ROGNER (GARDER LA SÉLECTION)", "TRIM (KEEP THE SELECTION)"), false, e, have && (mA > 0.05f || mB < mTotal - 0.05f), mConfirm == 1))
             { if (mConfirm == 1) { mConfirm = 0; Trim(); } else { mConfirm = 1; mConfirmUntil = now + 3f; } }
-            if (MButton(new Rect(x + pad + aw + gap, ay, aw, Style.Px(42)), mConfirm == 2 ? Lang.T("SÛR ? CLIQUE ENCORE", "SURE? CLICK AGAIN") : Lang.T("EFFACER LA CASSETTE", "ERASE THE TAPE"), false, e, clips > 0, true))
+            if (MButton(new Rect(x + pad + aw + gap, ay, aw, Style.Px(42)), mConfirm == 2 ? Lang.T("SÛR ? CLIQUE ENCORE", "SURE? CLICK AGAIN") : reel ? Lang.T("EFFACER LA BOBINE", "ERASE THE REEL") : Lang.T("EFFACER LA CASSETTE", "ERASE THE TAPE"), false, e, clips > 0 || TapeFilm(mTape.Data).StartsWith("url:"), true))
             { if (mConfirm == 2) { mConfirm = 0; Erase(); } else { mConfirm = 2; mConfirmUntil = now + 3f; } }
             if (MButton(new Rect(x + pad + 2 * (aw + gap), ay, aw, Style.Px(42)), Exporting ? Lang.T("EXPORT… ", "EXPORTING… ") + Mathf.Max(0, exportPct) + " %" : Lang.T("EXPORTER EN .MP4", "EXPORT AS .MP4"), true, e, have && !Exporting))
                 Export();

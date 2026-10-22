@@ -56,12 +56,12 @@ namespace MWCoop
             string arg = text.Substring(cut).Trim();
             EnsureImportDir();
             if (import != null) { Chat.System(Lang.T("Un import est déjà en cours : ", "An import is already running: ") + import.Name); return true; }
-            Esine tape = esineet.Find(e => e.Kind == KVhs && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform));
+            Esine tape = esineet.Find(e => (e.Kind == KVhs || e.Kind == KKela) && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform));   // (cassette ou bobine de cinema)
             string[] files = new string[0];
             try { files = Directory.GetFiles(ImportDir); } catch { }
             if (arg.Length == 0 || tape == null)
             {
-                if (tape == null) Chat.System(Lang.T("Prends d'abord une cassette VHS en main.", "Pick up a VHS tape first."));
+                if (tape == null) Chat.System(Lang.T("Prends d'abord une cassette VHS ou une bobine en main.", "Pick up a VHS tape or a film reel first."));
                 Chat.System(Lang.T("Mets ta vidéo dans : ", "Put your video in: ") + ImportDir);
                 if (files.Length == 0) Chat.System(Lang.T("(le dossier est vide)", "(the folder is empty)"));
                 else foreach (string f in files) Chat.System("  /importer " + Path.GetFileName(f));
@@ -77,19 +77,36 @@ namespace MWCoop
                 foreach (string f in files) Chat.System("  /importer " + Path.GetFileName(f));
                 return true;
             }
-            if (Clips(tape.Data).Count >= MaxClips) { Chat.System(Lang.T("Cette cassette est pleine.", "This tape is full.")); return true; }
-            if (!BindVideo()) { Chat.System(Lang.T("Import impossible : MWCoopRT.dll manque ou est trop ancienne.", "Import unavailable: MWCoopRT.dll is missing or too old.")); return true; }
+            StartImport(tape, src);
+            return true;
+        }
+
+        // Lance la conversion de src pour la cassette ou la bobine (tchat /importer, ou bouton du montage d'une bobine).
+        static void StartImport(Esine tape, string src)
+        {
+            if (import != null) { Chat.System(Lang.T("Un import est déjà en cours : ", "An import is already running: ") + import.Name); return; }
+            if (tape.Data.StartsWith("url:")) SetData(tape, "tyhja~" + TapeTitle(tape.Data));   // (bobine « lien » : redevient une bobine de films)
+            if (Clips(tape.Data).Count >= MaxClips) { Chat.System(Lang.T("Cette cassette est pleine.", "This tape is full.")); return; }
+            if (!BindVideo()) { Chat.System(Lang.T("Import impossible : MWCoopRT.dll manque ou est trop ancienne.", "Import unavailable: MWCoopRT.dll is missing or too old.")); return; }
             string film = "f" + Session.LocalId + "-" + DateTime.Now.Ticks.ToString("x");
             try { Directory.CreateDirectory(FilmDir); } catch { }
             int w = Mathf.Clamp(Config.GetInt("Boutique", "ImportLargeur", 320), 64, 640), h = Mathf.Clamp(Config.GetInt("Boutique", "ImportHauteur", 240), 48, 480);
             int fps = Mathf.Clamp(Config.GetInt("Boutique", "ImportImages", 12), 1, 25);
             int maxSec = Mathf.RoundToInt(Mathf.Clamp(Config.GetFloat("Boutique", "ImportMinutes", 20f), 0.2f, 120f) * 60f);
-            int r = vStart(src, FilmPath(film), w, h, fps, maxSec, Mathf.Clamp(Config.GetInt("Boutique", "ImportQualite", 50), 10, 95));
-            if (r != 0) { Chat.System(Lang.T("Import pas lancé (", "Import not started (") + r + ")"); return true; }
+            int q = Mathf.Clamp(Config.GetInt("Boutique", "ImportQualite", 50), 10, 95);
+            if (tape.Kind == KKela)
+            {
+                // bobine de cinema : image plus grande et plus fluide pour le grand ecran ([Kino] ImportLargeur...)
+                w = Mathf.Clamp(Config.GetInt("Kino", "ImportLargeur", 480), 64, 960); h = Mathf.Clamp(Config.GetInt("Kino", "ImportHauteur", 270), 48, 540);
+                fps = Mathf.Clamp(Config.GetInt("Kino", "ImportImages", 18), 1, 30);
+                maxSec = Mathf.RoundToInt(Mathf.Clamp(Config.GetFloat("Kino", "ImportMinutes", 30f), 0.2f, 180f) * 60f);
+                q = Mathf.Clamp(Config.GetInt("Kino", "ImportQualite", 60), 10, 95) + 1000;   // (+1000 : sans l'effet VHS)
+            }
+            int r = vStart(src, FilmPath(film), w, h, fps, maxSec, q);
+            if (r != 0) { Chat.System(Lang.T("Import pas lancé (", "Import not started (") + r + ")"); return; }
             import = new Import { TapeId = tape.Id, Film = film, Name = Path.GetFileName(src) };
-            Chat.System(Lang.T("Conversion de ", "Converting ") + import.Name + Lang.T(" pour la cassette… (tu peux continuer à jouer)", " for the tape... (you can keep playing)"));
+            Chat.System(Lang.T("Conversion de ", "Converting ") + import.Name + (tape.Kind == KKela ? Lang.T(" pour la bobine… (tu peux continuer à jouer)", " for the reel... (you can keep playing)") : Lang.T(" pour la cassette… (tu peux continuer à jouer)", " for the tape... (you can keep playing)")));
             L("video : import de " + src + " -> " + film + " (" + w + "x" + h + ", " + fps + " i/s, " + maxSec + " s au plus)");
-            return true;
         }
 
         static void TickImport(float now)

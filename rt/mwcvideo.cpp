@@ -29,7 +29,7 @@
 
 namespace
 {
-    struct Job { std::wstring src, dst; int w, h, fps, maxSec, quality; int kind = 0, scale = 3; std::wstring logo; };   // kind : 0 import, 1 export ; logo : PNG pose en haut a gauche (export)
+    struct Job { std::wstring src, dst; int w, h, fps, maxSec, quality; int kind = 0, scale = 3; std::wstring logo; bool vhs = true; };   // (vhs : effet VHS a l'import ; pas pour les bobines du cinema)   // kind : 0 import, 1 export ; logo : PNG pose en haut a gauche (export)
 
     volatile LONG g_state;          // 0 rien, 1 en cours, 2 fini, -1 echec
     volatile LONG g_cancel;
@@ -257,7 +257,7 @@ namespace
                                     Fit(flip.data(), sw, sh, sw * 4, img, j.w, j.h);
                                 }
                                 else Fit(scan0, sw, sh, pitch, img, j.w, j.h);
-                                VhsLook(img, j.w, j.h, 3);   // (neige legere : elle pese lourd en JPEG)
+                                if (j.vhs) VhsLook(img, j.w, j.h, 3);   // (neige legere : elle pese lourd en JPEG)
                                 if (Jpeg(wic, img, j.w, j.h, j.quality / 100.0f, jpg)) { Block(o, 1, ts, jpg.data(), (int)jpg.size()); frames++; }
                             }
                             if (locked2d) b2->Unlock2D(); else if (raw) mb->Unlock();
@@ -566,7 +566,7 @@ namespace
     // ---------------------------------------------------------------- choix d'un dossier (fenetre de Windows, fil a elle)
     volatile LONG g_pickState;   // 0 rien, 1 ouverte, 2 choisi, -1 annule
     wchar_t g_pickPath[1024];
-    struct Pick { std::wstring init; HWND owner; };
+    struct Pick { std::wstring init; HWND owner; bool file = false; };   // (file : choisir une video, pas un dossier)
 
     DWORD WINAPI PickThread(LPVOID p)
     {
@@ -579,8 +579,18 @@ namespace
             {
                 FILEOPENDIALOGOPTIONS o = 0;
                 d->GetOptions(&o);
-                d->SetOptions(o | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
-                d->SetTitle(L"MWCoop : dossier des videos");
+                if (pk->file)
+                {
+                    d->SetOptions(o | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST);
+                    COMDLG_FILTERSPEC ft[] = { { L"Videos", L"*.mp4;*.m4v;*.mov;*.avi;*.wmv;*.mkv;*.webm;*.mpg;*.mpeg;*.3gp" }, { L"Tous les fichiers", L"*.*" } };
+                    d->SetFileTypes(2, ft);
+                    d->SetTitle(L"MWCoop : video a mettre sur la bobine");
+                }
+                else
+                {
+                    d->SetOptions(o | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+                    d->SetTitle(L"MWCoop : dossier des videos");
+                }
                 IShellItem *it = nullptr;
                 if (!pk->init.empty() && SUCCEEDED(SHCreateItemFromParsingName(pk->init.c_str(), nullptr, IID_PPV_ARGS(&it)))) { d->SetFolder(it); it->Release(); it = nullptr; }
                 if (SUCCEEDED(d->Show(pk->owner)) && SUCCEEDED(d->GetResult(&it)))
@@ -622,14 +632,17 @@ namespace
     }
 }
 
-// Lance l'import (src -> dst, image w x h, fps images/s, maxSec secondes au plus, qualite JPEG 1-100).
-// 0 : parti ; -1 : un import est deja en cours ; -2 : fil pas cree.
+// Lance l'import (src -> dst, image w x h, fps images/s, maxSec secondes au plus, qualite JPEG 1-100 ; qualite + 1000 :
+// sans l'effet VHS -- bobines du cinema). 0 : parti ; -1 : un import est deja en cours ; -2 : fil pas cree.
 extern "C" __declspec(dllexport) int VidImportStart(const wchar_t *src, const wchar_t *dst, int w, int h, int fps, int maxSec, int quality)
 {
     if (!g_lockInit) { InitializeCriticalSection(&g_lock); g_lockInit = true; }
     if (g_state == 1) return -1;
     if (g_thread) { CloseHandle(g_thread); g_thread = nullptr; }
+    bool vhs = quality < 1000;
+    if (!vhs) quality -= 1000;
     Job *j = new Job{ src, dst, w < 16 ? 16 : w, h < 16 ? 16 : h, fps < 1 ? 1 : fps > 30 ? 30 : fps, maxSec < 1 ? 1 : maxSec, quality < 10 ? 10 : quality > 95 ? 95 : quality };
+    j->vhs = vhs;
     g_cancel = 0; g_progress = 0; g_msg[0] = 0;
     InterlockedExchange(&g_state, 1);
     g_thread = CreateThread(nullptr, 0, Thread, j, 0, nullptr);
@@ -685,4 +698,17 @@ extern "C" __declspec(dllexport) int VidPickFolderPoll(wchar_t *out, int n)
     if (s == 2 && out && n > 0) { EnterCriticalSection(&g_lock); wcsncpy_s(out, n, g_pickPath, _TRUNCATE); LeaveCriticalSection(&g_lock); }
     if (s == 2 || s == -1) InterlockedExchange(&g_pickState, 0);
     return s;
+}
+
+// Ouvre la fenetre de Windows pour choisir une video (bobine du cinema). Meme suivi que le dossier (VidPickFolderPoll).
+extern "C" __declspec(dllexport) int VidPickFileStart(const wchar_t *initial)
+{
+    if (!g_lockInit) { InitializeCriticalSection(&g_lock); g_lockInit = true; }
+    if (g_pickState == 1) return -1;
+    Pick *pk = new Pick{ initial ? initial : L"", GetForegroundWindow(), true };
+    InterlockedExchange(&g_pickState, 1);
+    HANDLE h = CreateThread(nullptr, 0, PickThread, pk, 0, nullptr);
+    if (!h) { delete pk; InterlockedExchange(&g_pickState, -1); return -2; }
+    CloseHandle(h);
+    return 0;
 }
