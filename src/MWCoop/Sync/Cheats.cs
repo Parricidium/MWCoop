@@ -15,10 +15,24 @@ namespace MWCoop
     public static class Cheats
     {
         // (Face : vers ou regarder en arrivant ; Alias : le mot anglais de /place)
-        public class Place { public string Key, Fr, En, Alias; public Vector3 At, Face; }
+        // (Need : lieu ajoute par MWCoop -- cinema, musee, boutique --, seulement si son ajout est actif ; pastille d'une autre
+        // couleur sur la carte)
+        public class Place { public string Key, Fr, En, Alias; public Vector3 At, Face; public System.Func<bool> Need; }
         // (appartement, maison des parents : les points de reapparition, Respawn ; les autres : au sol, reperes par
         // CheatsProbe -- Autotest=trichelieux)
-        public static Place[] Places { get { return Game.Msc ? PlacesMsc : PlacesMwc; } }
+        public static Place[] Places
+        {
+            get
+            {
+                Place[] all = Game.Msc ? PlacesMsc : PlacesMwc;
+                if (placesFrame == Time.frameCount && placesCache != null) return placesCache;
+                var l = new System.Collections.Generic.List<Place>();
+                foreach (Place p in all) if (p.Need == null || p.Need()) l.Add(p);
+                placesCache = l.ToArray(); placesFrame = Time.frameCount;
+                return placesCache;
+            }
+        }
+        static Place[] placesCache; static int placesFrame = -1;
         static readonly Place[] PlacesMwc = {
             new Place { Key = "appartement", Alias = "apartment", Fr = "Appartement", En = "Apartment", At = new Vector3(-1285.5f, 1.2f, 1076.4f) },
             new Place { Key = "maison", Alias = "home", Fr = "Maison des parents", En = "Parents' house", At = new Vector3(-6.2f, 1.0f, 6.6f) },
@@ -33,7 +47,10 @@ namespace MWCoop
             new Place { Key = "cabane", Alias = "cottage", Fr = "Cabane", En = "Cottage", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
             new Place { Key = "chalet", Alias = "cabin", Fr = "Chalet", En = "Cabin", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
             // cinema KINO TAHTI (JD, 22/10) : sur le parking, devant les portes du hall (Kauppa.KinoFrame : local 0, 16), face au hall
-            new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f) },
+            new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f), Need = () => Kauppa.Active && Kauppa.KinoOn },
+            // musee de la Corse et boutique OSUUSKAUPPA s21 (coin s21 de Perajarvi) : devant leurs portes, face a eux
+            new Place { Key = "musee", Alias = "museum", Fr = "Musée de la Corse", En = "Museum of Corsica", At = new Vector3(-1570.3f, 5.5f, 1096.1f), Face = new Vector3(-1574.6f, 5f, 1085.4f), Need = () => Kauppa.Active && Ajouts.Museum },
+            new Place { Key = "boutique", Alias = "shop", Fr = "OSUUSKAUPPA s21", En = "OSUUSKAUPPA s21", At = new Vector3(-1592.3f, 6.0f, 1105.1f), Face = new Vector3(-1591.1f, 5f, 1098.5f), Need = () => Kauppa.ShopOn },
         };
         // My Summer Car (19/10, vidage du jeu v.250908-04) : la meme carte pour les lieux communs ; le magasin de Teimo est a la
         // place du pub Nappo ; pas d'appartement ni de port ; les dragsters, le depart du rallye et Rykipohja en plus. (Alias :
@@ -76,12 +93,12 @@ namespace MWCoop
         static void Say(string s) { Chat.System(s); }
 
         static readonly string[] HelpFr = {
-            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, cinema",
+            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, cinema, musee, boutique",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)" };
         static readonly string[] HelpEn = {
-            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema",
+            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)" };

@@ -508,7 +508,7 @@ namespace MWCoop
             { "Traffic skid marks", "Следы шин трафика" },
             { "Player names", "Ники игроков" },
             { "/bring <player>: bring a player to you", "/bring <игрок>: призвать игрока к себе" },
-            { "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema", "/place <название>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, кинотеатр" },
+            { "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop", "/place <название>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop" },
             { "/money <amount>: cash for yourself", "/money <сумма>: наличные себе" },
             { "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/heal: голод, жажда, усталость, стресс, мочевой пузырь, грязь на ноль" },
             { "/free: no longer wanted, out of jail", "/free: снять розыск, выйти из тюрьмы" },
@@ -945,6 +945,8 @@ namespace MWCoop
             { "/clothes: my jacket, coverall and helmet in front of me", "/clothes: моя куртка, комбинезон и шлем передо мной" },
             { "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)", "/car <имя>: машина появляется передо мной (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)" },
             { "/car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)", "/car <имя>: машина появляется передо мной (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)" },
+            { "Cinema", "Кинотеатр" },
+            { "Museum of Corsica", "Музей Корсики" },
         };
     }
 }
