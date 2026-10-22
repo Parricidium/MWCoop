@@ -645,7 +645,10 @@ namespace MWCoop
             // lecteur se coupait (29.30, 22/10). Commandes laissees a chacun (le son du lecteur n'est pas encore partage sur MSC).
             return p.StartsWith("JOBS/Mummola") && f.FsmName == "Logic" || f.FsmName == "Save" && p.Contains("/Moving/Stuff")
                    || f.FsmName == "Logic" && p.EndsWith("ShitTank/ShitDumps")
-                   || p.Contains("/ButtonsCD/");
+                   || p.Contains("/ButtonsCD/")
+                   // (meme famille : les boutons a molette de la radio ordinaire -- radio(Clone)/RadioTuner, RadioVolume : automate Knob dont
+                   // « Get scroll » retombe sur « Mouse off 2 » des que la souris n'y est pas ; vidage v.250908-04)
+                   || f.FsmName == "Knob" && f.Fsm != null && f.Fsm.GetState("Get scroll") != null && f.Fsm.GetState("Mouse off 2") != null;
         }
 
         static bool IgnitionLike(PlayMakerFSM f)
