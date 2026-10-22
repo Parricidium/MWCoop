@@ -209,7 +209,7 @@ namespace MWCoop
                 Vector3 a = c[i], b = c[(i + 1) % 4];
                 int k = v.Count;
                 v.Add(from); v.Add(a); v.Add(b);
-                col.Add(new Color(1f, 0.95f, 0.8f, 0.10f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f));
+                col.Add(new Color(1f, 0.95f, 0.8f, 0.05f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f));   // (moitie moins opaque qu'avant : JD, 22/10)
                 t.Add(k); t.Add(k + 1); t.Add(k + 2); t.Add(k); t.Add(k + 2); t.Add(k + 1);   // (deux faces)
             }
             m.vertices = v.ToArray(); m.colors = col.ToArray(); m.triangles = t.ToArray(); m.RecalculateBounds();

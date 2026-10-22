@@ -122,34 +122,35 @@ namespace MWCoop
             if (!mats.ContainsKey("metalli")) Mat("metalli", "metal_galvanized", 1f, new Color(0.9f, 0.9f, 0.88f));
             if (!mats.ContainsKey("lasi")) Mat("lasi", "psk_glass", 1f);
             if (!mats.ContainsKey("tiski")) Mat("tiski", "wood12", 1.0f);
+            // (peintures unies partout dedans et sur les accessoires : les textures du jeu faisaient sale/use -- JD, 22/10)
             Mat("ki_tiili", "wall_brick2", 2.4f, new Color(0.95f, 0.78f, 0.7f));     // brique rouge-brun
-            Mat("ki_rappaus", "plaster", 2.0f, new Color(0.96f, 0.95f, 0.92f));      // enduit blanc
+            Mat("ki_rappaus", "paint_black_matte", 1f, new Color(0.94f, 0.93f, 0.9f));      // enduit blanc
             Mat("ki_aulaseina", "paint_black_matte", 1f, new Color(0.93f, 0.86f, 0.74f));   // murs du hall : peinture creme, unie
             Mat("ki_paneeli", "wood_panel4", 1.4f, new Color(0.85f, 0.7f, 0.55f));    // lambris du hall
-            Mat("ki_kasvi", "plaster", 0.5f, new Color(0.18f, 0.42f, 0.16f));        // plantes vertes
-            Mat("ki_punainen", "plaster", 2.0f, new Color(0.72f, 0.12f, 0.12f));     // bandeau rouge
-            Mat("ki_betoni", "concrete_slabs", 3.0f, new Color(0.85f, 0.85f, 0.83f));
+            Mat("ki_kasvi", "paint_black_matte", 1f, new Color(0.2f, 0.45f, 0.18f));        // plantes vertes
+            Mat("ki_punainen", "paint_black_matte", 1f, new Color(0.7f, 0.1f, 0.1f));     // bandeau rouge
+            Mat("ki_betoni", "paint_black_matte", 1f, new Color(0.66f, 0.66f, 0.64f));
             // (couleurs unies, sans texture : les textures du jeu se repetaient partout -- JD, 22/10)
             Mat("ki_asfaltti", "mwc_asphalt", 7f);   // route enneigee du jeu (traces le long de x : sens de circulation ; JD, 22/10)
             Mat("ki_viiva", "paint_black_matte", 1f, new Color(0.95f, 0.78f, 0.2f));     // lignes du parking, jaunes (visibles sur la neige)
-            Mat("ki_katto", "concrete_slabs", 3.0f, new Color(0.45f, 0.45f, 0.47f));
-            Mat("ki_alu", "metal_galvanized", 1f, new Color(0.18f, 0.18f, 0.2f));    // menuiseries noires
-            Mat("ki_kulta", "metal_galvanized", 1f, new Color(0.95f, 0.75f, 0.35f)); // laiton
+            Mat("ki_katto", "paint_black_matte", 1f, new Color(0.38f, 0.38f, 0.4f));
+            Mat("ki_alu", "paint_black_matte", 1f, new Color(0.16f, 0.16f, 0.18f));    // menuiseries noires
+            Mat("ki_kulta", "paint_black_matte", 1f, new Color(0.85f, 0.66f, 0.28f)); // laiton
             Mat("ki_matto", "paint_black_matte", 1f, new Color(0.42f, 0.05f, 0.08f));   // moquette bordeaux (unie)
             Mat("ki_aula", "paint_black_matte", 1f, new Color(0.13f, 0.17f, 0.36f));    // moquette du hall, bleue (unie)
             Mat("ki_kyltti_in", "paint_black_matte", 1f, Color.white);
             OwnMat("ki_sisaan", "kino-sisaan.png", true);
             OwnMat("ki_ulosajo", "kino-ulosajo.png", true);
             Mat("ki_seina", "fabric_cotton", 1.2f, new Color(0.16f, 0.14f, 0.22f));   // tenture murale sombre
-            Mat("ki_katossa", "plaster", 2.0f, new Color(0.12f, 0.12f, 0.14f));       // plafond des salles
-            Mat("ki_sisakatto", "tiles4", 1.2f, new Color(0.95f, 0.95f, 0.95f));     // faux plafond du hall
+            Mat("ki_katossa", "paint_black_matte", 1f, new Color(0.1f, 0.1f, 0.12f));       // plafond des salles
+            Mat("ki_sisakatto", "paint_black_matte", 1f, new Color(0.9f, 0.89f, 0.86f));     // faux plafond du hall
             Mat("ki_istuin", "fabric_cotton", 0.5f, new Color(0.62f, 0.06f, 0.08f));  // velours rouge des fauteuils
             Mat("ki_musta", "paint_black_matte", 1f, new Color(0.07f, 0.07f, 0.08f));
             Mat("ki_verho", "fabric_cotton", 0.8f, new Color(0.5f, 0.04f, 0.06f));         // rideaux de scene
-            Mat("ki_valkoinen", "plaster", 1f, new Color(1f, 1f, 1f));
-            Mat("ki_popcorn", "plaster", 0.5f, new Color(1f, 0.86f, 0.42f));
-            Mat("ki_sininen", "plaster", 1f, new Color(0.15f, 0.3f, 0.7f));
-            Mat("ki_projektori", "metal_galvanized", 1f, new Color(0.22f, 0.3f, 0.26f));   // vert machine
+            Mat("ki_valkoinen", "paint_black_matte", 1f, new Color(0.93f, 0.93f, 0.92f));
+            Mat("ki_popcorn", "paint_black_matte", 1f, new Color(1f, 0.84f, 0.38f));
+            Mat("ki_sininen", "paint_black_matte", 1f, new Color(0.15f, 0.3f, 0.7f));
+            Mat("ki_projektori", "paint_black_matte", 1f, new Color(0.22f, 0.3f, 0.26f));   // vert machine
             OwnMat("ki_kyltti", "kino-kyltti.png", true);
             OwnMat("ki_valkokangas", "kino-valkokangas.png", true);
             OwnMat("ki_hinnasto", "kino-hinnasto.png", true);
