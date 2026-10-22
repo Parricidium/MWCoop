@@ -22,6 +22,7 @@ namespace MWCoop
 
         // Hote lance par le salon : "continuer" | "nouvelle" (ecran de demarrage) ; null sinon. Remis a null en jeu.
         public static string HostChoice;
+        public static bool StartedNew;   // (nouvelle partie lancee par ce menu : la difficulte de depart s'applique au premier chargement, Difficulty)
         // Le bouton du menu a ete actionne : le jeu charge la partie.
         public static bool MenuDone { get { return step == 9; } }
 
@@ -127,6 +128,7 @@ namespace MWCoop
             {
                 // ButtonNewgame : active Licence (la carte du permis), masque Interface.
                 Log.Info("menu : nouvelle partie");
+                StartedNew = true;
                 Game.FindAny("Licence").SetActive(true);
                 Game.FindAny("Interface").SetActive(false);
                 // Licence/Buttons :: Data n'active ButtonBegin qu'avec un nom de famille saisi.

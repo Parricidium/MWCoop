@@ -45,7 +45,8 @@ namespace MWCoop
         static readonly Dictionary<int, Speaker> speakers = new Dictionary<int, Speaker>();
         static bool recording, failed;
         static readonly byte[] capture = new byte[8192], pcm = new byte[Rate * 2], ownPcm = new byte[Rate * 2];
-        static float lastSent, nextLog;
+        static float lastSent, nextLog, loudUntil;
+        static bool muted; static int levelLogs;
         static int sentLogs, heardLogs, avLogs;
         static float nextAvLog;
         public static bool Talking { get { return recording; } }
@@ -69,7 +70,12 @@ namespace MWCoop
         public static void Update()
         {
             if (!PlayerSync.InGame || !Session.Active || !Enabled || failed || !SteamNet.Ready) { Stop(); return; }
-            bool want = Input.GetKey(Keys.Voice) && !Menu.Open && !Menu.ChatOpen;
+            // Activation par la voix (.formallybad, 18/10 : « vocal a activation vocale, avec une touche muet ») : [Coop] VocalActivation=1,
+            // le micro reste ouvert et les paquets ne partent qu'au-dessus de [Coop] VocalSeuil (1..100, defaut 12 ; 0,7 s de maintien) ;
+            // touche Keys.VoiceMute (F6) : muet / parle. Sinon, appui sur la touche Keys.Voice (V) comme avant.
+            bool vox = Config.GetInt("Coop", "VocalActivation", 0) != 0;
+            if (vox && Input.GetKeyDown(Keys.VoiceMute) && !Menu.ChatOpen) { muted = !muted; Hud.Toast(muted ? Lang.T("Micro coupé", "Mic muted") : Lang.T("Micro ouvert (activation par la voix)", "Mic on (voice activation)")); }
+            bool want = (vox ? !muted : Input.GetKey(Keys.Voice)) && !Menu.Open && !Menu.ChatOpen;
             // [Test] VocalEssai=1 : micro ouvert de 30 a 40 s de partie (sans la touche) ; journal des paquets.
             if (Config.GetInt("Test", "VocalEssai", 0) != 0 && Time.timeSinceLevelLoad > 30f && Time.timeSinceLevelLoad < 40f) want = true;
             try
@@ -84,7 +90,23 @@ namespace MWCoop
                 {
                     uint got, gotRaw;
                     EVoiceResult r = SteamUser.GetVoice(true, capture, (uint)capture.Length, out got, false, null, 0, out gotRaw, 0);
-                    if (r == EVoiceResult.k_EVoiceResultOK && got > 0 && got < 1100)
+                    bool send = true;
+                    if (vox && r == EVoiceResult.k_EVoiceResultOK && got > 0 && got < 1100)
+                    {
+                        // (niveau du paquet : valeur efficace des echantillons decompresses ; seuil 12 % -> 0,06, une parole normale fait 0,05 a 0,3)
+                        uint own;
+                        if (SteamUser.DecompressVoice(capture, got, ownPcm, (uint)ownPcm.Length, out own, Rate) == EVoiceResult.k_EVoiceResultOK && own > 1)
+                        {
+                            double sum = 0; int cnt = (int)own / 2;
+                            for (int i = 0; i + 1 < (int)own; i += 2) { short v = (short)(ownPcm[i] | (ownPcm[i + 1] << 8)); sum += (double)v * v; }
+                            float rms = cnt > 0 ? Mathf.Sqrt((float)(sum / cnt)) / 32768f : 0f;
+                            float seuil = Mathf.Clamp(Config.GetFloat("Coop", "VocalSeuil", 12f), 1f, 100f) / 100f * 0.5f;
+                            if (rms >= seuil) loudUntil = Time.realtimeSinceStartup + 0.7f;
+                            send = Time.realtimeSinceStartup < loudUntil;
+                            if (levelLogs++ < 10 || levelLogs % 200 == 0) Log.Info("vocal : niveau " + rms.ToString("F3") + (send ? " (envoye)" : " (silence)") + ", seuil " + seuil.ToString("F3"));
+                        }
+                    }
+                    if (send && r == EVoiceResult.k_EVoiceResultOK && got > 0 && got < 1100)
                     {
                         // (+ gain de son micro, en dizaines de % : [Coop] GainMicro, lanceur ; demande de Донской, 12/10 : « micro plus fort »)
                         Session.SendAll(new NetWriter(Msg.Talk).U8(Session.LocalId).Bytes(capture, 0, (int)got).U8(MicGain / 10), false);

@@ -1660,6 +1660,17 @@ Character > Add-ons: each available car has a Download button (NEW tag when it h
 Click Download with the game closed: the car installs into MWCoop\\addons.	انقر تنزيل واللعبة مغلقة: تُثبَّت السيارة في MWCoop\\addons.
 New version: UPDATE tag and Update button. To remove it: click the car, then Uninstall (your livery is kept).	إصدار جديد: وسم UPDATE وزر تحديث. لإزالتها: انقر السيارة ثم إلغاء التثبيت (تبقى كسوتك محفوظة).
 By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	يمكن ذلك يدوياً أيضاً: انسخ مجلد السيارة (الذي يحتوي addon.ini) إلى مجلد الإضافات. كل لاعب يثبّت الإضافات التي يريد رؤيتها: بدون الإضافة ترى مكانها VAZ بنفس اللون والرقم.
+Voice: mute	الصوت: كتم الميكروفون
+Use (wardrobe)	استخدام (الخزانة)
+Voice activation (else push-to-talk)	تفعيل بالصوت (وإلا بالضغط على الزر)
+Voice activation threshold	عتبة التفعيل بالصوت
+Sleeping players snore	اللاعبون النائمون يشخرون
+Start difficulty (host, new game)	صعوبة البداية (المضيف، لعبة جديدة)
+Car window speed (host)	سرعة نوافذ السيارات (المضيف)
+Passenger: lean out only with the window open	الراكب: الميل للخارج فقط والنافذة مفتوحة
+Easy	سهل
+Medium	متوسط
+Hard	صعب
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت
@@ -1697,7 +1708,6 @@ Windowed	نافذة
 Fullscreen	ملء الشاشة
 Borderless	بلا حواف
 Engine quality	جودة المحرك
-Medium	متوسطة
 Good	جيدة
 Vanilla	الأصلية
 Like the game	مثل اللعبة
@@ -2197,7 +2207,7 @@ Ray tracing (in development): sun shadows computed with rays (trees, poles and w
 Unity's small \"My Winter Car Configuration\" window is no longer needed: the launcher skips it by itself at launch, set your screen here.	لم تعد هناك حاجة لنافذة Unity الصغيرة «My Winter Car Configuration»: يتخطّاها المشغّل تلقائياً عند التشغيل، اضبط شاشتك هنا.
 Off by default. The host allows them in Game and sharing (\"Allow cheats\"); their guests follow that choice. Every cheat is announced to everyone in the chat.	معطّل افتراضياً. يسمح به المضيف في «اللعبة والمشاركة» («السماح بالغشّ»)؛ ويتبع ضيوفه هذا الاختيار. كل غشّ يُعلَن للجميع في الدردشة.
 Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin).	اللوحة (F7) أو الدردشة: /tp <لاعب>، /bring <لاعب>، /place <مكان> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin).
-/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail).	/money <المبلغ>، /heal (الجوع، العطش، التعب، التوتر… إلى الصفر)، /free (لم تعد مطلوباً، خروج من السجن).
+/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail), /clothes (my jacket, coverall and helmet in front of me), /car <name> (the car comes in front of me).	/money <المبلغ>، /heal (الجوع، العطش، التعب، التوتر… إلى الصفر)، /free (لم تعد مطلوباً، خروج من السجن)، /clothes (سترتي وبدلتي وخوذتي أمامي)، /car <الاسم> (السيارة تأتي أمامي).
 For everyone: /time <0-24>, /snow on|off (done by the host, the world follows).	للجميع: /time <0-24>، /snow on|off (ينفّذه المضيف، ويتبعه العالم).
 Open Game options	افتح خيارات اللعبة
 The game starts, but without MWCoop (no MWCoop pill top left, no co-op). The launcher notices by itself and tells you.	تبدأ اللعبة لكن بدون MWCoop (لا شارة MWCoop في أعلى اليسار، لا لعب جماعي). يلاحظ المشغّل ذلك تلقائياً ويخبرك.

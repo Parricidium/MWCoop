@@ -9,6 +9,8 @@ namespace MWCoop
         public static KeyCode Chat { get { return Get("Tchat", KeyCode.T); } }
         public static KeyCode Wallet { get { return Get("PorteMonnaie", KeyCode.N); } }
         public static KeyCode Voice { get { return Get("Vocal", KeyCode.V); } }
+        public static KeyCode VoiceMute { get { return Get("VocalMuet", KeyCode.F6); } }   // (activation par la voix : muet / parle)
+        public static KeyCode Use { get { return Get("Usage", KeyCode.F); } }                 // (armoire : la touche d'usage du jeu, F)
         public static KeyCode Cheats { get { return Get("Triches", KeyCode.F7); } }
         public static KeyCode Map { get { return Get("Carte", KeyCode.M); } }
         public static KeyCode View { get { return Get("Vue", KeyCode.F5); } }

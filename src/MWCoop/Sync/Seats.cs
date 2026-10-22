@@ -32,7 +32,7 @@ namespace MWCoop
     //    (DriverBelt/HandleUpPivot) cachee.
     public static class Seats
     {
-        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f; public bool Bed; public float Yaw; }   // (Bed : ridelle d'une remorque, on y monte depuis le sol ; Yaw : sens de la place, degres, 0 = l'avant)
+        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f; public bool Bed; public float Yaw; public bool Stand; }   // (Stand : place debout, appuye -- cabine du tracteur)   // (Bed : ridelle d'une remorque, on y monte depuis le sol ; Yaw : sens de la place, degres, 0 = l'avant)
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
@@ -68,6 +68,8 @@ namespace MWCoop
         public static string SeatedCarKey { get { return current != null ? current.Car : null; } }   // (cle VehicleSync de la voiture)
         // Voiture ou le joueur local est assis en passager (null : aucune).
         public static Transform SeatedCar { get { return current != null ? current.CarT : null; } }
+        public static float LocalSeatX { get { return current != null ? current.Head.x : 0f; } }          // (repere de la voiture, droite +)
+        public static Vector3 LocalSeatPos { get { return current != null ? current.Head : Vector3.zero; } }
 
         public static void OnLevelLoaded()
         {
@@ -141,7 +143,6 @@ namespace MWCoop
                     }
                     continue;
                 }
-                if (n.StartsWith("KEKMET")) continue;   // une seule place
                 if (n == "BOAT" && Game.Msc)
                 {
                     // Barque de My Summer Car (joueurs du 20/10 : « pas de places pour les passagers ») : le pilote a l'arriere, pres du
@@ -173,6 +174,21 @@ namespace MWCoop
                     continue;
                 }
                 Vector3 d = rb.transform.InverseTransformPoint(dhp.position) + EyeFromPivot;
+                if (n.StartsWith("KEKMET"))
+                {
+                    // Tracteur (Dr.Robi, 19/10 : « trois joueurs dans les coins arriere de la cabine, appuyes a la carrosserie » ; dessin de
+                    // JD, 22/10 : debout, la tete a la vitre arriere) : pas de siege passager ; trois places DEBOUT derriere le conducteur --
+                    // coin arriere gauche, coin arriere droit, cote droit --, on y monte depuis le sol a cote (Bed). La cabine est basse
+                    // (1 m sous le toit) : debout a demi plie, les yeux a ceux du conducteur (pose accroupie de l'avatar). [Test] TracteurPlaces=
+                    // x,y,z (ecart, hauteur des yeux par rapport a ceux du conducteur, recul), TracteurCote=x,y,z (la place de droite).
+                    Vector3 tk = ParseV(Config.Get("Test", "TracteurPlaces", ""), new Vector3(0.28f, -0.12f, 0.30f));
+                    Vector3 tc = ParseV(Config.Get("Test", "TracteurCote", ""), new Vector3(0.45f, -0.12f, -0.05f));
+                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(-tk.x, d.y + tk.y, d.z - tk.z), ZoneX = 0.8f, ZoneZ = 0.8f, MaxX = 1.3f, Bed = true, Stand = true });
+                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(tk.x, d.y + tk.y, d.z - tk.z), ZoneX = 0.8f, ZoneZ = 0.8f, MaxX = 1.3f, Bed = true, Stand = true });
+                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 3, Head = new Vector3(tc.x, d.y + tc.y, d.z + tc.z), ZoneX = 0.8f, ZoneZ = 0.8f, MaxX = 1.3f, Bed = true, Stand = true });
+                    if (seatLogs++ < 4) Log.Info("places passagers : tracteur " + n + " : 3 places derriere le conducteur (yeux " + d.ToString("F2") + ")");
+                    continue;
+                }
                 // (My Summer Car : les yeux sont 7 cm vers le milieu par rapport au pivot, et l'avatar a son corps 8 cm a droite de ses yeux
                 // (pose de conduite) : en miroir simple, le passager avant s'asseyait 15 cm vers le milieu de son siege -- essai SATSUMA, 21/10)
                 float xm = Game.Msc ? 2f * EyeFromPivotMsc.x : 0f;
@@ -1048,6 +1064,15 @@ namespace MWCoop
 
         public static void PlayerLeft(int id) { remote.Remove(id); driverBelt.Remove(id); }
         // Sens de la place d'un passager distant (degres, repere de la voiture ; 0 : l'avant).
+        // Place debout (cabine du tracteur) d'un passager distant : avatar debout, pas assis.
+        public static bool RemoteSeatStanding(int id)
+        {
+            Remote r;
+            if (id == Net.Session.LocalId) return current != null && current.Stand;
+            if (!remote.TryGetValue(id, out r)) return false;
+            foreach (Seat s in seats) if (s.Car == r.Car && s.Index == r.Index) return s.Stand;
+            return false;
+        }
         public static float RemoteSeatYaw(int id)
         {
             Remote r;

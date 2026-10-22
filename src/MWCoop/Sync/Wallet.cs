@@ -444,11 +444,15 @@ namespace MWCoop
         // (demande de JD, 10/10). Valeurs relevees au menu principal (globales du jeu avant tout chargement) ; [Coop]
         // ArgentDepart=0 : comme avant (l'argent de la sauvegarde de l'hote).
         static float startCash = -1, startBank = -1;
+        public static string WorldId { get { return world ?? ""; } }
         static void FirstVisit()
         {
             if (Session.IsHost || Config.GetInt("Coop", "ArgentDepart", 1) == 0) return;
             float c = Config.GetFloat("Coop", "ArgentDepartLiquide", startCash), b = Config.GetFloat("Coop", "ArgentDepartBanque", startBank);
             if (c < 0 || b < 0) { Log.Info("argent : premiere venue dans ce monde, argent de depart inconnu : celui de la sauvegarde"); return; }
+            // (difficulte de depart de l'hote : meme facteur que chez lui -- Difficulty)
+            float df = Difficulty.MoneyFactor(world);
+            if (df != 1f) { c = Mathf.Round(c * df); b = Mathf.Round(b * df); }
             Log.Info("argent : premiere venue dans ce monde (" + world + ") : argent de depart " + c + " liquide, " + b + " banque (au lieu de " + cash.Value + " / " + bank.Value + ")");
             cash.Value = c; bank.Value = b;
             Hud.Toast(Lang.T("Premi\u00E8re venue : ", "First visit: ") + Mathf.RoundToInt(c + b) + Lang.T(" mk pour commencer", " mk to start with"));

@@ -388,6 +388,50 @@ namespace MWCoop
             return null;
         }
 
+        // Triche /voiture <nom> (Донской, 17/10) : la voiture vient 4 m devant celui qui triche, dans son sens, si personne ne la
+        // conduit ni ne la mene ; posee pareil chez tous (@voiturevers, Jobs). Noms : alias francais / anglais ou debut du nom du jeu.
+        static readonly string[][] CarAliases = {
+            new[] { "rivett", "corris", "CORRIS" }, new[] { "sorbet", "sorbett", "SORBET" }, new[] { "tracteur", "tractor", "kekmet", "KEKMET" },
+            new[] { "camion", "truck", "gifu", "GIFU" }, new[] { "fourgon", "van", "bachglotz", "BACHGLOTZ" }, new[] { "taxi", "machtwagen", "MACHTWAGEN" },
+            new[] { "moto", "bike", "jonnez", "JONNEZ" }, new[] { "remorque", "trailer", "flatbed", "FLATBED" }, new[] { "satsuma", "SATSUMA" },
+            new[] { "hayosiko", "HAYOSIKO" }, new[] { "ferndale", "FERNDALE" }, new[] { "ruscko", "RCO_RUSCKO" }, new[] { "bateau", "boat", "BOAT" } };
+        public static string BringCar(string arg)
+        {
+            string a = (arg ?? "").Trim().ToLowerInvariant(), key = null;
+            foreach (string[] al in CarAliases) for (int i = 0; i < al.Length - 1; i++) if (al[i] == a) key = al[al.Length - 1];
+            if (key == null) key = a.ToUpperInvariant();
+            Car c = null;
+            foreach (Car x in cars) if (x.Body != null && (x.Name.StartsWith(key) || x.Key.StartsWith(key))) { c = x; break; }
+            if (c == null) return Lang.T("Voiture inconnue : ", "Unknown car: ") + arg;
+            if (c.Index == LocalDriving || c.RemoteDriver >= 0 || c.RemoteBy >= 0) return Lang.T("Quelqu'un la conduit.", "Someone is driving it.");
+            Transform me = Game.PlayerT;
+            if (me == null) return null;
+            Vector3 fwd = me.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
+            Vector3 pos = me.position + fwd * 4.5f + Vector3.up * 0.5f; float yaw = me.eulerAngles.y;
+            PlaceCar(c, pos, yaw);
+            if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@voiturevers").Str(c.Key).Vec(pos).F32(yaw), true);
+            return null;
+        }
+        public static void OnBringCar(int who, NetReader r)
+        {
+            string key = r.Str(); Vector3 pos = r.Vec(); float yaw = r.F32();
+            foreach (Car c in cars) if (c.Key == key) { if (c.Index != LocalDriving) PlaceCar(c, pos, yaw); return; }
+        }
+        static void PlaceCar(Car c, Vector3 pos, float yaw)
+        {
+            Rigidbody b = c.Body;
+            if (b == null) return;
+            Quaternion q = Quaternion.Euler(0f, yaw, 0f);
+            bool kin = b.isKinematic;
+            FreezeParts(c);
+            if (!kin) { b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero; }
+            b.transform.position = pos; b.transform.rotation = q;
+            if (!kin) { b.position = pos; b.rotation = q; }
+            foreach (Rigidbody rb in c.T.GetComponentsInChildren<Rigidbody>()) if (rb != b && !rb.isKinematic) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            ThawParts(c);
+            Log.Info("voitures : " + c.Key + " amenee en " + pos.ToString("F1") + " (triche /voiture)");
+        }
+
         static Car Named(string name)
         {
             foreach (Car c in cars) if (c.Name == name || c.Key == name) return c;

@@ -192,7 +192,7 @@ W190	Ray tracing (in development): sun shadows computed with rays (trees, poles 
 W191	Unity's small \"My Winter Car Configuration\" window is no longer needed: the launcher skips it by itself at launch, set your screen here.
 W192	Off by default. The host allows them in Game and sharing (\"Allow cheats\"); their guests follow that choice. Every cheat is announced to everyone in the chat.
 W193	Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin).
-W194	/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail).
+W194	/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail), /clothes (my jacket, coverall and helmet in front of me), /car <name> (the car comes in front of me).
 W195	For everyone: /time <0-24>, /snow on|off (done by the host, the world follows).
 W196	Open Game options
 W197	The game starts, but without MWCoop (no MWCoop pill top left, no co-op). The launcher notices by itself and tells you.

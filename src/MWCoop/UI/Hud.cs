@@ -50,6 +50,18 @@ namespace MWCoop
             }
             Style.Alpha = 1f;
 
+            // Coups entre joueurs actives (квазарик, 21/10 : « une barre de vie et un effet quand on prend un coup ») : cinq cases en bas
+            // au milieu -- les coups recus dans les 20 s en rouge (5 = mort) --, et un voile rouge qui s'estompe apres chaque coup.
+            if (Pvp.Allowed && Session.Active)
+            {
+                int got = Pvp.HitsNow, max = Pvp.MaxHits; float since = now - Pvp.LastHitAt;
+                float segW = Style.Px(34), segH = Style.Px(9), gap = Style.Px(4);
+                float totalW = max * segW + (max - 1) * gap, x0 = (Screen.width - totalW) / 2f, y0 = Screen.height - Style.Px(40);
+                Style.Round(new Rect(x0 - Style.Px(10), y0 - Style.Px(7), totalW + Style.Px(20), segH + Style.Px(14)), (segH + Style.Px(14)) / 2, pill);
+                for (int i = 0; i < max; i++) Style.Round(new Rect(x0 + i * (segW + gap), y0, segW, segH), segH / 2, i < max - got ? Style.Good : Style.Warn);
+                if (since >= 0f && since < 0.45f) { Style.Alpha = (0.45f - since) / 0.45f * 0.35f; Style.Round(new Rect(0, 0, Screen.width, Screen.height), 0, Style.Warn); Style.Alpha = 1f; }
+            }
+
             // Micro ouvert (vocal) : temoin en bas a gauche.
             if (Voice.Talking)
             {

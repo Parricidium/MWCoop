@@ -6,7 +6,7 @@
 // (onglets Jeu, Image & ray tracing, Son & vocal, Co-op, Touches, Theme, Lanceur), voir plus bas.
 // ---- touches en jeu (Options du jeu > Touches) : section [Touches] de mwcoop.ini, noms des KeyCode de Unity
 struct GameKey { const char *ini, *def; const wchar_t *fr, *en; const char *defAz = nullptr; };   // defAz : clavier AZERTY
-static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" }, { "Triches", "F7", L"Triches", L"Cheats" }, { "Carte", "M", L"Carte", L"Map" }, { "Vue", "F5", L"Vue", L"View" }, { "Marqueur", "Mouse2", L"Marqueur", L"Marker" },
+static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" }, { "VocalMuet", "F6", L"Vocal : muet", L"Voice: mute" }, { "Usage", "F", L"Utiliser (armoire)", L"Use (wardrobe)" }, { "Triches", "F7", L"Triches", L"Cheats" }, { "Carte", "M", L"Carte", L"Map" }, { "Vue", "F5", L"Vue", L"View" }, { "Marqueur", "Mouse2", L"Marqueur", L"Marker" },
     // Camera drone (mode photo, demande de JD, 11/10) : categorie Camera drone ; memes noms et defauts que MWCoop\UI\Keys.cs.
     { "Drone", "F8", L"Drone", L"Drone" }, { "DroneAvant", "W", L"Avancer", L"Forward", "Z" }, { "DroneArriere", "S", L"Reculer", L"Back" },
     { "DroneGauche", "A", L"Gauche", L"Left", "Q" }, { "DroneDroite", "D", L"Droite", L"Right" }, { "DroneMonter", "Space", L"Monter", L"Up" },
@@ -207,9 +207,20 @@ static const std::vector<GfxRow> &GfxRows()
           { L"25 %", L"50 %", L"75 %", L"100 %" }, { L"25 %", L"50 %", L"75 %", L"100 %" }, 0, 6, "Coop" },
         { "GainMicro", L"Volume de ton micro (pour les autres)", L"Your microphone volume (for the others)", 100, { 100, 150, 200, 300 },
           { L"Normal", L"150 %", L"200 %", L"300 %" }, { L"Normal", L"150 %", L"200 %", L"300 %" }, 0, 6, "Coop" },
+        // (suggestion de .formallybad, 18/10 : « vocal a activation par la voix, avec une touche muet ») -- Sync/Voice.cs
+        { "VocalActivation", L"Micro ouvert par la voix (sinon touche appuyée)", L"Voice activation (else push-to-talk)", 0, {}, {}, {}, 0, 6, "Coop" },
+        { "VocalSeuil", L"Seuil d'activation par la voix", L"Voice activation threshold", 12, { 5, 12, 20, 35 },
+          { L"5 %", L"12 %", L"20 %", L"35 %" }, { L"5 %", L"12 %", L"20 %", L"35 %" }, 0, 6, "Coop" },
+        { "Ronflements", L"Ronflements des joueurs endormis", L"Sleeping players snore", 1, {}, {}, {}, 0, 6, "Coop" },
         { "VoirVisages", L"Voir les images importées des autres", L"See others' imported images", 1, {}, {}, {}, 0, 7, "Coop" },
         { "ModsAuto", L"Accepter les fichiers de l'hôte", L"Accept the host's files", 0, {}, {}, {}, 0, 8, "Opt" },
         { "ArgentDepart", L"Argent de départ des invités", L"Guests' starting money", 1, {}, {}, {}, 0, 8, "Coop" },
+        // (suggestion du 14/10 : « difficulte de depart : carburant, argent ; facile, moyen, difficile, standard, au hasard ») -- Sync/Difficulty.cs
+        { "Difficulte", L"Difficulté de départ (hôte, nouvelle partie)", L"Start difficulty (host, new game)", 0, { 0, 1, 2, 3, 4 },
+          { L"Jeu", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Game", L"Easy", L"Medium", L"Hard", L"Random" }, 0, 8, "Coop" },
+        { "VitesseVitres", L"Vitesse des vitres des voitures (hôte)", L"Car window speed (host)", 1, { 1, 2, 3, 4 },
+          { L"Jeu", L"x2", L"x3", L"x4" }, { L"Game", L"x2", L"x3", L"x4" }, 0, 8, "Coop" },
+        { "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", 1, {}, {}, {}, 0, 8, "Coop" },
         { "Triches", L"Autoriser les triches (hôte)", L"Allow cheats (host)", 0, {}, {}, {}, 0, 8, "Coop" },
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion de квазарик, 13/10 : « tuer les autres a coups de poing, option de l'hote ») -- Sync/Pvp.cs
@@ -294,6 +305,9 @@ static const std::vector<GfxRow> &GfxRows()
     pills("VocalPortee", { 15, 25, 35, 50, 80 }, { L"15", L"25", L"35 m", L"50", L"80" }, {});
     pills("VolumeVocal", { 50, 75, 100 }, { L"50", L"75", L"100 %" }, {});
     pills("GainMicro", { 100, 150, 200, 300 }, { L"Normal", L"150", L"200", L"300 %" }, {});
+    pills("VocalSeuil", { 5, 12, 20, 35 }, { L"5", L"12 %", L"20", L"35" }, {});
+    pills("Difficulte", { 0, 1, 2, 3, 4 }, { L"Jeu", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Game", L"Easy", L"Medium", L"Hard", L"Random" });
+    pills("VitesseVitres", { 1, 2, 3, 4 }, { L"Jeu", L"x2", L"x3", L"x4" }, { L"Game", L"x2", L"x3", L"x4" });
     // My Summer Car (19/10) : ni temperature du corps ni sueur dans ce jeu ; ses options graphiques (Systems/Options::GFX, vidage
     // v.250908-04) n'ont pas d'ombres de la lune, les retroviseurs y sont un oui / non (CarMirrors) ; en plus, ses reflets de
     // l'environnement (RefProbes) et de l'eau (Water) -- cles lues par MWCoop\Gfx.cs.

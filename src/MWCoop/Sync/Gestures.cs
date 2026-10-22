@@ -53,7 +53,7 @@ namespace MWCoop
         static float nextFind, nextSend, lastSend, loadedAt;
         static bool fingerWas, fistWas, found, fingerWas0, fistWas0;
         static int bits;
-        static float drunk, leanSide, leanFwd, heldSize, seatYaw;
+        static float drunk, leanSide, leanFwd, heldSize, seatYaw, windowHintAt;
         static Vector3 heldOff, seatPos;
         static PlayMakerFSM seatTrigger;
         static float seatCheckAt;
@@ -194,6 +194,20 @@ namespace MWCoop
                 leanFwd = Mathf.Abs(pitch) > 1.5f ? pitch : Mathf.Atan2(p.z, 0.9f) * Mathf.Rad2Deg;
                 if (Mathf.Abs(leanSide) < 4f) leanSide = 0f;
                 if (Mathf.Abs(leanFwd) < 4f) leanFwd = 0f;
+                // Passager : pas de penche vers sa portiere quand sa vitre est fermee (Menor, 14/10 : « se pencher seulement si la vitre
+                // est ouverte ») -- la camera est redressee (roulis et decalage de cote) tant qu'il penche de ce cote, et les autres ne
+                // le voient pas penche. [Coop] PencheVitre=0 : comme avant.
+                if (leanSide != 0f && Seats.Seated && VehicleSync.LocalDriving < 0 && Config.GetInt("Coop", "PencheVitre", 1) != 0)
+                {
+                    float sx = Seats.LocalSeatX;
+                    if (Mathf.Abs(sx) > 0.15f && Mathf.Sign(leanSide) == Mathf.Sign(sx) && !WindowCranks.WindowOpenNear(Seats.LocalCar, Seats.LocalSeatPos))
+                    {
+                        camBase.rotation = player.rotation * Quaternion.Euler(e.x, e.y, 0f);
+                        camBase.position -= player.right * p.x;
+                        leanSide = 0f;
+                        if (Time.realtimeSinceStartup >= windowHintAt) { windowHintAt = Time.realtimeSinceStartup + 6f; Hud.Toast(Lang.T("Vitre fermée", "Window closed")); }
+                    }
+                }
             }
             // Objet tenu : centre de ses rendus dans le repere de la camera, plus grande largeur.
             GameObject held = Props.Holding && hand != null ? hand.FsmVariables.GetFsmGameObject("PickedObject").Value : null;
