@@ -2304,27 +2304,6 @@ namespace MWCoop
         // le volant) : le jeu les calcule une fois (Wheel.SetTireStiffness : 2 * sqrt(masse * raideur), raideur = f(rayon, jante,
         // largeur, pression)) -- une pression ou un rayon fou a ce moment-la les laisse NaN pour de bon. Entrees notees (origine a
         // trouver), remises d'aplomb, calcul refait ; ce qui reste non fini garde la valeur relevee.
-        static void FixTire(Car c, Wheel w, System.Reflection.FieldInfo[] fs, float[] good)
-        {
-            bool first = nanSeen.Add(c.Key + ":pneu@" + w.name);
-            if (first) Log.Warn("voitures : " + c.Key + " pneu " + w.name + " : pression " + w.pressure + " (optimale " + w.optimalPressure + "), masse " + w.mass + ", rayon " + w.radius + ", jante " + w.rimRadius + ", largeur " + w.width);
-            if (!Finite(w.optimalPressure) || w.optimalPressure <= 0f) w.optimalPressure = 200f;
-            // (pression 0 avec optimale 0 : donnees de roue vides -- mods « Country garage », « CorrisAssists » ; Wheel.SetTireStiffness du jeu
-            // donne alors une rigidite nulle, la physique diverge a chaque pas et la remise ne tenait pas : CORRIS en vrille a 67 rad/s a sa
-            // reprise par l'hote, « envolee jusqu'a la maison des parents », 21/10. Pression remise a l'optimale.)
-            if (!Finite(w.pressure) || w.pressure <= 0f) w.pressure = w.optimalPressure;
-            if (!Finite(w.mass) || w.mass <= 0f) w.mass = 50f;
-            if (!Finite(w.radius) || !Finite(w.rimRadius) || !Finite(w.width) || w.radius <= w.rimRadius || w.width <= 0f) return;   // (pas de calcul possible)
-            try { w.SetTireStiffness(); } catch (System.Exception e) { if (first) Log.Warn("voitures : SetTireStiffness : " + e.Message); return; }
-            int still = 0;
-            for (int k = 0; k < fs.Length; k++)
-            {
-                float v = (float)fs[k].GetValue(w);
-                if (Finite(v)) continue;
-                fs[k].SetValue(w, good != null && k < good.Length && Finite(good[k]) ? good[k] : 0f); still++;
-            }
-            if (first) Log.Warn("voitures : " + c.Key + " pneu " + w.name + " recalcule" + (still > 0 ? ", " + still + " valeur(s) encore non finie(s) : relevees gardees" : ""));
-        }
         // Champs flottants non finis des roues et de la transmission d'une voiture (Drivetrain, Wheel...) : remis a la derniere
         // valeur finie relevee (sinon 0, 800 pour le regime) ; pneus recalcules. Rend le nombre de corrections.
         static int SanFields(Car c)
@@ -2337,23 +2316,26 @@ namespace MWCoop
                 if (m == null) continue;
                 System.Reflection.FieldInfo[] fs = FloatFields(m);
                 float[] good = c.SanGood != null && ci < c.SanGood.Length ? c.SanGood[ci] : null;
-                bool tire = false;
+                // Pneu (pression, optimale, raideur, amortissement) : JAMAIS touche. Sonde SondeRoues sur la CORRIS montee de la sauvegarde
+                // d'essai, sans aucune correction : pression 0 / 0, rayon 0,297 / 0,178, raideur 0, amortissement NaN -- et la voiture roule :
+                // c'est l'etat normal du jeu (son modele de pneu a pression est inactif). Corriger ces champs faisait pire : 1.7.2 recalculait
+                // la raideur a pression 0 (Wheel.SetTireStiffness) a la reprise d'une voiture -> CORRIS en vrille, envolee (21/10) ; 1.7.4
+                // posait la pression a 200 avec une raideur 0 -> « les roues s'enfoncent dans le sol » (НотХуярма?, 21-22/10).
                 for (int k = 0; k < fs.Length; k++)
                 {
                     System.Reflection.FieldInfo fi = fs[k];
+                    if (m is Wheel && TireField(fi.Name)) continue;
                     float v = (float)fi.GetValue(m);
                     if (Finite(v)) continue;
-                    // (valeur relevee au chargement plutot que 0 : amortissement des pneus a 0 = CORRIS qui s'envole, 17-18/10)
                     float to = fi.Name == "rpm" ? 800f : good != null && k < good.Length && Finite(good[k]) ? good[k] : 0f;
                     fi.SetValue(m, to); fixedF++;
-                    if (m is Wheel && (fi.Name == "tireDampingRate" || fi.Name == "criticalDamping" || fi.Name.EndsWith("TireStiffness"))) tire = true;
                     string fk = c.Key + ":" + m.GetType().Name + "." + fi.Name + "@" + m.name;
                     if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " " + m.GetType().Name + "." + fi.Name + " (" + m.name + ") = " + v + ", remis a " + to);
                 }
-                if (tire) FixTire(c, (Wheel)m, fs, good);
             }
             return fixedF;
         }
+        static bool TireField(string n) { return n == "pressure" || n == "optimalPressure" || n == "tireDampingRate" || n == "criticalDamping" || n.EndsWith("TireStiffness"); }
 
         static void Sanitize()
         {
