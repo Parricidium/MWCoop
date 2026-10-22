@@ -3288,6 +3288,19 @@ namespace MWCoop
                          + ", camera " + (Camera.main != null ? Camera.main.transform.position.ToString("F2") : "?"));
                 if (!sl && fat != null && fat.Value < 50f) { if (sleepWakeLogs++ > 12) sleepWatch = false; }   // (reveil : encore 12 s de releves -- chute sous le sol, lit des parents, JD 22/10)
             }
+            // [Test] SondeRoues=1 (22/10, roues de la CORRIS qui s'enfoncent chez un joueur) : donnees des roues de la CORRIS a 10, 20 et 30 s.
+            if (Config.GetInt("Test", "SondeRoues", 0) == 1 && t > 10f * (sondeRoues + 1) && sondeRoues < 3)
+            {
+                sondeRoues++;
+                GameObject car = GameObject.Find("CORRIS");
+                var sb = new System.Text.StringBuilder("autotest : roues CORRIS a " + t.ToString("F0") + " s :");
+                if (car == null) sb.Append(" introuvable");
+                else sb.Append(" position ").Append(car.transform.position.ToString("F2"));
+                if (car != null) foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true))
+                    sb.Append(" [").Append(w.name).Append(" pression ").Append(w.pressure).Append('/').Append(w.optimalPressure).Append(" rayon ").Append(w.radius).Append('/').Append(w.rimRadius)
+                      .Append(" largeur ").Append(w.width).Append(" masse ").Append(w.mass).Append(" raideur ").Append(FieldF(w, "verticalTireStiffness")).Append(" amort ").Append(FieldF(w, "tireDampingRate")).Append(" actif ").Append(w.gameObject.activeInHierarchy).Append(']');
+                Log.Info(sb.ToString());
+            }
             if (mode == "heure" && t > 15f && !done)
             {
                 // L'hote saute a 18 h : les invites doivent suivre (World).
@@ -3702,7 +3715,12 @@ namespace MWCoop
             return null;
         }
         static string clipShot;
-        static float nextSleepLog; static int sleepWakeLogs; static float cdWatchUntil;
+        static float nextSleepLog; static int sleepWakeLogs; static float cdWatchUntil; static int sondeRoues;
+        static string FieldF(object o, string name)   // (champ flottant prive, par reflexion)
+        {
+            var fi = o.GetType().GetField(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+            return fi == null ? "?" : fi.GetValue(o).ToString();
+        }
         public static int PoseFlags;
         static int seenFlags = -1;
         static float shotAt = -1;
