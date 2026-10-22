@@ -35,7 +35,9 @@ namespace MWCoop
         // place et cap du cinema (aussi pour le defrichage, Clearing)
         public static void KinoFrame(out Vector3 c, out float yaw, out string floor)
         {
-            string s = Config.Get("Kino", "Paikka", "-1528.2,1053.4,24.3,2.25");   // (plancher fixe, le meme chez tous : sol 0,76..2,08 sous l'emprise)
+            // (22/10 soir, choix de JD : le champ plat au nord de la route, a l'est des silos MAATALOUS ; facade et parking vers la route.
+            // Avant : a l'est du musee, -1528.2,1053.4,24.3,2.25 -- terrain trop complique, fosse, routes en biais)
+            string s = Config.Get("Kino", "Paikka", "-468,1629.5,184.3,3.62");   // (plancher fixe, le meme chez tous : sol 2,19..3,47 sous l'emprise, plateforme 2,75)
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             string[] a = s.Split(',');
             c = new Vector3(float.Parse(a[0], ci), 0f, float.Parse(a[1], ci));
@@ -50,7 +52,7 @@ namespace MWCoop
             KinoFrame(out c, out yaw, out fl);
             Quaternion r = Quaternion.Euler(0, yaw, 0);
             var pts = new[] { new Vector3(-KL - 3f, 0, -KD - 5f), new Vector3(KL + 3f, 0, -KD - 5f),   // (au sud : les arbres du fosse dont le feuillage entrait dans les salles)
-                               new Vector3(KL + 3f, 0, KPark + 15f), new Vector3(-KL - 3f, 0, KPark + 15f) };   // (au nord : jusqu'aux routes)
+                               new Vector3(KL + 3f, 0, KPark + 7f), new Vector3(-KL - 3f, 0, KPark + 7f) };   // (devant : jusqu'a la route, pas au-dela)
             return pts.Select(p => { Vector3 w = c + r * p; return new Vector2(w.x, w.z); }).ToArray();
         }
 
@@ -128,8 +130,8 @@ namespace MWCoop
             Mat("ki_punainen", "plaster", 2.0f, new Color(0.72f, 0.12f, 0.12f));     // bandeau rouge
             Mat("ki_betoni", "concrete_slabs", 3.0f, new Color(0.85f, 0.85f, 0.83f));
             // (couleurs unies, sans texture : les textures du jeu se repetaient partout -- JD, 22/10)
-            Mat("ki_asfaltti", "paint_black_matte", 1f, new Color(0.2f, 0.2f, 0.21f));   // asphalte
-            Mat("ki_viiva", "paint_black_matte", 1f, new Color(0.92f, 0.92f, 0.88f));    // lignes du parking
+            Mat("ki_asfaltti", "mwc_asphalt", 7f);   // route enneigee du jeu (traces le long de x : sens de circulation ; JD, 22/10)
+            Mat("ki_viiva", "paint_black_matte", 1f, new Color(0.95f, 0.78f, 0.2f));     // lignes du parking, jaunes (visibles sur la neige)
             Mat("ki_katto", "concrete_slabs", 3.0f, new Color(0.45f, 0.45f, 0.47f));
             Mat("ki_alu", "metal_galvanized", 1f, new Color(0.18f, 0.18f, 0.2f));    // menuiseries noires
             Mat("ki_kulta", "metal_galvanized", 1f, new Color(0.95f, 0.75f, 0.35f)); // laiton
@@ -621,14 +623,14 @@ namespace MWCoop
             for (int i = 0; i < n; i++)
             {
                 Vector3 p0 = from + dir * (len * i / n), p1 = from + dir * (len * (i + 1) / n);
-                Vector3[] q = { p0 - side, p0 + side, p1 + side, p1 - side };
+                Vector3[] q = { p0 - side, p1 - side, p1 + side, p0 + side };   // (premier cote le long de l'allee : traces de la texture dans le sens de circulation)
                 for (int k = 0; k < 4; k++) q[k].y = gy(q[k].x, q[k].z) + 0.08f;
                 if (Vector3.Cross(q[3] - q[0], q[1] - q[0]).y > 0f) Quad("ki_asfaltti", q[0], q[1], q[2], q[3]);
                 else Quad("ki_asfaltti", q[1], q[0], q[3], q[2]);
                 // bordures : face exterieure en beton, du bord de l'asphalte a 25 cm sous le sol
                 foreach (int e in new[] { 0, 1 })
                 {
-                    Vector3 a = e == 0 ? q[0] : q[1], b = e == 0 ? q[3] : q[2];
+                    Vector3 a = e == 0 ? q[0] : q[3], b = e == 0 ? q[1] : q[2];   // (bord gauche q0-q1, bord droit q3-q2)
                     Vector3 out0 = (e == 0 ? -side : side).normalized * 0.12f;
                     Vector3 a2 = a + out0, b2 = b + out0;
                     a2.y = gy(a2.x, a2.z) - 0.25f; b2.y = gy(b2.x, b2.z) - 0.25f;
