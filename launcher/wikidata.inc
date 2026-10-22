@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -664,6 +664,7 @@ static const WikiBlock kW_Shop[] = {
     { WB_B, L"Magnétoscopes, 390 mk, et la télévision, 590 mk : étagère en bois du mur gauche, celle du milieu.", L"VCRs, 390 mk, and the television, 590 mk: wooden shelf on the left wall, middle unit." },
     { WB_B, L"Caméscopes, 890 mk : étagère en bois du mur gauche, celle de droite.", L"Camcorders, 890 mk: wooden shelf on the left wall, right-hand unit." },
     { WB_B, L"KARTTURI 2000, le GPS de rallye, 690 mk : même étagère, au-dessus des caméscopes.", L"KARTTURI 2000, the rally GPS, 690 mk: same shelf, above the camcorders." },
+    { WB_B, L"Bobines de film pour le cinéma KINO TÄHTI, 49 mk : tablette du haut, à côté des cassettes.", L"Film reels for the KINO TÄHTI cinema, 49 mk: top shelf, next to the tapes." },
     { WB_H, L"Acheter", L"Buying", 0 },
     { WB_S, L"Vise un objet en rayon : clic gauche pour en prendre un, clic droit pour le reposer.", L"Look at an item on the shelf: left click takes one, right click puts it back." },
     { WB_S, L"Vise la caisse sur le comptoir : le total s'affiche. Clic pour payer.", L"Look at the till on the counter: the total shows up. Click to pay." },
@@ -671,6 +672,7 @@ static const WikiBlock kW_Shop[] = {
     { WB_S, L"Vise le sac, ou tiens-le en main, n'importe où : F sort un article, F tenu sort tout. Vide, le sac disparaît.", L"Look at the bag, or hold it in your hand, anywhere: F takes one item out, hold F takes everything out. An empty bag disappears." },
     { WB_TIP, L"Chacun paie avec son propre porte-monnaie. Les achats et les sacs sont vus par tous les joueurs.", L"Everyone pays from their own wallet. Purchases and bags are seen by every player." },
     { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
+    { WB_GO, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", 1000 + WA_KINO },
 };
 static const WikiBlock kW_Video[] = {
     { WB_P, L"Filme vos aventures avec un caméscope VHS des années 90 et regardez-les ensemble sur une télé, avec le son. Il faut : un caméscope, une cassette, un magnétoscope et une télé (celle de la boutique, ou une télé du jeu : maison, prison, maison de retraite, chez Jokke).",
@@ -931,6 +933,42 @@ static const WikiBlock kW_Editor[] = {
             L"Steam doesn't find the game (non-Steam copy, Steam blocked in your country)? Just point to the game's .exe file: the editor remembers it, for the launcher too." },
     { WB_GO, L"Ouvrir les Outils", L"Open Tools", TAB_TOOLS },
 };
+static const WikiBlock kW_Kino[] = {   // (cinema KINO TAHTI, 1.10.1 -- JD, 22/10 : « un guide dans le wiki »)
+    { WB_P, L"Le cinéma KINO TÄHTI est au bord de la route, à l'est des silos MAATALOUS : un cinéma finlandais des années 80-90, avec son parking, son hall, son comptoir et deux salles. Sur la carte (M), c'est le point « Cinéma » ; dans les triches, /lieu cinema y emmène.",
+            L"The KINO TÄHTI cinema stands by the road, east of the MAATALOUS silos: a Finnish cinema from the 80s-90s, with its parking, lobby, counter and two screen rooms. On the map (M) it is the \"Cinema\" spot; in the cheats, /place cinema takes you there." },
+    { WB_H, L"Au comptoir",
+            L"At the counter", 0 },
+    { WB_S, L"Vise un article sur le comptoir : son prix s'affiche. Clic gauche pour l'acheter, avec ton porte-monnaie.",
+            L"Look at an item on the counter: its price shows up. Left click buys it, from your wallet." },
+    { WB_B, L"Billet, 35 mk : valable toute la journée, pour les deux salles.",
+            L"Ticket, 35 mk: valid all day, for both screen rooms." },
+    { WB_B, L"Popcorn 12 mk, chips 8 mk, limonade 9 mk, bonbons 6 mk : en main, F mange ou boit une bouchée (faim et soif baissent). Le paquet vide tombe à la fin.",
+            L"Popcorn 12 mk, chips 8 mk, soda 9 mk, candy 6 mk: in hand, F takes a bite or a sip (hunger and thirst go down). The empty pack drops at the end." },
+    { WB_H, L"Dans la salle",
+            L"In the screen room", 0 },
+    { WB_S, L"Les portes des salles sont en haut des marches, au fond du hall. Avec un billet, clic gauche pour ouvrir ; elles se referment seules.",
+            L"The screen room doors are at the top of the steps, at the back of the lobby. With a ticket, left click to open; they close by themselves." },
+    { WB_S, L"Pour t'asseoir, place-toi devant un fauteuil et accroupis-toi (C), comme sur une chaise du jeu. Les autres joueurs te voient assis.",
+            L"To sit, stand in front of a seat and crouch (C), like on one of the game's chairs. The other players see you seated." },
+    { WB_B, L"Il fait 21 °C dans le cinéma : on s'y réchauffe.",
+            L"It's 21 °C inside the cinema: a good place to warm up." },
+    { WB_H, L"Passer un film",
+            L"Showing a film", 0 },
+    { WB_S, L"Achète une bobine de film à l'Osuuskauppa s21 (49 mk, tablette du haut, à côté des cassettes).",
+            L"Buy a film reel at the Osuuskauppa s21 (49 mk, top shelf, next to the tapes)." },
+    { WB_S, L"Bobine en main, appuie sur R : IMPORTER UNE VIDÉO… choisit un fichier sur ton PC (il est partagé avec tous les joueurs), ou colle un lien direct vers une vidéo (.mp4) puis METTRE LE LIEN.",
+            L"Reel in hand, press R: IMPORT A VIDEO… picks a file on your PC (it is shared with every player), or paste a direct link to a video (.mp4) then SET THE LINK." },
+    { WB_S, L"Entre dans une salle : la cabine de projection s'ouvre au fond, côté salle. Vise le projecteur, bobine en main, et fais un clic gauche pour la mettre.",
+            L"Go into a screen room: the projection booth opens at the back, on the room side. Look at the projector with the reel in hand and left click to load it." },
+    { WB_S, L"Vise le projecteur : F lance ou arrête la séance, F tenu retire la bobine. Les lumières baissent et tout le monde voit et entend le film en même temps.",
+            L"Look at the projector: F starts or stops the show, hold F takes the reel out. The lights dim and everybody sees and hears the film at the same time." },
+    { WB_WARN, L"YouTube, VK Video et Rutube ne donnent pas leur fichier vidéo : leurs liens ne se lisent pas. Il faut un lien qui finit par .mp4 (archive.org, ton propre serveur…). Chaque joueur lit le lien lui-même : il lui faut la connexion pour.",
+            L"YouTube, VK Video and Rutube don't give out their video file: their links don't play. You need a link ending in .mp4 (archive.org, your own server…). Each player streams the link themselves: they need the connection for it." },
+    { WB_TIP, L"Les bobines sur les projecteurs restent en place à la sauvegarde. Désactivable comme les autres ajouts : Réglages > Co-op > Ajouts MWCoop, jeton Cinéma (le choix de l'hôte vaut pour tous).",
+            L"Reels on the projectors stay there when you save. Can be turned off like the other additions: Settings > Co-op > MWCoop additions, Cinema chip (the host's choice applies to everyone)." },
+    { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
+    { WB_GO, L"Monter et exporter une cassette", L"Edit and export a tape", 1000 + WA_MONTAGE },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -967,4 +1005,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
     WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, relief, végétation, lumières, co-op", L"Objects, roads, terrain, plants, lights, co-op", kW_Editor),   // (WA_EDITOR = 33)
     WARTG(WG_MWC, 2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34)
+    WARTG(WG_MWC, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
 };

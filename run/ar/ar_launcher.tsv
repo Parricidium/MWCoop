@@ -1941,6 +1941,25 @@ Disable them all (vanilla game)	تعطيلها كلها (اللعبة الأصل
 Drone camera (F8)	كاميرا الطائرة المسيّرة (F8)
 Sleeping bags	أكياس النوم
 s21 shop (video, KARTTURI)	متجر s21 (فيديو، KARTTURI)
+The KINO TÄHTI cinema stands by the road, east of the MAATALOUS silos: a Finnish cinema from the 80s-90s, with its parking, lobby, counter and two screen rooms. On the map (M) it is the \"Cinema\" spot; in the cheats, /place cinema takes you there.	تقع سينما KINO TÄHTI بجانب الطريق، شرق صوامع MAATALOUS: سينما فنلندية من الثمانينيات والتسعينيات، بموقف سيارات وبهو ومنضدة وقاعتين. على الخريطة (M) هي نقطة \"السينما\"؛ وفي الغش، /place cinema يأخذك إليها.
+At the counter	عند المنضدة
+Look at an item on the counter: its price shows up. Left click buys it, from your wallet.	انظر إلى سلعة على المنضدة: يظهر سعرها. النقر الأيسر يشتريها من محفظتك.
+Ticket, 35 mk: valid all day, for both screen rooms.	تذكرة، 35 mk: صالحة طوال اليوم، للقاعتين.
+Popcorn 12 mk, chips 8 mk, soda 9 mk, candy 6 mk: in hand, F takes a bite or a sip (hunger and thirst go down). The empty pack drops at the end.	فشار 12 mk، رقائق 8 mk، مشروب غازي 9 mk، حلوى 6 mk: في اليد، F تأخذ قضمة أو رشفة (يقل الجوع والعطش). تسقط العبوة الفارغة في النهاية.
+In the screen room	في القاعة
+The screen room doors are at the top of the steps, at the back of the lobby. With a ticket, left click to open; they close by themselves.	أبواب القاعات في أعلى الدرجات، في عمق البهو. مع تذكرة، النقر الأيسر يفتحها؛ وتُغلق وحدها.
+To sit, stand in front of a seat and crouch (C), like on one of the game's chairs. The other players see you seated.	للجلوس، قف أمام مقعد وانحنِ (C)، كما على كرسي في اللعبة. يراك اللاعبون الآخرون جالسًا.
+It's 21 °C inside the cinema: a good place to warm up.	الحرارة داخل السينما 21 درجة: مكان جيد للتدفئة.
+Showing a film	عرض فيلم
+Buy a film reel at the Osuuskauppa s21 (49 mk, top shelf, next to the tapes).	اشترِ بكرة فيلم من Osuuskauppa s21 (49 mk، الرف العلوي، بجانب الأشرطة).
+Reel in hand, press R: IMPORT A VIDEO… picks a file on your PC (it is shared with every player), or paste a direct link to a video (.mp4) then SET THE LINK.	والبكرة في يدك، اضغط R: IMPORT A VIDEO… يختار ملفًا من حاسوبك (يُشارك مع كل اللاعبين)، أو الصق رابطًا مباشرًا لفيديو (.mp4) ثم SET THE LINK.
+Go into a screen room: the projection booth opens at the back, on the room side. Look at the projector with the reel in hand and left click to load it.	ادخل إلى قاعة: غرفة العرض تُفتح في الخلف، من جهة القاعة. انظر إلى جهاز العرض والبكرة في يدك وانقر بالزر الأيسر لوضعها.
+Look at the projector: F starts or stops the show, hold F takes the reel out. The lights dim and everybody sees and hears the film at the same time.	انظر إلى جهاز العرض: F يبدأ العرض أو يوقفه، والضغط المطوّل على F يُخرج البكرة. تخفت الأضواء ويرى الجميع الفيلم ويسمعونه في الوقت نفسه.
+YouTube, VK Video and Rutube don't give out their video file: their links don't play. You need a link ending in .mp4 (archive.org, your own server…). Each player streams the link themselves: they need the connection for it.	YouTube وVK Video وRutube لا تعطي ملف الفيديو: روابطها لا تعمل. تحتاج رابطًا ينتهي بـ .mp4 (archive.org، خادمك الخاص…). كل لاعب يشغّل الرابط بنفسه: يحتاج إلى اتصال لذلك.
+Reels on the projectors stay there when you save. Can be turned off like the other additions: Settings > Co-op > MWCoop additions, Cinema chip (the host's choice applies to everyone).	البكرات على أجهزة العرض تبقى في مكانها عند الحفظ. يمكن إيقافها مثل الإضافات الأخرى: الإعدادات > اللعب الجماعي > إضافات MWCoop، شارة \"السينما\" (اختيار المضيف يسري على الجميع).
+The KINO TÄHTI cinema	سينما KINO TÄHTI
+Ticket, popcorn, seats, your films	تذكرة، فشار، مقاعد، أفلامكم
+Film reels for the KINO TÄHTI cinema, 49 mk: top shelf, next to the tapes.	بكرات أفلام لسينما KINO TÄHTI، 49 mk: الرف العلوي، بجانب الأشرطة.
 These guests are still receiving your mods: 	هؤلاء الضيوف ما زالوا يستلمون مودّاتك: 
 \n\nWait for their download to finish before starting the game.	\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة.
 Sending mods (%d)\u2026	إرسال المودّات (%d)…
