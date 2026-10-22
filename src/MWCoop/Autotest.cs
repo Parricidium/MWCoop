@@ -3255,8 +3255,10 @@ namespace MWCoop
                 bool sl = Game.GlobalBool("PlayerSleeps");
                 Log.Info("autotest : dort " + sl + ", heure " + c.FsmVariables.GetFsmInt("Time").Value
                          + ", fatigue " + (fat != null ? fat.Value.ToString("F1") : "?")
-                         + ", echelle " + FsmVariables.GlobalVariables.FindFsmFloat("GlobalTimeScale").Value);
-                if (!sl && fat != null && fat.Value < 50f) sleepWatch = false;
+                         + ", echelle " + FsmVariables.GlobalVariables.FindFsmFloat("GlobalTimeScale").Value
+                         + ", joueur " + (Game.PlayerT != null ? Game.PlayerT.position.ToString("F2") + " rot " + Game.PlayerT.eulerAngles.ToString("F0") + " parent " + (Game.PlayerT.parent != null ? Game.PlayerT.parent.name : "-") : "?")
+                         + ", camera " + (Camera.main != null ? Camera.main.transform.position.ToString("F2") : "?"));
+                if (!sl && fat != null && fat.Value < 50f) { if (sleepWakeLogs++ > 12) sleepWatch = false; }   // (reveil : encore 12 s de releves -- chute sous le sol, lit des parents, JD 22/10)
             }
             if (mode == "heure" && t > 15f && !done)
             {
@@ -3672,7 +3674,7 @@ namespace MWCoop
             return null;
         }
         static string clipShot;
-        static float nextSleepLog;
+        static float nextSleepLog; static int sleepWakeLogs;
         public static int PoseFlags;
         static int seenFlags = -1;
         static float shotAt = -1;
