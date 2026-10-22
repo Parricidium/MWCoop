@@ -639,8 +639,13 @@ namespace MWCoop
             string p = Recon.Path(f.transform);
             // (et la decharge sauvage du GIFU, GIFU/ShitTank/ShitDumps::Logic : l'amende va a celui qui vide, d'apres SA logique ; rejouee,
             // l'enveloppe d'amende apparaissait dans toutes les boites aux lettres)
+            // Lecteur CD de la SATSUMA (cd player(Clone)/ButtonsCD : RadioVolume::Knob, RadioCDSwitch, TrackChannelSwitch) : le bouton de
+            // volume est un automate de molette dont « State 1 » retombe sur « Mouse off 2 -OFF-> Off 2 » des que la souris n'y est pas --
+            // recopie chez l'invite, il s'eteignait aussitot et son « Off 2 » revenait chez l'hote : la musique jouait une seconde puis le
+            // lecteur se coupait (29.30, 22/10). Commandes laissees a chacun (le son du lecteur n'est pas encore partage sur MSC).
             return p.StartsWith("JOBS/Mummola") && f.FsmName == "Logic" || f.FsmName == "Save" && p.Contains("/Moving/Stuff")
-                   || f.FsmName == "Logic" && p.EndsWith("ShitTank/ShitDumps");
+                   || f.FsmName == "Logic" && p.EndsWith("ShitTank/ShitDumps")
+                   || p.Contains("/ButtonsCD/");
         }
 
         static bool IgnitionLike(PlayMakerFSM f)

@@ -471,6 +471,33 @@ namespace MWCoop
         }
 
         static bool tricheDone;   // ([Test] Triche=<commande du tchat> : une fois, a 30 s)
+        static void CdMsc(float t)
+        {
+            // [Test] Autotest=cdmsc (MSC, 2 joueurs, l'hote agit) : le lecteur CD de la SATSUMA allume par la molette du volume (Knob :
+            // UNTIGHTEN depuis « Get scroll »), puis l'etat des trois automates ButtonsCD releve chaque seconde pendant 25 s : il doit
+            // rester On (29.30, 22/10 : il se coupait apres une seconde, l'invite renvoyant son « Off 2 »).
+            if (MWCoop.Net.Session.IsHost && t > 40f && !done)
+            {
+                done = true;
+                PlayMakerFSM knob = null;
+                foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                    if (f.FsmName == "Knob" && f.gameObject.name == "RadioVolume" && Recon.Path(f.transform).Contains("/ButtonsCD/")) knob = f;
+                if (knob == null) { Log.Warn("autotest cdmsc : bouton de volume du lecteur CD introuvable"); return; }
+                Log.Info("autotest cdmsc : lecteur CD, etat " + knob.ActiveStateName + ", UNTIGHTEN envoye");
+                knob.SendEvent("UNTIGHTEN");
+                cdWatchUntil = Time.realtimeSinceStartup + 25f;
+            }
+            if (cdWatchUntil > 0f && Time.realtimeSinceStartup >= nextSleepLog)
+            {
+                nextSleepLog = Time.realtimeSinceStartup + 1f;
+                string st = "";
+                foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                    if (Recon.Path(f.transform).Contains("/ButtonsCD/")) st += " " + f.gameObject.name + "::" + f.FsmName + "=" + f.ActiveStateName;
+                Log.Info("autotest cdmsc :" + st);
+                if (Time.realtimeSinceStartup >= cdWatchUntil) cdWatchUntil = 0f;
+            }
+        }
+
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -484,6 +511,7 @@ namespace MWCoop
             if (mode == "portiere" && t > 30f && !done) { done = true; Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "SATSUMA"), true, Config.Get("Test", "TestPorte", ""))); }
             if (mode == "portiere") return;
             if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
+            if (mode == "cdmsc") { CdMsc(t); return; }
             if (mode == "mscguepe") { MscGuepe(t); return; }
             if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "mscreste") { MscReste(t); return; }
@@ -3674,7 +3702,7 @@ namespace MWCoop
             return null;
         }
         static string clipShot;
-        static float nextSleepLog; static int sleepWakeLogs;
+        static float nextSleepLog; static int sleepWakeLogs; static float cdWatchUntil;
         public static int PoseFlags;
         static int seenFlags = -1;
         static float shotAt = -1;
