@@ -12,11 +12,13 @@ namespace MWCoop
     // [Test] LitParents=dx,dy,dz : decalage du corps (repere du monde : axe du lit, haut, travers), par defaut 0 / 0,08 / 0.
     public static class ParentsBed
     {
-        static float at = -1; static bool done, aligned;
+        static float at = -1; static bool done, aligned, releasing;
         static readonly System.Collections.Generic.List<Transform> pivots = new System.Collections.Generic.List<Transform>();
+        static readonly System.Collections.Generic.List<Vector3> wakes = new System.Collections.Generic.List<Vector3>();   // (par place : ou se relever, sur le plancher)
         static Vector3 feetDir;   // (sens des pieds dans le lit, monde)
+        static Transform lastPivot; static Quaternion savedLocal; static Vector3 wakeAt;
 
-        public static void OnLevelLoaded() { at = PlayerSync.InGame && !Game.Msc ? Time.realtimeSinceStartup + 14f : -1; done = false; aligned = false; pivots.Clear(); }
+        public static void OnLevelLoaded() { at = PlayerSync.InGame && !Game.Msc ? Time.realtimeSinceStartup + 14f : -1; done = false; aligned = false; releasing = false; pivots.Clear(); wakes.Clear(); }
 
         public static void Update()
         {
@@ -32,10 +34,40 @@ namespace MWCoop
             // il dormait en diagonale, JD 22/10 : « le corps doit suivre les bordures du lit ») -- cap pose dans l'axe du lit, les
             // pieds vers le bas du lit, une fois au debut du sommeil (les autres voient l'avatar couche dans ce sens).
             Transform pl = Game.PlayerT;
-            bool here = pl != null && pl.parent != null && pivots.Contains(pl.parent) && Game.GlobalBool("PlayerSleeps");
-            if (here && !aligned)
+            if (pl == null) return;
+            bool sleeps = Game.GlobalBool("PlayerSleeps");
+            bool here = pl.parent != null && pivots.Contains(pl.parent) && sleeps;
+            // Reveil (JD, 22/10 : « passe a travers le sol, reapparu dans la cuisine, camera au sol comme couche ») : le cap pose
+            // ci-dessous est une rotation du joueur dans le monde, donc un changement de sa rotation LOCALE sous le pivot couche ;
+            // quand l'animation de lever redresse le pivot, cette rotation locale devient un basculement (camera au sol). Et le
+            // jeu repose le joueur a l'origine du declencheur, qui est sous le plancher ici (le pivot final est descendu sur le
+            // matelas). Donc : rotation locale rendue des que le sommeil s'arrete (avant le lever), et joueur remis debout au
+            // pied du lit, sur le plancher, des que le jeu le detache du pivot.
+            if (aligned && !sleeps && pl.parent == lastPivot)
+            {
+                pl.localRotation = savedLocal;
+                aligned = false; releasing = true;
+                int i = pivots.IndexOf(lastPivot);
+                wakeAt = i >= 0 && i < wakes.Count ? wakes[i] : lastPivot.position;
+                Log.Info("lit des parents : fin du sommeil, rotation rendue ; lever prevu en " + wakeAt.ToString("F2"));
+            }
+            if (releasing && (pl.parent == null || !pivots.Contains(pl.parent)))
+            {
+                releasing = false;
+                var cc = pl.GetComponent<CharacterController>();
+                float feet = cc != null ? cc.center.y - cc.height / 2f : -0.9f;
+                Vector3 to = new Vector3(wakeAt.x, wakeAt.y + 0.05f - feet, wakeAt.z);
+                if (cc != null) cc.enabled = false;
+                Vector3 was = pl.position;
+                pl.position = to;
+                pl.rotation = Quaternion.Euler(0f, Quaternion.LookRotation(-feetDir).eulerAngles.y, 0f);   // (debout, face au lit)
+                if (cc != null) cc.enabled = true;
+                Log.Info("lit des parents : leve, joueur remis en " + to.ToString("F2") + " (le jeu l'avait pose en " + was.ToString("F2") + ")");
+            }
+            if (here && !aligned && !releasing)
             {
                 aligned = true;
+                lastPivot = pl.parent; savedLocal = pl.localRotation;
                 // (couche, le « haut » du joueur pointe vers sa tete : c'est lui qui donne le sens du corps -- PlayerSync envoie le cap des
                 // pieds d'apres lui ; on tourne le joueur autour de la verticale pour que ses pieds visent le bas du lit)
                 Vector3 up = pl.up; Vector3 feetNow = new Vector3(-up.x, 0f, -up.z);
@@ -46,7 +78,16 @@ namespace MWCoop
                 }
                 Log.Info("lit des parents : couche dans l'axe du lit (cap " + pl.eulerAngles.y.ToString("F0") + ")");
             }
-            if (!here) aligned = false;
+            if (!here && !releasing && pl.parent != lastPivot) aligned = false;
+        }
+
+        // Plancher sous un point (le plus haut des solides non declencheurs, hors joueur) ; sinon la hauteur donnee.
+        static float Floor(Vector3 p, float def)
+        {
+            float best = float.NegativeInfinity;
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(p.x, p.y + 1.2f, p.z), Vector3.down, 4f))
+                if (h.collider != null && !h.collider.isTrigger && Game.RootName(h.collider.transform) != "PLAYER" && h.point.y > best && h.point.y <= p.y + 0.3f) best = h.point.y;
+            return best > float.NegativeInfinity ? best : def;
         }
 
         static void Make()
@@ -73,7 +114,8 @@ namespace MWCoop
             int made = 0;
             for (int side = 0; side < 2; side++)
                 if (MakeOne(tpl, room, wb, ax, across * (side == 0 ? -half : half), side + 1)) made++;
-            Log.Info("lit des parents : " + made + " place(s) de sommeil sur " + Recon.Path(bed.transform) + " (lit " + wb.size.ToString("F1") + ", axe " + ax.ToString("F0") + ")");
+            string wk = ""; foreach (Vector3 w in wakes) wk += " " + w.ToString("F2");
+            Log.Info("lit des parents : " + made + " place(s) de sommeil sur " + Recon.Path(bed.transform) + " (lit " + wb.size.ToString("F1") + ", bas " + wb.min.y.ToString("F2") + ", axe " + ax.ToString("F0") + ", lever en" + wk + ")");
         }
 
         static bool MakeOne(GameObject tpl, Transform room, Bounds wb, Vector3 ax, Vector3 shift, int n)
@@ -85,7 +127,14 @@ namespace MWCoop
             PlayMakerFSM fsm = null;
             foreach (PlayMakerFSM f in sl.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Activate") fsm = f;
             Transform pivot = sl.transform.Find("AnimPivotSleep");
-            if (pivot != null) pivots.Add(pivot);
+            if (pivot != null)
+            {
+                pivots.Add(pivot);
+                // Ou se relever : au pied du lit, de ce cote, sur le plancher (Floor ; sinon le bas du lit).
+                float ext = Mathf.Abs(Vector3.Dot(wb.extents, ax));
+                Vector3 foot = new Vector3(wb.center.x, wb.max.y, wb.center.z) + shift - ax * (ext + 0.45f);
+                wakes.Add(new Vector3(foot.x, Floor(foot, wb.min.y), foot.z));
+            }
             Transform head = pivot != null ? pivot.Find("Sphere") : null;
             foreach (Renderer r in sl.GetComponentsInChildren<Renderer>(true)) r.enabled = false;   // (reperes du corps : invisibles)
             // (k.x : la tete -- le pivot final, ou le jeu pose la camera du dormeur -- a cette distance du milieu vers la tete de lit)
