@@ -40,7 +40,7 @@ namespace MWCoop
             Rigidbody corris = VehicleSync.Body("CORRIS");
             if (leaks != null) foreach (Transform c in leaks.transform) Add(c, corris);
             // Vapeur : tout SteamFountain* sous une voiture suivie.
-            foreach (string car in new[] { "CORRIS", "SORBET", "BACHGLOTZ", "KEKMET", "GIFU", "MACHTWAGEN" })
+            foreach (string car in Game.Msc ? new[] { "SATSUMA", "HAYOSIKO", "KEKMET", "GIFU", "FERNDALE", "RCO_RUSCKO12", "FLATBED" } : new[] { "CORRIS", "SORBET", "BACHGLOTZ", "KEKMET", "GIFU", "MACHTWAGEN" })
             {
                 Rigidbody rb = VehicleSync.Body(car);
                 if (rb == null) continue;

@@ -1993,6 +1993,7 @@ namespace MWCoop
                 case "@jack": ModJackStands.OnMessage(who, r); break;
                 case "@carbu": FuelPrices.OnMessage(who, r); break;
                 case "@tel": PhoneMsc.OnMessage(who, r); break;   // (MSC : appel decroche par un autre)
+                case "@rallymsc": RallyMsc.OnMessage(who, r); break;   // (MSC : temps d'un pilote humain au rallye)
                 case "@capot": PackHoods.OnMessage(who, r); break;   // (capot d'une voiture du pack rallye de JD)
                 case "@fils": WiringMsc.OnMessage(who, r); break;   // (MSC : borne electrique de la SATSUMA branchee)
                 case "@pompe": PumpsMsc.OnMessage(who, r); break;   // (MSC : pistolet et afficheurs d'une pompe)

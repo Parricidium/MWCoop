@@ -551,3 +551,7 @@ WED42	Objects, roads, terrain, plants, lights, co-op
 WED43	In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin).
 WDF1	Talk: \"Press V\" (key held) or \"Automatic\" (the mic opens as soon as you talk, above the adjustable threshold; F6 mutes it). Both games.
 WDF2	Start difficulty (Vanilla, Easy, Medium, Hard, Random): money and fuel of a new game, for everyone; also in the lobby, under \"New game\". Car window speed, passenger leaning out only with the window open.
+WM19	Since 1.9.0: the radio and the CD player (same song at the same second, each car's radio heard where it is), the NPCs' voices, the particles of the world, the sauna steam, the automatic doors, crashes between players' cars, leaks, held controls, gestures and hand tools, cooking, the house (fuses, kilju), the world's events, everything else of the world, the host's game kept on the guest's side, the rally's AI cars and results with the human drivers' times.
+WM19B	Rally prizes and the drag race results of the other players: not yet.
+WM19C	My Summer Car in BETA: nearly everything of My Winter Car is shared now (players, cars, mechanics, money, jobs, radio, world). What's left is listed in \"What works on My Summer Car\".
+WM19D	My Summer Car (BETA): a few side things are not shared yet (rally prizes, drag race results); see \"What works on My Summer Car\".
