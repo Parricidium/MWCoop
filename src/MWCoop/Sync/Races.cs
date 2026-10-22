@@ -54,7 +54,11 @@ namespace MWCoop
         const int K_CARS = 1, K_RESULTS = 2, K_HASH = 3, K_HASHREPLY = 4, K_ROOTS = 5, K_HELPERS = 6;
         // Course en place cette semaine (RACES 'SwapDates' : semaine paire le rallye, impaire la glace), d'apres l'hote :
         // chez l'invite le choix n'etait refait qu'a son reveil (WAKEUP) -- voitures IA de la glace roulant sur une piste eteinte.
-        static readonly string[] Roots = { "RACES/RALLY", "RACES/ICERACE" };
+        // My Summer Car (22/10) : memes automates (RallyCars :: AIdrivers / GenerateTimes / Leaderboard, RALLYCAR1-3 :: Steering /
+        // Throttle / SkinChange / Timing / Disable, Spectators :: Helpers), mais a la racine RALLY, pas RACES/RALLY ; pas de course
+        // sur glace (ICERACE introuvable : IceRace reste inactif).
+        static string Rp(string sub) { return Game.Msc ? sub : "RACES/" + sub; }
+        static string[] Roots { get { return Game.Msc ? new[] { "RALLY" } : new[] { "RACES/RALLY", "RACES/ICERACE" }; } }
         static float nextRoots;
         static readonly List<Car> cars = new List<Car>();
         static bool built;
@@ -69,7 +73,7 @@ namespace MWCoop
         // Automates des voitures IA gardes chez l'invite (visuels) ; tous les autres sont coupes.
         static readonly HashSet<string> KeepFsms = new HashSet<string> { "LOD", "Lights Switch", "Backfires", "Wait", "CalculateAngle", "FSM" };   // ('SkinChange' : livree posee par ApplySkin)
         // Automates de conteneurs du rallye coupes chez l'invite (logique de l'hote).
-        static readonly string[] HostOnlyLogic = { "RACES/RALLY/RallyCars::AIdrivers", "RACES/RALLY/RallyCars::GenerateTimes" };
+        static string[] HostOnlyLogic { get { return new[] { Rp("RALLY/RallyCars::AIdrivers"), Rp("RALLY/RallyCars::GenerateTimes") }; } }
 
         public static void OnLevelLoaded()
         {
@@ -83,7 +87,7 @@ namespace MWCoop
         static void Build()
         {
             built = true;
-            GameObject root = Game.FindAny("RACES");
+            GameObject root = Game.FindAny(Game.Msc ? "RALLY" : "RACES");
             if (root == null) { Log.Warn("courses : racine RACES introuvable"); return; }
             var ranks = new Dictionary<string, int>();
             uint h = 2166136261;
@@ -125,7 +129,7 @@ namespace MWCoop
         {
             if (results != null || Time.realtimeSinceStartup < nextResultsLook) return;
             nextResultsLook = Time.realtimeSinceStartup + 2f;
-            GameObject rc = Game.FindAny("RACES/RALLY/RallyCars");
+            GameObject rc = Game.FindAny(Rp("RALLY/RallyCars"));
             if (rc == null) return;
             foreach (PlayMakerHashTableProxy p in rc.GetComponents<PlayMakerHashTableProxy>())
                 if (p.referenceName == "Results" && p.hashTable != null) results = p.hashTable;
@@ -530,9 +534,9 @@ namespace MWCoop
             if (mode == "glace2" || mode == "glace3" || mode == "glace4" || mode == "glacevaz") return;   // (releve par IceRace.Test)
             if (mode != "glace")
             {
-                PlayMakerFSM reset = Game.FindFsm("RACES/RALLY", "Reset");
+                PlayMakerFSM reset = Game.FindFsm(Rp("RALLY"), "Reset");
                 sb.Append(" Reset ").Append(reset != null ? reset.ActiveStateName : "?");
-                GameObject rc = Game.FindAny("RACES/RALLY/RallyCars");
+                GameObject rc = Game.FindAny(Rp("RALLY/RallyCars"));
                 sb.Append(", RallyCars ").Append(rc != null && rc.activeInHierarchy ? "allume" : "eteint");
             }
             else
@@ -593,7 +597,7 @@ namespace MWCoop
             int n = 0;
             var fsms = new List<PlayMakerFSM>();
             foreach (Car c in cars) if (c.T != null) fsms.AddRange(c.T.GetComponentsInChildren<PlayMakerFSM>(true));
-            GameObject spec = Game.FindAny("RACES/RALLY/Spectators");
+            GameObject spec = Game.FindAny(Rp("RALLY/Spectators"));
             if (spec != null) { PlayMakerFSM h = Game.FsmOn(spec, "Helpers"); if (h != null) fsms.Add(h); }
             foreach (PlayMakerFSM f in fsms)
             {
@@ -663,7 +667,7 @@ namespace MWCoop
             if (helpers == null && Time.realtimeSinceStartup >= nextHelpersLook)
             {
                 nextHelpersLook = Time.realtimeSinceStartup + 2f;
-                GameObject spec = Game.FindAny("RACES/RALLY/Spectators");
+                GameObject spec = Game.FindAny(Rp("RALLY/Spectators"));
                 helpers = spec != null ? Game.FsmOn(spec, "Helpers") : null;
             }
             return helpers;
@@ -770,7 +774,7 @@ namespace MWCoop
             if (!hashOk) why = "voitures IA pas encore comparees a celles de l'hote";
             else if (c == null || c.T == null) why = "voiture " + gHelpIdx + " inconnue ici";
             else if (!c.Known || !c.On || !c.T.gameObject.activeInHierarchy) why = c.T.name + " pas en piste ici";
-            else if (!HelpersReady()) why = "RACES/RALLY/Spectators eteint ici";
+            else if (!HelpersReady()) why = Rp("RALLY/Spectators") + " eteint ici";
             if (why != null)
             {
                 if (now >= nextHelpersWarn) { nextHelpersWarn = now + 10f; Log.Info("rallye : spectateurs de l'hote en attente ici (" + why + ")"); }
@@ -801,7 +805,7 @@ namespace MWCoop
             if (Session.IsHost && retStep == 0 && t > 25f)
             {
                 Car pick = null;
-                foreach (Car c in cars) if (c.T != null && c.T.gameObject.activeInHierarchy && c.Key.StartsWith("RACES/RALLY/")) { pick = c; break; }
+                foreach (Car c in cars) if (c.T != null && c.T.gameObject.activeInHierarchy && c.Key.StartsWith(Rp("RALLY/"))) { pick = c; break; }
                 string why = pick == null ? "pas de voiture IA du rallye allumee" : !HelpersReady() ? "Spectators::Helpers pas pret" : !helpersHooked ? "Helpers pas encore accroche" : null;
                 if (why != null)
                 {

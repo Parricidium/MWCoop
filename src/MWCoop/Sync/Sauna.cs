@@ -11,9 +11,9 @@ namespace MWCoop
     // temps et entendent le son, SANS le flou ni le stress (effets personnels). Deux poeles : maison (YARD) et chalet (COTTAGE).
     public static class Sauna
     {
-        static readonly string[] Stoves = { "YARD/Building/SAUNA/Sauna/Kiuas", "COTTAGE/Stuff/Sauna/Stove" };
+        static readonly string[] Stoves = { "YARD/Building/SAUNA/Sauna/Kiuas", "COTTAGE/Stuff/Sauna/Stove", "COTTAGE/Sauna/Stove" };   // (le dernier : chalet de My Summer Car, 22/10)
         class Stove { public PlayMakerFSM F; public ParticleEmitter Steam; public bool Hooked; public float OffAt = -1f; public int Peak; }
-        static readonly Stove[] stoves = new Stove[2];
+        static readonly Stove[] stoves = new Stove[Stoves.Length];   // (autant que de chemins : 3 depuis MSC, 22/10)
         static float nextLook;
         static int logs;
 

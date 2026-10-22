@@ -136,7 +136,9 @@ namespace MWCoop
             foreach (Object o in Game.FsmsNamed("Update"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
-                if (f.hideFlags != HideFlags.None || f.FsmName != "Update" || !f.gameObject.name.StartsWith("CDAudioSource")) continue;
+                // (My Summer Car, 22/10 : le lecteur de la SATSUMA est SATSUMA/Electricity/SpeakerDash/CDPlayer -- memes automate 'Update',
+                // variables CurrentCD / Index et listes Radio/CD ; le jeu de canaux RadioChannels (Channel1, Folk) et Radio/Folk sont les memes)
+                if (f.hideFlags != HideFlags.None || f.FsmName != "Update" || !(f.gameObject.name.StartsWith("CDAudioSource") || Game.Msc && f.gameObject.name == "CDPlayer")) continue;
                 bool known = false;
                 foreach (Cd c in cds) if (c.Upd == f || c.Name == f.gameObject.name) { known = true; break; }
                 if (known) continue;

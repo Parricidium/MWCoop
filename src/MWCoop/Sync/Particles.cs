@@ -51,7 +51,7 @@ namespace MWCoop
             if (VehicleSync.IsPlayerCar(t)) return false;   // (voiture d'un joueur : son conducteur)
             return true;
         }
-        static bool IsCopyRoot(string r) { return r == "TRAFFIC" || r == "NPC_CARS" || r == "RACES" || r == "TRAIN"; }
+        static bool IsCopyRoot(string r) { return r == "TRAFFIC" || r == "NPC_CARS" || r == "RACES" || r == "TRAIN" || r == "RALLY"; }   // (RALLY : voitures IA du rallye de My Summer Car, 22/10)
         static bool IsCopy(Transform t) { return IsCopyRoot(t.root.name); }
 
         // Cle d'un objet allume : racine, puis a chaque niveau le nom et le rang parmi les freres DU MEME NOM, puis le nom

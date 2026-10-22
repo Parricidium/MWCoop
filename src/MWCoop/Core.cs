@@ -232,6 +232,7 @@ namespace MWCoop
             new Mod("chandelles", ModJackStands.Update),
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
+            new Mod("rallye (MSC)", RallyMsc.Update),   // (22/10 : temps des pilotes humains au classement du rallye de My Summer Car)
             new Mod("trace", Trace.Update),
             new Mod("deroule", Flow.Update),
             new Mod("ecran d'attente", WaitScreen.Update),
@@ -398,7 +399,12 @@ namespace MWCoop
                                     LightsGuard.OnLevelLoaded, PackHoods.OnLevelLoaded, MapPacks.OnLevelLoaded,   // (19/10 soir : phares et capots du pack rallye)
                                     Fires.OnLevelLoaded,   // (20/10 : cheminees, poeles, grill -- bois, allumage, braises)
                                     WiringMsc.OnLevelLoaded,   // (20/10 : fils de la SATSUMA)
-                                    Difficulty.OnLevelLoaded, Sleepers.OnLevelLoaded };   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
+                                    Difficulty.OnLevelLoaded, Sleepers.OnLevelLoaded,
+                                    Radio.OnLevelLoaded,   // (22/10 : radio et lecteur CD partages)
+                                    Voices.OnLevelLoaded, Particles.OnLevelLoaded, Sauna.OnLevelLoaded, NearDoors.OnLevelLoaded, CarHits.OnLevelLoaded,
+                                    CarLeaks.OnLevelLoaded, Knobs.OnLevelLoaded, AssembleIcon.OnLevelLoaded,   // (22/10 : modules generiques)
+                                    Gestures.OnLevelLoaded, HandTools.OnLevelLoaded, Cooking.OnLevelLoaded, Home.OnLevelLoaded, Events.OnLevelLoaded,
+                                    WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded };   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -412,6 +418,18 @@ namespace MWCoop
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
             "voitures", "portieres", "tableaux de bord", "passagers", "sommeil", "difficulte",
+            "radio",   // (22/10 : canaux RadioChannels et lecteur CDPlayer de la SATSUMA, memes automates que MWC)
+            // 22/10 (JD : « fait tout ») : modules generiques (ils balaient les automates et les objets, sans chemin de MWC) --
+            // voix des PNJ (MasterAudio), particules du monde (TRAFFIC, RALLY), vapeur du sauna (Sauna.Stoves a les deux chemins),
+            // portes automatiques (GetDistance vers PLAYER), chocs entre voitures de joueurs, fuites (Systems/Leaks, voitures de MSC),
+            // commandes tenues (automates Use a valeur tenue).
+            "voix", "particules", "sauna", "portes automatiques", "chocs", "fuites et vapeur", "molettes",
+            // (meme jour, 2e lot) gestes et outils en main (PLAYER de MSC : memes automates PlayerFunctions, PickUp, Drink...), cuisine
+            // (SausageTrigger, cafetiere), maison (seau de kilju ; fusibles absents de MSC : « introuvable ici »), evenements et tout
+            // le reste du monde (WorldFsms : balayage, racines a ignorer communes), partie de l'hote rangee chez l'invite (Game.Name).
+            "gestes", "outils en main", "cuisine", "maison", "evenements", "monde (automates)", "partie chez l'invite",
+            "courses",   // (22/10 : voitures IA et resultats du rallye de MSC -- racine RALLY, Races.Rp)
+            "rallye (MSC)",
             "monde",   // (heure et meteo : World.FindMsc / SendMsc)
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
