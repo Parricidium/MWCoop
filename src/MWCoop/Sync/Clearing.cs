@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace MWCoop
@@ -19,6 +20,10 @@ namespace MWCoop
             new Vector2(-1613f, 1075f), new Vector2(-1582f, 1059f), new Vector2(-1537f, 1050f), new Vector2(-1514f, 1081f),
             new Vector2(-1530f, 1091.5f), new Vector2(-1540f, 1089.5f), new Vector2(-1550f, 1089.5f), new Vector2(-1560f, 1092.5f),
             new Vector2(-1570f, 1097.5f), new Vector2(-1580f, 1101.5f), new Vector2(-1590f, 1106.5f), new Vector2(-1600f, 1111.5f), new Vector2(-1612f, 1108f) };
+        // Terrain du cinema KINO TAHTI (JD, 22/10) : le batiment, son parking et ses entrees, rectangle de son repere (Kauppa.KinoFrame).
+        static Vector2[] kinoPlot = new Vector2[0];
+        static bool s21On, kinoOn;
+        public static float KinoPadY = float.NaN;
         static readonly string[] Visual = { "TREES1", "TREES2", "TREES_MEDIUM1", "TREES_MEDIUM2", "TREES_MEDIUM3", "TREES_SMALL1", "TREES_SMALL2", "TREES_SMALL3", "TREES_SMALL4" };
         static readonly string[] Colls = { "TREES1_COLL", "TREES2_COLL", "TREES3_COLL" };
         static bool done;
@@ -32,6 +37,9 @@ namespace MWCoop
             done = true;
             if (!Kauppa.Active) return;   // (sans les ajouts COOP ni la boutique : la foret reste)
             if (Config.GetInt("Boutique", "Defrichage", 1) == 0) { Log.Info("defrichage : coupe ([Boutique] Defrichage=0)"); return; }
+            s21On = Ajouts.Shop || Ajouts.Museum;
+            kinoOn = Kauppa.KinoOn;
+            kinoPlot = kinoOn ? Kauppa.KinoPlot() : new Vector2[0];
             GameObject mesh = GameObject.Find("MAP/MESH");
             if (mesh == null) { Log.Info("defrichage : MAP/MESH introuvable"); return; }
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -116,7 +124,8 @@ namespace MWCoop
         const string DefaultPads = "-1591.1,1098.5,25,5.6,3.6;-1573.8,1087.4,22,10.6,7.9";
         static void Terrace()
         {
-            string s = Config.Get("Boutique", "Tasanne", DefaultPads);
+            string s = s21On ? Config.Get("Boutique", "Tasanne", DefaultPads) : "";
+            if (kinoOn) s = (s.Length > 0 ? s + ";" : "") + Kauppa.KinoPad();
             if (s.Length == 0) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             var pads = new List<float[]>();
@@ -129,6 +138,7 @@ namespace MWCoop
                 Vector3 front = new Vector3(x, 0, z) + r * new Vector3(0, 0, hd + 1f);
                 float h = Ground(front.x, front.z);
                 pads.Add(new[] { x, z, yaw, hw, hd, h });
+                if (kinoOn && one == Kauppa.KinoPad()) KinoPadY = h;
                 Log.Info("defrichage : plateforme en " + x + ", " + z + " a " + h.ToString("F2") + " m");
             }
             GameObject terr = GameObject.Find("MAP/MESH/TERRAIN_OBJ");
@@ -150,7 +160,7 @@ namespace MWCoop
                 // Pres des routes, le sol ne bouge pas : leurs bords enneiges (le bourrelet le long de la route) font partie du
                 // maillage de la route, fusionne par le jeu (statique, illisible) -- abaisse dessous, le sol laissait le bourrelet
                 // en l'air, ombres de l'autre cote visibles au travers (retour de JD, 13/10). Rien a moins de 2 m, raccord jusqu'a 8 m.
-                float dr = Mathf.Min(DistToLine(new Vector2(w.x, w.z), RoadEdge), DistToLine(new Vector2(w.x, w.z), MainRoadEdge));
+                float dr = InPoly(w.x, w.z, kinoPlot) ? RoadDist(w.x, w.z) : Mathf.Min(DistToLine(new Vector2(w.x, w.z), RoadEdge), DistToLine(new Vector2(w.x, w.z), MainRoadEdge));
                 best *= Mathf.SmoothStep(0f, 1f, (dr - 2f) / 6f);
                 return new Vector2(best, target);
             };
@@ -236,15 +246,39 @@ namespace MWCoop
             Log.Info("defrichage : terrassement, " + moved + " sommet(s) du sol et " + layers + " des couches posees dessus deplaces");
         }
 
-        static bool Inside(float x, float z)
+        static bool Inside(float x, float z) { return (s21On && InPoly(x, z, Plot)) || (kinoOn && InPoly(x, z, kinoPlot)); }
+
+        static bool InPoly(float x, float z, Vector2[] poly)
         {
             bool c = false;
-            for (int i = 0, j = Plot.Length - 1; i < Plot.Length; j = i++)
+            for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
             {
-                Vector2 a = Plot[i], b = Plot[j];
+                Vector2 a = poly[i], b = poly[j];
                 if ((a.y > z) != (b.y > z) && x < (b.x - a.x) * (z - a.y) / (b.y - a.y) + a.x) c = !c;
             }
             return c;
+        }
+
+        // Distance a la route la plus proche (route du musee, route de la course sur glace...), sondee autour du point : rayons
+        // vers le bas sur des cercles de 1 a 9 m, le premier qui touche un collider de route. Terrain du cinema : pas de bords
+        // releves a la main comme pour le coin s21.
+        static readonly string[] RoadNames = { "AsphaltRoad", "Road", "Road2", "IceRoad", "Pavement" };
+        static float RoadDist(float x, float z)
+        {
+            for (float rad = 1f; rad <= 9f; rad += 1f)
+                for (int k = 0; k < 12; k++)
+                {
+                    float a = k * Mathf.PI / 6f;
+                    if (IsRoad(x + Mathf.Cos(a) * rad, z + Mathf.Sin(a) * rad)) return rad;
+                }
+            return 99f;
+        }
+        static bool IsRoad(float x, float z)
+        {
+            RaycastHit best = new RaycastHit(); bool got = false;
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(x, 300f, z), Vector3.down, 400f))
+                if (!h.collider.isTrigger && h.collider.GetComponentInParent<Rigidbody>() == null && (!got || h.distance < best.distance)) { best = h; got = true; }
+            return got && System.Array.IndexOf(RoadNames, best.collider.name) >= 0;
         }
 
         static int Find(int[] p, int i) { while (p[i] != i) { p[i] = p[p[i]]; i = p[i]; } return i; }
@@ -257,7 +291,7 @@ namespace MWCoop
             if (v == null || v.Length == 0) { Log.Info("defrichage : " + name + " illisible ou vide"); return 0; }
             // boite du terrain + 15 m (rayon d'un grand arbre), dans le repere du maillage
             float x0 = float.MaxValue, x1 = float.MinValue, z0 = float.MaxValue, z1 = float.MinValue;
-            foreach (Vector2 p in Plot) { x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); z0 = Mathf.Min(z0, p.y); z1 = Mathf.Max(z1, p.y); }
+            foreach (Vector2 p in (s21On ? Plot : new Vector2[0]).Concat(kinoPlot)) { x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); z0 = Mathf.Min(z0, p.y); z1 = Mathf.Max(z1, p.y); }
             x0 -= 15f; x1 += 15f; z0 -= 15f; z1 += 15f;
             var near = new bool[v.Length];
             var world = new Vector3[v.Length];
@@ -294,7 +328,7 @@ namespace MWCoop
                 if (!foot.TryGetValue(r, out f) || world[i].y < f.y) foot[r] = world[i];
             }
             var gone = new HashSet<int>();
-            foreach (KeyValuePair<int, Vector3> kv in foot) if (Inside(kv.Value.x, kv.Value.z)) gone.Add(kv.Key);
+            foreach (KeyValuePair<int, Vector3> kv in foot) if (Inside(kv.Value.x, kv.Value.z)) gone.Add(kv.Key);   // (coin s21 et cinema)
             if (gone.Count == 0) return 0;
             for (int s = 0; s < tris.Length; s++)
             {

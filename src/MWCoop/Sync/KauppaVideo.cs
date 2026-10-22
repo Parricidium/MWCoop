@@ -90,6 +90,7 @@ namespace MWCoop
             }
             else if (kind == KKamera) KameraModel(g, out size);
             else if (kind == KKartturi) KartturiModel(g, out size, out screen);
+            else if (KinoModel(kind, g, out size)) { }   // (cinema : popcorn, chips, boisson, bonbons, bobine -- KinoEsineet)
             else
             {
                 // television : copie des maillages de la TV de la prison (tv_14 + son ecran)
@@ -148,11 +149,11 @@ namespace MWCoop
         {
             Vector3 size; Transform screen;
             GameObject g = Model(kind, out size, out screen);
-            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : kind == KKartturi ? "kartturi gps" : "television") + " osuuskauppa(itemx)";
+            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : kind == KKartturi ? "kartturi gps" : IsKinoKind(kind) ? KinoItemName(kind) : "television") + " osuuskauppa(itemx)";
             g.transform.position = pos; g.transform.rotation = rot;
             var e = new Esine { Id = id, Kind = kind, Data = data ?? "", Go = g, Screen = screen };
             e.Col = g.AddComponent<BoxCollider>(); e.Col.size = size;
-            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : kind == KKartturi ? 0.4f : 9f;
+            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : kind == KKartturi ? 0.4f : IsKinoKind(kind) ? KinoItemMass(kind) : 9f;
             e.Rb.collisionDetectionMode = CollisionDetectionMode.Continuous;   // (cassette fine : ne traverse pas le sol en tombant)
             g.layer = 19; g.tag = "PART";
             esineet.Add(e);
@@ -176,7 +177,7 @@ namespace MWCoop
             int op = r.U8(); string id = r.Str();
             if (op == 2) { Esine x = FindItem(id); if (x != null) RemoveItem(x, false); return; }
             string kind = r.Str(), data = r.Str(); Vector3 p = r.Vec(); Quaternion q = r.Quat();
-            if (!Active || root == null) return;
+            if (!Active || (root == null && kino == null)) return;
             Esine e = FindItem(id);
             if (e == null) CreateItem(id, kind, p, q, data);
             else if (e.Data != data) { e.Data = data; }
@@ -200,7 +201,7 @@ namespace MWCoop
         public static void OnSpawnRequest(int who, NetReader r)
         {
             string kind = r.Str(), data = r.Str(); Vector3 p = r.Vec(); Quaternion q = r.Quat();
-            if (Session.IsHost && root != null) SpawnItem(kind, data, p, q);
+            if (Session.IsHost && (root != null || kino != null)) SpawnItem(kind, data, p, q);
         }
 
         static void RemoveItem(Esine e, bool send)
@@ -426,15 +427,15 @@ namespace MWCoop
             Esine held = null;
             foreach (Esine e in esineet) if (e.Kind == KVhs && Held(e)) held = e;
             foreach (Esine e in esineet)
-                if ((e.Kind == KNauhuri || e.Kind == KKamera || e.Kind == KVhs) && e.Go != null && !Held(e) && e.Col.Raycast(ray, out h, best)) { best = h.distance; hit = e; }
+                if ((e.Kind == KNauhuri || e.Kind == KKamera || e.Kind == KVhs || e.Kind == KKela) && e.Go != null && !Held(e) && e.Col.Raycast(ray, out h, best)) { best = h.distance; hit = e; }
             if (hit != lookedItem) { if (lookedItem != null) ClearGui(); lookedItem = hit; vcrFDown = -1f; }
             if (hit == null) return false;
-            if (hit.Kind == KVhs)
+            if (hit.Kind == KVhs || hit.Kind == KKela)
             {
-                // cassette posee : son titre, et R = montage
+                // cassette ou bobine posee : son titre, et R = montage
                 string ti = TapeTitle(hit.Data);
                 guiUse.Value = true;
-                guiText.Value = Lang.TG("CASSETTE", "TAPE") + (ti.Length > 0 ? " « " + ti.ToUpperInvariant() + " »" : "") + " - " + Keys.Label(Keys.CameraRec) + Lang.TG(" : MONTAGE", ": EDITING");
+                guiText.Value = (hit.Kind == KKela ? Lang.TG("BOBINE", "FILM REEL") : Lang.TG("CASSETTE", "TAPE")) + (ti.Length > 0 ? " « " + ti.ToUpperInvariant() + " »" : "") + " - " + Keys.Label(Keys.CameraRec) + Lang.TG(" : MONTAGE", ": EDITING");
                 aimedTape = hit;
                 return true;
             }
@@ -527,6 +528,14 @@ namespace MWCoop
             OfferCol(kam, new Vector3(wx, kt + 0.12f, 2.02f), new Vector3(0.45f, 0.3f, 1.0f));
             Plane("hlkamera", new Vector3(front, kt - 0.06f, 2.02f), 0.18f, 0.09f, Vector3.right);
             KartturiOffers(wx, front);
+            // bobines de cinema (KINO TAHTI) : debout sur la tablette du haut, a cote des cassettes
+            if (KinoOn)
+            {
+                var kela = new Offer { Item = KKela, Price = KelaPrice, Fr = "BOBINE DE FILM", En = "FILM REEL" };
+                foreach (float x in new[] { -1.12f, -0.75f }) Display(kela, KKela, new Vector3(x, top, -0.02f), 0f, 90f);
+                OfferCol(kela, new Vector3(-0.93f, top + 0.18f, -0.02f), new Vector3(0.8f, 0.4f, 0.35f));
+                Plane("hlkela", new Vector3(-0.93f, top - 0.075f, 0.152f), 0.18f, 0.09f, Vector3.forward);
+            }
             L("en rayon : cassettes 19 mk, magnetoscopes 390 mk, television 590 mk, camescopes 890 mk, KARTTURI " + KartturiPrice + " mk");
         }
 

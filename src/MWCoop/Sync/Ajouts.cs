@@ -17,7 +17,7 @@ namespace MWCoop
     // bit dans B_Msc et sa cle dans les premiers de kAjoutKeys, launcher/gfx.inc).
     public static class Ajouts
     {
-        const int B_Drone = 1, B_Bags = 2, B_Shop = 4, B_Museum = 8, B_Vaz = 16;
+        const int B_Drone = 1, B_Bags = 2, B_Shop = 4, B_Museum = 8, B_Vaz = 16, B_Kino = 32;
         static int hostBits = -1;
         static float nextSend, loadedAt;
         static int lastRemote;
@@ -33,7 +33,7 @@ namespace MWCoop
                 if (!On) return 0;
                 int b = (Config.GetInt("Coop", "AjoutDrone", 1) != 0 ? B_Drone : 0) | (Config.GetInt("Coop", "AjoutSacs", 1) != 0 ? B_Bags : 0)
                       | (Config.GetInt("Coop", "AjoutBoutique", 1) != 0 ? B_Shop : 0) | (Config.GetInt("Coop", "AjoutMusee", 1) != 0 ? B_Museum : 0)
-                      | (Config.GetInt("Coop", "AjoutVaz", 1) != 0 ? B_Vaz : 0);
+                      | (Config.GetInt("Coop", "AjoutVaz", 1) != 0 ? B_Vaz : 0) | (Config.GetInt("Coop", "AjoutKino", 1) != 0 ? B_Kino : 0);
                 return Game.Msc ? b & B_Msc : b;
             }
         }
@@ -47,6 +47,8 @@ namespace MWCoop
         public static bool Museum { get { return (Bits & B_Museum) != 0; } }
         // (hote d'une version sans la VAZ : son annonce n'a pas le bit -> coupee chez l'invite aussi, rien a suivre chez lui)
         public static bool Vaz { get { return (Bits & B_Vaz) != 0; } }
+        // cinema KINO TAHTI (JD, 22/10 ; hote d'une version sans lui : pas de bit -> coupe chez l'invite aussi)
+        public static bool Kino { get { return (Bits & B_Kino) != 0; } }
 
         // Choix de l'hote connus (ou pas besoin) : la boutique, le musee et le defrichage peuvent se faire.
         public static bool Ready { get { return !Guest || hostBits >= 0 || Time.realtimeSinceStartup - loadedAt > 30f; } }
@@ -74,7 +76,7 @@ namespace MWCoop
         static string Names(int b)
         {
             if (b == 0) return "aucun";
-            return (((b & B_Drone) != 0 ? "drone " : "") + ((b & B_Bags) != 0 ? "sacs " : "") + ((b & B_Shop) != 0 ? "boutique " : "") + ((b & B_Museum) != 0 ? "musee " : "") + ((b & B_Vaz) != 0 ? "vaz" : "")).TrimEnd();
+            return (((b & B_Drone) != 0 ? "drone " : "") + ((b & B_Bags) != 0 ? "sacs " : "") + ((b & B_Shop) != 0 ? "boutique " : "") + ((b & B_Museum) != 0 ? "musee " : "") + ((b & B_Vaz) != 0 ? "vaz " : "") + ((b & B_Kino) != 0 ? "cinema" : "")).TrimEnd();
         }
 
     }

@@ -2041,6 +2041,7 @@ namespace MWCoop
                 case "@sacs": SleepingBags.OnList(r); break;
                 case "@sacosto": { Vector3 bp = r.Vec(); SleepingBags.OnBuyRequest(who, bp, r.Quat()); break; }
                 case "@kovi": Kauppa.OnDoor(who, r.Bool()); break;
+                case "@kino": Kauppa.OnKino(who, r); break;   // (cinema : portes des salles, projecteurs)
                 case "@kassi": Kauppa.OnBag(who, r); break;
                 case "@esine": Kauppa.OnItem(who, r); break;
                 case "@esineosto": Kauppa.OnSpawnRequest(who, r); break;
