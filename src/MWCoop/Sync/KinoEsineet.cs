@@ -82,10 +82,35 @@ namespace MWCoop
             {
                 // bobine dans sa boite ronde (couvercle etiquete)
                 size = new Vector3(0.36f, 0.045f, 0.36f);
-                Piece(g, PrimitiveType.Cylinder, Vector3.zero, Vector3.zero, new Vector3(0.36f, 0.0225f, 0.36f), greyMetal);
-                Piece(g, PrimitiveType.Quad, new Vector3(0, 0.0228f, 0), new Vector3(90, 0, 0), new Vector3(0.34f, 0.34f, 1), TexMat("kino-kela.png"));
+                Piece(g, PrimitiveType.Cylinder, new Vector3(0f, -0.003f, 0f), Vector3.zero, new Vector3(0.36f, 0.0195f, 0.36f), greyMetal);   // (dessus a 1,65 cm : le couvercle 8 mm plus haut)
+                // couvercle : disque a la taille de la boite (pas un carre qui deborde), texte lisible boite debout (rayon)
+                var lid = new GameObject("kansi");
+                lid.transform.SetParent(g.transform, false);
+                lid.transform.localPosition = new Vector3(0f, 0.0245f, 0f);   // (8 mm au-dessus du cylindre : plus pres, de loin, son dessus passait au travers -- rayons noirs)
+                lid.AddComponent<MeshFilter>().sharedMesh = ReelLid(0.178f);
+                lid.AddComponent<MeshRenderer>().sharedMaterial = TexMat("kino-kela.png");
             }
             return true;
+        }
+
+        // disque face au haut (+y) ; haut du texte vers -z, droite vers -x (boite debout en rayon : couvercle vers les clients)
+        static Mesh reelLid;
+        static Mesh ReelLid(float r)
+        {
+            if (reelLid != null) return reelLid;
+            const int seg = 48;
+            var v = new Vector3[seg + 1]; var uv = new Vector2[seg + 1]; var t = new int[seg * 3];
+            v[0] = Vector3.zero; uv[0] = new Vector2(0.5f, 0.5f);
+            for (int i = 0; i < seg; i++)
+            {
+                float a = i * Mathf.PI * 2f / seg, x = Mathf.Cos(a) * r, z = Mathf.Sin(a) * r;
+                v[i + 1] = new Vector3(x, 0f, z);
+                uv[i + 1] = new Vector2(0.5f - x / (2f * r), 0.5f - z / (2f * r));
+            }
+            for (int i = 0; i < seg; i++) { t[i * 3] = 0; t[i * 3 + 1] = 1 + (i + 1) % seg; t[i * 3 + 2] = 1 + i; }
+            reelLid = new Mesh { name = "kino_kela_kansi", vertices = v, uv = uv, triangles = t };
+            reelLid.RecalculateNormals(); reelLid.RecalculateBounds();
+            return reelLid;
         }
 
         // ---------------------------------------------------------------- manger / boire (objet en main, F)

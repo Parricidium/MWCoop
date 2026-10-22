@@ -125,7 +125,7 @@ namespace MWCoop
         static void Terrace()
         {
             string s = s21On ? Config.Get("Boutique", "Tasanne", DefaultPads) : "";
-            if (kinoOn) s = (s.Length > 0 ? s + ";" : "") + Kauppa.KinoPad();
+            if (kinoOn) { s = (s.Length > 0 ? s + ";" : "") + Kauppa.KinoPad(); Kauppa.KinoDrives(); }
             if (s.Length == 0) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             var pads = new List<float[]>();
@@ -185,10 +185,17 @@ namespace MWCoop
                 Vector3[] v;
                 try { v = m.vertices; } catch { Log.Info("defrichage : couche " + t.name + " illisible"); continue; }
                 Matrix4x4 l2w = t.localToWorldMatrix, w2l = t.worldToLocalMatrix;
-                int n = 0, inside = 0, nan = 0;
+                int n = 0, inside = 0, nan = 0, cut = 0;
                 for (int i = 0; i < v.Length; i++)
                 {
                     Vector3 w = l2w.MultiplyPoint3x4(v[i]);
+                    // bourrelet de neige sous une allee du cinema : rentre dans le sol (sinon il passait a travers l'asphalte)
+                    if (kinoOn && t.name == "Snowbanks" && Kauppa.OnKinoDrive(w.x, w.z))
+                    {
+                        float gs = grassY(w.x, w.z);
+                        if (!float.IsNaN(gs)) { w.y = Mathf.Min(w.y, gs - 0.4f); v[i] = w2l.MultiplyPoint3x4(w); n++; cut++; }
+                        continue;
+                    }
                     Vector2 bt = weight(w);
                     if (bt.x <= 0f) continue;
                     inside++;
@@ -197,7 +204,7 @@ namespace MWCoop
                     w.y += Mathf.Lerp(g, bt.y, bt.x) - g;
                     v[i] = w2l.MultiplyPoint3x4(w); n++;
                 }
-                if (inside > 0 || v.Length == 0) Log.Info("defrichage : couche " + t.name + " : " + v.Length + " sommets, " + inside + " dans la zone, " + nan + " sans sol dessous, " + grassCols.Count + " sols");
+                if (inside > 0 || cut > 0 || v.Length == 0) Log.Info("defrichage : couche " + t.name + " : " + v.Length + " sommets, " + inside + " dans la zone, " + nan + " sans sol dessous, " + cut + " sous les allees du cinema, " + grassCols.Count + " sols");
                 if (n == 0) continue;
                 m.vertices = v; m.RecalculateBounds();
                 if (mc != null && mc.sharedMesh == m) { mc.sharedMesh = null; mc.sharedMesh = m; }
@@ -273,7 +280,7 @@ namespace MWCoop
                 }
             return 99f;
         }
-        static bool IsRoad(float x, float z)
+        public static bool IsRoad(float x, float z)
         {
             RaycastHit best = new RaycastHit(); bool got = false;
             foreach (RaycastHit h in Physics.RaycastAll(new Vector3(x, 300f, z), Vector3.down, 400f))

@@ -134,7 +134,7 @@ namespace MWCoop
             parts.Clear(); cols.Clear();
             var keep = root; root = kino;
             // pied, carter (vert sombre), lanterne, objectif vers la fenetre de projection
-            Box(new Vector3(x - 0.25f, 0f, -0.35f), new Vector3(x + 0.25f, 1.9f, 0.35f), "ki_projektori");
+            Box(new Vector3(x - 0.25f, KBack, -0.35f), new Vector3(x + 0.25f, 1.9f, 0.35f), "ki_projektori");   // (sur le plancher de la cabine)
             Box(new Vector3(x - 0.3f, 1.9f, -0.22f), new Vector3(x + 0.3f, 2.6f, 0.22f), "ki_projektori");
             Box(new Vector3(x - 0.22f, 2.6f, -0.18f), new Vector3(x + 0.1f, 2.95f, 0.18f), "ki_musta");
             Flush();
@@ -368,13 +368,18 @@ namespace MWCoop
             string content = p.Content;
             if (content.Length == 0) return;
             SetProjector(p, "", false, 0, true);
-            Vector3 at = kino.transform.TransformPoint(new Vector3(p.S * 9.45f, 0.3f, 0.7f));   // (au sol de la cabine, pres de la porte)
+            Vector3 at = kino.transform.TransformPoint(new Vector3(p.S * 9.5f, KBack + 0.3f, 1.2f));   // (au sol de la cabine, pres de la porte)
             SpawnItem(KKela, content, at, kino.transform.rotation);
         }
 
         // image du film a l'instant (comme ShowFilm des cassettes) ; toile blanche sans film
         static void KinoShow(Projector p, float now)
         {
+            // son : dans la salle, il la remplit (enceintes partout : presque sans direction, meme volume au fond -- JD, 22/10) ;
+            // du hall ou de dehors, il vient de l'ecran et s'eteint avec la distance
+            bool inside = InSalle(p.Sali);
+            p.Audio.spatialBlend = inside ? 0.25f : 1f;
+            p.Audio.minDistance = inside ? 30f : 8f;
             if (p.Playing)
                 foreach (Transform r in p.Reels) if (r != null) r.Rotate(Vector3.right, Time.deltaTime * 140f, Space.Self);
             if (p.Beam != null && p.Beam.activeSelf != p.Playing) p.Beam.SetActive(p.Playing);
