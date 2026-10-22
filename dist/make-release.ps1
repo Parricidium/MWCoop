@@ -154,7 +154,9 @@ if ($Publier) {
             # Role Update Pings : seulement a la premiere version d'une famille X.Y (1.2, 1.3, 1.4...), pas aux X.Y.1, X.Y.2...
             # (demande de JD, 21/10) ; -Ping force la mention. La famille est connue par les tags deja poses (v$Version exclu).
             $xy = (($Version -split '\.')[0..1]) -join '.'
-            $family = @(git tag -l "v$xy.*" | Where-Object { $_.Trim() -and $_.Trim() -ne "v$Version" })
+            # (les pre-versions -- v1.10.0-nightly.1... -- ne sont jamais annoncees : elles ne comptent pas comme famille deja annoncee ;
+            # la 1.10.0 est partie sans mention a cause de sa nightly, 22/10)
+            $family = @(git tag -l "v$xy.*" | Where-Object { $_.Trim() -and $_.Trim() -ne "v$Version" -and $_.Trim() -notmatch '-' })
             $big = $Ping -or ($family.Count -eq 0)
             "Annonce Discord : " + $(if ($big) { "avec @Update Pings (premiere version $xy)" } else { "sans mention (famille $xy deja annoncee : $($family -join ', '))" })
             $head = $(if ($big) { "<@&$($w[1].Trim())> " } else { '' }) + "**MWCoop $Version is out!**"
