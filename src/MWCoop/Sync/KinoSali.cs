@@ -503,6 +503,24 @@ namespace MWCoop
                     break;
                 }
                 case "lippu": ticketDay = GameDay; L("essai : billet du jour " + ticketDay); break;
+                case "sonde":
+                {
+                    // sonde x z0 z1 : le sol le long d'une ligne nord-sud (collider touche et hauteur, aux changements) -- emplacement
+                    float x = F(a[2]), z0 = F(a[3]), z1 = F(a[4]);
+                    var sb = new System.Text.StringBuilder("essai : sonde x " + x + " :");
+                    string last = null;
+                    for (float z = z0; z <= z1; z += 1f)
+                    {
+                        RaycastHit best = new RaycastHit(); bool got = false;
+                        foreach (RaycastHit h in Physics.RaycastAll(new Vector3(x, 300f, z), Vector3.down, 400f))
+                            if (!h.collider.isTrigger && (!got || h.distance < best.distance)) { best = h; got = true; }
+                        string n = got ? best.collider.name : "-";
+                        if (n != last) { sb.Append(" | z" + z + " " + n + " " + (got ? best.point.y.ToString("F1") : "")); last = n; }
+                        else if (((int)z) % 10 == 0) sb.Append(" .z" + z + " " + (got ? best.point.y.ToString("F1") : ""));
+                    }
+                    L(sb.ToString());
+                    break;
+                }
                 case "kelamontage": { Esine k = esineet.FindLast(e => e.Kind == KKela); if (k != null) OpenMontage(k); L("essai : montage de la bobine " + (k != null ? k.Data : "-")); break; }
                 case "linkki": SetProjector(projectors[int.Parse(a[2])], "url:" + a[3] + "~" + LinkTitle(a[3]), true, a.Length > 4 ? int.Parse(a[4]) : 0, true); break;   // linkki <sali> <adresse> [ms]
                 case "tuokela":
