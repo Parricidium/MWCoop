@@ -47,11 +47,11 @@ enum {
     UI_GFX_GROUP = 2560,          // + groupe (13) : plier / deplier une categorie des Options du jeu
     UI_GFX_PRESET = 2590,         // + prereglage
     UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)
-    UI_LOBBY_OPT = 3200,          // SALON (0.96.4) : + option * 3 + (0 ligne / interrupteur, 1 fleche gauche, 2 fleche droite) (kLobbyOptDefs, 3200-3247)
-    UI_LOBBY_PRIV = 3260,         // + 0 public, 1 prive
-    UI_LOBBY_COPY = 3262, UI_LOBBY_REGEN, UI_LOBBY_MAXM, UI_LOBBY_MAXP,   // code : copier, nouveau ; joueurs au plus - / +
-    UI_LOBBY_OPTTAB = 3268,       // + 0 la partie, 1 les miennes (onglets de la carte des options, hote)
-    UI_LOBBY_CODEOK = 3270,       // ENTRER : code d'un salon Steam prive
+    UI_LOBBY_OPT = 3200,          // SALON (0.96.4) : + option * 3 + (0 ligne / interrupteur, 1 fleche gauche, 2 fleche droite) (kLobbyOptDefs : 33 options au plus, 3200-3299)
+    UI_LOBBY_PRIV = 3300,         // + 0 public, 1 prive   (3300+ depuis 1.8.9 : 26 options x 3 debordaient sur 3260-3279, Marqueurs cliquait « Tous » des ajouts)
+    UI_LOBBY_COPY = 3302, UI_LOBBY_REGEN, UI_LOBBY_MAXM, UI_LOBBY_MAXP,   // code : copier, nouveau ; joueurs au plus - / +
+    UI_LOBBY_OPTTAB = 3308,       // + 0 la partie, 1 les miennes (onglets de la carte des options, hote)
+    UI_LOBBY_CODEOK = 3310,       // ENTRER : code d'un salon Steam prive
     UI_NOTE = 300,                // + i : version i de la liste
     UI_NOTE_UPDATE = 290,
     UI_LOOKPIN = 400,             // + zone (0 tete, 1 torse, 2 jambes, 3 silhouette)

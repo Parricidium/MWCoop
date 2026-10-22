@@ -117,6 +117,11 @@ static const TutoStep kTuto[] = {
       L"Tools", L"The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.", "1.2.0" },
     { L"Addons dans la barre", L"Sous Mods : les voitures addons et la VAZ, chacune avec sa carte et sa livrée (gabarit, ton image).",
       L"Add-ons in the sidebar", L"Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).", "1.6.6" },
+    // 1.8.9 (22/10) : parler au micro (touche ou automatique), difficulte de depart sous « Nouvelle partie » (52, 53)
+    { L"Parler : touche ou automatique", L"Réglages > Son & vocal, « Parler » : Appuyer sur V (tu parles en tenant la touche, comme avant) ou Automatique (le micro s'ouvre dès que tu parles ; seuil réglable, F6 le coupe). Aussi dans le salon, Options > Les miennes.",
+      L"Talk: key or automatic", L"Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as before) or Automatic (the mic opens as soon as you talk; adjustable threshold, F6 mutes it). Also in the lobby, Options > Mine.", "1.8.9" },
+    { L"Difficulté de départ", L"En hébergeant, choisis « Nouvelle partie » : la difficulté s'affiche juste dessous. Vanilla : le jeu tel quel ; Facile, Moyenne, Difficile : argent et carburant de départ ; Hasard. Pour tous, MWC et MSC. Défaut : Réglages > Co-op.",
+      L"Start difficulty", L"When hosting, pick \"New game\": the difficulty shows right below. Vanilla: the game as is; Easy, Medium, Hard: starting money and fuel; Random. For everyone, MWC and MSC. Default: Settings > Co-op.", "1.8.9" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -133,7 +138,7 @@ static const TutoStep &TutoStepOf(int i)
     if (g_game == GAME_MSC && i == 34) return kTutoMsc34;
     return kTuto[i];
 }
-static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33); }
+static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33 || i == 52); }   // (52 : Addons, voitures de My Winter Car)
 
 // Pastille d'un onglet de la page Reglages (meme calcul que DrawSettingsPage : gfx.inc) et champ Chercher un reglage de
 // l'en-tete (DrawSetSearchBox : a gauche des raccourcis API / Journaux / Credits, ui.inc DrawHeader).
@@ -203,10 +208,14 @@ static RectF TutoTarget(int i)
     case 50: return TutoSetTab(SET_HUD);                     // onglet HUD (TutoGo l'ouvre)
     // 1.2.0
     case 51: return g_navR[TAB_TOOLS];                       // raccourci Outils de l'en-tete (ui.inc DrawHeader)
+    case 52: return g_navR[TAB_ADDONS];                      // 1.6.6 : Addons dans la barre (cible oubliee jusqu'en 1.8.9 : bulle au centre)
+    // 1.8.9
+    case 53: return TutoSetTab(SET_SON);                     // onglet Son & vocal (SetTutoTab l'ouvre) : Parler
+    case 54: return g_btn[B_HOST].r;                         // HEBERGER : la difficulte sous « Nouvelle partie » (carte de droite du salon)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

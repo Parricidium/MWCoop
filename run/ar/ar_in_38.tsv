@@ -1,0 +1,22 @@
+SH1	Talk: key held, or as soon as you talk
+SH2	Press V
+SH3	Automatic
+SH4	Talk
+SH5	Press V (key held), or automatic: as soon as you talk · F6: mute
+SH6	Threshold (automatic)
+SH7	Lower = more sensitive
+SH8	Start difficulty
+SH9	New game: money and fuel · Vanilla = the game as is
+SH10	Car window speed
+SH11	Passenger: lean out only with the window open
+SH12	Talk key
+SH13	Key held, or as soon as you talk
+SH14	Sleeping players, within 12 m
+SH15	Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nTalk: \"Press V\" (key held, set in the Keys tab) or \"Automatic\" (the mic opens as soon as you talk, above the threshold; F6 mutes it). Voice volume only changes what you hear; your microphone, what the others hear from you.
+SH16	Money and fuel, for everyone
+SH17	Start difficulty: 
+SH18	Difficulty
+SH19	Windows
+SH20	Talk: key or automatic
+SH21	Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as before) or Automatic (the mic opens as soon as you talk; adjustable threshold, F6 mutes it). Also in the lobby, Options > Mine.
+SH22	When hosting, pick \"New game\": the difficulty shows right below. Vanilla: the game as is; Easy, Medium, Hard: starting money and fuel; Random. For everyone, MWC and MSC. Default: Settings > Co-op.

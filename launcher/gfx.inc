@@ -208,7 +208,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "GainMicro", L"Volume de ton micro (pour les autres)", L"Your microphone volume (for the others)", 100, { 100, 150, 200, 300 },
           { L"Normal", L"150 %", L"200 %", L"300 %" }, { L"Normal", L"150 %", L"200 %", L"300 %" }, 0, 6, "Coop" },
         // (suggestion de .formallybad, 18/10 : « vocal a activation par la voix, avec une touche muet ») -- Sync/Voice.cs
-        { "VocalActivation", L"Micro ouvert par la voix (sinon touche appuyée)", L"Voice activation (else push-to-talk)", 0, {}, {}, {}, 0, 6, "Coop" },
+        // (JD, 22/10 : « laisser le choix : appuyer sur V pour parler, ou la detection automatique »)
+        { "VocalActivation", L"Parler : touche tenue, ou dès que tu parles", L"Talk: key held, or as soon as you talk", 0, { 0, 1 }, { L"Appuyer sur V", L"Automatique" }, { L"Press V", L"Automatic" }, 0, 6, "Coop" },
         { "VocalSeuil", L"Seuil d'activation par la voix", L"Voice activation threshold", 12, { 5, 12, 20, 35 },
           { L"5 %", L"12 %", L"20 %", L"35 %" }, { L"5 %", L"12 %", L"20 %", L"35 %" }, 0, 6, "Coop" },
         { "Ronflements", L"Ronflements des joueurs endormis", L"Sleeping players snore", 1, {}, {}, {}, 0, 6, "Coop" },
@@ -217,7 +218,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "ArgentDepart", L"Argent de départ des invités", L"Guests' starting money", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion du 14/10 : « difficulte de depart : carburant, argent ; facile, moyen, difficile, standard, au hasard ») -- Sync/Difficulty.cs
         { "Difficulte", L"Difficulté de départ (hôte, nouvelle partie)", L"Start difficulty (host, new game)", 0, { 0, 1, 2, 3, 4 },
-          { L"Jeu", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Game", L"Easy", L"Medium", L"Hard", L"Random" }, 0, 8, "Coop" },
+          { L"Vanilla", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Vanilla", L"Easy", L"Medium", L"Hard", L"Random" }, 0, 8, "Coop" },   // (0 : le jeu tel quel -- « Vanilla », JD 22/10)
         { "VitesseVitres", L"Vitesse des vitres des voitures (hôte)", L"Car window speed (host)", 1, { 1, 2, 3, 4 },
           { L"Jeu", L"x2", L"x3", L"x4" }, { L"Game", L"x2", L"x3", L"x4" }, 0, 8, "Coop" },
         { "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", 1, {}, {}, {}, 0, 8, "Coop" },
@@ -306,7 +307,7 @@ static const std::vector<GfxRow> &GfxRows()
     pills("VolumeVocal", { 50, 75, 100 }, { L"50", L"75", L"100 %" }, {});
     pills("GainMicro", { 100, 150, 200, 300 }, { L"Normal", L"150", L"200", L"300 %" }, {});
     pills("VocalSeuil", { 5, 12, 20, 35 }, { L"5", L"12 %", L"20", L"35" }, {});
-    pills("Difficulte", { 0, 1, 2, 3, 4 }, { L"Jeu", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Game", L"Easy", L"Medium", L"Hard", L"Random" });
+    pills("Difficulte", { 0, 1, 2, 3, 4 }, { L"Vanilla", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Vanilla", L"Easy", L"Medium", L"Hard", L"Random" });
     pills("VitesseVitres", { 1, 2, 3, 4 }, { L"Jeu", L"x2", L"x3", L"x4" }, { L"Game", L"x2", L"x3", L"x4" });
     // My Summer Car (19/10) : ni temperature du corps ni sueur dans ce jeu ; ses options graphiques (Systems/Options::GFX, vidage
     // v.250908-04) n'ont pas d'ombres de la lune, les retroviseurs y sont un oui / non (CarMirrors) ; en plus, ses reflets de
@@ -564,6 +565,9 @@ static const SetItem kSetItems[] = {
     { 6, SI_X, "footer", L"Appliqués au prochain lancement du jeu · en jeu : F10.", L"Applied at the next game start · in game: F10.", L"DE", NULL, 2 },
     { 7, SI_GFX, "Vocal", NULL, NULL, NULL, NULL }, { 7, SI_GFX, "VocalPortee", NULL, NULL, NULL, NULL }, { 7, SI_GFX, "VolumeVocal", NULL, NULL, L"Ce que tu entends", L"What you hear" },
     { 7, SI_GFX, "GainMicro", L"Mon micro (pour les autres)", L"My microphone (for the others)", NULL, NULL },
+    // (1.8.9 : les lignes de 1.8.8 n'etaient dans aucune carte -- JD : « laisser le choix, appuyer sur V ou detection automatique »)
+    { 7, SI_GFX, "VocalActivation", L"Parler", L"Talk", L"Appuyer sur V (touche tenue), ou automatique : dès que tu parles · F6 : muet", L"Press V (key held), or automatic: as soon as you talk · F6: mute" },
+    { 7, SI_GFX, "VocalSeuil", L"Seuil (automatique)", L"Threshold (automatic)", L"Plus bas = plus sensible", L"Lower = more sensitive" },
     { 7, SI_X, "footer", L"Appliqués tout de suite, même en jeu.", L"Applied right away, even in game.", L"DE", NULL, 2 },
     { 8, SI_X, "voicehelp", NULL, NULL, NULL, NULL },
     { 9, SI_SEC, NULL, L"Règles", L"Rules", NULL, NULL },
@@ -571,6 +575,9 @@ static const SetItem kSetItems[] = {
     { 9, SI_GFX, "Triches", L"Autoriser les triches (F7)", L"Allow cheats (F7)", NULL, NULL },
     { 9, SI_GFX, "Renverser", L"Les voitures renversent les joueurs", L"Cars run players over", L"Amis et PNJ", L"Friends and NPCs" },
     { 9, SI_GFX, "PvP", L"Coups de poing entre joueurs", L"Punches between players", NULL, NULL },
+    { 9, SI_GFX, "Difficulte", L"Difficulté de départ", L"Start difficulty", L"Nouvelle partie : argent et carburant · Vanilla = le jeu tel quel", L"New game: money and fuel · Vanilla = the game as is" },
+    { 9, SI_GFX, "VitesseVitres", L"Vitesse des vitres des voitures", L"Car window speed", NULL, NULL },
+    { 9, SI_GFX, "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", NULL, NULL },
     { 9, SI_SEC, NULL, L"Jeux & ajouts", L"Games & additions", NULL, NULL },
     { 9, SI_GFX, "VenttiEnjeux", NULL, NULL, NULL, NULL },
     // (Jokkis a louer retirees le 18/10 : la VAZ-2108 prend la place d'une IA a la course sur glace)
@@ -583,7 +590,8 @@ static const SetItem kSetItems[] = {
     // Chez moi (maquette Co-op) : vocal a gauche, partage et affichage a droite (les lignes du vocal sont aussi dans Son & vocal).
     { 10, SI_SEC, NULL, L"Vocal", L"Voice", NULL, NULL },
     { 10, SI_GFX, "Vocal", NULL, NULL, NULL, NULL },
-    { 10, SI_GFX, "Touche:Vocal", L"Parler", L"Talk", L"Touche tenue", L"Hold the key" },
+    { 10, SI_GFX, "Touche:Vocal", L"Touche pour parler", L"Talk key", L"Touche tenue", L"Hold the key" },
+    { 10, SI_GFX, "VocalActivation", L"Parler", L"Talk", L"Touche tenue, ou dès que tu parles", L"Key held, or as soon as you talk" },
     { 10, SI_GFX, "VocalPortee", NULL, NULL, NULL, NULL }, { 10, SI_GFX, "VolumeVocal", NULL, NULL, NULL, NULL },
     { 10, SI_GFX, "GainMicro", L"Mon micro (pour les autres)", L"My microphone (for the others)", NULL, NULL },
     { 10, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
@@ -592,6 +600,7 @@ static const SetItem kSetItems[] = {
     { 10, SI_GFX, "VoirVisages", NULL, NULL, L"Visages, peintures, posters", L"Faces, paints, posters" },
     { 10, SI_GFX, "Marqueurs", NULL, NULL, NULL, NULL },
     { 10, SI_GFX, "CarteMaintenir", L"Carte (M)", L"Map (M)", NULL, NULL },
+    { 10, SI_GFX, "Ronflements", NULL, NULL, L"Les joueurs endormis, à 12 m", L"Sleeping players, within 12 m" },
     { 10, SI_OPT, "ContenuEnvoye", L"Mon contenu envoyé", L"My content sent", NULL, NULL },
     { 11, SI_X, "net", L"Réseau par défaut", L"Default network", L"Steam : amis ; IP / VPN : port à ouvrir", L"Steam: friends; IP / VPN: port to open", 1 },
     { 11, SI_OPT, "Port", L"Port (IP / VPN)", L"Port (IP / VPN)", L"UDP et TCP ; à rediriger sur la box", L"UDP and TCP; to forward on the router", 1 },
@@ -1255,8 +1264,8 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             SetRowLabel(g, row, T(it.fr, it.en), T(it.dFr, it.dEn), w - 56);
             SetKeyCap(g, RectF(x + w - 44, cy - 15, 44, 30), L"F10", false, false, true);
         } else if (!strcmp(k, "voicehelp")) {
-            Para(g, T(L"Le vocal est de proximité : on t'entend jusqu'à la portée choisie, de moins en moins fort en s'éloignant, comme en vrai. Le micro et les haut-parleurs sont ceux de Windows (périphériques par défaut).\n\nLa touche pour parler (tenue) est dans l'onglet Touches. Le volume des voix ne change que ce que tu entends ; ton micro, ce que les autres entendent de toi.",
-                      L"Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nThe push-to-talk key is in the Keys tab. Voice volume only changes what you hear; your microphone, what the others hear from you."),
+            Para(g, T(L"Le vocal est de proximité : on t'entend jusqu'à la portée choisie, de moins en moins fort en s'éloignant, comme en vrai. Le micro et les haut-parleurs sont ceux de Windows (périphériques par défaut).\n\nParler : « Appuyer sur V » (touche tenue, réglable dans Touches) ou « Automatique » (le micro s'ouvre dès que tu parles, au-dessus du seuil ; F6 le coupe). Le volume des voix ne change que ce que tu entends ; ton micro, ce que les autres entendent de toi.",
+                      L"Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nTalk: \"Press V\" (key held, set in the Keys tab) or \"Automatic\" (the mic opens as soon as you talk, above the threshold; F6 mutes it). Voice volume only changes what you hear; your microphone, what the others hear from you."),
                  RectF(x, y + 4, w, h - 8), 12.5f, kGrey);
         } else if (!strcmp(k, "ajouts")) {   // Tous / Choisir / Aucun : SansAjouts, et les interrupteurs (ceux du jeu choisi)
             bool none = GfxGet("SansAjouts") == 1;
@@ -1802,7 +1811,7 @@ static bool SetChar(wchar_t c)
 static void SetEnter(int tab) { g_setTab = tab == TAB_COOP ? SET_COOP : SET_JEU; g_setSearch.clear(); g_setFocus = false; }
 // La barre de gauche suit l'onglet : Jeu / Image / Son = page Jeu (TAB_GFX), le reste = Co-op (TAB_COOP).
 static void SetRail() { int t = g_setTab <= SET_SON ? TAB_GFX : TAB_COOP; if (g_tab == TAB_GFX || g_tab == TAB_COOP) g_tab = t; }
-static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage)
+static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : step == 53 ? SET_SON : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage ; 53 : Son & vocal, parler)
 static void SetCaptureState(const std::wstring &st)
 {
     static const wchar_t *names[SET_N] = { L"jeu", L"image", L"hud", L"son", L"coop", L"touches", L"theme", L"lanceur" };

@@ -1671,6 +1671,27 @@ Passenger: lean out only with the window open	الراكب: الميل للخا�
 Easy	سهل
 Medium	متوسط
 Hard	صعب
+Talk: key held, or as soon as you talk	التحدث: مع الاستمرار بالضغط على المفتاح، أو بمجرد أن تتكلم
+Press V	اضغط V
+Automatic	تلقائي
+Talk	التحدث
+Press V (key held), or automatic: as soon as you talk · F6: mute	اضغط V (مع الاستمرار)، أو تلقائي: بمجرد أن تتكلم · F6: كتم
+Threshold (automatic)	العتبة (تلقائي)
+Lower = more sensitive	أقل = أكثر حساسية
+Start difficulty	صعوبة البداية
+New game: money and fuel · Vanilla = the game as is	لعبة جديدة: المال والوقود · Vanilla = اللعبة كما هي
+Car window speed	سرعة نوافذ السيارات
+Talk key	مفتاح التحدث
+Key held, or as soon as you talk	مع الاستمرار بالضغط، أو بمجرد أن تتكلم
+Sleeping players, within 12 m	اللاعبون النائمون، ضمن 12 م
+Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nTalk: \"Press V\" (key held, set in the Keys tab) or \"Automatic\" (the mic opens as soon as you talk, above the threshold; F6 mutes it). Voice volume only changes what you hear; your microphone, what the others hear from you.	الصوت حسب القرب: يُسمع صوتك حتى المدى المختار، ويخفت مع المسافة، كما في الواقع. الميكروفون ومكبرات الصوت هي أجهزة Windows الافتراضية.\n\nالتحدث: \"اضغط V\" (مع الاستمرار بالضغط على المفتاح، يُضبط في تبويب المفاتيح) أو \"تلقائي\" (يفتح الميكروفون بمجرد أن تتكلم، فوق العتبة؛ F6 يكتمه). مستوى الأصوات يغيّر ما تسمعه أنت فقط؛ وميكروفونك ما يسمعه الآخرون منك.
+Money and fuel, for everyone	المال والوقود، للجميع
+Start difficulty: 	صعوبة البداية: 
+Difficulty	الصعوبة
+Windows	النوافذ
+Talk: key or automatic	التحدث: مفتاح أو تلقائي
+Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as before) or Automatic (the mic opens as soon as you talk; adjustable threshold, F6 mutes it). Also in the lobby, Options > Mine.	الإعدادات > الصوت والمحادثة، \"التحدث\": اضغط V (تتكلم مع الاستمرار بالضغط على المفتاح، كما من قبل) أو تلقائي (يفتح الميكروفون بمجرد أن تتكلم؛ عتبة قابلة للضبط، F6 يكتمه). أيضًا في الردهة: الخيارات > خياراتي.
+When hosting, pick \"New game\": the difficulty shows right below. Vanilla: the game as is; Easy, Medium, Hard: starting money and fuel; Random. For everyone, MWC and MSC. Default: Settings > Co-op.	عند الاستضافة، اختر \"لعبة جديدة\": تظهر الصعوبة تحتها مباشرة. Vanilla: اللعبة كما هي؛ سهل، متوسط، صعب: المال والوقود في البداية؛ عشوائي. للجميع، MWC وMSC. الافتراضي: الإعدادات > اللعب الجماعي.
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت
@@ -2564,3 +2585,5 @@ Roads: flat across with embankments, markings in the centre or on the edges; a p
 Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.	مجموعات تعمل: انقر على غرض من اللعبة؛ باب أو مقبض… يُنسخ بآلياته أو يُخفى كلياً.
 Objects, roads, terrain, plants, lights, co-op	أغراض، طرق، تضاريس، نباتات، أضواء، لعب جماعي
 In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin).	في المحرّر، الزر … بجانب خريطة حديثة: إعادة تسمية أو تكرار أو تحديث الخريطة المجمّعة أو إزالتها من اللعبة أو حذف المشروع (سلة محذوفات Windows).
+Talk: \"Press V\" (key held) or \"Automatic\" (the mic opens as soon as you talk, above the adjustable threshold; F6 mutes it). Both games.	التحدث: \"اضغط V\" (مع الاستمرار بالضغط) أو \"تلقائي\" (يفتح الميكروفون بمجرد أن تتكلم، فوق العتبة القابلة للضبط؛ F6 يكتمه). في اللعبتين.
+Start difficulty (Vanilla, Easy, Medium, Hard, Random): money and fuel of a new game, for everyone; also in the lobby, under \"New game\". Car window speed, passenger leaning out only with the window open.	صعوبة البداية (Vanilla، سهل، متوسط، صعب، عشوائي): مال ووقود اللعبة الجديدة، للجميع؛ أيضًا في الردهة، تحت \"لعبة جديدة\". سرعة نوافذ السيارات، والراكب يميل للخارج فقط والنافذة مفتوحة.

@@ -6,7 +6,7 @@ namespace MWCoop
 {
     // Difficulte de depart (suggestion du 14/10 : « choisir au debut : carburant du tracteur et de la Sorbet, argent liquide et en
     // banque ; facile, moyen, difficile, standard, tout au hasard »). [Coop] Difficulte, decidee par l'hote (lanceur, Options du
-    // jeu > Coop) : 0 le jeu, 1 facile (argent x2, reservoirs pleins), 2 moyen (argent x0,5, reservoirs a moitie), 3 difficile
+    // jeu > Coop ; aussi sous « Nouvelle partie » dans le salon, 1.8.9) : 0 vanilla (le jeu tel quel), 1 facile (argent x2, reservoirs pleins), 2 moyen (argent x0,5, reservoirs a moitie), 3 difficile
     // (argent x0,1, reservoirs a 15 %), 4 au hasard (tire d'apres l'identifiant de la partie : le meme pour tous). Appliquee par
     // l'hote au premier chargement d'une NOUVELLE partie (Flow.StartedNew), une fois : argent (PlayerMoney, PlayerBankAccount) et
     // chaque reservoir FuelTank* :: Data (FuelLevel, MaxCapacity). Les invites : leur argent de premiere venue suit le meme
@@ -74,7 +74,7 @@ namespace MWCoop
         public static string Name(int lvl)
         {
             switch (lvl) { case 1: return Lang.T("facile", "easy"); case 2: return Lang.T("moyenne", "medium"); case 3: return Lang.T("difficile", "hard"); case 4: return Lang.T("au hasard", "random"); }
-            return Lang.T("le jeu", "the game");
+            return "vanilla";
         }
     }
 }
