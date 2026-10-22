@@ -32,6 +32,8 @@ namespace MWCoop
             new Place { Key = "danse", Alias = "dance", Fr = "Salle de danse", En = "Dance hall", At = new Vector3(464.3f, 10.8f, 1325.9f), Face = new Vector3(455.1f, 13.1f, 1318.2f) },
             new Place { Key = "cabane", Alias = "cottage", Fr = "Cabane", En = "Cottage", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
             new Place { Key = "chalet", Alias = "cabin", Fr = "Chalet", En = "Cabin", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
+            // cinema KINO TAHTI (JD, 22/10) : sur le parking, devant les portes du hall (Kauppa.KinoFrame : local 0, 16), face au hall
+            new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f) },
         };
         // My Summer Car (19/10, vidage du jeu v.250908-04) : la meme carte pour les lieux communs ; le magasin de Teimo est a la
         // place du pub Nappo ; pas d'appartement ni de port ; les dragsters, le depart du rallye et Rykipohja en plus. (Alias :
@@ -74,12 +76,12 @@ namespace MWCoop
         static void Say(string s) { Chat.System(s); }
 
         static readonly string[] HelpFr = {
-            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet",
+            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, cinema",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)" };
         static readonly string[] HelpEn = {
-            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin",
+            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)" };
