@@ -1694,6 +1694,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Talk: key or automatic", L"التحدث: مفتاح أو تلقائي" },
     { L"Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as before) or Automatic (the mic opens as soon as you talk; adjustable threshold, F6 mutes it). Also in the lobby, Options > Mine.", L"الإعدادات > الصوت والمحادثة، \"التحدث\": اضغط V (تتكلم مع الاستمرار بالضغط على المفتاح، كما من قبل) أو تلقائي (يفتح الميكروفون بمجرد أن تتكلم؛ عتبة قابلة للضبط، F6 يكتمه). أيضًا في الردهة: الخيارات > خياراتي." },
     { L"When hosting, pick \"New game\": the difficulty shows right below. Vanilla: the game as is; Easy, Medium, Hard: starting money and fuel; Random. For everyone, MWC and MSC. Default: Settings > Co-op.", L"عند الاستضافة، اختر \"لعبة جديدة\": تظهر الصعوبة تحتها مباشرة. Vanilla: اللعبة كما هي؛ سهل، متوسط، صعب: المال والوقود في البداية؛ عشوائي. للجميع، MWC وMSC. الافتراضي: الإعدادات > اللعب الجماعي." },
+    { L"KINO TÄHTI cinema", L"سينما KINO TÄHTI" },
+    { L"Cinema", L"سينما" },
     { L"Proximity voice", L"الصوت حسب القرب" },
     { L"Voice range", L"مدى الصوت" },
     { L"Voice volume", L"مستوى الصوت" },
