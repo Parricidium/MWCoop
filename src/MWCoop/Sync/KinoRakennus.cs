@@ -30,7 +30,7 @@ namespace MWCoop
 
         public static bool KinoOn { get { return Ajouts.Kino && Config.GetInt("Kino", "Active", 1) != 0; } }
 
-        static void ResetKino() { OnLevelLoadedKino(); kino = null; kinoLeaves = null; kinoOpen = 0f; kinoNear = -10f; kinoSalLights.Clear(); ResetKinoKassa(); ResetKinoSali(); }
+        static void ResetKino() { OnLevelLoadedKino(); kino = null; kinoDrives = null; kinoLeaves = null; kinoOpen = 0f; kinoNear = -10f; kinoSalLights.Clear(); ResetKinoKassa(); ResetKinoSali(); }
 
         // place et cap du cinema (aussi pour le defrichage, Clearing)
         public static void KinoFrame(out Vector3 c, out float yaw, out string floor)
@@ -127,13 +127,17 @@ namespace MWCoop
             Mat("ki_kasvi", "plaster", 0.5f, new Color(0.18f, 0.42f, 0.16f));        // plantes vertes
             Mat("ki_punainen", "plaster", 2.0f, new Color(0.72f, 0.12f, 0.12f));     // bandeau rouge
             Mat("ki_betoni", "concrete_slabs", 3.0f, new Color(0.85f, 0.85f, 0.83f));
-            Mat("ki_asfaltti", "ASPHALT", 4.0f, new Color(0.75f, 0.75f, 0.76f));
-            Mat("ki_viiva", "plaster", 1f, new Color(0.95f, 0.95f, 0.9f));           // lignes du parking
+            // (couleurs unies, sans texture : les textures du jeu se repetaient partout -- JD, 22/10)
+            Mat("ki_asfaltti", "paint_black_matte", 1f, new Color(0.2f, 0.2f, 0.21f));   // asphalte
+            Mat("ki_viiva", "paint_black_matte", 1f, new Color(0.92f, 0.92f, 0.88f));    // lignes du parking
             Mat("ki_katto", "concrete_slabs", 3.0f, new Color(0.45f, 0.45f, 0.47f));
             Mat("ki_alu", "metal_galvanized", 1f, new Color(0.18f, 0.18f, 0.2f));    // menuiseries noires
             Mat("ki_kulta", "metal_galvanized", 1f, new Color(0.95f, 0.75f, 0.35f)); // laiton
-            Mat("ki_matto", "carpet1", 0.6f, new Color(0.55f, 0.08f, 0.12f));         // moquette bordeaux
-            Mat("ki_aula", "carpet3", 0.6f, new Color(0.22f, 0.28f, 0.6f));           // moquette du hall, bleue
+            Mat("ki_matto", "paint_black_matte", 1f, new Color(0.42f, 0.05f, 0.08f));   // moquette bordeaux (unie)
+            Mat("ki_aula", "paint_black_matte", 1f, new Color(0.13f, 0.17f, 0.36f));    // moquette du hall, bleue (unie)
+            Mat("ki_kyltti_in", "paint_black_matte", 1f, Color.white);
+            OwnMat("ki_sisaan", "kino-sisaan.png", true);
+            OwnMat("ki_ulosajo", "kino-ulosajo.png", true);
             Mat("ki_seina", "fabric_cotton", 1.2f, new Color(0.16f, 0.14f, 0.22f));   // tenture murale sombre
             Mat("ki_katossa", "plaster", 2.0f, new Color(0.12f, 0.12f, 0.14f));       // plafond des salles
             Mat("ki_sisakatto", "tiles4", 1.2f, new Color(0.95f, 0.95f, 0.95f));     // faux plafond du hall
@@ -186,8 +190,12 @@ namespace MWCoop
                 // mur exterieur en brique
                 var door = new Hole(-KD + 0.35f, -KD + 1.85f, KBack, KBack + 2.2f);   // (en haut des marches du hall)
                 var port = new Hole(-0.35f, 0.35f, 2.2f, 2.6f);   // (objectif du projecteur a 2,4 m : KinoSali)
+                // porte de la cabine de projection, cote salle (JD, 22/10 : depuis le hall, n'importe qui changeait le film) ;
+                // seuil au niveau de l'allee du fond de la salle
+                var booth = new Hole(0.75f, 1.65f, KBack, KBack + 2.1f);
                 float lobbyFace = s * (KPart - Wall / 2);
-                MWall(false, lobbyFace, s, -KD + Wall, KD - Wall, 0f, KLobH, new[] { door, port }, "ki_aulaseina", "ki_seina");
+                MWall(false, lobbyFace, s, -KD + Wall, KD - Wall, 0f, KLobH, new[] { door, port, booth }, "ki_aulaseina", "ki_seina");
+                Plane("ki_konehuone", new Vector3(s * (KPart + Wall / 2 + 0.012f), KBack + 2.35f, (booth.U0 + booth.U1) / 2f), 1.0f, 0.25f, s > 0 ? Vector3.right : Vector3.left);
                 MWall(false, lobbyFace, s, -KD + Wall, KD - Wall, KLobH, KSalH, new Hole[0], "ki_tiili", "ki_seina");
                 GlassZ(s * KPart, port.U0, port.U1, port.Y0, port.Y1);
                 // linteau de la porte de salle : enseigne SALI 1 / SALI 2
@@ -371,6 +379,15 @@ namespace MWCoop
                 }
             }
 
+            // enceintes du son d'ambiance sur les murs lateraux et au fond (decor : le son, KinoSali)
+            foreach (float wz in new[] { zi0 + 0.1f, zi1 - 0.1f })
+                foreach (float x in new[] { 15.5f, 20f, 24.2f })
+                {
+                    float d = wz < 0 ? 0.25f : -0.25f;
+                    Box(new Vector3(s * x - 0.28f, 4.0f, Mathf.Min(wz, wz + d)), new Vector3(s * x + 0.28f, 4.75f, Mathf.Max(wz, wz + d)), "ki_musta", false);
+                }
+            foreach (float z in new[] { -4f, 0f, 4f })
+                Box(new Vector3(Mathf.Min(s * (xin + 0.05f), s * (xin + 0.3f)), 4.6f, z - 0.28f), new Vector3(Mathf.Max(s * (xin + 0.05f), s * (xin + 0.3f)), 5.35f, z + 0.28f), "ki_musta", false);
             // appliques murales (la lumiere : KinoLights), bande lumineuse le long des marches
             foreach (float wz in new[] { zi0 + 0.06f, zi1 - 0.06f })
                 foreach (float x in new[] { 14f, 18f, 22f })
@@ -476,17 +493,15 @@ namespace MWCoop
         static void KinoBooth(float s)
         {
             float xo = s * 8.9f, xi = s * (KPart - Wall / 2), z0 = -1.9f, z1 = 1.9f, top = 3.5f, t = 0.12f;
-            var door = new Hole(-0.45f, 0.45f, 0f, 2.1f);
-            // mur cote hall, avec porte
-            foreach (var seg in new[] { new[] { z0, door.U0 }, new[] { door.U1, z1 } })
-                Box(new Vector3(Mathf.Min(xo, xo + s * t), 0f, seg[0]), new Vector3(Mathf.Max(xo, xo + s * t), top, seg[1]), "ki_aulaseina");
-            Box(new Vector3(Mathf.Min(xo, xo + s * t), door.Y1, door.U0), new Vector3(Mathf.Max(xo, xo + s * t), top, door.U1), "ki_aulaseina");
+            // mur cote hall, plein (on entre par la salle : porte dans la cloison, KinoShell)
+            Box(new Vector3(Mathf.Min(xo, xo + s * t), 0f, z0), new Vector3(Mathf.Max(xo, xo + s * t), top, z1), "ki_aulaseina");
+            // plancher de la cabine au niveau du fond de la salle
+            Box(new Vector3(Mathf.Min(xo, xi), 0f, z0), new Vector3(Mathf.Max(xo, xi), KBack, z1), null, null, "ki_betoni", null, null, null);
             // murs lateraux
             foreach (float z in new[] { z0, z1 - t })
                 Box(new Vector3(Mathf.Min(xo, xi), 0f, z), new Vector3(Mathf.Max(xo, xi), top, z + t), "ki_aulaseina");
             // plafond
             Box(new Vector3(Mathf.Min(xo, xi), top, z0), new Vector3(Mathf.Max(xo, xi), top + 0.08f, z1), "ki_aulaseina", false);
-            Plane("ki_konehuone", new Vector3(xo - s * 0.012f, 2.45f, 0f), 1.0f, 0.25f, s > 0 ? Vector3.left : Vector3.right);
         }
 
         // ---------------------------------------------------------------- parking
@@ -500,28 +515,134 @@ namespace MWCoop
                 RaycastHit? h = GroundHit(kino.transform.TransformPoint(new Vector3(x, 50f, z)));
                 return h.HasValue ? kino.transform.InverseTransformPoint(h.Value.point).y : -0.2f;
             };
-            HeightGrid("ki_asfaltti", x0, x1, z0, z1, 1.5f, gy, 0.04f);
-            // entree et sortie : allees vers les routes (10 m au-dela du muret)
-            foreach (float s in new[] { -1f, 1f })
-            {
-                float a = s * 24.2f;
-                HeightGrid("ki_asfaltti", Mathf.Min(a - s * 3f, a + s * 3f), Mathf.Max(a - s * 3f, a + s * 3f), z1, z1 + 9f, 1.5f, gy, 0.04f);
-            }
-            // places : 2,6 m de large, 5 m de profondeur depuis le trottoir ; pas devant l'entree du hall
+            // (maille de 1 m, 10 cm au-dessus du sol : avec 1,5 m et 4 cm, des triangles de neige du terrain passaient au travers)
+            HeightGrid("ki_asfaltti", x0, x1, z0, z1 + 0.6f, 1f, gy, 0.1f);
+            // places : 2,6 m de large, 5 m de profondeur depuis le trottoir, ligne du fond ; pas devant l'entree du hall
             for (float x = -25f; x <= 25.01f; x += 2.6f)
             {
                 if (Mathf.Abs(x) < 3.0f) continue;
-                Line(x, z0 + 0.2f, x, z0 + 5f, gy);
+                Line(x, z0 + 0.2f, x, z0 + 5.2f, gy);
             }
-            // fleches au sol : passage pieton devant les portes
-            for (float x = -2.6f; x <= 2.61f; x += 0.65f) Line(x - 0.18f, z0 + 0.6f, x - 0.18f, z0 + 4.4f, gy, 0.35f);
-            // muret : 0,9 m, brique et chaperon en beton ; au nord, ouvertures d'entree et de sortie
-            float mz = z1 + 0.3f;
-            WallRun(-21f, mz, 21f, mz, gy);
+            Line(-25f, z0 + 5.2f, -3.0f, z0 + 5.2f, gy); Line(3.0f, z0 + 5.2f, 25f, z0 + 5.2f, gy);
+            // passage pieton devant les portes du hall (bandes paralleles a la facade, comme un vrai passage)
+            for (float z = z0 + 0.5f; z <= z0 + 4.6f; z += 0.7f) Line(-2.4f, z, 2.4f, z, gy, 0.35f);
+            // muret : 0,9 m, brique et chaperon en beton ; au nord, entree (ouest) et sortie (est), larges de 7,8 m, piliers
+            float mz = z1 + 0.3f, gx = KL + 1.8f;
+            WallRun(-20f, mz, 20f, mz, gy);
             foreach (float s in new[] { -1f, 1f })
-                WallRun(s * (KL + 1.8f), -KD + 0.2f, s * (KL + 1.8f), mz, gy);
+            {
+                WallRun(s * gx, -KD + 0.2f, s * gx, mz, gy);
+                foreach (float px in new[] { s * 20f, s * gx }) KinoPillar(px, mz, gy);
+                // panneau sur le pilier du cote du muret, fleche peinte au sol (entree : vers le parking ; sortie : vers la route)
+                float cx = s * (20f + gx) / 2f, g = gy(s * 20f, mz);
+                Plane(s < 0 ? "ki_sisaan" : "ki_ulosajo", new Vector3(s * 20f, g + 1.55f, mz + 0.27f), 0.48f, 0.6f, Vector3.forward);
+                GroundArrow(cx, mz - 2.5f, s < 0 ? -1f : 1f, gy);
+                KinoDriveway(KinoDrives()[s < 0 ? 0 : 1], gy);
+            }
             // lampadaires (lumiere : KinoLights)
             foreach (float x in new[] { -19f, -7f, 7f, 19f }) KinoLamp(new Vector3(x, gy(x, z1 - 0.6f), z1 - 0.6f));
+        }
+
+        // pilier de brique (0,5 x 1,3 m, chaperon en beton) au bout d'un muret
+        static void KinoPillar(float x, float z, Func<float, float, float> gy)
+        {
+            float g = gy(x, z);
+            Box(new Vector3(x - 0.25f, g - 0.5f, z - 0.25f), new Vector3(x + 0.25f, g + 1.3f, z + 0.25f), "ki_tiili");
+            Box(new Vector3(x - 0.3f, g + 1.3f, z - 0.3f), new Vector3(x + 0.3f, g + 1.4f, z + 0.3f), "ki_betoni", false);
+        }
+
+        // fleche blanche peinte au sol, pointe vers +z (dir 1) ou -z (dir -1)
+        static void GroundArrow(float x, float z, float dir, Func<float, float, float> gy)
+        {
+            Line(x, z - dir * 1.4f, x, z + dir * 0.4f, gy, 0.35f);
+            float y = gy(x, z + dir * 0.6f) + 0.13f;
+            Vector3 a = new Vector3(x - 0.6f, y, z + dir * 0.35f), b = new Vector3(x + 0.6f, y, z + dir * 0.35f), c = new Vector3(x, y, z + dir * 1.3f);
+            if (dir > 0) Tri("ki_viiva", a, c, b); else Tri("ki_viiva", b, c, a);
+        }
+
+        // allee d'asphalte de l'ouverture du muret jusqu'a la route la plus proche (sondee : Clearing.IsRoad), 6,5 m de
+        // large, en troncons de 1 m qui suivent le sol (et le bord de la route a l'arrivee)
+        // Allees d'entree et de sortie : de l'ouverture du muret jusqu'au bord de la route la plus proche (sondee :
+        // Clearing.IsRoad), calculees une fois par chargement (le defrichage en a besoin avant la construction : bourrelets de
+        // neige coupes dessous). Repere du cinema : [depart, arrivee sur la route].
+        static List<Vector3[]> kinoDrives;
+        public static List<Vector3[]> KinoDrives()
+        {
+            if (kinoDrives != null) return kinoDrives;
+            kinoDrives = new List<Vector3[]>();
+            Vector3 c; float yaw; string fl;
+            KinoFrame(out c, out yaw, out fl);
+            Quaternion r = Quaternion.Euler(0, yaw, 0);
+            float mz = KPark + 0.3f, gx = KL + 1.8f;
+            foreach (float s in new[] { -1f, 1f })
+            {
+                float cx = s * (20f + gx) / 2f;
+                Vector3 from = new Vector3(cx, 0f, mz - 0.4f), best = new Vector3(cx, 0f, mz + 8f);
+                float bd = float.MaxValue;
+                for (float dz = 1f; dz <= 26f; dz += 1f)
+                    for (float dx = -14f; dx <= 14f; dx += 1f)
+                    {
+                        Vector3 p = new Vector3(cx + dx, 0f, mz + dz), w = c + r * p;
+                        if (!Clearing.IsRoad(w.x, w.z)) continue;
+                        float d = (p - from).sqrMagnitude;
+                        if (d < bd) { bd = d; best = p; }
+                    }
+                kinoDrives.Add(new[] { from, best });
+                L("cinema : allee de l'ouverture x " + cx.ToString("F0") + (bd < float.MaxValue ? " vers la route a " + Mathf.Sqrt(bd).ToString("F1") + " m" : " : pas de route trouvee"));
+            }
+            return kinoDrives;
+        }
+
+        // le point (x, z du monde) est-il sous une allee (bourrelets de neige de la route a couper : Clearing)
+        public static bool OnKinoDrive(float x, float z)
+        {
+            if (kinoDrives == null) return false;
+            Vector3 c; float yaw; string fl;
+            KinoFrame(out c, out yaw, out fl);
+            Vector3 p = Quaternion.Inverse(Quaternion.Euler(0, yaw, 0)) * new Vector3(x - c.x, 0f, z - c.z);
+            foreach (Vector3[] d in kinoDrives)
+            {
+                Vector3 dir = d[1] - d[0]; float len = dir.magnitude; if (len < 0.1f) continue; dir /= len;
+                float along = Vector3.Dot(p - d[0], dir), across = Mathf.Abs(Vector3.Dot(p - d[0], new Vector3(dir.z, 0f, -dir.x)));
+                if (along > -1f && along < len + 3f && across < 4.2f) return true;
+            }
+            return false;
+        }
+
+        // allee : asphalte de 6,5 m en troncons de 50 cm qui suivent le sol, bordures de beton qui descendent dans la neige ;
+        // elle s'arrete au bord de la route (son accotement enneige fait partie du maillage de la route, intouchable)
+        static void KinoDriveway(Vector3[] d, Func<float, float, float> gy)
+        {
+            Vector3 from = d[0], dir = d[1] - d[0];
+            float len = Mathf.Max(1f, dir.magnitude - 1.2f);
+            dir.y = 0f; dir.Normalize();
+            Vector3 side = new Vector3(dir.z, 0f, -dir.x) * 3.25f;
+            int n = Mathf.Max(1, Mathf.CeilToInt(len / 0.5f));
+            for (int i = 0; i < n; i++)
+            {
+                Vector3 p0 = from + dir * (len * i / n), p1 = from + dir * (len * (i + 1) / n);
+                Vector3[] q = { p0 - side, p0 + side, p1 + side, p1 - side };
+                for (int k = 0; k < 4; k++) q[k].y = gy(q[k].x, q[k].z) + 0.08f;
+                if (Vector3.Cross(q[3] - q[0], q[1] - q[0]).y > 0f) Quad("ki_asfaltti", q[0], q[1], q[2], q[3]);
+                else Quad("ki_asfaltti", q[1], q[0], q[3], q[2]);
+                // bordures : face exterieure en beton, du bord de l'asphalte a 25 cm sous le sol
+                foreach (int e in new[] { 0, 1 })
+                {
+                    Vector3 a = e == 0 ? q[0] : q[1], b = e == 0 ? q[3] : q[2];
+                    Vector3 out0 = (e == 0 ? -side : side).normalized * 0.12f;
+                    Vector3 a2 = a + out0, b2 = b + out0;
+                    a2.y = gy(a2.x, a2.z) - 0.25f; b2.y = gy(b2.x, b2.z) - 0.25f;
+                    Vector3 at = a + out0 + Vector3.up * 0.02f, bt = b + out0 + Vector3.up * 0.02f;
+                    // dessus de la bordure et sa face exterieure (deux faces : vue des deux cotes)
+                    Quad("ki_betoni", a, b, bt, at); Quad("ki_betoni", b, a, at, bt);
+                    Quad("ki_betoni", at, bt, b2, a2); Quad("ki_betoni", bt, at, a2, b2);
+                }
+            }
+            // fin de l'allee : petite rampe jusqu'au sol (bord vers la route)
+            Vector3 e0 = from + dir * len - side, e1 = from + dir * len + side;
+            Vector3 f0 = e0 + dir * 0.6f, f1 = e1 + dir * 0.6f;
+            e0.y = gy(e0.x, e0.z) + 0.08f; e1.y = gy(e1.x, e1.z) + 0.08f; f0.y = gy(f0.x, f0.z) - 0.05f; f1.y = gy(f1.x, f1.z) - 0.05f;
+            if (Vector3.Cross(f0 - e0, e1 - e0).y > 0f) Quad("ki_asfaltti", e0, e1, f1, f0); else Quad("ki_asfaltti", e1, e0, f0, f1);
         }
 
         // grille de quads (cellule c) a la hauteur du sol + lift
@@ -547,7 +668,7 @@ namespace MWCoop
             for (int i = 0; i < steps; i++)
             {
                 Vector3 p0 = new Vector3(xa, 0, za) + d * (i / (float)steps), p1 = new Vector3(xa, 0, za) + d * ((i + 1) / (float)steps);
-                p0.y = gy(p0.x, p0.z) + 0.06f; p1.y = gy(p1.x, p1.z) + 0.06f;
+                p0.y = gy(p0.x, p0.z) + 0.12f; p1.y = gy(p1.x, p1.z) + 0.12f;   // (sur l'asphalte, a 10 cm du sol)
                 Quad("ki_viiva", p0 - n, p0 + n, p1 + n, p1 - n);
             }
         }
@@ -679,6 +800,15 @@ namespace MWCoop
             m.triangles = new[] { 0, 2, 1, 0, 3, 2, 0, 1, 2, 0, 2, 3 };
             m.RecalculateBounds();
             if (mc != null) { mc.sharedMesh = null; mc.sharedMesh = m; }
+            // temperature dedans (automate « Data » de la zone abritee, variable Temp : 17 ou 21 chez Teimo et a l'inspection) :
+            // un cinema chauffe ([Kino] Lampo, 21 par defaut ; JD, 22/10)
+            float temp = Config.GetFloat("Kino", "Lampo", 21f);
+            foreach (PlayMakerFSM f in g.GetComponents<PlayMakerFSM>())
+            {
+                if (f.FsmName != "Data") continue;
+                HutongGames.PlayMaker.FsmFloat tv = f.FsmVariables.FindFsmFloat("Temp");
+                if (tv != null) { L("cinema : temperature dedans " + tv.Value.ToString("F0") + " -> " + temp.ToString("F0")); tv.Value = temp; }
+            }
             g.SetActive(true);
         }
 

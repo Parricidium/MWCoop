@@ -273,11 +273,12 @@ def kela():
     W, H = 512, 512   # (couvercle de la boite de bobine : metal, etiquette au milieu)
     im = Image.new('RGB', (W, H), (150, 152, 158))
     d = ImageDraw.Draw(im)
-    for r in range(250, 0, -18): d.ellipse([256 - r, 256 - r, 256 + r, 256 + r], outline=(130, 132, 138), width=3)
+    for r in range(250, 60, -36): d.ellipse([256 - r, 256 - r, 256 + r, 256 + r], outline=(141, 143, 149), width=6)   # (cercles doux et espaces : fins, ils faisaient des rayons noirs de loin)
+    im = im.filter(ImageFilter.GaussianBlur(1.5)); d = ImageDraw.Draw(im)
     d.rounded_rectangle([96, 196, 416, 316], 12, fill=(245, 240, 225), outline=(60, 60, 70), width=4)
     text_center(d, (256, 236), 'FILMIKELA', font(IMPACT, 54), (30, 30, 40))
     text_center(d, (256, 290), '35 mm · KINO TÄHTI', font(BAHN, 24), (90, 30, 30))
-    save(im.transpose(Image.FLIP_LEFT_RIGHT), 'kino-kela.png')   # (le couvercle est vu par le dos du quad : image retournee)
+    save(im, 'kino-kela.png')   # (couvercle : disque aux UV calcules, KinoEsineet.ReelLid)
 
 popcorn(); sipsit(); limsa(); karkit(); kela()
 
@@ -292,3 +293,20 @@ def hintalappu_kela():
     save(im, 'kino-hintalappu-kela.png')
 
 hintalappu_kela()
+
+def parkkikyltti(name, text, sub, arrow_up):
+    # panneau bleu d'entree / de sortie du parking (sur le pilier du muret)
+    W, H = 256, 320
+    im = Image.new('RGB', (W, H), (20, 70, 160))
+    d = ImageDraw.Draw(im)
+    d.rectangle([6, 6, W - 7, H - 7], outline=(255, 255, 255), width=6)
+    text_center(d, (W / 2, 70), 'P', font(ARIAL, 110), (255, 255, 255))
+    text_center(d, (W / 2, 168), text, font(ARIAL, 44), (255, 255, 255))
+    text_center(d, (W / 2, 210), sub, font(ARIAL, 22), (210, 225, 255))
+    cx, cy = W / 2, 268
+    if arrow_up: d.polygon([(cx, cy - 30), (cx + 30, cy + 5), (cx + 12, cy + 5), (cx + 12, cy + 30), (cx - 12, cy + 30), (cx - 12, cy + 5), (cx - 30, cy + 5)], fill=(255, 255, 255))
+    else: d.polygon([(cx, cy + 30), (cx + 30, cy - 5), (cx + 12, cy - 5), (cx + 12, cy - 30), (cx - 12, cy - 30), (cx - 12, cy - 5), (cx - 30, cy - 5)], fill=(255, 255, 255))
+    save(im, name)
+
+parkkikyltti('kino-sisaan.png', 'SISÄÄN', 'ENTRÉE · IN', True)
+parkkikyltti('kino-ulosajo.png', 'ULOS', 'SORTIE · OUT', True)
