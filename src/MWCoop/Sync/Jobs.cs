@@ -2020,6 +2020,7 @@ namespace MWCoop
                 case "@emitk": Particles.OnDefs(who, r); break;
                 case "@sonk": CopySounds.OnDefs(who, r); break;
                 case "@coup": Pvp.OnPunch(who, r); break;
+                case "@voiturevers": VehicleSync.OnBringCar(who, r); break;
                 case "@ajouts": if (!Session.IsHost) Ajouts.OnHost(r.U8()); break;
                 case "@triche": Cheats.OnRemote(who, r.Str()); break;
                 case "@mw2": ModSecondMachtwagen.OnMessage(who, r); break;

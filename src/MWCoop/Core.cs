@@ -181,6 +181,10 @@ namespace MWCoop
             new Mod("outils en main", HandTools.Update),
             new Mod("tas de bois des remorques", LogPiles.Update),
             new Mod("sacs de couchage", SleepingBags.Update),
+            new Mod("sommeil", Sleepers.Update),
+            new Mod("lit des parents", ParentsBed.Update),
+            new Mod("difficulte", Difficulty.Update),
+            new Mod("armoire", Wardrobe.Update),
             new Mod("ajouts (hote)", Ajouts.Update),
             new Mod("boutique", Kauppa.Update),
             new Mod("mods (Cheatbox++)", ModCheatbox.Update),
@@ -317,6 +321,10 @@ namespace MWCoop
             HandTools.OnLevelLoaded();
             LogPiles.OnLevelLoaded();
             SleepingBags.OnLevelLoaded();
+            Sleepers.OnLevelLoaded();
+            ParentsBed.OnLevelLoaded();
+            Difficulty.OnLevelLoaded();
+            Wardrobe.OnLevelLoaded();
             WorldFiles.OnLevelLoaded();
             Ajouts.OnLevelLoaded();
             Kauppa.OnLevelLoaded();
@@ -402,7 +410,7 @@ namespace MWCoop
             "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente", "export carte", "cartes",
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
-            "voitures", "portieres", "tableaux de bord", "passagers",
+            "voitures", "portieres", "tableaux de bord", "passagers", "sommeil", "difficulte",
             "monde",   // (heure et meteo : World.FindMsc / SendMsc)
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)

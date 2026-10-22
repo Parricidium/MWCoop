@@ -68,6 +68,7 @@ namespace MWCoop
         float sleepDiag;                     // yeux / pieds, debout (pose couchee du dormeur)
         string anchorCar;
         bool passenger;                      // assis a une place passager (pose assise, pas de volant)
+        float seatCrouch = -1f;              // place debout a demi plie (cabine du tracteur) : profondeur de la pose accroupie imposee
         string carName;
         float armWR, armWL, crouchW, crouchDepth;
         bool crouching;
@@ -1739,6 +1740,7 @@ namespace MWCoop
             Quaternion seatRot;
             inCar = VehicleSync.SeatPose(pi.Id, st.Head, out seatPos, out seatRot);
             Transform pCar = null; Vector3 pHead = Vector3.zero; string pName = null;
+            seatCrouch = -1f;
             passenger = !inCar && Seats.RemoteSeat(pi.Id, out pCar, out pHead, out pName);
             if (passenger)
             {
@@ -1750,7 +1752,11 @@ namespace MWCoop
                 Quaternion seatQ = pCar.rotation * Quaternion.Euler(0f, seatYaw, 0f);
                 Root.transform.rotation = seatQ;
                 leanOff = Vector3.zero;
-                pos = pCar.TransformPoint(pHead) - seatQ * eyesRest;
+                // (place debout -- coins de la cabine du tracteur, dessin de JD du 22/10 : debout a demi plie, appuye, la tete a la vitre
+                // arriere : pose accroupie de l'avatar a [Test] DeboutPli (0..1, 0,5), les yeux a la place, [Test] DeboutYeux au-dessus des pieds)
+                bool standing = Seats.RemoteSeatStanding(pi.Id);
+                if (standing) seatCrouch = Mathf.Clamp01(Config.GetFloat("Test", "DeboutPli", 0.5f));
+                pos = pCar.TransformPoint(pHead) - seatQ * (standing ? new Vector3(0f, Config.GetFloat("Test", "DeboutYeux", 0.85f), 0.05f) : eyesRest);
                 // Couchette de la GIFU : 67 cm seulement sous le toit, la tete (camera) juste dessous ; assis droit, le corps
                 // s'enfoncait de ~22 cm dans la couchette (retour d'un joueur, 09/10). Assis dessus, voute en avant : la tete
                 // reste sous le toit.
@@ -1762,7 +1768,8 @@ namespace MWCoop
                 yaw = pCar.eulerAngles.y + seatYaw;
                 placed = true;
                 Root.transform.position = pos;
-                f |= PlayerSync.F_Seated;
+                if (!standing) f |= PlayerSync.F_Seated;
+                else { f = (f & ~PlayerSync.F_Seated) | PlayerSync.F_Crouch; inCar = false; passenger = false; }   // (debout a demi plie : pose accroupie, pas la pose assise ni l'ajustement du siege)
             }
             else if (inCar)
             {
@@ -1887,6 +1894,7 @@ namespace MWCoop
             // Profondeur : hauteur de camera de l'automate Crouch du joueur (1,4 debout -> 0,3 au ras du sol).
             // Anciennes versions (hauteur du corps envoyee, > 1,4) : accroupi simple.
             crouchDepth = !crouch ? 0f : st.Height > 1.45f ? 0.5f : Mathf.Clamp01((1.4f - st.Height) / 1.1f);
+            if (seatCrouch >= 0f && crouch) crouchDepth = seatCrouch;   // (place debout de la cabine du tracteur)
             sitting = sit || crouch;
             Root.transform.localScale = Vector3.one;
             // Dans un vehicule : la place dans la voiture, reposee en fin d'image (LatePose) sur la voiture deja deplacee.

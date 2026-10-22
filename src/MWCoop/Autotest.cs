@@ -410,6 +410,20 @@ namespace MWCoop
                     testCam.transform.LookAt(target);
                 }
             }
+            // [Test] CameraMonde=x,y,z,vx,vy,vz : camera d'essai fixe dans le monde, tournee vers (vx,vy,vz) -- captures d'un lieu (lit...).
+            string cm = Config.Get("Test", "CameraMonde", "");
+            if (cm.Length > 0)
+            {
+                string[] c = cm.Split(',');
+                if (c.Length >= 6)
+                {
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    System.Func<int, float> F = i => float.Parse(c[i], ci);
+                    if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
+                    testCam.transform.position = new Vector3(F(0), F(1), F(2));
+                    testCam.transform.LookAt(new Vector3(F(3), F(4), F(5)), Vector3.forward);
+                }
+            }
             // [Test] CameraVoiture=x,y,z,vx,vy,vz : camera d'essai dans le repere de [Test] TestVoiture, tournee vers (vx,vy,vz).
             string cv = Config.Get("Test", "CameraVoiture", "");
             if (cv.Length > 0)
@@ -456,6 +470,7 @@ namespace MWCoop
                 }
         }
 
+        static bool tricheDone;   // ([Test] Triche=<commande du tchat> : une fois, a 30 s)
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -468,6 +483,7 @@ namespace MWCoop
             if (mode == "sondeplaces") return;
             if (mode == "portiere" && t > 30f && !done) { done = true; Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "SATSUMA"), true, Config.Get("Test", "TestPorte", ""))); }
             if (mode == "portiere") return;
+            if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             if (mode == "mscguepe") { MscGuepe(t); return; }
             if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "mscreste") { MscReste(t); return; }
@@ -912,6 +928,7 @@ namespace MWCoop
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
             if (Game.Msc) { MscTest(mode, t); return; }   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC)
+            if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t); Vitrines.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t); Fluids.TestFill(mode, t); ModMachtwagen300D.Test(mode, t); SleepingBags.Test(mode, t); ModCheatbox.Test(mode, t); CarLeaks.Test(mode, t); Sauna.Test(mode, t);

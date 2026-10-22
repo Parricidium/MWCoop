@@ -23,6 +23,10 @@ namespace MWCoop
         static Vector3 push; static float pushUntil;
 
         public static bool Allowed { get { return Session.Active && (Session.IsHost ? Config.GetInt("Coop", "PvP", 0) != 0 : hostAllows); } }
+        // Barre de vie du HUD (квазарик, 21/10) : coups recus dans la fenetre (5 = mort), instant du dernier.
+        public static int HitsNow { get { return Time.realtimeSinceStartup - lastHitAt > HitWindow ? 0 : hits; } }
+        public static int MaxHits { get { return HitsToKill; } }
+        public static float LastHitAt { get { return lastHitAt; } }
 
         public static void Update()
         {
@@ -73,7 +77,7 @@ namespace MWCoop
                     bd = along; best = pi.Id;
                 }
             }
-            if (best < 0) return;
+            if (best < 0) { Npcs.Punch(cam.position, cam.forward, 1.4f); return; }   // (pas de joueur : un PNJ ? -- Maxim Pennis, 16/10)
             Vector3 dir = cam.forward; dir.y = 0f;
             dir = dir.sqrMagnitude > 1e-4f ? dir.normalized : Vector3.forward;
             Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@coup").U8(best).Vec(dir).U8(weapon), true);

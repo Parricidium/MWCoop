@@ -315,6 +315,30 @@ namespace MWCoop
         // la vitre bougeait a peine (journaux de .nolly, 12/10 : « -> Mouse off 2 (voulu State 1) »). Ici, celui qui tourne la
         // manivelle (il la vise, a moins de 1,3 m) envoie la pose locale de la vitre 10 fois par seconde tant qu'elle bouge, puis
         // une derniere fois (fiable) ; les autres la posent. L'hote redit toutes les 15 s la pose de chaque vitre (arrivants).
+        // Vitres plus rapides (.formallybad, 15/10 : « la fermeture des vitres est tres lente ») : [Coop] VitesseVitres=k, 1 = le jeu
+        // (4 s), 2 = deux fois plus vite... -- la duree des iTween de chaque automate 'Knob' (manivelle du jeu et copies) divisee
+        // par k. Seules les durees d'origine (>= 3,9 s) sont touchees : une copie deja acceleree ne l'est pas deux fois.
+        static void SpeedUp(PlayMakerFSM f)
+        {
+            float k = Mathf.Clamp(Config.GetFloat("Coop", "VitesseVitres", 1f), 1f, 8f);
+            if (f == null || k <= 1.01f) return;
+            int n = 0;
+            try
+            {
+                foreach (FsmState st in f.FsmStates)
+                    foreach (FsmStateAction a in st.Actions)
+                    {
+                        if (a == null || !a.GetType().Name.StartsWith("iTween")) continue;
+                        System.Reflection.FieldInfo fi = a.GetType().GetField("time");
+                        FsmFloat t = fi != null ? fi.GetValue(a) as FsmFloat : null;
+                        if (t == null || t.Value < 3.9f) continue;
+                        t.Value = t.Value / k; n++;
+                    }
+            }
+            catch (System.Exception e) { Log.Warn("vitres : vitesse : " + e.Message); }
+            if (n > 0) Log.Info("vitres : " + Recon.Path(f.transform) + " : " + n + " mouvement(s) " + k.ToString("F1") + " fois plus rapides");
+        }
+
         // Canal des evenements (Events), cle « vitre:<chemin de la manivelle> ». Toutes les voitures dont la manivelle ('Knob',
         // variable Windows) vise une vitre, et le temoin de la vitre passager (Drive la pose en miroir).
         class Win { public string Key; public PlayMakerFSM Knob; public Transform Glass; public float AimAt = -9f, LastSend, RemoteAt = -9f, ReachAt = -9f; public Vector3 SentPos; public Quaternion SentRot, SentKnob; public bool Moving; }
@@ -336,7 +360,25 @@ namespace MWCoop
                 foreach (Win x in wins) if (x.Knob == f) { known = true; break; }
                 if (known) continue;
                 wins.Add(new Win { Key = WinPrefix + Recon.Path(f.transform), Knob = f, Glass = w.Value.transform });
+                SpeedUp(f);
             }
+        }
+
+        // La vitre la plus proche d'une place (repere de la voiture : manivelle du jeu ou copie) est-elle ouverte ? Vrai aussi sans
+        // vitre connue a moins de 1,2 m (place sans vitre : rien n'empeche). Ouverte : pivot de la vitre (ou son temoin) ecarte du
+        // repos de plus de 8 cm.
+        public static bool WindowOpenNear(Transform car, Vector3 seatLocal)
+        {
+            if (car == null) return true;
+            Win best = null; float bd = 1.2f;
+            foreach (Win w in wins)
+            {
+                if (w.Knob == null || w.Glass == null || !w.Knob.transform.IsChildOf(car)) continue;
+                Vector3 k = car.InverseTransformPoint(w.Knob.transform.position);
+                float d = new Vector2(k.x - seatLocal.x, k.z - seatLocal.z).magnitude;
+                if (d < bd) { bd = d; best = w; }
+            }
+            return best == null || best.Glass.localPosition.magnitude > 0.08f;
         }
 
         static void TickWins()

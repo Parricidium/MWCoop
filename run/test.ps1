@@ -1,4 +1,4 @@
-﻿# Copie build\ dans les instances, lance -Players instances hors ecran, attend -Seconds, les ferme
+# Copie build\ dans les instances, lance -Players instances hors ecran, attend -Seconds, les ferme
 # (sauf -KeepOpen) et affiche la fin des journaux. Chaque instance : profil isole + arriere-plan.
 # -Msc : les instances de My Summer Car (run\make-testinstances.ps1 -Msc).
 param([int]$Players = 1, [int]$Seconds = 60, [switch]$KeepOpen, [switch]$NoBuild, [switch]$Msc,
@@ -10,7 +10,8 @@ if (-not $NoBuild) {
     $o = cmd /c "`"$root\run\build-mod.cmd`"" 2>&1
     if ($LASTEXITCODE -ne 0) { $o | Select-String 'error|erreur'; throw 'echec de compilation' }
 }
-Get-Process $exe -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Racine\MWCoop-Joueur*" } | Stop-Process -Force   # jamais les copies de JD (MWCoop-JD-*)
+# (seulement les instances de cet essai, Joueur1..N : une autre session fait tourner Joueur3/4 en meme temps -- 22/10 ; jamais les copies de JD, MWCoop-JD-*)
+Get-Process $exe -ErrorAction SilentlyContinue | Where-Object { $_.Path -match ('^' + [regex]::Escape("$Racine\MWCoop-Joueur") + '(\d+)\\') -and [int]$Matches[1] -le $Players } | Stop-Process -Force
 Start-Sleep -Milliseconds 500
 $procs = @()
 for ($i = 1; $i -le $Players; $i++) {

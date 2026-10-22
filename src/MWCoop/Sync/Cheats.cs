@@ -76,21 +76,25 @@ namespace MWCoop
         static readonly string[] HelpFr = {
             "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
-            "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous" };
+            "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
+            "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)" };
         static readonly string[] HelpEn = {
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
-            "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone" };
+            "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
+            "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)" };
         // My Summer Car (19/10) : ses lieux (PlacesMsc), l'heure du jeu par pas de 2 h (MAP/SUN/Pivot/SUN::Color), la pluie
         // au lieu de la neige.
         static readonly string[] HelpMscFr = {
             "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
-            "/heure <0-24> : l'heure de tous (par pas de 2 h)", "/pluie oui|non : pluie pour tous" };
+            "/heure <0-24> : l'heure de tous (par pas de 2 h)", "/pluie oui|non : pluie pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
+            "/voiture <nom> : la voiture vient devant moi (satsuma, hayosiko, ferndale, ruscko, tracteur, camion, moto, remorque)" };
         static readonly string[] HelpMscEn = {
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
-            "/time <0-24>: everyone's time of day (2-hour steps)", "/rain on|off: rain for everyone" };
+            "/time <0-24>: everyone's time of day (2-hour steps)", "/rain on|off: rain for everyone", "/clothes: my jacket, coverall and helmet in front of me",
+            "/car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)" };
 
         // Commandes anglaises -> les noms d'ici. (Meteo : « neige » dans My Winter Car, « pluie » dans My Summer Car.)
         static string Canon(string c)
@@ -104,6 +108,8 @@ namespace MWCoop
                 case "money": case "cash": return "argent";
                 case "heal": return "soin";
                 case "free": case "nojail": return "liberer";
+                case "clothes": case "wear": return "vetements";
+                case "car": case "vehicle": return "voiture";
                 case "time": return "heure";
                 case "snow": case "rain": case "pluie": case "neige": case "meteo": case "weather": return Game.Msc ? "pluie" : "neige";
             }
@@ -158,6 +164,22 @@ namespace MWCoop
                     if (pi == null) return Lang.T("Joueur introuvable : ", "No such player: ") + arg;
                     if (pi.Level != 1) return pi.Name + Lang.T(" n'est pas en partie.", " is not in game.");
                     return null;   // (fait chez lui, a l'annonce)
+                }
+                case "voiture":
+                {
+                    // (Донской, 17/10 : « teleporter et faire apparaitre une voiture du jeu » -- elle vient, on n'en cree pas)
+                    if (arg.Length == 0) return Lang.T("Quelle voiture ? /aide pour la liste.", "Which car? /help for the list.");
+                    string busy = Busy(); if (busy != null) return busy;
+                    return VehicleSync.BringCar(arg);
+                }
+                case "vetements":
+                {
+                    // (Maxim Pennis, 17/10 : « un bouton qui ramene le casque, la combinaison, la veste » -- perdus quelque part)
+                    string busy = Busy(); if (busy != null) return busy;
+                    int n = Wear.BringMine();
+                    if (n == 0) return Lang.T("Aucun vêtement à ramener (déjà portés ?).", "No clothing to bring back (already worn?).");
+                    Say(Lang.T("Vêtements ramenés : ", "Clothing brought back: ") + n);
+                    return null;
                 }
                 case "lieu":
                 {

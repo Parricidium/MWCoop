@@ -153,6 +153,31 @@ namespace MWCoop
         }
 
         // Cle fixe des vetements pour Props (ils changent de parent : EQUIPMENTS, PLAYER, racine de la scene).
+        // Triche /vetements (Maxim Pennis, 17/10) : ma veste, ma combinaison et mon casque -- le dernier exemplaire que j'ai
+        // porte, sinon un exemplaire que personne ne porte -- poses devant moi. Rend le nombre d'objets ramenes.
+        public static int BringMine()
+        {
+            Transform me = Game.PlayerT;
+            if (me == null) return 0;
+            int n = 0, meId = Session.Active ? Session.LocalId : 0;
+            for (int kind = 0; kind < 3; kind++)
+            {
+                Item pick = null;
+                foreach (Item it in items) if (it.Kind == kind && it.Go != null && !it.LocalWorn && it.WornBy < 0 && it.LastWearer == meId) { pick = it; break; }
+                if (pick == null) foreach (Item it in items) if (it.Kind == kind && it.Go != null && !it.LocalWorn && it.WornBy < 0 && !it.Hidden) { pick = it; break; }
+                if (pick == null) continue;
+                Vector3 fwd = me.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
+                Vector3 at = me.position + fwd * 0.9f + Vector3.up * (1.1f + 0.15f * n) + Vector3.Cross(Vector3.up, fwd) * (0.3f * (n - 1));
+                Rigidbody rb = pick.Go.GetComponent<Rigidbody>();
+                if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+                pick.Go.transform.position = at;
+                Log.Info("vetements : " + Kinds[kind] + " (" + pick.Name + ") ramene devant moi");
+                n++;
+            }
+            if (n > 0) Props.SoonScan();
+            return n;
+        }
+
         public static string KeyOf(GameObject go)
         {
             foreach (Item it in items) if (it.Go != null && it.Go == go) return it.Key;

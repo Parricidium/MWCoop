@@ -723,6 +723,41 @@ namespace MWCoop
             if (!c.Set || Mathf.Abs(c.Target - c.Off) > 0.5f) { c.Off = c.Target; c.Set = true; }
         }
 
+        // Coups de poing sur les PNJ (Maxim Pennis, 16/10 : « frapper ce type », avec les coups entre joueurs actives) : le pieton,
+        // le client du taxi ou Teimo en luge vise a moins de maxD tombe -- etat "Accident" de son automate CarHit (celui du
+        // renversement, pantin seulement, pas de delit), rejoue chez tous comme un renversement. Rend vrai si un PNJ a ete touche.
+        public static bool Punch(Vector3 from, Vector3 fwd, float maxD)
+        {
+            Npc best = null; float bd = maxD; PlayMakerFSM bf = null;
+            foreach (Npc n in all)
+            {
+                if (n.Char == null || !n.Char.gameObject.activeInHierarchy) continue;
+                Vector3 basePos = n.Char.position;
+                if ((basePos - from).sqrMagnitude > (maxD + 2f) * (maxD + 2f)) continue;
+                PlayMakerFSM f = null;
+                foreach (PlayMakerFSM x in n.Char.GetComponentsInChildren<PlayMakerFSM>(true)) if (x.FsmName == "CarHit") { f = x; break; }
+                if (f == null) continue;
+                foreach (float h in new[] { 0.6f, 1.0f, 1.4f })
+                {
+                    Vector3 p = basePos + Vector3.up * h - from;
+                    float along = Vector3.Dot(p, fwd);
+                    if (along < 0.1f || along > bd) continue;
+                    if ((p - fwd * along).magnitude > 0.5f) continue;
+                    bd = along; best = n; bf = f;
+                }
+            }
+            if (best == null || bf == null) return false;
+            string key = Recon.Path(bf.transform) + "::CarHit";
+            Log.Info("PNJ : coup de poing sur " + best.Path + " (" + bd.ToString("F2") + " m) : " + key + " -> Accident");
+            if (Session.Active) Session.SendAll(new NetWriter(Msg.Npc).U8(K_EVENT).U8(Session.LocalId).Str(key).Str("Accident"), true);
+            if (!bf.enabled) bf.enabled = true;
+            Traffic.MarkDead(bf.transform);
+            Replay.Depth++;
+            try { Game.SetState(bf, "Accident"); }
+            finally { Replay.Depth--; }
+            return true;
+        }
+
         public static void OnMessage(Peer from, NetReader r)
         {
             int kind = r.U8();

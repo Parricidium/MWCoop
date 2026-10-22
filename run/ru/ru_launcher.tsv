@@ -1848,3 +1848,13 @@ Character > Add-ons: each available car has a Download button (NEW tag when it h
 Click Download with the game closed: the car installs into MWCoop\\addons.	Нажми «Скачать», когда игра закрыта: машина установится в MWCoop\\addons.
 New version: UPDATE tag and Update button. To remove it: click the car, then Uninstall (your livery is kept).	Новая версия: метка UPDATE и кнопка «Обновить». Чтобы убрать машину: нажми на неё, затем «Удалить» (ливрея сохранится).
 By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	Можно и вручную: скопируй папку машины (ту, где лежит addon.ini) в папку дополнений. Каждый ставит те дополнения, которые хочет видеть: без дополнения на её месте видна VAZ того же цвета и с тем же номером.
+Voice: mute	Голос: выкл. микрофон
+Use (wardrobe)	Использовать (шкаф)
+Voice activation (else push-to-talk)	Активация голосом (иначе — по кнопке)
+Voice activation threshold	Порог активации голосом
+Sleeping players snore	Спящие игроки храпят
+Start difficulty (host, new game)	Стартовая сложность (хост, новая игра)
+Car window speed (host)	Скорость стёкол машин (хост)
+Passenger: lean out only with the window open	Пассажир: высовываться только при открытом окне
+Easy	Легко
+Hard	Сложно
