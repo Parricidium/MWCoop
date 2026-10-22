@@ -1858,3 +1858,25 @@ Car window speed (host)	Скорость стёкол машин (хост)
 Passenger: lean out only with the window open	Пассажир: высовываться только при открытом окне
 Easy	Легко
 Hard	Сложно
+Talk: key held, or as soon as you talk	Говорить: удерживая клавишу, или как только заговоришь
+Press V	Нажать V
+Automatic	Автоматически
+Talk	Говорить
+Press V (key held), or automatic: as soon as you talk · F6: mute	Нажать V (удерживая), или автоматически: как только заговоришь · F6: без звука
+Threshold (automatic)	Порог (автоматически)
+Lower = more sensitive	Ниже = чувствительнее
+Start difficulty	Сложность старта
+New game: money and fuel · Vanilla = the game as is	Новая игра: деньги и топливо · Vanilla = игра как есть
+Car window speed	Скорость стёкол машин
+Passenger: lean out only with the window open	Пассажир: высовываться только при открытом окне
+Talk key	Клавиша разговора
+Key held, or as soon as you talk	Удерживая клавишу, или как только заговоришь
+Sleeping players, within 12 m	Спящие игроки, в пределах 12 м
+Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nTalk: \"Press V\" (key held, set in the Keys tab) or \"Automatic\" (the mic opens as soon as you talk, above the threshold; F6 mutes it). Voice volume only changes what you hear; your microphone, what the others hear from you.	Голос работает по близости: тебя слышно до выбранной дальности, всё тише с расстоянием, как в жизни. Микрофон и колонки — устройства Windows по умолчанию.\n\nГоворить: \"Нажать V\" (удерживая клавишу, задаётся во вкладке Клавиши) или \"Автоматически\" (микрофон включается, как только заговоришь, выше порога; F6 выключает его). Громкость голосов меняет только то, что слышишь ты; твой микрофон — то, что слышат от тебя другие.
+Money and fuel, for everyone	Деньги и топливо, для всех
+Start difficulty: 	Сложность старта: 
+Difficulty	Сложность
+Windows	Стёкла
+Talk: key or automatic	Говорить: клавиша или автоматически
+Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as before) or Automatic (the mic opens as soon as you talk; adjustable threshold, F6 mutes it). Also in the lobby, Options > Mine.	Настройки > Звук и голос, \"Говорить\": Нажать V (говоришь, удерживая клавишу, как раньше) или Автоматически (микрофон включается, как только заговоришь; порог настраивается, F6 выключает). Также в лобби: Опции > Мои.
+When hosting, pick \"New game\": the difficulty shows right below. Vanilla: the game as is; Easy, Medium, Hard: starting money and fuel; Random. For everyone, MWC and MSC. Default: Settings > Co-op.	Когда хостишь, выбери \"Новая игра\": сложность появится прямо под ней. Vanilla: игра как есть; Легко, Средне, Сложно: стартовые деньги и топливо; Случайно. Для всех, MWC и MSC. По умолчанию: Настройки > Кооп.

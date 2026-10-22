@@ -549,3 +549,5 @@ WED40	Roads: flat across with embankments, markings in the centre or on the edge
 WED41	Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.
 WED42	Objects, roads, terrain, plants, lights, co-op
 WED43	In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin).
+WDF1	Talk: \"Press V\" (key held) or \"Automatic\" (the mic opens as soon as you talk, above the adjustable threshold; F6 mutes it). Both games.
+WDF2	Start difficulty (Vanilla, Easy, Medium, Hard, Random): money and fuel of a new game, for everyone; also in the lobby, under \"New game\". Car window speed, passenger leaning out only with the window open.

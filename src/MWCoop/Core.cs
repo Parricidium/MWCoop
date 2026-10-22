@@ -397,7 +397,8 @@ namespace MWCoop
                                     Interactions.OnLevelLoaded, PushDoors.OnLevelLoaded,   // (portes de la maison, interrupteurs ; portes du garage poussees)
                                     LightsGuard.OnLevelLoaded, PackHoods.OnLevelLoaded, MapPacks.OnLevelLoaded,   // (19/10 soir : phares et capots du pack rallye)
                                     Fires.OnLevelLoaded,   // (20/10 : cheminees, poeles, grill -- bois, allumage, braises)
-                                    WiringMsc.OnLevelLoaded };   // (20/10 : fils de la SATSUMA)
+                                    WiringMsc.OnLevelLoaded,   // (20/10 : fils de la SATSUMA)
+                                    Difficulty.OnLevelLoaded, Sleepers.OnLevelLoaded };   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }

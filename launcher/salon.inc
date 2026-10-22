@@ -67,13 +67,14 @@ static RectF kChoiceR[2] = { RectF(950, 136, 296, 50), RectF(950, 192, 296, 50) 
 static const float kLobbyRowH = 72;
 static DWORD g_lobbySinceT;                         // entree dans ce salon (bandeau de l'invite : « dans ce salon depuis »)
 static int g_lobbySinceGen = -1;                    // ... pour quel salon (g_lobbyGen)
-// Identifiants des nouvelles commandes du salon (suite de UI_LOBBY_* de uikit.inc ; < 3300 : LobbyOptClick)
-enum { UI_LOBBY_AJOUTS = 3272,   // + k : ajouts MWCoop Tous / Choisir / Aucun
-       UI_LOBBY_MAXSEG = 3276,   // + k : joueurs au plus 4 / 8 / 12 / 16
-       UI_LOBBY_OPTRESET = 3280, UI_LOBBY_OPTKEEP,   // Remettre (les Reglages), Garder comme defauts
-       UI_LOBBY_MODS = 3282,     // Gerer (page MODS)
-       UI_LOBBY_CHAT = 3283, UI_LOBBY_SEND,   // tchat : champ « Message au salon », ENVOYER
-       UI_LOBBY_SEGV = 3285 };   // + rang : pastilles segmentees de « Les miennes » (kLobbySegKeys, a la suite ; 3285-3299)
+// Identifiants des nouvelles commandes du salon (suite de UI_LOBBY_* de uikit.inc ; 3200-3399 : LobbyOptClick, ui.inc)
+enum { UI_LOBBY_AJOUTS = 3312,   // + k : ajouts MWCoop Tous / Choisir / Aucun
+       UI_LOBBY_MAXSEG = 3316,   // + k : joueurs au plus 4 / 8 / 12 / 16
+       UI_LOBBY_OPTRESET = 3320, UI_LOBBY_OPTKEEP,   // Remettre (les Reglages), Garder comme defauts
+       UI_LOBBY_MODS = 3322,     // Gerer (page MODS)
+       UI_LOBBY_CHAT = 3323, UI_LOBBY_SEND,   // tchat : champ « Message au salon », ENVOYER
+       UI_LOBBY_SEGV = 3330,     // + rang : pastilles segmentees de « Les miennes » (kLobbySegKeys, a la suite ; 3330-3359)
+       UI_LOBBY_DIFF = 3360 };   // + niveau : difficulte de depart (carte de droite, Nouvelle partie ; 1.8.9)
 static RectF g_lobbyGearR, g_lobbyPopR;               // engrenage de l'en-tete, son menu
 
 // Sons du salon (repris de SACoop) : arrivee, depart, pret, plus pret. Petites notes synthetisees (WAV en memoire).

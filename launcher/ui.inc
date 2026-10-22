@@ -1621,7 +1621,7 @@ static bool UiClick(int id)
     if (id >= UI_CRED_TAB && id < UI_CRED_TAB + 4) { g_credTab = id - UI_CRED_TAB; g_scroll[TAB_CREDITS] = 0; return true; }
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
-    if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 100) { LobbyOptClick(id); return true; }
+    if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 200) { LobbyOptClick(id); return true; }   // (3200-3399 : salon.inc)
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
     if (id >= UI_TOOL_GET && id <= UI_TOOL_DIR) { ToolsClick(id); return true; }
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
