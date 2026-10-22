@@ -8,7 +8,7 @@ namespace MWCoop
     //  - « Tout desactiver » ([Coop] SansAjouts=1 ; demande de Menor, 12/10 : « un jeu 100 % vanilla », et de JD : un bouton
     //    pour tous, presents et a venir) ;
     //  - et un interrupteur par ajout (demande de JD, 13/10 : garder le drone mais retirer la boutique et le musee...) :
-    //    [Coop] AjoutDrone, AjoutSacs, AjoutBoutique, AjoutMusee, AjoutVaz (1 par defaut ; VAZ-2108 du F10 : demande de JD, 18/10).
+    //    [Coop] AjoutDrone, AjoutSacs, AjoutBoutique, AjoutMusee, AjoutVaz, AjoutKino (1 par defaut ; VAZ-2108 du F10 : demande de JD, 18/10).
     // En partie, les choix de l'HOTE valent pour tous ses invites (JD, 13/10) : il les annonce (@ajouts, toutes les 10 s et a
     // chaque arrivee) ; un invite garde les siens en plus (il peut couper pour lui, pas rallumer ce que l'hote a coupe).
     // La boutique et le musee (construits 12 s apres le chargement) et le defrichage attendent l'annonce de l'hote (Ready ;

@@ -1876,6 +1876,8 @@ static const wchar_t *const kRu[][2] = {
     { L"Talk: key or automatic", L"Говорить: клавиша или автоматически" },
     { L"Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as before) or Automatic (the mic opens as soon as you talk; adjustable threshold, F6 mutes it). Also in the lobby, Options > Mine.", L"Настройки > Звук и голос, \"Говорить\": Нажать V (говоришь, удерживая клавишу, как раньше) или Автоматически (микрофон включается, как только заговоришь; порог настраивается, F6 выключает). Также в лобби: Опции > Мои." },
     { L"When hosting, pick \"New game\": the difficulty shows right below. Vanilla: the game as is; Easy, Medium, Hard: starting money and fuel; Random. For everyone, MWC and MSC. Default: Settings > Co-op.", L"Когда хостишь, выбери \"Новая игра\": сложность появится прямо под ней. Vanilla: игра как есть; Легко, Средне, Сложно: стартовые деньги и топливо; Случайно. Для всех, MWC и MSC. По умолчанию: Настройки > Кооп." },
+    { L"KINO TÄHTI cinema", L"Кинотеатр KINO TÄHTI" },
+    { L"Cinema", L"Кинотеатр" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
