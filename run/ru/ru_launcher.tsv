@@ -1882,3 +1882,22 @@ Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as 
 When hosting, pick \"New game\": the difficulty shows right below. Vanilla: the game as is; Easy, Medium, Hard: starting money and fuel; Random. For everyone, MWC and MSC. Default: Settings > Co-op.	Когда хостишь, выбери \"Новая игра\": сложность появится прямо под ней. Vanilla: игра как есть; Легко, Средне, Сложно: стартовые деньги и топливо; Случайно. Для всех, MWC и MSC. По умолчанию: Настройки > Кооп.
 KINO TÄHTI cinema	Кинотеатр KINO TÄHTI
 Cinema	Кинотеатр
+The KINO TÄHTI cinema stands by the road, east of the MAATALOUS silos: a Finnish cinema from the 80s-90s, with its parking, lobby, counter and two screen rooms. On the map (M) it is the \"Cinema\" spot; in the cheats, /place cinema takes you there.	Кинотеатр KINO TÄHTI стоит у дороги, к востоку от силосов MAATALOUS: финский кинотеатр 80-90-х с парковкой, фойе, стойкой и двумя залами. На карте (M) это точка «Кинотеатр»; в читах туда ведёт /place cinema.
+At the counter	У стойки
+Look at an item on the counter: its price shows up. Left click buys it, from your wallet.	Наведитесь на товар на стойке: появится цена. Левый клик — покупка из вашего кошелька.
+Ticket, 35 mk: valid all day, for both screen rooms.	Билет, 35 mk: действует весь день, в оба зала.
+Popcorn 12 mk, chips 8 mk, soda 9 mk, candy 6 mk: in hand, F takes a bite or a sip (hunger and thirst go down). The empty pack drops at the end.	Попкорн 12 mk, чипсы 8 mk, лимонад 9 mk, конфеты 6 mk: в руке F — откусить или отпить (голод и жажда уменьшаются). Пустая упаковка в конце падает.
+In the screen room	В зале
+The screen room doors are at the top of the steps, at the back of the lobby. With a ticket, left click to open; they close by themselves.	Двери залов — наверху ступеней, в глубине фойе. С билетом левый клик открывает; закрываются сами.
+To sit, stand in front of a seat and crouch (C), like on one of the game's chairs. The other players see you seated.	Чтобы сесть, встаньте перед креслом и присядьте (C), как на стул в игре. Другие игроки видят вас сидящим.
+It's 21 °C inside the cinema: a good place to warm up.	В кинотеатре 21 °C: можно согреться.
+Showing a film	Показать фильм
+Buy a film reel at the Osuuskauppa s21 (49 mk, top shelf, next to the tapes).	Купите киноплёнку в Osuuskauppa s21 (49 mk, верхняя полка, рядом с кассетами).
+Reel in hand, press R: IMPORT A VIDEO… picks a file on your PC (it is shared with every player), or paste a direct link to a video (.mp4) then SET THE LINK.	С плёнкой в руке нажмите R: IMPORT A VIDEO… выбирает файл на ПК (он передаётся всем игрокам), или вставьте прямую ссылку на видео (.mp4) и нажмите SET THE LINK.
+Go into a screen room: the projection booth opens at the back, on the room side. Look at the projector with the reel in hand and left click to load it.	Войдите в зал: будка проектора открывается в глубине, со стороны зала. Наведитесь на проектор с плёнкой в руке и сделайте левый клик, чтобы её поставить.
+Look at the projector: F starts or stops the show, hold F takes the reel out. The lights dim and everybody sees and hears the film at the same time.	Наведитесь на проектор: F запускает или останавливает сеанс, удержание F вынимает плёнку. Свет гаснет, и все видят и слышат фильм одновременно.
+YouTube, VK Video and Rutube don't give out their video file: their links don't play. You need a link ending in .mp4 (archive.org, your own server…). Each player streams the link themselves: they need the connection for it.	YouTube, VK Video и Rutube не отдают свой видеофайл: их ссылки не воспроизводятся. Нужна ссылка, оканчивающаяся на .mp4 (archive.org, ваш сервер…). Каждый игрок загружает ссылку сам: ему нужен для этого интернет.
+Reels on the projectors stay there when you save. Can be turned off like the other additions: Settings > Co-op > MWCoop additions, Cinema chip (the host's choice applies to everyone).	Плёнки на проекторах сохраняются вместе с игрой. Отключается, как и другие дополнения: Настройки > Кооп > Дополнения MWCoop, значок «Кинотеатр» (выбор хоста действует для всех).
+The KINO TÄHTI cinema	Кинотеатр KINO TÄHTI
+Ticket, popcorn, seats, your films	Билет, попкорн, кресла, ваши фильмы
+Film reels for the KINO TÄHTI cinema, 49 mk: top shelf, next to the tapes.	Киноплёнки для кинотеатра KINO TÄHTI, 49 mk: верхняя полка, рядом с кассетами.
