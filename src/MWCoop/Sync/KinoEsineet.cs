@@ -15,16 +15,24 @@ namespace MWCoop
         public const string KPopcorn = "popcorn", KSipsit = "sipsit", KLimsa = "limsa", KKarkit = "karkit", KKela = "kela";
         public const int KelaPrice = 49;
 
-        static bool IsKinoKind(string k) { return k == KPopcorn || k == KSipsit || k == KLimsa || k == KKarkit || k == KKela; }
-        static bool IsFood(string k) { return k == KPopcorn || k == KSipsit || k == KLimsa || k == KKarkit; }
-        static string KinoItemName(string k) { return k == KPopcorn ? "popcorn" : k == KSipsit ? "potato chips" : k == KLimsa ? "soda" : k == KKarkit ? "candy" : "film reel"; }
-        static float KinoItemMass(string k) { return k == KKela ? 1.2f : k == KLimsa ? 0.4f : 0.2f; }
+        // (epicerie, 23/10 : biere et eau-de-vie se boivent comme la limonade -- KauppaEpicerie)
+        static bool IsKinoKind(string k) { return k == KPopcorn || k == KSipsit || k == KLimsa || k == KKarkit || k == KKela || k == KOlut || k == KViina; }
+        static bool IsFood(string k) { return k == KPopcorn || k == KSipsit || k == KLimsa || k == KKarkit || k == KOlut || k == KViina; }
+        static bool IsDrink(string k) { return k == KLimsa || k == KOlut || k == KViina; }
+        static string KinoItemName(string k) { return k == KPopcorn ? "popcorn" : k == KSipsit ? "potato chips" : k == KLimsa ? "soda" : k == KKarkit ? "candy" : k == KOlut ? "beer bottle" : k == KViina ? "vodka bottle" : "film reel"; }
+        static float KinoItemMass(string k) { return k == KKela ? 1.2f : k == KLimsa ? 0.4f : k == KOlut ? 0.55f : k == KViina ? 0.9f : 0.2f; }
 
         // bouchees par emballage, et ce que fait chacune
-        static int Portions(string k) { return k == KPopcorn ? 5 : k == KSipsit ? 4 : k == KLimsa ? 4 : 3; }
+        static int Portions(string k) { return k == KPopcorn ? 5 : k == KSipsit ? 4 : k == KLimsa ? 4 : k == KOlut ? 4 : k == KViina ? 8 : 3; }
         static void Bite(string k)
         {
-            if (k == KLimsa) { Game.SetGlobalFloat("PlayerThirst", Mathf.Max(0f, Game.GlobalFloat("PlayerThirst") - 9f)); }
+            if (k == KOlut || k == KViina)
+            {
+                // gorgee : ivresse du jeu (PlayerDrunk) ; la biere desaltere, l'eau-de-vie donne soif
+                Game.SetGlobalFloat("PlayerDrunk", Game.GlobalFloat("PlayerDrunk") + (k == KOlut ? 0.08f : 0.18f));
+                Game.SetGlobalFloat("PlayerThirst", Mathf.Max(0f, Game.GlobalFloat("PlayerThirst") + (k == KOlut ? -7f : 1.5f)));
+            }
+            else if (k == KLimsa) { Game.SetGlobalFloat("PlayerThirst", Mathf.Max(0f, Game.GlobalFloat("PlayerThirst") - 9f)); }
             else
             {
                 float h = k == KPopcorn ? 5f : k == KSipsit ? 4f : 2.5f;
@@ -33,7 +41,7 @@ namespace MWCoop
                 if (k == KSipsit || k == KPopcorn) Game.SetGlobalFloat("PlayerThirst", Game.GlobalFloat("PlayerThirst") + 1f);   // (sale : un peu soif)
             }
             Transform cam = Game.MainCam != null ? Game.MainCam.transform : null;
-            string v = k == KLimsa ? "drinking" : k == KSipsit || k == KPopcorn ? "eat_chips" : "eating";
+            string v = IsDrink(k) ? "drinking" : k == KSipsit || k == KPopcorn ? "eat_chips" : "eating";
             try { if (cam != null) MasterAudio.PlaySound3DAtVector3AndForget("PlayerMisc", cam.position, 1f, null, 0f, v); } catch { }
         }
 
@@ -41,7 +49,7 @@ namespace MWCoop
         static bool KinoModel(string kind, GameObject g, out Vector3 size)
         {
             size = Vector3.one * 0.1f;
-            if (!IsKinoKind(kind)) return false;
+            if (!IsKinoKind(kind) || kind == KOlut || kind == KViina) return false;
             if (blackPlastic == null) { blackPlastic = Plain(new Color(0.07f, 0.07f, 0.08f)); greyMetal = Plain(new Color(0.2f, 0.2f, 0.21f)); }
             if (kind == KPopcorn)
             {
@@ -128,7 +136,7 @@ namespace MWCoop
             if (looked == null && lookedItem == null && kinoLooked == null)
             {
                 guiUse.Value = true;
-                guiText.Value = (f.Kind == KLimsa ? Lang.TG("F : BOIRE", "F: DRINK") : Lang.TG("F : MANGER", "F: EAT")) + " (" + Lang.TG(FoodFr(f.Kind), KinoItemName(f.Kind).ToUpperInvariant()) + ")";
+                guiText.Value = (IsDrink(f.Kind) ? Lang.TG("F : BOIRE", "F: DRINK") : Lang.TG("F : MANGER", "F: EAT")) + " (" + Lang.TG(FoodFr(f.Kind), KinoItemName(f.Kind).ToUpperInvariant()) + ")";
                 foodHint = true;
             }
             if (!Input.GetKeyDown(KeyCode.F)) return;
@@ -160,6 +168,6 @@ namespace MWCoop
             }
         }
 
-        static string FoodFr(string k) { return k == KPopcorn ? "POPCORN" : k == KSipsit ? "CHIPS" : k == KLimsa ? "LIMONADE" : "BONBONS"; }
+        static string FoodFr(string k) { return k == KPopcorn ? "POPCORN" : k == KSipsit ? "CHIPS" : k == KLimsa ? "LIMONADE" : k == KOlut ? "BIÈRE" : k == KViina ? "EAU-DE-VIE" : "BONBONS"; }
     }
 }

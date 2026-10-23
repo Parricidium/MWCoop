@@ -120,7 +120,7 @@ namespace MWCoop
             try { MasterAudio.PlaySound3DAtVector3AndForget("Store", at, 1f, null, 0f, "cash_register_2"); } catch { }
             // le sac de courses, sur le tapis du comptoir cote client
             Bounds cb = counterBounds.size.sqrMagnitude > 0f ? counterBounds : new Bounds(new Vector3(3.3f, 0.5f, -1.2f), new Vector3(3.4f, 1.05f, 1.6f));
-            Vector3 p = root.transform.TransformPoint(new Vector3(cb.min.x + 0.8f, CounterTop + 0.3f, cb.max.z - 0.4f));
+            Vector3 p = root.transform.TransformPoint(new Vector3(cb.max.x - 0.45f, CounterTop + 0.3f, cb.center.z - 0.05f));   // (cote client, au bout du comptoir)
             NewBag(p, root.transform.rotation * Quaternion.Euler(0f, 180f, 0f), items);
             Say("Myyjä : Kiitos ! Bonne nuit au chaud.", "Shopkeeper: Kiitos! Sleep warm.");
         }

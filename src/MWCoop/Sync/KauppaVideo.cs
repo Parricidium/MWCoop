@@ -90,6 +90,7 @@ namespace MWCoop
             }
             else if (kind == KKamera) KameraModel(g, out size);
             else if (kind == KKartturi) KartturiModel(g, out size, out screen);
+            else if (EpiModel(kind, g, out size)) { }   // (epicerie : biere, eau-de-vie, casque -- KauppaEpicerie)
             else if (KinoModel(kind, g, out size)) { }   // (cinema : popcorn, chips, boisson, bonbons, bobine -- KinoEsineet)
             else
             {
@@ -149,11 +150,11 @@ namespace MWCoop
         {
             Vector3 size; Transform screen;
             GameObject g = Model(kind, out size, out screen);
-            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : kind == KKartturi ? "kartturi gps" : IsKinoKind(kind) ? KinoItemName(kind) : "television") + " osuuskauppa(itemx)";
+            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : kind == KKartturi ? "kartturi gps" : kind == KKypara ? "rally kypara" : IsKinoKind(kind) ? KinoItemName(kind) : "television") + " osuuskauppa(itemx)";
             g.transform.position = pos; g.transform.rotation = rot;
             var e = new Esine { Id = id, Kind = kind, Data = data ?? "", Go = g, Screen = screen };
             e.Col = g.AddComponent<BoxCollider>(); e.Col.size = size;
-            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : kind == KKartturi ? 0.4f : IsKinoKind(kind) ? KinoItemMass(kind) : 9f;
+            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : kind == KKartturi ? 0.4f : kind == KKypara ? 1.4f : IsKinoKind(kind) ? KinoItemMass(kind) : 9f;
             e.Rb.collisionDetectionMode = CollisionDetectionMode.Continuous;   // (cassette fine : ne traverse pas le sol en tombant)
             g.layer = 19; g.tag = "PART";
             esineet.Add(e);
@@ -500,43 +501,6 @@ namespace MWCoop
             string content = tape != null ? tape.Data : Tape(vcr).Length > 0 ? Tape(vcr) : "tyhja";
             if (tape != null) RemoveItem(tape, true);
             SetData(vcr, content + "|1");
-        }
-
-        // ---------------------------------------------------------------- en rayon
-        static void VideoOffers()
-        {
-            // cassettes : tablette du haut de la gondole, cote porte, couchees, tranche vers les clients
-            float top = 0.14f + 3f * (1.45f - 0.2f) / 3.3f + 0.025f;
-            var vhs = new Offer { Item = KVhs, Price = 19, Fr = "CASSETTE VHS", En = "VHS TAPE" };
-            for (int i = 0; i < 6; i++) Display(vhs, KVhs, new Vector3(-2.52f + i * 0.2f, top, -0.02f), 0f, 78f);   // debout, etiquette vers les clients
-            OfferCol(vhs, new Vector3(-2.02f, top + 0.08f, -0.02f), new Vector3(1.3f, 0.22f, 0.35f));
-            Plane("hlvhs", new Vector3(-2.02f, top - 0.075f, 0.152f), 0.18f, 0.09f, Vector3.forward);
-            // magnetoscopes : etagere basse du mur gauche (niveau du milieu), facade vers la piece ; TV dessus
-            float wx = -W2 + Wall + 0.225f, front = -W2 + Wall + 0.453f;
-            var vcr = new Offer { Item = KNauhuri, Price = 390, Fr = "MAGNÉTOSCOPE", En = "VCR" };
-            foreach (float z in new[] { 0.5f, 1.1f }) Display(vcr, KNauhuri, new Vector3(wx, 0.525f, z), -90f);
-            OfferCol(vcr, new Vector3(wx, 0.62f, 0.8f), new Vector3(0.45f, 0.25f, 1.15f));
-            Plane("hlnauhuri", new Vector3(front, 0.46f, 0.8f), 0.18f, 0.09f, Vector3.right);
-            var tv = new Offer { Item = KTv, Price = 590, Fr = "TÉLÉVISION", En = "TELEVISION" };
-            Display(tv, KTv, new Vector3(wx, 0.9f, 0.8f), -90f);
-            OfferCol(tv, new Vector3(wx, 1.15f, 0.8f), new Vector3(0.5f, 0.5f, 0.6f));
-            Plane("hltv", new Vector3(front, 0.83f, 0.8f), 0.18f, 0.09f, Vector3.right);
-            // camescopes : etagere haute de droite (troisieme planche), objectif vers la piece
-            float kt = 0.1f + 2f * (1.9f - 0.1f) / 4f + 0.025f;
-            var kam = new Offer { Item = KKamera, Price = 890, Fr = "CAMÉSCOPE", En = "CAMCORDER" };
-            foreach (float z in new[] { 1.78f, 2.27f }) Display(kam, KKamera, new Vector3(wx, kt, z), 90f);
-            OfferCol(kam, new Vector3(wx, kt + 0.12f, 2.02f), new Vector3(0.45f, 0.3f, 1.0f));
-            Plane("hlkamera", new Vector3(front, kt - 0.06f, 2.02f), 0.18f, 0.09f, Vector3.right);
-            KartturiOffers(wx, front);
-            // bobines de cinema (KINO TAHTI) : debout sur la tablette du haut, a cote des cassettes
-            if (KinoOn)
-            {
-                var kela = new Offer { Item = KKela, Price = KelaPrice, Fr = "BOBINE DE FILM", En = "FILM REEL" };
-                foreach (float x in new[] { -1.12f, -0.75f }) Display(kela, KKela, new Vector3(x, top, -0.02f), 0f, 90f);
-                OfferCol(kela, new Vector3(-0.93f, top + 0.18f, -0.02f), new Vector3(0.8f, 0.4f, 0.35f));
-                Plane("hlkela", new Vector3(-0.93f, top - 0.075f, 0.152f), 0.18f, 0.09f, Vector3.forward);
-            }
-            L("en rayon : cassettes 19 mk, magnetoscopes 390 mk, television 590 mk, camescopes 890 mk, KARTTURI " + KartturiPrice + " mk");
         }
 
         // un article expose (sans physique), pose par le bas en "at" ; yaw NaN : ecran de la TV vers la piece (+x)
