@@ -161,8 +161,15 @@ namespace MWCoop
                 blocked.Clear();
             }
             // Curseur libere ; le jeu le laisse invisible : Core dessine le notre (Style.DrawCursor) par-dessus.
-            if (on && freeCursor) { Screen.lockCursor = false; Cursor.visible = false; }
-            else if (on && !Screen.lockCursor) Screen.lockCursor = true;   // (camera drone, menu referme : la souris revient au drone)
+            // (квазарик, 22/10, MSC : curseur qui clignote tchat ouvert -- Screen.lockCursor = false remis a chaque image rend
+            // le curseur visible avant que Cursor.visible = false le cache : un aller-retour par image. Etat du curseur touche
+            // seulement quand il change, et par Cursor.lockState, qui ne touche pas a la visibilite.)
+            if (on && freeCursor)
+            {
+                if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
+                if (Cursor.visible) Cursor.visible = false;
+            }
+            else if (on && Cursor.lockState != CursorLockMode.Locked) Cursor.lockState = CursorLockMode.Locked;   // (camera drone, menu referme : la souris revient au drone)
         }
 
         public static void Draw()
