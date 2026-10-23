@@ -54,6 +54,12 @@ namespace MWCoop
         // une offre en rayon (objet de mod ou piece d'occasion)
         class OsatOffer { public int Wing; public string Name; public int Price; public OsatModItem Mod; public OsatUsed Used; public int UsedIndex; public GameObject Display, Tag; public BoxCollider Col; public OsatSlot Slot; }
         static readonly List<OsatOffer> osatOffers = new List<OsatOffer>();
+        // panier (comme a l'Osuuskauppa : on prend en rayon, on paie a la caisse, puis tout sort sur la palette NOUTO -- JD, 23/10) :
+        // cles d'offres ("m:<id>" objet de mod, plusieurs fois possible ; "u:<n>" piece d'occasion n du stock)
+        static readonly List<string> osatBasket = new List<string>();
+        static BoxCollider osatRegCol;
+        static TextMesh osatRegText;
+        static bool osatRegLooked;
         static OsatOffer osatLooked;
         static float osatLastBuy, osatNoMoneyUntil, osatLastHello = -100f, osatNextAsk;
         static bool osatInside;
@@ -66,6 +72,7 @@ namespace MWCoop
         {
             osatStock = null; osatStockDay = -1; osatLoaded = false; osatAsked = false; osatDirty = true;
             osatOffers.Clear(); osatSlots.Clear(); osatLooked = null; osatInside = false; osatVendor = null; osatWear.Clear(); osatTestDone = false;
+            osatBasket.Clear(); osatRegCol = null; osatRegText = null; osatRegLooked = false;
         }
 
         static int DaysPassed
@@ -149,16 +156,32 @@ namespace MWCoop
                 var ray = new Ray(cam.transform.position, cam.transform.forward);
                 float best = 2.2f; RaycastHit h;
                 foreach (OsatOffer o in osatOffers) if (o.Col != null && o.Col.Raycast(ray, out h, best)) { best = h.distance; hit = o; }
+                bool reg = osatRegCol != null && osatRegCol.Raycast(ray, out h, best);
+                if (reg) hit = null;
+                if (reg != osatRegLooked) { KinoClearGui(); osatRegLooked = reg; }
+                if (reg)
+                {
+                    guiBuy.Value = true;
+                    var cr = System.Globalization.CultureInfo.InvariantCulture;
+                    guiText.Value = now < osatNoMoneyUntil ? "NOT ENOUGH MONEY" : osatBasket.Count == 0 ? Lang.TG("CAISSE", "TILL") : Lang.TG("PAYER ", "PAY ") + BasketTotal().ToString("F2", cr) + " MK";
+                    if (Input.GetMouseButtonDown(0)) OsatPay(now);
+                }
             }
+            else if (osatRegLooked) { KinoClearGui(); osatRegLooked = false; }
             if (hit != osatLooked) { if (osatLooked != null) KinoClearGui(); osatLooked = hit; }
             if (hit != null)
             {
                 guiBuy.Value = true;
                 var ci = System.Globalization.CultureInfo.InvariantCulture;
-                if (now < osatNoMoneyUntil) guiText.Value = "NOT ENOUGH MONEY";
-                else guiText.Value = hit.Name.ToUpperInvariant() + (hit.Used != null ? " (" + Lang.TG("ÉTAT ", "CONDITION ") + Mathf.RoundToInt(hit.Used.Wear) + " %)" : "") + " " + hit.Price.ToString("F2", ci) + " MK";
-                if (Input.GetMouseButtonDown(0)) OsatBuy(hit, now);
+                string key = OfferKey(hit);
+                int inB = osatBasket.FindAll(k => k == key).Count;
+                if (hit.Used != null && inB > 0) guiText.Value = Lang.TG("DANS LE PANIER (CLIC DROIT : REPOSER)", "IN THE BASKET (RIGHT CLICK: PUT BACK)");
+                else guiText.Value = hit.Name.ToUpperInvariant() + (hit.Used != null ? " (" + Lang.TG("ÉTAT ", "CONDITION ") + Mathf.RoundToInt(hit.Used.Wear) + " %)" : "") + " " + hit.Price.ToString("F2", ci) + " MK" + (inB > 0 ? " (" + inB + ")" : "");
+                if (Input.GetMouseButtonDown(0) && !(hit.Used != null && inB > 0)) OsatTake(hit, true);
+                else if (Input.GetMouseButtonDown(1) && inB > 0) OsatTake(hit, false);
             }
+            // panier oublie : vide si l'on s'eloigne du magasin
+            if (osatBasket.Count > 0 && Game.PlayerT != null && (Game.PlayerT.position - osat.transform.position).sqrMagnitude > 40f * 40f) { osatBasket.Clear(); OsatBasketChanged(); }
             // accueil
             bool inNow = InOsat(Game.PlayerT);
             if (inNow && !osatInside && now - osatLastHello > 40f && osatVendor != null)
@@ -303,46 +326,127 @@ namespace MWCoop
             return any ? b : new Bounds(Vector3.zero, Vector3.one * 0.3f);
         }
 
-        // ---------------------------------------------------------------- achat
-        static void OsatBuy(OsatOffer o, float now)
+        // ---------------------------------------------------------------- panier, caisse, achat
+        static string OfferKey(OsatOffer o) { return o.Mod != null ? "m:" + o.Mod.Id : "u:" + o.UsedIndex; }
+
+        static OsatOffer OfferOf(string key)
+        {
+            foreach (OsatOffer o in osatOffers) if (OfferKey(o) == key) return o;
+            return null;
+        }
+
+        static int BasketTotal() { int t = 0; foreach (string k in osatBasket) { OsatOffer o = OfferOf(k); if (o != null) t += o.Price; } return t; }
+
+        // prendre en rayon (take) ou reposer
+        static void OsatTake(OsatOffer o, bool take)
+        {
+            string key = OfferKey(o);
+            if (take) osatBasket.Add(key); else osatBasket.Remove(key);
+            try { MasterAudio.PlaySound3DAtVector3AndForget("HouseFoley", o.Col.transform.position, 0.5f, null, 0f, "mailbox_open"); } catch { }
+            OsatBasketChanged();
+        }
+
+        // piece d'occasion dans le panier : cachee du rayon (sa case reste visable pour la reposer) ; ecran de la caisse
+        static void OsatBasketChanged()
+        {
+            osatBasket.RemoveAll(k => OfferOf(k) == null);
+            foreach (OsatOffer o in osatOffers)
+            {
+                if (o.Used == null) continue;
+                bool hide = osatBasket.Contains(OfferKey(o));
+                if (o.Display != null) o.Display.SetActive(!hide);
+                if (o.Tag != null) o.Tag.SetActive(!hide);
+            }
+            if (osatRegText != null) osatRegText.text = BasketTotal().ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        static void OsatPay(float now)
         {
             if (now - osatLastBuy < 0.6f) return;
             osatLastBuy = now;
-            if (money == null || money.Value < o.Price)
+            if (osatBasket.Count == 0) { Say("Myyjä : prends d'abord ce que tu veux dans les rayons.", "Vendor: take what you want from the shelves first."); return; }
+            int total = BasketTotal();
+            if (money == null || money.Value < total)
             {
                 osatNoMoneyUntil = now + 2f;
                 Say("Myyjä : il te manque de l'argent.", "Vendor: you're a bit short on money.");
                 return;
             }
+            int paid = 0, n = 0;
+            foreach (string k in new List<string>(osatBasket))
+            {
+                OsatOffer o = OfferOf(k);
+                if (o != null && OsatDeliver(o)) { paid += o.Price; n++; }
+            }
+            money.Value -= paid;   // (Wallet : une depense reste au joueur)
+            if (paid > 0) CashSound();
+            osatBasket.Clear();
+            OsatBasketChanged();
+            L("magasin de pieces : paye " + paid + " mk pour " + n + " article(s), reste " + money.Value.ToString("F0") + " mk");
+            if (n > 0) Say("Myyjä : Kiitos ! Tout est sur la palette NOUTO.", "Vendor: Kiitos! Everything's on the NOUTO pallet.");
+        }
+
+        // un article paye : il sort sur la palette NOUTO de son aile (vrai si livre)
+        static bool OsatDeliver(OsatOffer o)
+        {
             Vector3 pk = OsatPickup(o.Wing) + new Vector3(UnityEngine.Random.Range(-0.35f, 0.35f), 0.25f + 0.1f * (osatBuyN++ % 4), UnityEngine.Random.Range(-0.2f, 0.2f));
             Vector3 pos = osat.transform.TransformPoint(pk);
             Quaternion rot = osat.transform.rotation * Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
             if (o.Mod != null)
             {
-                money.Value -= o.Price;   // (Wallet : une depense reste au joueur)
-                CashSound();
-                L("magasin de pieces : achat de '" + o.Mod.Id + "' " + o.Price + " mk, reste " + money.Value.ToString("F0") + " mk");
+                L("magasin de pieces : achat de '" + o.Mod.Id + "' " + o.Price + " mk");
                 InvokeMod(o.Mod, Session.LocalId, true, pos, rot);
                 if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@osat").U8(2).Str(o.Mod.Id).Vec(pos).Quat(rot), true);
-                Say("Myyjä : Kiitos ! Tu le trouveras sur la palette NOUTO.", "Vendor: Kiitos! You'll find it on the NOUTO pallet.");
-                return;
+                return true;
             }
             OsatUsed u = o.Used;
-            if (u == null || u.Sold) return;
+            if (u == null || u.Sold) return false;
             List<KeyValuePair<string, int>> before;
             GameObject go = SpawnUsed(u.Vin, u.Wear, pos, rot, null, out before);
-            if (go == null) { Say("Myyjä : celle-là, je ne la retrouve plus... prends-en une autre.", "Vendor: can't find that one anymore... pick another."); return; }
-            money.Value -= o.Price;
-            CashSound();
+            if (go == null) { Say("Myyjä : celle-là, je ne la retrouve plus... (pas payée)", "Vendor: can't find that one anymore... (not charged)"); return false; }
             u.Sold = true; osatDirty = true;
-            L("magasin de pieces : achat de " + u.Name + " (" + u.Vin + ", usure " + u.Wear.ToString("F0") + ") " + o.Price + " mk : " + go.name + ", reste " + money.Value.ToString("F0") + " mk");
+            L("magasin de pieces : achat de " + u.Name + " (" + u.Vin + ", usure " + u.Wear.ToString("F0") + ") " + o.Price + " mk : " + go.name);
             if (Session.Active)
             {
                 var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@osat").U8(1).U8(o.UsedIndex).Str(u.Vin).F32(u.Wear).Vec(pos).Quat(rot).U8(before.Count);
                 foreach (KeyValuePair<string, int> kv in before) w.Str(kv.Key).I32(kv.Value);
                 Session.SendAll(w, true);
             }
-            Say("Myyjä : Kiitos ! Elle est sur la palette NOUTO, à droite.", "Vendor: Kiitos! It's on the NOUTO pallet, on the right.");
+            return true;
+        }
+
+        // caisse enregistreuse de la PSK (comme a l'Osuuskauppa), clavier vers le vendeur, son ecran (texte de la PSK) vers le
+        // client avec le total du panier (JD, 23/10) ; [Osat] KassaKulma : rotation en plus (degres)
+        static void OsatRegister()
+        {
+            GameObject regSrc = FindPath("PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister");
+            float yaw = Config.GetFloat("Osat", "KassaKulma", -76f);   // (mesure : a 0, ecran vers -104 deg ; -76 le tourne vers le client, +z)
+            GameObject reg = regSrc != null ? Clone("PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister", 0, new Vector3(1.3f, 1.03f, -2.3f), yaw, new Vector3(0, -1, 0), false) : null;
+            if (reg == null) { L("magasin de pieces : caisse de la PSK introuvable"); return; }
+            Bounds rb = LocalBounds(reg);
+            var cg = new GameObject("osat_kassa");
+            cg.layer = 2;
+            cg.transform.SetParent(osat.transform, false);
+            cg.transform.localPosition = rb.center;
+            osatRegCol = cg.AddComponent<BoxCollider>(); osatRegCol.isTrigger = true; osatRegCol.size = rb.size + new Vector3(0.08f, 0.08f, 0.08f);
+            Transform logic = regSrc.transform.Find("CashRegisterLogic");
+            TextMesh src = logic != null ? logic.GetComponent<TextMesh>() : null;
+            if (src == null) { L("magasin de pieces : ecran de la caisse de la PSK introuvable"); return; }
+            var tg = new GameObject("osat_kassa_naytto");
+            tg.transform.SetParent(reg.transform, false);
+            tg.transform.localPosition = regSrc.transform.InverseTransformPoint(logic.position);
+            tg.transform.localRotation = Quaternion.Inverse(regSrc.transform.rotation) * logic.rotation;
+            Vector3 ls = logic.lossyScale, ss = regSrc.transform.lossyScale;
+            tg.transform.localScale = new Vector3(ls.x / ss.x, ls.y / ss.y, ls.z / ss.z);
+            var tm = tg.AddComponent<TextMesh>();
+            tm.font = src.font; tm.fontSize = src.fontSize; tm.characterSize = src.characterSize; tm.anchor = src.anchor;
+            tm.alignment = src.alignment; tm.color = src.color; tm.lineSpacing = src.lineSpacing; tm.offsetZ = src.offsetZ;
+            var mr = tg.GetComponent<MeshRenderer>();
+            Renderer sr = logic.GetComponent<Renderer>();
+            if (mr != null && sr != null) mr.sharedMaterials = sr.sharedMaterials;
+            tm.text = "0.00";
+            osatRegText = tm;
+            L("magasin de pieces : caisse posee, ecran tourne vers " + osat.transform.InverseTransformDirection(tg.transform.forward).ToString("F2") + " (repere du magasin ; le client est vers +z)");
         }
 
         static void CashSound()
@@ -531,7 +635,11 @@ namespace MWCoop
                 int nb = r.U8();
                 var before = new List<KeyValuePair<string, int>>();
                 for (int i = 0; i < nb; i++) before.Add(new KeyValuePair<string, int>(r.Str(), r.I32()));
-                if (osatStock != null && idx < osatStock.Count && osatStock[idx].Vin == vin) { osatStock[idx].Sold = true; osatDirty = true; }
+                if (osatStock != null && idx < osatStock.Count && osatStock[idx].Vin == vin)
+                {
+                    osatStock[idx].Sold = true; osatDirty = true;
+                    if (osatBasket.Remove("u:" + idx)) Say("Myyjä : désolé, quelqu'un vient d'acheter " + osatStock[idx].Name + ".", "Vendor: sorry, someone just bought the " + osatStock[idx].Name + ".");
+                }
                 List<KeyValuePair<string, int>> mine;
                 GameObject go = SpawnUsed(vin, wear, pos, rot, before, out mine);
                 L("magasin de pieces : piece d'occasion " + vin + " achetee par #" + who + (go != null ? ", recree ici : " + go.name : ", PAS recreee ici"));

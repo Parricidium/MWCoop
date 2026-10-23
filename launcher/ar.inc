@@ -1976,6 +1976,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Mod authors: CoopApi.AddShopItem(id, name, price, model, callback) puts an item on the CARDINAL wing's shelves. When it is bought, the callback runs on every player's game with the buyer and the pick-up spot: the mod spawns its object there. Details and an example: docs/API.md on MWCoop's GitHub.", L"لمطوري المودات: CoopApi.AddShopItem(id, name, price, model, callback) يضع غرضًا على رفوف جناح CARDINAL. عند الشراء، يُستدعى الـ callback لدى كل اللاعبين مع المشتري ومكان الاستلام: ينشئ المود غرضه هناك. التفاصيل ومثال: docs/API.md على GitHub الخاص بـ MWCoop." },
     { L"The CARDINAL parts shop", L"متجر قطع الغيار CARDINAL" },
     { L"Mod parts, used parts for the Rivett", L"قطع المودات، قطع مستعملة لـ Rivett" },
+    { L"Look at an item: its name, condition and price show up. Left click takes it, right click puts it back.", L"انظر إلى سلعة: يظهر اسمها وحالتها وسعرها. النقر الأيسر يأخذها، والنقر الأيمن يعيدها." },
+    { L"Look at the till on the counter: its screen shows the total. Click to pay, from your wallet. Your purchases appear on each wing's NOUTO pallet, in front of the counter.", L"انظر إلى الصندوق على المنضدة: تعرض شاشته المجموع. انقر للدفع من محفظتك. تظهر مشترياتك على منصة NOUTO لكل جناح، أمام المنضدة." },
     { L"These guests are still receiving your mods: ", L"هؤلاء الضيوف ما زالوا يستلمون مودّاتك: " },
     { L"\n\nWait for their download to finish before starting the game.", L"\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة." },
     { L"Sending mods (%d)\u2026", L"إرسال المودّات (%d)…" },
