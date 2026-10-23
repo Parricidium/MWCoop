@@ -97,7 +97,7 @@ namespace MWCoop
             public float AntiRoll, ComDrop;   // barres antiroulis (N/m, 0 : celles du jeu) ; centre de gravite abaisse (m) -- JD 21/10, tonneaux trop faciles
             public float Handbrake;           // couple du frein a main sur l'essieu arriere (N.m, 0 : celui du jeu) -- JD 21/10, partir en travers
         }
-        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4;
+        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
@@ -211,7 +211,34 @@ namespace MWCoop
             Dome = new Vector3(0f, 1.06f, -0.20f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "Sport Quattro Gr. B", Power = 450f, PowerRpm = 7500f, Torque = 490f, TorqueRpm = 5500f, MaxRpm = 8000f,
                             Mass = 1100f, Com = 0.58f, Steer = 38f, Spring = 52000f, Damp = 3400f, AntiRoll = 22000f, ComDrop = 0.05f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
-        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84 };   // (rempli : Vaz2108 au constructeur statique)
+        // 205 T16 Evo 2 1986 Gr. B (JD 23/10, rally cars GrB/205T16, Kankkunen : « Peujot 205 T16 Ebo 2 ») : moteur central
+        // arriere, integrale ; habitacle de la vue interieure du modele (remonte de 3 cm sur la caisse) ; yeux au point de vue du
+        // modele rFactor (Eyepoint du cockpitinfo, remonte comme l'habitacle : -0,32 ; 0,92 ; -0,03), tete 27 cm derriere ; frein
+        // a main : son propre levier (sur le tunnel, pivot a l'arriere, poignee vers l'avant : se leve quand il est serre, comme
+        // l'Impreza) ; boutons comme l'Ebo 1 : contact (rouge), starter (bleu, tire / pousse), phares (blanc), warning (orange) en
+        // colonne sur la face de la planche (z 0,518, tournee vers le pilote) juste a droite du volant. Tenue de route : celle de
+        // l'Ebo 1 validee par JD, moteur et masse de l'Evo 2 : 450 ch a 7 500 tr/min, 490 Nm a 5 500, rupteur 8 000, 910 kg (Mass
+        // du .hdv rFactor) ; frein a main de la Sport Quatro (6 000 N.m).
+        public static readonly Model T16b = new Model { Id = ModelT16b, Folder = "t16e2", Name = "205 Ebo 2",
+            Head = new Vector3(-0.32f, 0.95f, -0.30f), Engine = new Vector3(0f, 0.55f, -0.85f),
+            BrakePivot = new Vector3(-0.012f, 0.297f, -0.125f), BrakeGrip = new Vector3(-0.012f, 0.349f, 0.095f),
+            Controls = new[] {
+                new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.05f, 0.640f, 0.511f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(-0.05f, 0.605f, 0.511f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(-0.05f, 0.570f, 0.511f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(-0.05f, 0.535f, 0.511f)) },
+            Knobs = new[] {
+                new Knob { At = new Vector3(-0.05f, 0.640f, 0.518f), Normal = Vector3.back, Col = new Color(0.80f, 0.06f, 0.05f) },
+                new Knob { At = new Vector3(-0.05f, 0.605f, 0.518f), Normal = Vector3.back, Col = new Color(0.10f, 0.25f, 0.85f), Choke = true, Path = "Functions/Dashboard/Choke/ButtonChoke" },
+                new Knob { At = new Vector3(-0.05f, 0.570f, 0.518f), Normal = Vector3.back, Col = new Color(0.92f, 0.92f, 0.90f) },
+                new Knob { At = new Vector3(-0.05f, 0.535f, 0.518f), Normal = Vector3.back, Col = new Color(0.95f, 0.45f, 0.05f) } },
+            Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
+                          "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
+                          "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
+            Dome = new Vector3(0f, 1.10f, -0.20f), HasDome = true, ControlSize = 0.024f,
+            Sp = new Spec { Name = "205 T16 Evo 2 Gr. B", Power = 450f, PowerRpm = 7500f, Torque = 490f, TorqueRpm = 5500f, MaxRpm = 8000f,
+                            Mass = 910f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles); }
