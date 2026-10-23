@@ -340,6 +340,10 @@ namespace MWCoop
                     if (++fillsIn % 20 == 1) Log.Info("liquides et usure : " + key + " rempli de " + v.ToString("F2") + " par le joueur #" + who + " -> " + Val(x).ToString("F2"));
                     continue;
                 }
+                // Valeur disputee (recalculee des deux cotes : usure de la courroie d'alternateur de MSC...) : seul l'hote fait foi.
+                // Il n'envoyait deja plus que lui, mais il appliquait encore ce qu'un invite envoyait avant de le savoir : la
+                // courroie abimee chez l'hote « revenait a son etat d'origine » (Teodor_Takahashi, 23/10 : Use.Wear = 2.23 recue de #1).
+                if (x.Contested && who != 0) { Tally(x, false, now); continue; }
                 // (remplissage fait ici depuis le dernier releve, pas encore parti : garde par-dessus la valeur recue)
                 float here = Val(x);
                 if (Fill(x) && here > x.Last && (Driven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += here - x.Last;

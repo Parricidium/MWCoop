@@ -145,6 +145,7 @@ namespace MWCoop
         // Cles vues en double a un releve (deux corps, meme cle) : objets « (Clone) » apparus en jeu, ou le rang ne vaut rien
         // d'un joueur a l'autre -- ni l'un ni l'autre n'est suivi (impossible de savoir lequel est lequel en face).
         static readonly HashSet<string> dupKeys = new HashSet<string>();
+        static int mscKeyLogs;
         static readonly HashSet<string> dupLogged = new HashSet<string>();
 
         public static string WorldKeyOf(Rigidbody rb) { return WorldKey(rb); }   // (Fluids : bidons)
@@ -158,7 +159,10 @@ namespace MWCoop
             if (rb.GetComponent<Drinks.Thrown>() != null) return false;   // (bouteille jetee par un autre, recreee ici : copie sans logique)
             // A la racine de la scene : son rang parmi les racines change avec l'ordre de chargement. Seul un objet apparu en
             // jeu « (Clone) » passe, avec une cle sans rang (son nom, meme des deux cotes) -- en double, personne ne le suit.
-            if (t.parent == null && !t.name.Contains("(Clone)")) return false;
+            // (My Summer Car : les pieces achetees ou rechargees de la sauvegarde sont a la racine, avec ou sans « (Clone) » selon
+            // qu'elles sont nees dans la partie ou au chargement -- « rear light right », « headlight »... : acceptees, cle par le
+            // nom sans « (Clone) », la meme des deux cotes ; Vaydon, 23/10 : phares jamais synchronises, troisieme feu arriere)
+            if (t.parent == null && !t.name.Contains("(Clone)") && !Game.Msc) return false;
             if (rb.isKinematic) return false;   // (anime par le jeu, ou pas encore libre : revu au releve suivant)
             if (rb.GetComponent<Joint>() != null) return false;   // porte, ragdoll, chaine : sa physique est celle du joint
             bool solid = false;
@@ -194,6 +198,14 @@ namespace MWCoop
             if (k == null && tn == "Suitcase" && t.parent == null && t.Find("Part0") != null) k = SuitcaseKey;
             // Cellule camping du mod RAM 1500 posee a part (montee : rangee sous le Ram, elle le suit) -- prise a la main comme une piece.
             if (k == null && tn == "CamperShell" && t.parent == null) k = "w:mod:ramcamper";
+            // Piece de My Summer Car (automate Removal) : la cle de PartsMsc (db:Database/... ou id:...), la meme chez tous quel que
+            // soit son parent ou son etat. Avant : demontee du moteur et prise aussitot en main (cinematique, sous PLAYER), elle
+            // n'avait pas de cle -- carburateur, collecteur, cache-culbuteurs invisibles dans la main de l'autre (Teodor_Takahashi, 23/10).
+            if (k == null && Game.Msc && Game.FsmOn(t.gameObject, "Removal") != null)
+            {
+                string mk = Parts.MscPartKey(t.gameObject);
+                if (mk.StartsWith("db:") || mk.StartsWith("id:")) { k = "w:" + mk; if (mscKeyLogs++ < 20) Log.Info("objets : piece " + Recon.Path(t) + " -> cle " + k); }
+            }
             if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement. Cle
             // par son UT (maison, usine), pas par l'endroit : tenue en main, elle est sous PLAYER pour les deux.
@@ -209,7 +221,8 @@ namespace MWCoop
             {
                 string path = Recon.Path(t);
                 if (!listed && path.Contains("skeleton")) return null;   // (os d'un PNJ anime sans joint)
-                k = !listed && t.parent == null ? "w:" + path : "w:" + path + "#" + t.GetSiblingIndex();   // (racine « (Clone) » : sans rang)
+                k = !listed && t.parent == null ? "w:" + path.Replace("(Clone)", "") : "w:" + path + "#" + t.GetSiblingIndex();   // (racine « (Clone) » : sans rang, nom sans « (Clone) »)
+                if (!listed && t.parent == null && Game.Msc && mscKeyLogs++ < 20) Log.Info("objets : objet a la racine " + path + " -> cle " + k);
                 if (!listed && dupKeys.Contains(k)) return null;
             }
             worldKeys[rb.gameObject] = k;
