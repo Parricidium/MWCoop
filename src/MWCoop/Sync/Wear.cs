@@ -49,6 +49,7 @@ namespace MWCoop
             public int OffWho = -1; public Vector3 OffPos; public Quaternion OffRot; public float OffAt = -1;  // pose ou un autre l'a enleve
             public int LastWearer = -1;                                           // dernier porteur vu
             public float YieldAt = -100, HeldLog = -100, SentAt;
+            public Vector3 FreePos, FreeEul;                                      // (casque achete : derniere pose libre, sauvegardee)
         }
 
         // 0 veste, 1 combinaison, 2 casque, 3 tasse, puis par joueur k >= 2 : veste k, combinaison k, casque k, tasse k.
@@ -76,6 +77,7 @@ namespace MWCoop
             Reset();
             clothLogic = helmetLogic = null;
             helmetHooked.Clear(); cupSeen.Clear(); cupResend = 0f;
+            osto.Clear(); ostoFile.Clear(); ostoRead = false;
             player = null;
             found = fileRead = false;
             filePoses.Clear();
@@ -134,7 +136,7 @@ namespace MWCoop
         static readonly HashSet<GameObject> helmetHooked = new HashSet<GameObject>();
         static void HookHelmets()
         {
-            foreach (Item it in items)
+            foreach (Item it in AllItems())
             {
                 if (it.Kind != 2 || it.Go == null || helmetHooked.Contains(it.Go)) continue;
                 PlayMakerFSM use = Game.FsmOn(it.Go, "Use");
@@ -180,7 +182,7 @@ namespace MWCoop
 
         public static string KeyOf(GameObject go)
         {
-            foreach (Item it in items) if (it.Go != null && it.Go == go) return it.Key;
+            foreach (Item it in AllItems()) if (it.Go != null && it.Go == go) return it.Key;
             return null;
         }
 
@@ -193,7 +195,7 @@ namespace MWCoop
             get
             {
                 int f = 0;
-                foreach (Item it in items) if (it.LocalWorn) f |= Bits[it.Kind];
+                foreach (Item it in AllItems()) if (it.LocalWorn) f |= Bits[it.Kind];
                 return f;
             }
         }
@@ -235,8 +237,16 @@ namespace MWCoop
                 return none;
             }
             if (src == null) return null;
+            var it = NewCopy(kind, k, src, CopyNames[kind] + " " + k + "(itemx)", Kinds[kind] + " " + k, "w:vetement:" + Kinds[kind] + k, pos, rot);
+            items.Add(it);
+            return it;
+        }
+
+        // copie d'un vetement du jeu (« (itemx) » dans le nom : la main du jeu le prend comme un objet), pas encore listee
+        static Item NewCopy(int kind, int k, GameObject src, string goName, string name, string key, Vector3 pos, Quaternion rot)
+        {
             var go = (GameObject)Object.Instantiate(src, pos, rot);
-            go.name = CopyNames[kind] + " " + k + "(itemx)";   // (« (itemx) » : la main du jeu le prend comme un objet)
+            go.name = goName;
             go.transform.parent = null;
             go.transform.position = pos; go.transform.rotation = rot;
             go.transform.localScale = Vector3.one;   // (comme le chargement du jeu : SetScale 1)
@@ -270,10 +280,114 @@ namespace MWCoop
                 FsmInt st = use.FsmVariables.FindFsmInt("State"); if (st != null) st.Value = 0;
                 FsmBool ld = use.FsmVariables.FindFsmBool("Loaded"); if (ld != null) ld.Value = true;
             }
-            var it = new Item { Go = go, Kind = kind, Name = Kinds[kind] + " " + k, Key = "w:vetement:" + Kinds[kind] + k };
-            items.Add(it);
+            var nit = new Item { Go = go, Kind = kind, Name = name, Key = key, FreePos = pos, FreeEul = rot.eulerAngles };
             Props.SoonScan();
+            return nit;
+        }
+
+        // ---------------------------------------------------------------- casques achetes (epicerie, JD 23/10)
+        // Copies du casque du jeu vendues a l'Osuuskauppa, en plus des paires (une par joueur) : creees chez l'hote (ou en
+        // solo), liste et poses envoyees a tous (@vetosto, redite avec celle des paires), gardees a cote de la sauvegarde de
+        // l'hote (MWCoop-kyparat.txt). Messages de port : numero 128 + j (hors des paires, dont l'ordre peut differer).
+        const int OstoBase = 128;
+        static readonly List<Item> osto = new List<Item>();
+        static readonly List<Vector3[]> ostoFile = new List<Vector3[]>();
+        static bool ostoRead;
+        static bool Authority { get { return !Session.Active || Session.IsHost; } }
+        static string OstoPath { get { return WorldFiles.PathOf("MWCoop-kyparat.txt"); } }
+
+        static IEnumerable<Item> AllItems()
+        {
+            foreach (Item it in items) yield return it;
+            foreach (Item it in osto) yield return it;
+        }
+
+        public static void BuyHelmet(Vector3 pos, Quaternion rot)
+        {
+            if (Authority) { AddOsto(pos, rot, true, Session.Active ? Session.LocalId : 0); return; }
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@vetostoa").Vec(pos).Quat(rot), true);
+            Log.Info("vetements : casque achete, demande envoyee a l'hote");
+        }
+
+        public static void OnBuyRequest(int who, Vector3 pos, Quaternion rot) { if (Session.IsHost) AddOsto(pos, rot, true, who); }
+
+        // essai (boutique, action « kyparapaalle ») : le dernier casque achete mis par son automate Use, comme un clic
+        public static string TestOsto()
+        {
+            if (osto.Count == 0) return "aucun casque achete";
+            Item it = osto[osto.Count - 1];
+            PlayMakerFSM use = it.Go != null ? Game.FsmOn(it.Go, "Use") : null;
+            if (use == null) return it.Name + " : pas d'automate Use";
+            Game.SetState(use, "State 1");
+            return it.Name + " : mis par son automate (" + use.ActiveStateName + ")";
+        }
+        public static string OstoState() { return osto.Count + " casque(s) achete(s)" + (osto.Count > 0 ? ", dernier : " + State2(osto[osto.Count - 1]) : ""); }
+        static string State2(Item it) { return it.Name + (it.Go == null ? " absent" : (it.Go.activeSelf ? " visible en " + it.Go.transform.position.ToString("F2") : " inactif") + ", porte ici " + it.LocalWorn + ", PlayerHelmet " + Game.GlobalBool("PlayerHelmet")); }
+
+        static Item AddOsto(Vector3 pos, Quaternion rot, bool bought, int who)
+        {
+            GameObject src = items[2].Go;
+            if (src == null) { Log.Info("vetements : casque du jeu introuvable, casque achete pas cree"); return null; }
+            int j = osto.Count + 1;
+            Item it = NewCopy(2, j, src, "helmet osto " + j + "(itemx)", "casque achete " + j, "w:vetement:casqueosto" + j, pos, rot);
+            osto.Add(it);
+            HookHelmets();
+            if (bought)
+            {
+                Log.Info("vetements : casque achete " + j + " par #" + who + ", pose en " + pos.ToString("F1"));
+                SaveOsto(); SendOsto();
+            }
             return it;
+        }
+
+        static void LoadOsto()
+        {
+            ostoRead = true;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            try
+            {
+                if (File.Exists(OstoPath))
+                    foreach (string l in File.ReadAllLines(OstoPath))
+                    {
+                        string[] c = l.Split(';');
+                        if (c.Length < 6) continue;
+                        Vector3 p = new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci)), e = new Vector3(float.Parse(c[3], ci), float.Parse(c[4], ci), float.Parse(c[5], ci));
+                        AddOsto(p, Quaternion.Euler(e), false, 0);
+                    }
+            }
+            catch (System.Exception ex) { Log.Warn("vetements : lecture des casques achetes " + ex.Message); }
+            if (osto.Count > 0) Log.Info("vetements : " + osto.Count + " casque(s) achete(s) repris de la sauvegarde");
+        }
+
+        static void SaveOsto()
+        {
+            if (!Authority || !ostoRead) return;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder();
+            foreach (Item it in osto)
+            {
+                foreach (float f in new[] { it.FreePos.x, it.FreePos.y, it.FreePos.z, it.FreeEul.x, it.FreeEul.y, it.FreeEul.z }) sb.Append(f.ToString("R", ci)).Append(';');
+                sb.Length--; sb.Append('\n');
+            }
+            try { File.WriteAllText(OstoPath, sb.ToString()); } catch (System.Exception ex) { Log.Warn("vetements : ecriture des casques achetes " + ex.Message); }
+        }
+
+        static void SendOsto()
+        {
+            if (!Session.Active || !Session.IsHost || osto.Count == 0 || Session.RemoteCount == 0) return;
+            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@vetosto").U8(osto.Count);
+            foreach (Item it in osto) w.Vec(it.FreePos).Vec(it.FreeEul);
+            Session.SendAll(w, true);
+        }
+
+        // Invite : liste de l'hote -- les casques achetes qui manquent ici, a la pose de l'hote.
+        public static void OnOstoList(NetReader r)
+        {
+            int n = r.U8();
+            var ps = new List<Vector3[]>();
+            for (int j = 0; j < n; j++) ps.Add(new[] { r.Vec(), r.Vec() });
+            if (Session.IsHost || items[2].Go == null) return;
+            for (int j = osto.Count; j < n; j++) AddOsto(ps[j][0], Quaternion.Euler(ps[j][1]), false, 0);
         }
 
         // Paires jusqu'a n (poses : veste, rotation, combinaison, rotation par paire k >= 2, sinon point de la maison).
@@ -331,7 +445,7 @@ namespace MWCoop
         }
 
         // A la sauvegarde du jeu (SaveHook), comme les autres objets des ajouts : poses des tenues de plus.
-        public static void OnGameSave() { if (Session.Active && fileRead) SaveFile(); }
+        public static void OnGameSave() { if (Session.Active && fileRead) SaveFile(); SaveOsto(); }
 
         static void SaveFile()
         {
@@ -471,29 +585,38 @@ namespace MWCoop
                 if (want > pairs && EnsurePairs(want, filePoses, filePoses.Count + 1 >= want ? "reprises de la sauvegarde" : "une par joueur")) { SaveFile(); nextList = 0f; }
                 if (now >= nextList) { nextList = now + 10f; SendList(); }
             }
+            if (Authority && !ostoRead && items[2].Go != null && now - loadedAt > 12f) { LoadOsto(); SendOsto(); }
+            if (Session.Active && Session.IsHost && ostoRead && now >= nextOsto) { nextOsto = now + 10f; SendOsto(); }
             if (swapKind >= 0 && now >= swapAt) Swap(now);
-            for (int i = 0; i < items.Count; i++)
+            for (int i = 0; i < items.Count; i++) Tick(items[i], i, now);
+            for (int j = 0; j < osto.Count; j++) Tick(osto[j], OstoBase + j, now);
+        }
+        static float nextOsto;
+
+        static void Tick(Item it, int i, float now)
+        {
             {
-                Item it = items[i];
                 GameObject go = it.Go;
-                if (go == null) continue;
+                if (go == null) return;
                 Transform t = go.transform;
                 // Sous PLAYER (pas sa racine : au volant ou passager, la racine est la voiture).
                 bool worn = !go.activeSelf && player != null && t.IsChildOf(player);
                 if (worn != it.LocalWorn)
                 {
                     it.LocalWorn = worn;
-                    if (worn) it.Hidden = false;   // (cache ici, puis mis par ce joueur-ci : impossible, mais propre)
+                    if (worn) it.Hidden = false;
+                    if (!worn && i >= OstoBase) { it.FreePos = t.position; it.FreeEul = t.rotation.eulerAngles; }   // (cache ici, puis mis par ce joueur-ci : impossible, mais propre)
                     if (Session.Active) { SendWear(i, worn, t); it.SentAt = now; }
                     Log.Info("vetements : " + it.Name + (worn ? " mis(e)" : " enleve(e) en " + t.position.ToString("F1")));
                 }
                 else if (worn && Session.Active && now - it.SentAt > 5f) { SendWear(i, true, t); it.SentAt = now; }   // (redit : arrivee, message perdu)
-                if (!Session.Active) continue;
+                if (i >= OstoBase && !worn && !it.Hidden && go.activeInHierarchy && (player == null || !t.IsChildOf(player))) { it.FreePos = t.position; it.FreeEul = t.rotation.eulerAngles; }
+                if (!Session.Active) return;
                 int wearer = RemoteWearer(it, now);
                 if (worn)
                 {
                     if (wearer >= 0 && wearer < Session.LocalId) Yield(it, wearer, now);
-                    continue;
+                    return;
                 }
                 if (wearer >= 0)
                 {
@@ -597,8 +720,8 @@ namespace MWCoop
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Wear).U8(who).U8(i).Bool(worn).Vec(pos).Quat(rot), true, who);
-            if (i < 0 || i >= items.Count) return;   // (copie pas encore la : redit dans 5 s)
-            Item it = items[i];
+            Item it = i >= OstoBase ? (i - OstoBase < osto.Count ? osto[i - OstoBase] : null) : (i < items.Count ? items[i] : null);
+            if (it == null) return;   // (copie pas encore la : redit dans 5 s)
             float now = Time.realtimeSinceStartup;
             bool was = it.WornBy == who;
             if (worn) { it.WornBy = who; it.WornAt = now; }

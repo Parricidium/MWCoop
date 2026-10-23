@@ -617,6 +617,8 @@ namespace MWCoop
                             shotName = a[8]; shotAt = now + (a.Length > 9 ? F(a[9]) : 3f);
                             break;
                         }
+                        case "kyparapaalle": L("essai : " + Wear.TestOsto()); break;
+                        case "kypara": L("essai : " + Wear.OstoState()); break;
                         case "vitriini": { Vitriini v = vitriinit.Find(x => x.Name == a[2]); if (v != null) { v.OpenHalf = int.Parse(a[3]); L("essai : vitrine " + a[2] + " moitie " + a[3]); } break; }
                         case "fin": if (testCam != null) { UnityEngine.Object.Destroy(testCam.gameObject); testCam = null; } break;
                         default: KinoEssai(a, now); break;   // (actions du cinema : KinoRakennus.cs)
