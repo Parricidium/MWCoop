@@ -265,6 +265,7 @@ namespace MWCoop
         static void SpawnKind(string kind, Vector3 p, Quaternion q)
         {
             if (kind == "makuupussi") SleepingBags.Purchase(p, q);
+            else if (kind == KKypara) Wear.BuyHelmet(p, q);   // (copie du casque du jeu, portable : Wear)
             else SpawnItem(kind, kind == KVhs || kind == KKela ? "tyhja" : "", p, q);
         }
 

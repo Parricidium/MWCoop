@@ -15,7 +15,7 @@ namespace MWCoop
     public static partial class Kauppa
     {
         public const string KOlut = "olut", KViina = "viina", KKypara = "kypara";
-        const int OlutPrice = 14, ViinaPrice = 89, KyparaPrice = 690;
+        const int OlutPrice = 14, ViinaPrice = 89, KyparaPrice = 290;
         const float XIn = 2.05f, ZIn = 2.4f;   // (faces interieures des murs)
 
         // ---------------------------------------------------------------- meubles
@@ -365,8 +365,13 @@ namespace MWCoop
             foreach (GameObject g in gps.Shown) { Transform sc = g.transform.Find("naytto"); if (sc != null) sc.GetComponent<Renderer>().sharedMaterial = splash; }
             OfferCol(gps, new Vector3(x, rallyTops[2] + 0.1f, zc), new Vector3(0.38f, 0.22f, 1.0f));
             Plane("hlkartturi", new Vector3(tagX, rallyTops[2] - 0.035f, zc), 0.12f, 0.06f, Vector3.left);
-            var kyp = new Offer { Item = KKypara, Price = KyparaPrice, Fr = "CASQUE DE RALLYE", En = "RALLY HELMET" };
-            foreach (float z in new[] { -1.85f, -1.25f }) Display(kyp, KKypara, new Vector3(x, rallyTops[3], z), 90f);
+            // casques : copies du casque du jeu (JD 23/10 : « les casques du jeu qui spawn dans la chambre »), portables comme lui
+            var kyp = new Offer { Item = KKypara, Price = KyparaPrice, Fr = "CASQUE", En = "HELMET" };
+            foreach (float z in new[] { -1.85f, -1.25f })
+            {
+                GameObject h = Clone("EQUIPMENTS/Helmet/helmet(itemx)", 0, new Vector3(x, rallyTops[3], z), 90f, new Vector3(0, -1, 0), false, false);
+                if (h != null) kyp.Shown.Add(h); else Display(kyp, KKypara, new Vector3(x, rallyTops[3], z), 90f);
+            }
             OfferCol(kyp, new Vector3(x, rallyTops[3] + 0.15f, zc), new Vector3(0.38f, 0.3f, 1.0f));
             Plane("hlkypara", new Vector3(tagX, rallyTops[3] - 0.035f, zc), 0.12f, 0.06f, Vector3.left);
             L("rallye : KARTTURI " + KartturiPrice + ", casque " + KyparaPrice + " mk");
