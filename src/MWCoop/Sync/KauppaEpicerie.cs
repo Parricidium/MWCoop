@@ -369,7 +369,7 @@ namespace MWCoop
             var kyp = new Offer { Item = KKypara, Price = KyparaPrice, Fr = "CASQUE", En = "HELMET" };
             foreach (float z in new[] { -1.85f, -1.25f })
             {
-                GameObject h = Clone("EQUIPMENTS/Helmet/helmet(itemx)", 0, new Vector3(x, rallyTops[3], z), 90f, new Vector3(0, -1, 0), false, false);
+                GameObject h = Clone("EQUIPMENTS/Helmet/helmet(itemx)", 0, new Vector3(x, rallyTops[3], z), -90f, new Vector3(0, -1, 0), false, false);   // (visiere vers le client, JD 23/10)
                 if (h != null) kyp.Shown.Add(h); else Display(kyp, KKypara, new Vector3(x, rallyTops[3], z), 90f);
             }
             OfferCol(kyp, new Vector3(x, rallyTops[3] + 0.15f, zc), new Vector3(0.38f, 0.3f, 1.0f));

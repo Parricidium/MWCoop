@@ -87,6 +87,7 @@ namespace MWCoop
             }
             TickDoor();
             TickVitriinit();
+            BeretRetry(Time.realtimeSinceStartup);
             Interact();
             Greet(now);
             TickSay();
@@ -337,31 +338,51 @@ namespace MWCoop
         // Beret corse : dome de laine noire un peu bombe, bandeau, petite queue au sommet ; penche sur le cote.
         // Pose : sur le sommet du crane (haut du corps, mesure), un peu enfonce. [Boutique] BeretPose = enfoncement sous le
         // sommet, avant, cote (m), inclinaison avant, cote (degres).
+        // (beret du jeu pas encore releve par Looks a la construction -- epicerie, 23/10 : le vendeur avait le beret modelise ;
+        // JD : « remet le beret du jeu » -- nouvel essai toutes les 2 s pendant une minute, le modelise est alors remplace)
+        static GameObject beretModel; static float beretRetryUntil = -1f, beretNext;
+        static void BeretRetry(float now)
+        {
+            if (beretRetryUntil < 0f || now < beretNext) return;
+            beretNext = now + 2f;
+            if (now > beretRetryUntil || vendor == null) { beretRetryUntil = -1f; return; }
+            bool ok = false;
+            try { ok = GameBeret(vendor); } catch (Exception e) { L("vendeur : beret du jeu " + e.Message); }
+            if (!ok) { if (Config.GetInt("Test", "BeretLog", 0) != 0) L("vendeur : beret du jeu pas encore (" + string.Join(" ", Looks.Accessories(Looks.KHat).ToArray()) + ")"); return; }
+            if (beretModel != null) UnityEngine.Object.Destroy(beretModel);
+            beretModel = null; beretRetryUntil = -1f;
+        }
+
+        static bool GameBeret(Avatar a)
+        {
+            Transform head = a.HeadBone;
+            if (head == null || Config.Get("Boutique", "Beret", "jeu") == "corse") return false;
+            string key = Looks.Accessories(Looks.KHat).Find(k => k.StartsWith("latsa@"));
+            Looks.AccInfo ai = key != null ? Looks.Acc(key) : null;
+            if (ai == null) return false;
+            var lg = new GameObject("osuus_latsa");
+            lg.layer = head.gameObject.layer;
+            lg.transform.parent = head;
+            lg.transform.localPosition = ai.Pos;
+            lg.transform.localRotation = ai.Rot;
+            lg.transform.localScale = ai.Scale;
+            Vector3 hd = a.HeadDelta;
+            if (hd.sqrMagnitude > 1e-6f) lg.transform.position += hd;
+            lg.AddComponent<MeshFilter>().sharedMesh = ai.Mesh;
+            lg.AddComponent<MeshRenderer>().sharedMaterials = ai.Mats;
+            L("vendeur : beret du jeu (" + key + ")");
+            return true;
+        }
+
         static void Beret(Avatar a)
         {
             Transform head = a.HeadBone;
             if (head == null) { L("vendeur : pas d'os de tete pour le beret"); return; }
-            // D'abord le beret du jeu (« Latsa », lätsä = beret ; JD, 12/10), pose comme sur le PNJ qui le porte (Looks).
-            // ([Boutique] Beret=corse : le beret basque/corse noir modelise ci-dessous a la place)
-            string key = Config.Get("Boutique", "Beret", "jeu") == "corse" ? null : Looks.Accessories(Looks.KHat).Find(k => k.StartsWith("latsa@"));
-            Looks.AccInfo ai = key != null ? Looks.Acc(key) : null;
-            if (ai != null)
-            {
-                var lg = new GameObject("osuus_latsa");
-                lg.layer = head.gameObject.layer;
-                lg.transform.parent = head;
-                lg.transform.localPosition = ai.Pos;
-                lg.transform.localRotation = ai.Rot;
-                lg.transform.localScale = ai.Scale;
-                Vector3 hd = a.HeadDelta;
-                if (hd.sqrMagnitude > 1e-6f) lg.transform.position += hd;
-                lg.AddComponent<MeshFilter>().sharedMesh = ai.Mesh;
-                lg.AddComponent<MeshRenderer>().sharedMaterials = ai.Mats;
-                L("vendeur : beret du jeu (" + key + ")");
-                return;
-            }
-            L("vendeur : Latsa du jeu introuvable, beret modelise");
+            if (GameBeret(a)) return;
+            L("vendeur : Latsa du jeu introuvable, beret modelise (nouvel essai pendant une minute)");
             var g = new GameObject("osuus_beret");
+            beretModel = g;
+            if (Config.Get("Boutique", "Beret", "jeu") != "corse") { beretRetryUntil = Time.realtimeSinceStartup + 60f; beretNext = 0f; }
             g.AddComponent<MeshFilter>().sharedMesh = BeretMesh();
             var tex = new Texture2D(64, 64, TextureFormat.RGB24, true) { name = "kauppa_beret" };
             var rnd = new System.Random(5);
