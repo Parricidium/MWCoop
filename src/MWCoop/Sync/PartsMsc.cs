@@ -244,6 +244,7 @@ namespace MWCoop
             GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("Part").Value;
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f || part == null) return;
             string id = MscPartKey(part);
+            Touch(H(p.Key));
             Log.Info("montage : " + id + " sur " + p.Key);
             VehicleSync.CalmAfterPart(p.Fsm.transform);
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
@@ -290,6 +291,7 @@ namespace MWCoop
             string id = MscPartKey(rem.gameObject);
             FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
             string key = trig != null && trig.Value != null ? MscPointKey(trig.Value.transform) : "";
+            if (key.Length > 0) Touch(H(key));
             if (breakoff)
             {
                 // Casse : envoyee seulement par celui qui fait autorite sur la voiture (sa copie ici a pu s'emballer) -- comme MWC.
@@ -370,6 +372,7 @@ namespace MWCoop
             string key = r.Str(), id = r.Str();
             int flags = r.More ? r.U8() : 0;
             string outKey = r.More ? r.Str() : "";
+            Touch(H(key));
             if (Session.IsHost)
             {
                 var fw = new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).U8(flags);
@@ -436,6 +439,7 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;
             string part = MscPartKey(b.F.FsmVariables.GetFsmGameObject("PartAssembled").Value);
             if (part.Length == 0) return;
+            Touch(H(part + "|" + b.Key));
             int stage = b.F.FsmVariables.GetFsmInt("Stage").Value;
             Session.SendAll(new NetWriter(Msg.Bolt).U8(Session.LocalId).Str(part).Str(b.Key).U8(Mathf.Clamp(stage, 0, 255)), true);
         }
@@ -445,6 +449,134 @@ namespace MWCoop
             foreach (Bolt b in bolts)
                 if (b.F != null && b.Key == key && MscPartKey(b.F.FsmVariables.GetFsmGameObject("PartAssembled").Value) == part) return b;
             return null;
+        }
+
+
+        // ---------------------------------------------------------------- controle periodique, My Summer Car (23/10)
+        // Meme principe que sur MWC (Parts.Digest) : points 'Assembly' (hors points « echange », sans piece libre a renvoyer) et vis
+        // 'Screw' (Stage). Piece en trop ici -> 'Remove part' de son 'Removal' ; piece manquante -> demandee, l'hote renvoie le
+        // montage (Msg.Part comme MscLocalInstall) ; vis au Stage de l'hote.
+        static Dictionary<uint, MscPoint> mscPointsByHash; static int mscPointsByHashN = -1;
+        static string MscBoltKeyOf(Bolt b) { return MscPartKey(b.F.FsmVariables.GetFsmGameObject("PartAssembled").Value) + "|" + b.Key; }
+        static void MscHashMaps()
+        {
+            if (mscPointsByHash == null || mscPointsByHashN != mscPoints.Count)
+            {
+                mscPointsByHash = new Dictionary<uint, MscPoint>();
+                foreach (KeyValuePair<string, MscPoint> kv in mscPoints) mscPointsByHash[H(kv.Key)] = kv.Value;
+                mscPointsByHashN = mscPoints.Count;
+            }
+            if (boltsByHash == null || boltsByHashN != bolts.Count)
+            {
+                boltsByHash = new Dictionary<uint, Bolt>();
+                foreach (Bolt b in bolts) if (b.F != null) boltsByHash[H(MscBoltKeyOf(b))] = b;
+                boltsByHashN = bolts.Count;
+            }
+        }
+        static string MscInstalledId(MscPoint p)
+        {
+            FsmGameObject pv = p.Fsm.FsmVariables.FindFsmGameObject("Part");
+            GameObject part = pv != null ? pv.Value : null;
+            return part != null && MscHolds(p.Fsm, part) ? MscPartKey(part) : "";
+        }
+        static void MscDigest(float now)
+        {
+            NetWriter w = null; int n = 0, total = 0, totalB = 0;
+            foreach (KeyValuePair<string, MscPoint> kv in mscPoints)
+            {
+                MscPoint p = kv.Value;
+                if (p.Fsm == null || p.Swap) continue;
+                string id = MscInstalledId(p);
+                if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
+                w.I32((int)H(p.Key)).Str(id); n++; total++;
+                if (n >= 40) { Session.SendAll(w, true); w = null; }
+            }
+            if (w != null) Session.SendAll(w, true);
+            w = null; n = 0;
+            foreach (Bolt b in bolts)
+            {
+                if (b.F == null || !b.F.gameObject.activeInHierarchy) continue;
+                FsmInt st = b.F.FsmVariables.FindFsmInt("Stage"); if (st == null) continue;
+                if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(1); n = 0; }
+                w.I32((int)H(MscBoltKeyOf(b))).U8(Mathf.Clamp(st.Value, 0, 255)); n++; totalB++;
+                if (n >= 100) { Session.SendAll(w, true); w = null; }
+            }
+            if (w != null) Session.SendAll(w, true);
+            if (digestLogs++ < 3 || now >= lastDigestLog + 120f) { lastDigestLog = now; Log.Info("pieces (MSC) : controle envoye aux invites (" + total + " points, " + totalB + " vis)"); }
+        }
+        static void MscOnDigest(int who, NetReader r, int kind, float now)
+        {
+            MscHashMaps();
+            List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0;
+            if (kind == 0)
+            {
+                while (r.More)
+                {
+                    uint h = (uint)r.I32(); string id = r.Str();
+                    MscPoint p;
+                    if (!mscPointsByHash.TryGetValue(h, out p) || p.Fsm == null) { unknown++; continue; }
+                    if (Recent(h, now) || p.Swap) continue;
+                    FsmGameObject pv = p.Fsm.FsmVariables.FindFsmGameObject("Part");
+                    GameObject part = pv != null ? pv.Value : null;
+                    string mine = MscInstalledId(p);
+                    if (mine == id) continue;
+                    if (mine.Length > 0 && (mounting.ContainsKey(part) || PendingReinstall(part))) continue;
+                    if (mine.Length > 0)
+                    {
+                        PlayMakerFSM rem = Game.FsmOn(part, "Removal");
+                        if (rem != null)
+                        {
+                            VehicleSync.CalmAfterPart(rem.transform);
+                            applying = true; Replay.Depth++;
+                            try { rem.enabled = true; Game.SetState(rem, "Remove part"); }
+                            finally { applying = false; Replay.Depth--; }
+                            Props.HoldFromRemote(part, who);
+                            Log.Info("piece " + mine + " demontee de " + p.Key + " au controle de l'hote : pas montee chez lui" + (id.Length > 0 ? " (il y a " + id + ")" : ""));
+                            removed++;
+                        }
+                    }
+                    if (id.Length > 0 && !AskedLately(h, now)) { if (ask == null) ask = new List<int>(); if (ask.Count < 20) ask.Add((int)h); }
+                    Touch(h);
+                }
+                if (ask != null)
+                {
+                    var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@piecesdemande");
+                    foreach (int h in ask) w.I32(h);
+                    Session.SendToHost(w, true);
+                }
+            }
+            else
+            {
+                while (r.More)
+                {
+                    uint h = (uint)r.I32(); int target = r.U8();
+                    Bolt b;
+                    if (!boltsByHash.TryGetValue(h, out b) || b.F == null) { unknown++; continue; }
+                    if (Recent(h, now) || !b.F.gameObject.activeInHierarchy) continue;
+                    FsmInt st = b.F.FsmVariables.FindFsmInt("Stage");
+                    if (st == null || st.Value == target) continue;
+                    string part = MscPartKey(b.F.FsmVariables.GetFsmGameObject("PartAssembled").Value);
+                    if (MscApplyBolt(who, part, b.Key, target, true)) { fixedBolts++; Touch(h); }
+                }
+            }
+            int asked = ask != null ? ask.Count : 0;
+            if (removed + fixedBolts + asked > 0)
+                Log.Info("pieces (MSC) : controle de l'hote : " + removed + " demontee(s) ici, " + asked + " demandee(s), " + fixedBolts + " vis reglee(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
+        }
+        static void MscOnDigestAsk(int who, NetReader r)
+        {
+            MscHashMaps();
+            int n = 0;
+            while (r.More && n < 20)
+            {
+                uint h = (uint)r.I32(); n++;
+                MscPoint p;
+                if (!mscPointsByHash.TryGetValue(h, out p) || p.Fsm == null || p.Swap) continue;
+                string id = MscInstalledId(p);
+                if (id.Length == 0) continue;
+                Session.Broadcast(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
+                Log.Info("pieces (MSC) : montage de " + id + " sur " + p.Key + " renvoye a la demande de #" + who);
+            }
         }
 
         static bool MscApplyBolt(int who, string part, string key, int target, bool last)

@@ -2998,15 +2998,27 @@ namespace MWCoop
             // 30-90 cm, le moteur au palan n'arrivait jamais a 5 cm des detecteurs de vis et les pieces portees par l'autre
             // apparaissaient a cote de la voiture (relecture du 15/10). Sinon 1 m / 10 degres (voiture garee au loin).
             bool work = Time.realtimeSinceStartup < c.CalmUntil + 20f;
-            if ((t.position - pos).sqrMagnitude > (work ? 0.0016f : 1f) || Quaternion.Angle(t.rotation, rot) > (work ? 1.5f : 10f))
+            // (23/10 : une voiture garee ne repose pas a la meme hauteur ni dans la meme assiette chez chacun -- suspension, pieces,
+            // pneus -- et recalee toutes les 2 s de quelques cm vers le bas ou d'un degre, elle « sautait » sans arret chez l'invite :
+            // 226 recalages en dix minutes dans un journal du 21/10, « la voiture saute » chez les joueurs. Desormais : a plat et en cap
+            // seulement pour decider ; a la pose, la hauteur d'ici est gardee si elle est proche de celle de l'hote (jamais enfoncee de
+            // quelques cm dans le sol : elle rebondissait), et l'assiette d'ici est gardee -- seul le cap est pris de l'hote.)
+            Vector3 d = t.position - pos; float dy = pos.y - t.position.y; d.y = 0f;
+            float yawD = Mathf.Abs(Mathf.DeltaAngle(t.eulerAngles.y, rot.eulerAngles.y)), tilt = Quaternion.Angle(t.rotation, rot);
+            float dyMax = work ? 0.3f : 1f;
+            bool far = d.sqrMagnitude > (work ? 0.0016f : 1f) || yawD > (work ? 1.5f : 10f) || Mathf.Abs(dy) > dyMax || tilt > 25f;
+            if (far)
             {
                 SetKinematic(c, false);
-                MoveCargo(c, pos, rot, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)
-                t.position = pos;
-                t.rotation = rot;
+                Vector3 to = pos; Quaternion rq = rot;
+                if (Mathf.Abs(dy) <= dyMax && dy < 0f) to.y = t.position.y;   // (l'hote la voit plus bas de peu : pas enfoncee dans le sol d'ici)
+                if (tilt <= 25f) rq = Quaternion.AngleAxis(Mathf.DeltaAngle(t.eulerAngles.y, rot.eulerAngles.y), Vector3.up) * t.rotation;   // (assiette d'ici, cap de l'hote)
+                MoveCargo(c, to, rq, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)
+                t.position = to;
+                t.rotation = rq;
                 c.Body.velocity = vel;
                 c.Body.angularVelocity = ang;
-                Log.Info("voiture " + c.Key + " recalee sur " + (who == 0 ? "l'hote" : "#" + who));
+                Log.Info("voiture " + c.Key + " recalee sur " + (who == 0 ? "l'hote" : "#" + who) + " (ecart " + d.magnitude.ToString("F2") + " m, hauteur " + dy.ToString("F2") + " m, cap " + yawD.ToString("F0") + " deg, assiette " + tilt.ToString("F0") + " deg)");
             }
         }
 

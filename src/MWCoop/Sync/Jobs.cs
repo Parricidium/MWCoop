@@ -2025,6 +2025,8 @@ namespace MWCoop
                 case "@marqueur": Markers.OnMessage(who, r); break;   // marqueur partage d'un joueur (pose, deplace, retire)   // invite -> hote : tout l'etat, comme a l'arrivee (menu F10, SYNCHRO)
                 case "@emit": Particles.OnMessage(who, r); break;
                 case "@vapeur": Sauna.OnRemote(who, r); break;
+                case "@pieces": Parts.OnDigest(who, r); break;   // (controle periodique des pieces de l'hote, 23/10)
+                case "@piecesdemande": Parts.OnDigestAsk(who, r); break;
                 case "@son": CopySounds.OnMessage(who, r); break;
                 case "@emitk": Particles.OnDefs(who, r); break;
                 case "@sonk": CopySounds.OnDefs(who, r); break;
