@@ -70,7 +70,11 @@ $lines = foreach ($f in @($zip, $edPack, "$stage\MWCoop.exe", "$stage\version.dl
 $lines
 if ($Publier) {
     # Rien de non commite : le tag doit pointer sur le code du zip (0.26.3 : commit rate, release partie quand meme).
-    if (git -C $root status --porcelain) { throw "modifications non commitees : committer avant de publier" }
+    # (fichiers non suivis ignores -- ceux des autres sessions, mods/Voyage... : on ne les deplace plus le temps de la release ;
+    # sauf sous src\ et launcher\, qui seraient compiles dans le zip)
+    if (git -C $root status --porcelain --untracked-files=no) { throw "modifications non commitees : committer avant de publier" }
+    $nonSuivis = @(git -C $root ls-files --others --exclude-standard -- src launcher)
+    if ($nonSuivis.Count -gt 0) { throw "fichiers non suivis compiles dans le zip : $($nonSuivis -join ', ')" }
     if (-not $Notes) { $Notes = "MWCoop $Version" }
     # " --- " au milieu d'une ligne vaut une ligne --- (0.63.0 : tout etait reste colle, francais et anglais, dans les
     # notes du lanceur comme dans l'annonce Discord, qui ne doit avoir que l'anglais)
