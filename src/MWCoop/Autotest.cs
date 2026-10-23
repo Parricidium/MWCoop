@@ -683,6 +683,28 @@ namespace MWCoop
                 }
                 return;
             }
+            // [Test] Autotest=msctenue (Vaydon, 23/10 : « jonnez when dragging ») : l'invite ([Test] TestActeur=invite) va a cote de la
+            // mobylette a 35 s, la prend en main a 40 s comme le jeu (rangee sous le joueur, corps cinematique), la deplace de 4 m
+            // de 42 a 52 s, la lache a 55 s ; chacun note sa pose toutes les 2 s (l'hote doit la voir bouger, pas la recaler).
+            if (mode == "msctenue")
+            {
+                Rigidbody jb = VehicleSync.Body("JONNEZ ES(Clone)");
+                Transform jt = jb != null ? jb.transform : null;
+                if (!Net.Session.IsHost && jt != null)
+                {
+                    if (t > 35f && mscStep == 0) { mscStep = 1; Log.Info("autotest : msctenue, " + VehicleSync.TestEnter("JONNEZ ES(Clone)", false)); }
+                    if (t > 40f && mscStep == 1)
+                    {
+                        mscStep = 2; Transform pl = Game.PlayerT;
+                        jb.isKinematic = true; jt.parent = pl; jt.localPosition = new Vector3(0f, 0.3f, 1.2f); jt.localRotation = Quaternion.identity;
+                        Log.Info("autotest : msctenue, mobylette prise en main (sous " + Recon.Path(pl) + ")");
+                    }
+                    if (t > 42f && t < 52f && mscStep == 2) { Vector3 lp = jt.localPosition; lp.x += 0.4f * Time.deltaTime; jt.localPosition = lp; }
+                    if (t > 55f && mscStep == 2) { mscStep = 3; Vector3 wp = jt.position; Quaternion wr = jt.rotation; jt.parent = null; jt.position = wp; jt.rotation = wr; jb.isKinematic = false; Log.Info("autotest : msctenue, mobylette lachee en " + wp.ToString("F1")); }
+                }
+                if (t > 30f && t < 80f && t >= mscLog && jb != null) { mscLog = t + 2f; Log.Info("autotest : msctenue, mobylette en " + jt.position.ToString("F1") + (jb.isKinematic ? " cin" : "") + (jt.parent != null ? " sous " + jt.parent.name : "")); }
+                return;
+            }
             // [Test] Autotest=mscbateau2 (квазарик, 22/10 : « la barque disparait pour un joueur, meme apres qu'il en est sorti » --
             // journal de l'hote : BOAT propulsee a 107 puis 219 m/s au premier pas de sa reprise, 15 fois dans la soiree) : l'invite
             // ([Test] TestActeur=invite) monte au moteur a 40 s, lance le moteur a 44 s, avance au large de 48 a 63 s (vitesse

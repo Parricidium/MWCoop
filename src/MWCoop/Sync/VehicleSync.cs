@@ -1013,6 +1013,23 @@ namespace MWCoop
         // bougeons, les autres suivent ; sa derniere pose part quand il s'arrete (Release).
         static void PushTick(float now)
         {
+            // Vehicule tenu en main (My Summer Car : la mobylette soulevee ou tiree est rangee par le jeu sous la main du joueur,
+            // corps cinematique -- elle ne « roule » pas a cote de nous, la regle d'en dessous ne la voyait pas) : a nous tant
+            // qu'elle est en main, comme une poussee ; sans cela l'hote la recalait toutes les 2 s dans la main de l'invite
+            // (Vaydon, 23/10 : « jonnez when dragging », 317 m/s de sursaut dans son journal).
+            Car held = null;
+            foreach (Car c in cars)
+                if (c.Body != null && !c.Kinematic && c.T.parent != null && Game.UnderPlayer(c.T)) { held = c; break; }
+            if (held != null && (held.RemoteBy < 0 || held.RemoteBy == Session.LocalId))
+            {
+                pushUntil = now + 1.5f;
+                if (owned < 0 || owned == held.Index)
+                {
+                    if (pushCar != held.Index || owned != held.Index) Log.Info("poussee : " + held.Key + " tenue en main, suit chez les autres");
+                    pushCar = held.Index; owned = held.Index;
+                }
+                return;
+            }
             bool gesture = Gestures.Pushing;
             if (!gesture && now < nextMoveLook) return;
             if (!gesture) nextMoveLook = now + 0.25f;
@@ -2799,8 +2816,10 @@ namespace MWCoop
         {
             if (c.Body == null || c.Net < 0) return;   // (absente de la table de l'hote : personne ne la connait sous ce numero)
             bool driven = mode != 0;
+            // (tenue en main sous le joueur : la pose du transform -- celle du corps cinematique ne suit pas sa main sur Unity 5.0)
+            bool held = c.T.parent != null && Game.UnderPlayer(c.T);
             var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(c.Net).U8(mode)
-                .Vec(c.Body.position).Quat(c.Body.rotation).Vec(c.Body.velocity).Vec(c.Body.angularVelocity);
+                .Vec(held ? c.T.position : c.Body.position).Quat(held ? c.T.rotation : c.Body.rotation).Vec(held ? Vector3.zero : c.Body.velocity).Vec(held ? Vector3.zero : c.Body.angularVelocity);
             if (driven)
             {
                 float rpm = testRpm >= 0f ? testRpm : c.Dt != null ? c.Dt.rpm : ModFloat(c.ModDt, c.ModRpm);
