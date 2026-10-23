@@ -19,23 +19,49 @@ namespace MWCoop.Net
     // via Steam), puis accepter l'invitation ou attendre que le salon de l'ami soit trouve.
     public static class SteamNet
     {
-        // SteamManager du jeu (pas public) : sa propriete statique Initialized, lue par reflexion.
+        // SteamManager du jeu (pas public) : son instance (champ statique s_instance) et son etat (m_bInitialized), lus par
+        // reflexion SANS la creer. Avant (jusqu'a 1.12.4) : la propriete Initialized, dont le getter cree le SteamManager
+        // s'il n'existe pas encore -- le mod le creait des l'ecran de demarrage (le jeu ne le fait qu'a l'intro), donc
+        // SteamAPI.Init et RestartAppIfNecessary pendant la connexion a l'hote ; chez halesterin (22/10) ce premier appel
+        // a Steam a bloque le jeu 22 s (ecran blanc), puis le jeu s'est ferme. Le jeu le cree lui-meme a l'intro.
+        static System.Reflection.FieldInfo instField, initField;
         static System.Reflection.PropertyInfo initProp;
         static bool initLooked;
+        static object Manager
+        {
+            get
+            {
+                if (!initLooked)
+                {
+                    initLooked = true;
+                    System.Type t = System.Type.GetType("SteamManager, Assembly-CSharp");
+                    const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+                    if (t != null) { instField = t.GetField("s_instance", F); initField = t.GetField("m_bInitialized", F); }
+                    if (t != null && (instField == null || initField == null))
+                    {
+                        // (autre SteamManager : propriete Initialized, comme avant -- elle cree l'instance si besoin)
+                        initProp = t.GetProperty("Initialized", F);
+                        Log.Warn("steam : SteamManager.s_instance / m_bInitialized introuvables" + (initProp != null ? ", propriete Initialized lue comme avant" : ""));
+                    }
+                }
+                object m = instField != null ? instField.GetValue(null) : null;
+                return m != null && !((UnityEngine.Object)m).Equals(null) ? m : null;
+            }
+        }
+        // Le jeu a cree son SteamManager (intro, menu) : Steam a ete demarre, avec ou sans succes.
+        public static bool Started { get { try { return Manager != null || initProp != null; } catch { return false; } } }
+        static bool readyLogged;
         public static bool Ready
         {
             get
             {
                 try
                 {
-                    if (!initLooked)
-                    {
-                        initLooked = true;
-                        System.Type t = System.Type.GetType("SteamManager, Assembly-CSharp");
-                        if (t != null) initProp = t.GetProperty("Initialized", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                        if (initProp == null) Log.Warn("steam : SteamManager.Initialized introuvable");
-                    }
-                    return initProp != null && (bool)initProp.GetValue(null, null);
+                    object m = Manager;
+                    if (initProp != null) return (bool)initProp.GetValue(null, null);
+                    bool ok = m != null && initField != null && (bool)initField.GetValue(m);
+                    if (m != null && !readyLogged) { readyLogged = true; Log.Info("steam : demarre par le jeu, " + (ok ? "pret" : "SteamAPI_Init en echec (Steam lance ? meme compte que le jeu ?)")); }
+                    return ok;
                 }
                 catch { return false; }
             }

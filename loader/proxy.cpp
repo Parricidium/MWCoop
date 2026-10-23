@@ -8,6 +8,7 @@
 //  - ArrierePlan=1 : fenetre posee hors ecran, jamais activee, ne touche ni au curseur ni au
 //    clavier/souris (instances de test sur le PC de JD).
 #include <windows.h>
+#include <locale.h>
 #include <shlobj.h>
 #include <knownfolders.h>
 #include <shlwapi.h>
@@ -502,6 +503,10 @@ static void Init() {
     wchar_t logs[MAX_PATH], lp[MAX_PATH];
     swprintf(logs, MAX_PATH, L"%s\\logs", g_profil[0] ? g_profilDir : g_dataRoot);
     SHCreateDirectoryExW(NULL, logs, NULL);
+    // Chemins ecrits en UTF-8 dans nos journaux (%ls de Log, fwprintf de la trace) : dans la locale "C" du CRT, un nom de
+    // dossier en cyrillique coupait la ligne ("jeu : C:\\Users\\" chez halesterin, 23/10) ou devenait des "?". CRT
+    // statique (/MT) : seule notre copie du CRT est touchee, pas celle du jeu. (Windows 10 1803+ ; sinon rien ne change.)
+    setlocale(LC_CTYPE, ".UTF8");
     ArchiveLogs(logs);
     swprintf(lp, MAX_PATH, L"%s\\chargeur.log", logs);
     g_log = _wfopen(lp, L"w");
