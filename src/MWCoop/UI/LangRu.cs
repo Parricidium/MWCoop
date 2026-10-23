@@ -958,6 +958,7 @@ namespace MWCoop
             { "): the show starts once everyone has it.", "): сеанс начнётся, когда он будет у всех." },
             { "Film received: the show starts once everyone has it.", "Фильм получен: сеанс начнётся, когда он будет у всех." },
             { "Others", "Другие" },
+            { "Steam is starting with the game...", "Steam запускается вместе с игрой..." },
         };
     }
 }

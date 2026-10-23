@@ -78,7 +78,10 @@ namespace MWCoop
             Error = "";
             if (refusal.Length > 0) Error = L("Refusé par l'hôte : ", "Refused by the host: ") + refusal;
             else if (!connected && Session.Steam && MWCoop.Net.SteamNet.LobbyOwner == 0)
-                Error = !MWCoop.Net.SteamNet.Ready
+                // (le jeu demarre Steam a l'intro, quelques secondes apres le logo : pas une erreur avant, 23/10)
+                Error = !MWCoop.Net.SteamNet.Started
+                    ? L("Steam démarre avec le jeu...", "Steam is starting with the game...")
+                    : !MWCoop.Net.SteamNet.Ready
                     ? L("Steam n'est pas disponible : lance Steam, et le jeu Steam (pas une autre copie).", "Steam is not available: start Steam, and the Steam version of the game.")
                     : L("En attente de l'hôte : il t'invite par Steam (F10 > Inviter des amis Steam, ou Maj+Tab), puis accepte l'invitation ici. "
                         + "Si un ami héberge déjà, sa partie est rejointe toute seule.",

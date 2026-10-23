@@ -6218,6 +6218,9 @@ static std::vector<std::wstring> ZipFiles()
     if (!g_iniLauncher.empty()) add(g_iniLauncher);
     std::vector<std::wstring> dirs = { g_gameDir, MirrorDir(), MscCopyDir(), GuestCopyDir() };
     for (const std::wstring &d : dirs) if (!d.empty()) { add(d + L"doorstop_config.ini"); add(d + L"MSCLoader_Preloader.txt"); add(d + L"output_log.txt"); }   // (output_log : MSCLoader le met a cote de l'exe, -logFile)
+    // Journal de Unity des copies de lancement (sans MSCLoader : dans <jeu>_Data, comme pour le jeu) -- absent du zip de
+    // halesterin (23/10, jeu fige 22 s au demarrage puis ferme) : il aurait dit ce que Steam avait repondu.
+    for (size_t i = 1; i < dirs.size(); i++) if (!dirs[i].empty()) add(dirs[i] + GM().data + L"\\output_log.txt");
     if (!LocalDir().empty()) add(LocalDir() + L"mscloader-mwcoop\\version.txt");
     return files;
 }
