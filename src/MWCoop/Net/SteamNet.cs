@@ -49,14 +49,32 @@ namespace MWCoop.Net
             }
         }
         // Le jeu a cree son SteamManager (intro, menu) : Steam a ete demarre, avec ou sans succes.
-        public static bool Started { get { try { return Manager != null || initProp != null; } catch { return false; } } }
-        static bool readyLogged;
+        public static bool Started { get { try { return Session.Steam || Manager != null || initProp != null; } catch { return false; } } }
+        static bool readyLogged, steamPropLooked;
+        static System.Reflection.PropertyInfo steamProp;
         public static bool Ready
         {
             get
             {
                 try
                 {
+                    // Mode Steam (salon, pair-a-pair) : comme jusqu'a 1.12.4, la propriete Initialized du jeu, qui cree son
+                    // SteamManager des le logo s'il n'existe pas encore (кiзявка, 23/10 : connexion Steam bloquee depuis la 1.12.5,
+                    // alors que tout marchait la veille ; la 1.12.5 n'attendait le jeu qu'au menu). Mode IP : on attend le jeu
+                    // (halesterin, 1.12.5 : un premier appel a Steam des le logo bloquait son jeu 22 s).
+                    if (Session.Steam)
+                    {
+                        if (steamProp == null && !steamPropLooked)
+                        {
+                            steamPropLooked = true;
+                            System.Type t = System.Type.GetType("SteamManager, Assembly-CSharp");
+                            if (t != null) steamProp = t.GetProperty("Initialized", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                            if (steamProp == null) Log.Warn("steam : SteamManager.Initialized introuvable");
+                        }
+                        bool sok = steamProp != null && (bool)steamProp.GetValue(null, null);
+                        if (!readyLogged) { readyLogged = true; Log.Info("steam : mode Steam, demarre par le mod des le logo, " + (sok ? "pret" : "SteamAPI_Init en echec (Steam lance ? meme compte que le jeu ?)")); }
+                        return sok;
+                    }
                     object m = Manager;
                     if (initProp != null) return (bool)initProp.GetValue(null, null);
                     bool ok = m != null && initField != null && (bool)initField.GetValue(m);
