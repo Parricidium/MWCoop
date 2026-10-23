@@ -102,7 +102,7 @@ namespace MWCoop
                 lp.Tex.Apply(false);
                 if (p.Screen.sharedMaterial != lp.Mat) p.Screen.sharedMaterial = lp.Mat;
             }
-            if (st == 2 && BagAuthority && now - lp.OpenedAt > 3f) SetProjector(p, p.Content, false, 0, true);   // (fin de la video)
+            if (st == 2 && BagAuthority && now - lp.OpenedAt > 3f) { SetProjector(p, p.Content, false, 0, true); SetKinoDoor(kinoExits[p.Sali], true, true); }   // (fin de la video : lumiere, issue de secours ouverte)
         }
 
         static void LinkStop(Projector p)

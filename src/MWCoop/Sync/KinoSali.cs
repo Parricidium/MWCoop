@@ -40,8 +40,9 @@ namespace MWCoop
         static void ResetKinoSali()
         {
             kinoSeatSpots.Clear(); kinoTexts.Clear();
-            for (int i = 0; i < 3; i++) { kinoDoors[i] = null; projectors[i] = null; }
+            for (int i = 0; i < 3; i++) { kinoDoors[i] = null; kinoExits[i] = null; projectors[i] = null; }
             pendingReel = null; pendingProj = null; kinoLoaded = false; seatHintDone = false;
+            ResetKinoJako();
         }
 
         static void KinoSaliSetup()
@@ -51,6 +52,7 @@ namespace MWCoop
             {
                 int sali = s < 0 ? 1 : 2;
                 kinoDoors[sali] = KinoMakeDoor(s, sali);
+                kinoExits[sali] = KinoMakeExit(s, sali);
                 projectors[sali] = KinoMakeProjector(s, sali);
             }
             L("cinema : " + kinoSeatSpots.Count + " places (" + trig + " declencheurs de siege), portes et projecteurs en place");
@@ -123,7 +125,40 @@ namespace MWCoop
             if (d == null || d.Open == open) return;
             d.Open = open; d.OpenedAt = Time.realtimeSinceStartup;
             try { MasterAudio.PlaySound3DAtVector3AndForget("Store", d.Leaf.position, 0.9f, null, 0f, open ? "door_open" : "door_close"); } catch { }
-            if (send && Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@kino").U8(1).U8(d.Sali).Bool(open), true);
+            bool exit = d == kinoExits[d.Sali];
+            if (send && Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@kino").U8(exit ? 5 : 1).U8(d.Sali).Bool(open), true);
+        }
+
+        // issue de secours de la salle (facade, pres de l'ecran) : battant metallique, charniere cote pignon, s'ouvre vers
+        // l'exterieur ; ouverte toute seule a la fin du film (JD, 23/10), et de l'interieur par un clic
+        static readonly KinoDoor[] kinoExits = new KinoDoor[3];
+        static KinoDoor KinoMakeExit(float s, int sali)
+        {
+            float w = 1.12f, h = 2.06f, th = 0.06f, ez = KD - Wall * 0.5f;
+            var pivot = new GameObject("kino_hata" + sali);
+            pivot.transform.SetParent(kino.transform, false);
+            pivot.transform.localPosition = new Vector3(s * (23.6f + w / 2f), KFront, ez);
+            parts.Clear(); cols.Clear();
+            var keep = root; root = pivot;
+            // (le battant part de la charniere vers le milieu du batiment : -s)
+            Box(new Vector3(Mathf.Min(0f, -s * w), 0f, -th / 2), new Vector3(Mathf.Max(0f, -s * w), h, th / 2), "ki_alu", false);
+            foreach (float sz in new[] { -1f, 1f })
+                Box(new Vector3(Mathf.Min(-s * (w - 0.08f), -s * (w - 0.2f)), 0.95f, sz * (th / 2) - (sz < 0 ? 0.06f : 0f)), new Vector3(Mathf.Max(-s * (w - 0.08f), -s * (w - 0.2f)), 1.0f, sz * (th / 2) + (sz > 0 ? 0.06f : 0f)), "metalli", false);
+            Flush();
+            root = keep;
+            var cg = new GameObject("kino_hata_coll");
+            cg.transform.SetParent(pivot.transform, false);
+            cg.transform.localPosition = new Vector3(-s * w / 2f, h / 2f, 0f);
+            var bc = cg.AddComponent<BoxCollider>(); bc.size = new Vector3(w, h, 0.1f);
+            return new KinoDoor { Sali = sali, Leaf = pivot.transform, Col = bc };
+        }
+
+        static void KinoExitGui(KinoDoor d)
+        {
+            guiUse.Value = true;
+            if (!d.Open && !InSalle(d.Sali)) { guiText.Value = Lang.TG("ISSUE DE SECOURS", "EMERGENCY EXIT"); return; }
+            guiText.Value = d.Open ? Lang.TG("FERMER", "CLOSE") : Lang.TG("SORTIE", "EXIT");
+            if (Input.GetMouseButtonDown(0)) SetKinoDoor(d, !d.Open, true);
         }
 
         // ---------------------------------------------------------------- projecteur et ecran
@@ -209,7 +244,7 @@ namespace MWCoop
                 Vector3 a = c[i], b = c[(i + 1) % 4];
                 int k = v.Count;
                 v.Add(from); v.Add(a); v.Add(b);
-                col.Add(new Color(1f, 0.95f, 0.8f, 0.05f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f));   // (moitie moins opaque qu'avant : JD, 22/10)
+                col.Add(new Color(1f, 0.95f, 0.8f, 0.022f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f)); col.Add(new Color(1f, 0.95f, 0.8f, 0f));   // (encore plus discret : JD, 22/10 puis 23/10)
                 t.Add(k); t.Add(k + 1); t.Add(k + 2); t.Add(k); t.Add(k + 2); t.Add(k + 1);   // (deux faces)
             }
             m.vertices = v.ToArray(); m.colors = col.ToArray(); m.triangles = t.ToArray(); m.RecalculateBounds();
@@ -245,6 +280,7 @@ namespace MWCoop
         {
             int op = r.U8();
             if (op == 1) { int sali = r.U8(); bool open = r.Bool(); if (kino != null && sali >= 1 && sali <= 2) SetKinoDoor(kinoDoors[sali], open, false); return; }
+            if (op == 5) { int sali = r.U8(); bool open = r.Bool(); if (kino != null && sali >= 1 && sali <= 2) SetKinoDoor(kinoExits[sali], open, false); return; }   // (issue de secours)
             if (op == 2)
             {
                 int sali = r.U8(); string content = r.Str(); bool playing = r.Bool(); int el = r.I32();
@@ -269,13 +305,16 @@ namespace MWCoop
                 {
                     if (kinoDoors[i] != null && kinoDoors[i].Col.Raycast(ray, out h, best)) { best = h.distance; hit = kinoDoors[i]; }
                     if (projectors[i] != null && projectors[i].Col.Raycast(ray, out h, best)) { best = h.distance; hit = projectors[i]; }
+                    if (kinoExits[i] != null && kinoExits[i].Col.Raycast(ray, out h, best)) { best = h.distance; hit = kinoExits[i]; }
                 }
             }
             if (hit != kinoLooked) { if (kinoLooked != null) KinoClearGui(); kinoLooked = hit; if (hit is Projector) ((Projector)hit).FDown = -1f; }
             if (hit is KinoOffer) KinoOfferGui((KinoOffer)hit, now);
+            else if (hit is KinoDoor && hit == kinoExits[((KinoDoor)hit).Sali]) KinoExitGui((KinoDoor)hit);
             else if (hit is KinoDoor) KinoDoorGui((KinoDoor)hit, now);
             else if (hit is Projector) KinoProjectorGui((Projector)hit, now);
             TickReelInsert();
+            TickKinoJako(now);
             // en entrant dans une salle : comment s'asseoir (une fois par partie)
             int inSali = InSalle(1) ? 1 : InSalle(2) ? 2 : 0;
             if (inSali != 0 && !seatHintDone) { seatHintDone = true; Hud.Toast(Lang.T("Pour t'asseoir : place-toi devant un fauteuil et accroupis-toi (C), comme sur une chaise", "To sit: stand in front of a seat and crouch (C), like on a chair")); }
@@ -287,6 +326,12 @@ namespace MWCoop
                 if (d.Open && now - d.OpenedAt > 15f && (BagAuthority)) SetKinoDoor(d, false, true);
                 d.Angle = Mathf.MoveTowards(d.Angle, d.Open ? 100f : 0f, Time.deltaTime * 170f);
                 d.Leaf.localRotation = Quaternion.Euler(0f, (d.Leaf.localPosition.x > 0 ? -1f : 1f) * d.Angle, 0f);
+                // issue de secours : vers l'exterieur, refermee toute seule apres 40 s
+                KinoDoor x = kinoExits[i];
+                if (x == null) continue;
+                if (x.Open && now - x.OpenedAt > 40f && BagAuthority) SetKinoDoor(x, false, true);
+                x.Angle = Mathf.MoveTowards(x.Angle, x.Open ? 95f : 0f, Time.deltaTime * 150f);
+                x.Leaf.localRotation = Quaternion.Euler(0f, (i == 1 ? -1f : 1f) * x.Angle, 0f);
             }
             // projection
             bool anyPlaying = false;
@@ -340,12 +385,13 @@ namespace MWCoop
             if (asm != null) asm.Value = false;
             guiUse.Value = true;
             string title = TapeTitle(p.Content);
-            guiText.Value = (title.Length > 0 ? "« " + title.ToUpperInvariant() + " » " : "") + (p.Playing ? Lang.TG("F : ARRÊTER", "F: STOP") : Lang.TG("F : PROJETER", "F: PLAY")) + Lang.TG(" - F TENU : RETIRER", " - HOLD F: UNLOAD");
+            bool wait = KinoWaiting(p.Sali);   // (film en partage : la seance commencera toute seule -- KinoJako)
+            guiText.Value = (title.Length > 0 ? "« " + title.ToUpperInvariant() + " » " : "") + (wait ? Lang.TG("EN ATTENTE DES JOUEURS", "WAITING FOR PLAYERS") : p.Playing ? Lang.TG("F : ARRETER", "F: STOP") : Lang.TG("F : PROJETER", "F: PLAY")) + Lang.TG(" - F TENU : RETIRER", " - HOLD F: UNLOAD");
             if (Input.GetKeyDown(KeyCode.F)) p.FDown = now;
             if (p.FDown >= 0f)
             {
                 if (now - p.FDown >= 0.8f) { p.FDown = -1f; UnloadReel(p); }
-                else if (Input.GetKeyUp(KeyCode.F)) { p.FDown = -1f; SetProjector(p, p.Content, !p.Playing, 0, true); }
+                else if (Input.GetKeyUp(KeyCode.F)) { p.FDown = -1f; if (!wait) SetProjector(p, p.Content, !p.Playing, 0, true); }
             }
         }
 
@@ -361,6 +407,7 @@ namespace MWCoop
             RemoveItem(reel, true);
             SetProjector(p, content, false, 0, true);
             try { MasterAudio.PlaySound3DAtVector3AndForget("HouseFoley", p.Col.transform.position, 0.6f, null, 0f, "mailbox_open"); } catch { }
+            KinoShareStart(p);   // (son film propose aux autres ; la seance attend qu'ils l'aient -- KinoJako)
         }
 
         static void UnloadReel(Projector p)
@@ -411,7 +458,7 @@ namespace MWCoop
                 // bobine vierge, film pas encore recu, ou fin du film : toile eclairee par la lampe
                 if (p.Screen.sharedMaterial != p.Idle) p.Screen.sharedMaterial = p.Idle;
                 if (p.Audio.isPlaying) p.Audio.Stop();
-                if (all && clips.Count > 0 && t > at + 2f && BagAuthority) SetProjector(p, p.Content, false, 0, true);   // (fin : la lumiere revient)
+                if (all && clips.Count > 0 && t > at + 2f && BagAuthority) { SetProjector(p, p.Content, false, 0, true); SetKinoDoor(kinoExits[p.Sali], true, true); }   // (fin : la lumiere revient, l'issue de secours s'ouvre -- JD, 23/10)
                 return;
             }
             float tc = t - clipStart;
@@ -446,8 +493,10 @@ namespace MWCoop
                 if (l == null) continue;
                 int sali = l.transform.localPosition.x < 0 ? 1 : 2;
                 Projector p = projectors[sali];
-                float want = p != null && p.Playing ? 0.08f : 1.0f;
-                l.intensity = Mathf.MoveTowards(l.intensity, want, Time.deltaTime * 0.5f);
+                // (eteintes pendant la seance, rallumees a la fin -- JD, 23/10 : avant, seulement baissees a 8 %)
+                float want = p != null && p.Playing ? 0f : 1.0f;
+                l.intensity = Mathf.MoveTowards(l.intensity, want, Time.deltaTime * 0.8f);
+                l.enabled = l.intensity > 0.001f;
             }
         }
 
@@ -588,6 +637,19 @@ namespace MWCoop
                     SetProjector(projectors[s], content, true, 0, true);
                     break;
                 }
+                case "kelaa":
+                {
+                    // kelaa <sali> : comme un joueur qui pose la bobine (derniere bobine a film) : partage avant la seance (KinoJako)
+                    int s = int.Parse(a[2]);
+                    Esine src = esineet.FindLast(e => e.Kind == KKela && TapeFilm(e.Data).Length > 0);
+                    if (src == null) { L("essai : pas de bobine a film"); break; }
+                    string content = src.Data;
+                    RemoveItem(src, true);
+                    SetProjector(projectors[s], content, false, 0, true);
+                    KinoShareStart(projectors[s]);
+                    break;
+                }
+                case "jako": KinoAnswer(a[2] == "1"); break;   // (jako 1 / 0 : reponse a la question du film)
                 case "istu":
                 {
                     // istu <sali> <rang> <place> : joueur pose sur le fauteuil, declencheur force en « Press return » (comme

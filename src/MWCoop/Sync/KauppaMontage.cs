@@ -232,7 +232,7 @@ namespace MWCoop
             catch (Exception e) { Note(Lang.T("Rognage raté : ", "Trim failed: ") + e.Message, true); return; }
             if (n == 0) { try { File.Delete(FilmPath(film)); } catch { } Note(Lang.T("Rien dans la sélection.", "Nothing in the selection."), true); return; }
             SetData(mTape, film + "~" + Clean(mTitle));
-            SendFilm(film);
+            if (mTape.Kind != KKela) SendFilm(film);   // (bobine : proposee au projecteur -- KinoJako)
             L("video : cassette " + mTape.Id + " rognee " + a.ToString("F1") + "-" + b.ToString("F1") + " s -> " + film + " (" + n + " images)");
             LoadMontage();
             mA = 0f; mB = mTotal; Seek(0f);

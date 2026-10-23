@@ -146,12 +146,19 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- partage des films
-        class FilmOut { public string Film; public byte[] Data; public int Next, Count; public bool Again; }
-        class FilmIn { public byte[][] Parts; public int Got; public float Last; }
+        // (1.11.1, JD 23/10 : un film de bobine de 302 Mo n'arrivait jamais chez l'invite -- plus de 200 000 morceaux, refuses
+        // par la garde de OnFilmPart -- et partait a 300 Ko/s.) Envoi lu dans le fichier au fil de l'eau (pas tout en memoire),
+        // autant de morceaux par image que le canal fiable en accepte (Peer.InFlight sous FilmiFile), au plus [Boutique] FilmiKoS
+        // Ko/s (1500) ; reception ecrite directement dans le fichier a sa place (morceaux de FilmChunk octets), avancement
+        // connu (FilmProgress : KinoJako l'affiche et le dit au partageur).
+        class FilmOut { public string Film; public FileStream Fs; public long Length; public int Next, Count; public bool Again; }
+        class FilmIn { public FileStream Fs; public bool[] Have; public int Got, Count; public float Last; }
         static readonly List<FilmOut> filmOut = new List<FilmOut>();
         static readonly Dictionary<string, FilmIn> filmIn = new Dictionary<string, FilmIn>();
         static readonly Dictionary<string, float> filmAsked = new Dictionary<string, float>();
-        const int FilmChunk = 1000;
+        const int FilmChunk = 1000, FilmMaxParts = 4000000;   // (4 Go au plus)
+        static float filmSendBudget, filmSendT;
+        static byte[] filmBuf;
 
         static void SendFilm(string film)
         {
@@ -160,16 +167,16 @@ namespace MWCoop
             if (o != null) { if (o.Next > 0) o.Again = true; return; }
             try
             {
-                byte[] b = File.ReadAllBytes(FilmPath(film));
-                filmOut.Add(new FilmOut { Film = film, Data = b, Count = (b.Length + FilmChunk - 1) / FilmChunk });
-                L("video : envoi du film " + film + " (" + b.Length / 1024 + " Ko)");
+                var fs = new FileStream(FilmPath(film), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                filmOut.Add(new FilmOut { Film = film, Fs = fs, Length = fs.Length, Count = (int)((fs.Length + FilmChunk - 1) / FilmChunk) });
+                L("video : envoi du film " + film + " (" + fs.Length / 1024 + " Ko)");
             }
             catch (Exception e) { L("video : envoi de " + film + " : " + e.Message); }
         }
 
         static void AskFilm(string film, float now)
         {
-            if (!Session.Active || Session.RemoteCount <= 0) return;
+            if (!Session.Active || Session.RemoteCount <= 0 || KinoFilmRefused(film)) return;
             float last;
             FilmIn fi;
             if (filmIn.TryGetValue(film, out fi) && now - fi.Last < 20f) return;   // (arrive)
@@ -179,48 +186,87 @@ namespace MWCoop
             L("video : film " + film + " demande");
         }
 
+        // avancement de la reception ici : 0..1, -1 si rien n'arrive
+        public static float FilmProgress(string film)
+        {
+            FilmIn fi;
+            if (HaveFilm(film)) return 1f;
+            return filmIn.TryGetValue(film, out fi) && fi.Count > 0 ? fi.Got / (float)fi.Count : -1f;
+        }
+
+        // le plus charge des canaux fiables (morceaux envoyes pas encore acquittes, ou en attente)
+        static int MaxInFlight()
+        {
+            int m = 0;
+            if (Session.T != null) foreach (Peer pr in Session.T.Peers) if (pr != null && pr.InFlight > m) m = pr.InFlight;
+            return m;
+        }
+
         static void TickFilms(float now)
         {
             TickPlayStarts();
             TickImport(now);
             if (filmOut.Count == 0) return;
-            if (!Session.Active) { filmOut.Clear(); return; }
-            int budget = Mathf.Clamp(Config.GetInt("Boutique", "FilmiVauhti", 3), 1, 20);
+            if (!Session.Active) { foreach (FilmOut x in filmOut) if (x.Fs != null) x.Fs.Close(); filmOut.Clear(); return; }
+            // debit : FilmiKoS Ko/s au plus, et rien de plus tant que le canal fiable est plein
+            float dt = filmSendT > 0f ? Mathf.Min(0.25f, now - filmSendT) : 0f;
+            filmSendT = now;
+            filmSendBudget = Mathf.Min(filmSendBudget + dt * Config.GetInt("Boutique", "FilmiKoS", 1500) * 1024f / FilmChunk, 400f);
+            int room = Config.GetInt("Boutique", "FilmiFile", 160) - MaxInFlight();
             FilmOut o = filmOut[0];
-            for (int k = 0; k < budget && o.Next < o.Count; k++, o.Next++)
+            if (filmBuf == null) filmBuf = new byte[FilmChunk];
+            try
             {
-                int off = o.Next * FilmChunk, n = Math.Min(FilmChunk, o.Data.Length - off);
-                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmi").Str(o.Film).I32(o.Next).I32(o.Count).Bytes(o.Data, off, n), true);
+                for (; room > 0 && filmSendBudget >= 1f && o.Next < o.Count; room--, filmSendBudget -= 1f, o.Next++)
+                {
+                    long off = (long)o.Next * FilmChunk;
+                    int n = (int)Math.Min(FilmChunk, o.Length - off);
+                    o.Fs.Position = off;
+                    int got = 0;
+                    while (got < n) { int k = o.Fs.Read(filmBuf, got, n - got); if (k <= 0) break; got += k; }
+                    Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmi").Str(o.Film).I32(o.Next).I32(o.Count).Bytes(filmBuf, 0, got), true);
+                }
             }
+            catch (Exception e) { L("video : envoi de " + o.Film + " interrompu : " + e.Message); o.Next = o.Count; o.Again = false; }
             if (o.Next >= o.Count)
             {
                 if (o.Again) { o.Again = false; o.Next = 0; }
-                else { filmOut.RemoveAt(0); L("video : film " + o.Film + " envoye (" + o.Count + " morceaux)"); }
+                else { if (o.Fs != null) o.Fs.Close(); filmOut.RemoveAt(0); L("video : film " + o.Film + " envoye (" + o.Count + " morceaux)"); }
             }
         }
 
         public static void OnFilmPart(int who, NetReader r)
         {
             string film = Session.Clean(r.Str(), 64); int i = r.I32(), n = r.I32(); byte[] b = r.Bytes();
-            if (film.Length == 0 || film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || n <= 0 || n > 200000 || i < 0 || i >= n) return;
-            if (HaveFilm(film)) return;
+            if (film.Length == 0 || film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || n <= 0 || n > FilmMaxParts || i < 0 || i >= n || b.Length > FilmChunk) return;
+            if (HaveFilm(film) || KinoFilmRefused(film)) return;
             FilmIn fi;
-            if (!filmIn.TryGetValue(film, out fi) || fi.Parts.Length != n) { fi = new FilmIn { Parts = new byte[n][] }; filmIn[film] = fi; }
-            fi.Last = Time.realtimeSinceStartup;
-            if (fi.Parts[i] != null) return;
-            fi.Parts[i] = b; fi.Got++;
-            if (fi.Got < n) return;
-            filmIn.Remove(film);
             try
             {
-                Directory.CreateDirectory(FilmDir);
-                string tmp = FilmPath(film) + ".osa";
-                using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write))
-                    foreach (byte[] part in fi.Parts) fs.Write(part, 0, part.Length);
-                File.Move(tmp, FilmPath(film));
+                if (!filmIn.TryGetValue(film, out fi) || fi.Count != n)
+                {
+                    if (fi != null && fi.Fs != null) fi.Fs.Close();
+                    Directory.CreateDirectory(FilmDir);
+                    fi = new FilmIn { Fs = new FileStream(FilmPath(film) + ".osa", FileMode.Create, FileAccess.ReadWrite, FileShare.Read), Have = new bool[n], Count = n };
+                    filmIn[film] = fi;
+                }
+                fi.Last = Time.realtimeSinceStartup;
+                if (fi.Have[i]) return;
+                fi.Fs.Position = (long)i * FilmChunk;
+                fi.Fs.Write(b, 0, b.Length);
+                fi.Have[i] = true; fi.Got++;
+                if (fi.Got < n) return;
+                filmIn.Remove(film);
+                fi.Fs.Close();
+                File.Move(FilmPath(film) + ".osa", FilmPath(film));
                 L("video : film " + film + " recu de #" + who + " (" + n + " morceaux)");
+                KinoFilmArrived(film);
             }
-            catch (Exception e) { L("video : film " + film + " pas ecrit : " + e.Message); }
+            catch (Exception e)
+            {
+                L("video : film " + film + " pas ecrit : " + e.Message);
+                if (filmIn.TryGetValue(film, out fi)) { if (fi.Fs != null) fi.Fs.Close(); filmIn.Remove(film); }
+            }
         }
 
         public static void OnFilmAsk(int who, NetReader r)
@@ -291,6 +337,8 @@ namespace MWCoop
         static void OnLevelLoadedFilms()
         {
             foreach (Film f in filmCache.Values) if (f.Clip != null) UnityEngine.Object.Destroy(f.Clip);
+            foreach (FilmOut o in filmOut) if (o.Fs != null) o.Fs.Close();
+            foreach (FilmIn fi in filmIn.Values) if (fi.Fs != null) fi.Fs.Close();
             filmCache.Clear(); playStart.Clear(); filmOut.Clear(); filmIn.Clear(); filmAsked.Clear();
         }
     }

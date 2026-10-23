@@ -176,7 +176,7 @@ namespace MWCoop
                 string key = OfferKey(hit);
                 int inB = osatBasket.FindAll(k => k == key).Count;
                 if (hit.Used != null && inB > 0) guiText.Value = Lang.TG("DANS LE PANIER (CLIC DROIT : REPOSER)", "IN THE BASKET (RIGHT CLICK: PUT BACK)");
-                else guiText.Value = hit.Name.ToUpperInvariant() + (hit.Used != null ? " (" + Lang.TG("ÉTAT ", "CONDITION ") + Mathf.RoundToInt(hit.Used.Wear) + " %)" : "") + " " + hit.Price.ToString("F2", ci) + " MK" + (inB > 0 ? " (" + inB + ")" : "");
+                else guiText.Value = hit.Name.ToUpperInvariant() + (hit.Used != null ? " (" + Lang.TG("ETAT ", "CONDITION ") + Mathf.RoundToInt(hit.Used.Wear) + " %)" : "") + " " + hit.Price.ToString("F2", ci) + " MK" + (inB > 0 ? " (" + inB + ")" : "");
                 if (Input.GetMouseButtonDown(0) && !(hit.Used != null && inB > 0)) OsatTake(hit, true);
                 else if (Input.GetMouseButtonDown(1) && inB > 0) OsatTake(hit, false);
             }
@@ -267,7 +267,7 @@ namespace MWCoop
             if (arial == null) return null;
             var g = new GameObject("osat_hinta");
             g.transform.SetParent(osat.transform, false);
-            float edge = slot.Big ? 0.73f : slot.Size.z / 2f + 0.03f;
+            float edge = slot.Big ? 0.76f : slot.Size.z / 2f + 0.05f;   // (devant la lisse orange, pas dans sa face : le texte disparaissait selon l'angle -- JD, 23/10)
             g.transform.localPosition = slot.Pos + slot.Face * edge + Vector3.up * (slot.Big ? -0.12f : -0.035f);
             g.transform.localRotation = Quaternion.LookRotation(-slot.Face);
             var tm = g.AddComponent<TextMesh>();

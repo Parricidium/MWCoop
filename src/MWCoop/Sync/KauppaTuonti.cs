@@ -145,7 +145,7 @@ namespace MWCoop
                 if (title.Length > 24) title = title.Substring(0, 24).Trim();
             }
             SetData(tape, (films.Length > 0 ? films + "+" : "") + im.Film + "~" + title);
-            SendFilm(im.Film);
+            if (tape.Kind != KKela) SendFilm(im.Film);   // (bobine : le film n'est propose aux autres qu'au projecteur, avec leur accord -- KinoJako)
             Chat.System(Lang.T("Vidéo ajoutée sur la cassette « ", "Video added to the tape \"") + title + Lang.T(" » : ", "\": ") + sb);
         }
     }
