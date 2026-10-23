@@ -7,7 +7,9 @@ using UnityEngine;
 namespace MWCoop
 {
     // Boutique OSUUSKAUPPA s21 (demande de JD, 12/10) : le batiment, construit en code dans son propre repere (x = largeur
-    // 11 m, z = profondeur 7 m, facade et porte en +z, y = 0 au plancher), a l'ouest du parking de la PSK. Habillage :
+    // 4,5 m, z = profondeur 5,2 m, facade et porte en +z, y = 0 au plancher). Epicerie de village (JD 23/10, plan : plus
+    // petite, chaleureuse, une seule personne par allee -- 11 x 7 m avant) : porte a droite de la facade ; amenagement dans
+    // KauppaEpicerie.cs. Habillage :
     // materiaux du jeu trouves par leur nom (aucun fichier du jeu copie) + nos textures (assets\kauppa, dans la DLL).
     public static partial class Kauppa
     {
@@ -34,7 +36,7 @@ namespace MWCoop
             }
             catch { L("[Boutique] Paikka illisible : " + s); }
         }
-        const float W2 = 5.5f, D2 = 3.5f, Wall = 0.2f, WallH = 3.4f, Ceil = 2.9f, Pitch = 25f;
+        const float W2 = 2.25f, D2 = 2.6f, Wall = 0.2f, WallH = 3.4f, Ceil = 2.9f, Pitch = 25f;
 
         static GameObject root;
         static Transform door; static float doorAngle;
@@ -89,7 +91,7 @@ namespace MWCoop
             Mat("kivi", "rock_sokkeli", 2.0f);                 // soubassement en pierre
             Mat("katto", "roof_metal 1", 2.0f, new Color(0.62f, 0.42f, 0.38f));   // tole ondulee, brun-rouge
             Mat("lumi", "SNOW", 3f);
-            Mat("parketti", "tiles5", 1.4f);
+            Mat("parketti", "wood_panel19", 1.2f, new Color(0.85f, 0.72f, 0.58f));   // (epicerie : plancher de bois)
             Mat("tapetti", "wallpaper1", 1.1f);
             Mat("paneeli", "wood_panel4", 1.4f);
             Mat("sisakatto", "wood_panel2", 1.6f);
@@ -126,6 +128,7 @@ namespace MWCoop
             OwnMat("hlkamera", "hintalappu-kamera.png");
             OwnMat("hlkartturi", "hintalappu-kartturi.png");
             OwnMat("hlkela", "kino-hintalappu-kela.png");
+            EpicerieMaterials();
         }
 
         // ---------------------------------------------------------------- geometrie
@@ -326,19 +329,18 @@ namespace MWCoop
             Box(new Vector3(-W2 + Wall, -0.1f, -D2 + Wall), new Vector3(W2 - Wall, 0f, D2 - Wall), null, null, "parketti", null, null, null);
 
             // murs : facade (+z) avec porte, deux vitrines et une petite fenetre ; pignons ; arriere
-            var door0 = new Hole(-4.4f, -3.4f, 0f, 2.15f);
-            var winA = new Hole(-2.7f, -0.1f, 0.9f, 2.3f);
-            var winB = new Hole(0.7f, 3.3f, 0.9f, 2.3f);
-            var winC = new Hole(4.0f, 4.9f, 1.2f, 2.2f);
-            WallWithHoles(true, D2, -1, -W2, W2, new[] { door0, winA, winB, winC });
-            var back = new Hole(-2.2f, -1.2f, 1.3f, 2.1f);
+            // (epicerie, 23/10 : porte a droite ; murs lateraux sans fenetre, vitrines et etageres contre eux ; petite fenetre
+            // haute au fond, au-dessus des gondoles ; fenetre laterale gauche pres de la facade, au-dessus du coin libre)
+            var door0 = new Hole(0.95f, 1.85f, 0f, 2.15f);
+            var winA = new Hole(-1.95f, -0.25f, 0.9f, 2.2f);   // (derriere le vendeur)
+            WallWithHoles(true, D2, -1, -W2, W2, new[] { door0, winA });
+            var back = new Hole(-0.5f, 0.5f, 1.5f, 2.2f);
             WallWithHoles(true, -D2, 1, -W2, W2, new[] { back });
-            var sideR = new Hole(-1.4f, -0.2f, 1.0f, 2.2f);
-            WallWithHoles(false, W2, -1, -D2 + Wall, D2 - Wall, new[] { sideR });
-            var sideL = new Hole(0.2f, 1.4f, 1.0f, 2.2f);
+            var sideL = new Hole(1.3f, 2.2f, 1.2f, 2.1f);       // (au-dessus du retour du comptoir)
+            WallWithHoles(false, W2, -1, -D2 + Wall, D2 - Wall, new Hole[0]);
             WallWithHoles(false, -W2, 1, -D2 + Wall, D2 - Wall, new[] { sideL });
-            Window(true, D2, -1, winA, 1); Window(true, D2, -1, winB, 1); Window(true, D2, -1, winC, 0);
-            Window(true, -D2, 1, back, 0); Window(false, W2, -1, sideR, 0); Window(false, -W2, 1, sideL, 0);
+            Window(true, D2, -1, winA, 1);
+            Window(true, -D2, 1, back, 0); Window(false, -W2, 1, sideL, 0);
             // encadrement de porte
             Box(new Vector3(door0.U0 - 0.08f, 0, D2), new Vector3(door0.U0, 2.23f, D2 + 0.03f), "lista", false);
             Box(new Vector3(door0.U1, 0, D2), new Vector3(door0.U1 + 0.08f, 2.23f, D2 + 0.03f), "lista", false);
@@ -374,25 +376,24 @@ namespace MWCoop
             Tri("lauta", new Vector3(-W2, WallH, D2), new Vector3(-W2, ridge, 0), new Vector3(-W2, WallH, -D2));
 
             // enseigne au-dessus des vitrines
-            float sx0 = -2.6f, sx1 = 3.8f, sy0 = 2.42f, sy1 = 3.22f, sgz = D2 + 0.06f;
+            float sx0 = -2.0f, sx1 = 0.75f, sy0 = 2.42f, sy1 = 3.22f, sgz = D2 + 0.06f;
             Box(new Vector3(sx0, sy0, D2), new Vector3(sx1, sy1, sgz), "lista", "lista", "lista", "lista", null, null, false);
             Quad("kyltti", new Vector3(sx1, sy0, sgz), new Vector3(sx0, sy0, sgz), new Vector3(sx0, sy1, sgz), new Vector3(sx1, sy1, sgz),
                  new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
 
             // lampes "col de cygne" au-dessus de l'enseigne
-            foreach (float x in new[] { -0.9f, 2.1f })
+            foreach (float x in new[] { -1.3f, 0.1f })
             {
                 Box(new Vector3(x - 0.02f, 3.3f, D2 + 0.06f), new Vector3(x + 0.02f, 3.34f, D2 + 0.72f), "metalli", false);
                 Box(new Vector3(x - 0.11f, 3.24f, D2 + 0.66f), new Vector3(x + 0.11f, 3.36f, D2 + 0.86f), "metalli", false);
             }
             // affiches dans les vitrines (vues de dehors)
             float pz = D2 - Wall * 0.45f - 0.04f;
-            PosterFront("video", winA.U0 + 0.15f, winA.U0 + 0.15f + 0.62f, winA.Y0 + 0.08f, winA.Y0 + 0.08f + 0.93f, pz);
-            PosterFront("makuupussi", winB.U1 - 0.77f, winB.U1 - 0.15f, winB.Y0 + 0.08f, winB.Y0 + 1.01f, pz);
-            PosterFront("horaires", winC.U0 + 0.25f, winC.U0 + 0.55f, winC.Y0 + 0.1f, winC.Y0 + 0.55f, pz);
+            PosterFront("video", winA.U0 + 0.1f, winA.U0 + 0.1f + 0.45f, winA.Y0 + 0.1f, winA.Y0 + 0.1f + 0.68f, pz);
+            PosterFront("horaires", winA.U1 - 0.4f, winA.U1 - 0.1f, winA.Y0 + 0.1f, winA.Y0 + 0.55f, pz);
 
             // perron et marches devant la porte
-            float deck0 = -5.1f, deck1 = -2.7f, dz = D2 + 1.3f;
+            float deck0 = 0.65f, deck1 = 2.15f, dz = D2 + 1.3f;
             Box(new Vector3(deck0, -frontDrop - 1.0f, D2), new Vector3(deck1, -0.03f, dz), "terassi");
             int steps = Mathf.Max(0, Mathf.CeilToInt((frontDrop - 0.05f) / 0.19f));
             float rise = steps > 0 ? (frontDrop - 0.03f) / (steps + 0.0001f) : 0;
@@ -425,11 +426,11 @@ namespace MWCoop
 
         static void FlatDeco()
         {
-            Plane("matto", new Vector3(-3.9f, 0.006f, 1.9f), 1.0f, 2.2f, Vector3.up);          // passage depuis la porte
-            Plane("matto", new Vector3(-1.6f, 0.006f, 1.6f), 1.4f, 1.0f, Vector3.up);
-            Plane("ryijy", new Vector3(W2 - Wall - 0.01f, 1.75f, 2.0f), 0.9f, 1.3f, Vector3.left); // au-dessus du coin cafe
-            Plane("juliste1", new Vector3(-4.1f, 1.75f, -D2 + Wall + 0.01f), 0.5f, 0.7f, Vector3.forward);
-            Plane("juliste3", new Vector3(-0.6f, 1.8f, -D2 + Wall + 0.01f), 0.5f, 0.7f, Vector3.forward);
+            Plane("matto", new Vector3(1.4f, 0.006f, 1.75f), 0.85f, 1.2f, Vector3.up);          // passage depuis la porte
+            Plane("matto", new Vector3(-0.45f, 0.006f, 0.7f), 1.6f, 0.65f, Vector3.up);          // devant le comptoir
+            Plane("ryijy", new Vector3(W2 - Wall - 0.01f, 1.7f, 1.75f), 0.6f, 0.85f, Vector3.left); // pres de la porte
+            Plane("juliste1", new Vector3(-1.3f, 1.75f, -D2 + Wall + 0.01f), 0.5f, 0.7f, Vector3.forward);
+            Plane("juliste3", new Vector3(1.3f, 1.8f, -D2 + Wall + 0.01f), 0.5f, 0.7f, Vector3.forward);
         }
 
         static void Flush()
@@ -460,15 +461,15 @@ namespace MWCoop
 
         static void Lights()
         {
-            var warm = new Color(1f, 0.83f, 0.62f);
-            foreach (Vector3 p in new[] { new Vector3(-3f, 2.6f, 0.3f), new Vector3(0.3f, 2.6f, 0.6f), new Vector3(3f, 2.6f, -0.6f) })
+            var warm = new Color(1f, 0.76f, 0.5f);   // (epicerie : lumiere chaude, lampes en papier basses)
+            foreach (Vector3 p in new[] { new Vector3(-1.0f, 2.45f, 1.6f), new Vector3(-1.1f, 2.45f, -1.2f), new Vector3(1.1f, 2.45f, -0.6f) })
             {
                 var g = new GameObject("osuus_valo");
                 g.transform.SetParent(root.transform, false); g.transform.localPosition = p;
-                var l = g.AddComponent<Light>(); l.type = LightType.Point; l.color = warm; l.intensity = 1.5f; l.range = 7f; l.shadows = LightShadows.None;
+                var l = g.AddComponent<Light>(); l.type = LightType.Point; l.color = warm; l.intensity = 1.25f; l.range = 4.5f; l.shadows = LightShadows.None;
             }
             // eclairage de l'enseigne (deux spots sous l'avant-toit)
-            foreach (float x in new[] { -0.9f, 2.1f })
+            foreach (float x in new[] { -1.3f, 0.1f })
             {
                 var sg = new GameObject("osuus_valo_kyltti");
                 sg.transform.SetParent(root.transform, false);
@@ -477,7 +478,7 @@ namespace MWCoop
                 var sl = sg.AddComponent<Light>(); sl.type = LightType.Spot; sl.spotAngle = 100f; sl.color = new Color(1f, 0.9f, 0.75f); sl.intensity = 1.6f; sl.range = 3.5f; sl.shadows = LightShadows.None;
             }
             var e = new GameObject("osuus_valo_ulko");
-            e.transform.SetParent(root.transform, false); e.transform.localPosition = new Vector3(-3.9f, 2.45f, D2 + 0.6f);
+            e.transform.SetParent(root.transform, false); e.transform.localPosition = new Vector3(1.4f, 2.45f, D2 + 0.6f);
             var le = e.AddComponent<Light>(); le.type = LightType.Point; le.color = warm; le.intensity = 1.2f; le.range = 6f; le.shadows = LightShadows.None;
         }
 

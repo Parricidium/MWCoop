@@ -51,20 +51,6 @@ namespace MWCoop
         }
         static Material bl { get { return blackPlastic; } }
 
-        // ---------------------------------------------------------------- en rayon (appele par VideoOffers)
-        static void KartturiOffers(float wx, float front)
-        {
-            float lv = 0.1f + 3f * (1.9f - 0.1f) / 4f + 0.025f;   // (etagere haute de droite, 4e planche)
-            var gps = new Offer { Item = KKartturi, Price = KartturiPrice, Fr = "KARTTURI 2000 (GPS DE RALLYE)", En = "KARTTURI 2000 (RALLY GPS)" };
-            foreach (float z in new[] { 1.8f, 2.02f, 2.24f }) Display(gps, KKartturi, new Vector3(wx, lv, z), -90f, -12f);
-            // ecrans des modeles exposes : l'ecran d'accueil
-            Shader us = Shader.Find("Unlit/Texture");
-            var splash = new Material(us != null ? us : Shader.Find("Legacy Shaders/Diffuse")) { mainTexture = Kartturi.NewDevice().Tex };
-            foreach (GameObject g in gps.Shown) { Transform sc = g.transform.Find("naytto"); if (sc != null) sc.GetComponent<Renderer>().sharedMaterial = splash; }
-            OfferCol(gps, new Vector3(wx, lv + 0.09f, 2.02f), new Vector3(0.4f, 0.22f, 0.8f));
-            Plane("hlkartturi", new Vector3(front, lv - 0.06f, 2.02f), 0.18f, 0.09f, Vector3.right);
-        }
-
         // ---------------------------------------------------------------- en main
         static Esine HeldKartturi()
         {

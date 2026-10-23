@@ -97,6 +97,9 @@ namespace MWCoop
             Box(new Vector3(sx - 0.4f, y, -5.45f), new Vector3(sx + 0.4f, y + 0.03f, -5.0f), "ki_alu", false);
             Box(new Vector3(sx - 0.4f, y, -5.47f), new Vector3(sx + 0.4f, y + 0.55f, -5.43f), "ki_alu", false);
             AddKinoOffer(KSipsit, 8, "CHIPS", "CHIPS", new Vector3(sx, y + 0.25f, -5.1f), new Vector3(0.9f, 0.6f, 0.5f));
+            // bobines de film (JD 23/10 : vendues au cinema, plus a l'Osuuskauppa) : boites debout entre limonade et chips
+            float rx = 2.05f;
+            AddKinoOffer(KKela, KelaPrice, "BOBINE DE FILM", "FILM REEL", new Vector3(rx, y + 0.2f, -5.15f), new Vector3(0.55f, 0.42f, 0.5f));
             Flush();
             root = keep;
             // articles exposes (modeles des objets, sans physique)
@@ -108,6 +111,8 @@ namespace MWCoop
             for (int i = 0; i < 3; i++) ShowKinoItem(KSipsit, new Vector3(sx - 0.25f + i * 0.25f, y + 0.03f, -5.3f), 0f, -12f);
             ShowKinoItem(KPopcorn, new Vector3(px - 0.15f, y + 0.3f, -5.2f), 0f);
             ShowKinoItem(KPopcorn, new Vector3(px + 0.15f, y + 0.3f, -5.25f), 30f);
+            ShowKinoItem(KKela, new Vector3(rx - 0.11f, y, -5.3f), 0f, 90f);
+            ShowKinoItem(KKela, new Vector3(rx + 0.11f, y, -5.3f), 0f, 90f);
             L("cinema : comptoir garni (" + kinoOffers.Count + " articles)");
         }
 
@@ -220,7 +225,7 @@ namespace MWCoop
             float x = o.X;
             if (pl != null) x = Mathf.Clamp(kino.transform.InverseTransformPoint(pl.position).x, o.X - 0.4f, o.X + 0.4f);
             Vector3 at = kino.transform.TransformPoint(new Vector3(x, KCounterTop + 0.16f, KCounterFront - 0.15f));
-            SpawnItem(o.Item, Portions(o.Item).ToString(), at, kino.transform.rotation * Quaternion.Euler(0f, 180f, 0f));
+            SpawnItem(o.Item, o.Item == KKela ? "tyhja" : Portions(o.Item).ToString(), at, kino.transform.rotation * Quaternion.Euler(0f, 180f, 0f));
             Say("Myyjä : Ole hyvä !", "Vendor: Ole hyvä! Here you go.");
             L("cinema : achat " + o.Item + " " + o.Price + " mk, reste " + money.Value.ToString("F0") + " mk");
         }

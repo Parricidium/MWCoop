@@ -45,7 +45,7 @@ namespace MWCoop
             ResetOsat();
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
-            offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
+            offers.Clear(); vitriinit.Clear(); videoCab = konsoliCab = null; script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
             buildAt = Active && Game.LevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
 
@@ -86,6 +86,7 @@ namespace MWCoop
                 return;
             }
             TickDoor();
+            TickVitriinit();
             Interact();
             Greet(now);
             TickSay();
@@ -127,6 +128,7 @@ namespace MWCoop
             public string Item; public int Price; public string Fr, En; public Collider Col;
             public readonly List<GameObject> Shown = new List<GameObject>();   // exposes en rayon (caches quand on les prend)
             public int Taken;                                                  // pris, pas encore payes
+            public Vitriini Cab; public int Half;                              // (vitrine : moitie a ouvrir avant de prendre)
         }
         static readonly List<Offer> offers = new List<Offer>();
         static Bounds counterBounds;
@@ -134,43 +136,7 @@ namespace MWCoop
         // Sacs de couchage plies, exposes sur la tablette du milieu de la gondole (cote porte), etiquette de prix devant.
         static void Offers()
         {
-            try { BagOffer(); } catch (Exception e) { L("sacs de couchage : rayon " + e); }
-            try { VideoOffers(); } catch (Exception e) { L("video : rayons " + e); }
-        }
-
-        static void BagOffer()
-        {
-            if (!Ajouts.Bags) { L("sacs de couchage coupes (lanceur : ajouts COOP) : pas en rayon"); return; }
-            Mesh m; Material mat;
-            if (!SleepingBags.DisplayModel(out m, out mat)) { L("sacs de couchage : modele indisponible, rien en rayon"); return; }
-            // (gondole : StoreGondola(-2.7, -0.5, -0.55, 0.15, 1.45, 3) -- tablette 2, face avant de mid+0.02 a b1-0.02)
-            float shelf = 0.14f + 2f * (1.45f - 0.2f) / 3.3f + 0.025f;
-            float zMid = (-0.18f + 0.13f) / 2f;
-            var offer = new Offer { Item = "makuupussi", Price = SleepingBagPrice, Fr = "SAC DE COUCHAGE", En = "SLEEPING BAG" };
-            foreach (float x in new[] { -2.2f, -1.6f, -1.0f })
-            {
-                var g = new GameObject("osuus_myynnissa_makuupussi");
-                offer.Shown.Add(g);
-                g.transform.SetParent(root.transform, false);
-                g.AddComponent<MeshFilter>().sharedMesh = m;
-                g.AddComponent<MeshRenderer>().sharedMaterial = mat;
-                Bounds b = m.bounds;
-                // longueur du rouleau en travers de la tablette (le long de x)
-                if (b.size.z > b.size.x) g.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
-                Bounds lb = LocalBounds(g);
-                g.transform.localPosition = new Vector3(x - lb.center.x, shelf - lb.min.y + 0.002f, zMid - lb.center.z);
-            }
-            var col = new GameObject("osuus_osto_makuupussi");
-            col.layer = 2;   // (Ignore Raycast : ne gene pas la main du jeu)
-            col.transform.SetParent(root.transform, false);
-            col.transform.localPosition = new Vector3(-1.6f, shelf + 0.17f, zMid);
-            var bc = col.AddComponent<BoxCollider>();
-            bc.isTrigger = true;
-            bc.size = new Vector3(1.9f, 0.36f, 0.4f);
-            offer.Col = bc;
-            offers.Add(offer);
-            Plane("hintalappu", new Vector3(-1.6f, shelf - 0.075f, 0.152f), 0.18f, 0.09f, Vector3.forward);
-            L("en rayon : sac de couchage " + SleepingBagPrice + " mk");
+            EpicerieOffers();
         }
 
         static object looked;
@@ -196,7 +162,8 @@ namespace MWCoop
                 var ray = new Ray(cam.transform.position, cam.transform.forward);
                 float best = 1.6f;
                 RaycastHit h;
-                foreach (Offer o in offers) if (o.Col != null && o.Col.Raycast(ray, out h, best)) { best = h.distance; hit = o; }
+                foreach (Offer o in offers) if (o.Col != null && Reachable(o) && o.Col.Raycast(ray, out h, best)) { best = h.distance; hit = o; }
+                foreach (Vitriini v in vitriinit) foreach (Lasi p in v.Panes) if (p.Col != null && p.Col.Raycast(ray, out h, best)) { best = h.distance; hit = p; }
                 if (registerCol != null && registerCol.Raycast(ray, out h, best)) { best = h.distance; hit = registerCol; }
                 if (doorCol != null && doorCol.Raycast(ray, out h, best)) { best = h.distance; hit = doorCol; }
                 foreach (Pussi b in pussit)
@@ -258,6 +225,14 @@ namespace MWCoop
                 }
                 return;
             }
+            var pane = hit as Lasi;
+            if (pane != null)
+            {
+                guiUse.Value = true;
+                guiText.Value = pane.V.OpenHalf == pane.Half ? Lang.TG("FERMER LA VITRINE", "CLOSE THE CABINET") : Lang.TG("OUVRIR LA VITRINE", "OPEN THE CABINET");
+                if (Input.GetMouseButtonDown(0)) ToggleVitriini(pane);
+                return;
+            }
             if (ReferenceEquals(hit, doorCol))
             {
                 guiUse.Value = true;
@@ -307,7 +282,7 @@ namespace MWCoop
             Transform r = vendor.Root.transform;
             r.SetParent(root.transform, false);
             r.localPosition = vendorSpot;
-            r.localRotation = Quaternion.identity;   // (face a la porte, +z)
+            r.localRotation = Quaternion.Euler(0f, 180f, 0f);   // (epicerie : dos a la vitrine, face aux rayons)
             SkinnedMeshRenderer br = vendor.BodyRenderer;
             if (br != null)
             {
@@ -630,6 +605,19 @@ namespace MWCoop
                             shotName = a[8]; shotAt = now + (a.Length > 9 ? F(a[9]) : 6f);
                             break;
                         }
+                        // (epicerie : camera en coordonnees de la boutique ; vitrine ouverte)
+                        case "sisalla":
+                        {
+                            Vector3 at = root.transform.TransformPoint(new Vector3(F(a[2]), F(a[3]), F(a[4]))), tg = root.transform.TransformPoint(new Vector3(F(a[5]), F(a[6]), F(a[7])));
+                            Transform pl = Game.PlayerT;
+                            if (pl != null) { var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false; pl.position = at - Vector3.up * 1.5f; }
+                            if (testCam == null) { testCam = new GameObject("MWCoop-CameraBoutique").AddComponent<Camera>(); if (Game.MainCam != null) testCam.CopyFrom(Game.MainCam); testCam.depth = 100; }
+                            testCam.farClipPlane = 3000f; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = a.Length > 10 ? F(a[10]) : 70f;
+                            testCam.transform.position = at; testCam.transform.rotation = Quaternion.LookRotation(tg - at);
+                            shotName = a[8]; shotAt = now + (a.Length > 9 ? F(a[9]) : 3f);
+                            break;
+                        }
+                        case "vitriini": { Vitriini v = vitriinit.Find(x => x.Name == a[2]); if (v != null) { v.OpenHalf = int.Parse(a[3]); L("essai : vitrine " + a[2] + " moitie " + a[3]); } break; }
                         case "fin": if (testCam != null) { UnityEngine.Object.Destroy(testCam.gameObject); testCam = null; } break;
                         default: KinoEssai(a, now); break;   // (actions du cinema : KinoRakennus.cs)
                     }
