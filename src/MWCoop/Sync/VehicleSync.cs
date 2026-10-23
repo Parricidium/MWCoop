@@ -764,9 +764,11 @@ namespace MWCoop
             // d'avant : 12 175 tr/min 1,5 s apres le demarrage, gaz relache, et l'usure du jeu ejecte coussinets et pistons
             // (19 141 tr/min le 20/10, meme joueur). Ici le regime est tenu a 1,1 x le maximum a chaque pas, comme le ferait
             // le limiteur du jeu image par image.
-            if (why == null && Game.Msc && w > maxW * 1.1f)
+            // (seuil 1,25 x et retour a 1,1 x : le limiteur du jeu laisse monter la SATSUMA a 8 900 tr/min au point mort, gaz
+            // relache -- journal de Teodor_Takahashi, 23/10, ramenee trois fois de 8 850 a 8 000 avec la 1.11.2)
+            if (why == null && Game.Msc && w > maxW * 1.25f)
             {
-                w = maxW; why = "emballe (MSC, x1,1)";
+                w = maxW * 1.1f; why = "emballe (MSC, x1,25)";
                 if (runawayLogs++ < 10)
                     Log.Warn("voitures : " + d.name + " regime " + (w0 / k).ToString("F0") + " tr/min ramene a " + maxRpm.ToString("F0") + " -- gaz " + d.throttle.ToString("F2") + ", rapport " + d.ratio.ToString("F2")
                              + ", image " + (Time.deltaTime * 1000f).ToString("F0") + " ms");
