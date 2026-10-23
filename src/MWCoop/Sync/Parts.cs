@@ -445,6 +445,9 @@ namespace MWCoop
         //    par OnMessage comme un montage normal, pose par rapport au point) ;
         //  - vis a un autre cran : TIGHTEN / UNTIGHTEN jusqu'au cran de l'hote (serrage de la piece recalcule).
         // Tout ce qui a bouge ici dans les 6 dernieres secondes (message en route, montage en cours) est laisse tranquille.
+        // Le DERNIER GESTE a raison, quel que soit son auteur (JD, 23/10 : « chacun doit pouvoir la construire comme en solo ») :
+        // l'hote joint a chaque entree l'age de sa derniere modification ; si l'invite a modifie ce point ou cette vis plus
+        // recemment, il renvoie son etat a l'hote (montage, demontage ou cran, comme un geste normal) au lieu de se corriger.
         // [Test] PiecesEcart=1 : chez l'invite, a 45 s, une piece montee est retiree sans rien envoyer ; le controle doit la ramener.
         static float nextDigest, lastDigestLog; static int digestLogs;
         static readonly Dictionary<uint, float> touched = new Dictionary<uint, float>();
@@ -453,6 +456,8 @@ namespace MWCoop
         static bool ecartDone;
         static uint H(string s) { uint h = 2166136261; foreach (char ch in s) { h ^= ch; h *= 16777619; } return h; }
         static void Touch(uint h) { touched[h] = Time.realtimeSinceStartup; }
+        static float Age(uint h, float now) { float t; return touched.TryGetValue(h, out t) ? now - t : 1e6f; }
+        const float Never = 9e5f;
         static bool Recent(uint h, float now) { float t; return touched.TryGetValue(h, out t) && now - t < 6f; }
         static string BoltKeyOf(Bolt b) { return PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) + "|" + b.Key; }
         static void HashMaps()
@@ -488,7 +493,8 @@ namespace MWCoop
                 GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
                 string id = Holds(p.Fsm, part) ? IdOf(part) : "";
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
-                w.I32((int)H(p.Key)).Str(id); n++; total++;
+                uint hk = H(p.Key);
+                w.I32((int)hk).Str(id).F32(Age(hk, now)); n++; total++;
                 if (n >= 40) { Session.SendAll(w, true); w = null; }
             }
             if (w != null) Session.SendAll(w, true);
@@ -498,7 +504,8 @@ namespace MWCoop
                 if (b.F == null || !b.F.gameObject.activeInHierarchy) continue;
                 FsmInt t = b.F.FsmVariables.FindFsmInt("BoltTightness"); if (t == null) continue;
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(1); n = 0; }
-                w.I32((int)H(BoltKeyOf(b))).U8(Mathf.Clamp(t.Value, 0, 255)); n++; totalB++;
+                uint hb = H(BoltKeyOf(b));
+                w.I32((int)hb).U8(Mathf.Clamp(t.Value, 0, 255)).F32(Age(hb, now)); n++; totalB++;
                 if (n >= 100) { Session.SendAll(w, true); w = null; }
             }
             if (w != null) Session.SendAll(w, true);
@@ -513,12 +520,12 @@ namespace MWCoop
             if (now - loadedAt < 30f || !PlayerSync.InGame) return;
             if (Game.Msc) { MscOnDigest(who, r, kind, now); return; }
             HashMaps();
-            List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0;
+            List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0, resent = 0;
             if (kind == 0)
             {
                 while (r.More)
                 {
-                    uint h = (uint)r.I32(); string id = r.Str();
+                    uint h = (uint)r.I32(); string id = r.Str(); float hostAge = r.F32();
                     Point p;
                     if (!pointsByHash.TryGetValue(h, out p) || p.Fsm == null) { unknown++; continue; }
                     if (Recent(h, now) || !p.Fsm.gameObject.activeInHierarchy) continue;
@@ -527,6 +534,13 @@ namespace MWCoop
                     string mine = isIn ? IdOf(part) : "";
                     if (mine == id) continue;
                     if (isIn && (mounting.ContainsKey(part) || PendingReinstall(part))) continue;
+                    if (Age(h, now) + 0.5f < hostAge && hostAge > 0f)
+                    {
+                        // Mon geste est le plus recent : c'est l'hote qui se met a jour (renvoye comme un geste normal).
+                        if (isIn) SendPointState(p, part, mine, true); else if (id.Length > 0) SendPointState(p, FindByIdCached(id) ?? FindById(id), id, false);
+                        Touch(h); resent++;
+                        continue;
+                    }
                     if (isIn) { ReplayRemove(p, part, mine, who, "pas montee chez l'hote" + (id.Length > 0 ? " (il y a " + id + ")" : "")); removed++; }
                     if (id.Length > 0 && !AskedLately(h, now)) { if (ask == null) ask = new List<int>(); if (ask.Count < 20) ask.Add((int)h); }
                     Touch(h);
@@ -542,19 +556,26 @@ namespace MWCoop
             {
                 while (r.More)
                 {
-                    uint h = (uint)r.I32(); int target = r.U8();
+                    uint h = (uint)r.I32(); int target = r.U8(); float hostAge = r.F32();
                     Bolt b;
                     if (!boltsByHash.TryGetValue(h, out b) || b.F == null) { unknown++; continue; }
                     if (Recent(h, now) || !b.F.gameObject.activeInHierarchy) continue;
                     FsmInt t = b.F.FsmVariables.FindFsmInt("BoltTightness");
                     if (t == null || t.Value == target) continue;
                     string part = PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value);
+                    if (Age(h, now) + 0.5f < hostAge && hostAge > 0f)
+                    {
+                        Session.SendAll(new NetWriter(Msg.Bolt).U8(Session.LocalId).Str(part).Str(b.Key).U8(Mathf.Clamp(t.Value, 0, 255)), true);
+                        Log.Info("vis " + part + "/" + b.Key + " = " + t.Value + " ici, plus recent que chez l'hote (" + target + ") : renvoyee");
+                        Touch(h); resent++;
+                        continue;
+                    }
                     if (ApplyBolt(who, part, b.Key, target, true)) { fixedBolts++; Touch(h); }
                 }
             }
             int asked = ask != null ? ask.Count : 0;
-            if (removed + fixedBolts + asked > 0)
-                Log.Info("pieces : controle de l'hote : " + removed + " demontee(s) ici, " + asked + " demandee(s), " + fixedBolts + " vis reglee(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
+            if (removed + fixedBolts + asked + resent > 0)
+                Log.Info("pieces : controle de l'hote : " + removed + " demontee(s) ici, " + asked + " demandee(s), " + fixedBolts + " vis reglee(s), " + resent + " geste(s) d'ici plus recent(s) renvoye(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
         }
 
         // Hote : montages demandes par un invite (points ou il a un ecart), renvoyes comme des montages normaux.
@@ -584,6 +605,21 @@ namespace MWCoop
             }
         }
 
+        // Etat d'un point d'ici renvoye a tous comme un geste (OnLocal) : montage (pose par rapport au point, serrage) ou demontage.
+        static void SendPointState(Point p, GameObject part, string id, bool install)
+        {
+            if (part == null || id.Length == 0) return;
+            PlayMakerFSM data = Game.FsmOn(part, "Data");
+            FsmInt aid = data != null ? data.FsmVariables.FindFsmInt("AssemblyID") : null;
+            FsmFloat tf = data != null ? data.FsmVariables.FindFsmFloat("Tightness") : null;
+            Transform pt = p.Fsm.transform;
+            Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(install).Str(p.Key).Str(id).I32(aid != null ? aid.Value : 0)
+                .Vec(part.transform.position).Quat(part.transform.rotation)
+                .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation)
+                .F32(tf != null ? tf.Value : -1f).U8(0), true);
+            Log.Info("piece " + id + (install ? " montee" : " demontee") + " ici sur " + p.Key + ", plus recent que chez l'hote : renvoye");
+        }
+
         static void ReplayRemove(Point p, GameObject part, string id, int who, string why)
         {
             VehicleSync.CalmAfterPart(p.Fsm.transform);
@@ -597,7 +633,7 @@ namespace MWCoop
         // [Test] PiecesEcart=1 (invite) : ecart provoque pour eprouver le controle.
         static void TestEcart(float now)
         {
-            if (ecartDone || Session.IsHost || Config.GetInt("Test", "PiecesEcart", 0) == 0 || Time.timeSinceLevelLoad < 45f) return;
+            if (ecartDone || Config.GetInt("Test", "PiecesEcart", 0) == 0 || Time.timeSinceLevelLoad < 45f) return;   // (hote ou invite : celui qui a la cle)
             ecartDone = true;
             foreach (KeyValuePair<string, Point> kv in points)
             {
@@ -608,6 +644,7 @@ namespace MWCoop
                 applying = true; Replay.Depth++;
                 try { Game.SetState(p.Fsm, "Remove part"); }
                 finally { applying = false; Replay.Depth--; }
+                Touch(H(p.Key));   // (un vrai geste d'ici dont le message se serait perdu)
                 Log.Info("autotest : ecart provoque : " + IdOf(part) + " retiree de " + p.Key + " sans rien envoyer");
                 break;
             }
@@ -621,6 +658,7 @@ namespace MWCoop
                 applying = true; Replay.Depth++;
                 try { for (int g = 0; t.Value > 0 && g < 10; g++) b.F.SendEvent("UNTIGHTEN"); }
                 finally { applying = false; Replay.Depth--; }
+                Touch(H(BoltKeyOf(b)));
                 Log.Info("autotest : ecart provoque : vis " + BoltKeyOf(b) + " " + was + " -> " + t.Value + " sans rien envoyer");
                 break;
             }

@@ -488,7 +488,8 @@ namespace MWCoop
                 if (p.Fsm == null || p.Swap) continue;
                 string id = MscInstalledId(p);
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
-                w.I32((int)H(p.Key)).Str(id); n++; total++;
+                uint hk = H(p.Key);
+                w.I32((int)hk).Str(id).F32(Age(hk, now)); n++; total++;
                 if (n >= 40) { Session.SendAll(w, true); w = null; }
             }
             if (w != null) Session.SendAll(w, true);
@@ -498,7 +499,8 @@ namespace MWCoop
                 if (b.F == null || !b.F.gameObject.activeInHierarchy) continue;
                 FsmInt st = b.F.FsmVariables.FindFsmInt("Stage"); if (st == null) continue;
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(1); n = 0; }
-                w.I32((int)H(MscBoltKeyOf(b))).U8(Mathf.Clamp(st.Value, 0, 255)); n++; totalB++;
+                uint hb = H(MscBoltKeyOf(b));
+                w.I32((int)hb).U8(Mathf.Clamp(st.Value, 0, 255)).F32(Age(hb, now)); n++; totalB++;
                 if (n >= 100) { Session.SendAll(w, true); w = null; }
             }
             if (w != null) Session.SendAll(w, true);
@@ -507,12 +509,12 @@ namespace MWCoop
         static void MscOnDigest(int who, NetReader r, int kind, float now)
         {
             MscHashMaps();
-            List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0;
+            List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0, resent = 0;
             if (kind == 0)
             {
                 while (r.More)
                 {
-                    uint h = (uint)r.I32(); string id = r.Str();
+                    uint h = (uint)r.I32(); string id = r.Str(); float hostAge = r.F32();
                     MscPoint p;
                     if (!mscPointsByHash.TryGetValue(h, out p) || p.Fsm == null) { unknown++; continue; }
                     if (Recent(h, now) || p.Swap) continue;
@@ -521,6 +523,15 @@ namespace MWCoop
                     string mine = MscInstalledId(p);
                     if (mine == id) continue;
                     if (mine.Length > 0 && (mounting.ContainsKey(part) || PendingReinstall(part))) continue;
+                    if (Age(h, now) + 0.5f < hostAge && hostAge > 0f)
+                    {
+                        // Mon geste est le plus recent : l'hote se met a jour (montage comme MscLocalInstall, demontage comme MscLocalRemove)
+                        if (mine.Length > 0) Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(mine).U8(0), true);
+                        else if (id.Length > 0) Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(false).Str(p.Key).Str(id).U8(0), true);
+                        Log.Info("piece " + (mine.Length > 0 ? mine + " montee" : id + " demontee") + " ici sur " + p.Key + ", plus recent que chez l'hote : renvoye");
+                        Touch(h); resent++;
+                        continue;
+                    }
                     if (mine.Length > 0)
                     {
                         PlayMakerFSM rem = Game.FsmOn(part, "Removal");
@@ -549,19 +560,26 @@ namespace MWCoop
             {
                 while (r.More)
                 {
-                    uint h = (uint)r.I32(); int target = r.U8();
+                    uint h = (uint)r.I32(); int target = r.U8(); float hostAge = r.F32();
                     Bolt b;
                     if (!boltsByHash.TryGetValue(h, out b) || b.F == null) { unknown++; continue; }
                     if (Recent(h, now) || !b.F.gameObject.activeInHierarchy) continue;
                     FsmInt st = b.F.FsmVariables.FindFsmInt("Stage");
                     if (st == null || st.Value == target) continue;
                     string part = MscPartKey(b.F.FsmVariables.GetFsmGameObject("PartAssembled").Value);
+                    if (Age(h, now) + 0.5f < hostAge && hostAge > 0f)
+                    {
+                        Session.SendAll(new NetWriter(Msg.Bolt).U8(Session.LocalId).Str(part).Str(b.Key).U8(Mathf.Clamp(st.Value, 0, 255)), true);
+                        Log.Info("vis " + part + "/" + b.Key + " = " + st.Value + " ici, plus recent que chez l'hote (" + target + ") : renvoyee");
+                        Touch(h); resent++;
+                        continue;
+                    }
                     if (MscApplyBolt(who, part, b.Key, target, true)) { fixedBolts++; Touch(h); }
                 }
             }
             int asked = ask != null ? ask.Count : 0;
-            if (removed + fixedBolts + asked > 0)
-                Log.Info("pieces (MSC) : controle de l'hote : " + removed + " demontee(s) ici, " + asked + " demandee(s), " + fixedBolts + " vis reglee(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
+            if (removed + fixedBolts + asked + resent > 0)
+                Log.Info("pieces (MSC) : controle de l'hote : " + removed + " demontee(s) ici, " + asked + " demandee(s), " + fixedBolts + " vis reglee(s), " + resent + " geste(s) d'ici plus recent(s) renvoye(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
         }
         static void MscOnDigestAsk(int who, NetReader r)
         {
