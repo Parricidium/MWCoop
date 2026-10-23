@@ -832,6 +832,7 @@ namespace MWCoop
                 inner.SetParent(b.BrakePivot, false);
                 inner.localPosition = -cur.BrakePivot;
                 AddParts(b, inner, "frein.p205", basePaint, paint, number);
+                FitLever(lever, b.BrakePivot);
             }
             else Log.Warn("vaz : frein a main du jeu (Functions/HandBrake/LeverPivot) introuvable");
 
@@ -983,6 +984,37 @@ namespace MWCoop
 
         // Objet du jeu deplace (sans le tourner) pour que le centre de ses colliders soit en 'world'.
         // Zones cliquables d'une commande ramenees a 'size' metres au plus dans chaque direction (centres gardes).
+        // Zone cliquable du frein a main du jeu (LeverPivot, automate Use : MousePickEvent sur SON collider) posee sur le levier
+        // visible du modele -- JD 23/10 : « je n'arrive pas a le cibler » (seule la Subaru allait) : la zone etait un cube de
+        // 5 cm sur la poignee (Shrink), hors du levier qu'on vise sur la plupart des voitures. Boite du levier (au repos), 1,5 cm
+        // de marge, 6 cm d'epaisseur au moins.
+        static void FitLever(Transform lever, Transform visual)
+        {
+            bool any = false; Bounds wb = new Bounds();
+            foreach (Renderer r in visual.GetComponentsInChildren<Renderer>(true)) { if (!any) { wb = r.bounds; any = true; } else wb.Encapsulate(r.bounds); }
+            if (!any) return;
+            bool trig = false;
+            foreach (Collider c in lever.GetComponents<Collider>()) { trig |= c.isTrigger; Object.DestroyImmediate(c); }
+            Bounds lb = new Bounds(); bool first = true;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 w = new Vector3((i & 1) == 0 ? wb.min.x : wb.max.x, (i & 2) == 0 ? wb.min.y : wb.max.y, (i & 4) == 0 ? wb.min.z : wb.max.z);
+                Vector3 l = lever.InverseTransformPoint(w);
+                if (first) { lb = new Bounds(l, Vector3.zero); first = false; } else lb.Encapsulate(l);
+            }
+            Vector3 sc = lever.lossyScale;
+            float pad = 0.015f, min = 0.06f;
+            Vector3 size = lb.size;
+            for (int k = 0; k < 3; k++)
+            {
+                float s = Mathf.Max(Mathf.Abs(sc[k]), 1e-4f);
+                size[k] = Mathf.Max(size[k] + 2f * pad / s, min / s);
+            }
+            var bc = lever.gameObject.AddComponent<BoxCollider>();
+            bc.isTrigger = trig; bc.center = lb.center; bc.size = size;
+            Log.Info("vaz : frein a main cliquable sur le levier du modele (" + Vector3.Scale(size, sc).ToString("F2") + " m)");
+        }
+
         static void Shrink(Transform t, float size)
         {
             foreach (Collider k in t.GetComponentsInChildren<Collider>(true))

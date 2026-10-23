@@ -819,7 +819,11 @@ namespace MWCoop
                         // masque reel de l'action MousePickEvent du levier (automate Use)
                         PlayMakerFSM uf = Game.FsmOn(lv.gameObject, "Use"); int mask = 0; float dist = 1f;
                         if (uf != null) foreach (FsmState st in uf.FsmStates) foreach (FsmStateAction ac in st.Actions) { var mp = ac as HutongGames.PlayMaker.Actions.MousePickEvent; if (mp == null) continue; mask = HutongGames.PlayMaker.ActionHelpers.LayerArrayToLayerMask(mp.layerMask, mp.invertMask.Value); dist = mp.rayDistance.Value; }
-                        RaycastHit mh; Vector3 md = lc.bounds.center - eye;
+                        // (on vise le levier VISIBLE du modele, comme le joueur)
+                        Vector3 vis = lc.bounds.center; bool vf = false; Bounds vb = new Bounds();
+                        foreach (Transform tt in car.GetComponentsInChildren<Transform>(true)) if (tt.name == "VAZ_frein") foreach (Renderer rr in tt.GetComponentsInChildren<Renderer>(true)) { if (!vf) { vb = rr.bounds; vf = true; } else vb.Encapsulate(rr.bounds); }
+                        if (vf) vis = vb.center;
+                        RaycastHit mh; Vector3 md = vis - eye;
                         bool mok = Physics.Raycast(eye, md.normalized, out mh, dist, mask);
                         sb.Append(" ; masque du jeu ").Append(mask).Append(", ").Append(dist.ToString("F1")).Append(" m : ").Append(mok ? (mh.collider.transform.IsChildOf(lv) ? "LEVIER" : VehicleSync.RelPath(car, mh.collider.transform)) + "@" + mh.distance.ToString("F2") : "rien");
                         pick = mok && mh.collider.transform.IsChildOf(lv);
@@ -831,7 +835,7 @@ namespace MWCoop
                         sb.Append(" ; calque 19 = ").Append(LayerMask.LayerToName(19)).Append(", 13 = ").Append(LayerMask.LayerToName(13));
                         Log.Info(sb.ToString());
                         if (testCam == null) { testCam = new GameObject("MWCoop-CameraPilote").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.02f; testCam.fieldOfView = 60; }
-                        testCam.transform.position = eye; testCam.transform.LookAt(aim, car.up);
+                        testCam.transform.position = eye; testCam.transform.LookAt(vis, car.up);
                         Autotest.CaptureSoon("vaz-frein", 0.4f);
                     }
                     else Log.Info("autotest vaz : frein a main : " + (cam == null ? "camera" : "levier du jeu") + " introuvable");
