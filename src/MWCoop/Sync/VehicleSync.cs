@@ -758,6 +758,19 @@ namespace MWCoop
             // Toute voiture : au-dela de 1,5 x le regime maximal, ce n'est plus un sur-regime du jeu (retrogradage) mais un
             // emballement de l'integration -- la SATSUMA d'un invite a 19 141 tr/min 2 s apres son demarrage, pistons et
             // coussinets ejectes par l'usure mecanique du jeu (29.30, 20/10). Ramenee au maximum, et l'etat note au journal.
+            // My Summer Car : le limiteur du jeu est un automate (RevLimiter : friction moteur 0,22 + regime/4000, a chaque
+            // IMAGE) ; le Drivetrain, lui, integre a chaque pas de physique. Sur une machine a 20 images/s avec des images de
+            // 300 a 800 ms (29.30 et son ami, 22/10), les 15 a 40 pas de physique d'une seule image tournent avec la friction
+            // d'avant : 12 175 tr/min 1,5 s apres le demarrage, gaz relache, et l'usure du jeu ejecte coussinets et pistons
+            // (19 141 tr/min le 20/10, meme joueur). Ici le regime est tenu a 1,1 x le maximum a chaque pas, comme le ferait
+            // le limiteur du jeu image par image.
+            if (why == null && Game.Msc && w > maxW * 1.1f)
+            {
+                w = maxW; why = "emballe (MSC, x1,1)";
+                if (runawayLogs++ < 10)
+                    Log.Warn("voitures : " + d.name + " regime " + (w0 / k).ToString("F0") + " tr/min ramene a " + maxRpm.ToString("F0") + " -- gaz " + d.throttle.ToString("F2") + ", rapport " + d.ratio.ToString("F2")
+                             + ", image " + (Time.deltaTime * 1000f).ToString("F0") + " ms");
+            }
             if (why == null && w > maxW * 1.5f)
             {
                 w = maxW; why = "emballe (x1,5)";
