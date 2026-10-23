@@ -243,6 +243,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "AjoutVaz", L"VAZ-2108 des joueurs (F10)", L"Players' VAZ-2108 (F10)", 1, {}, {}, {}, 0, 15, "Coop" },
         // (cinema KINO TAHTI, a l'est des silos MAATALOUS -- JD, 22/10 ; Sync/Kino*.cs)
         { "AjoutKino", L"Cinéma KINO TÄHTI", L"KINO TÄHTI cinema", 1, {}, {}, {}, 0, 15, "Coop" },
+        // (magasin de pieces CARDINAL VARAOSAT, pres du camping de la station de ski -- JD, 23/10 ; Sync/Osat*.cs)
+        { "AjoutOsat", L"Magasin de pièces CARDINAL", L"CARDINAL parts shop", 1, {}, {}, {}, 0, 15, "Coop" },
         { "Touche:Tchat", L"Écrire aux autres (tchat)", L"Write to the others (chat)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:PorteMonnaie", L"Porte-monnaie (donner de l'argent)", L"Wallet (give money)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Vocal", L"Parler (vocal, touche tenue)", L"Talk (voice, hold the key)", 0, {}, {}, {}, 0, 9, "Touches" },
@@ -485,7 +487,7 @@ static float SetRowH() { return 36 * UiDensity() * UiTextScale(); }       // lig
 static float SetRowDH() { return 46 * UiDensity() * UiTextScale(); }      // ligne avec explication grise
 static float SetSecH() { return 26 * UiDensity() * UiTextScale(); }       // titre de section
 enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD = 2920, UI_SET_ACCENT = 2925, UI_SET_AURORE = 2931, UI_SET_WINTHEME = 2935, UI_SET_THEMEDEF,
-       UI_SET_MAXP = 2940, UI_SET_PRIV = 2945, UI_SET_AJOUTS = 2948, UI_SET_AJOUT = 2951, UI_SET_DRONEKB = 2957,   // (ajouts : 2951-2956, six au plus)
+       UI_SET_MAXP = 2940, UI_SET_PRIV = 2945, UI_SET_AJOUTS = 2948, UI_SET_AJOUT = 2951, UI_SET_DRONEKB = 2984,   // (ajouts : 2951-2959, neuf au plus ; disposition du drone : 2984-2986)
        UI_SET_NOTES = 2960, UI_SET_LOGDIR, UI_SET_LOGZIP, UI_SET_DISCORDASK, UI_SET_SKIN, UI_SET_CAR, UI_SET_CONTENT, UI_SET_STEAMLINE, UI_SET_GOIMAGE, UI_SET_API, UI_SET_GITHUB,
        UI_SET_DEFAULT = 2972, UI_SET_SAVE, UI_SET_NETTEST, UI_SET_HOSTGUIDE, UI_SET_REPAIR, UI_SET_NIGHTLY, UI_SET_GLASS, UI_SET_RTTOGGLE,   // (2972-2979)
        UI_SET_HUDSTYLE = 2980,       // + style (0 Vanilla .. 3 Bandeau) : tuiles de l'onglet HUD (2980-2983)
@@ -1116,7 +1118,7 @@ static void SetThemePreview(Graphics &g, RectF r, Color sky0, Color sky1, Color 
 // Ajouts du jeu choisi (19/10) : My Summer Car n'a que le drone (sacs, boutique s21, musee et VAZ sont faits pour My Winter
 // Car ; le mod les coupe aussi, Sync/Ajouts.cs B_Msc). Ceux des deux jeux d'abord : kAjoutKeys et kAjoutN (aussi le salon,
 // launcher.cpp : « for (k : kAjoutKeys) », « kAjoutN ») ne parcourent que les kAjoutMsc premiers sur My Summer Car.
-static const char *kAjoutAll[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee", "AjoutVaz", "AjoutKino" };
+static const char *kAjoutAll[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee", "AjoutVaz", "AjoutKino", "AjoutOsat" };
 static const int kAjoutMsc = 1;
 static int AjoutCount() { return g_game == GAME_MSC ? kAjoutMsc : (int)(sizeof(kAjoutAll) / sizeof(kAjoutAll[0])); }
 struct AjoutList {
@@ -1126,7 +1128,9 @@ struct AjoutList {
 };
 static const AjoutList kAjoutKeys = {};
 #define kAjoutN (AjoutCount())
-static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse", L"VAZ-2108 (F10)", L"Cinéma" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica", L"VAZ-2108 (F10)", L"Cinema" };
+static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse", L"VAZ-2108 (F10)", L"Cinéma", L"Pièces CARDINAL" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica", L"VAZ-2108 (F10)", L"Cinema", L"CARDINAL parts" };
+static_assert(sizeof(kAjoutFr) / sizeof(kAjoutFr[0]) == sizeof(kAjoutAll) / sizeof(kAjoutAll[0]) && sizeof(kAjoutEn) / sizeof(kAjoutEn[0]) == sizeof(kAjoutAll) / sizeof(kAjoutAll[0]), "un nom FR/EN par ajout (1.10.0 : le 6e plantait la page Co-op)");
+static_assert(sizeof(kAjoutAll) / sizeof(kAjoutAll[0]) <= 9, "identifiants des ajouts : 2951-2959 (UI_SET_AJOUT)");
 static float g_chipW = 458;
 static int SetChipLines(float w)
 {
@@ -1948,7 +1952,7 @@ static bool SetClick(int id)
         if (k == 0) for (const char *a : kAjoutKeys) GfxSet(a, 1);
         return true;
     }
-    if (id >= UI_SET_AJOUT && id < UI_SET_AJOUT + kAjoutN) { const char *a = kAjoutKeys[id - UI_SET_AJOUT]; GfxSet(a, GfxGet(a) == 1 ? 0 : 1); return true; }   // (6 identifiants au plus : UI_SET_DRONEKB suit)
+    if (id >= UI_SET_AJOUT && id < UI_SET_AJOUT + kAjoutN) { const char *a = kAjoutKeys[id - UI_SET_AJOUT]; GfxSet(a, GfxGet(a) == 1 ? 0 : 1); return true; }   // (9 identifiants au plus : 2951-2959, UI_SET_NOTES = 2960 suit)
     if (id >= UI_SET_DRONEKB && id < UI_SET_DRONEKB + 3) { DroneLayoutSet(id - UI_SET_DRONEKB); return true; }
     return GfxClick(id);
 }

@@ -504,6 +504,44 @@ namespace MWCoop
                 }
                 case "lippu": ticketDay = GameDay; L("essai : billet du jour " + ticketDay); break;
                 case "kartta": MapPanel.Open = a.Length < 3 || a[2] != "0"; break;   // kartta [0] : carte du F10 (M) ouverte / fermee
+                case "aita":
+                {
+                    // aita <objet> x0 x1 z0 z1 : sommets d'un maillage dans un rectangle, par tranche de 5 m en z (x mini, x maxi)
+                    GameObject go = GameObject.Find(a[2]);
+                    MeshFilter mf = go != null ? go.GetComponent<MeshFilter>() : null;
+                    if (mf == null || mf.sharedMesh == null) { L("essai : aita : " + a[2] + " introuvable"); break; }
+                    float x0 = F(a[3]), x1 = F(a[4]), z0 = F(a[5]), z1 = F(a[6]);
+                    var bands = new SortedDictionary<int, Vector2>();
+                    foreach (Vector3 v in mf.sharedMesh.vertices)
+                    {
+                        Vector3 w = go.transform.TransformPoint(v);
+                        if (w.x < x0 || w.x > x1 || w.z < z0 || w.z > z1) continue;
+                        int k = Mathf.FloorToInt(w.z / 5f) * 5;
+                        Vector2 m; if (!bands.TryGetValue(k, out m)) m = new Vector2(float.MaxValue, float.MinValue);
+                        bands[k] = new Vector2(Mathf.Min(m.x, w.x), Mathf.Max(m.y, w.x));
+                    }
+                    var sb = new System.Text.StringBuilder("essai : aita " + a[2] + " :");
+                    foreach (var kv in bands) sb.Append(" | z" + kv.Key + " x " + kv.Value.x.ToString("F1") + ".." + kv.Value.y.ToString("F1"));
+                    L(sb.ToString());
+                    break;
+                }
+                case "sondex":
+                {
+                    // sondex z x0 x1 : comme sonde, le long d'une ligne est-ouest, tous les 0,5 m ; tout ce qui depasse du sol (barriere...)
+                    float z = F(a[2]), x0 = F(a[3]), x1 = F(a[4]);
+                    var sb = new System.Text.StringBuilder("essai : sondex z " + z + " :");
+                    string last = null;
+                    for (float x = x0; x <= x1; x += 0.5f)
+                    {
+                        var hs = Physics.RaycastAll(new Vector3(x, 300f, z), Vector3.down, 400f);
+                        System.Array.Sort(hs, (p, q) => p.distance.CompareTo(q.distance));
+                        string n = "-"; float y = 0f;
+                        foreach (RaycastHit h in hs) if (!h.collider.isTrigger) { n = h.collider.name; y = h.point.y; break; }
+                        if (n != last) { sb.Append(" | x" + x + " " + n + " " + y.ToString("F1")); last = n; }
+                    }
+                    L(sb.ToString());
+                    break;
+                }
                 case "sonde":
                 {
                     // sonde x z0 z1 : le sol le long d'une ligne nord-sud (collider touche et hauteur, aux changements) -- emplacement
@@ -574,6 +612,7 @@ namespace MWCoop
                     L("essai : assis salle " + s + " rang " + row + " place " + idx + (best != null ? " (declencheur a " + bd.ToString("F2") + " m, etat " + best.ActiveStateName + ")" : " (pas de declencheur)"));
                     break;
                 }
+                default: OsatEssai(a, now); break;   // (actions du magasin de pieces : OsatEssai.cs)
             }
         }
     }

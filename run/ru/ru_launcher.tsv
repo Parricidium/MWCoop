@@ -1901,3 +1901,17 @@ Reels on the projectors stay there when you save. Can be turned off like the oth
 The KINO TÄHTI cinema	Кинотеатр KINO TÄHTI
 Ticket, popcorn, seats, your films	Билет, попкорн, кресла, ваши фильмы
 Film reels for the KINO TÄHTI cinema, 49 mk: top shelf, next to the tapes.	Киноплёнки для кинотеатра KINO TÄHTI, 49 mk: верхняя полка, рядом с кассетами.
+CARDINAL parts shop	Магазин запчастей CARDINAL
+CARDINAL parts	Запчасти CARDINAL
+The CARDINAL VARAOSAT parts shop is at the ski resort camping area, north of the caravans, between the track and the blue fence. On the map (M) it is the \"CARDINAL VARAOSAT\" spot; in the cheats, /place parts takes you there.	Магазин запчастей CARDINAL VARAOSAT находится у кемпинга горнолыжного центра, к северу от караванов, между трассой и синим забором. На карте (M) это точка «CARDINAL VARAOSAT»; в читах туда ведёт /place parts.
+Two wings	Два крыла
+On the left, CARDINAL: parts and vehicles from mods that sell here (like Cardinal's). The shelves stay empty if none of these mods is installed.	Слева, CARDINAL: детали и машины из модов, которые продают здесь (например, моды Cardinal). Полки пустые, если ни один такой мод не установлен.
+On the right, KÄYTETYT OSAT: 16 used parts for the Rivett, picked at random and restocked every 3 game days. Their condition (wear) shows with the price.	Справа, KÄYTETYT OSAT: 16 подержанных деталей для Rivett, выбранных случайно и обновляемых каждые 3 игровых дня. Их состояние (износ) показано рядом с ценой.
+Buying	Покупка
+Look at an item: its name, condition and price show up. Left click pays, from your wallet.	Наведитесь на товар: появятся название, состояние и цена. Левый клик — оплата из вашего кошелька.
+Your purchase appears on the wing's NOUTO pallet, in front of the counter.	Покупка появляется на поддоне NOUTO этого крыла, перед стойкой.
+A used part is a real game part: it fits, wears and saves like any other, and every player sees it. Can be turned off: Settings > Co-op > MWCoop additions, CARDINAL parts chip (the host's choice applies to everyone).	Подержанная деталь — настоящая деталь игры: она ставится, изнашивается и сохраняется как остальные, и её видят все игроки. Отключается: Настройки > Кооп > Дополнения MWCoop, значок «Запчасти CARDINAL» (выбор хоста действует для всех).
+Selling your mod's parts	Продавать детали своего мода
+Mod authors: CoopApi.AddShopItem(id, name, price, model, callback) puts an item on the CARDINAL wing's shelves. When it is bought, the callback runs on every player's game with the buyer and the pick-up spot: the mod spawns its object there. Details and an example: docs/API.md on MWCoop's GitHub.	Авторам модов: CoopApi.AddShopItem(id, name, price, model, callback) выставляет предмет на полки крыла CARDINAL. При покупке callback вызывается у всех игроков с покупателем и местом выдачи: мод создаёт там свой предмет. Подробности и пример: docs/API.md на GitHub MWCoop.
+The CARDINAL parts shop	Магазин запчастей CARDINAL
+Mod parts, used parts for the Rivett	Детали модов, б/у для Rivett

@@ -173,7 +173,7 @@ struct LobbyOptDef { const char *key; int def; bool host; };
 static const LobbyOptDef kLobbyOptDefs[] = {
     { "ArgentDepart", 1, true }, { "Triches", 0, true }, { "Renverser", 1, true }, { "PvP", 0, true }, { "Jokkis", 0, true }, { "VenttiEnjeux", 1, true },
     { "Difficulte", 0, true }, { "VitesseVitres", 1, true }, { "PencheVitre", 1, true },
-    { "SansAjouts", 0, true }, { "AjoutDrone", 1, true }, { "AjoutSacs", 1, true }, { "AjoutBoutique", 1, true }, { "AjoutMusee", 1, true }, { "AjoutVaz", 1, true }, { "AjoutKino", 1, true },
+    { "SansAjouts", 0, true }, { "AjoutDrone", 1, true }, { "AjoutSacs", 1, true }, { "AjoutBoutique", 1, true }, { "AjoutMusee", 1, true }, { "AjoutVaz", 1, true }, { "AjoutKino", 1, true }, { "AjoutOsat", 1, true },
     { "Vocal", 1, false }, { "VocalPortee", 35, false }, { "VolumeVocal", 100, false }, { "GainMicro", 100, false },
     { "VocalActivation", 0, false }, { "VocalSeuil", 12, false }, { "Ronflements", 1, false },
     { "VoirVisages", 1, false }, { "CarteMaintenir", 0, false }, { "Marqueurs", 1, false }, { "ModsAuto", 0, false },

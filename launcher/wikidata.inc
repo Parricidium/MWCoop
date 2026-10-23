@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -969,6 +969,29 @@ static const WikiBlock kW_Kino[] = {   // (cinema KINO TAHTI, 1.10.1 -- JD, 22/1
     { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
     { WB_GO, L"Monter et exporter une cassette", L"Edit and export a tape", 1000 + WA_MONTAGE },
 };
+static const WikiBlock kW_Osat[] = {   // (magasin de pieces CARDINAL VARAOSAT -- JD, 23/10)
+    { WB_P, L"Le magasin de pièces CARDINAL VARAOSAT est au camping de la station de ski, au nord des caravanes, entre la piste et la barrière bleue. Sur la carte (M), c'est le point « CARDINAL VARAOSAT » ; dans les triches, /lieu pieces y emmène.",
+            L"The CARDINAL VARAOSAT parts shop is at the ski resort camping area, north of the caravans, between the track and the blue fence. On the map (M) it is the \"CARDINAL VARAOSAT\" spot; in the cheats, /place parts takes you there." },
+    { WB_H, L"Deux ailes",
+            L"Two wings", 0 },
+    { WB_B, L"À gauche, CARDINAL : les pièces et les véhicules des mods qui vendent ici (comme ceux de Cardinal). Les rayons restent vides si aucun de ces mods n'est installé.",
+            L"On the left, CARDINAL: parts and vehicles from mods that sell here (like Cardinal's). The shelves stay empty if none of these mods is installed." },
+    { WB_B, L"À droite, KÄYTETYT OSAT : 16 pièces d'occasion pour la Rivett, tirées au hasard et renouvelées tous les 3 jours du jeu. Leur état (usure) s'affiche avec le prix.",
+            L"On the right, KÄYTETYT OSAT: 16 used parts for the Rivett, picked at random and restocked every 3 game days. Their condition (wear) shows with the price." },
+    { WB_H, L"Acheter",
+            L"Buying", 0 },
+    { WB_S, L"Vise un article : son nom, son état et son prix s'affichent. Clic gauche pour payer, avec ton porte-monnaie.",
+            L"Look at an item: its name, condition and price show up. Left click pays, from your wallet." },
+    { WB_S, L"Ton achat apparaît sur la palette NOUTO de l'aile, devant le comptoir.",
+            L"Your purchase appears on the wing's NOUTO pallet, in front of the counter." },
+    { WB_TIP, L"Une pièce d'occasion est une vraie pièce du jeu : elle se monte, s'use et se sauvegarde comme les autres, et tous les joueurs la voient. Désactivable : Réglages > Co-op > Ajouts MWCoop, jeton Pièces CARDINAL (le choix de l'hôte vaut pour tous).",
+            L"A used part is a real game part: it fits, wears and saves like any other, and every player sees it. Can be turned off: Settings > Co-op > MWCoop additions, CARDINAL parts chip (the host's choice applies to everyone)." },
+    { WB_H, L"Vendre les pièces de son mod",
+            L"Selling your mod's parts", 0 },
+    { WB_P, L"Auteurs de mods : CoopApi.AddShopItem(id, nom, prix, modèle, rappel) met un objet en rayon dans l'aile CARDINAL. À l'achat, le rappel est appelé chez tous les joueurs avec l'acheteur et la place de retrait : le mod y fait apparaître son objet. Détails et exemple : docs/API.md sur le GitHub de MWCoop.",
+            L"Mod authors: CoopApi.AddShopItem(id, name, price, model, callback) puts an item on the CARDINAL wing's shelves. When it is bought, the callback runs on every player's game with the buyer and the pick-up spot: the mod spawns its object there. Details and an example: docs/API.md on MWCoop's GitHub." },
+    { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -1006,4 +1029,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, relief, végétation, lumières, co-op", L"Objects, roads, terrain, plants, lights, co-op", kW_Editor),   // (WA_EDITOR = 33)
     WARTG(WG_MWC, 2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34)
     WARTG(WG_MWC, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
+    WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
 };

@@ -1,0 +1,12 @@
+OW1	The CARDINAL VARAOSAT parts shop is at the ski resort camping area, north of the caravans, between the track and the blue fence. On the map (M) it is the \"CARDINAL VARAOSAT\" spot; in the cheats, /place parts takes you there.
+OW2	Two wings
+OW3	On the left, CARDINAL: parts and vehicles from mods that sell here (like Cardinal's). The shelves stay empty if none of these mods is installed.
+OW4	On the right, KÄYTETYT OSAT: 16 used parts for the Rivett, picked at random and restocked every 3 game days. Their condition (wear) shows with the price.
+OW5	Buying
+OW6	Look at an item: its name, condition and price show up. Left click pays, from your wallet.
+OW7	Your purchase appears on the wing's NOUTO pallet, in front of the counter.
+OW8	A used part is a real game part: it fits, wears and saves like any other, and every player sees it. Can be turned off: Settings > Co-op > MWCoop additions, CARDINAL parts chip (the host's choice applies to everyone).
+OW9	Selling your mod's parts
+OW10	Mod authors: CoopApi.AddShopItem(id, name, price, model, callback) puts an item on the CARDINAL wing's shelves. When it is bought, the callback runs on every player's game with the buyer and the pick-up spot: the mod spawns its object there. Details and an example: docs/API.md on MWCoop's GitHub.
+OW11	The CARDINAL parts shop
+OW12	Mod parts, used parts for the Rivett

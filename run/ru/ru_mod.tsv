@@ -499,7 +499,7 @@ Traffic dust	Пыль от трафика
 Traffic skid marks	Следы шин трафика
 Player names	Ники игроков
 /bring <player>: bring a player to you	/bring <игрок>: призвать игрока к себе
-/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop	/place <название>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop
+/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop, parts	/place <название>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop, parts
 /money <amount>: cash for yourself	/money <сумма>: наличные себе
 /heal: hunger, thirst, fatigue, stress, bladder, dirt to zero	/heal: голод, жажда, усталость, стресс, мочевой пузырь, грязь на ноль
 /free: no longer wanted, out of jail	/free: снять розыск, выйти из тюрьмы

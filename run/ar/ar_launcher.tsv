@@ -1960,6 +1960,20 @@ Reels on the projectors stay there when you save. Can be turned off like the oth
 The KINO TÄHTI cinema	سينما KINO TÄHTI
 Ticket, popcorn, seats, your films	تذكرة، فشار، مقاعد، أفلامكم
 Film reels for the KINO TÄHTI cinema, 49 mk: top shelf, next to the tapes.	بكرات أفلام لسينما KINO TÄHTI، 49 mk: الرف العلوي، بجانب الأشرطة.
+CARDINAL parts shop	متجر قطع غيار CARDINAL
+CARDINAL parts	قطع CARDINAL
+The CARDINAL VARAOSAT parts shop is at the ski resort camping area, north of the caravans, between the track and the blue fence. On the map (M) it is the \"CARDINAL VARAOSAT\" spot; in the cheats, /place parts takes you there.	متجر قطع الغيار CARDINAL VARAOSAT في مخيم منتجع التزلج، شمال الكرفانات، بين المسار والسياج الأزرق. على الخريطة (M) هو نقطة \"CARDINAL VARAOSAT\"؛ وفي الغش، /place parts يأخذك إليه.
+Two wings	جناحان
+On the left, CARDINAL: parts and vehicles from mods that sell here (like Cardinal's). The shelves stay empty if none of these mods is installed.	على اليسار، CARDINAL: قطع ومركبات من المودات التي تبيع هنا (مثل مودات Cardinal). تبقى الرفوف فارغة إذا لم يكن أي منها مثبتًا.
+On the right, KÄYTETYT OSAT: 16 used parts for the Rivett, picked at random and restocked every 3 game days. Their condition (wear) shows with the price.	على اليمين، KÄYTETYT OSAT: 16 قطعة مستعملة لسيارة Rivett، تُختار عشوائيًا وتتجدد كل 3 أيام في اللعبة. تظهر حالتها (التآكل) مع السعر.
+Buying	الشراء
+Look at an item: its name, condition and price show up. Left click pays, from your wallet.	انظر إلى سلعة: يظهر اسمها وحالتها وسعرها. النقر الأيسر يدفع من محفظتك.
+Your purchase appears on the wing's NOUTO pallet, in front of the counter.	تظهر مشترياتك على منصة NOUTO الخاصة بالجناح، أمام المنضدة.
+A used part is a real game part: it fits, wears and saves like any other, and every player sees it. Can be turned off: Settings > Co-op > MWCoop additions, CARDINAL parts chip (the host's choice applies to everyone).	القطعة المستعملة قطعة حقيقية من اللعبة: تُركَّب وتتآكل وتُحفظ مثل غيرها، ويراها كل اللاعبين. يمكن إيقافه: الإعدادات > اللعب الجماعي > إضافات MWCoop، شارة \"قطع CARDINAL\" (اختيار المضيف يسري على الجميع).
+Selling your mod's parts	بيع قطع المود الخاص بك
+Mod authors: CoopApi.AddShopItem(id, name, price, model, callback) puts an item on the CARDINAL wing's shelves. When it is bought, the callback runs on every player's game with the buyer and the pick-up spot: the mod spawns its object there. Details and an example: docs/API.md on MWCoop's GitHub.	لمطوري المودات: CoopApi.AddShopItem(id, name, price, model, callback) يضع غرضًا على رفوف جناح CARDINAL. عند الشراء، يُستدعى الـ callback لدى كل اللاعبين مع المشتري ومكان الاستلام: ينشئ المود غرضه هناك. التفاصيل ومثال: docs/API.md على GitHub الخاص بـ MWCoop.
+The CARDINAL parts shop	متجر قطع الغيار CARDINAL
+Mod parts, used parts for the Rivett	قطع المودات، قطع مستعملة لـ Rivett
 These guests are still receiving your mods: 	هؤلاء الضيوف ما زالوا يستلمون مودّاتك: 
 \n\nWait for their download to finish before starting the game.	\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة.
 Sending mods (%d)\u2026	إرسال المودّات (%d)…
@@ -2325,7 +2339,6 @@ VHS tapes, 19 mk: top shelf of the white gondola.	أشرطة VHS، 19 mk: الر
 VCRs, 390 mk, and the television, 590 mk: wooden shelf on the left wall, middle unit.	أجهزة الفيديو، 390 mk، والتلفاز، 590 mk: الرف الخشبي على الجدار الأيسر، الوحدة الوسطى.
 Camcorders, 890 mk: wooden shelf on the left wall, right-hand unit.	كاميرات الفيديو، 890 mk: الرف الخشبي على الجدار الأيسر، الوحدة اليمنى.
 KARTTURI 2000, the rally GPS, 690 mk: same shelf, above the camcorders.	KARTTURI 2000، جهاز GPS للرالي، 690 mk: الرف نفسه، فوق كاميرات الفيديو.
-Buying	الشراء
 Look at an item on the shelf: left click takes one, right click puts it back.	انظر إلى غرض على الرف: النقر الأيسر يأخذ واحداً، والنقر الأيمن يعيده.
 Look at the till on the counter: the total shows up. Click to pay.	انظر إلى الصندوق على المنضدة: يظهر المجموع. انقر للدفع.
 Your purchases come in a shopping bag on the counter. Pick it up like any object.	تصل مشترياتك في كيس تسوق على المنضدة. التقطه مثل أي غرض.

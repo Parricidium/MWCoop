@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using MWCoop.Net;
+using UnityEngine;
 
 namespace MWCoop
 {
@@ -16,7 +17,7 @@ namespace MWCoop
     public static class CoopApi
     {
         /// <summary>API version: raised when something is added. Check it if you use a newer member.</summary>
-        public const int Version = 1;
+        public const int Version = 2;
 
         /// <summary>Largest payload of <see cref="Send"/> (reliable; it is split in packets and rebuilt on the other side).</summary>
         public const int MaxReliableBytes = 64 * 1024;
@@ -101,6 +102,29 @@ namespace MWCoop
 
         /// <summary>Same as <see cref="PlayerLeft"/>, as a method (easier through reflection).</summary>
         public static void OnPlayerLeft(Action<int> handler) { PlayerLeft += handler; }
+
+        // ------------------------------------------------------------ parts shop (version 2)
+        // (magasin de pieces CARDINAL VARAOSAT -- JD, 23/10 : un batiment ou les mods vendent leurs objets ; Kauppa.OsatMyynti)
+
+        /// <summary>True when the CARDINAL VARAOSAT parts shop exists in this game (My Winter Car, add-on on; the host's choice
+        /// applies to everyone). Items can be added at any time anyway: they show up when the shop is built.</summary>
+        public static bool ShopAvailable { get { return !Game.Msc && Ajouts.Osat; } }
+
+        /// <summary>Puts an item of your mod on sale in the CARDINAL VARAOSAT parts shop (left wing). Version 2.
+        /// <para><paramref name="id"/>: unique and the same on every player's game (e.g. "MyMod.Exhaust"); adding the same id
+        /// again updates it. <paramref name="model"/>: shown on a shelf (only its meshes are copied, it is never touched; may be
+        /// inactive, null = no model); big items go on a display stand. Unlimited stock.</para>
+        /// <para><paramref name="onBought"/>(buyerId, boughtHere, position, rotation) is called on EVERY player's game, in the
+        /// same order, when someone buys it (the buyer has paid): spawn your object at position/rotation (the NOUTO pick-up
+        /// pallet). Spawn it on every game if your mod syncs it by itself, or only where boughtHere is true if you send it
+        /// with <see cref="Send"/>. Returns false if the arguments are wrong.</para></summary>
+        public static bool AddShopItem(string id, string name, float price, GameObject model, Action<int, bool, Vector3, Quaternion> onBought)
+        {
+            return Kauppa.OsatAddModItem(id, name, price, model, onBought);
+        }
+
+        /// <summary>Takes an item added with <see cref="AddShopItem"/> off the shelves.</summary>
+        public static void RemoveShopItem(string id) { Kauppa.OsatRemoveModItem(id); }
 
         // ------------------------------------------------------------ dessous (MWCoop)
         static class To { public const int All = 255; }
