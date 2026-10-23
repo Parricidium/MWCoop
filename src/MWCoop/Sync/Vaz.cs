@@ -155,7 +155,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
-            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; openDone = false;
+            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false;
             if (!hooked)
             {
                 hooked = true;
@@ -364,7 +364,18 @@ namespace MWCoop
         static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone;
         static int tourShot = -1, braqueShot = -1; static bool rendusDone, tourLog;
         static Camera testCam;
-        static int entryStep;
+        static int entryStep, assisStep;
+
+        // (VazAssis) PLAYER, son parent et la camera : ou est la vue de conduite, et qui la pose
+        static string PlayerChain(Transform car)
+        {
+            GameObject pl = GameObject.Find("PLAYER"); if (pl == null) return ", PLAYER absent";
+            var sb = new System.Text.StringBuilder(", PLAYER sous " + (pl.transform.parent != null ? VehicleSync.RelPath(car, pl.transform.parent) : "rien") + " local " + pl.transform.localPosition.ToString("F3") + " monde/voiture " + car.InverseTransformPoint(pl.transform.position).ToString("F3"));
+            for (Transform t = pl.transform.parent; t != null && t != car; t = t.parent) sb.Append(" | ").Append(t.name).Append(car.InverseTransformPoint(t.position).ToString("F3"));
+            Transform c = pl.transform.Find("Pivot/AnimPivot/Camera/FPSCamera");
+            if (c != null) sb.Append(", camera / PLAYER ").Append(pl.transform.InverseTransformPoint(c.position).ToString("F3"));
+            return sb.ToString();
+        }
 
         static void PutPlayer(Vector3 local)
         {
@@ -714,6 +725,30 @@ namespace MWCoop
                     int side = k / 12, j = k % 12;
                     float x = (j < 6 ? 0.78f : 0.62f) * (side == 0 ? -1f : 1f), z = 0.7f - 0.2f * (j % 6);
                     PutPlayer(new Vector3(x, -0.05f, z));
+                }
+            }
+            // [Test] VazAssis=1 : le joueur entre en conduite (38 s : pose dans la zone d'entree ; 39,5 s : Key DOWN a l'automate
+            // PlayerTrigger) ; 45 s : yeux du joueur et pivot de tete dans le repere de la voiture, capture vaz-assis (hauteur
+            // de la vue de conduite -- 205 Ebo 2, JD 23/10 : « je suis dans le toit »).
+            if (host && testStep == 2 && Config.GetInt("Test", "VazAssis", 0) != 0)
+            {
+                Transform car = CarOf(Me);
+                Transform dt = car != null ? car.Find("Functions/PlayerTrigger/DriveTriggerX") : null;
+                if (dt != null && t > 38f && assisStep == 0) { assisStep = 1; Vector3 l = car.InverseTransformPoint(dt.position); PutPlayer(new Vector3(l.x, -0.05f, l.z)); }
+                if (dt != null && t > 39.5f && assisStep == 1)
+                {
+                    assisStep = 2; PlayMakerFSM f = Game.FsmOn(dt.gameObject, "PlayerTrigger");
+                    Log.Info("autotest vaz : assis, PlayerTrigger " + (f != null ? f.ActiveStateName : "absent"));
+                    if (f != null) f.SendEvent("Key DOWN");
+                }
+                if (car != null && t > 45f && assisStep == 2)
+                {
+                    assisStep = 3; GameObject cam = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera"); Transform hp = car.Find("Functions/PlayerTrigger/DriverHeadPivot");
+                    PlayMakerFSM f = dt != null ? Game.FsmOn(dt.gameObject, "PlayerTrigger") : null;
+                    Log.Info("autotest vaz : assis, etat " + (f != null ? f.ActiveStateName : "?") + ", yeux " + (cam != null ? car.InverseTransformPoint(cam.transform.position).ToString("F3") : "?")
+                             + ", pivot de tete " + (hp != null ? car.InverseTransformPoint(hp.position).ToString("F3") : "?") + ", zone " + (dt != null ? car.InverseTransformPoint(dt.position).ToString("F3") : "?")
+                             + PlayerChain(car));
+                    Autotest.CaptureSoon("vaz-assis", 0.3f);
                 }
             }
             if (host && testStep == 2 && t > 50f) { testStep = 3; Call(); Log.Info("autotest vaz : appelee, " + State()); }

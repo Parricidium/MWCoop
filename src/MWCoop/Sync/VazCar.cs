@@ -39,6 +39,7 @@ namespace MWCoop
             public Vector3 Dome; public bool HasDome;   // plafonnier (Functions/InteriorLight) pose ici
             public float BrakeAngle = 1f;     // amplitude du levier (KnobPos 0-20 degres x ceci)
             public float EyeDrop;             // yeux (DriverHeadPivot) plus bas que Head, sans bouger l'assise (zone d'entree, SpawnPlayer)
+            public bool SeatEyes;             // vue de conduite recalee sur le pivot de tete a l'entree (SeatView)
             public float ControlSize;         // taille maxi (m) des zones cliquables des commandes deplacees (0 : celles du jeu)
             public Dictionary<string, Vector3> Info;
             public Spec Sp;                   // tenue de route propre (null : Rivett rallye, VazHandling)
@@ -215,14 +216,15 @@ namespace MWCoop
         // 205 T16 Evo 2 1986 Gr. B (JD 23/10, rally cars GrB/205T16, Kankkunen : « Peujot 205 T16 Ebo 2 ») : moteur central
         // arriere, integrale ; habitacle de la vue interieure du modele (remonte de 3 cm sur la caisse) ; yeux au point de vue du
         // modele rFactor) : assise de l'Ebo 1 (la meme caisse ; JD 23/10 : avec la tete descendue, on ne pouvait plus s'asseoir
-        // qu'en se collant au volant), yeux seuls 10 cm plus bas (EyeDrop : cameras conducteur et passager trop hautes) ; frein
+        // qu'en se collant au volant), yeux seuls 4 cm plus bas (EyeDrop) et vue recalee a l'entree sur le point de vue du
+        // modele rFactor (SeatEyes : la vue etait a la hauteur ou l'on se tenait -- « dans le toit ») ; frein
         // a main : son propre levier (sur le tunnel, pivot a l'arriere, poignee vers l'avant : se leve quand il est serre, comme
         // l'Impreza) ; boutons comme l'Ebo 1 : contact (rouge), starter (bleu, tire / pousse), phares (blanc), warning (orange) en
         // colonne sur la face de la planche (z 0,518, tournee vers le pilote) juste a droite du volant. Tenue de route : celle de
         // l'Ebo 1 validee par JD, moteur et masse de l'Evo 2 : 450 ch a 7 500 tr/min, 490 Nm a 5 500, rupteur 8 000, 910 kg (Mass
         // du .hdv rFactor) ; frein a main de la Sport Quatro (6 000 N.m).
         public static readonly Model T16b = new Model { Id = ModelT16b, Folder = "t16e2", Name = "205 Ebo 2",
-            Head = new Vector3(-0.32f, 0.969f, -0.291f), EyeDrop = 0.10f, Engine = new Vector3(0f, 0.55f, -0.85f),
+            Head = new Vector3(-0.32f, 0.969f, -0.291f), EyeDrop = 0.04f, SeatEyes = true, Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.012f, 0.297f, -0.125f), BrakeGrip = new Vector3(-0.012f, 0.349f, 0.095f),
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.05f, 0.640f, 0.511f)),
@@ -283,6 +285,7 @@ namespace MWCoop
             public GameObject Car;
             public Transform Body, SteerPivot, SorbetSteer, BrakePivot, SorbetBrake;
             public Quaternion SorbetSteerRest, SorbetBrakeRest;
+            public float SeatAt = -1f; public bool SeatSet;   // (SeatView : entree vue a, vue recalee)
             public float SteerTurn, SteerRatio;   // (volant : angle pose, degres par unite de direction)
             public VazSound Sound;
             public VazFlaps Flaps;
@@ -917,6 +920,7 @@ namespace MWCoop
             }
             Steering(b);
             Brake(b);
+            SeatView(b, now);
             ChokeKnob(b);
             Roof(b);
             if (b.Sound != null) b.Sound.Update();
@@ -1015,6 +1019,29 @@ namespace MWCoop
         // Levier du modele : position du levier du jeu (automate Use, KnobPos : 0 desserre, 20 serre = son angle en degres) ;
         // poignee vers l'avant -> elle monte quand on serre. (Avant : angle compte depuis la pose a la construction -- la SORBET
         // copiee est garee frein serre, tout etait a l'envers : retour de JD, 18/10.)
+        // Vue de conduite (205 Ebo 2, JD 23/10 : « je suis dans le toit ») : en entrant, le jeu range PLAYER sous
+        // DriverHeadPivot/CameraPivotPLR/Pivot SANS le deplacer (PlayerTrigger, etat Reset view) -- la vue reste a la hauteur
+        // ou l'on se tenait (siege, bas de caisse...). Model.SeatEyes : 0,8 s apres l'entree (le temps de s'accroupir), PLAYER
+        // recale pour que les yeux soient au pivot de tete + Seats.EyeFromPivot (la place du pilote du modele).
+        static GameObject seatPl;
+        static void SeatView(Built b, float now)
+        {
+            if (b.M == null || !b.M.SeatEyes) return;
+            if (seatPl == null) seatPl = GameObject.Find("PLAYER");
+            Transform piv = b.Car.transform.Find("Functions/PlayerTrigger/DriverHeadPivot/CameraPivotPLR/Pivot");
+            if (seatPl == null || piv == null || seatPl.transform.parent != piv) { b.SeatAt = -1f; b.SeatSet = false; return; }
+            if (b.SeatSet) return;
+            if (b.SeatAt < 0f) { b.SeatAt = now; return; }
+            if (now - b.SeatAt < 0.8f) return;
+            b.SeatSet = true;
+            Transform hp = b.Car.transform.Find("Functions/PlayerTrigger/DriverHeadPivot"), cam = seatPl.transform.Find("Pivot/AnimPivot/Camera/FPSCamera");
+            if (hp == null || cam == null) return;
+            Transform ct = b.Car.transform;
+            Vector3 want = ct.TransformPoint(ct.InverseTransformPoint(hp.position) + Seats.EyeFromPivot), was = cam.position;
+            seatPl.transform.position += want - was;
+            Log.Info("vaz : vue de conduite recalee de " + ct.InverseTransformPoint(was).ToString("F2") + " a " + ct.InverseTransformPoint(want).ToString("F2") + " (repere de la voiture)");
+        }
+
         static void Brake(Built b)
         {
             if (b.BrakePivot == null || b.SorbetBrake == null) return;
