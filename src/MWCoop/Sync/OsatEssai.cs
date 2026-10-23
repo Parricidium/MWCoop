@@ -75,6 +75,67 @@ namespace MWCoop
                     break;
                 }
                 case "osattesti": OsatTestItems(); break;
+                case "osattormays":
+                {
+                    // ce qui touche le magasin (+ parvis) et le parking : collisions (OverlapBox) et maillages dessines (boite
+                    // englobante), hors le magasin lui-meme ; sommets de la barriere de la piste de ski
+                    if (osat == null) break;
+                    Transform ot = osat.transform;
+                    foreach (var zn in new[] { new { N = "batiment+parvis", C = new Vector3(0f, 1.5f, 0.25f), H = new Vector3(OL + 0.6f, 2.2f, OD + 1.95f) },
+                                               new { N = "parking+lampadaires", C = new Vector3(0f, 2f, 17.6f), H = new Vector3(9.5f, 3f, 3.6f) } })
+                    {
+                        var names = new SortedDictionary<string, int>();
+                        Vector3 wc = ot.TransformPoint(zn.C);
+                        foreach (Collider c in Physics.OverlapSphere(wc, zn.H.magnitude))   // (pas d'OverlapBox dans cet Unity : sphere, puis boite)
+                        {
+                            if (c == null || c.transform.IsChildOf(ot)) continue;
+                            Bounds cb = c.bounds;
+                            if (cb.size.magnitude > 300f) continue;
+                            Vector3 cl = ot.InverseTransformPoint(cb.center) - zn.C;
+                            if (Mathf.Abs(cl.x) > zn.H.x + Mathf.Max(cb.extents.x, cb.extents.z) || Mathf.Abs(cl.z) > zn.H.z + Mathf.Max(cb.extents.x, cb.extents.z) || Mathf.Abs(cl.y) > zn.H.y + cb.extents.y) continue;
+                            string k = "collision " + ObjPath(c.transform) + (c.isTrigger ? " (declencheur)" : "");
+                            int n; names.TryGetValue(k, out n); names[k] = n + 1;
+                        }
+                        foreach (Renderer r in UnityEngine.Object.FindObjectsOfType<Renderer>())
+                        {
+                            if (r == null || !r.enabled || r.transform.IsChildOf(ot)) continue;
+                            Bounds b = r.bounds;
+                            if (b.size.magnitude > 300f) continue;   // (sol, routes, foret fusionnes : a part)
+                            Vector3 lc = ot.InverseTransformPoint(b.center) - zn.C;
+                            Vector3 le = b.extents;
+                            if (Mathf.Abs(lc.x) > zn.H.x + Mathf.Max(le.x, le.z) || Mathf.Abs(lc.z) > zn.H.z + Mathf.Max(le.x, le.z) || Mathf.Abs(lc.y) > zn.H.y + le.y) continue;
+                            string k = "dessin " + ObjPath(r.transform);
+                            int n; names.TryGetValue(k, out n); names[k] = n + 1;
+                        }
+                        L("essai : tormays " + zn.N + " : " + names.Count + " objet(s)" + (names.Count > 0 ? " -- " : "") + string.Join(" | ", new List<string>(names.Keys).ToArray()));
+                    }
+                    GameObject fence = GameObject.Find("SkihillFence");
+                    MeshFilter mf = fence != null ? fence.GetComponent<MeshFilter>() : null;
+                    if (mf != null && mf.sharedMesh != null)
+                    {
+                        float bestD = float.MaxValue; Vector3 bestP = Vector3.zero;
+                        // (le long des aretes des triangles, tous les 25 cm : les panneaux passent entre les poteaux)
+                        Vector3[] vs = mf.sharedMesh.vertices; int[] tri = mf.sharedMesh.triangles;
+                        var pts = new List<Vector3>();
+                        for (int t = 0; t + 2 < tri.Length; t += 3)
+                            for (int e = 0; e < 3; e++)
+                            {
+                                Vector3 pa = fence.transform.TransformPoint(vs[tri[t + e]]), pb = fence.transform.TransformPoint(vs[tri[t + (e + 1) % 3]]);
+                                if ((pa - ot.position).sqrMagnitude > 3600f && (pb - ot.position).sqrMagnitude > 3600f) continue;
+                                int n = Mathf.Max(1, Mathf.CeilToInt((pb - pa).magnitude / 0.25f));
+                                for (int i = 0; i <= n; i++) pts.Add(Vector3.Lerp(pa, pb, i / (float)n));
+                            }
+                        foreach (Vector3 w in pts)
+                        {
+                            Vector3 lp = ot.InverseTransformPoint(w);
+                            float dx = Mathf.Max(0f, Mathf.Abs(lp.x) - OL), dz = Mathf.Max(0f, Mathf.Abs(lp.z) - OD);   // (aux murs)
+                            float d = Mathf.Sqrt(dx * dx + dz * dz);
+                            if (d < bestD) { bestD = d; bestP = lp; }
+                        }
+                        L("essai : tormays barriere de la piste de ski : point le plus proche a " + bestD.ToString("F2") + " m du magasin (local " + bestP.ToString("F1") + ")");
+                    }
+                    break;
+                }
                 case "osatpaiva":
                 {
                     FsmInt d = FsmVariables.GlobalVariables.FindFsmInt("GlobalDaysPassed");

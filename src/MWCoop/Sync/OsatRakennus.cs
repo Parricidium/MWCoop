@@ -133,7 +133,9 @@ namespace MWCoop
             MWall(true, OD, -1, -OL, OL, 0f, OH, holes, "os_ulko", "os_sisa");
             MWall(true, -OD, 1, -OL, OL, 0f, OH, new Hole[0], "os_ulko", "os_sisa");
             foreach (float s in new[] { -1f, 1f }) MWall(false, s * OL, -s, -OD + Wall, OD - Wall, 0f, OH, new Hole[0], "os_ulko", "os_sisa");
-            Box(new Vector3(-OL - 0.04f, -0.4f, OD), new Vector3(OL + 0.04f, 0.45f, OD + 0.04f), "ki_tiili", false);
+            // (facade : la plinthe s'arrete de chaque cote de la porte -- JD, 23/10 : elle passait devant)
+            foreach (float s in new[] { -1f, 1f })
+                Box(new Vector3(s > 0 ? 1.3f : -OL - 0.04f, -0.4f, OD), new Vector3(s > 0 ? OL + 0.04f : -1.3f, 0.45f, OD + 0.04f), "ki_tiili", false);
             Box(new Vector3(-OL - 0.04f, -0.4f, -OD - 0.04f), new Vector3(OL + 0.04f, 0.45f, -OD), "ki_tiili", false);
             foreach (float s in new[] { -1f, 1f })
                 Box(new Vector3(s > 0 ? OL : -OL - 0.04f, -0.4f, -OD), new Vector3(s > 0 ? OL + 0.04f : -OL, 0.45f, OD), "ki_tiili", false);
