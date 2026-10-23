@@ -43,7 +43,21 @@ namespace MWCoop
             public Spec Sp;                   // tenue de route propre (null : Rivett rallye, VazHandling)
             // description : Description / DescriptionEn de addon.ini (panneau F10)
             public string Desc { get { Read(); return Lang.T(desc ?? "", descEn ?? desc ?? ""); } }
-            string desc, descEn;
+            string desc, descEn, group;
+            // categorie (filtre du F10 et de l'onglet Addons du lanceur -- JD, 23/10) : Categorie= de addon.ini, sinon le « Gr. X »
+            // du nom de la tenue de route ; la VAZ-2108, livree avec le mod : « MWCoop »
+            public string Group
+            {
+                get
+                {
+                    if (Folder == "vaz") return "MWCoop";
+                    Read();
+                    if (!string.IsNullOrEmpty(group)) return group;
+                    string n = Sp != null ? Sp.Name ?? "" : "";
+                    int i = n.IndexOf("Gr. ");
+                    return i >= 0 && i + 4 < n.Length ? n.Substring(i, 5) : Lang.T("Autres", "Others");
+                }
+            }
             void Read()
             {
                 if (nameRead || Folder == "vaz") return;
@@ -57,6 +71,7 @@ namespace MWCoop
                             if (l.StartsWith("NomCourt=") && l.Length > 9) name = l.Substring(9).Trim();
                             else if (l.StartsWith("DescriptionEn=")) descEn = l.Substring(14).Trim();
                             else if (l.StartsWith("Description=")) desc = l.Substring(12).Trim();
+                            else if (l.StartsWith("Categorie=")) group = l.Substring(10).Trim();
                         }
                 }
                 catch { }

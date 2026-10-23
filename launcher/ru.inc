@@ -1915,6 +1915,8 @@ static const wchar_t *const kRu[][2] = {
     { L"Look at the till on the counter: its screen shows the total. Click to pay, from your wallet. Your purchases appear on each wing's NOUTO pallet, in front of the counter.", L"Наведитесь на кассу на стойке: на её экране итог. Клик — оплата из вашего кошелька. Покупки появляются на поддоне NOUTO каждого крыла, перед стойкой." },
     { L"Your (imported) film isn't on the others' games yet: when you load the reel, each of them gets a question with the film's size ([Y] yes, [U] no). The film goes to those who say yes, and the show starts by itself once everyone has it.", L"Вашего (импортированного) фильма у других ещё нет: когда вы ставите плёнку, каждый получает вопрос с размером фильма ([Y] да, [U] нет). Фильм уходит тем, кто ответил «да», и сеанс начинается сам, когда он есть у всех." },
     { L"During the show, the room's lights go out; at the end they come back on and the emergency exit opens.", L"Во время сеанса свет в зале гаснет; в конце он снова загорается, и открывается запасной выход." },
+    { L"All", L"Все" },
+    { L"Others", L"Другие" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
