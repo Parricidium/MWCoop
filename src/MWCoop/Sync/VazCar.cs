@@ -99,6 +99,11 @@ namespace MWCoop
             public float Mass, Com, Steer, Spring, Damp; public float[] Gears;
             public float AntiRoll, ComDrop;   // barres antiroulis (N/m, 0 : celles du jeu) ; centre de gravite abaisse (m) -- JD 21/10, tonneaux trop faciles
             public float Handbrake;           // couple du frein a main sur l'essieu arriere (N.m, 0 : celui du jeu) -- JD 21/10, partir en travers
+            // comportement de rallye moderne (JD 23/10 : « les voitures addons survirent beaucoup, et le frein a main ne l'aide pas a
+            // partir en glisse ») : adherence de l'essieu arriere (x, 1 : comme l'avant), adherence arriere pendant le frein a main
+            // (x, 1 : rien), barres antiroulis avant / arriere (N/m, 0 : AntiRoll), amortissement du lacet (Rigidbody.angularDrag,
+            // 0 : celui de la Rivett)
+            public float RearGrip = 1f, HandbrakeSlide = 1f, AntiRollFront, AntiRollRear, YawDamp;
         }
         public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
@@ -242,7 +247,10 @@ namespace MWCoop
                           "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
             Dome = new Vector3(0f, 1.10f, -0.20f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "205 T16 Evo 2 Gr. B", Power = 450f, PowerRpm = 7500f, Torque = 490f, TorqueRpm = 5500f, MaxRpm = 8000f,
-                            Mass = 910f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+                            Mass = 910f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f },
+                            // (rallye moderne, JD 23/10 -- a valider sur l'Ebo 2 avant les autres) : arriere +15 % d'adherence laterale,
+                            // 45 % au frein a main ; barre avant plus raide que l'arriere ; lacet amorti ; centre de gravite 4 cm plus bas
+                            RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 24000f, AntiRollRear = 12000f, YawDamp = 0.6f, ComDrop = 0.04f } };
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
@@ -305,6 +313,7 @@ namespace MWCoop
             public float NextLamp, NextHide, NextSpec, NextMask, NextGrip, NextStart, NextStartLog;
             public PlayMakerFSM Priming, Power, Tank;   // (VazHandling.ReadyToStart)
             public readonly float[] LastGrip = { -1f, -1f };
+            public bool Handbraking;          // (frein a main tire : adherence arriere reduite, Spec.HandbrakeSlide)
             public int MaskLogs;
             public Model M = Vaz2108;
             public readonly List<Collider> OffColl = new List<Collider>();
@@ -530,8 +539,10 @@ namespace MWCoop
             if (!cur.HasFiles) { Log.Warn("vaz : fichiers du modele absents (" + cur.Dir + ")"); return null; }
             Dictionary<string, Vector3> inf = Info();
             var b = new Built { Number = number, Shown = number, M = cur, Paint = paint };
+            ModSafe.Snapshot snap = ModSafe.Before(sorbet);
             GameObject car = Object.Instantiate(sorbet);
             car.SetActive(false);   // (reglee eteinte : ses automates demarrent sur la version modifiee)
+            ModSafe.Strip(car, snap, "vaz " + name);   // (scripts des mods de la SORBET : Sorbet Collection, JD 23/10)
             car.name = name;
             b.Car = car;
             Transform ct = car.transform;

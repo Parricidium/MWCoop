@@ -435,8 +435,10 @@ namespace MWCoop
             Wheel[] aiWheels = ai.GetComponentsInChildren<Wheel>(true);
             if (aiWheels.Length != 4) { Log.Warn("jokkis : " + r.D.AiPath + " : " + aiWheels.Length + " roues, attendu 4"); return; }
 
+            ModSafe.Snapshot snap = ModSafe.Before(sorbet);
             GameObject car = Object.Instantiate(sorbet);
             car.SetActive(false);   // (reglee eteinte : ses automates demarrent sur la version modifiee)
+            ModSafe.Strip(car, snap, "jokkis " + r.Number);   // (scripts des mods de la SORBET)
             car.name = Prefix + r.Number;
             r.Car = car;
             Transform ct = car.transform;
