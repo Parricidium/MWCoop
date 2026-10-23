@@ -146,6 +146,7 @@ namespace MWCoop
             Drivetrain.Transmissions tr = evo ? Drivetrain.Transmissions.AWD : Drivetrain.Transmissions.RWD;
             float[] gears = evo ? sp.Gears : Gears;
             if (b.Rb != null && !Mathf.Approximately(b.Rb.mass, wantMass)) { b.Rb.mass = wantMass; n++; }
+            if (b.Rb != null && evo && sp.YawDamp > 0f && !Mathf.Approximately(b.Rb.angularDrag, sp.YawDamp)) { b.Rb.angularDrag = sp.YawDamp; n++; }
             Drivetrain dt = b.Dt;
             if (dt != null && evo)
             {
@@ -184,7 +185,8 @@ namespace MWCoop
                     object axl = af != null ? af.GetValue(ax) : null;
                     if (axl == null) continue;
                     n += SetF(axl, "suspensionRate", spring) + SetF(axl, "suspensionTravel", SpringTravel) + SetF(axl, "bumpRate", damp) + SetF(axl, "reboundRate", damp);
-                    if (evo && sp.AntiRoll > 0f) n += SetF(axl, "antiRollBarRate", sp.AntiRoll);
+                    float ar = evo ? (an == "frontAxle" && sp.AntiRollFront > 0f ? sp.AntiRollFront : an == "rearAxle" && sp.AntiRollRear > 0f ? sp.AntiRollRear : sp.AntiRoll) : 0f;
+                    if (ar > 0f) n += SetF(axl, "antiRollBarRate", ar);
                     if (an == "frontAxle") n += SetF(axl, "maxSteeringAngle", steer);
                 }
             Component cd = car.GetComponent("CarDynamics");
@@ -243,7 +245,12 @@ namespace MWCoop
                 object axl = af != null ? af.GetValue(ax) : null;
                 if (axl == null) continue;
                 float grip = Mathf.Clamp(g[k] + helper, 0.1f, 1.7f);
-                SetF(axl, "forwardGripFactor", grip); SetF(axl, "sidewaysGripFactor", grip);
+                VazCar.Spec sp = Sp(b);
+                // (rallye moderne : arriere plus accrocheur que l'avant -- moins de survirage -- sauf frein a main tire : l'arriere
+                // decroche et la voiture pivote)
+                float side = grip;
+                if (k == 1 && sp != null) side = grip * (b.Handbraking ? sp.HandbrakeSlide : sp.RearGrip);
+                SetF(axl, "forwardGripFactor", grip); SetF(axl, "sidewaysGripFactor", side);
             }
         }
 
@@ -318,6 +325,8 @@ namespace MWCoop
             if (hbField == null) { hbField = b.Axis.GetType().GetField("handbrakeInput"); brField = b.Axis.GetType().GetField("brakeInput"); }
             object hb = hbField != null ? hbField.GetValue(b.Axis) : null, br = brField != null ? brField.GetValue(b.Axis) : null;
             float h = hb is float ? (float)hb : 0f, k = br is float ? (float)br : 0f;
+            bool hbOn = h > 0.3f;
+            if (hbOn != b.Handbraking) { b.Handbraking = hbOn; Grip(b); }   // (tout de suite, pas au prochain releve de 0,25 s)
             if (h > 0.05f || (k > 0.2f && dt.rpm < 2000f))
             {
                 if (engagingField == null) engagingField = typeof(Drivetrain).GetField("engaging", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
