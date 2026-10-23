@@ -145,7 +145,21 @@ namespace MWCoop
         // Cles vues en double a un releve (deux corps, meme cle) : objets « (Clone) » apparus en jeu, ou le rang ne vaut rien
         // d'un joueur a l'autre -- ni l'un ni l'autre n'est suivi (impossible de savoir lequel est lequel en face).
         static readonly HashSet<string> dupKeys = new HashSet<string>();
-        static int mscKeyLogs;
+        static int mscKeyLogs, keyLogs;
+        // Rang de t parmi les enfants de son parent qui portent le meme nom (0 pour le premier).
+        static int SameNameRank(Transform t)
+        {
+            Transform par = t.parent;
+            if (par == null) return 0;
+            int r = 0;
+            for (int i = 0, n = par.childCount; i < n; i++)
+            {
+                Transform c = par.GetChild(i);
+                if (c == t) break;
+                if (c.name == t.name) r++;
+            }
+            return r;
+        }
         static readonly HashSet<string> dupLogged = new HashSet<string>();
 
         public static string WorldKeyOf(Rigidbody rb) { return WorldKey(rb); }   // (Fluids : bidons)
@@ -221,7 +235,12 @@ namespace MWCoop
             {
                 string path = Recon.Path(t);
                 if (!listed && path.Contains("skeleton")) return null;   // (os d'un PNJ anime sans joint)
-                k = !listed && t.parent == null ? "w:" + path.Replace("(Clone)", "") : "w:" + path + "#" + t.GetSiblingIndex();   // (racine « (Clone) » : sans rang, nom sans « (Clone) »)
+                // Rang : parmi les freres DU MEME NOM, pas parmi tous les freres -- sur My Summer Car l'ordre des enfants de ITEMS et de
+                // CARPARTS differe d'un joueur a l'autre (objets crees en jeu intercales : handbrake(Clone)#53 chez l'hote, #60 chez
+                // l'invite ; dipper, grill, notepad, radiateur, garde-boue... jamais synchronises, Vaydon 23/10). Les paires du jeu
+                // (deux haches, deux louches, deux seaux) gardent leur ordre relatif.
+                k = !listed && t.parent == null ? "w:" + path.Replace("(Clone)", "") : "w:" + path + "#" + SameNameRank(t);
+                if (Config.GetInt("Test", "JournalCles", 0) != 0 && keyLogs++ < 400) Log.Info("objets : cle " + k + " (rang " + t.GetSiblingIndex() + ")");
                 if (!listed && t.parent == null && Game.Msc && mscKeyLogs++ < 20) Log.Info("objets : objet a la racine " + path + " -> cle " + k);
                 if (!listed && dupKeys.Contains(k)) return null;
             }
