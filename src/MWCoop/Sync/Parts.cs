@@ -187,6 +187,7 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;
             string part = PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value);
             if (part.Length == 0) return;
+            Touch(H(part + "|" + b.Key));
             int target = b.F.FsmVariables.GetFsmInt("BoltTightness").Value + b.F.FsmVariables.GetFsmInt("ScrewInt").Value;
             Session.SendAll(new NetWriter(Msg.Bolt).U8(Session.LocalId).Str(part).Str(b.Key).U8(Mathf.Clamp(target, 0, 255)), true);
         }
@@ -197,6 +198,7 @@ namespace MWCoop
             if (Session.IsHost) who = from.Id;
             string part = r.Str(), key = r.Str();
             int target = r.U8();
+            Touch(H(part + "|" + key));
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Bolt).U8(who).Str(part).Str(key).U8(target), true, who);
             // Deja des tours en attente pour cette vis : celui-ci passe apres eux (meme ordre que chez l'autre).
             bool queued = Queued(part, key, pendingBolts.Count);
@@ -298,6 +300,7 @@ namespace MWCoop
             points.Clear();
             hooked.Clear();
             waiting.Clear(); waitingSet.Clear(); fresh.Clear(); pendingBolts.Clear();
+            nextDigest = 0f; touched.Clear(); asked.Clear(); pointsByHash = null; boltsByHash = null; mscPointsByHash = null; ecartDone = false;   // (controle periodique)
             MscReset();
             idMap.Clear(); idMapAt = -100;
             bursts.Clear(); reinstall.Clear(); reinstallLogs = 0;
@@ -322,6 +325,7 @@ namespace MWCoop
             if (Game.Msc) MscTick();   // (demontages « echange » faits ici : envoyes avec la cle de la nouvelle piece libre)
             if (mounting.Count > 0) CheckMounting(now);
             if (reinstall.Count > 0) CheckReinstall(now);
+            Digest(now); if (!Game.Msc) TestEcart(now);   // (controle periodique de l'hote, 23/10)
             if (now < nextScan) return;
             nextScan = now + 15f;   // nouvelles pieces (achats...) : nouveau passage
             Scan();
@@ -428,6 +432,198 @@ namespace MWCoop
                 if (++n >= 80) break;
             }
             return n + " pieces" + sb;
+        }
+
+
+        // ---------------------------------------------------------------- controle periodique (23/10, JD : « exactement comme l'hote »)
+        // Jusqu'ici chaque montage, demontage et tour de vis etait envoye une fois : un message perdu, un rejeu rate (point pas encore
+        // actif, automate occupe) ou une casse ignoree laissaient un ecart durable entre l'hote et un invite (siege monte chez l'un,
+        // pas chez l'autre ; vis a 3 ici, 8 la-bas). L'hote envoie maintenant toutes les 10 s l'etat de ses points de montage
+        // (empreinte de la cle, ID de la piece montee ou vide) et de ses vis (empreinte, cran), par paquets ; l'invite compare :
+        //  - piece montee ici que l'hote n'a pas (ou une autre) : demontee ici (Remove part, comme un demontage recu) ;
+        //  - piece montee chez l'hote, absente ici : demandee (@piecesdemande) ; l'hote renvoie le montage complet (Msg.Part, rejoue
+        //    par OnMessage comme un montage normal, pose par rapport au point) ;
+        //  - vis a un autre cran : TIGHTEN / UNTIGHTEN jusqu'au cran de l'hote (serrage de la piece recalcule).
+        // Tout ce qui a bouge ici dans les 6 dernieres secondes (message en route, montage en cours) est laisse tranquille.
+        // [Test] PiecesEcart=1 : chez l'invite, a 45 s, une piece montee est retiree sans rien envoyer ; le controle doit la ramener.
+        static float nextDigest, lastDigestLog; static int digestLogs;
+        static readonly Dictionary<uint, float> touched = new Dictionary<uint, float>();
+        static Dictionary<uint, Point> pointsByHash; static int pointsByHashN = -1;
+        static Dictionary<uint, Bolt> boltsByHash; static int boltsByHashN = -1;
+        static bool ecartDone;
+        static uint H(string s) { uint h = 2166136261; foreach (char ch in s) { h ^= ch; h *= 16777619; } return h; }
+        static void Touch(uint h) { touched[h] = Time.realtimeSinceStartup; }
+        static bool Recent(uint h, float now) { float t; return touched.TryGetValue(h, out t) && now - t < 6f; }
+        static string BoltKeyOf(Bolt b) { return PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) + "|" + b.Key; }
+        static void HashMaps()
+        {
+            if (pointsByHash == null || pointsByHashN != points.Count)
+            {
+                pointsByHash = new Dictionary<uint, Point>();
+                foreach (KeyValuePair<string, Point> kv in points) pointsByHash[H(kv.Key)] = kv.Value;
+                pointsByHashN = points.Count;
+            }
+            if (boltsByHash == null || boltsByHashN != bolts.Count)
+            {
+                boltsByHash = new Dictionary<uint, Bolt>();
+                foreach (Bolt b in bolts) if (b.F != null) boltsByHash[H(BoltKeyOf(b))] = b;
+                boltsByHashN = bolts.Count;
+            }
+        }
+        static bool PendingReinstall(GameObject part) { foreach (Reinstall ri in reinstall) if (ri.Part == part) return true; return false; }
+        // (une piece manquante introuvable ici serait redemandee a chaque controle : une fois par minute au plus, par point)
+        static readonly Dictionary<uint, float> asked = new Dictionary<uint, float>();
+        static bool AskedLately(uint h, float now) { float t; if (asked.TryGetValue(h, out t) && now - t < 60f) return true; asked[h] = now; return false; }
+
+        static void Digest(float now)
+        {
+            if (!Session.Active || !Session.IsHost || Session.RemoteCount == 0 || now < nextDigest || now - loadedAt < 30f) return;
+            nextDigest = now + 10f;
+            if (Game.Msc) { MscDigest(now); return; }
+            NetWriter w = null; int n = 0, total = 0, totalB = 0;
+            foreach (KeyValuePair<string, Point> kv in points)
+            {
+                Point p = kv.Value;
+                if (p.Fsm == null || !p.Fsm.gameObject.activeInHierarchy) continue;
+                GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+                string id = Holds(p.Fsm, part) ? IdOf(part) : "";
+                if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
+                w.I32((int)H(p.Key)).Str(id); n++; total++;
+                if (n >= 40) { Session.SendAll(w, true); w = null; }
+            }
+            if (w != null) Session.SendAll(w, true);
+            w = null; n = 0;
+            foreach (Bolt b in bolts)
+            {
+                if (b.F == null || !b.F.gameObject.activeInHierarchy) continue;
+                FsmInt t = b.F.FsmVariables.FindFsmInt("BoltTightness"); if (t == null) continue;
+                if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(1); n = 0; }
+                w.I32((int)H(BoltKeyOf(b))).U8(Mathf.Clamp(t.Value, 0, 255)); n++; totalB++;
+                if (n >= 100) { Session.SendAll(w, true); w = null; }
+            }
+            if (w != null) Session.SendAll(w, true);
+            if (digestLogs++ < 3 || now >= lastDigestLog + 120f) { lastDigestLog = now; Log.Info("pieces : controle envoye aux invites (" + total + " points, " + totalB + " vis)"); }
+        }
+
+        public static void OnDigest(int who, NetReader r)
+        {
+            if (Session.IsHost) return;
+            int kind = r.U8();
+            float now = Time.realtimeSinceStartup;
+            if (now - loadedAt < 30f || !PlayerSync.InGame) return;
+            if (Game.Msc) { MscOnDigest(who, r, kind, now); return; }
+            HashMaps();
+            List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0;
+            if (kind == 0)
+            {
+                while (r.More)
+                {
+                    uint h = (uint)r.I32(); string id = r.Str();
+                    Point p;
+                    if (!pointsByHash.TryGetValue(h, out p) || p.Fsm == null) { unknown++; continue; }
+                    if (Recent(h, now) || !p.Fsm.gameObject.activeInHierarchy) continue;
+                    GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+                    bool isIn = Holds(p.Fsm, part);
+                    string mine = isIn ? IdOf(part) : "";
+                    if (mine == id) continue;
+                    if (isIn && (mounting.ContainsKey(part) || PendingReinstall(part))) continue;
+                    if (isIn) { ReplayRemove(p, part, mine, who, "pas montee chez l'hote" + (id.Length > 0 ? " (il y a " + id + ")" : "")); removed++; }
+                    if (id.Length > 0 && !AskedLately(h, now)) { if (ask == null) ask = new List<int>(); if (ask.Count < 20) ask.Add((int)h); }
+                    Touch(h);
+                }
+                if (ask != null)
+                {
+                    var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@piecesdemande");
+                    foreach (int h in ask) w.I32(h);
+                    Session.SendToHost(w, true);
+                }
+            }
+            else
+            {
+                while (r.More)
+                {
+                    uint h = (uint)r.I32(); int target = r.U8();
+                    Bolt b;
+                    if (!boltsByHash.TryGetValue(h, out b) || b.F == null) { unknown++; continue; }
+                    if (Recent(h, now) || !b.F.gameObject.activeInHierarchy) continue;
+                    FsmInt t = b.F.FsmVariables.FindFsmInt("BoltTightness");
+                    if (t == null || t.Value == target) continue;
+                    string part = PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value);
+                    if (ApplyBolt(who, part, b.Key, target, true)) { fixedBolts++; Touch(h); }
+                }
+            }
+            int asked = ask != null ? ask.Count : 0;
+            if (removed + fixedBolts + asked > 0)
+                Log.Info("pieces : controle de l'hote : " + removed + " demontee(s) ici, " + asked + " demandee(s), " + fixedBolts + " vis reglee(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
+        }
+
+        // Hote : montages demandes par un invite (points ou il a un ecart), renvoyes comme des montages normaux.
+        public static void OnDigestAsk(int who, NetReader r)
+        {
+            if (!Session.IsHost) return;
+            if (Game.Msc) { MscOnDigestAsk(who, r); return; }
+            HashMaps();
+            int n = 0;
+            while (r.More && n < 20)
+            {
+                uint h = (uint)r.I32(); n++;
+                Point p;
+                if (!pointsByHash.TryGetValue(h, out p) || p.Fsm == null) continue;
+                GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+                if (!Holds(p.Fsm, part)) continue;
+                string id = IdOf(part); if (id.Length == 0) continue;
+                PlayMakerFSM data = Game.FsmOn(part, "Data");
+                FsmInt aid = data != null ? data.FsmVariables.FindFsmInt("AssemblyID") : null;
+                FsmFloat tf = data != null ? data.FsmVariables.FindFsmFloat("Tightness") : null;
+                Transform pt = p.Fsm.transform;
+                Session.Broadcast(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).I32(aid != null ? aid.Value : 0)
+                    .Vec(part.transform.position).Quat(part.transform.rotation)
+                    .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation)
+                    .F32(tf != null ? tf.Value : -1f).U8(0), true);
+                Log.Info("pieces : montage de " + id + " sur " + p.Key + " renvoye a la demande de #" + who);
+            }
+        }
+
+        static void ReplayRemove(Point p, GameObject part, string id, int who, string why)
+        {
+            VehicleSync.CalmAfterPart(p.Fsm.transform);
+            applying = true; Replay.Depth++;
+            try { Game.SetState(p.Fsm, "Remove part"); }
+            finally { applying = false; Replay.Depth--; }
+            Props.HoldFromRemote(part, who);
+            Log.Info("piece " + id + " demontee de " + p.Key + " au controle de l'hote : " + why);
+        }
+
+        // [Test] PiecesEcart=1 (invite) : ecart provoque pour eprouver le controle.
+        static void TestEcart(float now)
+        {
+            if (ecartDone || Session.IsHost || Config.GetInt("Test", "PiecesEcart", 0) == 0 || Time.timeSinceLevelLoad < 45f) return;
+            ecartDone = true;
+            foreach (KeyValuePair<string, Point> kv in points)
+            {
+                Point p = kv.Value;
+                if (p.Fsm == null || !p.Fsm.gameObject.activeInHierarchy) continue;
+                GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+                if (!Holds(p.Fsm, part) || IdOf(part).Length == 0 || !p.Key.Contains("VINP_Seat")) continue;
+                applying = true; Replay.Depth++;
+                try { Game.SetState(p.Fsm, "Remove part"); }
+                finally { applying = false; Replay.Depth--; }
+                Log.Info("autotest : ecart provoque : " + IdOf(part) + " retiree de " + p.Key + " sans rien envoyer");
+                break;
+            }
+            // (et une vis desserree sans rien envoyer : le controle doit la resserrer au cran de l'hote)
+            foreach (Bolt b in bolts)
+            {
+                if (b.F == null || !b.F.gameObject.activeInHierarchy) continue;
+                FsmInt t = b.F.FsmVariables.FindFsmInt("BoltTightness");
+                if (t == null || t.Value < 2) continue;
+                int was = t.Value;
+                applying = true; Replay.Depth++;
+                try { for (int g = 0; t.Value > 0 && g < 10; g++) b.F.SendEvent("UNTIGHTEN"); }
+                finally { applying = false; Replay.Depth--; }
+                Log.Info("autotest : ecart provoque : vis " + BoltKeyOf(b) + " " + was + " -> " + t.Value + " sans rien envoyer");
+                break;
+            }
         }
 
         public static string IdOf(GameObject go)
@@ -579,6 +775,7 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;   // chargement : chacun le sien
             string id = IdOf(part);
             if (id.Length == 0) { Log.Warn("piece sans ID sur " + p.Key); return; }
+            Touch(H(p.Key));
             int flags = breakoff ? 1 : 0;
             if (breakoff && Config.GetInt("Test", "CasseSansGarde", 0) == 0)   // ([Test] CasseSansGarde=1 : envoyee quand meme, pour eprouver le refus de l'hote)
             {
@@ -636,6 +833,7 @@ namespace MWCoop
             bool breakoff = (flags & 1) != 0, crash = (flags & 2) != 0;
             Point p;
             if (!points.TryGetValue(key, out p) || p.Fsm == null) { Scan(); points.TryGetValue(key, out p); }
+            Touch(H(key));
             if (Session.IsHost)
             {
                 // Casse venue d'un invite : seulement s'il fait autorite sur la voiture, jamais d'un point a attache incassable

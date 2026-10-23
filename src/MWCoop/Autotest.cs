@@ -3289,7 +3289,25 @@ namespace MWCoop
                 if (!sl && fat != null && fat.Value < 50f) { if (sleepWakeLogs++ > 12) sleepWatch = false; }   // (reveil : encore 12 s de releves -- chute sous le sol, lit des parents, JD 22/10)
             }
             // [Test] SondeRoues=1 (22/10, roues de la CORRIS qui s'enfoncent chez un joueur) : donnees des roues de la CORRIS a 10, 20 et 30 s.
-            if (Config.GetInt("Test", "SondeRoues", 0) == 1 && t > 10f * (sondeRoues + 1) && sondeRoues < 3)
+            // [Test] PressionPneus=200 (23/10, Rivett qui s'envole a la reprise chez les joueurs) : pneus de la CORRIS gonfles a cette
+            // pression (optimale aussi) a 12 s, raideur recalculee par le jeu (Wheel.SetTireStiffness) -- l'etat d'une voiture dont les
+            // pneus ont ete gonfles a la station, que la sauvegarde d'essai n'a pas (pression 0 : modele de pneu inactif).
+            float pneusP = Config.GetFloat("Test", "PressionPneus", 0f);
+            if (pneusP > 0f && t > 12f && !pressDone)
+            {
+                pressDone = true;
+                GameObject pc = GameObject.Find("CORRIS");
+                var sb0 = new System.Text.StringBuilder("autotest : pneus de la CORRIS gonfles a " + pneusP + " :");
+                if (pc != null) foreach (Wheel w in pc.GetComponentsInChildren<Wheel>(true))
+                {
+                    w.pressure = pneusP; w.optimalPressure = pneusP;
+                    try { w.SetTireStiffness(); } catch (System.Exception e) { sb0.Append(" (SetTireStiffness : " + e.Message + ")"); }
+                    sb0.Append(' ').Append(w.name).Append(" raideur ").Append(FieldF(w, "verticalTireStiffness")).Append(" amort ").Append(FieldF(w, "tireDampingRate"));
+                }
+                Log.Info(sb0.ToString());
+            }
+            int sondeMax = Config.GetInt("Test", "SondeRoues", 0) == 2 ? 12 : 3;   // (2 : toutes les 10 s pendant 2 min)
+            if (Config.GetInt("Test", "SondeRoues", 0) >= 1 && t > 10f * (sondeRoues + 1) && sondeRoues < sondeMax)
             {
                 sondeRoues++;
                 GameObject car = GameObject.Find("CORRIS");
@@ -3715,7 +3733,7 @@ namespace MWCoop
             return null;
         }
         static string clipShot;
-        static float nextSleepLog; static int sleepWakeLogs; static float cdWatchUntil; static int sondeRoues;
+        static float nextSleepLog; static int sleepWakeLogs; static float cdWatchUntil; static int sondeRoues; static bool pressDone;
         static string FieldF(object o, string name)   // (champ flottant prive, par reflexion)
         {
             var fi = o.GetType().GetField(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
