@@ -183,10 +183,8 @@ namespace MWCoop
                 MWall(true, -KD, 1, u0, u1, KFront - 0.1f, KSalH, new Hole[0], "ki_tiili", "ki_seina");
                 // pignon (derriere l'ecran)
                 MWall(false, s * KL, -s, -KD + Wall, KD - Wall, KFront - 0.1f, KSalH, new Hole[0], "ki_tiili", "ki_seina");
-                // issue de secours : porte metallique fermee, enseigne verte au-dessus
-                float ez = KD - Wall * 0.5f;
-                Box(new Vector3(exit.U0 + 0.04f, KFront, ez - 0.03f), new Vector3(exit.U1 - 0.04f, KFront + 2.06f, ez + 0.03f), "ki_alu");
-                Box(new Vector3(exit.U1 - 0.2f, KFront + 0.95f, ez + 0.03f), new Vector3(exit.U1 - 0.08f, KFront + 1.0f, ez + 0.09f), "metalli", false);
+                // issue de secours : porte metallique (battant mobile : KinoSali, KinoMakeExit -- s'ouvre a la fin du film), enseigne
+                // verte au-dessus
                 Plane("ki_ulos", new Vector3(s * 23.6f, KFront + 2.35f, KD - Wall - 0.01f), 0.5f, 0.2f, Vector3.back);
                 // escalier exterieur de l'issue (le sol dehors est au niveau du parking)
                 // cloison hall / salle : porte au fond (plan de JD), fenetre de projection au milieu ; au-dessus du toit du hall,

@@ -140,11 +140,7 @@ namespace MWCoop
             PlayerInfo from;
             string name = Session.Players.TryGetValue(who, out from) ? from.Name : "#" + who;
             Log.Info("pvp : frappe par " + name + " (" + WeaponFr[w] + ", " + hits + "/" + HitsToKill + ")");
-            if (hits < HitsToKill)
-            {
-                Hud.Toast((w == 0 ? Lang.T("Coup de poing de ", "Punched by ") : Lang.T("Coup de " + WeaponFr[w] + " de ", "Hit with a " + WeaponEn[w] + " by ")) + name + " (" + hits + "/" + HitsToKill + ")");
-                return;
-            }
+            if (hits < HitsToKill) return;   // (plus de message par coup a l'ecran -- JD, 23/10 : ils encombraient le fil des messages ; le journal garde la ligne)
             hits = 0;
             Log.Info("pvp : " + Respawn.TestDie("Murder"));
         }

@@ -1978,6 +1978,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Mod parts, used parts for the Rivett", L"قطع المودات، قطع مستعملة لـ Rivett" },
     { L"Look at an item: its name, condition and price show up. Left click takes it, right click puts it back.", L"انظر إلى سلعة: يظهر اسمها وحالتها وسعرها. النقر الأيسر يأخذها، والنقر الأيمن يعيدها." },
     { L"Look at the till on the counter: its screen shows the total. Click to pay, from your wallet. Your purchases appear on each wing's NOUTO pallet, in front of the counter.", L"انظر إلى الصندوق على المنضدة: تعرض شاشته المجموع. انقر للدفع من محفظتك. تظهر مشترياتك على منصة NOUTO لكل جناح، أمام المنضدة." },
+    { L"Your (imported) film isn't on the others' games yet: when you load the reel, each of them gets a question with the film's size ([Y] yes, [U] no). The film goes to those who say yes, and the show starts by itself once everyone has it.", L"فيلمك (المستورد) ليس لدى الآخرين بعد: عند وضع البكرة، يتلقى كل منهم سؤالًا مع حجم الفيلم ([Y] نعم، [U] لا). يُرسل الفيلم لمن يقول نعم، ويبدأ العرض وحده عندما يصبح لدى الجميع." },
+    { L"During the show, the room's lights go out; at the end they come back on and the emergency exit opens.", L"أثناء العرض تنطفئ أضواء القاعة؛ وفي النهاية تعود وتُفتح مخرج الطوارئ." },
     { L"These guests are still receiving your mods: ", L"هؤلاء الضيوف ما زالوا يستلمون مودّاتك: " },
     { L"\n\nWait for their download to finish before starting the game.", L"\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة." },
     { L"Sending mods (%d)\u2026", L"إرسال المودّات (%d)…" },

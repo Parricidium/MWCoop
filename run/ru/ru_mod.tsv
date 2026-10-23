@@ -951,3 +951,13 @@ Someone is driving it.	Кто-то ею управляет.
 /car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)	/car <имя>: машина появляется передо мной (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)
 Cinema	Кинотеатр
 Museum of Corsica	Музей Корсики
+KINO TÄHTI CINEMA	КИНОТЕАТР KINO TÄHTI
+{0} wants to show \"{1}\". Download the film? Size: {2}	{0} хочет показать «{1}». Скачать фильм? Размер: {2}
+[Y] YES     [U] NO     ({0} s)	[Y] ДА     [U] НЕТ     ({0} с)
+Film \"{0}\": {1} % ({2} of {3})	Фильм «{0}»: {1} % ({2} из {3})
+Show waiting for the film: 	Сеанс ждёт фильм: 
+ MB	 МБ
+ GB	 ГБ
+Film offered to the other players (	Фильм предложен другим игрокам (
+): the show starts once everyone has it.	): сеанс начнётся, когда он будет у всех.
+Film received: the show starts once everyone has it.	Фильм получен: сеанс начнётся, когда он будет у всех.
