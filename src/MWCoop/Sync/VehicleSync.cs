@@ -81,6 +81,7 @@ namespace MWCoop
             public bool WasKinematic;
             public Dictionary<Rigidbody, RigidbodyInterpolation> InterpWas;   // copie : interpolation de la voiture et de ses pieces
             public Dictionary<Rigidbody, bool> Frozen; public float NextFrozen;   // copie : pieces figees avec elle (etait cinematique ?)
+            public Dictionary<Rigidbody, Pose> Offsets;   // copie : pose de chaque corps enfant par rapport a la racine au debut de la copie (MSC)
             public bool Framewise;              // copie ou le joueur local est passager : deplacee a chaque image (Ride)
             public float SettleUntil;           // reprise d'une copie (voiture redevenue physique ici) : bridee jusque-la
             public float CalmUntil;             // piece montee ou demontee (ici ou chez un autre) : garee, tenue calme jusque-la
@@ -913,7 +914,7 @@ namespace MWCoop
                 Ride(c, remote && Seats.SeatedCar == c.T);
                 if (remote)
                 {
-                    if (c.Framewise && c.Body.gameObject.activeInHierarchy) FollowFrame(c);
+                    if (c.Framewise && c.Body.gameObject.activeInHierarchy) { FollowFrame(c); SyncFrozen(c); }
                     if (now >= c.NextJoints) ProtectJoints(c);   // pieces montees entre-temps
                     if (now >= c.NextFrozen) RefreshFrozen(c);
                     Animate(c);
@@ -1750,6 +1751,7 @@ namespace MWCoop
         static void FreezeParts(Car c)
         {
             if (c.Frozen == null) c.Frozen = new Dictionary<Rigidbody, bool>();
+            NoteOffsets(c);
             int n = 0;
             foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true))
             {
@@ -1781,22 +1783,75 @@ namespace MWCoop
             }
             FreezeParts(c);
         }
+        // Pieces figees : leur pose physique suit leur transform a chaque deplacement de la copie. Sur My Summer Car (Unity 5.0)
+        // un corps cinematique enfant d'une racine deplacee par MovePosition garde sa pose physique d'origine : la coque GFX de
+        // la barque (colliders, attache fixe a la racine) restait au ponton pendant que la copie traversait le lac, et a la
+        // reprise l'attache ramenait les deux corps l'un vers l'autre d'un coup (квазарик, 22/10 : 107 puis 219 m/s, « la barque
+        // disparait » ; rejoue : 35 m d'ecart, 7 m/s). Les colliders des pieces d'une copie restaient de meme en arriere.
+        public struct Pose { public Vector3 P; public Quaternion R; }
+        static void NoteOffsets(Car c)
+        {
+            if (c.Offsets == null) c.Offsets = new Dictionary<Rigidbody, Pose>();
+            Transform root = c.Body.transform;
+            foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (rb == null || rb == c.Body || c.Offsets.ContainsKey(rb)) continue;
+                Pose o; o.P = root.InverseTransformPoint(rb.transform.position); o.R = Quaternion.Inverse(root.rotation) * rb.transform.rotation;
+                c.Offsets[rb] = o;
+            }
+        }
+        static void SyncFrozen(Car c)
+        {
+            if (c.Frozen == null || c.Offsets == null) return;
+            Vector3 rp = c.Body.position; Quaternion rr = c.Body.rotation;
+            foreach (KeyValuePair<Rigidbody, bool> kv in c.Frozen)
+            {
+                Rigidbody rb = kv.Key; Pose o;
+                if (rb == null || !rb.isKinematic || !c.Offsets.TryGetValue(rb, out o)) continue;
+                Vector3 wp = rp + rr * o.P; Quaternion wr = rr * o.R;
+                if ((rb.position - wp).sqrMagnitude < 1e-6f) continue;
+                // (transform d'abord : Unity 5.0 ne resynchronise la pose physique d'un corps cinematique que depuis son propre
+                // transform ; MovePosition seul laissait la coque GFX au ponton, vitesse « 1800 m/s » lue a chaque pas)
+                rb.transform.position = wp; rb.transform.rotation = wr;
+                rb.position = wp; rb.rotation = wr;
+            }
+        }
         static void ThawParts(Car c)
         {
             if (c.Frozen == null) return;
             int n = 0;
+            Vector3 rp = c.Body.position; Quaternion rr = c.Body.rotation;
             foreach (KeyValuePair<Rigidbody, bool> kv in c.Frozen)
             {
-                Rigidbody rb = kv.Key;
+                Rigidbody rb = kv.Key; Pose o = new Pose();
                 if (rb == null || kv.Value) continue;
-                rb.position = rb.transform.position; rb.rotation = rb.transform.rotation;   // (pose exacte du transform, suivie pendant la copie)
+                if (c.Offsets == null || !c.Offsets.TryGetValue(rb, out o)) { o.P = c.Body.transform.InverseTransformPoint(rb.transform.position); o.R = Quaternion.Inverse(rr) * rb.transform.rotation; }
+                Vector3 wp = rp + rr * o.P; Quaternion wr = rr * o.R;
+                // (redevenu physique d'abord, puis pose exacte par rapport a la racine : la pose donnee a un corps cinematique
+                // etait perdue au changement d'etat, et sur MSC son transform suivait sa pose physique restee en arriere, 23/10)
                 rb.isKinematic = false;
+                rb.position = wp; rb.rotation = wr; rb.transform.position = wp; rb.transform.rotation = wr;
                 rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
                 rb.WakeUp();
                 n++;
             }
             c.Frozen = null;
-            if (n > 0 && freezeLogs++ < 20) Log.Info("voiture " + c.Key + " reprise : " + n + " pieces rendues libres a leur place");
+            // Corps libres restes en arriere (tete du conducteur de la barque, 36 m derriere a la reprise sur MSC) : remis a
+            // leur place du debut de la copie, a l'arret, avant que leur attache ne tire la voiture.
+            int back = 0;
+            if (c.Offsets != null)
+                foreach (KeyValuePair<Rigidbody, Pose> kv in c.Offsets)
+                {
+                    Rigidbody rb = kv.Key;
+                    if (rb == null || rb == c.Body || rb.isKinematic || !rb.transform.IsChildOf(c.T)) continue;
+                    Vector3 wp = rp + rr * kv.Value.P;
+                    if ((rb.position - wp).sqrMagnitude < 4f) continue;
+                    Quaternion wr = rr * kv.Value.R;
+                    rb.position = wp; rb.rotation = wr; rb.transform.position = wp; rb.transform.rotation = wr; rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
+                    back++;
+                }
+            c.Offsets = null;
+            if ((n > 0 || back > 0) && freezeLogs++ < 20) Log.Info("voiture " + c.Key + " reprise : " + n + " pieces rendues libres a leur place" + (back > 0 ? ", " + back + " corps libre(s) ramene(s) a leur place" : ""));
         }
 
         // Copie conduite ailleurs : ses attaches cassables (pare-brise, portieres, pieces montees) ne cassent
@@ -1839,7 +1894,7 @@ namespace MWCoop
             if (!scanned) return;
             if (frozenCar != null) HoldFrozen();
             foreach (Car c in cars)
-                if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy && !c.Framewise) Follow(c);
+                if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy && !c.Framewise) { Follow(c); SyncFrozen(c); }
                 else if (c.Body != null && !c.Kinematic && c.SettleUntil > 0f) Settle(c);
             foreach (Car c in cars)
                 if (c.GuardUntil > 0f && c.Body != null && !c.Kinematic) ThawGuard(c);
@@ -1946,7 +2001,8 @@ namespace MWCoop
                 if (rb != b && !rb.isKinematic) { rb.velocity = b.velocity; rb.angularVelocity = b.angularVelocity; }
             if (guardLogs++ < 30)
                 Log.Warn("voiture " + c.Key + " propulsee apres sa reprise, personne au volant (" + v.magnitude.ToString("F1") + " m/s, " + w.magnitude.ToString("F1") + " rad/s, "
-                         + (now - (c.GuardUntil - 4f)).ToString("F2") + " s apres) : " + (reset ? "remise a sa pose de reprise, tenue calme 2 s" : "elan retire"));
+                         + (now - (c.GuardUntil - 4f)).ToString("F2") + " s apres) : " + (reset ? "remise a sa pose de reprise, tenue calme 2 s" : "elan retire")
+                         + (Config.GetInt("Test", "SondeReprise", 0) != 0 ? " ; " + PartsProbe(c) : ""));
         }
         static void Settle(Car c)
         {

@@ -29,7 +29,7 @@ namespace MWCoop
         // moteur tenu (1500 tr/min) de 24 a 60 s, poussee en avant (6 m/s) de 26 a 38 s ; il ouvre [Test] TestPorte (la premiere
         // par defaut) a 45 s, la relache, et la referme a 65 s. Chacun note la voiture toutes les 2 s et la portiere des 42 s
         // (l'invite doit voir la copie bouger, puis la portiere ouverte et refermee).
-        static int mscStep; static float mscLog;
+        static int mscStep, mscFast; static float mscLog;
         // [Test] Autotest=mscmeca (19/10) : l'hote monte la portiere gauche de la SATSUMA a 60 s (comme un clic : 'Wait for assembly'
         // -ASSEMBLE->), serre deux crans d'une de ses vis a 70 s, fait des courses chez Teimo a 80 s (QSausages = 2, 'Purchase') et
         // demonte la portiere a 100 s (l'invite arrive vers 35 s). Chacun note toutes les 5 s : portiere montee ? (declencheur eteint, parent), vis, argent.
@@ -498,6 +498,39 @@ namespace MWCoop
             }
         }
 
+        // Barque de My Summer Car (essais) : moteur lance / coupe par la variable Start de 'Sound Engine' (BOAT/GFX/Audio).
+        static string BoatStart(bool on)
+        {
+            GameObject au = Game.FindAny("BOAT/GFX/Audio");
+            PlayMakerFSM se = au != null ? Game.FsmOn(au, "Sound Engine") : null;
+            FsmBool st = se != null ? se.FsmVariables.FindFsmBool("Start") : null;
+            if (st != null) st.Value = on;
+            return "Sound Engine [" + (se != null ? se.ActiveStateName : "?") + "] Start " + (st != null ? st.Value.ToString() : "?");
+        }
+        static string FsmVar(string path, string fsm, string v)
+        {
+            GameObject g = Game.FindAny(path);
+            PlayMakerFSM f = g != null ? Game.FsmOn(g, fsm) : null;
+            if (f == null) return v + " ?";
+            FsmFloat x = f.FsmVariables.FindFsmFloat(v);
+            return v + " " + (x != null ? x.Value.ToString("F2") : "?") + (f.enabled ? "" : " (automate coupe)") + (g.activeInHierarchy ? "" : " (objet eteint)");
+        }
+        static string BoatProbe()
+        {
+            Rigidbody b = VehicleSync.Body("BOAT");
+            if (b == null) return "pas de barque";
+            GameObject gfx = Game.FindAny("BOAT/GFX");
+            Rigidbody g = gfx != null ? gfx.GetComponent<Rigidbody>() : null;
+            var sb = new System.Text.StringBuilder();
+            sb.Append("racine ").Append(b.position.ToString("F1")).Append(" v ").Append(b.velocity.magnitude.ToString("F1")).Append(b.isKinematic ? " cin" : "").Append(" masse ").Append(b.mass.ToString("F1"));
+            if (g != null) sb.Append(" ; GFX v ").Append(g.velocity.magnitude.ToString("F1")).Append(g.isKinematic ? " cin" : "").Append(" masse ").Append(g.mass.ToString("F1")).Append(" ecart ").Append(Vector3.Distance(g.position, b.position).ToString("F2"));
+            sb.Append(" ; ").Append(FsmVar("BOAT/GFX/Audio/Engine", "Simulation", "Thrust")).Append(' ').Append(FsmVar("BOAT/GFX/Audio/Engine", "Simulation", "RPM")).Append(' ').Append(FsmVar("BOAT/GFX/Audio/Engine", "Simulation", "Gear"));
+            sb.Append(" ; ").Append(FsmVar("BOAT", "Y Velocity", "Velo")).Append(" ; ").Append(FsmVar("BOAT/GFX/Audio", "Sound Engine", "RPM"));
+            GameObject au = Game.FindAny("BOAT/GFX/Audio");
+            PlayMakerFSM se = au != null ? Game.FsmOn(au, "Sound Engine") : null;
+            if (se != null) sb.Append(" [").Append(se.ActiveStateName).Append(se.enabled ? "]" : ", coupe]");
+            return sb.ToString();
+        }
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -650,6 +683,31 @@ namespace MWCoop
                 }
                 return;
             }
+            // [Test] Autotest=mscbateau2 (квазарик, 22/10 : « la barque disparait pour un joueur, meme apres qu'il en est sorti » --
+            // journal de l'hote : BOAT propulsee a 107 puis 219 m/s au premier pas de sa reprise, 15 fois dans la soiree) : l'invite
+            // ([Test] TestActeur=invite) monte au moteur a 40 s, lance le moteur a 44 s, avance au large de 48 a 63 s (vitesse
+            // imposee), sort a 66 s, coupe le moteur a 70 s (la barque revient a l'hote) ; chacun note la barque toutes les 5 s
+            // (pose, vitesse, corps GFX, automates Simulation / Y Velocity / Sound Engine).
+            if (mode == "mscbateau2")
+            {
+                Rigidbody b = VehicleSync.Body("BOAT");
+                if (!Net.Session.IsHost)
+                {
+                    if (t > 35f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscbateau2, " + VehicleSync.TestEnter("BOAT", false)); }
+                    if (t > 40f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscbateau2, moteur -> " + VehicleSync.TestEnter("BOAT", true)); }
+                    if (t > 44f && mscStep == 2) { mscStep = 3; Log.Info("autotest : mscbateau2, lance : " + BoatStart(true)); }
+                    if (t > 48f && t < 58f && b != null && !b.isKinematic) { Vector3 v = b.velocity; v.x = 2.8f; v.z = 2.8f; b.velocity = v; }
+                    // ('Check speed' refuse la sortie tant qu'un axe de vitesse depasse 0,3 m/s : on attend l'arret)
+                    if (t > 68f && mscStep == 3 && b != null && b.velocity.magnitude < 0.2f) { mscStep = 4; Log.Info("autotest : mscbateau2, sortie -> " + VehicleSync.TestExit("BOAT")); }
+                    if (t > 74f && mscStep == 4) { mscStep = 5; Log.Info("autotest : mscbateau2, moteur coupe : " + BoatStart(false)); }
+                }
+                // (l'hote vient pres de la barque a 64 s, comme un joueur qui rejoint le conducteur au rivage : l'automate 'LOD' de la
+                // barque la rend physique a moins de 20 m -- meme en copie ?)
+                else if (t > 64f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscbateau2, l'hote s'approche : " + VehicleSync.TestEnter("BOAT", false)); }
+                if (t > 30f && t < 130f && t >= mscLog) { mscLog = t + 5f; Log.Info("autotest : mscbateau2, " + BoatProbe()); }
+                if (b != null && b.velocity.magnitude > 5f && mscFast++ < 40) Log.Info("autotest : mscbateau2, RAPIDE " + BoatProbe());
+                return;
+            }
             // [Test] Autotest=mscbateau (joueurs du 20/10) : assis a chaque place de la barque (1, 2, 3) 8 s chacune, captures en
             // troisieme personne ([Test] TroisiemePersonne=1) pour voir la pose et la place.
             if (mode == "mscbateau")
@@ -766,7 +824,15 @@ namespace MWCoop
                 VehicleSync.TestEngine(t > 24f && t < 60f ? 1500f : -1f, 0.5f);
                 Rigidbody b = VehicleSync.Body(car);
                 if (b != null && t > 26f && t < 38f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 6f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
-                if (t > 45f && mscStep == 3) { mscStep = 4; Log.Info("autotest : mscvoiture, ouvre " + CarDoors.TestOpen(car, true, part)); }
+                // (квазарик, 22/10 : « ignition » affiche chez tous quand un autre tourne la cle du tracteur) : cle sur ACC a 30 s
+                // (comme un clic tenu : contact, puis demarreur), relachee a 34 s ('Shut off') ; chacun note l'automate de la cle et le
+                // texte GUIinteraction toutes les 2 s -- chez l'invite, 'Wait player' et texte vide.
+                // (par evenements, comme la souris : 'Wait button' -ACC-> Test -> ACC on, -START-> Motor starting, -FINISHED-> Shut off ;
+                // Game.SetState ne passe pas par les transitions, rien ne serait envoye)
+                if (t > 30f && mscStep == 3 && Config.GetInt("Test", "TestCle", 1) != 0) { mscStep = 31; PlayMakerFSM k = IgnitionOf(car); if (k != null) { Game.SetState(k, "Test"); Log.Info("autotest : mscvoiture, cle (clic) -> " + k.ActiveStateName + " (" + Recon.Path(k.transform) + ")"); } }
+                if (t > 32f && mscStep == 31) { mscStep = 32; PlayMakerFSM k = IgnitionOf(car); if (k != null) { k.SendEvent("START"); Log.Info("autotest : mscvoiture, cle (demarreur) -> " + k.ActiveStateName); } }
+                if (t > 34f && mscStep == 32) { mscStep = 33; PlayMakerFSM k = IgnitionOf(car); if (k != null) { k.SendEvent("FINISHED"); Log.Info("autotest : mscvoiture, cle relachee -> " + k.ActiveStateName); } }
+                if (t > 45f && (mscStep == 3 || mscStep == 31 || mscStep == 32 || mscStep == 33)) { mscStep = 4; Log.Info("autotest : mscvoiture, ouvre " + CarDoors.TestOpen(car, true, part)); }
                 if (t > 45.6f && mscStep == 4) { mscStep = 5; Log.Info("autotest : mscvoiture, relache " + CarDoors.TestState(car, "Mouse off", part)); }
                 if (t > 65f && mscStep == 5) { mscStep = 6; Log.Info("autotest : mscvoiture, ferme " + CarDoors.TestOpen(car, false, part)); }
             }
@@ -774,9 +840,22 @@ namespace MWCoop
             {
                 mscLog = Time.realtimeSinceStartup + 2f;
                 Rigidbody b = VehicleSync.Body(car);
+                PlayMakerFSM ig = t > 28f && t < 50f ? IgnitionOf(car) : null;
+                FsmString gi = ig != null ? FsmVariables.GlobalVariables.FindFsmString("GUIinteraction") : null;
                 Log.Info("autotest : mscvoiture " + VehicleSync.Describe(car) + (b != null ? ", cinematique " + b.isKinematic + ", vitesse " + b.velocity.magnitude.ToString("F1") : "")
+                         + (ig != null ? " | cle [" + ig.ActiveStateName + "] texte \"" + (gi != null ? gi.Value : "?") + "\"" : "")
                          + (t > 42f ? " | portiere " + CarDoors.StateOf(car, part) : ""));
             }
+        }
+
+        // Automate de la cle de contact d'une voiture de My Summer Car ('Use' avec les etats « ACC on » et « Motor starting »).
+        static PlayMakerFSM IgnitionOf(string car)
+        {
+            Rigidbody b = VehicleSync.Body(car);
+            if (b == null) return null;
+            foreach (PlayMakerFSM f in b.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Use" && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState("Motor starting") != null) return f;
+            return null;
         }
 
         // Posture du joueur local : parent, controleur, automates du joueur (etat), hauteur Crouch, pivots de la camera.
