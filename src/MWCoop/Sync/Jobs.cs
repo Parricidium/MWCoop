@@ -676,9 +676,13 @@ namespace MWCoop
         {
             FsmBool acc = j.F.FsmVariables.FindFsmBool("ACC"), on = j.F.FsmVariables.FindFsmBool("MotorOn");
             string cur = j.F.ActiveStateName;
-            bool already = state == "ACC on" ? acc != null && acc.Value && cur == "Wait button"
-                         : state == "Motor OFF" ? acc != null && !acc.Value && (on == null || !on.Value) && cur == "Wait button"
-                         : state == "Shut off" ? cur == "Wait button" || cur == "Shut off"
+            // (23/10, квазарик : « ignition » affiche chez tous quand un autre tourne la cle du tracteur -- le rejeu laissait
+            // l'automate dans « Wait button », qui ecrit GUIinteraction = STARTER a chaque image tant que la souris est dessus ;
+            // au repos il doit etre dans « Wait player », qui efface le texte et attend la souris)
+            bool rest = cur == "Wait button" || cur == "Wait player";
+            bool already = state == "ACC on" ? acc != null && acc.Value && rest
+                         : state == "Motor OFF" ? acc != null && !acc.Value && (on == null || !on.Value) && rest
+                         : state == "Shut off" ? rest || cur == "Shut off"
                          : cur == state;
             j.FromReplay = true;
             if (already) return;
@@ -686,9 +690,12 @@ namespace MWCoop
             try
             {
                 Game.SetState(j.F, state);
-                if (state == "ACC on" && j.F.ActiveStateName == "ACC on") Game.SetState(j.F, "Wait button");
+                if (state == "ACC on" && j.F.ActiveStateName == "ACC on") Game.SetState(j.F, "Wait player");
+                else if (j.F.ActiveStateName == "Wait button") Game.SetState(j.F, "Wait player");
             }
             finally { applying = false; Replay.Depth--; }
+            FsmString gi = FsmVariables.GlobalVariables.FindFsmString("GUIinteraction");
+            if (gi != null && (gi.Value == "STARTER" || gi.Value == "IGNITION")) gi.Value = "";
             Log.Info("cle de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ", ACC " + (acc != null && acc.Value) + ")");
         }
 
