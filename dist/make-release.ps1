@@ -11,7 +11,7 @@
 # -Nightly (canal temporaire, demande de JD, 14/10) : version en developpement (ex. 0.96.0-nightly.1, branche refonte) ;
 # pre-release GitHub, paquet MWCoop-<version>.nightly (le meme zip sous un nom que les lanceurs d'avant 0.95.2 ne prennent
 # pas), branche courante poussee (pas main), PAS d'annonce Discord. Le lanceur ne la propose qu'en canal Nightly.
-param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '', [switch]$Nightly, [switch]$Ping)
+param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '', [switch]$Nightly, [switch]$Ping, [string]$Image = '')
 if ($Nightly -ne ($Version -match 'nightly')) { throw "-Nightly va avec une version 'x.y.z-nightly.N' (et seulement elle)" }
 $root = Split-Path $PSScriptRoot
 $code = Get-Content "$root\src\MWCoop\Version.cs" -Raw
@@ -151,6 +151,8 @@ if ($Publier) {
                 title = "MWCoop $Version"; url = $url; color = 7912959; description = $desc
                 footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
             }
+            # -Image <url> : grande image sous le texte de l'annonce (1.11.0, magasin CARDINAL : JD, 23/10)
+            if ($Image) { $embed.image = @{ url = $Image } }
             # Role Update Pings : seulement a la premiere version d'une famille X.Y (1.2, 1.3, 1.4...), pas aux X.Y.1, X.Y.2...
             # (demande de JD, 21/10) ; -Ping force la mention. La famille est connue par les tags deja poses (v$Version exclu).
             $xy = (($Version -split '\.')[0..1]) -join '.'
