@@ -746,7 +746,7 @@ static void DrawPaintView(Graphics &g, RectF card)
 // Depuis 1.8.0 (JD, 21/10 : « mettre les voitures a part comme l'editeur de carte ») : les addons se telechargent ici
 // (catalogue plus bas) ; une carte pas encore installee porte « Telecharger », une installee plus ancienne que le
 // catalogue « Mettre a jour ».
-struct Addon { std::wstring key, dir, name, nameShort, desc, descEn, ver, remoteVer; bool livery = false; bool builtin = false; bool installed = true; };   // (builtin : la VAZ, livree avec le mod ; ver : Version= de addon.ini ; remoteVer : celle du catalogue)
+struct Addon { std::wstring key, dir, name, nameShort, desc, descEn, ver, remoteVer, group; bool livery = false; bool builtin = false; bool installed = true; };   // (builtin : la VAZ, livree avec le mod ; ver : Version= de addon.ini ; remoteVer : celle du catalogue)
 static std::vector<Addon> g_addonList;
 static ULONGLONG g_addonScanT;
 static int g_addonSel = -1;          // carte ouverte (-1 : la liste)
@@ -773,7 +773,7 @@ static void AddonsLeave() { g_addonsTab = false; }
 // .<cle>-nouveau, puis l'ancien dossier remplace : le scan saute les noms a point).
 // Vus : [Lanceur] AddonsVus (cles du catalogue deja montrees) ; NEW sur la barre tant qu'une voiture du catalogue n'a pas
 // ete vue, sur la carte pendant la session ou elle est apparue.
-struct AddonCat { std::wstring key, ver, name, nameShort, desc, descEn, url, pic, modMin; long long size = 0; bool livery = false; };
+struct AddonCat { std::wstring key, ver, name, nameShort, desc, descEn, url, pic, modMin, group; long long size = 0; bool livery = false; };
 static std::wstring g_addonsRepo = L"Parricidium/MWCoop-Addons";   // (/depotaddons : autre depot, pour les essais)
 static std::vector<AddonCat> g_addonCat;                           // (sous g_cs)
 static volatile bool g_addonCatBusy;
@@ -815,6 +815,7 @@ static std::vector<AddonCat> AddonCatParse(const std::string &src)
         else if (k == "Description") c.desc = val; else if (k == "DescriptionEn") c.descEn = val;
         else if (k == "Livree") c.livery = val == L"1"; else if (k == "Taille") c.size = _wtoi64(val.c_str());
         else if (k == "Paquet") c.url = val; else if (k == "Apercu") c.pic = val; else if (k == "ModMin") c.modMin = val;
+        else if (k == "Categorie") c.group = val;
     }
     std::vector<AddonCat> o;
     for (const AddonCat &c : v)
@@ -964,6 +965,31 @@ static void AddonsOpenDir()
     ShellExecuteW(g_wnd, L"open", L"explorer.exe", (L"\"" + AddonsRoot() + L"\"").c_str(), NULL, SW_SHOWNORMAL);
     LaunchLog("addons : dossier ouvert (%ls)", AddonsRoot().c_str());
 }
+// Filtre de la liste par categorie (Categorie= de addon.ini et du catalogue ; la VAZ : « MWCoop ») : [Lanceur] AddonsFiltre.
+static std::vector<Addon> g_addonAll;
+static std::wstring AddonFilter()
+{
+    wchar_t b[64] = L"";
+    GetPrivateProfileStringW(L"Lanceur", L"AddonsFiltre", L"", b, 64, g_iniLauncher.c_str());
+    return b;
+}
+// categories presentes : MWCoop (la VAZ) d'abord, puis par nom ; au plus 7 (boutons 517-524 avec « Toutes »)
+static std::vector<std::wstring> AddonGroups()
+{
+    std::vector<std::wstring> g;
+    for (const Addon &a : g_addonAll) if (!a.group.empty() && std::find(g.begin(), g.end(), a.group) == g.end()) g.push_back(a.group);
+    std::sort(g.begin(), g.end(), [](const std::wstring &x, const std::wstring &y) { return x == L"MWCoop" ? y != L"MWCoop" : y == L"MWCoop" ? false : x < y; });
+    if (g.size() > 7) g.resize(7);
+    return g;
+}
+static void AddonsSetFilter(int k)
+{
+    std::vector<std::wstring> g = AddonGroups();
+    std::wstring f = k > 0 && k <= (int)g.size() ? g[k - 1] : L"";
+    WritePrivateProfileStringW(L"Lanceur", L"AddonsFiltre", f.empty() ? NULL : f.c_str(), g_iniLauncher.c_str());
+    g_scroll[TAB_CAR] = 0; g_addonSel = -1; g_addonScanT = 0;
+    LaunchLog("addons : filtre %ls", f.empty() ? L"(toutes)" : f.c_str());
+}
 static void AddonsScan()
 {
     ULONGLONG now = GetTickCount64();
@@ -997,6 +1023,7 @@ static void AddonsScan()
                     if (k == "Nom") a.name = val; else if (k == "NomCourt") a.nameShort = val;
                     else if (k == "Description") a.desc = val; else if (k == "DescriptionEn") a.descEn = val;
                     else if (k == "Livree") a.livery = val == L"1"; else if (k == "Version") a.ver = val;
+                    else if (k == "Categorie") a.group = val;
                 }
                 if (a.nameShort.empty()) a.nameShort = a.name;
                 v.push_back(a);
@@ -1010,8 +1037,8 @@ static void AddonsScan()
         for (const AddonCat &c : g_addonCat) {
             Addon *in = NULL;
             for (Addon &x : v) if (!_wcsicmp(x.key.c_str(), c.key.c_str())) in = &x;
-            if (in) { in->remoteVer = c.ver; continue; }
-            Addon a; a.key = c.key; a.name = c.name; a.nameShort = c.nameShort; a.desc = c.desc; a.descEn = c.descEn; a.livery = c.livery;
+            if (in) { in->remoteVer = c.ver; if (in->group.empty()) in->group = c.group; continue; }   // (installee avant les categories : celle du catalogue)
+            Addon a; a.key = c.key; a.name = c.name; a.nameShort = c.nameShort; a.desc = c.desc; a.descEn = c.descEn; a.livery = c.livery; a.group = c.group;
             a.remoteVer = c.ver; a.installed = false;
             v.push_back(a);
         }
@@ -1023,12 +1050,25 @@ static void AddonsScan()
     if (!g_gameDir.empty() && !CarMsc()) {
         std::wstring vd = g_modRoot + L"MWCoop\\vaz\\";
         if (FileExists(vd + L"carrosserie.p205")) {
-            Addon a; a.key = L"vaz"; a.dir = vd; a.name = L"VAZ-2108"; a.nameShort = L"VAZ"; a.livery = true; a.builtin = true;
+            Addon a; a.key = L"vaz"; a.dir = vd; a.name = L"VAZ-2108"; a.nameShort = L"VAZ"; a.livery = true; a.builtin = true; a.group = L"MWCoop";
             a.desc = L"Livrée avec le mod · la voiture de tout le monde · seize couleurs"; a.descEn = L"Ships with the mod · everyone's car · sixteen colours";
             v.insert(v.begin(), a);
         }
     }
     std::wstring sel = g_addonSel >= 0 && g_addonSel < (int)g_addonList.size() ? g_addonList[g_addonSel].key : L"";   // (le catalogue arrive : les rangs changent)
+    // filtre par categorie (Gr. A, Gr. B... -- JD, 23/10) : la liste montree ; g_addonAll garde tout (les boutons du filtre)
+    for (Addon &a : v)   // (sans Categorie= : le « Gr. X » de la description, sinon Autres)
+        if (a.group.empty()) {
+            size_t i = a.desc.find(L"Gr. ");
+            a.group = i != std::wstring::npos && i + 4 < a.desc.size() && a.desc[i + 4] != L' ' ? a.desc.substr(i, 5) : T(L"Autres", L"Others");
+        }
+    g_addonAll = v;
+    std::wstring f = AddonFilter();
+    if (!f.empty()) {
+        bool any = false;
+        for (const Addon &a : v) if (a.group == f) any = true;
+        if (any) { std::vector<Addon> w; for (const Addon &a : v) if (a.group == f) w.push_back(a); v = w; }
+    }
     g_addonList = v;
     g_addonSel = -1;
     for (int i = 0; i < (int)v.size() && !sel.empty(); i++) if (v[i].key == sel && v[i].installed) g_addonSel = i;
@@ -1251,6 +1291,23 @@ static void DrawAddonList(Graphics &g)
     UiButton(g, RectF(area.X + area.Width - 24 - 264 - 12 - 108, area.Y + 20, 108, 38), T(L"Aide", L"Help"), UI_ADDON_HELP, false, IC_BOOK, true, 10);
     if (!g_addonList.empty())
         UiSeg(g, RectF(area.X + area.Width - 24 - 264 - 12 - 108 - 12 - 200, area.Y + 22, 200, 34), { T(L"Galerie", L"Gallery"), T(L"Liste", L"List") }, AddonsView(), UI_ADDON_VIEW, 12);
+    // filtre par categorie (sous les boutons, a droite) : Toutes, MWCoop, Gr. A, Gr. B... -- seulement s'il y en a plusieurs
+    {
+        std::vector<std::wstring> gs = AddonGroups();
+        if (gs.size() > 1) {
+            std::wstring f = AddonFilter();
+            std::vector<std::wstring> labels; labels.push_back(T(L"Toutes", L"All"));
+            for (const std::wstring &s : gs) labels.push_back(s);
+            float x = area.X + area.Width - 24;
+            for (int k = (int)labels.size() - 1; k >= 0; k--) {
+                float w = PillW(labels[k].c_str(), 11) + 26;
+                x -= w;
+                bool on = k == 0 ? f.empty() || std::find(gs.begin(), gs.end(), f) == gs.end() : labels[k] == f;
+                UiButton(g, RectF(x, area.Y + 64, w, 28), labels[k].c_str(), UI_ADDON_FILTER + k, on, -1, true, 14);
+                x -= 6;
+            }
+        }
+    }
     if (g_addonList.empty()) {
         Icon(g, IC_CAR, area.X + area.Width / 2, area.Y + area.Height / 2 - 50, 56, WithA(kGrey, 0.6f), 1.4f);
         Text(g, T(L"Aucun addon installé", L"No add-on installed"), RectF(area.X, area.Y + area.Height / 2 - 10, area.Width, 26), 15, FontStyleBold, kGrey);

@@ -957,6 +957,7 @@ namespace MWCoop
             { "Film offered to the other players (", "Фильм предложен другим игрокам (" },
             { "): the show starts once everyone has it.", "): сеанс начнётся, когда он будет у всех." },
             { "Film received: the show starts once everyone has it.", "Фильм получен: сеанс начнётся, когда он будет у всех." },
+            { "Others", "Другие" },
         };
     }
 }

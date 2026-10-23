@@ -19,6 +19,22 @@ namespace MWCoop
             set { pick = value; Config.Save("Coop", "VoitureModele", value.ToString()); }
         }
         static int pvModel = -1; static string pvLivery = "";
+        // filtre des modeles par categorie (Gr. A, Gr. B... -- JD, 23/10) : "" = tous ([Coop] VoitureFiltre)
+        static string filter;
+        static string Filter
+        {
+            get { if (filter == null) filter = Config.Get("Coop", "VoitureFiltre", ""); return filter; }
+            set { filter = value ?? ""; Config.Save("Coop", "VoitureFiltre", filter); }
+        }
+        static bool InFilter(int m) { return Filter.Length == 0 || VazCar.ModelOf(m).Group == Filter; }
+        // categories des modeles installes, dans l'ordre : MWCoop (la VAZ) d'abord, puis par nom
+        static System.Collections.Generic.List<string> Groups()
+        {
+            var g = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i) && !g.Contains(VazCar.ModelOf(i).Group)) g.Add(VazCar.ModelOf(i).Group);
+            g.Sort((a, b) => a == "MWCoop" ? -1 : b == "MWCoop" ? 1 : string.CompareOrdinal(a, b));
+            return g;
+        }
         // modele et livree a montrer pour la couleur n
         static void Shown(int n, out int model, out string livery)
         {
@@ -191,7 +207,7 @@ namespace MWCoop
                 case KeyCode.V: CallMine(); return true;
                 case KeyCode.M:
                     if (!Vaz.EvoAvailable) return false;
-                    { int m = Pick; do m = (m + 1) % VazCar.Models.Length; while (!VazCar.Has(m)); Pick = m; }   // (modele suivant installe)
+                    { int m = Pick, n = 0; do { m = (m + 1) % VazCar.Models.Length; n++; } while ((!VazCar.Has(m) || !InFilter(m)) && n <= VazCar.Models.Length); if (VazCar.Has(m)) Pick = m; }   // (modele suivant installe, dans le filtre)
                     return true;
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter: Act(hi); return true;
@@ -304,8 +320,27 @@ namespace MWCoop
                 // choix du modele (extensions installees) : un bouton par modele, a la largeur de son nom, en lignes (retour a
                 // la ligne quand la place manque ; chaque ligne remplie sur toute la largeur) -- JD 21/10, quatre voitures : les
                 // noms se chevauchaient dans quatre boutons de meme largeur
+                // filtre par categorie (au-dessus des modeles, seulement s'il y a plusieurs categories) : Tous, MWCoop, Gr. A...
+                System.Collections.Generic.List<string> gs = Groups();
+                if (gs.Count > 1)
+                {
+                    if (Filter.Length > 0 && !gs.Contains(Filter)) Filter = "";
+                    var labels = new System.Collections.Generic.List<string> { Lang.T("Tous", "All") };
+                    labels.AddRange(gs);
+                    float fx = r.x, fg = P(6);
+                    for (int k = 0; k < labels.Count; k++)
+                    {
+                        float fw = Style.Width(labels[k], 12) + P(18);
+                        if (fx > r.x && fx + fw > r.xMax) { fx = r.x; cy += P(28); }
+                        bool on = k == 0 ? Filter.Length == 0 : Filter == labels[k];
+                        if (Kit.Button(new Rect(fx, cy, fw, P(24)), labels[k], on ? 1 : 0, false, true, null, 12)) Filter = k == 0 ? "" : labels[k];
+                        fx += fw + fg;
+                    }
+                    cy += P(30);
+                }
                 var ms = new System.Collections.Generic.List<int>();
-                for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i)) ms.Add(i);
+                for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i) && InFilter(i)) ms.Add(i);
+                if (ms.Count > 0 && !ms.Contains(Pick)) Pick = ms[0];   // (le modele choisi est toujours un de ceux du filtre)
                 float gap = P(8);
                 var w = new float[ms.Count];
                 for (int k = 0; k < ms.Count; k++) w[k] = Mathf.Min(r.width, Mathf.Max(P(70), Style.Width(VazCar.ModelOf(ms[k]).Name, 13) + P(26)));
