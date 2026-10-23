@@ -38,6 +38,7 @@ namespace MWCoop
             public string[] Off;              // commandes de la SORBET coupees (colliders)
             public Vector3 Dome; public bool HasDome;   // plafonnier (Functions/InteriorLight) pose ici
             public float BrakeAngle = 1f;     // amplitude du levier (KnobPos 0-20 degres x ceci)
+            public float EyeDrop;             // yeux (DriverHeadPivot) plus bas que Head, sans bouger l'assise (zone d'entree, SpawnPlayer)
             public float ControlSize;         // taille maxi (m) des zones cliquables des commandes deplacees (0 : celles du jeu)
             public Dictionary<string, Vector3> Info;
             public Spec Sp;                   // tenue de route propre (null : Rivett rallye, VazHandling)
@@ -213,15 +214,15 @@ namespace MWCoop
                             Mass = 1100f, Com = 0.58f, Steer = 38f, Spring = 52000f, Damp = 3400f, AntiRoll = 22000f, ComDrop = 0.05f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
         // 205 T16 Evo 2 1986 Gr. B (JD 23/10, rally cars GrB/205T16, Kankkunen : « Peujot 205 T16 Ebo 2 ») : moteur central
         // arriere, integrale ; habitacle de la vue interieure du modele (remonte de 3 cm sur la caisse) ; yeux au point de vue du
-        // modele rFactor (Eyepoint du cockpitinfo, remonte comme l'habitacle : -0,32 ; 0,92 ; -0,03) puis 8 cm plus bas (JD 23/10 :
-        // cameras conducteur et passager trop hautes), tete 27 cm derriere ; frein
+        // modele rFactor) : assise de l'Ebo 1 (la meme caisse ; JD 23/10 : avec la tete descendue, on ne pouvait plus s'asseoir
+        // qu'en se collant au volant), yeux seuls 10 cm plus bas (EyeDrop : cameras conducteur et passager trop hautes) ; frein
         // a main : son propre levier (sur le tunnel, pivot a l'arriere, poignee vers l'avant : se leve quand il est serre, comme
         // l'Impreza) ; boutons comme l'Ebo 1 : contact (rouge), starter (bleu, tire / pousse), phares (blanc), warning (orange) en
         // colonne sur la face de la planche (z 0,518, tournee vers le pilote) juste a droite du volant. Tenue de route : celle de
         // l'Ebo 1 validee par JD, moteur et masse de l'Evo 2 : 450 ch a 7 500 tr/min, 490 Nm a 5 500, rupteur 8 000, 910 kg (Mass
         // du .hdv rFactor) ; frein a main de la Sport Quatro (6 000 N.m).
         public static readonly Model T16b = new Model { Id = ModelT16b, Folder = "t16e2", Name = "205 Ebo 2",
-            Head = new Vector3(-0.32f, 0.87f, -0.30f), Engine = new Vector3(0f, 0.55f, -0.85f),
+            Head = new Vector3(-0.32f, 0.969f, -0.291f), EyeDrop = 0.10f, Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.012f, 0.297f, -0.125f), BrakeGrip = new Vector3(-0.012f, 0.349f, 0.095f),
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.05f, 0.640f, 0.511f)),
@@ -727,6 +728,9 @@ namespace MWCoop
                     Transform m = ct.Find(mp);
                     if (m != null) m.position = ct.TransformPoint(ct.InverseTransformPoint(m.position) + delta);
                 }
+                // (205 Ebo 2, JD 23/10 : camera plus basse, mais l'assise de l'Ebo 1 -- la zone d'entree descendue avec la tete
+                // n'etait plus atteignable qu'en se collant au volant)
+                if (cur.EyeDrop != 0f) hp.position -= ct.up * cur.EyeDrop;
                 foreach (Joint j in hp.GetComponents<Joint>())
                 {
                     Vector3 aw = hp.TransformPoint(j.anchor);
