@@ -48,6 +48,8 @@ namespace MWCoop
             new Place { Key = "chalet", Alias = "cabin", Fr = "Chalet", En = "Cabin", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
             // cinema KINO TAHTI (JD, 22/10) : sur le parking, devant les portes du hall (Kauppa.KinoFrame : local 0, 16), face au hall
             new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f), Need = () => Kauppa.Active && Kauppa.KinoOn },
+            // magasin de pieces CARDINAL VARAOSAT (JD, 23/10) : sur le parvis, face a la vitrine (Kauppa.OsatFrame : local 0, 6,5)
+            new Place { Key = "pieces", Alias = "parts", Fr = "CARDINAL VARAOSAT", En = "CARDINAL VARAOSAT", At = new Vector3(-1749.3f, 7.2f, -136.2f), Face = new Vector3(-1755.8f, 7f, -136.7f), Need = () => Kauppa.Active && Kauppa.OsatOn },
             // musee de la Corse et boutique OSUUSKAUPPA s21 (coin s21 de Perajarvi) : devant leurs portes, face a eux
             new Place { Key = "musee", Alias = "museum", Fr = "Musée de la Corse", En = "Museum of Corsica", At = new Vector3(-1570.3f, 5.5f, 1096.1f), Face = new Vector3(-1574.6f, 5f, 1085.4f), Need = () => Kauppa.Active && Ajouts.Museum },
             new Place { Key = "boutique", Alias = "shop", Fr = "OSUUSKAUPPA s21", En = "OSUUSKAUPPA s21", At = new Vector3(-1592.3f, 6.0f, 1105.1f), Face = new Vector3(-1591.1f, 5f, 1098.5f), Need = () => Kauppa.ShopOn },
@@ -93,12 +95,12 @@ namespace MWCoop
         static void Say(string s) { Chat.System(s); }
 
         static readonly string[] HelpFr = {
-            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, cinema, musee, boutique",
+            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, cinema, musee, boutique, pieces",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)" };
         static readonly string[] HelpEn = {
-            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop",
+            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop, parts",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)" };

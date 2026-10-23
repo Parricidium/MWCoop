@@ -24,7 +24,7 @@ namespace MWCoop
         public const int SleepingBagPrice = 149;
 
         // Coin s21 a construire : la boutique ou le musee (chacun son interrupteur, Ajouts) ; [Boutique] Active=0 : rien.
-        public static bool Active { get { return (Ajouts.Shop || Ajouts.Museum || Ajouts.Kino) && Config.GetInt("Boutique", "Active", 1) != 0; } }
+        public static bool Active { get { return (Ajouts.Shop || Ajouts.Museum || Ajouts.Kino || Ajouts.Osat) && Config.GetInt("Boutique", "Active", 1) != 0; } }
         public static bool ShopOn { get { return Active && Ajouts.Shop; } }
 
         // Sacs poses d'office au debut de partie (sans boutique : oui).
@@ -42,13 +42,14 @@ namespace MWCoop
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
             ResetMuseo();
             ResetKino();
+            ResetOsat();
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
             buildAt = Active && Game.LevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
 
-        public static void OnGameSave() { OnGameSaveVideo(); OnGameSaveBags(); OnGameSaveKino(); }
+        public static void OnGameSave() { OnGameSaveVideo(); OnGameSaveBags(); OnGameSaveKino(); OnGameSaveOsat(); }
 
         public static void Update()
         {
@@ -65,6 +66,9 @@ namespace MWCoop
                 else L("musee coupe (ajouts COOP : lanceur, ou choix de l'hote)");
                 if (KinoOn) try { if (!ShopOn && !Ajouts.Museum) Materials(); BuildKino(); } catch (Exception e) { L("cinema : " + e); }
                 else L("cinema coupe (ajouts COOP : lanceur, ou choix de l'hote)");
+                // magasin de pieces CARDINAL VARAOSAT (JD, 23/10)
+                if (OsatOn) try { if (!ShopOn && !Ajouts.Museum && !KinoOn) Materials(); BuildOsat(); } catch (Exception e) { L("magasin de pieces : " + e); }
+                else L("magasin de pieces coupe (ajouts COOP : lanceur, ou choix de l'hote)");
                 L("construite en " + sw.ElapsedMilliseconds + " ms");
                 t0 = now;
                 LoadScript();
@@ -74,10 +78,11 @@ namespace MWCoop
             }
             TickMuseo();
             TickKino(now);
+            TickOsat(now);
             if (root == null)
             {
-                // (cinema sans boutique : ses objets -- popcorn, bobines... -- et les sous-titres du vendeur)
-                if (kino != null) { TickSay(); TickItems(now); RunScript(now); if (shotAt > 0f && now >= shotAt) { shotAt = -1f; TakeShot(); } }
+                // (cinema ou magasin de pieces sans boutique : leurs objets -- popcorn, bobines... -- et les sous-titres des vendeurs)
+                if (kino != null || osat != null) { TickSay(); TickItems(now); RunScript(now); if (shotAt > 0f && now >= shotAt) { shotAt = -1f; TakeShot(); } }
                 return;
             }
             TickDoor();
@@ -325,7 +330,7 @@ namespace MWCoop
         }
 
         // Haut du vendeur : notre calque (sweat MWCoop, mains transparentes) pose sur la texture de torse du jeu.
-        static Material ShirtMaterial()
+        static Material ShirtMaterial(string png = "myyja-paita.png")
         {
             Material tpl = Avatar.FindMaterial("char_shirt01");
             if (tpl == null || tpl.mainTexture == null) { L("vendeur : matiere de torse introuvable"); return null; }
@@ -339,7 +344,7 @@ namespace MWCoop
             tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
             RenderTexture.active = prev;
             RenderTexture.ReleaseTemporary(rt);
-            Texture2D layer = Res("myyja-paita.png", TextureFormat.ARGB32);
+            Texture2D layer = Res(png, TextureFormat.ARGB32);
             Color[] px = tex.GetPixels();
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)

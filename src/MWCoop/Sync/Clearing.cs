@@ -24,6 +24,10 @@ namespace MWCoop
         static Vector2[] kinoPlot = new Vector2[0];
         static bool s21On, kinoOn;
         public static float KinoPadY = float.NaN;
+        // Terrain du magasin de pieces CARDINAL VARAOSAT (JD, 23/10) : le batiment et son parvis (Kauppa.OsatFrame).
+        static Vector2[] osatPlot = new Vector2[0];
+        static bool osatOn;
+        public static float OsatPadY = float.NaN;
         static readonly string[] Visual = { "TREES1", "TREES2", "TREES_MEDIUM1", "TREES_MEDIUM2", "TREES_MEDIUM3", "TREES_SMALL1", "TREES_SMALL2", "TREES_SMALL3", "TREES_SMALL4" };
         static readonly string[] Colls = { "TREES1_COLL", "TREES2_COLL", "TREES3_COLL" };
         static bool done;
@@ -40,6 +44,8 @@ namespace MWCoop
             s21On = Ajouts.Shop || Ajouts.Museum;
             kinoOn = Kauppa.KinoOn;
             kinoPlot = kinoOn ? Kauppa.KinoPlot() : new Vector2[0];
+            osatOn = Kauppa.OsatOn;
+            osatPlot = osatOn ? Kauppa.OsatPlot() : new Vector2[0];
             GameObject mesh = GameObject.Find("MAP/MESH");
             if (mesh == null) { Log.Info("defrichage : MAP/MESH introuvable"); return; }
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -126,6 +132,7 @@ namespace MWCoop
         {
             string s = s21On ? Config.Get("Boutique", "Tasanne", DefaultPads) : "";
             if (kinoOn) { s = (s.Length > 0 ? s + ";" : "") + Kauppa.KinoPad(); Kauppa.KinoDrives(); }
+            if (osatOn) s = (s.Length > 0 ? s + ";" : "") + Kauppa.OsatPad();
             if (s.Length == 0) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             var pads = new List<float[]>();
@@ -139,6 +146,7 @@ namespace MWCoop
                 float h = Ground(front.x, front.z);
                 pads.Add(new[] { x, z, yaw, hw, hd, h });
                 if (kinoOn && one == Kauppa.KinoPad()) KinoPadY = h;
+                if (osatOn && one == Kauppa.OsatPad()) OsatPadY = h;
                 Log.Info("defrichage : plateforme en " + x + ", " + z + " a " + h.ToString("F2") + " m");
             }
             GameObject terr = GameObject.Find("MAP/MESH/TERRAIN_OBJ");
@@ -160,7 +168,7 @@ namespace MWCoop
                 // Pres des routes, le sol ne bouge pas : leurs bords enneiges (le bourrelet le long de la route) font partie du
                 // maillage de la route, fusionne par le jeu (statique, illisible) -- abaisse dessous, le sol laissait le bourrelet
                 // en l'air, ombres de l'autre cote visibles au travers (retour de JD, 13/10). Rien a moins de 2 m, raccord jusqu'a 8 m.
-                float dr = InPoly(w.x, w.z, kinoPlot) ? RoadDist(w.x, w.z) : Mathf.Min(DistToLine(new Vector2(w.x, w.z), RoadEdge), DistToLine(new Vector2(w.x, w.z), MainRoadEdge));
+                float dr = InPoly(w.x, w.z, kinoPlot) || InPoly(w.x, w.z, osatPlot) ? RoadDist(w.x, w.z) : Mathf.Min(DistToLine(new Vector2(w.x, w.z), RoadEdge), DistToLine(new Vector2(w.x, w.z), MainRoadEdge));
                 best *= Mathf.SmoothStep(0f, 1f, (dr - 2f) / 6f);
                 return new Vector2(best, target);
             };
@@ -253,7 +261,7 @@ namespace MWCoop
             Log.Info("defrichage : terrassement, " + moved + " sommet(s) du sol et " + layers + " des couches posees dessus deplaces");
         }
 
-        static bool Inside(float x, float z) { return (s21On && InPoly(x, z, Plot)) || (kinoOn && InPoly(x, z, kinoPlot)); }
+        static bool Inside(float x, float z) { return (s21On && InPoly(x, z, Plot)) || (kinoOn && InPoly(x, z, kinoPlot)) || (osatOn && InPoly(x, z, osatPlot)); }
 
         static bool InPoly(float x, float z, Vector2[] poly)
         {
@@ -298,7 +306,7 @@ namespace MWCoop
             if (v == null || v.Length == 0) { Log.Info("defrichage : " + name + " illisible ou vide"); return 0; }
             // boite du terrain + 15 m (rayon d'un grand arbre), dans le repere du maillage
             float x0 = float.MaxValue, x1 = float.MinValue, z0 = float.MaxValue, z1 = float.MinValue;
-            foreach (Vector2 p in (s21On ? Plot : new Vector2[0]).Concat(kinoPlot)) { x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); z0 = Mathf.Min(z0, p.y); z1 = Mathf.Max(z1, p.y); }
+            foreach (Vector2 p in (s21On ? Plot : new Vector2[0]).Concat(kinoPlot).Concat(osatPlot)) { x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); z0 = Mathf.Min(z0, p.y); z1 = Mathf.Max(z1, p.y); }
             x0 -= 15f; x1 += 15f; z0 -= 15f; z1 += 15f;
             var near = new bool[v.Length];
             var world = new Vector3[v.Length];

@@ -3,7 +3,7 @@
 MWCoop (co-op for My Winter Car and My Summer Car) exposes a small public API so that **other mods can keep their own state in sync
 between the players of a co-op session**. It is the static class `MWCoop.CoopApi` in `MWCoop.dll`.
 
-- Available since MWCoop 0.43.0 (`CoopApi.Version == 1`).
+- Available since MWCoop 0.43.0 (`CoopApi.Version == 1`). Version 2 (MWCoop 1.11.0) adds the parts shop: sell your mod's items in the game.
 - Public names and docs are in English. The rest of the MWCoop source is in French, but it is open source and not
   obfuscated, so you never need to read it to use this API.
 - Works with MSCLoader mods, or any code running in the game process.
@@ -38,7 +38,7 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 
 | Member | Description |
 |---|---|
-| `const int Version` | API version (1). Raised when members are added. |
+| `const int Version` | API version (2). Raised when members are added. |
 | `const int MaxReliableBytes` | Largest reliable payload: 64 KB (split into packets and rebuilt for you). |
 | `const int MaxUnreliableBytes` | Largest unreliable payload: 1000 bytes (one packet). |
 | `string GameName` | "My Winter Car" or "My Summer Car" (since 1.1.0). |
@@ -56,6 +56,9 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 | `void StopListening(string channel, Action<int, byte[]> handler)` | Stop receiving. |
 | `event Action<int> PlayerJoined / PlayerLeft` | A player joined or left (players already there are not announced: read `PlayerIds()` once). |
 | `void OnPlayerJoined(Action<int>) / OnPlayerLeft(Action<int>)` | Same events, as methods (easier through reflection). |
+| `bool ShopAvailable` | **v2.** The CARDINAL VARAOSAT parts shop exists in this game (My Winter Car, add-on on; the host's choice applies to everyone). |
+| `bool AddShopItem(string id, string name, float price, GameObject model, Action<int, bool, Vector3, Quaternion> onBought)` | **v2.** Puts an item of your mod on sale in the parts shop. See below. |
+| `void RemoveShopItem(string id)` | **v2.** Takes it off the shelves. |
 
 Notes:
 
@@ -135,6 +138,42 @@ CoopApi.Listen("MyMod", (from, data) => { /* ... */ });
 CoopApi.OnPlayerJoined(id => CoopApi.SendTo(id, "MyMod", MyState()));   // bring a newcomer up to date
 ```
 
+## Selling your items in the parts shop (version 2)
+
+MWCoop builds a small parts shop, **CARDINAL VARAOSAT**, at the ski resort camping area (My Winter Car). Its left wing
+(CARDINAL) is for mods: any mod can put items on its shelves with `AddShopItem`. The right wing sells used Rivett parts
+(MWCoop's own, restocked every 3 game days).
+
+- `id`: unique, and **the same on every player's game** (e.g. `"MyMod.Exhaust"`). Adding the same id again updates the item.
+- `name`, `price` (mk): shown when a player looks at the item, and on its price tag.
+- `model`: a GameObject shown on the shelf. Only its meshes and materials are copied; your object is never touched,
+  it may be inactive (a prefab or a hidden template is fine). Big models go on a display stand, others are scaled to fit a
+  shelf slot. `null` = no model.
+- `onBought(buyerId, boughtHere, position, rotation)`: called on **every** player's game, in the same order, when someone
+  buys the item (the buyer has already paid from their own wallet). Spawn your object at `position` / `rotation` (on the
+  NOUTO pick-up pallet of the wing).
+  - If your mod keeps its objects in sync by itself (it spawns them the same way on every game), spawn on every game.
+  - If you prefer, spawn only where `boughtHere` is true and send the result to the others with `Send`.
+- Unlimited stock. Items stay registered across game loads: call `AddShopItem` once (in `OnLoad`, for example).
+- Nothing is lost if the shop is off (`ShopAvailable == false`): the items just don't show.
+- Every player needs your mod for the item to show up on their game (MWCoop offers the host's mods to guests).
+
+```csharp
+// direct reference
+CoopApi.AddShopItem("MyMod.Exhaust", "Sport exhaust", 450f, exhaustPrefab, (buyer, here, pos, rot) =>
+{
+    GameObject e = GameObject.Instantiate(exhaustPrefab, pos, rot);
+    e.SetActive(true);
+    // ... your own part logic, the same on every game
+});
+
+// reflection (no hard dependency); there is a single AddShopItem method, so GetMethod finds it
+Type api = Type.GetType("MWCoop.CoopApi, MWCoop");
+if (api != null && (int)api.GetField("Version").GetValue(null) >= 2)
+    api.GetMethod("AddShopItem").Invoke(null, new object[] { "MyMod.Exhaust", "Sport exhaust", 450f, exhaustPrefab,
+        new Action<int, bool, Vector3, Quaternion>(OnExhaustBought) });
+```
+
 ## Tips
 
 - **Who decides?** Let the host decide for shared things (spawned objects, a shared counter, a world state)
@@ -146,3 +185,4 @@ CoopApi.OnPlayerJoined(id => CoopApi.SendTo(id, "MyMod", MyState()));   // bring
 ## Version history
 
 - **1** (MWCoop 0.43.0): first version.
+- **2** (MWCoop 1.11.0): parts shop: `ShopAvailable`, `AddShopItem`, `RemoveShopItem`.
