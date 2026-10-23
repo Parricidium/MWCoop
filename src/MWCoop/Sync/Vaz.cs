@@ -414,12 +414,60 @@ namespace MWCoop
         // Autotest « vazcle » ([Test] TestVoiture=MWCoop-VAZ-3) : la n 3 prise a 8 s ; l'essai « cle » de Jobs fait le reste
         // (volant 22 s, contact 32 s, demarreur 34 s tenu CleTenue s). Chaque seconde de 31 a 50 s : regime, reservoir,
         // conduite d'essence, batterie ; a 35 s les variables de l'automate Starter.
+        // [Test] VazVitesses=1 (autotest vazcle, moteur lance a ~36 s) : de 42 a 47 s en 1re, de 49 a 54 s en marche arriere, gaz
+        // 0,7, frein a main desserre ; vitesse le long de l'avant de la voiture notee a 46,5 et 53,5 s (JD 23/10 : « la VAZ avance
+        // sur R et recule sur la 1 »)
+        static string WheelSpins(GameObject car)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) sb.Append(' ').Append(w.wheelPos).Append('=').Append(w.angularVelocity.ToString("F1")).Append(w.onGroundDown ? "" : "(air)");
+            return sb.ToString();
+        }
+        static int gearPhase, gearPlaced = -1; static Vector3 gearAt;
+        static void TestGears(GameObject car, float t)
+        {
+            Drivetrain dt = car.GetComponent<Drivetrain>();
+            AxisCarController acc = car.GetComponent<AxisCarController>();
+            Rigidbody rb = car.GetComponent<Rigidbody>();
+            if (dt == null || acc == null || rb == null || t < 42f || t > 56f) { if (acc != null && t > 56f && t < 58f && !acc.enabled) acc.enabled = true; return; }
+            int g = t < 47.5f ? 2 : t >= 49f && t < 54.5f ? 0 : 1;
+            // (au debut de chaque phase : voiture remise a plat, cap garde, a l'arret -- l'essai la jetait dans le fosse)
+            int ph = t < 47.5f ? 0 : t >= 49f ? 1 : -1;
+            if (ph >= 0 && ph != gearPlaced)
+            {
+                gearPlaced = ph;
+                if (gearAt == Vector3.zero) gearAt = car.transform.position;
+                Vector3 f = car.transform.forward; f.y = 0f; if (f.sqrMagnitude < 1e-4f) f = Vector3.forward;
+                RaycastHit gh; Vector3 at = gearAt + Vector3.up * 3f;
+                if (Physics.Raycast(at, Vector3.down, out gh, 10f, ~(1 << 2))) at = gh.point + Vector3.up * 0.6f;
+                rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
+                car.transform.position = at; car.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
+            }
+            if (!dt.enabled || dt.rpm < 600f) { dt.enabled = true; dt.canStall = false; dt.rpm = 2500f; }   // (moteur tenu en marche : l'essai porte sur le sens, pas sur le demarrage)
+            if (dt.gear != g) dt.gear = g;
+            // (commandes du joueur coupees le temps de l'essai : gaz pose directement sur le moteur)
+            if (acc.enabled) acc.enabled = false;
+            dt.throttle = g == 1 ? 0f : 0.7f;
+            acc.handbrakeInput = 0f; acc.brakeInput = 0f; acc.throttleInput = dt.throttle;   // (lus par l'anti-calage : embrayage coupe sinon)
+            foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) { w.handbrake = 0f; w.brake = 0f; }   // (voiture garee frein serre : roues libres)
+            Transform lv = car.transform.Find("Functions/HandBrake/LeverPivot");
+            PlayMakerFSM hf = lv != null ? Game.FsmOn(lv.gameObject, "Use") : null;
+            if (hf != null && hf.FsmVariables.FindFsmFloat("KnobPos") != null) hf.FsmVariables.FindFsmFloat("KnobPos").Value = 0f;
+            float fwd = Vector3.Dot(rb.velocity, car.transform.forward);
+            if ((gearPhase == 0 && t > 46.5f) || (gearPhase == 1 && t > 53.5f))
+            {
+                Log.Info("autotest vazcle : " + (gearPhase == 0 ? "1re" : "marche arriere") + " -> vitesse vers l'avant " + (fwd * 3.6f).ToString("F1") + " km/h, rapport " + dt.gear + " (" + (dt.gearRatios != null && dt.gear < dt.gearRatios.Length ? dt.gearRatios[dt.gear].ToString("F2") : "?") + "), regime " + dt.rpm.ToString("F0") + ", gaz " + dt.throttle.ToString("F2") + ", embrayage " + dt.clutchEngageSpeed.ToString("F2") + ", pente " + (Mathf.Asin(Mathf.Clamp(car.transform.forward.y, -1f, 1f)) * Mathf.Rad2Deg).ToString("F1") + " deg, roues" + WheelSpins(car) + ", transmission " + dt.transmission + ", couple moteur " + dt.torque.ToString("F0"));
+                gearPhase++;
+            }
+            if (t > 55.5f) acc.enabled = true;
+        }
         static float cleLog; static bool cleDump, panneDone, sonDone, moteurDone;
         static void TestKey(float t)
         {
             bool asker = Config.GetInt("Test", "CleInvite", 0) != 0 ? !Host : Host;
             if (asker && testStep == 0 && t > (Host ? 8f : 4f)) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
             GameObject car = Game.FindAny(Config.Get("Test", "TestVoiture", "MWCoop-VAZ-3"));
+            if (car != null && Config.GetInt("Test", "VazVitesses", 0) != 0) TestGears(car, t);
             // [Test] VazPanne=ligne (conduite d'essence vide) | batterie (charge 20) | noyee (chambre a 30) : pose a 30 s, pour retrouver le refus de JD
             if (car != null && t > 30f && !panneDone)
             {
@@ -749,6 +797,44 @@ namespace MWCoop
                              + ", pivot de tete " + (hp != null ? car.InverseTransformPoint(hp.position).ToString("F3") : "?") + ", zone " + (dt != null ? car.InverseTransformPoint(dt.position).ToString("F3") : "?")
                              + PlayerChain(car));
                     Autotest.CaptureSoon("vaz-assis", 0.3f);
+                }
+                // 48 s : depuis les yeux, visee du levier de frein a main du jeu (deplace sur celui du modele) : premier objet touche,
+                // distance (JD 23/10 : « le frein a main est inaccessible de la place conducteur » sur certaines) ; photo vaz-frein
+                if (car != null && t > 48f && assisStep == 3)
+                {
+                    assisStep = 4;
+                    GameObject cam = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera");
+                    Transform lv = car.Find("Functions/HandBrake/LeverPivot");
+                    Collider lc = lv != null ? lv.GetComponentInChildren<Collider>() : null;
+                    if (cam != null && lc != null)
+                    {
+                        Vector3 eye = cam.transform.position, aim = lc.bounds.center;
+                        var hits = Physics.RaycastAll(eye, (aim - eye).normalized, 3f);
+                        System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
+                        var sb = new System.Text.StringBuilder("autotest vaz : frein a main vise depuis les yeux, a " + (aim - eye).magnitude.ToString("F2") + " m :");
+                        for (int i = 0; i < hits.Length && i < 4; i++) sb.Append(' ').Append(hits[i].collider.transform.IsChildOf(lv) ? "LEVIER" : VehicleSync.RelPath(car, hits[i].collider.transform)).Append(hits[i].collider.isTrigger ? "(decl.)" : "").Append("[c").Append(hits[i].collider.gameObject.layer).Append(']').Append('@').Append(hits[i].distance.ToString("F2"));
+                        // (comme le jeu : MousePickEvent du levier, calque 19, 1 m)
+                        RaycastHit ph; bool pick = false; string first = "rien";
+                        foreach (Collider c in lv.GetComponentsInChildren<Collider>(true)) if (c.gameObject.layer == 19) { Vector3 d = c.bounds.center - eye; if (Physics.Raycast(eye, d.normalized, out ph, 1f, 1 << 19)) { first = ph.collider.transform.IsChildOf(lv) ? "LEVIER" : VehicleSync.RelPath(car, ph.collider.transform); pick |= ph.collider.transform.IsChildOf(lv); } sb.Append(" ; clic du jeu (calque 19, a ").Append(d.magnitude.ToString("F2")).Append(" m) : ").Append(first); }
+                        // masque reel de l'action MousePickEvent du levier (automate Use)
+                        PlayMakerFSM uf = Game.FsmOn(lv.gameObject, "Use"); int mask = 0; float dist = 1f;
+                        if (uf != null) foreach (FsmState st in uf.FsmStates) foreach (FsmStateAction ac in st.Actions) { var mp = ac as HutongGames.PlayMaker.Actions.MousePickEvent; if (mp == null) continue; mask = HutongGames.PlayMaker.ActionHelpers.LayerArrayToLayerMask(mp.layerMask, mp.invertMask.Value); dist = mp.rayDistance.Value; }
+                        RaycastHit mh; Vector3 md = lc.bounds.center - eye;
+                        bool mok = Physics.Raycast(eye, md.normalized, out mh, dist, mask);
+                        sb.Append(" ; masque du jeu ").Append(mask).Append(", ").Append(dist.ToString("F1")).Append(" m : ").Append(mok ? (mh.collider.transform.IsChildOf(lv) ? "LEVIER" : VehicleSync.RelPath(car, mh.collider.transform)) + "@" + mh.distance.ToString("F2") : "rien");
+                        pick = mok && mh.collider.transform.IsChildOf(lv);
+                        sb.Append(pick ? " -> ATTEIGNABLE" : " -> PAS ATTEIGNABLE");
+                        GameObject sl = Game.FindAny("SORBET(190-200psi)/Functions/HandBrake/LeverPivot");
+                        sb.Append(" ; levier : calques");
+                        foreach (Collider c in lv.GetComponentsInChildren<Collider>(true)) sb.Append(' ').Append(c.name).Append('=').Append(c.gameObject.layer).Append(c.enabled ? "" : "(off)");
+                        if (sl != null) foreach (Collider c in sl.GetComponentsInChildren<Collider>(true)) sb.Append(" ; SORBET ").Append(c.name).Append('=').Append(c.gameObject.layer).Append(" ").Append(LayerMask.LayerToName(c.gameObject.layer));
+                        sb.Append(" ; calque 19 = ").Append(LayerMask.LayerToName(19)).Append(", 13 = ").Append(LayerMask.LayerToName(13));
+                        Log.Info(sb.ToString());
+                        if (testCam == null) { testCam = new GameObject("MWCoop-CameraPilote").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.02f; testCam.fieldOfView = 60; }
+                        testCam.transform.position = eye; testCam.transform.LookAt(aim, car.up);
+                        Autotest.CaptureSoon("vaz-frein", 0.4f);
+                    }
+                    else Log.Info("autotest vaz : frein a main : " + (cam == null ? "camera" : "levier du jeu") + " introuvable");
                 }
             }
             if (host && testStep == 2 && t > 50f) { testStep = 3; Call(); Log.Info("autotest vaz : appelee, " + State()); }

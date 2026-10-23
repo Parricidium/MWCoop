@@ -117,7 +117,7 @@ namespace MWCoop
         // coupees (chauffage, essuie-glaces, degivrage, radio, pare-soleil, des) ; plafonnier gardé, sous le pavillon.
         static readonly Vector3 EvoFace = new Vector3(-0.19f, 0.10f, -0.97f).normalized;   // (face arriere du boitier, vers le pilote)
         public static readonly Model Evo3 = new Model { Id = ModelEvo, Folder = "evo3", Name = "Ebo III",
-            Head = new Vector3(-0.35f, 0.909f, -0.101f), Engine = new Vector3(0f, 0.75f, 1.55f),
+            Head = new Vector3(-0.35f, 0.909f, -0.101f), SeatEyes = true, EyeDrop = -0.10f, SteerDeg = 450f, Engine = new Vector3(0f, 0.75f, 1.55f),
             BrakePivot = new Vector3(-0.05f, 0.275f, 0.313f), BrakeGrip = new Vector3(-0.075f, 0.60f, 0.355f), BrakeAngle = 1.4f,
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.095f, 0.690f, 0.482f)),
@@ -136,7 +136,8 @@ namespace MWCoop
             // (mod a part de JD, Grupo A engine.ini du mod rFactor) : 370 ch a 5 900 tr/min, 495 Nm a 4 200, rupteur 7 500,
             // integrale, 1 230 kg, 61 % sur l'avant (moteur transversal avant), braquage 35
             Sp = new Spec { Name = "Evo III Gr. A", Power = 370f, PowerRpm = 5900f, Torque = 495f, TorqueRpm = 4200f, MaxRpm = 7500f,
-                            Mass = 1230f, Com = 0.61f, Steer = 35f, Spring = 45300f, Damp = 2850f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+                            Mass = 1230f, Com = 0.61f, Steer = 35f, Spring = 45300f, Damp = 2850f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f },
+                            Handbrake = 6000f, RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 32000f, AntiRollRear = 16000f, YawDamp = 0.6f, ComDrop = 0.04f } };   // (rallye moderne, comme l'Ebo 2 -- JD 23/10)
         // 205 T16 Evo 1 Gr. B (JD 21/10, rally cars GrB/205T162 : « Peugeot 205 T16 1985 », Salonen) : moteur central arriere,
         // integrale ; poste de conduite d'apres
         // le volant du pilote (le meme que l'Evo III, 0,19 plus en arriere et 0,06 plus haut) ; frein a main : la tige carbone de
@@ -147,7 +148,7 @@ namespace MWCoop
         // prive de JD validee en jeu (46 % sur l'avant, braquage 40, boite et pont), moteur et masse de l'Evo 1 (JD : « c'est
         // l'Evo 1 ») : 350 ch a 7 500 tr/min, 450 Nm a 5 000, rupteur 8 000, 940 kg (Mass du .hdv rFactor).
         public static readonly Model T16 = new Model { Id = ModelT16, Folder = "t16", Name = "205 Ebo 1",
-            Head = new Vector3(-0.32f, 0.969f, -0.291f), Engine = new Vector3(0f, 0.55f, -0.85f),
+            Head = new Vector3(-0.32f, 0.969f, -0.291f), SeatEyes = true, EyeDrop = -0.10f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.02f, 0.335f, 0.123f), BrakeGrip = new Vector3(-0.045f, 0.66f, 0.165f), BrakeAngle = 1.4f,
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.03f, 0.665f, 0.530f)),
@@ -164,7 +165,8 @@ namespace MWCoop
                           "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
             Dome = new Vector3(0f, 1.05f, -0.25f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "205 T16 Evo 1 Gr. B", Power = 350f, PowerRpm = 7500f, Torque = 450f, TorqueRpm = 5000f, MaxRpm = 8000f,
-                            Mass = 940f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+                            Mass = 940f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f },
+                            Handbrake = 6000f, RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 25000f, AntiRollRear = 12500f, YawDamp = 0.6f, ComDrop = 0.04f } };   // (rallye moderne, comme l'Ebo 2 -- JD 23/10)
         // Subaru Impreza 96 Gr. A (JD 21/10, rally cars GrA8/Subaru_96, « 555 » McRae 1995) : moteur avant, integrale ; poste
         // de conduite d'apres le volant du pilote (le meme que l'Evo III, decale de (0,044 ; 0,114 ; -0,177)) ; frein a main :
         // son propre levier (le long du tunnel, poignee vers l'avant, pivot a l'arriere : se leve quand il est serre, comme la
@@ -173,7 +175,7 @@ namespace MWCoop
         // 470 Nm a 4 000, rupteur 7 500, 1 130 kg (Mass du .hdv rFactor), 60 % sur l'avant, braquage 35.
         static readonly Vector3 ImpFace = new Vector3(0f, 0.50f, -0.87f).normalized;
         public static readonly Model Imp96 = new Model { Id = ModelImp, Folder = "imp96", Name = "Imprezza 95",
-            Head = new Vector3(-0.306f, 1.023f, -0.278f), Engine = new Vector3(0f, 0.55f, 1.55f),
+            Head = new Vector3(-0.306f, 1.023f, -0.278f), SeatEyes = true, EyeDrop = -0.10f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.55f),
             BrakePivot = new Vector3(0f, 0.36f, -0.10f), BrakeGrip = new Vector3(0f, 0.47f, 0.10f),
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.065f, 0.653f, 0.424f)),
@@ -190,7 +192,8 @@ namespace MWCoop
                           "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
             Dome = new Vector3(0f, 1.20f, -0.30f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "Impreza 96 Gr. A", Power = 300f, PowerRpm = 5500f, Torque = 470f, TorqueRpm = 4000f, MaxRpm = 7500f,
-                            Mass = 1130f, Com = 0.60f, Steer = 35f, Spring = 41600f, Damp = 2700f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+                            Mass = 1130f, Com = 0.60f, Steer = 35f, Spring = 41600f, Damp = 2700f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f },
+                            Handbrake = 6000f, RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 30000f, AntiRollRear = 15000f, YawDamp = 0.6f, ComDrop = 0.04f } };   // (rallye moderne, comme l'Ebo 2 -- JD 23/10)
         // Audi Sport Quattro 1984 Gr. B (JD 21/10, rally cars GrB/Squattro, Blomqvist) : moteur avant, integrale ; habitacle de
         // la vue interieure du modele (redescendu de 10 cm sur la caisse) ; yeux au point de vue du modele rFactor (Eyepoint du
         // cockpitinfo, redescendu comme l'habitacle : -0,36 ; 0,90 ; -0,10), tete 27 cm derriere ; frein a main : pas de levier modelise, la tige carbone de l'Evo III posee sur le tunnel
@@ -201,7 +204,7 @@ namespace MWCoop
         // barres antiroulis 22 000, centre de gravite 5 cm plus bas (le reglage plus dur de la 1.8.4 : « bizarre », retire) ;
         // frein a main 6 000 N.m sur les roues arriere (« plus fort, pour partir en travers ») -- a etendre aux autres addons
         public static readonly Model Sq84 = new Model { Id = ModelSq, Folder = "sq84", Name = "Sport Quatro",
-            Head = new Vector3(-0.36f, 0.93f, -0.37f), Engine = new Vector3(0f, 0.55f, 1.45f),
+            Head = new Vector3(-0.36f, 0.93f, -0.37f), SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.45f),
             BrakePivot = new Vector3(-0.10f, 0.25f, -0.02f), BrakeGrip = new Vector3(-0.125f, 0.575f, 0.022f), BrakeAngle = 1.4f,
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.020f, 0.435f, 0.342f)),
@@ -218,7 +221,8 @@ namespace MWCoop
                           "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
             Dome = new Vector3(0f, 1.06f, -0.20f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "Sport Quattro Gr. B", Power = 450f, PowerRpm = 7500f, Torque = 490f, TorqueRpm = 5500f, MaxRpm = 8000f,
-                            Mass = 1100f, Com = 0.58f, Steer = 38f, Spring = 52000f, Damp = 3400f, AntiRoll = 22000f, ComDrop = 0.05f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+                            Mass = 1100f, Com = 0.58f, Steer = 38f, Spring = 52000f, Damp = 3400f, AntiRoll = 22000f, ComDrop = 0.05f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f },
+                            RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 29000f, AntiRollRear = 14500f, YawDamp = 0.6f } };   // (rallye moderne, comme l'Ebo 2 -- JD 23/10)
         // 205 T16 Evo 2 1986 Gr. B (JD 23/10, rally cars GrB/205T16, Kankkunen : « Peujot 205 T16 Ebo 2 ») : moteur central
         // arriere, integrale ; habitacle de la vue interieure du modele (remonte de 3 cm sur la caisse) ; yeux au point de vue du
         // modele rFactor) : assise de l'Ebo 1 (la meme caisse ; JD 23/10 : avec la tete descendue, on ne pouvait plus s'asseoir
@@ -266,7 +270,7 @@ namespace MWCoop
         // passager trop en avant.
         static readonly Vector3 EyesModel = new Vector3(-0.35f, 1.10f, 0.02f);
         static readonly Vector3 HeadModel = EyesModel - new Vector3(0f, -0.03f, 0.27f);
-        static VazCar() { Models[0] = Vaz2108; Vaz2108.Head = HeadModel; Vaz2108.Controls = Controls; Vaz2108.BrakePivot = BrakePivotModel; Vaz2108.BrakeGrip = BrakeGripModel; Vaz2108.Engine = EngineModel; }
+        static VazCar() { Models[0] = Vaz2108; Vaz2108.SteerDeg = 450f; Vaz2108.Head = HeadModel; Vaz2108.Controls = Controls; Vaz2108.BrakePivot = BrakePivotModel; Vaz2108.BrakeGrip = BrakeGripModel; Vaz2108.Engine = EngineModel; }
 
         // Commandes de la SORBET posees sur les boutons du tableau de bord de la VAZ (centres des pieces du modele, repere
         // du modele ; photo annotee de JD, 18/10) : contact, essuie-glaces et feux sur les trois interrupteurs a gauche des
