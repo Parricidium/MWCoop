@@ -40,6 +40,7 @@ namespace MWCoop
             public float BrakeAngle = 1f;     // amplitude du levier (KnobPos 0-20 degres x ceci)
             public float EyeDrop;             // yeux (DriverHeadPivot) plus bas que Head, sans bouger l'assise (zone d'entree, SpawnPlayer)
             public bool SeatEyes;             // vue de conduite recalee sur le pivot de tete a l'entree (SeatView)
+            public float SteerDeg;            // volant : degres a fond de braquage, fixes (0 : rapport releve sur la SORBET)
             public float ControlSize;         // taille maxi (m) des zones cliquables des commandes deplacees (0 : celles du jeu)
             public Dictionary<string, Vector3> Info;
             public Spec Sp;                   // tenue de route propre (null : Rivett rallye, VazHandling)
@@ -216,7 +217,7 @@ namespace MWCoop
         // 205 T16 Evo 2 1986 Gr. B (JD 23/10, rally cars GrB/205T16, Kankkunen : « Peujot 205 T16 Ebo 2 ») : moteur central
         // arriere, integrale ; habitacle de la vue interieure du modele (remonte de 3 cm sur la caisse) ; yeux au point de vue du
         // modele rFactor) : assise de l'Ebo 1 (la meme caisse ; JD 23/10 : avec la tete descendue, on ne pouvait plus s'asseoir
-        // qu'en se collant au volant), yeux seuls 4 cm plus bas (EyeDrop) et vue recalee a l'entree sur le point de vue du
+        // qu'en se collant au volant), volant a 450 degres de chaque cote (SteerDeg : un tour et quart), yeux seuls 4 cm plus bas (EyeDrop) et vue recalee a l'entree sur le point de vue du
         // modele rFactor (SeatEyes : la vue etait a la hauteur ou l'on se tenait -- « dans le toit ») ; frein
         // a main : son propre levier (sur le tunnel, pivot a l'arriere, poignee vers l'avant : se leve quand il est serre, comme
         // l'Impreza) ; boutons comme l'Ebo 1 : contact (rouge), starter (bleu, tire / pousse), phares (blanc), warning (orange) en
@@ -224,7 +225,7 @@ namespace MWCoop
         // l'Ebo 1 validee par JD, moteur et masse de l'Evo 2 : 450 ch a 7 500 tr/min, 490 Nm a 5 500, rupteur 8 000, 910 kg (Mass
         // du .hdv rFactor) ; frein a main de la Sport Quatro (6 000 N.m).
         public static readonly Model T16b = new Model { Id = ModelT16b, Folder = "t16e2", Name = "205 Ebo 2",
-            Head = new Vector3(-0.32f, 0.969f, -0.291f), EyeDrop = 0.04f, SeatEyes = true, Engine = new Vector3(0f, 0.55f, -0.85f),
+            Head = new Vector3(-0.32f, 0.969f, -0.291f), EyeDrop = 0.04f, SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.012f, 0.297f, -0.125f), BrakeGrip = new Vector3(-0.012f, 0.349f, 0.095f),
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.05f, 0.640f, 0.511f)),
@@ -1086,7 +1087,10 @@ namespace MWCoop
                 object v = steerField != null ? steerField.GetValue(b.Axis) : null;
                 if (v is float) input = Mathf.Clamp((float)v, -1f, 1f);
             }
-            if (Mathf.Abs(input) > 0.1f && Mathf.Abs(input) < 0.6f)
+            // (rapport fixe du modele : le releve sur la SORBET varie de 170 a 450 -- 205 Ebo 2, JD 23/10 : « il tourne a peine et
+            // dans le mauvais sens » ; a 270 degres, une jante a trois branches braquee a fond ressemble a un quart de tour a l'envers)
+            if (b.M != null && b.M.SteerDeg > 0f) b.SteerRatio = b.M.SteerDeg;
+            else if (Mathf.Abs(input) > 0.1f && Mathf.Abs(input) < 0.6f)
             {
                 Quaternion d = Quaternion.Inverse(b.SorbetSteerRest) * b.SorbetSteer.localRotation;
                 float a; Vector3 ax;
