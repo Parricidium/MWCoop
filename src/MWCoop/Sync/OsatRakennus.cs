@@ -196,7 +196,7 @@ namespace MWCoop
             Box(new Vector3(-2.2f, 0f, -2.6f), new Vector3(2.2f, 0.98f, -1.9f), "tiski");
             Box(new Vector3(-2.25f, 0.98f, -2.65f), new Vector3(2.25f, 1.03f, -1.85f), "os_musta");
             Box(new Vector3(-2.2f, 0.08f, -1.9f), new Vector3(2.2f, 0.22f, -1.86f), "os_puna", false);
-            try { Clone("INSPECTION/LOD/inspection_desk/CashRegister/InspectionCashRegister", 0, new Vector3(1.4f, 1.03f, -2.3f), 180, new Vector3(0, -1, 0), false); } catch (Exception e) { L("magasin de pieces : caisse " + e.Message); }
+            try { OsatRegister(); } catch (Exception e) { L("magasin de pieces : caisse " + e.Message); }
             foreach (int wing in new[] { 0, 1 })
             {
                 float s = wing == 0 ? -1f : 1f;

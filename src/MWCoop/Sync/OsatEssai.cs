@@ -71,9 +71,10 @@ namespace MWCoop
                     KinoGui();
                     if (money != null) money.Value += 1000f;
                     osatLastBuy = -10f;
-                    OsatBuy(osatOffers[i], now);
+                    OsatTake(osatOffers[i], true);
                     break;
                 }
+                case "osatmaksa": { KinoGui(); if (money != null) money.Value += 1000f; osatLastBuy = -10f; OsatPay(now); break; }   // (paie le panier a la caisse)
                 case "osattesti": OsatTestItems(); break;
                 case "osattormays":
                 {
