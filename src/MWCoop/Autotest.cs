@@ -613,6 +613,37 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=freinmain (MWC, 2 joueurs ; летвин 23/10 : « le frein a main laisse rouler ») : l'invite prend le volant de [Test]
+        // TestVoiture a 15/22 s (reessaie comme gifulevier), serre le frein a main a 32 s ([Test] FreinCommande, FreinValeur -- KnobPos : 20 = serre a fond,
+        // 0 = temoin), descend a 38 s. Chacun note l'etat du frein a 34, 46 et 60 s ; l'hote lance la voiture a 2 m/s vers l'avant a 52 s et
+        // note sa vitesse 1 et 3 s apres, boite au rapport [Test] FreinRapport (1 : point mort) -- frein serre : arretee ; desserre : elle roule encore.
+        static float fmLog; static int fmStep, fmTries; static float fmTryAt; static bool fmSeat;
+        static void FreinMain(float t)
+        {
+            string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            Rigidbody b = VehicleSync.Body(car);
+            bool driving = b != null && ReferenceEquals(VehicleSync.LocalDrivingRoot, b.transform);
+            if (!MWCoop.Net.Session.IsHost)
+            {
+                if (t > 15f && fmStep == 0) { fmStep = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 19f && fmStep == 1) { fmStep = 2; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 22f && fmStep == 2) { fmStep = 3; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (fmStep == 3 && !driving && t > 24f && fmTries < 4 && t >= fmTryAt) { fmTryAt = t + 4f; fmTries++; fmSeat = true; Log.Info("autotest : freinmain, essai " + fmTries + " : " + VehicleSync.TestEnter(car, false)); }
+                if (fmStep == 3 && !driving && fmSeat && t >= fmTryAt - 2f) { fmSeat = false; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (t > 32f && fmStep == 3) { fmStep = 4; Log.Info("autotest : freinmain, invite : frein a main " + Knobs.TestHold(Config.Get("Test", "FreinCommande", "HandBrake/LeverPivot"), Config.GetFloat("Test", "FreinValeur", 20f))); }
+                if (t > 38f && fmStep == 4) { fmStep = 5; Log.Info("autotest : freinmain, invite : sortie -> " + VehicleSync.TestExit(car)); }
+            }
+            else
+            {
+                if (t > 40f && Config.GetInt("Test", "FreinForce", 0) != 0) VehicleSync.TestHandbrake(car, 1f);   // ([Test] FreinForce=1 : frein a main du controleur serre a chaque image, garee)
+                if (t > 52f && fmStep == 0 && b != null) { fmStep = 1; Vector3 f = b.transform.forward; f.y = 0f; b.WakeUp(); string pm = VehicleSync.TestGear(car, Config.GetInt("Test", "FreinRapport", 1)); b.velocity = f.normalized * 2f; Log.Info("autotest : freinmain, hote : voiture lancee a 2 m/s, " + pm + " (" + (b.isKinematic ? "copie" : "physique ici") + ")"); }
+                if (t > 53f && fmStep == 1 && b != null) { fmStep = 2; Log.Info("autotest : freinmain, hote : 1 s apres, " + b.velocity.magnitude.ToString("F2") + " m/s"); }
+                if (t > 55f && fmStep == 2 && b != null) { fmStep = 3; Log.Info("autotest : freinmain, hote : 3 s apres, " + b.velocity.magnitude.ToString("F2") + " m/s"); }
+            }
+            if ((t > 34f && t < 35f || t > 46f && t < 47f || t > 60f && t < 61f) && Time.realtimeSinceStartup >= fmLog)
+            { fmLog = Time.realtimeSinceStartup + 2f; Log.Info("autotest : freinmain, " + (MWCoop.Net.Session.IsHost ? "hote" : "invite") + " : " + VehicleSync.HandbrakeState(car) + " ; " + Knobs.Describe()); }
+        }
+
         static bool tricheDone;   // ([Test] Triche=<commande du tchat> : une fois, a 30 s)
         static void CdMsc(float t)
         {
@@ -1524,6 +1555,7 @@ namespace MWCoop
             }
             if (mode == "conduite") Conduite(t);
             if (mode == "gifulevier") GifuLevier(t);
+            if (mode == "freinmain") FreinMain(t);
             // [Test] JournalPieds=1 : toutes les 2 s, chevilles des avatars dans le repere de leur voiture et plancher sous chacune.
             if (Config.GetInt("Test", "JournalPieds", 0) != 0 && t > 20f && Time.realtimeSinceStartup >= feetLogAt)
             {

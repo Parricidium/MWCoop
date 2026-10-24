@@ -2768,6 +2768,24 @@ namespace MWCoop
 
         public static Vector3 TestDriveZonePos(string name) { Car c = Named(name); return c != null && c.Drive != null ? c.Drive.transform.position : Vector3.zero; }
 
+        // Essais : frein a main d'une voiture -- controleur de conduite (allume, handbrakeInput), frein a main des roues, corps (copie ou
+        // physique d'ici, vitesse), qui la mene.
+        public static string HandbrakeState(string name)
+        {
+            Car c = Named(name);
+            if (c == null || c.Body == null) return name + " ?";
+            var sb = new System.Text.StringBuilder(c.Key);
+            sb.Append(c.Axis != null ? (c.Axis.enabled ? " controleur allume" : " controleur coupe") + " handbrakeInput " + c.Axis.handbrakeInput.ToString("F2") : " pas de controleur");
+            sb.Append(", roues");
+            foreach (Wheel w in c.Body.GetComponentsInChildren<Wheel>(true)) sb.Append(' ').Append(w.name).Append('=').Append(w.handbrake.ToString("F2")).Append(w.enabled ? "" : "(coupee)");
+            sb.Append(", ").Append(c.Body.isKinematic ? "copie" : "physique ici").Append(", ").Append(c.Body.velocity.magnitude.ToString("F2")).Append(" m/s");
+            sb.Append(c.Index == LocalDriving ? ", conduite ici" : c.RemoteBy >= 0 ? ", menee par #" + c.RemoteBy : "");
+            return sb.ToString();
+        }
+
+        // Essais : frein a main du controleur de conduite pose a la main (FreinForce).
+        public static void TestHandbrake(string name, float v) { Car c = Named(name); if (c != null && c.Axis != null) c.Axis.handbrakeInput = v; }
+
         public static string TestExit(string name)
         {
             Car c = Named(name);
