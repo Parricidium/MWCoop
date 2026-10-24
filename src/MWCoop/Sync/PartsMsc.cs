@@ -512,9 +512,23 @@ namespace MWCoop
             List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0, resent = 0;
             if (kind == 0)
             {
-                while (r.More)
+                var rows = new List<KeyValuePair<uint, KeyValuePair<string, float>>>();
+                while (r.More) { uint h0 = (uint)r.I32(); string id0 = r.Str(); float a0 = r.F32(); rows.Add(new KeyValuePair<uint, KeyValuePair<string, float>>(h0, new KeyValuePair<string, float>(id0, a0))); }
+                int would = 0;
+                foreach (var row in rows)
                 {
-                    uint h = (uint)r.I32(); string id = r.Str(); float hostAge = r.F32();
+                    MscPoint q;
+                    if (!mscPointsByHash.TryGetValue(row.Key, out q) || q.Fsm == null || q.Swap || Recent(row.Key, now)) continue;
+                    FsmGameObject qv = q.Fsm.FsmVariables.FindFsmGameObject("Part");
+                    GameObject qp = qv != null ? qv.Value : null;
+                    string qm = MscInstalledId(q);
+                    if (qm.Length == 0 || qm == row.Value.Key || mounting.ContainsKey(qp) || PendingReinstall(qp)) continue;
+                    if (!(Age(row.Key, now) + 0.5f < row.Value.Value && row.Value.Value > 0f)) would++;
+                }
+                bool trusted = DigestTrusted(would, now);
+                foreach (var row in rows)
+                {
+                    uint h = row.Key; string id = row.Value.Key; float hostAge = row.Value.Value;
                     MscPoint p;
                     if (!mscPointsByHash.TryGetValue(h, out p) || p.Fsm == null) { unknown++; continue; }
                     if (Recent(h, now) || p.Swap) continue;
@@ -532,6 +546,7 @@ namespace MWCoop
                         Touch(h); resent++;
                         continue;
                     }
+                    if (mine.Length > 0 && !trusted) continue;   // (controle pas fiable : rien de demonte, rien demande)
                     if (mine.Length > 0)
                     {
                         PlayMakerFSM rem = Game.FsmOn(part, "Removal");
