@@ -31,7 +31,7 @@ namespace MWCoop
         static string pointed = "";
         static bool sheetLogged;
 
-        public static void OnLevelLoaded() { dists.Clear(); crimes.Clear(); satsuma = park = null; sheets[0] = sheets[1] = null; next = nextScan = 0f; pointed = ""; sheetLogged = false; testStep = 0; }
+        public static void OnLevelLoaded() { dists.Clear(); crimes.Clear(); satsuma = park = last = null; sheets[0] = sheets[1] = null; next = nextScan = 0f; pointed = ""; sheetLogged = false; testStep = 0; }
 
         static bool IsCar(GameObject g) { return g != null && (g.name.StartsWith("SATSUMA") || g.name.StartsWith(Vaz.Prefix)); }
 
@@ -42,39 +42,50 @@ namespace MWCoop
             if (now < nextScan) return;
             nextScan = now + 10f;
             dists.Clear(); crimes.Clear();
+            if (park == null) park = Game.FindAny("RALLY/ParcFerme");
+            for (int i = 0; i < 2; i++) if (sheets[i] == null) sheets[i] = Game.FindAny(SheetNames[i]);
             GameObject rally = Game.FindAny("RALLY");
             if (rally == null) return;
             foreach (PlayMakerFSM f in rally.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 bool form = f.FsmName == "Activate" && f.gameObject.name.StartsWith("RegisterForm"), parc = f.FsmName == "Logic" && f.gameObject.name == "ParcFerme", crime = f.FsmName == "CarHit";
                 if (!form && !parc && !crime) continue;
-                foreach (FsmState st in f.FsmStates)
-                    foreach (FsmStateAction a in st.Actions)
-                    {
-                        var gd = a as HutongGames.PlayMaker.Actions.GetDistance;
-                        if (gd != null && gd.target != null && !gd.target.UseVariable && IsCar(gd.target.Value)) dists.Add(gd);
-                        var sc = a as HutongGames.PlayMaker.Actions.StringCompare;
-                        if (crime && sc != null && sc.stringVariable != null && sc.stringVariable.Name == "PlayerCurrentVehicle" && sc.compareTo != null) crimes.Add(sc);
-                    }
+                // (automate jamais demarre -- objet jamais allume : ses actions ne se chargent pas encore ; relu dans 10 s)
+                if (f.Fsm == null || string.IsNullOrEmpty(f.ActiveStateName)) continue;
+                try
+                {
+                    foreach (FsmState st in f.FsmStates)
+                        if (st != null && st.Actions != null)
+                            foreach (FsmStateAction a in st.Actions)
+                            {
+                                var gd = a as HutongGames.PlayMaker.Actions.GetDistance;
+                                if (gd != null && gd.target != null && !gd.target.UseVariable && IsCar(gd.target.Value)) dists.Add(gd);
+                                var sc = a as HutongGames.PlayMaker.Actions.StringCompare;
+                                if (crime && sc != null && sc.stringVariable != null && sc.stringVariable.Name == "PlayerCurrentVehicle" && sc.compareTo != null) crimes.Add(sc);
+                            }
+                }
+                catch (System.Exception e) { Log.Warn("rallye (MSC) : " + f.gameObject.name + "::" + f.FsmName + " illisible (" + e.GetType().Name + ")"); }
             }
-            if (park == null) park = Game.FindAny("RALLY/ParcFerme");
+            if (park == null) park = Game.FindAny("RALLY/ParcFerme");   // (feuilles et parc ferme cherches avant le balayage, qui peut echouer)
             for (int i = 0; i < 2; i++) if (sheets[i] == null) sheets[i] = Game.FindAny(SheetNames[i]);
         }
 
-        // Voiture du rallye : la mienne du F10 si elle est plus pres de la feuille d'inscription (ou du parc ferme) que la SATSUMA.
+        // Voiture du rallye : la mienne du F10 si elle est plus pres de la feuille d'inscription (ou du parc ferme) que la SATSUMA ;
+        // ni feuille ni parc ferme (speciales, apres l'inscription) : le dernier choix, tant que la voiture existe.
+        static GameObject last;
         static GameObject Want(out bool mine)
         {
             mine = false;
             if (satsuma == null) satsuma = Game.FindAny("SATSUMA(557kg, 248)");
             Transform car = Vaz.CarOf(Session.Active ? Session.LocalId : 0);
-            if (car == null) return satsuma;
+            if (car == null) return last = satsuma;
             Vector3 at = Vector3.zero; bool any = false;
             foreach (string fp in Forms) { GameObject g = Game.FindAny(fp); if (g != null && g.activeInHierarchy) { at = g.transform.position; any = true; break; } }
             if (!any && park != null && park.activeInHierarchy) { at = park.transform.position; any = true; }
-            if (!any) return satsuma;
+            if (!any) { mine = last == car.gameObject; return last != null ? last : satsuma; }
             float dm = Vector3.Distance(car.position, at), ds = satsuma != null ? Vector3.Distance(satsuma.transform.position, at) : float.MaxValue;
             mine = dm < ds;
-            return mine ? car.gameObject : satsuma;
+            return last = mine ? car.gameObject : satsuma;
         }
 
         public static void Update()
@@ -128,7 +139,7 @@ namespace MWCoop
                 testStep = 1;
                 FsmInt day = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay");
                 if (day != null) day.Value = 6;
-                Log.Info("autotest vazrallye : samedi, " + Cheats.Command("/heure 12"));
+                Cheats.SetHour(12); Log.Info("autotest vazrallye : samedi 12 h");
             }
             if (testStep == 1 && t > 26f)
             {
