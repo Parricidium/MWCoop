@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- page GUIDE : contenu (inclus par wiki.inc)
+﻿// ---------------------------------------------------------------- page GUIDE : contenu (inclus par wiki.inc)
 // Categories (pliables), puis articles : titre, sous-titre, blocs. WB_H ouvre une section pliable ; WB_S : etapes
 // numerotees (recomptees a chaque section) ; WB_FIG : figure de wiki.inc ; WB_GO : bouton vers une page (TAB_*) ou vers
 // un autre article (1000 + WA_*). Tenir a jour quand une fonction change.
@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -125,7 +125,7 @@ static const WikiBlock kW_Tour[] = {
     { WB_B, L"RÉGLAGES — Jeu, Co-op et Mods. Jeu et Co-op ouvrent la même page Réglages, avec ses onglets (Jeu, Image & ray tracing, Son & vocal, Co-op, Touches, Thème, Lanceur) et son champ « Chercher un réglage… ».",
             L"SETTINGS — Game, Co-op and Mods. Game and Co-op open the same Settings page, with its tabs (Game, Image & ray tracing, Sound & voice, Co-op, Keys, Theme, Launcher) and its \"Search a setting…\" field." },
     { WB_B, L"MÉDIA & AIDE — VHS et Album (tes cassettes et tes photos), Guide (ici) et Nouveautés.", L"MEDIA & HELP — VHS and Album (your tapes and photos), Guide (here) and What's new." },
-    { WB_B, L"Tout en bas de la barre : Discord, le code source (le bouton < >, GitHub) et Soutenir (le cœur). En haut à droite : les Outils (la clé : l'éditeur de carte), les Crédits (l'étoile), les Journaux (l'icône page) et l'API pour les moddeurs ({ }).", L"At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ })." },
+    { WB_B, L"Tout en bas de la barre : Discord, le code source (le bouton < >, GitHub) et Soutenir (le cœur). En haut à droite : les Outils (la clé : l'éditeur de carte et le convertisseur de circuits), les Crédits (l'étoile), les Journaux (l'icône page) et l'API pour les moddeurs ({ }).", L"At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor and the track converter), the Credits (the star), the Logs (the page icon) and the modding API ({ })." },
     { WB_H, L"Le Guide", L"The Guide" },
     { WB_P, L"Trois onglets dans l'en-tête : Guide, Nouveautés (les notes de chaque version) et Crédits. Le champ Chercher… filtre les articles ; en bas de chaque article, ← précédent et suivant → passent au voisin.",
             L"Three tabs in the header: Guide, What's new (each version's notes) and Credits. The Search… field filters the articles; at the bottom of every article, ← previous and next → go to the neighbour." },
@@ -1006,6 +1006,47 @@ static const WikiBlock kW_Osat[] = {   // (magasin de pieces CARDINAL VARAOSAT -
             L"Mod authors: CoopApi.AddShopItem(id, name, price, model, callback) puts an item on the CARDINAL wing's shelves. When it is bought, the callback runs on every player's game with the buyer and the pick-up spot: the mod spawns its object there. Details and an example: docs/API.md on MWCoop's GitHub." },
     { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
 };
+static const WikiBlock kW_Voyage[] = {   // (convertisseur de circuits Assetto Corsa + mod Voyage, Early -- JD, 24/10)
+    { WB_P, L"Le convertisseur de circuits transforme les circuits de ton Assetto Corsa (officiels et mods) en destinations de voyage pour My Winter Car. Dans le jeu, l'agence de voyage de Peräjärvi vend un billet, le Cessna décolle de l'aérodrome près du cinéma et te dépose sur le circuit. Version Early : il s'améliorera au fil des mises à jour.",
+            L"The track converter turns the tracks of your Assetto Corsa (official and mods) into travel destinations for My Winter Car. In game, the Peräjärvi travel agency sells a ticket, the Cessna takes off from the airfield near the cinema and drops you on the track. Early version: it will improve with the updates." },
+    { WB_H, L"Ce qu'il faut",
+            L"What you need", 0 },
+    { WB_B, L"Assetto Corsa installé, avec les circuits que tu veux convertir (Steam le trouve tout seul ; sinon, indique son dossier).",
+            L"Assetto Corsa installed, with the tracks you want to convert (Steam finds it on its own; otherwise, point to its folder)." },
+    { WB_B, L"My Winter Car avec MSCLoader : le mod Voyage, qui fait l'agence, l'aérodrome et le vol, est un mod MSCLoader.",
+            L"My Winter Car with MSCLoader: the Voyage mod, which makes the agency, the airfield and the flight, is an MSCLoader mod." },
+    { WB_H, L"Installer et convertir",
+            L"Install and convert", 0 },
+    { WB_S, L"Outils (la clé en haut à droite) > Convertisseur de circuits : Télécharger, puis Lancer.",
+            L"Tools (the wrench at the top right) > Track converter: Download, then Launch." },
+    { WB_S, L"Dans sa barre de gauche, si le mod Voyage manque ou date : Installer (ou Mettre à jour). Il est copié dans le dossier Mods du jeu.",
+            L"In its left bar, if the Voyage mod is missing or outdated: Install (or Update). It is copied into the game's Mods folder." },
+    { WB_S, L"Choisis un circuit dans la bibliothèque : le tracé, le nom à l'agence, le prix du billet, le point d'arrivée (stand, grille, tour lancé), les textures et le décor. Convertir : quelques secondes.",
+            L"Pick a track in the library: the layout, the name at the agency, the ticket price, the arrival point (pit box, grid, hotlap), the textures and the scenery. Convert: a few seconds." },
+    { WB_S, L"Lance une partie : à l'agence de voyage de Peräjärvi (à l'est du musée de la Corse), une affiche par destination.",
+            L"Start a game: at the Peräjärvi travel agency (east of the Museum of Corsica), one poster per destination." },
+    { WB_H, L"Le voyage",
+            L"The trip", 0 },
+    { WB_S, L"À l'agence, clic sur l'affiche du circuit : un billet aller-retour, payé en liquide.",
+            L"At the agency, click the track's poster: a return ticket, paid in cash." },
+    { WB_S, L"À l'aérodrome, au nord du cinéma : PARLER au guichet, puis clic pour dire oui. Le Cessna décolle, et tu arrives au circuit.",
+            L"At the airfield, north of the cinema: TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track." },
+    { WB_S, L"Pour rentrer : le guichet du retour, à côté du point d'arrivée. L'avion te ramène à l'aérodrome.",
+            L"To come back: the return desk, next to the arrival point. The plane brings you back to the airfield." },
+    { WB_H, L"Gérer ses destinations",
+            L"Managing your destinations", 0 },
+    { WB_B, L"À gauche, tes destinations avec leur état : À jour, À reconvertir (le circuit ou le convertisseur a changé), Circuit introuvable (elle reste jouable).",
+            L"On the left, your destinations with their state: Up to date, Needs reconverting (the track or the converter changed), Track not found (it still works in game)." },
+    { WB_B, L"Pour chacune : un aperçu 3D (vue d'ensemble, point d'arrivée, collisions) et sa fiche : nom, prix, point d'arrivée, pris en compte au prochain chargement de partie.",
+            L"For each one: a 3D preview (overview, arrival point, colliders) and its sheet: name, price, arrival point, applied the next time a save loads." },
+    { WB_B, L"Reconvertir (avec d'autres réglages), ouvrir son dossier, ou la supprimer : elle part dans la Corbeille de Windows.",
+            L"Reconvert it (with other settings), open its folder, or delete it: it goes to the Windows Recycle Bin." },
+    { WB_TIP, L"En co-op, chaque joueur convertit le même circuit (et le même tracé) depuis son Assetto Corsa : vous arrivez au même endroit et vous vous voyez sur la piste.",
+            L"In co-op, every player converts the same track (and the same layout) from their own Assetto Corsa: you land at the same place and see each other on the track." },
+    { WB_WARN, L"Rien n'est envoyé ni partagé : les circuits viennent de ton Assetto Corsa et restent sur ton PC, l'hôte ne les envoie pas. Version Early : un circuit très lourd peut être lent à charger ; signale-le sur le Discord.",
+            L"Nothing is uploaded or shared: the tracks come from your Assetto Corsa and stay on your PC, the host doesn't send them. Early version: a very heavy track can be slow to load; report it on the Discord." },
+    { WB_GO, L"Ouvrir les Outils", L"Open Tools", TAB_TOOLS },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -1044,4 +1085,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WARTG(WG_MWC, 2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34)
     WARTG(WG_MWC, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
     WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
+    WARTG(WG_MWC, 2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)
 };

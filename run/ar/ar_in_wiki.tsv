@@ -520,7 +520,7 @@ WED12	Steam doesn't find the game (non-Steam copy, Steam blocked in your country
 WED13	Open Tools
 WED14	The map editor
 WED15	Prepare the map and tour it in 3D
-WED16	At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ }).
+WED16	At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor and the track converter), the Credits (the star), the Logs (the page icon) and the modding API ({ }).
 WED17	A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to add your own objects. BETA version: copy, move and hide game objects, import 3D models, compile your map and share it in co-op; roads come next.
 WED18	Your map: objects, 3D models, co-op
 WED19	Make your map
@@ -555,3 +555,25 @@ WM19	Since 1.9.0: the radio and the CD player (same song at the same second, eac
 WM19B	Rally prizes and the drag race results of the other players: not yet.
 WM19C	My Summer Car in BETA: nearly everything of My Winter Car is shared now (players, cars, mechanics, money, jobs, radio, world). What's left is listed in \"What works on My Summer Car\".
 WM19D	My Summer Car (BETA): a few side things are not shared yet (rally prizes, drag race results); see \"What works on My Summer Car\".
+WVY01	The track converter
+WVY02	Your Assetto Corsa tracks, by plane from the airfield
+WVY03	The track converter turns the tracks of your Assetto Corsa (official and mods) into travel destinations for My Winter Car. In game, the Peräjärvi travel agency sells a ticket, the Cessna takes off from the airfield near the cinema and drops you on the track. Early version: it will improve with the updates.
+WVY04	What you need
+WVY05	Assetto Corsa installed, with the tracks you want to convert (Steam finds it on its own; otherwise, point to its folder).
+WVY06	My Winter Car with MSCLoader: the Voyage mod, which makes the agency, the airfield and the flight, is an MSCLoader mod.
+WVY07	Install and convert
+WVY08	Tools (the wrench at the top right) > Track converter: Download, then Launch.
+WVY09	In its left bar, if the Voyage mod is missing or outdated: Install (or Update). It is copied into the game's Mods folder.
+WVY10	Pick a track in the library: the layout, the name at the agency, the ticket price, the arrival point (pit box, grid, hotlap), the textures and the scenery. Convert: a few seconds.
+WVY11	Start a game: at the Peräjärvi travel agency (east of the Museum of Corsica), one poster per destination.
+WVY12	The trip
+WVY13	At the agency, click the track's poster: a return ticket, paid in cash.
+WVY14	At the airfield, north of the cinema: TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track.
+WVY15	To come back: the return desk, next to the arrival point. The plane brings you back to the airfield.
+WVY16	Managing your destinations
+WVY17	On the left, your destinations with their state: Up to date, Needs reconverting (the track or the converter changed), Track not found (it still works in game).
+WVY18	For each one: a 3D preview (overview, arrival point, colliders) and its sheet: name, price, arrival point, applied the next time a save loads.
+WVY19	Reconvert it (with other settings), open its folder, or delete it: it goes to the Windows Recycle Bin.
+WVY20	In co-op, every player converts the same track (and the same layout) from their own Assetto Corsa: you land at the same place and see each other on the track.
+WVY21	Nothing is uploaded or shared: the tracks come from your Assetto Corsa and stay on your PC, the host doesn't send them. Early version: a very heavy track can be slow to load; report it on the Discord.
+WVY22	Open Tools
