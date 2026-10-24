@@ -673,11 +673,24 @@ namespace MWCoop
             if (se != null) sb.Append(" [").Append(se.ActiveStateName).Append(se.enabled ? "]" : ", coupe]");
             return sb.ToString();
         }
+        static int mscGear; static float mscHandsAt;
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
             // passager, sonde des places.
             CameraKnobs(t);
+            // (24/10, pommeau sorti dans Avatar.KnobPoint par [MWC]) [Test] PassageVitesse=1 : le conducteur passe 1, 2, 3 a 40/43/46 s ;
+            // [Test] JournalMains=1 : mains des avatars des autres et rapport de la voiture, toutes les 0,5 s de 30 a 50 s.
+            if (Config.GetInt("Test", "PassageVitesse", 0) != 0 && VehicleSync.LocalDrivingName != null)
+            {
+                string drv = VehicleSync.LocalDrivingName;
+                if (t > 40f && mscGear == 0 || t > 43f && mscGear == 1 || t > 46f && mscGear == 2) { mscGear++; Log.Info("autotest : vitesse " + mscGear + " -> " + VehicleSync.TestGear(drv, mscGear)); }
+            }
+            if (Config.GetInt("Test", "JournalMains", 0) != 0 && t > 30f && t < 50f && Time.realtimeSinceStartup >= mscHandsAt)
+            {
+                mscHandsAt = Time.realtimeSinceStartup + 0.5f;
+                foreach (Avatar a in PlayerSync.Avatars) Log.Info("autotest : mains " + a.HandsState() + " ; " + VehicleSync.GearState(Config.Get("Test", "TestVoiture", "SATSUMA")));
+            }
             if (mode == "conduite") { Conduite(t); return; }
             if (mode == "vaz" || mode == "vazcle") { Vaz.Test(mode, t); return; }   // (24/10 : voitures sur la Ruscko)
             if (mode == "vazrallye") { RallyMscVaz.Test(mode, t); return; }   // (24/10 : rallye de MSC avec sa voiture du F10)
@@ -702,6 +715,7 @@ namespace MWCoop
             if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "portemagasin") { PorteMagasin(t); return; }
             if (mode == "mscmontage") { MscMontage(t); return; }
+            if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
             // [Test] Autotest=sondedetach (24/10) : actions qui ecrivent la variable [Test] SondeVar (Detach) d'un autre automate.
             if (mode == "sondedetach" && t > 40f && step == 0)
             {
