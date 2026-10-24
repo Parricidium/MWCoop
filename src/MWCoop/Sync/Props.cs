@@ -853,6 +853,8 @@ namespace MWCoop
         }
 
         public static bool IsProp(Rigidbody rb) { return rb != null && byBody.ContainsKey(rb); }
+        // Joueur qui deplace cet objet en ce moment (tenu, lache, transporte par lui) ; -1 : personne d'autre.
+        public static int RemoteMover(Rigidbody rb) { Prop p; return rb != null && byBody.TryGetValue(rb, out p) ? p.RemoteBy : -1; }
 
         // Objet tombe sous la carte (hote de NotHuyarma, 17/10 : une pose a y = -345 000 000 envoyee toutes les 6 s, ignoree par
         // l'invite ; les colis « qui disparaissent » des fourches) : remis a sa derniere pose envoyee, sinon devant le joueur.
