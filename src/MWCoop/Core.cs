@@ -457,7 +457,7 @@ namespace MWCoop
             "feux",   // (20/10, joueurs : « le bois ne prend pas » -- cheminees, poeles et grill de MSC : memes automates WoodTrigger / SetFire que MWC)
             "phares", "capots du pack", "cablage", "porte-buches",   // (24/10 : faisceau tenu par un autre, Markos -- WiringGuard)
               // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)
-            "vaz-2108",   // (24/10, JD : les voitures addons sur MSC -- VazCar copie la RUSCKO, onglet Voitures du F10)
+            "vaz-2108", "panneau vaz",   // (24/10, JD : les voitures addons sur MSC -- VazCar copie la RUSCKO, onglet Voitures du F10)
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;
