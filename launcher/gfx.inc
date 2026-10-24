@@ -1433,15 +1433,20 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
                 HotZone(r, UI_SET_LANG + i);
             }
         } else if (!strcmp(k, "update")) {   // etat de la mise a jour : Verifier, ou Mettre a jour
-            std::wstring av = UpdAvail();
+            // (mod du jeu choisi et lanceur, deux flux depuis 1.15.0 : le mod d'abord, puis le lanceur)
+            std::wstring av = UpdAvail(), al = LancAvail(), lv = LauncherVer();
             std::wstring l1, l2 = g_localVer.empty() ? std::wstring(T(L"MWCoop n'est pas installé", L"MWCoop is not installed")) : std::wstring(T(L"Tu as la ", L"You have ")) + g_localVer;
+            if (!lv.empty()) l2 += std::wstring(T(L" · lanceur ", L" · launcher ")) + lv;
             if (!av.empty()) l1 = std::wstring(T(L"Version ", L"Version ")) + av + T(L" disponible", L" available");
+            else if (!al.empty()) l1 = std::wstring(T(L"Lanceur ", L"Launcher ")) + al + T(L" disponible", L" available");
             else if (g_busy) l1 = T(L"Recherche ou installation en cours…", L"Checking or installing…");
             else l1 = T(L"MWCoop est à jour", L"MWCoop is up to date");
-            std::wstring bt = av.empty() ? T(L"Vérifier", L"Check") : T(L"Mettre à jour", L"Update");
-            float bw = SetButtonW(bt) + (av.empty() ? 0 : 24);
+            bool upd = !av.empty() || !al.empty();
+            std::wstring bt = !upd ? T(L"Vérifier", L"Check") : T(L"Mettre à jour", L"Update");
+            float bw = SetButtonW(bt) + (upd ? 24 : 0);
             SetRowLabel(g, row, l1, l2, w - bw - 12);
             if (!av.empty()) UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_NOTE_UPDATE, true, IC_DOWNLOAD, g_lobby == LB_NONE && !g_busy);
+            else if (!al.empty()) UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_LANCEUR_UPDATE, true, IC_DOWNLOAD, g_lobby == LB_NONE && !g_busy);
             else UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_SET_CHECK, false, -1, !g_busy);
         } else if (!strcmp(k, "canal")) SetSegRow(g, it, row, { L"MSC", L"MWC" }, g_game == GAME_MSC ? 0 : 1, UI_SET_CANAL);
         else if (!strcmp(k, "majauto")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0, UI_SET_AUTO);
@@ -1530,9 +1535,10 @@ static void SetCardHeader(Graphics &g, const SetCard &c, float right, float y, f
         float sw = SetSegW(l, 12);
         SetSeg(g, RectF(right - sw, cy - 15, sw, 30), l, DroneLayoutGet(), UI_SET_DRONEKB, 12);
     } else if (!strcmp(c.hdr, "updchip")) {
-        std::wstring av = UpdAvail();
-        std::wstring s = !av.empty() ? av + T(L" disponible", L" available") : g_localVer.empty() ? std::wstring(T(L"non installé", L"not installed")) : g_localVer + T(L" · à jour", L" · up to date");
-        SetChip(g, right, cy, s, !av.empty() ? kAcc : g_localVer.empty() ? kWarn : kOk);
+        std::wstring av = UpdAvail(), al = LancAvail();
+        std::wstring s = !av.empty() ? av + T(L" disponible", L" available") : !al.empty() ? std::wstring(T(L"Lanceur ", L"Launcher ")) + al + T(L" disponible", L" available")
+                       : g_localVer.empty() ? std::wstring(T(L"non installé", L"not installed")) : g_localVer + T(L" · à jour", L" · up to date");
+        SetChip(g, right, cy, s, !av.empty() || !al.empty() ? kAcc : g_localVer.empty() ? kWarn : kOk);
     } else if (!strcmp(c.hdr, "mwcver")) {
         bool ok = !g_gameDir.empty();
         SetChip(g, right, cy, ok ? std::wstring(GM().name) + L" " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), ok ? kOk : kRed);

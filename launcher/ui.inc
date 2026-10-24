@@ -502,6 +502,17 @@ static void DrawRail(Graphics &g)
         Text(g, std::wstring(T(L"Mettre à jour · ", L"Update · ")) + v, RectF(b.r.X + 34, b.r.Y, b.r.Width - 40, b.r.Height), 13, FontStyleBold, kOnAcc, StringAlignmentNear);
         y0 = 216;
     }
+    if (g_btn[B_UPDLANCEUR].visible) {   // lanceur (flux a part depuis 1.15.0) : sous celui du mod, plus discret
+        Button &b = g_btn[B_UPDLANCEUR];
+        b.r = RectF(28, y0 + 2, 208, 34);
+        GraphicsPath p; RoundRect(p, b.r, 11);
+        SolidBrush fb(Mix(WithA(kAcc, 0.16f), WithA(kAcc, 0.30f), b.hover)); g.FillPath(&fb, &p);
+        Pen pen(WithA(kAcc, b.enabled ? 0.9f : 0.4f), 1.2f); g.DrawPath(&pen, &p);
+        std::wstring v = LancAvail();
+        Icon(g, IC_DOWNLOAD, b.r.X + 20, b.r.Y + b.r.Height / 2, 15, WithA(kAcc, b.enabled ? 1.0f : 0.5f), 2.0f);
+        Text(g, std::wstring(T(L"Lanceur · ", L"Launcher · ")) + v.substr(0, v.find(L'-')), RectF(b.r.X + 34, b.r.Y, b.r.Width - 40, b.r.Height), 12, FontStyleBold, kInk, StringAlignmentNear);
+        y0 += 40;
+    }
     // groupes jusqu'a Reglages (674) : lignes de 44 px, ou de 40 quand le bouton de mise a jour prend de la place
     int nItems = 0;
     for (int k = 0, i = 0; k < kNavGroups; k++)
@@ -511,6 +522,9 @@ static void DrawRail(Graphics &g)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 22; step = 40; }   // (bouton de mise a jour + 9 pages)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 20; step = 37; }   // (11 pages depuis MEDIA)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 18; step = 34; }
+    // (toujours trop : les deux boutons de mise a jour, mod et lanceur, et toutes les pages -- lignes resserrees juste ce qu'il
+    // faut ; avant, la derniere page passait sous Discord)
+    if (avail - kNavGroups * lab - nItems * step < 6 && nItems > 0) { lab = 16; step = max(26.0f, floorf((avail - kNavGroups * lab - 6) / nItems)); }
     float gap = min(20.0f, max(0.0f, (avail - kNavGroups * lab - nItems * step) / (kNavGroups - 1))), y = y0;
     for (int k = 0, i = 0; k < kNavGroups; k++) {
         SmallLabel(g, T(kNavGroupFr[k], kNavGroupEn[k]), RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
@@ -925,8 +939,8 @@ static void DrawHome(Graphics &g)
         float y = nc.Y + 46, rowH = (nc.Height - 54) / 2;
         for (size_t i = 0; i < notes.size() && i < 2; i++) {
             const Note &n = notes[i];
-            std::wstring ver = n.ver.substr(0, n.ver.find(L'-'));
-            bool fresh = i == 0 && (g_localVer.empty() || CmpVer(n.ver, g_localVer) > 0);
+            std::wstring ver = n.stream == STR_LANCEUR || n.stream == STR_OUTILS ? NoteName(n) : n.ver.substr(0, n.ver.find(L'-'));
+            bool fresh = i == 0 && NoteCmp(n) > 0;
             float pw = PillW(ver, 10);
             Pill(g, RectF(nc.X + 20, y + 4, pw, 20), fresh ? kRed : TH(cardSel), ver, fresh ? Color(255, 255, 255, 255) : kInk, 10);
             std::vector<std::wstring> bl = NoteBullets(n, 2);
@@ -1050,12 +1064,17 @@ static void DrawNotesPage(Graphics &g)
         if (r.Y + r.Height < lr.Y || r.Y > lr.Y + lr.Height) continue;
         bool on = i == g_noteSel, hot = g_uiHot == UI_NOTE + i;
         if (on || hot) { GraphicsPath p; RoundRect(p, r, 14); SolidBrush b(on ? TH(cardSel) : TH(card)); g.FillPath(&b, &p); }
-        int cmp = g_localVer.empty() ? 1 : CmpVer(notes[i].ver, g_localVer);
+        int cmp = NoteCmp(notes[i]);
         SolidBrush dot(cmp > 0 ? kAcc : cmp == 0 ? kOk : WithA(kGrey, 0.6f));
         g.FillEllipse(&dot, r.X + 14, r.Y + r.Height / 2 - 5, 10.0f, 10.0f);
         Text(g, notes[i].ver.substr(0, notes[i].ver.find(L'-')), RectF(r.X + 36, r.Y + 10, 120, 24), 15, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, notes[i].date, RectF(r.X + 36, r.Y + 33, 140, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
-        if (cmp >= 0 && !g_localVer.empty()) {
+        // (flux, depuis 1.15.0 : le jeu, le lanceur ou les outils, apres la date ; rien pour l'histoire)
+        std::wstring sub = notes[i].date;
+        if (notes[i].stream == STR_LANCEUR) sub += T(L" · Lanceur", L" · Launcher");
+        else if (notes[i].stream == STR_OUTILS) sub += T(L" · Outils", L" · Tools");
+        else if (notes[i].stream != STR_GLOBAL) sub += g_game == GAME_MSC ? L" · My Summer Car" : L" · My Winter Car";
+        Text(g, sub, RectF(r.X + 36, r.Y + 33, r.Width - 46 - 70, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        if (cmp >= 0 && (notes[i].stream == STR_LANCEUR || !g_localVer.empty())) {
             const wchar_t *lab = cmp == 0 ? T(L"INSTALLÉE", L"INSTALLED") : T(L"NOUVELLE", L"NEW");
             float w = PillW(lab, 9.5f);
             Pill(g, RectF(r.X + r.Width - w - 10, r.Y + 22, w, 20), cmp == 0 ? WithA(kOk, 0.2f) : kAcc, lab, cmp == 0 ? kOk : kOnAcc, 9.5f);
@@ -1066,10 +1085,11 @@ static void DrawNotesPage(Graphics &g)
     // detail
     const Note &n = notes[g_noteSel];
     RectF b = kNotesBody;
-    Title(g, L"MWCoop " + n.ver.substr(0, n.ver.find(L'-')), RectF(b.X + 28, b.Y + 22, 400, 38), 28, kInk);
+    Title(g, NoteName(n), RectF(b.X + 28, b.Y + 22, 460, 38), 28, kInk);
     Text(g, n.date, RectF(b.X + 28, b.Y + 58, 300, 20), 13, FontStyleRegular, kGrey, StringAlignmentNear);
-    int cmp = g_localVer.empty() ? 1 : CmpVer(n.ver, g_localVer);
-    if (cmp > 0 && !UpdAvail().empty()) UiButton(g, RectF(b.X + b.Width - 200, b.Y + 26, 172, 44), T(L"Mettre à jour", L"Update"), UI_NOTE_UPDATE, true, IC_DOWNLOAD);
+    int cmp = NoteCmp(n);
+    if (cmp > 0 && n.stream == STR_LANCEUR && !LancAvail().empty()) UiButton(g, RectF(b.X + b.Width - 200, b.Y + 26, 172, 44), T(L"Mettre à jour", L"Update"), UI_LANCEUR_UPDATE, true, IC_DOWNLOAD, !g_busy);
+    else if (cmp > 0 && n.stream != STR_LANCEUR && n.stream != STR_OUTILS && !UpdAvail().empty()) UiButton(g, RectF(b.X + b.Width - 200, b.Y + 26, 172, 44), T(L"Mettre à jour", L"Update"), UI_NOTE_UPDATE, true, IC_DOWNLOAD);
     else if (cmp == 0) { const wchar_t *lab = T(L"INSTALLÉE", L"INSTALLED"); float w = PillW(lab, 11); Pill(g, RectF(b.X + b.Width - 28 - w, b.Y + 36, w, 24), WithA(kOk, 0.2f), lab, kOk); }
     Pen sep(TH(sep), 1); g.DrawLine(&sep, b.X + 28, b.Y + 84, b.X + b.Width - 28, b.Y + 84);
     // corps : puces, paragraphes, images (defilement)
@@ -1532,6 +1552,7 @@ static bool UiClick(int id)
     case UI_PAGE_OK: PageOk(); return true;
     case UI_PAGE_CANCEL: PageCancel(); return true;
     case UI_NOTE_UPDATE: if (g_lobby == LB_NONE && !g_busy) StartUpdate(true); return true;
+    case UI_LANCEUR_UPDATE: if (g_lobby == LB_NONE && !g_busy) StartLauncherUpdate(); return true;
     case UI_SET_CHECK: if (!g_busy) StartUpdate(false); return true;
     case UI_SET_CANAL: case UI_SET_CANAL + 1:
         GameSet(id == UI_SET_CANAL ? GAME_MSC : GAME_MWC, false);
@@ -1625,7 +1646,7 @@ static bool UiClick(int id)
     if (id >= UI_CRED_TAB && id < UI_CRED_TAB + 4) { g_credTab = id - UI_CRED_TAB; g_scroll[TAB_CREDITS] = 0; return true; }
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
-    if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 200) { LobbyOptClick(id); return true; }   // (3200-3399 : salon.inc)
+    if ((id >= UI_LOBBY_PRIV && id < 3400) || (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 600)) { LobbyOptClick(id); return true; }   // (3300-3399 et 10400-10999 : salon.inc)
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
     if (id >= UI_TOOL_GET && id <= UI_TOOL_CV_DIR) { ToolsClick(id); return true; }
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)

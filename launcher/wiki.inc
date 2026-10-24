@@ -470,8 +470,8 @@ static void DrawWikiNews(Graphics &g)
     if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement…", L"Loading…") : T(L"Pas de notes pour l'instant.", L"No notes yet."), RectF(x, y + 10, w, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     for (size_t i = 0; i < notes.size() && i < 3; i++) {
         const Note &n = notes[i];
-        std::wstring ver = n.ver.substr(0, n.ver.find(L'-'));
-        bool fresh = i == 0 && (g_localVer.empty() || CmpVer(n.ver, g_localVer) > 0);
+        std::wstring ver = n.stream == STR_LANCEUR || n.stream == STR_OUTILS ? NoteName(n) : n.ver.substr(0, n.ver.find(L'-'));
+        bool fresh = i == 0 && NoteCmp(n) > 0;
         std::vector<std::wstring> lines = NoteBullets(n, 2);
         std::wstring title = lines.empty() ? T(L"(sans détail)", L"(no detail)") : lines[0], sub = lines.size() > 1 ? lines[1] : L"";
         float cw = PillW(ver, 10) - 2, tx = x + cw + 12, tw = w - cw - 12;
@@ -621,6 +621,8 @@ static std::wstring GuideNewChip()
 {
     if (!NotesUnseen()) return L"";
     std::wstring v = NewestNote();
+    size_t d = v.find_first_of(L"0123456789");   // (« lanceur-1.15.1 » : le numero seul)
+    v = d == std::wstring::npos ? L"" : v.substr(d);
     return v.substr(0, v.find(L'-'));
 }
 static float GuideTabW(int k)

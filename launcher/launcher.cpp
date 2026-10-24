@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n> [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1175,8 +1175,9 @@ static bool CopyTree(const std::wstring &src, const std::wstring &dst, bool *sel
         std::wstring s = src + L"\\" + n, d = dst + L"\\" + n;
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { ok = CopyTree(s, d, selfReplaced, failed) && ok; continue; }
         if (!_wcsicmp(d.c_str(), ModIni().c_str()) && FileExists(d)) { MergeIni(s, d); continue; }
-        // (lanceur a part : son exe et les textes du paquet restent hors de MWC\ / MSC\ -- l'exe est remplace plus bas)
-        if (!ModInGame() && !_wcsicmp(dst.c_str(), g_modRoot.substr(0, g_modRoot.size() - 1).c_str())
+        // (le lanceur a son propre flux depuis 1.15.0, LauncherUpdateThread : jamais remplace par le mod -- un zip global de
+        // 1.15.0 installe faute de release du flux remettrait un lanceur plus ancien)
+        if (!_wcsicmp(dst.c_str(), g_modRoot.substr(0, g_modRoot.size() - 1).c_str())
             && (!_wcsicmp(n.c_str(), L"MWCoop.exe") || !_wcsicmp(n.c_str(), L"LISEZMOI.txt") || !_wcsicmp(n.c_str(), L"README.txt"))) continue;
         if (!_wcsicmp(d.c_str(), (g_modRoot + L"MWCoop\\version.txt").c_str())) continue;   // en dernier (UpdateThread)
         if (!_wcsicmp(d.c_str(), g_self.c_str())) {
@@ -1220,7 +1221,16 @@ static bool IsWritableDir(const std::wstring &dir)
 // Texte de chaque release GitHub : en francais, puis une ligne "---", puis en anglais. Gardees dans
 // <jeu>\MWCoop\notes-maj.json pour les lire hors ligne.
 // (depuis 0.92.3, demande de JD : encore une ligne "---" et en russe ; sans : l'anglais en russe)
-struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor, conv; bool pre = false; };   // pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc) ; conv : convertisseur de circuits (.convertisseur)
+// Flux de versions (1.15.0, demande de JD du 24/10 : chaque jeu se met a jour a part). Jusqu'a kLastGlobal, une seule liste
+// (tags vX.Y.Z, un zip avec tout) ; ensuite des tags mwc-X.Y.Z (paquet .mwc), msc-X.Y.Z (.msc), lanceur-X.Y.Z (.lanceur :
+// MWCoop.exe seul) et outils-X.Y.Z (.editeur / .convertisseur). Nightly : .mwc-nightly, .msc-nightly, .lanceur-nightly.
+// Les lanceurs d'avant 1.15.0 ne prennent qu'un .zip ou un .nightly (et voient « msc-1.15.1 » plus recent que 1.14.2, par
+// comparaison de texte) : jamais ces extensions-la pour un flux. Les vX.Y.Z apres kLastGlobal sont les « ponts » (zip
+// classique : lanceur courant + mod 1.15.0, version.txt 1.15.0) pour ces anciens lanceurs, qui ne lisent que les 40
+// dernieres releases : ignores ici.
+enum { STR_GLOBAL, STR_MWC, STR_MSC, STR_LANCEUR, STR_OUTILS };
+static const wchar_t *kLastGlobal = L"1.15.0";
+struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor, conv; bool pre = false; int stream = STR_GLOBAL; };   // pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc) ; conv : convertisseur de circuits (.convertisseur) ; zip : paquet du flux (.zip / .nightly en global)
 static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
@@ -1286,7 +1296,12 @@ static std::vector<Note> ParseReleases(const std::string &json)
         // l'objet de la release commence avant "tag_name" (url, id...) : on cherche les assets dans [p, fin)
         Note n;
         n.ver = Widen(JsonField(json, "tag_name", p, end));
-        if (!n.ver.empty() && (n.ver[0] == L'v' || n.ver[0] == L'V')) n.ver.erase(0, 1);
+        static const struct { const wchar_t *pre, *ext; int s; } kStr[] = {
+            { L"mwc-", L".mwc", STR_MWC }, { L"msc-", L".msc", STR_MSC }, { L"lanceur-", L".lanceur", STR_LANCEUR }, { L"outils-", NULL, STR_OUTILS } };
+        const wchar_t *ext = NULL;
+        for (auto &k : kStr)
+            if (!_wcsnicmp(n.ver.c_str(), k.pre, wcslen(k.pre))) { n.stream = k.s; ext = k.ext; n.ver.erase(0, wcslen(k.pre)); break; }
+        if (n.stream == STR_GLOBAL && !n.ver.empty() && (n.ver[0] == L'v' || n.ver[0] == L'V')) n.ver.erase(0, 1);
         std::string d = JsonField(json, "published_at", p, end);
         if (d.size() >= 10) n.date = Widen(d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4));
         std::wstring body = Widen(JsonField(json, "body", p, end));
@@ -1322,6 +1337,13 @@ static std::vector<Note> ParseReleases(const std::string &json)
             if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".editeur")) { if (n.editor.empty()) n.editor = Widen(url); continue; }
             if (url.size() > 14 && !_stricmp(url.c_str() + url.size() - 14, ".convertisseur")) { if (n.conv.empty()) n.conv = Widen(url); continue; }   // (convertisseur Voyage, 24/10)
             if (!n.zip.empty()) continue;
+            if (n.stream != STR_GLOBAL) {   // (flux : son extension seulement, ou la meme suivie de -nightly)
+                if (!ext) continue;
+                std::wstring w = Widen(url), e = ext, en = e + L"-nightly";
+                if (w.size() > e.size() && !_wcsicmp(w.c_str() + w.size() - e.size(), e.c_str())) n.zip = w;
+                else if (w.size() > en.size() && !_wcsicmp(w.c_str() + w.size() - en.size(), en.c_str())) { n.zip = w; n.pre = true; }
+                continue;
+            }
             if (url.size() > 4 && !_stricmp(url.c_str() + url.size() - 4, ".zip")) { n.zip = Widen(url); continue; }
             if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".nightly")) { n.zip = Widen(url); n.pre = true; continue; }
         }
@@ -1342,9 +1364,16 @@ static int FetchReleases(std::string &json)
 {
     std::wstring cache = g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\notes-maj.json";
     DWORD code = 0;
+    // ([Lanceur] VersionsEssai=<fichier> : essais, une fausse liste de releases a la place de GitHub -- flux, 1.15.0)
+    wchar_t essai[MAX_PATH] = L"";
+    GetPrivateProfileStringW(L"Lanceur", L"VersionsEssai", L"", essai, MAX_PATH, g_iniLauncher.c_str());
+    if (essai[0]) {
+        std::vector<unsigned char> d;
+        if (ReadAll(essai, d) && !d.empty()) { json.assign(d.begin(), d.end()); g_relCode = 200; g_relErr = 0; LaunchLog("versions : liste d'essai %s", Narrow(essai, CP_UTF8).c_str()); return REL_OK; }
+    }
     // ([Lanceur] SansApi=1 : essais, sans l'API)
     bool got = GetPrivateProfileIntW(L"Lanceur", L"SansApi", 0, g_iniLauncher.c_str()) == 0
-               && HttpGet(L"https://api.github.com/repos/" + g_repo + L"/releases?per_page=40", &json, L"", false, &code);
+               && HttpGet(L"https://api.github.com/repos/" + g_repo + L"/releases?per_page=100", &json, L"", false, &code);   // (100 : quatre flux depuis 1.15.0)
     g_relCode = code; g_relErr = got ? 0 : g_httpErr;
     LaunchLog("versions sur GitHub : %s (code HTTP %lu, erreur WinHTTP %lu)", got ? "recues" : "pas de reponse", code, g_relErr);
     // Sans l'API (GitHub injoignable, ou sa limite de 60 demandes par heure -- partagee par tous ceux qui passent par un
@@ -1388,6 +1417,11 @@ static volatile bool g_updChecking;
 static DWORD g_updCheckT;
 static std::wstring UpdAvail() { EnterCriticalSection(&g_cs); std::wstring v = g_updVer; LeaveCriticalSection(&g_cs); return v; }
 static void UpdSet(const std::wstring &v) { EnterCriticalSection(&g_cs); g_updVer = v; LeaveCriticalSection(&g_cs); }
+// Lanceur (flux lanceur-, 1.15.0) : sa propre mise a jour, proposee a cote de celle du mod (B_UPDLANCEUR), jamais d'office
+// (sauf [Lanceur] MajAuto=1). Version et paquet proposes, sous g_cs.
+static std::wstring g_updLanc, g_updLancUrl;
+static volatile bool g_lancBusy;
+static std::wstring LancAvail() { EnterCriticalSection(&g_cs); std::wstring v = g_updLanc; LeaveCriticalSection(&g_cs); return v; }
 
 // Versions installees : Reworked seulement, 0.96 et plus (JD, 19/10 : Legacy retiree pour de bon, le switch MSC / MWC prend sa
 // place ; la cle [Lanceur] Version n'est plus lue). Une installation Legacy (moins de 0.96) passe a la plus recente, ses
@@ -1396,11 +1430,17 @@ static bool IsReworkedVer(const std::wstring &v) { return v.find(L"nightly") != 
 // Versions d'essai (nightly, pre-releases de GitHub) : [Lanceur] Nightly=1 (Reglages > Lanceur) les propose comme mises a
 // jour si elles sont plus recentes que la version stable ; sinon elles ne servent que de secours (aucune stable Reworked).
 static bool NightlyOn() { return GetPrivateProfileIntW(L"Lanceur", L"Nightly", 0, g_iniLauncher.c_str()) != 0; }
-static const Note *PickRelease(const std::vector<Note> &rel)
+// Pont pour les anciens lanceurs (vX.Y.Z apres kLastGlobal) : ni installe, ni montre dans les Nouveautes.
+static bool IsBridge(const Note &n) { return n.stream == STR_GLOBAL && n.ver.find(L"nightly") == std::wstring::npos && CmpVer(n.ver, kLastGlobal) > 0; }
+static int ModStream() { return g_game == GAME_MSC ? STR_MSC : STR_MWC; }
+// Release a installer pour un flux : celles du flux, et pour le mod d'un jeu les globales jusqu'a kLastGlobal (installation
+// avant la premiere release du flux).
+static const Note *PickRelease(const std::vector<Note> &rel, int stream)
 {
     const Note *best = NULL, *pre = NULL;
     for (const Note &n : rel) {
-        if (n.zip.empty() || !IsReworkedVer(n.ver)) continue;
+        if (n.zip.empty() || IsBridge(n)) continue;
+        if (n.stream != stream && !(n.stream == STR_GLOBAL && (stream == STR_MWC || stream == STR_MSC) && IsReworkedVer(n.ver))) continue;
         if (!n.pre) { if (!best || CmpVer(n.ver, best->ver) > 0) best = &n; }
         else if (!pre || CmpVer(n.ver, pre->ver) > 0) pre = &n;
     }
@@ -1411,6 +1451,35 @@ static const Note *PickRelease(const std::vector<Note> &rel)
 static bool WantVer(const std::wstring &remote, const std::wstring &local)
 {
     return local.empty() || CmpVer(remote, local) > 0 || (!IsReworkedVer(local) && remote != local);
+}
+// Version de ce lanceur (FILEVERSION de MWCoop.exe : launcher\version.txt a la compilation, build.cmd), "" si illisible.
+static std::string VerText(unsigned long long v);
+static std::wstring LauncherVer()
+{
+    static std::wstring v;
+    if (v.empty()) {   // (l'exe qui tourne : g_self vise celui du jeu factice dans certains essais)
+        wchar_t me[MAX_PATH] = L"";
+        GetModuleFileNameW(NULL, me, MAX_PATH);
+        unsigned long long n = ExeVersion(me);
+        if (n) v = Widen(VerText(n));
+    }
+    return v;
+}
+// Note comparee a ce qui est installe pour son flux : 1 plus recente, 0 installee, -1 plus ancienne ; -2 sans objet (outils,
+// version du lanceur illisible). Le mod pas installe : tout est nouveau.
+static int NoteCmp(const Note &n)
+{
+    if (n.stream == STR_OUTILS) return -2;
+    if (n.stream == STR_LANCEUR) { std::wstring l = LauncherVer(); return l.empty() ? -2 : CmpVer(n.ver, l); }
+    return g_localVer.empty() ? 1 : CmpVer(n.ver, g_localVer);
+}
+// Nom d'une note : « MWCoop 1.15.2 » (le mod ; MSCoop sur My Summer Car), « Lanceur 1.15.1 », « Outils 1.15.0 ».
+static std::wstring NoteName(const Note &n)
+{
+    std::wstring v = n.ver.substr(0, n.ver.find(L'-'));
+    if (n.stream == STR_LANCEUR) return std::wstring(T(L"Lanceur ", L"Launcher ")) + v;
+    if (n.stream == STR_OUTILS) return std::wstring(T(L"Outils ", L"Tools ")) + v;
+    return std::wstring(n.stream == STR_GLOBAL ? L"MWCoop" : ProductName()) + L" " + v;
 }
 // My Summer Car (BETA, demande de JD du 19/10 : « les Nouveautes doivent parler de MSC ») : les versions d'avant kMscFirstVer
 // sont celles de My Winter Car, cachees. Dans les suivantes, une puce propre a MWC est retiree : « MWC » (mot entier, « [MWC] »
@@ -1497,16 +1566,21 @@ static Note MscBetaNote()
     }
     return n;
 }
-// Notes montrees : tout (les anciennes aussi, c'est l'histoire), sauf les pre-releases d'avant 0.96 ; sur My Summer Car,
-// celles de MSC seulement (plus haut).
+// Notes montrees : le flux du jeu affiche, le lanceur et les outils (1.15.0), et l'histoire d'avant (releases globales
+// jusqu'a kLastGlobal, sans les ponts), sauf les pre-releases d'avant 0.96 ; sur My Summer Car, dans l'histoire, celles de
+// MSC seulement (plus haut). Ordre de GitHub (les plus recentes d'abord), flux melanges.
 static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
 {
     std::vector<Note> out;
-    for (const Note &n : rel) if (!n.pre || IsReworkedVer(n.ver)) out.push_back(n);
+    for (const Note &n : rel) {
+        if (n.stream == STR_GLOBAL ? IsBridge(n) || (n.pre && !IsReworkedVer(n.ver)) : (n.stream != ModStream() && n.stream != STR_LANCEUR && n.stream != STR_OUTILS) || (n.pre && !NightlyOn())) continue;   // (flux : Nightly seulement en canal Nightly)
+        out.push_back(n);
+    }
     if (g_game != GAME_MSC) return out;
     std::vector<Note> msc;
     bool first = false;
     for (Note n : out) {
+        if (n.stream != STR_GLOBAL) { msc.push_back(n); continue; }
         if (CmpVer(n.ver, kMscFirstVer) < 0 || !NoteForMsc(n)) continue;
         if (CmpVer(n.ver, kMscFirstVer) == 0) first = true;
         msc.push_back(n);
@@ -1516,10 +1590,98 @@ static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
 }
 static std::wstring SavesBackupNightly();   // (saves.inc)
 static void ToolsSeen(const std::vector<Note> &rel);   // (outils.inc : derniere version de l'editeur de carte)
+static void LoaderEnsure(const std::wstring &dir, const char *where);   // (chargeur version.dll du lanceur, plus bas)
 
+// Lanceur : version du flux lanceur- plus recente que ce MWCoop.exe -> proposee (B_UPDLANCEUR) ; rien sinon.
+static void LancSeen(const std::vector<Note> &rel)
+{
+    const Note *p = PickRelease(rel, STR_LANCEUR);
+    std::wstring mine = LauncherVer();
+    bool newer = p && !mine.empty() && CmpVer(p->ver, mine) > 0;
+    EnterCriticalSection(&g_cs);
+    if (newer && g_updLanc != p->ver) LaunchLog("lanceur : version %s disponible (celui-ci : %s)", Narrow(p->ver, CP_UTF8).c_str(), Narrow(mine, CP_UTF8).c_str());
+    g_updLanc = newer ? p->ver : L""; g_updLancUrl = newer ? p->zip : L"";
+    LeaveCriticalSection(&g_cs);
+}
+
+// Installe la version proposee du lanceur (paquet .lanceur : MWCoop.exe, LISEZMOI.txt, README.txt) a la place de celui-ci,
+// puis le relance. Appele sous g_busy.
+static void LauncherUpdate()
+{
+    std::wstring ver, url;
+    EnterCriticalSection(&g_cs); ver = g_updLanc; url = g_updLancUrl; LeaveCriticalSection(&g_cs);
+    if (ver.empty() || url.empty()) return;
+    wchar_t tmp[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmp);
+    std::wstring work = std::wstring(tmp) + L"MWCoop-lanceur-" + std::to_wstring(GetCurrentProcessId());
+    DeleteTree(work);
+    CreateDirectoryW(work.c_str(), NULL);
+    std::wstring zip = work + L"\\lanceur.zip", ext = work + L"\\x", exe = ext + L"\\MWCoop.exe";
+    SetStatus(K_NORMAL, T(L"Téléchargement du lanceur %s…", L"Downloading the launcher %s…"), ver.c_str());
+    bool got = false;
+    for (int attempt = 0; attempt < 3 && !got; attempt++) {
+        if (attempt) Sleep(1500);
+        g_progress = 0;
+        got = HttpGet(url, NULL, zip, true);
+    }
+    std::string why = got ? "" : "telechargement";
+    if (got) { CreateDirectoryW(ext.c_str(), NULL); if (!Unzip(zip, ext, &why)) got = false; else if (!FileExists(exe)) { got = false; why = "MWCoop.exe absent du paquet"; } }
+    g_progress = -1;
+    if (!got) {
+        LaunchLog("lanceur : mise a jour %s impossible (%s)", Narrow(ver, CP_UTF8).c_str(), why.c_str());
+        SetStatus(K_ERR, T(L"Mise à jour du lanceur impossible (%S)", L"Launcher update failed (%S)"), why.c_str());
+        DeleteTree(work);
+        return;
+    }
+    std::wstring old = g_self + L".old";
+    DeleteFileW(old.c_str());
+    bool moved = MoveFileExW(g_self.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+    if (!moved || !CopyFileW(exe.c_str(), g_self.c_str(), FALSE)) {
+        DWORD e = GetLastError();
+        if (moved) MoveFileExW(old.c_str(), g_self.c_str(), MOVEFILE_REPLACE_EXISTING);   // (l'ancien remis en place)
+        LaunchLog("lanceur : %s pas remplace (erreur %lu)", Narrow(g_self, CP_UTF8).c_str(), e);
+        SetStatus(K_ERR, T(L"Lanceur pas remplacé (erreur %lu) : relance-le en administrateur", L"Launcher not replaced (error %lu): run it as administrator"), e);
+        DeleteTree(work);
+        return;
+    }
+    for (const wchar_t *t : { L"LISEZMOI.txt", L"README.txt" })
+        if (FileExists(ext + L"\\" + t)) CopyFileW((ext + L"\\" + t).c_str(), (g_dir + t).c_str(), FALSE);
+    DeleteTree(work);
+    LaunchLog("lanceur : %s installe (avant : %s), relance", Narrow(ver, CP_UTF8).c_str(), Narrow(LauncherVer(), CP_UTF8).c_str());
+    EnterCriticalSection(&g_cs); g_updLanc.clear(); g_updLancUrl.clear(); LeaveCriticalSection(&g_cs);
+    SetStatus(K_OK, T(L"Lanceur mis à jour · %s", L"Launcher updated · %s"), ver.c_str());
+    PostMessageW(g_wnd, WM_APP_RELAUNCH, 0, 0);
+}
+static DWORD WINAPI LauncherUpdateThread(void *)
+{
+    LauncherUpdate();
+    g_busy = false;
+    return 0;
+}
+// Bouton du lanceur (rail, Reglages, Nouveautes).
+static void StartLauncherUpdate()
+{
+    if (g_busy || LancAvail().empty()) return;
+    g_busy = true;
+    HANDLE t = CreateThread(NULL, 0, LauncherUpdateThread, NULL, 0, NULL);
+    if (t) CloseHandle(t); else g_busy = false;
+}
+
+static DWORD UpdateBody(int mode);
 static DWORD WINAPI UpdateThread(void *param)
 {
     int mode = (int)(INT_PTR)param;
+    DWORD r = UpdateBody(mode);
+    // [Lanceur] MajAuto=1 : le lanceur aussi, apres le mod
+    if (mode != UPD_QUIET && !g_busy && !LancAvail().empty() && GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0) {
+        g_busy = true;
+        LauncherUpdate();
+        g_busy = false;
+    }
+    return r;
+}
+static DWORD UpdateBody(int mode)
+{
     bool quiet = mode == UPD_QUIET;
     struct Done { bool q; ~Done() { if (q) g_updChecking = false; } } done = { quiet };
     if (!quiet) {
@@ -1531,8 +1693,9 @@ static DWORD WINAPI UpdateThread(void *param)
     bool mod = g_modOk;
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
-    const Note *pick = PickRelease(rel);
+    const Note *pick = PickRelease(rel, ModStream());
     ToolsSeen(rel);
+    if (!rel.empty()) LancSeen(rel);
     EnterCriticalSection(&g_cs);
     g_notes = ChannelNotes(rel);
     LeaveCriticalSection(&g_cs);
@@ -1635,18 +1798,8 @@ static DWORD WINAPI UpdateThread(void *param)
     LaunchLog("mise a jour : installation de %s (depuis %s)", Narrow(remote, CP_UTF8).c_str(), Narrow(local.empty() ? L"rien" : local, CP_UTF8).c_str());
     std::wstring gd = g_modRoot.substr(0, g_modRoot.size() - 1);
     SHCreateDirectoryExW(NULL, gd.c_str(), NULL);
-    bool ok = CopyTree(ext, gd, &self, &failed);
-    // Lanceur ailleurs que les fichiers du mod (installe a part, ou pose dans le dossier de l'AUTRE jeu) : il se met a jour lui aussi
-    if (ok && !self && (RunningFromHome() || IsGameDirOf(g_dir, 1 - g_game)) && FileExists(ext + L"\\MWCoop.exe")) {
-        std::wstring old = g_self + L".old";
-        DeleteFileW(old.c_str());
-        bool moved = MoveFileExW(g_self.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
-        if (moved && CopyFileW((ext + L"\\MWCoop.exe").c_str(), g_self.c_str(), FALSE)) self = true;
-        else {
-            LaunchLog("mise a jour : lanceur de %s pas remplace (erreur %lu)", Narrow(g_dir, CP_UTF8).c_str(), GetLastError());
-            if (moved) MoveFileExW(old.c_str(), g_self.c_str(), MOVEFILE_REPLACE_EXISTING);   // (l'ancien remis en place)
-        }
-    }
+    bool ok = CopyTree(ext, gd, &self, &failed);   // (lanceur jamais remplace ici depuis 1.15.0 : LauncherUpdate)
+    if (ok && ModInGame()) LoaderEnsure(g_modRoot, "mise a jour");   // (paquets .mwc / .msc sans version.dll : celle du lanceur)
     // version.txt seulement si tout est en place : une installation interrompue sera reprise au prochain lancement
     CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL);
     if (ok && !CopyFileW((ext + L"\\MWCoop\\version.txt").c_str(), (g_modRoot + L"MWCoop\\version.txt").c_str(), FALSE)) { ok = false; failed = L"version.txt"; }
@@ -1680,6 +1833,7 @@ static DWORD WINAPI NotesOnlyThread(void *)
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
     ToolsSeen(rel);
+    if (!rel.empty()) LancSeen(rel);
     EnterCriticalSection(&g_cs);
     g_notes = ChannelNotes(rel);
     LeaveCriticalSection(&g_cs);
@@ -1728,7 +1882,7 @@ static void UpdateTick()
 enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_ADDONS, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab)
 static int g_tab = TAB_HOME;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -1787,6 +1941,8 @@ static void UpdateButtons()
     g_btn[B_NETIP].enabled = g_btn[B_NETSTEAM].enabled = !busy;
     g_btn[B_UPDATE].visible = menu && game && !busy && !g_goWait && !UpdAvail().empty();
     g_btn[B_UPDATE].enabled = lobby == LB_NONE;   // (pendant un salon : on finit d'abord la partie)
+    g_btn[B_UPDLANCEUR].visible = menu && !busy && !g_goWait && !LancAvail().empty();   // (lanceur : meme sans jeu trouve)
+    g_btn[B_UPDLANCEUR].enabled = lobby == LB_NONE;
 }
 
 
@@ -2627,10 +2783,12 @@ static bool NotesUnseen();
 static float NotesMaxScroll();
 
 // ---------------------------------------------------------------- onglet NOUVEAUTES
+// (flux et version : « lanceur-1.15.1 », « 1.14.2 » pour l'histoire -- deux flux peuvent avoir le meme numero)
 static std::wstring NewestNote()
 {
+    static const wchar_t *pre[] = { L"", L"mwc-", L"msc-", L"lanceur-", L"outils-" };
     EnterCriticalSection(&g_cs);
-    std::wstring v = g_notes.empty() ? L"" : g_notes[0].ver;
+    std::wstring v = g_notes.empty() ? L"" : pre[g_notes[0].stream] + g_notes[0].ver;
     LeaveCriticalSection(&g_cs);
     return v;
 }
@@ -2642,7 +2800,9 @@ static bool NotesUnseen()
     if (v.empty()) return false;
     wchar_t seen[64] = {};
     GetPrivateProfileStringW(L"Lanceur", NotesSeenKey(), L"", seen, 64, g_iniLauncher.c_str());
-    return !seen[0] || CmpVer(v, seen) > 0;
+    if (!seen[0]) return true;
+    if (iswdigit(v[0]) && iswdigit(seen[0])) return CmpVer(v, seen) > 0;   // (histoire : comme avant 1.15.0)
+    return _wcsicmp(v.c_str(), seen) != 0;
 }
 static void NotesMarkSeen()
 {
@@ -5024,7 +5184,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
     auto caption = [&](const wchar_t *t, bool lock) { SmallLabel(g, t, RectF(x, y, w - 20, 16), kAcc); if (lock) DrawLock(g, right - 7, y + 8, kGrey); y += 18; };
     auto row = [&](const char *key, bool dim) {
         int i = LobbyOptIdx(key);
-        if (i < 0) return;
+        if (i < 0 || !LobbyOptOn(kLobbyOptDefs[i])) return;   // (option de l'autre jeu)
         std::wstring lab, sub;
         LobbyRowLabel(kLobbyOptDefs[i], GfxRowByKey(key), lab, sub);
         float h = !strncmp(key, "Ajout", 5) ? sh : sub.empty() ? rh : rh2;
@@ -6488,6 +6648,7 @@ static void OnButton(int id)
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
     case B_DISCORD: ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_UPDATE: StartUpdate(true); break;
+    case B_UPDLANCEUR: StartLauncherUpdate(); break;
     case B_COLOR: CarPickColor(); break;
     case B_LOGDIR: LogsOpenFolder(); break;
     case B_LOGZIP: LogsZip(); break;
@@ -7004,9 +7165,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         std::string o;
         for (const Note &n : rel) o += Narrow(n.ver, CP_UTF8) + (n.pre ? " pre" : "") + (n.zip.empty() ? " sans paquet" : " " + Narrow(n.zip, CP_UTF8)) + "\r\n";
         {
-            const Note *p = PickRelease(rel);
+            const Note *p = PickRelease(rel, ModStream()), *l = PickRelease(rel, STR_LANCEUR);
             std::wstring v = p ? p->ver : L"";
             o += "choisie : " + Narrow(v, CP_UTF8) + (p && WantVer(v, argv[4]) ? " a installer" : " rien") + " ; notes " + std::to_string(ChannelNotes(rel).size()) + "\r\n";
+            o += "lanceur : " + (l ? Narrow(l->ver, CP_UTF8) + " " + Narrow(l->zip, CP_UTF8) : std::string("aucun")) + "\r\n";
+            for (const Note &n : ChannelNotes(rel)) o += "  note " + std::to_string(n.stream) + " " + Narrow(n.ver, CP_UTF8) + "\r\n";
         }
         HANDLE f = CreateFileW(argv[3], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
         if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, o.data(), (DWORD)o.size(), &w, NULL); CloseHandle(f); }
@@ -7097,11 +7260,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         std::wstring d = WithSlash(argv[2]);
         SetGame(IsGameDir(d) ? d : L"");
         g_launcherLog = std::wstring(argv[3]) + L".lanceur.log"; g_debug = true;   // (detail des requetes -- miroirs, 21/10)
-        if (!g_gameDir.empty()) { g_busy = true; UpdateThread(NULL); }
+        // ([Lanceur] MajAuto=1 : installe, comme StartUpdate, puis le lanceur s'il y a lieu -- flux, 1.15.0)
+        bool autoMaj = GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0;
+        if (!g_gameDir.empty()) { g_busy = true; UpdateThread((void *)(INT_PTR)(autoMaj ? UPD_INSTALL : UPD_CHECK)); }
         FILE *f = _wfopen(argv[3], L"w, ccs=UTF-8");
         wchar_t wh[MAX_PATH] = L"(pas charge)";
         if (HMODULE m = GetModuleHandleW(L"winhttp.dll")) GetModuleFileNameW(m, wh, MAX_PATH);
-        if (f) { fwprintf(f, L"jeu=%s mod=%d local=%s releases=%d winhttp=%s\n%s\n", g_gameDir.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_relState, wh, g_status.c_str()); fclose(f); }
+        if (f) { fwprintf(f, L"jeu=%s racine=%s mod=%d local=%s releases=%d winhttp=%s\nlanceur=%S (%s) propose=%s\n%s\n", g_gameDir.c_str(), g_modRoot.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_relState, wh,
+                         VerText(ExeVersion(g_self)).c_str(), g_self.c_str(), LancAvail().c_str(), g_status.c_str()); fclose(f); }
         delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
         GdiplusShutdown(gtok);
         return 0;
@@ -7530,6 +7696,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             UpdSet(L"0.41.0");
             if (st == L"nouvelle-maj-survol") { g_hot = B_UPDATE; g_btn[B_UPDATE].hover = 1; }
             if (st == L"nouvelle-maj-notes") g_tab = TAB_NOTES;
+        }
+        else if (st == L"flux" || st == L"flux-notes" || st == L"flux-reglages") {   // flux (1.15.0) : la liste de [Lanceur] VersionsEssai, comme au demarrage
+            g_busy = true;
+            UpdateBody(UPD_CHECK);
+            g_busy = false;
+            if (st == L"flux-notes") g_tab = TAB_NOTES;
+            if (st == L"flux-reglages") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-lanceur"); }
         }
         else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1"); g_focus = 0; g_time = 0.2f; }
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }

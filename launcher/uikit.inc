@@ -47,7 +47,16 @@ enum {
     UI_GFX_GROUP = 2560,          // + groupe (13) : plier / deplier une categorie des Options du jeu
     UI_GFX_PRESET = 2590,         // + prereglage
     UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)
-    UI_LOBBY_OPT = 3200,          // SALON (0.96.4) : + option * 3 + (0 ligne / interrupteur, 1 fleche gauche, 2 fleche droite) (kLobbyOptDefs : 33 options au plus, 3200-3299)
+    // SALON, plages par session (1.15.0, 24/10, decide avec [Directives]) -- 3200-3299 libres (anciennes options) :
+    //   3300-3364      commandes communes du salon (ci-dessous et salon.inc), inchangees
+    //   10000-10099    commandes dediees communes ([Launcher])
+    //   10100-10199    commandes dediees de My Winter Car ([MWC])
+    //   10200-10299    commandes dediees de My Summer Car ([MSC])
+    //   10300-10399    commandes dediees des addons et outils ([Addons et Tools])
+    //   10400-10999    lignes d'options du salon : UI_LOBBY_OPT + index dans kLobbyOptDefs * 3 (200 options au plus ; une option
+    //                  = une ligne de kLobbyOptDefs avec son jeu, l'identifiant suit tout seul)
+    UI_LOBBY_OPT = 10400,         // + option * 3 + (0 ligne / interrupteur, 1 fleche gauche, 2 fleche droite)
+    UI_LANCEUR_UPDATE = 10000,    // NOUVEAUTES / REGLAGES : mettre a jour le lanceur (flux lanceur-, 1.15.0)
     UI_LOBBY_PRIV = 3300,         // + 0 public, 1 prive   (3300+ depuis 1.8.9 : 26 options x 3 debordaient sur 3260-3279, Marqueurs cliquait « Tous » des ajouts)
     UI_LOBBY_COPY = 3302, UI_LOBBY_REGEN, UI_LOBBY_MAXM, UI_LOBBY_MAXP,   // code : copier, nouveau ; joueurs au plus - / +
     UI_LOBBY_OPTTAB = 3308,       // + 0 la partie, 1 les miennes (onglets de la carte des options, hote)
