@@ -301,6 +301,7 @@ namespace MWCoop
             public float SeatAt = -1f; public bool SeatSet;   // (SeatView : entree vue a, vue recalee)
             public float SteerTurn, SteerRatio;   // (volant : angle pose, degres par unite de direction)
             public VazSound Sound;
+            public float IdleTrim;   // (My Summer Car : gaz de ralenti appris par le regulateur, VazHandling.Idle)
             public VazFlaps Flaps;
             public FsmFloat BrakeKnob;
             public PlayMakerFSM DriveFsm;     // (My Summer Car : PlayerTrigger de la zone conducteur, MscDriven)
