@@ -16,6 +16,7 @@ namespace Convertisseur
         {
             public string Name, Shader;
             public byte Blend, AlphaTest;
+            public int Depth;   // (0 normal ; 1 lecture seule, 2 sans profondeur : decalques poses sur la route)
             public readonly Dictionary<string, string> Samplers = new Dictionary<string, string>();   // txDiffuse -> nom de texture
             public readonly Dictionary<string, float> Props = new Dictionary<string, float>();
         }
@@ -68,7 +69,7 @@ namespace Convertisseur
             for (int k = 0; k < nm; k++)
             {
                 var m = new Material { Name = S(), Shader = S() };
-                m.Blend = B(); m.AlphaTest = B(); I();
+                m.Blend = B(); m.AlphaTest = B(); m.Depth = I();
                 int np = I();
                 for (int j = 0; j < np; j++) { string pn = S(); m.Props[pn] = F(); p += 36; }
                 int ns = I();
