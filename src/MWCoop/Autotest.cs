@@ -319,6 +319,43 @@ namespace MWCoop
         // [Test] Autotest=portemagasin (MSC, 2 joueurs, Markos 24/10) : les deux vont a 10 s devant la porte du magasin ; a 20 s
         // horaires figes, magasin FERME chez l'hote et ouvert chez l'invite (STORE/OpeningHours.OpenStore) ; l'invite ouvre la
         // porte a 50 s et la referme a 62 s. Attendu : la porte suit l'invite chez l'hote (avant : fermee a cle chez lui).
+        // [Test] Autotest=mscmontage (MSC, JD et Kristof 24/10 : pieces posees qui retombent) : le joueur [Test] Monteur (0 = hote)
+        // fait les montages de [Test] Montages ("point|piece;point|piece", par defaut tableau de bord, compteurs, aile gauche) a 40 s
+        // puis toutes les 10 s, comme un clic ; chacun note 5 s apres si la piece tient (les ruptures : « attache rompue »).
+        static int mmStep, mmPush;
+        static void MscMontage(float t)
+        {
+            string[] list = Config.Get("Test", "Montages", "SATSUMA(557kg, 248)/Dashboard/trigger_dashboard|db:Database/DatabaseMechanics/Dashboard;"
+                + "db:Database/DatabaseMechanics/Dashboard/trigger_meters|db:Database/DatabaseMechanics/DashboardMeters;SATSUMA(557kg, 248)/Body/trigger_fender_left|db:Database/DatabaseBody/Fender_Left").Split(';');
+            // ([Test] PousseA=60 : l'invite pousse la voiture 5 s a partir de cet instant, comme Autotest=pousse -- la copie chez l'hote)
+            float pa = Config.GetInt("Test", "PousseA", 0);
+            if (pa > 0f && !Net.Session.IsHost)
+            {
+                Rigidbody b = VehicleSync.Body("SATSUMA(557kg, 248)");
+                if (b != null && t > pa - 2f && mmPush == 0)
+                {
+                    mmPush = 1;
+                    GameObject pl = Game.PlayerGo;
+                    var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; pl.transform.position = b.transform.TransformPoint(new Vector3(0f, 0f, -3.2f)); cc.enabled = true; }
+                    Log.Info("autotest montage : derriere la voiture pour la pousser");
+                }
+                Gestures.TestPush = t > pa && t < pa + 5f;
+                if (b != null && t > pa && t < pa + 5f && !b.isKinematic) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 1.2f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+            }
+            if (mmStep >= list.Length * 2) return;
+            int i = mmStep / 2;
+            string[] pp = list[i].Split('|');
+            if (pp.Length < 2) { mmStep += 2; return; }
+            float at = 40f + 10f * i;
+            if (mmStep % 2 == 0 && t > at)
+            {
+                mmStep++;
+                if (Net.Session.LocalId == Config.GetInt("Test", "Monteur", 0)) Log.Info("autotest montage : " + Parts.MscTestClick(pp[0].Trim(), pp[1].Trim()));
+            }
+            else if (mmStep % 2 == 1 && t > at + 5f) { mmStep++; Log.Info("autotest montage : " + pp[0].Trim() + " " + Parts.MscTestHolds(pp[0].Trim())); }
+        }
+
         static int pmStep; static float pmLog;
         static void PorteMagasin(float t)
         {
@@ -586,6 +623,34 @@ namespace MWCoop
             if (mode == "mscguepe") { MscGuepe(t); return; }
             if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "portemagasin") { PorteMagasin(t); return; }
+            if (mode == "mscmontage") { MscMontage(t); return; }
+            // [Test] Autotest=sondedetach (24/10) : actions qui ecrivent la variable [Test] SondeVar (Detach) d'un autre automate.
+            if (mode == "sondedetach" && t > 40f && step == 0)
+            {
+                step = 1;
+                string vn = Config.Get("Test", "SondeVar", "Detach");
+                int n = 0;
+                foreach (Object o in Game.AllFsms(0f))
+                {
+                    var f = o as PlayMakerFSM; if (f == null || f.Fsm == null || f.Fsm.States == null) continue;
+                    foreach (FsmState st in f.Fsm.States)
+                    {
+                        FsmStateAction[] acts;
+                        try { acts = st.Actions; } catch { continue; }
+                        if (acts == null) continue;
+                        foreach (FsmStateAction a in acts)
+                        {
+                            var sb = a as HutongGames.PlayMaker.Actions.SetFsmBool;
+                            if (sb == null || sb.variableName == null || sb.variableName.Value != vn) continue;
+                            GameObject tg = sb.gameObject == null ? null : sb.gameObject.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : sb.gameObject.GameObject != null ? sb.gameObject.GameObject.Value : null;
+                            n++;
+                            Log.Info("autotest sonde : " + Recon.Path(f.transform) + " :: " + f.FsmName + " / " + st.Name + " -> " + (tg != null ? Recon.Path(tg.transform) : "?") + "." + (sb.fsmName != null ? sb.fsmName.Value : "?") + "." + vn + " = " + (sb.setValue != null ? sb.setValue.ToString() : "?"));
+                        }
+                    }
+                }
+                Log.Info("autotest sonde : " + n + " action(s)");
+            }
+            if (mode == "sondedetach") return;
             if (mode == "mscreste") { MscReste(t); return; }
             if (mode == "mscregles") { MscRegles(t); return; }
             if (mode == "mscmeca") { MscMeca(t); return; }

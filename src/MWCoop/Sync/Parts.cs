@@ -764,7 +764,7 @@ namespace MWCoop
                 Transform pt; mountingAt.TryGetValue(part, out pt); mountingAt.Remove(part);
                 if (part == null || pt == null) continue;
                 Rigidbody prb = part.GetComponent<Rigidbody>();
-                Log.Info("piece " + IdOf(part) + " posee : joint " + (part.GetComponent<FixedJoint>() != null ? "oui" : "NON") + ", corps " + (prb == null ? "aucun" : prb.isKinematic ? "CINEMATIQUE" : "libre") + ", par rapport au point "
+                Log.Info("piece " + (Game.Msc ? MscPartKey(part) : IdOf(part)) + " posee : joint " + (part.GetComponent<Joint>() != null ? "oui" : "NON") + ", corps " + (prb == null ? "aucun" : prb.isKinematic ? "CINEMATIQUE" : "libre") + ", par rapport au point "
                     + pt.InverseTransformPoint(part.transform.position).ToString("F3") + " / " + (Quaternion.Inverse(pt.rotation) * part.transform.rotation).eulerAngles.ToString("F1"));
             }
             mountedNow.Clear();
