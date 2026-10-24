@@ -23,6 +23,7 @@ namespace MWCoop
             public string Key; public PlayMakerFSM F; public FsmFloat Var;
             public HashSet<string> Held = new HashSet<string>();
             public List<FsmStateAction> Apply = new List<FsmStateAction>();
+            public List<FsmStateAction> Sinks = new List<FsmStateAction>(); public PlayMakerFSM SinkF;   // etat d'un autre automate de l'objet qui pose le moteur (voir Set)
             public bool HasLight;
             public bool Mine; public float NextSend; public float LastSent = float.NaN;
             public float RemoteAt = -10f;   // dernier message d'un autre joueur sur cette commande (il la manoeuvre)
@@ -66,6 +67,25 @@ namespace MWCoop
                             if (a != null && applyTypes.Contains(a.GetType().Name)) kn.Apply.Add(a);
                 }
                 kn.HasLight = f.Fsm.GetState("Check light") != null;
+                // (seulement un automate a un seul etat qui pose une variable : celui de la GIFU, 'Throttle' / Throttling ; pas les
+                // etats serre / desserre d'un frein a main, valeurs fixes -- les jouer tous les aurait melanges)
+                try   // (illisible : la commande reste suivie, sans ses proprietes)
+                {
+                    foreach (PlayMakerFSM o in f.GetComponents<PlayMakerFSM>())
+                        if (o != f && o.Fsm != null && o.Fsm.States.Length == 1)
+                            foreach (FsmState s in o.Fsm.States)
+                            {
+                                bool sets = false;
+                                foreach (FsmStateAction a in s.Actions)
+                                {
+                                    var sp = a as HutongGames.PlayMaker.Actions.SetProperty;
+                                    if (sp != null && sp.targetProperty != null && sp.targetProperty.setProperty && sp.targetProperty.FloatParameter != null && sp.targetProperty.FloatParameter.UseVariable) sets = true;
+                                }
+                                // (tout l'etat, dans l'ordre : le Kekmet calcule MinRPM du levier avant de le poser)
+                                if (sets && kn.SinkF == null) { kn.SinkF = o; foreach (FsmStateAction a in s.Actions) if (a != null && !(a is ModHook)) kn.Sinks.Add(a); }
+                            }
+                }
+                catch { kn.Sinks.Clear(); kn.SinkF = null; }
             }
             catch { refused.Add(f); return false; }
             if (kn.Var == null || !Replay.Claim(f, "molettes")) { refused.Add(f); return false; }
@@ -73,7 +93,7 @@ namespace MWCoop
             for (int n = 2; byKey.ContainsKey(kn.Key); n++) kn.Key = path + "#" + Recon.Twin(f) + "+" + n;
             knobs.Add(kn);
             byKey[kn.Key] = kn;
-            Log.Info("molettes : " + kn.Key + " suivie (valeur " + kn.Var.Name + " tenue dans " + string.Join(", ", new List<string>(kn.Held).ToArray()) + ", " + kn.Apply.Count + " actions de pose" + (kn.HasLight ? ", voyant" : "") + ")");
+            Log.Info("molettes : " + kn.Key + " suivie (valeur " + kn.Var.Name + " tenue dans " + string.Join(", ", new List<string>(kn.Held).ToArray()) + ", " + kn.Apply.Count + " actions de pose" + (kn.HasLight ? ", voyant" : "") + (kn.Sinks.Count > 0 ? ", " + kn.Sinks.Count + " action(s) d'un automate qui pose le moteur" : "") + ")");
             return true;
         }
 
@@ -138,6 +158,50 @@ namespace MWCoop
                 catch (System.Exception e) { Replay.HookError(e); }
             }
             if (final && k.HasLight && k.F.ActiveStateName == "Wait player") Game.SetState(k.F, "Check light");
+            // Accelerateur a main de la GIFU (MSC, Markos 24/10 : « le client n'a pas d'accelerateur a main, il doit appuyer sur
+            // la pedale pour pomper ») : la valeur va a l'automate 'Throttle' du bouton, qui la pose a chaque image dans le
+            // moteur (Drivetrain.idlethrottle). Tableau de bord inactif ici (LOD : joueur loin de la GIFU), cet automate ne tourne
+            // pas : chez l'hote, qui fait tourner le moteur de la GIFU garee, le ralenti restait a 0,13 et la pompe aussi.
+            // Ici son etat est joue une fois (pas s'il est coupe : le jeu le coupe moteur arrete, Kekmet) ; actif, il se rejoue seul.
+            if (k.Sinks.Count > 0 && k.SinkF != null && k.SinkF.enabled && !k.F.gameObject.activeInHierarchy)
+                foreach (FsmStateAction a in k.Sinks)
+                {
+                    try { a.OnEnter(); }
+                    catch (System.Exception e) { Replay.HookError(e); }
+                }
+        }
+
+        // [Test] Autotest=gifumain (MSC, 2 joueurs) : a 30 s l'invite tire l'accelerateur a main de la GIFU (LeverPos au maximum,
+        // envoye comme au relachement du bouton) ; a 40 s, chacun note le levier, la valeur de l'automate Throttle, le ralenti
+        // du moteur (Drivetrain.idlethrottle), le regime, l'etat de l'automate Throttle et si le tableau de bord (LOD) est actif.
+        static int tStep; static bool tNear;
+        public static void Test(string mode, float t)
+        {
+            // ([Test] GifuPres=1 : l'invite, 2=les deux, va a 8 s a 3 m de la GIFU -- tableau actif chez lui, pas chez l'hote loin)
+            int near = Config.GetInt("Test", "GifuPres", 0);
+            if (t > 8f && tStep == 0 && !tNear && (near == 2 || near == 1 && !Session.IsHost))
+            {
+                tNear = true;
+                Rigidbody g = VehicleSync.Body("GIFU(750/450psi)");
+                var cc = Game.PlayerGo != null ? Game.PlayerGo.GetComponent<CharacterController>() : null;
+                if (g != null && cc != null) { cc.enabled = false; Game.PlayerGo.transform.position = g.position + g.transform.right * -3f + Vector3.up; cc.enabled = true; Log.Info("autotest : gifumain, pres de la GIFU"); }
+            }
+            Knob k = null;
+            string want = Config.Get("Test", "TestMolette", "ButtonHandThrottle");   // (KEKMET : le levier du tracteur)
+            foreach (Knob x in knobs) if (x.Key.Contains(want)) k = x;
+            if (k == null) { if (t > 30f && tStep == 0) { tStep = 9; Log.Info("autotest : gifumain, accelerateur a main non suivi"); } return; }
+            if (!Session.IsHost && t > 30f && tStep == 0) { tStep = 1; float max = Config.GetFloat("Test", "TestMoletteVal", 0.03f); k.Var.Value = max; Set(k, max, true); Send(k, true); Log.Info("autotest : gifumain, invite : levier tire (" + k.Var.Value + ")"); }
+            if (t > 40f && tStep < 2 || t > 55f && tStep == 2)
+            {
+                tStep = tStep < 2 ? 2 : 3;
+                PlayMakerFSM th = Game.FsmOn(k.F.gameObject, "Throttle");
+                Drivetrain dt = k.F.GetComponentInParent<Drivetrain>();
+                FsmFloat tv = th != null ? th.FsmVariables.FindFsmFloat("Throttle") : null;
+                Log.Info("autotest : gifumain, " + (Session.IsHost ? "hote" : "invite") + " : levier " + k.Var.Value.ToString("F3") + ", Throttle " + (tv != null ? tv.Value.ToString("F3") : "?")
+                    + ", ralenti " + (dt != null ? dt.idlethrottle.ToString("F3") + " min " + dt.minRPM.ToString("F0") + " regime " + dt.rpm.ToString("F0") + (dt.enabled ? "" : " coupe") : "?")
+                    + ", automate Throttle [" + (th != null ? th.ActiveStateName + (th.enabled ? "" : " desactive") : "?") + "], tableau " + (k.F.gameObject.activeInHierarchy ? "actif" : "inactif")
+                    + (PlayerSync.LocalCamera != null ? ", " + Vector3.Distance(PlayerSync.LocalCamera.position, k.F.transform.position).ToString("F0") + " m" : ""));
+            }
         }
 
         // ---------------------------------------------------------------- commandes des voitures garees (arrivants)

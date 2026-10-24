@@ -2854,11 +2854,19 @@ namespace MWCoop
                     else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; txt = od.OwnerOption == OwnerDefaultOption.UseOwner ? "proprietaire" : od.GameObject != null && od.GameObject.Value != null ? od.GameObject.Value.name : "?"; }
                     else if (v is FsmEvent) txt = ((FsmEvent)v).Name;
                     else if (v is bool || v is int || v is float || v is string || v is System.Enum) txt = v.ToString();
+                    else if (v is FsmProperty) { var fp = (FsmProperty)v; txt = (fp.TargetObject != null && fp.TargetObject.Value != null ? fp.TargetObject.Value.GetType().Name + "(" + fp.TargetObject.Value.name + ")" : fp.TargetTypeName) + "." + fp.PropertyName + (fp.setProperty ? " <- " : " -> ") + PropVar(fp); }
                     if (txt != null) sb.Append(' ').Append(fi.Name).Append('=').Append(txt);
                 }
                 sb.Append(']');
             }
             return sb.ToString();
+        }
+
+        static string PropVar(FsmProperty fp)
+        {
+            foreach (NamedVariable nv in new NamedVariable[] { fp.FloatParameter, fp.BoolParameter, fp.IntParameter, fp.StringParameter, fp.GameObjectParameter, fp.ObjectParameter, fp.Vector3Parameter })
+                if (nv != null && (nv.UseVariable && !string.IsNullOrEmpty(nv.Name))) return "{" + nv.Name + "}";
+            return fp.FloatParameter != null ? fp.FloatParameter.ToString() : "?";
         }
 
         // ---------------------------------------------------------------- essai boite a gants / loquet
