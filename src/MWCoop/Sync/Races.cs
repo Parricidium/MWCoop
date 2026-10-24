@@ -825,8 +825,18 @@ namespace MWCoop
                     string before = helpers.ActiveStateName;
                     helpers.SendEvent("ROLLED");
                     Log.Info("autotest retourne : hote : " + pick.T.name + " retournee a " + pick.T.position.ToString("F0") + ", ROLLED a Helpers ('" + before + "' -> '" + helpers.ActiveStateName + "')");
+                    // ([Test] RetourneLoin=1 : l'hote part a 250 m -- le jeu attend qu'aucun joueur ne soit a moins de 200 m -- et rien n'est force)
+                    if (Config.GetInt("Test", "RetourneLoin", 0) != 0 && Game.PlayerGo != null)
+                    {
+                        var cc = Game.PlayerGo.GetComponent<CharacterController>();
+                        Vector3 away = pick.T.position + new Vector3(250f, 0f, 0f);
+                        RaycastHit gh; if (Physics.Raycast(away + Vector3.up * 200f, Vector3.down, out gh, 400f)) away = gh.point + Vector3.up;
+                        if (cc != null) cc.enabled = false; Game.PlayerGo.transform.position = away; if (cc != null) cc.enabled = true;
+                        Log.Info("autotest retourne : hote : parti a 250 m (" + away.ToString("F0") + "), rien de force");
+                    }
                 }
             }
+            if (Session.IsHost && retStep == 1 && t > retAt + 2f && Config.GetInt("Test", "RetourneLoin", 0) != 0) retStep = 2;   // (loin : rien de force)
             if (Session.IsHost && retStep == 1 && t > retAt + 2f)
             {
                 retStep = 2;
@@ -840,7 +850,7 @@ namespace MWCoop
                 }
             }
             int k = (int)(t / 5f);
-            if (t < 30f || k == retLog || k > 12) return;
+            if (t < 30f || k == retLog || k > Config.GetInt("Test", "RetourneJusqua", 60) / 5) return;
             retLog = k;
             var sb = new System.Text.StringBuilder("autotest retourne : " + (Session.IsHost ? "hote" : "invite") + " t=" + (k * 5) + " : Helpers ");
             if (helpers == null) sb.Append("introuvable");
