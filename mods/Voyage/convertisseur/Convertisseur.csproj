@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Convertisseur Voyage : circuits Assetto Corsa -> destinations du mod Voyage (My Winter Car). Fenetre WinForms sans cadre
+       + WebView2 (interface HTML dans ui\, apercu 3D three.js), comme l'editeur de carte. .NET Framework 4.8. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>ConvertisseurVoyage</AssemblyName>
+    <RootNamespace>Convertisseur</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <ApplicationIcon>..\..\..\launcher\mwcoop.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <OutputPath>..\build\convertisseur\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Product>Voyage - Convertisseur de circuits</Product>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="Microsoft.VisualBasic" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="ui" />
+  </ItemGroup>
+</Project>

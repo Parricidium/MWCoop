@@ -1,0 +1,14 @@
+CV001	Track converter %s installed: click Launch
+CV002	Could not download the track converter (%s)
+CV003	Close the track converter before updating it
+CV004	Could not start the tool (error %lu)
+CV005	A separate program to edit the map of My Summer Car or My Winter Car: roads, game objects, 3D models, vegetation, terrain.
+CV006	Compiled maps: added to the game, sent to guests in co-op
+CV007	Game files stay on your PC, your saves are not touched
+CV008	Track converter
+CV009	Turns the tracks of your Assetto Corsa into travel destinations for My Winter Car: a ticket at the Peräjärvi agency, the plane at the airfield near the cinema.
+CV010	Not installed yet · version %s, about 3 MB
+CV011	Official and mod tracks, converted on your PC: nothing is shared
+CV012	Voyage mod included (agency, airfield, Cessna flight): installed by the converter
+CV013	My Winter Car only, with MSCLoader; in co-op, everyone converts the same track
+CV014	The Cessna 172 at the airfield of the Voyage mod (travel agency, flights to converted tracks), from the Plane model by osmosikum on Sketchfab: sketchfab.com/osmosikum, CC BY 4.0 license. Textures reduced for the game.

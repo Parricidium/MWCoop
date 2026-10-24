@@ -58,12 +58,37 @@ foreach ($f in Get-ChildItem $edStage -File -Recurse) {
 }
 $z.Dispose()
 "Ecrit : $edPack ($([math]::Round((Get-Item $edPack).Length / 1KB)) Ko)"
+# Convertisseur de circuits (mods\Voyage\convertisseur, demande de JD du 24/10, « Early ») : circuits d'Assetto Corsa ->
+# destinations du mod Voyage ; paquet ConvertisseurVoyage-<version>.convertisseur avec le mod (mod\Voyage.dll, que le
+# convertisseur installe dans le jeu). Le lanceur (page Outils) le telecharge dans %LOCALAPPDATA%\MWCoop\voyage.
+$ErrorActionPreference = 'Continue'
+$vo = cmd /c "`"$root\mods\Voyage\build.cmd`"" 2>&1
+if ($LASTEXITCODE -ne 0) { $vo | Select-Object -Last 5; throw "echec de compilation du mod Voyage" }
+$vo = dotnet build -c Release -v q -nologo "$root\mods\Voyage\convertisseur\Convertisseur.csproj" 2>&1
+if ($LASTEXITCODE -ne 0) { $vo | Select-String 'error'; throw "echec de compilation du convertisseur" }
+$ErrorActionPreference = 'Stop'
+$cvBuild = "$root\mods\Voyage\build\convertisseur"
+$cvStage = "$PSScriptRoot\out\ConvertisseurVoyage-$Version"
+if (Test-Path $cvStage) { Remove-Item $cvStage -Recurse -Force }
+New-Item -ItemType Directory -Force "$cvStage\mod" | Out-Null
+foreach ($f in 'ConvertisseurVoyage.exe', 'ConvertisseurVoyage.exe.config', 'Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll') { Copy-Item "$cvBuild\$f" $cvStage }
+Copy-Item "$cvBuild\ui" $cvStage -Recurse
+Copy-Item "$root\mods\Voyage\build\Voyage.dll" "$cvStage\mod"
+Set-Content "$cvStage\version.txt" $Version -NoNewline -Encoding ASCII
+$cvPack = "$PSScriptRoot\out\ConvertisseurVoyage-$Version.convertisseur"
+if (Test-Path $cvPack) { Remove-Item $cvPack -Force }
+$z = [System.IO.Compression.ZipFile]::Open($cvPack, 'Create')
+foreach ($f in Get-ChildItem $cvStage -File -Recurse) {
+    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($z, $f.FullName, $f.FullName.Substring($cvStage.Length + 1).Replace('\', '/')) | Out-Null
+}
+$z.Dispose()
+"Ecrit : $cvPack ($([math]::Round((Get-Item $cvPack).Length / 1KB)) Ko)"
 # Empreintes SHA-256 publiees a cote du zip : chacun peut verifier ses fichiers (et les chercher sur VirusTotal)
 # quand un antivirus a apprentissage automatique s'inquiete d'un exe non signe.
 $sums = "$PSScriptRoot\out\SHA256SUMS-$Version.txt"
-$lines = foreach ($f in @($zip, $edPack, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll", "$stage\MWCoop\MWCoopRT.dll")) {
+$lines = foreach ($f in @($zip, $edPack, $cvPack, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll", "$stage\MWCoop\MWCoopRT.dll")) {
     $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
-    $n = if ($f -eq $zip -or $f -eq $edPack) { Split-Path $f -Leaf } else { $f.Substring($stage.Length + 1).Replace('\', '/') }
+    $n = if ($f -eq $zip -or $f -eq $edPack -or $f -eq $cvPack) { Split-Path $f -Leaf } else { $f.Substring($stage.Length + 1).Replace('\', '/') }
     "$h  $n"
 }
 [System.IO.File]::WriteAllText($sums, ($lines -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding $false))
@@ -106,8 +131,8 @@ if ($Publier) {
     if ($Nightly -and $branch -eq 'main') { Remove-Item $nf; throw "une Nightly se publie depuis sa branche (refonte), pas main" }
     $po = cmd /c "git -C `"$root`" push origin HEAD:$branch 2>&1"   # par cmd : git ecrit sur stderr, ce qui arreterait le script
     if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de $branch" }
-    if ($Nightly) { gh release create "v$Version" $zip $edPack $sums --repo Parricidium/MWCoop --title "MWCoop $Version (Nightly)" --notes-file $nf --target $head --prerelease }
-    else { gh release create "v$Version" $zip $edPack $sums --repo Parricidium/MWCoop --title "MWCoop $Version" --notes-file $nf --target $head }
+    if ($Nightly) { gh release create "v$Version" $zip $edPack $cvPack $sums --repo Parricidium/MWCoop --title "MWCoop $Version (Nightly)" --notes-file $nf --target $head --prerelease }
+    else { gh release create "v$Version" $zip $edPack $cvPack $sums --repo Parricidium/MWCoop --title "MWCoop $Version" --notes-file $nf --target $head }
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { throw "echec de la publication GitHub" }

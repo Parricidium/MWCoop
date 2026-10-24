@@ -1,0 +1,95 @@
+﻿<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Voyage · Convertisseur de circuits</title>
+<link rel="stylesheet" href="app.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<div class="win" id="win">
+  <header class="tb" id="titlebar">
+    <div class="tb-l">
+      <span class="logo" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg></span>
+      <span class="ttl" id="title">Voyage · Convertisseur de circuits</span>
+    </div>
+    <div class="tb-r">
+      <button class="ib" id="btn-actualiser" data-i18n-title="actualiser" aria-label="Actualiser"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+      <span class="gap"></span>
+      <button class="wc" data-act="reduire" aria-label="Réduire"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6h10" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button class="wc" data-act="agrandir" aria-label="Agrandir"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button class="wc close" data-act="fermer" aria-label="Fermer"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+  </header>
+
+  <div class="screen">
+    <!-- Barre de gauche : bibliotheque, destinations converties, dossiers, langue -->
+    <aside class="side">
+      <button class="nav on" id="nav-biblio"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span data-i18n="biblio">Circuits Assetto Corsa</span><span class="n" id="nb-circuits"></span></button>
+      <div class="lbl"><span data-i18n="mesDest">Mes destinations</span><span class="n" id="nb-dest"></span></div>
+      <nav class="dests" id="dests"></nav>
+      <div class="side-foot">
+        <div class="mod" id="mod-etat"></div>
+        <div class="folders">
+          <div class="fold"><span class="fl" data-i18n="dossierAc">Assetto Corsa</span><button class="mini" data-pick="ac" data-i18n="changer">Changer</button></div>
+          <div class="path" id="path-ac"></div>
+          <div class="fold"><span class="fl" data-i18n="dossierMwc">My Winter Car</span><button class="mini" data-pick="mwc" data-i18n="changer">Changer</button></div>
+          <div class="path" id="path-mwc"></div>
+        </div>
+        <label class="lang"><span data-i18n="langue">Langue</span>
+          <select id="lang"><option value="fr">Français</option><option value="en">English</option><option value="ru">Русский</option><option value="ar">العربية</option></select>
+        </label>
+      </div>
+    </aside>
+
+    <!-- Bibliotheque : circuits trouves dans Assetto Corsa -->
+    <main class="main" id="biblio">
+      <div class="head">
+        <div>
+          <h1 data-i18n="biblioTitre">Circuits Assetto Corsa</h1>
+          <p class="sub" data-i18n="biblioSous">Choisis un circuit : il devient une destination de l'agence de voyage, à prendre en avion depuis l'aérodrome.</p>
+        </div>
+      </div>
+      <div class="filters">
+        <label class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="search" data-i18n-ph="chercher" placeholder="Chercher un circuit, un pays…" spellcheck="false"></label>
+        <div class="seg4" id="filtre">
+          <button data-f="tous" class="on" data-i18n="fTous">Tous</button>
+          <button data-f="aconv" data-i18n="fAConv">À convertir</button>
+          <button data-f="conv" data-i18n="fConv">Convertis</button>
+          <button data-f="kunos" data-i18n="fKunos">Officiels</button>
+          <button data-f="mods" data-i18n="fMods">Mods</button>
+        </div>
+        <select id="tri" aria-label="Tri"><option value="nom" data-i18n="triNom">Nom</option><option value="pays" data-i18n="triPays">Pays</option><option value="long" data-i18n="triLong">Longueur</option></select>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="blank" id="blank" hidden></div>
+      <p class="note legal"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span data-i18n="legal">La conversion se fait sur ton PC, depuis ton Assetto Corsa. Rien n'est envoyé ni partagé : chaque joueur convertit ses propres circuits.</span></p>
+    </main>
+
+    <!-- Destination convertie : apercu 3D, fiche, etat -->
+    <main class="main dest" id="dest" hidden>
+      <div class="view" id="view">
+        <canvas id="c3d" tabindex="0"></canvas>
+        <div class="ov tl" id="view-tl"><span class="chip" id="view-tri" hidden></span><span class="chip" id="view-tex" hidden></span></div>
+        <div class="ov br">
+          <button class="chip" id="v-ensemble"><span data-i18n="vEnsemble">Vue d'ensemble</span></button>
+          <button class="chip" id="v-arrivee"><span data-i18n="vArrivee">Point d'arrivée</span></button>
+          <button class="chip" id="v-collision"><span data-i18n="vCollision">Collisions</span></button>
+        </div>
+        <div class="ov bl"><span class="chip aide" data-i18n-title="aide3d" title="">?</span></div>
+        <div class="loading" id="view-load" hidden><div class="spin"></div><span id="view-load-t"></span><div class="bar small"><span id="view-bar"></span></div></div>
+      </div>
+      <aside class="pane right" id="dest-pane"></aside>
+    </main>
+  </div>
+</div>
+
+<!-- Fenetres -->
+<div class="modal" id="m-conv" hidden><div class="dlg conv" role="dialog" aria-modal="true" id="conv"></div></div>
+<div class="modal" id="m-confirm" hidden><div class="dlg petit" role="dialog" aria-modal="true" id="confirm"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="i18n.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

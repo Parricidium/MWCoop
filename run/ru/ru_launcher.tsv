@@ -1932,3 +1932,17 @@ Buy a film reel at the cinema counter (49 mk, next to the soda).	Купите к
 Village store: cabinets, shelves, till	Сельский магазин: витрины, полки, касса
 Health (PvP)	Здоровье (PvP)
 Only when the host turned PvP on	Только когда хост включил PvP
+Track converter %s installed: click Launch	Конвертер трасс %s установлен: нажми «Запустить»
+Could not download the track converter (%s)	Не удалось скачать конвертер трасс (%s)
+Close the track converter before updating it	Закрой конвертер трасс перед обновлением
+Could not start the tool (error %lu)	Не удалось запустить программу (ошибка %lu)
+A separate program to edit the map of My Summer Car or My Winter Car: roads, game objects, 3D models, vegetation, terrain.	Отдельная программа для изменения карты My Summer Car или My Winter Car: дороги, объекты игры, 3D-модели, растительность, рельеф.
+Compiled maps: added to the game, sent to guests in co-op	Собранные карты: добавляются в игру, отправляются гостям в кооперативе
+Game files stay on your PC, your saves are not touched	Файлы игры остаются на твоём ПК, сохранения не затрагиваются
+Track converter	Конвертер трасс
+Turns the tracks of your Assetto Corsa into travel destinations for My Winter Car: a ticket at the Peräjärvi agency, the plane at the airfield near the cinema.	Превращает трассы твоей Assetto Corsa в направления для путешествий в My Winter Car: билет в агентстве Перяярви, самолёт на аэродроме у кинотеатра.
+Not installed yet · version %s, about 3 MB	Ещё не установлен · версия %s, около 3 МБ
+Official and mod tracks, converted on your PC: nothing is shared	Официальные трассы и моды, конвертация на твоём ПК: ничего не передаётся
+Voyage mod included (agency, airfield, Cessna flight): installed by the converter	Мод Voyage в комплекте (агентство, аэродром, полёт на Cessna): его устанавливает конвертер
+My Winter Car only, with MSCLoader; in co-op, everyone converts the same track	Только My Winter Car, с MSCLoader; в кооперативе каждый конвертирует ту же трассу
+The Cessna 172 at the airfield of the Voyage mod (travel agency, flights to converted tracks), from the Plane model by osmosikum on Sketchfab: sketchfab.com/osmosikum, CC BY 4.0 license. Textures reduced for the game.	Cessna 172 на аэродроме мода Voyage (турагентство, рейсы на сконвертированные трассы), по модели Plane от osmosikum на Sketchfab: sketchfab.com/osmosikum, лицензия CC BY 4.0. Текстуры уменьшены для игры.

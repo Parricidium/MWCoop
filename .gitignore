@@ -30,3 +30,7 @@ docs/rt/
 editor/obj/
 editor/bin/
 editor/essais/
+
+# Convertisseur de circuits (mods\Voyage\convertisseur) : sorties de compilation de dotnet
+mods/Voyage/convertisseur/obj/
+mods/Voyage/convertisseur/bin/
