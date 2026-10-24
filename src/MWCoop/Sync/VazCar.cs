@@ -517,11 +517,98 @@ namespace MWCoop
 
         static GameObject FindSorbet()
         {
+            if (Msc)
+            {
+                GameObject r = Game.FindAny("RCO_RUSCKO12(270)");
+                if (r != null && r.GetComponent("CarDynamics") != null) return r;
+                foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                    if (rb.transform.parent == null && rb.name.StartsWith("RCO_RUSCKO") && rb.GetComponent("CarDynamics") != null) return rb.gameObject;
+                return null;
+            }
             GameObject g = Game.FindAny("SORBET(190-200psi)");
             if (g != null && g.GetComponent("CarDynamics") != null) return g;
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
                 if (rb.transform.parent == null && rb.name.StartsWith("SORBET") && rb.GetComponent("CarDynamics") != null) return rb.gameObject;
             return null;
+        }
+
+        // ---------------------------------------------------------------- voiture de base : SORBET (MWC) ou Ruscko (MSC)
+        // My Summer Car (JD 24/10 : « les addons, mais pour MSC ») : copie de la RUSCKO (RCO_RUSCKO12 : boite manuelle, memes
+        // composants UnityCar que la SORBET -- comme le pack rallye MSC du 19/10, MWCoop-voiture/mod/Peugeot205.cs). Ses objets
+        // n'ont ni les memes noms ni la meme place (vidage ref/msc-v.250908-04, RCO_RUSCKO12) : chemins ci-dessous ; commandes
+        // de la SORBET traduites par Ctl (null : rien de tel sur la Ruscko -- ni starter, ni warning, ni chauffage, ni
+        // plafonnier ; le bouton orange des addons y est le klaxon).
+        static bool Msc { get { return Game.Msc; } }
+        public static string PDriveTrigger { get { return Msc ? "LOD/PlayerTrigger/DriveTrigger" : "Functions/PlayerTrigger/DriveTriggerX"; } }
+        public static string PHeadPivot { get { return Msc ? "LOD/DriverHeadPivot" : "Functions/PlayerTrigger/DriverHeadPivot"; } }
+        static string PCamPivot { get { return Msc ? "LOD/DriverHeadPivot/CameraPivot/Pivot" : "Functions/PlayerTrigger/DriverHeadPivot/CameraPivotPLR/Pivot"; } }
+        public static string PHatch { get { return Msc ? "RearDoor/doorear" : "Hatch/Hatch"; } }
+        public static string PDoorL { get { return Msc ? "DriverDoors/doorl" : "Doors/DoorFront(leftx)"; } }
+        public static string PDoorR { get { return Msc ? "DriverDoors/doorr" : "Doors/DoorFront(right)"; } }
+        public static string PTank { get { return Msc ? "FuelTank" : "Simulation/FuelTankSorbett"; } }
+        static string PLever { get { return Msc ? "LOD/Dashboard/ParkingBrake" : "Functions/HandBrake/LeverPivot"; } }
+        static string NSteer { get { return Msc ? "RusckoSteeringPivot" : "SteeringPivotSorbett"; } }
+        static string[] PRearDoors { get { return Msc ? new string[0] : new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)" }; } }
+        static string[] PSeats { get { return Msc ? new string[0] : new[] { "Colliders/seats1", "Colliders/seats2", "Colliders/seats3", "Colliders/seats4", "Colliders/bench", "RearSeat/Pivot/Coll" }; } }
+        static string[] PDriver
+        {
+            get
+            {
+                return Msc ? new[] { "LOD/PlayerTrigger/DriveTrigger", "LOD/DriverHeadPivot", "LOD/PlayerTrigger/SpawnPlayer", "MassDriver" }
+                           : new[] { "Functions/PlayerTrigger/DriveTriggerX", "Functions/PlayerTrigger/DriverHeadPivot", "Functions/PlayerTrigger/SpawnPlayer", "Functions/MassDriver", "Functions/SteeringColumnPivot" };
+            }
+        }
+        public static string Ctl(string sorbet)
+        {
+            if (!Msc || sorbet == null) return sorbet;
+            switch (sorbet)
+            {
+                case "Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet": return "LOD/Dashboard/Knobs/Ignition";
+                case "Functions/Dashboard/Buttons/ButtonLightModes": return "LOD/Dashboard/Knobs/Lights";
+                case "Functions/Dashboard/Buttons/ButtonWipers": return "LOD/Dashboard/Knobs/ButtonWipers";
+                case "Functions/Dashboard/Buttons/ButtonHazard": return "LOD/Dashboard/Knobs/ButtonHorn";
+                default: return null;
+            }
+        }
+
+        // Ruscko copiee (pack rallye MSC du 19/10, retours de JD) : nid de guepes retire (son automate Starter le reveille au
+        // demarrage : des guepes dans la voiture) ; automates 'Angle' des roues arriere coupes (essieu oscillant : roues
+        // inclinees) ; tirette de frein de parking coupee (ses automates ecrivent handbrakeInput a chaque image, par-dessus la
+        // touche du frein a main : voir MscBrake) ; refroidissement coupe (Cooling : un moteur de rallye a fond chauffait, le
+        // frottement du moteur montait) ; contact sans la cle de la Ruscko ('Check key' : PlayerKeyRuscko) ; demarreur de
+        // diesel fatigue rendu sur ('Check clutch' grince 4 fois sur 5, 'Starting engine' lance de 0,5 a 15 s : 0,6-1,4 s) ;
+        // FixedJoint de la racine retire (pose par l'automate LOD de la vraie Ruscko loin de la camera : la copie serait
+        // clouee sur place).
+        static void MscFixes(GameObject car)
+        {
+            Transform ct = car.transform;
+            int n = 0;
+            Transform hive = ct.Find("WaspHive");
+            if (hive != null) { Object.DestroyImmediate(hive.gameObject); n++; }
+            foreach (FixedJoint fj in car.GetComponents<FixedJoint>()) { Object.DestroyImmediate(fj); n++; }
+            foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                string on = f.transform.name;
+                if ((f.FsmName == "Angle" && f.GetComponent<Wheel>() != null) || on == "ParkingBrake" || (f.FsmName == "Cooling" && on == "Cooling")) { f.enabled = false; n++; continue; }
+                if (f.FsmName == "Use" && on == "Ignition")
+                    foreach (FsmState st in f.FsmStates)
+                        if (st.Name == "Check key")
+                            foreach (FsmStateAction ac in st.Actions)
+                            {
+                                var ic = ac as HutongGames.PlayMaker.Actions.IntCompare;
+                                if (ic != null) { ic.integer1 = new FsmInt { Value = ic.integer2 != null ? ic.integer2.Value : 1 }; n++; }
+                            }
+                if (f.FsmName == "Starter" && on == "Starter")
+                    foreach (FsmState st in f.FsmStates)
+                        foreach (FsmStateAction ac in st.Actions)
+                        {
+                            var re = ac as HutongGames.PlayMaker.Actions.SendRandomEvent;
+                            if (st.Name == "Check clutch" && re != null && re.weights != null && re.weights.Length == 2) { re.weights[0].Value = 0f; re.weights[1].Value = 1f; n++; }
+                            var rf = ac as HutongGames.PlayMaker.Actions.RandomFloat;
+                            if (st.Name == "Starting engine" && rf != null) { rf.min.Value = 0.6f; rf.max.Value = 1.4f; n++; }
+                        }
+            }
+            Log.Info("vaz : Ruscko copiee : " + n + " correction(s) (guepes, roues arriere, tirette, refroidissement, contact sans cle, demarreur)");
         }
 
         // Voiture du rallye du jeu (RACES/.../RALLYCAR3 ; chez l'invite, Races la sort de son parent) : recherche parmi tous les
@@ -571,6 +658,7 @@ namespace MWCoop
                 }
                 catch (System.Exception e) { Log.Warn("vaz : automate " + f.FsmName + " : " + e.Message); }
             }
+            if (Msc) MscFixes(car);
 
             // 2. Visuel de la SORBET cache (colliders et fumee d'echappement gardes), LODGroup retire, portieres arriere et hayon
             //    eteints (trois portes), degats coupes.
@@ -582,7 +670,9 @@ namespace MWCoop
             foreach (LODGroup lg in car.GetComponentsInChildren<LODGroup>(true)) Object.Destroy(lg);
             // (hayon de la SORBET garde quand le modele a le sien : il porte celui de la VAZ, voir 4b)
             bool hasHatch = File.Exists(Path.Combine(cur.Dir, "hayon.p205"));
-            foreach (string dp in hasHatch ? new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)" } : new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)", "Hatch/Hatch" })
+            var offParts = new List<string>(PRearDoors);
+            if (!hasHatch) offParts.Add(PHatch);
+            foreach (string dp in offParts)
             {
                 Transform d = ct.Find(dp);
                 if (d != null && d.gameObject.activeSelf) d.gameObject.SetActive(false);
@@ -593,7 +683,7 @@ namespace MWCoop
             // VAZ, ils occupaient la zone d'entree du conducteur et la place du passager une fois reculees -- plus moyen d'y
             // entrer (retour de JD, 18/10 ; releve autotest vaz, VazPlaces).
             int seatColl = 0;
-            foreach (string sp in new[] { "Colliders/seats1", "Colliders/seats2", "Colliders/seats3", "Colliders/seats4", "Colliders/bench", "RearSeat/Pivot/Coll" })
+            foreach (string sp in PSeats)
             {
                 Transform s = ct.Find(sp);
                 if (s == null) continue;
@@ -614,6 +704,14 @@ namespace MWCoop
                 if (at == null || !inf.TryGetValue(ax[1], out a1) || !inf.TryGetValue(ax[2], out a2)) continue;
                 at.localPosition = new Vector3(at.localPosition.x, at.localPosition.y, offset.z + (a1.z + a2.z) * 0.5f);
             }
+            // (Ruscko : roues directement sous la voiture -- chacune avancee ou reculee a l'essieu du modele, pack rallye MSC)
+            if (Msc)
+                foreach (Wheel w in wheels)
+                {
+                    Vector3 lp = ct.InverseTransformPoint(w.transform.position), a;
+                    if (!inf.TryGetValue("wheel_" + (lp.x < 0 ? "l" : "r") + (lp.z > 0 ? "f" : "r"), out a)) continue;
+                    w.transform.position = ct.TransformPoint(new Vector3(lp.x, lp.y, offset.z + a.z));
+                }
 
             // 4. Carrosserie et capot (soude : pas de moteur dessous), portieres, volant.
             Material basePaint = FindMat(sorbet, "paint") ?? FindMat(sorbet, "");
@@ -624,12 +722,13 @@ namespace MWCoop
             AddParts(b, body.transform, "carrosserie.p205", basePaint, paint, number);
             AddParts(b, body.transform, "capot.p205", basePaint, paint, number);
             int doors = 0;
-            foreach (string[] dd in new[] { new[] { "portiere_g.p205", "DoorFront(leftx)", "door_dside_f" }, new[] { "portiere_d.p205", "DoorFront(right)", "door_pside_f" } })
+            foreach (string[] dd in new[] { new[] { "portiere_g.p205", PDoorL, "door_dside_f" }, new[] { "portiere_d.p205", PDoorR, "door_pside_f" } })
             {
-                Transform sd = FindDeep(ct, dd[1]);
-                if (sd == null) { Log.Warn("vaz : " + dd[1] + " de la SORBET introuvable"); continue; }
+                Transform sd = ct.Find(dd[1]);
+                if (sd == null) { Log.Warn("vaz : " + dd[1] + " de la voiture de base introuvable"); continue; }
                 Vector3 hl;
-                if (inf.TryGetValue(dd[2], out hl))
+                if (Msc && inf.TryGetValue(dd[2], out hl)) MscHinge(ct, body.transform, sd, dd[0], hl);
+                else if (inf.TryGetValue(dd[2], out hl))
                 {
                     // charniere de la SORBET sur celle de la VAZ (x et z ; axe vertical garde), attache de l'articulation recalee
                     Vector3 was = ct.InverseTransformPoint(sd.position), lw = ct.InverseTransformPoint(body.transform.TransformPoint(hl));
@@ -651,7 +750,7 @@ namespace MWCoop
 
             // 4b. Hayon (coffre) : celui de la SORBET (corps sur charniere : clic pour ouvrir, ses automates, synchro du jeu) pose
             //     sur la charniere de la VAZ (haut du hayon), le hayon du modele accroche dessous (demande de JD, 18/10 soir).
-            Transform sh = ct.Find("Hatch/Hatch");
+            Transform sh = ct.Find(PHatch);
             Vector3 hh;
             if (hasHatch && sh != null && inf.TryGetValue("hayon_charniere", out hh))
             {
@@ -707,17 +806,17 @@ namespace MWCoop
                 AddParts(b, inner, "volant.p205", basePaint, paint, number);
                 Vector3 axv;
                 if (inf.TryGetValue("volant_axe", out axv) && axv.sqrMagnitude > 0.1f) b.SteerAxis = axv.normalized;
-                b.SorbetSteer = FindDeep(ct, "SteeringPivotSorbett");
+                b.SorbetSteer = FindDeep(ct, NSteer);
                 if (b.SorbetSteer != null) b.SorbetSteerRest = b.SorbetSteer.localRotation;
                 b.Axis = car.GetComponent("AxisCarController");
             }
 
             // 5. Roues visibles : jantes et pneus de RALLYCAR3 sur les modeles de roue de la SORBET, au rayon de la SORBET, a la
             //    voie de la VAZ (roue visible decalee le long de l'essieu ; les roues physiques ne bougent pas).
-            GameObject rc = RallyCar();
-            int rw = 0;
+            GameObject rc = Msc ? null : RallyCar();
+            int rw = Msc ? MscWheels(b, ct, wheels, inf, offset, basePaint, paint, number) : 0;
             Wheel[] rcw = rc != null ? rc.GetComponentsInChildren<Wheel>(true) : new Wheel[0];
-            foreach (Wheel w in wheels)
+            foreach (Wheel w in Msc ? new Wheel[0] : wheels)
             {
                 Wheel mate = null;
                 foreach (Wheel x in rcw) if (x.wheelPos == w.wheelPos) { mate = x; break; }
@@ -742,7 +841,7 @@ namespace MWCoop
             if (hp != null)
             {
                 delta = (offset + cur.Head) - ct.InverseTransformPoint(hp.position);
-                foreach (string mp in new[] { "Functions/PlayerTrigger/DriveTriggerX", "Functions/PlayerTrigger/DriverHeadPivot", "Functions/PlayerTrigger/SpawnPlayer", "Functions/MassDriver", "Functions/SteeringColumnPivot" })
+                foreach (string mp in PDriver)
                 {
                     Transform m = ct.Find(mp);
                     if (m != null) m.position = ct.TransformPoint(ct.InverseTransformPoint(m.position) + delta);
@@ -761,7 +860,7 @@ namespace MWCoop
                 // l'avant du siege ; reculee avec la tete, elle n'etait plus atteignable (retour de JD, 18/10). Ramenee 15 cm
                 // en arriere de sa place d'origine (avant : il fallait se coller au volant), 8 cm vers la portiere, et agrandie
                 // (rayon 26 cm, 70 cm de long) : elle couvre l'ancien point et l'avant du siege.
-                Transform dtx = ct.Find("Functions/PlayerTrigger/DriveTriggerX");
+                Transform dtx = ct.Find(PDriveTrigger);
                 if (dtx != null)
                 {
                     float side = ct.InverseTransformPoint(dtx.position).x < 0f ? -1f : 1f;
@@ -776,15 +875,18 @@ namespace MWCoop
             int ctl = 0;
             foreach (KeyValuePair<string, Vector3> kv in cur.Controls)
             {
-                Transform t = ct.Find(kv.Key);
-                if (t == null) { Log.Warn("vaz : commande " + kv.Key + " introuvable"); continue; }
+                string cp = Ctl(kv.Key);
+                if (cp == null) continue;   // (rien de tel sur la Ruscko)
+                Transform t = ct.Find(cp);
+                if (t == null) { Log.Warn("vaz : commande " + cp + " introuvable"); continue; }
                 if (cur.ControlSize > 0f) Shrink(t, cur.ControlSize);   // (boutons a 3 cm : le starter de la SORBET couvrait les phares)
                 if (MoveOnto(t, body.transform.TransformPoint(kv.Value))) ctl++;
             }
             if (cur.Off != null)
                 foreach (string op in cur.Off)
                 {
-                    Transform o = ct.Find(op);
+                    string cp = Ctl(op);
+                    Transform o = cp != null ? ct.Find(cp) : null;
                     if (o == null) continue;
                     foreach (Collider k in o.GetComponentsInChildren<Collider>(true)) { k.enabled = false; b.OffColl.Add(k); }
                 }
@@ -810,21 +912,25 @@ namespace MWCoop
                     if (kn.Choke)
                     {
                         b.ChokeKnob = g.transform; b.ChokeRest = kn.At; b.ChokeDir = kn.Normal;
-                        b.ChokeButton = kn.Path != null ? ct.Find(kn.Path) : null;
+                        b.ChokeButton = Ctl(kn.Path) != null ? ct.Find(Ctl(kn.Path)) : null;
                     }
                 }
-            if (cur.HasDome)
+            if (cur.HasDome && !Msc)
             {
                 Transform dome = ct.Find("Functions/InteriorLight");
                 if (dome != null) MoveOnto(dome, body.transform.TransformPoint(cur.Dome));
             }
-            Transform lever = ct.Find("Functions/HandBrake/LeverPivot");
+            Transform lever = ct.Find(PLever);
             if (lever != null)
             {
                 // (addons : zone cliquable ramenee a la poignee -- celle de la SORBET masquait le bouton du warning de la Subaru)
-                if (cur.ControlSize > 0f) Shrink(lever, cur.ControlSize * 2f);
-                MoveOnto(lever, body.transform.TransformPoint(cur.BrakeGrip));
-                b.SorbetBrake = lever; b.SorbetBrakeRest = lever.localRotation;
+                if (Msc) foreach (Collider k in lever.GetComponentsInChildren<Collider>(true)) { k.enabled = false; b.OffColl.Add(k); }   // (Ruscko : touche du frein a main, MscBrake)
+                else
+                {
+                    if (cur.ControlSize > 0f) Shrink(lever, cur.ControlSize * 2f);
+                    MoveOnto(lever, body.transform.TransformPoint(cur.BrakeGrip));
+                    b.SorbetBrake = lever; b.SorbetBrakeRest = lever.localRotation;
+                }
                 b.BrakePivot = new GameObject("VAZ_frein").transform;
                 b.BrakePivot.SetParent(body.transform, false);
                 b.BrakePivot.localPosition = cur.BrakePivot;
@@ -832,9 +938,9 @@ namespace MWCoop
                 inner.SetParent(b.BrakePivot, false);
                 inner.localPosition = -cur.BrakePivot;
                 AddParts(b, inner, "frein.p205", basePaint, paint, number);
-                FitLever(lever, b.BrakePivot);
+                if (!Msc) FitLever(lever, b.BrakePivot);
             }
-            else Log.Warn("vaz : frein a main du jeu (Functions/HandBrake/LeverPivot) introuvable");
+            else Log.Warn("vaz : frein a main du jeu (" + PLever + ") introuvable");
 
             // 7. Lumieres de la SORBET sur les feux de la VAZ ; listes pour allumer les feux du modele.
             int lights = 0;
@@ -875,7 +981,8 @@ namespace MWCoop
                 b.Flaps.Add(bg);
             }
             if (b.Flaps != null) Log.Info("vaz : " + b.Flaps.Count + " bavette(s) souple(s)");
-            Transform tank = ct.Find("Simulation/FuelTankSorbett");
+            if (b.Axis == null) b.Axis = car.GetComponent("AxisCarController");
+            Transform tank = ct.Find(PTank);
             PlayMakerFSM tf = tank != null ? Game.FsmOn(tank.gameObject, "Data") : null;
             FsmFloat fuel = tf != null ? tf.FsmVariables.FindFsmFloat("FuelLevel") : null;
             if (fuel != null) fuel.Value = 40f;
@@ -887,6 +994,86 @@ namespace MWCoop
             Log.Info("vaz : " + name + " (" + cur.Name + ") construite en " + pos.ToString("F1") + " : " + emptied + " etats de sauvegarde vides, " + ids + " identifiants prefixes, " + b.Hidden.Count + " rendus SORBET caches, "
                      + doors + " portieres, " + ctl + " commandes posees, " + seatColl + " colliders de sieges SORBET coupes, " + rw + " roues du rallye" + (rc == null ? " (RALLYCAR3 introuvable)" : "") + ", " + lights + " lumieres posees, " + b.Lamps.Count + " pieces de feux, decalage " + offset.ToString("F2") + ", tete " + delta.ToString("F2"));
             return b;
+        }
+
+        // Portiere de la Ruscko sur la charniere du modele (pack rallye MSC, retours de JD du 19/10) : charniere sur l'arete avant
+        // EXTERIEURE de la portiere du modele (celle d'infos.txt est en retrait ; la Ruscko ouvre plus grand que la SORBET et le
+        // bord avant se decollait du montant) ; c'est l'ANCRE du HingeJoint (pas l'origine de la portiere, comme sur la SORBET)
+        // qui y va, axe de la charniere remis vertical dans la voiture (celui de la Ruscko est dans le repere de sa portiere).
+        static void MscHinge(Transform ct, Transform body, Transform sd, string file, Vector3 hl)
+        {
+            float front = float.MinValue, ox = 0f;
+            foreach (Part p in Load(file)) foreach (Vector3 v in p.Mesh.vertices) front = Mathf.Max(front, v.z);
+            foreach (Part p in Load(file)) foreach (Vector3 v in p.Mesh.vertices) if (v.z > front - 0.06f) ox = Mathf.Max(ox, Mathf.Abs(v.x));
+            if (ox > 0f) hl = new Vector3(Mathf.Sign(hl.x) * (ox - 0.015f), hl.y, front - 0.03f);
+            var hj = sd.GetComponent<HingeJoint>();
+            Vector3 al = ct.InverseTransformPoint(hj != null ? sd.TransformPoint(hj.anchor) : sd.position), lw = ct.InverseTransformPoint(body.TransformPoint(hl));
+            sd.position += ct.TransformVector(new Vector3(lw.x - al.x, 0f, lw.z - al.z));
+            if (hj == null) return;
+            Vector3 axW = ct.InverseTransformDirection(sd.TransformDirection(hj.axis));
+            hj.axis = sd.InverseTransformDirection(ct.up * (axW.y < 0f ? -1f : 1f));
+            Vector3 aw = sd.TransformPoint(hj.anchor);
+            hj.autoConfigureConnectedAnchor = false;
+            hj.connectedAnchor = hj.connectedBody != null ? hj.connectedBody.transform.InverseTransformPoint(aw) : aw;
+            Log.Info("vaz : " + sd.name + " : charniere en " + hl.ToString("F3") + " (arete avant du modele), axe " + axW.ToString("F2") + " -> vertical");
+        }
+
+        // Roues sur My Summer Car (JD 24/10 : « leurs roues d'origine et pneus, vu que ce n'est pas l'hiver ») : roue.p205 du
+        // modele (jante et pneu de terre de l'addon) sur chaque roue de la Ruscko, rayon et largeur physiques pris sur la roue du
+        // modele, flanc du pneu aligne sur l'aile (pack rallye MSC). Sans roue.p205 (la VAZ) : les roues de la Ruscko restent.
+        static int MscWheels(Built b, Transform ct, Wheel[] wheels, Dictionary<string, Vector3> inf, Vector3 offset, Material basePaint, Color paint, int number)
+        {
+            List<Part> rp = Load("roue.p205");
+            if (rp.Count == 0)
+            {
+                // (roues de la Ruscko sorties a la voie du modele le long de leur axe : elles restaient rentrees sous les ailes de la VAZ)
+                foreach (Wheel w in wheels)
+                {
+                    foreach (Renderer r in w.GetComponentsInChildren<Renderer>(true)) { b.Hidden.Remove(r); r.enabled = true; }
+                    Transform model = w.model != null ? w.model.transform : w.transform;
+                    Vector3 lp = ct.InverseTransformPoint(model.position), target;
+                    if (!inf.TryGetValue("wheel_" + (lp.x < 0 ? "l" : "r") + (lp.z > 0 ? "f" : "r"), out target)) continue;
+                    Vector3 d = ct.right * ((offset.x + target.x) - lp.x);
+                    foreach (Transform c in model) c.position += d;
+                }
+                Log.Info("vaz : pas de roue.p205 : roues de la Ruscko gardees, a la voie du modele");
+                return 0;
+            }
+            Bounds wb = rp[0].Mesh.bounds;
+            foreach (Part p in rp) wb.Encapsulate(p.Mesh.bounds);
+            float mr = Mathf.Max(wb.extents.y, wb.extents.z);
+            List<Part> bodyParts = Load("carrosserie.p205");
+            int n = 0;
+            foreach (Wheel w in wheels)
+            {
+                w.radius = mr; w.width = wb.size.x;
+                Transform model = w.model != null ? w.model.transform : w.transform;
+                Vector3 lp = ct.InverseTransformPoint(model.position), target;
+                Quaternion q = lp.x > 0f ? Quaternion.Euler(0f, 180f, 0f) : Quaternion.identity;
+                var rw = new GameObject("VAZ_roue").transform;
+                rw.SetParent(model, false);
+                rw.localRotation = q; rw.localPosition = -(q * wb.center);
+                AddParts(b, rw, "roue.p205", basePaint, paint, number);
+                if (inf.TryGetValue("wheel_" + (lp.x < 0 ? "l" : "r") + (lp.z > 0 ? "f" : "r"), out target))
+                {
+                    float extra = Mathf.Clamp(FenderGap(bodyParts, target, wb.extents.x, mr) - 0.006f, 0f, 0.12f);
+                    rw.position += ct.right * ((offset.x + target.x) - lp.x + (lp.x < 0 ? -extra : extra));
+                }
+                n++;
+            }
+            Log.Info("vaz : " + n + " roues du modele (rayon " + mr.ToString("F3") + ", largeur " + wb.size.x.ToString("F3") + ")");
+            return n;
+        }
+
+        // Ecart entre le flanc exterieur du pneu (moyeu + demi-largeur) et l'aile au-dessus : sommets de la carrosserie a moins de
+        // 0,9 rayon du moyeu en z, entre 5 cm et rayon + 15 cm au-dessus du moyeu ; |x| le plus grand.
+        static float FenderGap(List<Part> body, Vector3 hub, float halfWidth, float radius)
+        {
+            float fx = 0f;
+            foreach (Part p in body)
+                foreach (Vector3 v in p.Mesh.vertices)
+                    if (Mathf.Abs(v.z - hub.z) < radius * 0.9f && v.y > hub.y + 0.05f && v.y < hub.y + radius + 0.15f && Mathf.Abs(v.x) > fx) fx = Mathf.Abs(v.x);
+            return fx > 0f ? fx - (Mathf.Abs(hub.x) + halfWidth) : 0f;
         }
 
         // Copie d'un sous-arbre reduite a Transform + MeshFilter + MeshRenderer, tout allume.
@@ -1076,13 +1263,13 @@ namespace MWCoop
         {
             if (b.M == null || !b.M.SeatEyes) return;
             if (seatPl == null) seatPl = GameObject.Find("PLAYER");
-            Transform piv = b.Car.transform.Find("Functions/PlayerTrigger/DriverHeadPivot/CameraPivotPLR/Pivot");
+            Transform piv = b.Car.transform.Find(PCamPivot);
             if (seatPl == null || piv == null || seatPl.transform.parent != piv) { b.SeatAt = -1f; b.SeatSet = false; return; }
             if (b.SeatSet) return;
             if (b.SeatAt < 0f) { b.SeatAt = now; return; }
             if (now - b.SeatAt < 0.8f) return;
             b.SeatSet = true;
-            Transform hp = b.Car.transform.Find("Functions/PlayerTrigger/DriverHeadPivot"), cam = seatPl.transform.Find("Pivot/AnimPivot/Camera/FPSCamera");
+            Transform hp = b.Car.transform.Find(PHeadPivot), cam = seatPl.transform.Find("Pivot/AnimPivot/Camera/FPSCamera");
             if (hp == null || cam == null) return;
             Transform ct = b.Car.transform;
             Vector3 want = ct.TransformPoint(ct.InverseTransformPoint(hp.position) + Seats.EyeFromPivot), was = cam.position;
@@ -1090,8 +1277,25 @@ namespace MWCoop
             Log.Info("vaz : vue de conduite recalee de " + ct.InverseTransformPoint(was).ToString("F2") + " a " + ct.InverseTransformPoint(want).ToString("F2") + " (repere de la voiture)");
         }
 
+        // My Summer Car : la tirette de la Ruscko (automates coupes, MscFixes) remplacee par la touche de frein a main du jeu
+        // (CarController : wheel.handbrake = handbrakeInput tant qu'on conduit) ; personne au volant ici et voiture pas suivie
+        // pour un autre : frein serre sur les roues arriere (elle ne roule pas seule) ; le levier du modele suit (20 degres serre).
+        static void MscBrake(Built b)
+        {
+            bool driven = VehicleSync.LocalDrivingRoot == b.Car.transform;
+            float hb = 0f;
+            foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>(true))
+            {
+                if (!w.wheelPos.ToString().StartsWith("REAR")) continue;
+                if (!driven && (b.Rb == null || !b.Rb.isKinematic)) w.handbrake = 1f;
+                hb = Mathf.Max(hb, w.handbrake);
+            }
+            if (b.BrakePivot != null) b.BrakePivot.localRotation = Quaternion.AngleAxis(-Mathf.Clamp01(hb) * 20f * (b.M != null ? b.M.BrakeAngle : 1f), Vector3.right);
+        }
+
         static void Brake(Built b)
         {
+            if (Msc) { MscBrake(b); return; }
             if (b.BrakePivot == null || b.SorbetBrake == null) return;
             if (b.BrakeKnob == null)
             {
@@ -1248,8 +1452,25 @@ namespace MWCoop
             var root = new GameObject("MWCoop-VazApercu-" + number);
             b.Car = root;
             foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205", "bavette_ag.p205", "bavette_ad.p205", "bavette_vg.p205", "bavette_vd.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
-            GameObject rc = RallyCar();
             Dictionary<string, Vector3> inf = Info();
+            // (My Summer Car : roue.p205 du modele, sinon les roues de la Ruscko -- pas de RALLYCAR3)
+            List<Part> rp = Msc ? Load("roue.p205") : new List<Part>();
+            GameObject rc = Msc ? (rp.Count > 0 ? null : sorbet) : RallyCar();
+            if (rp.Count > 0)
+            {
+                Bounds wb = rp[0].Mesh.bounds;
+                foreach (Part p in rp) wb.Encapsulate(p.Mesh.bounds);
+                foreach (string wn in new[] { "wheel_lf", "wheel_rf", "wheel_lr", "wheel_rr" })
+                {
+                    Vector3 c;
+                    if (!inf.TryGetValue(wn, out c)) continue;
+                    Quaternion q = wn[6] == 'r' ? Quaternion.Euler(0f, 180f, 0f) : Quaternion.identity;
+                    var rw = new GameObject("roue" + wn).transform;
+                    rw.SetParent(root.transform, false);
+                    rw.localRotation = q; rw.localPosition = c - q * wb.center;
+                    AddParts(b, rw, "roue.p205", basePaint, paint, number);
+                }
+            }
             if (rc != null)
                 foreach (Wheel w in rc.GetComponentsInChildren<Wheel>(true))
                 {

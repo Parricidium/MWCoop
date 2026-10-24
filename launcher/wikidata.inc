@@ -626,7 +626,11 @@ static const WikiBlock kW_Addons[] = {   // (1.5.1, JD : comment installer une v
     { WB_B, L"Couleur et numéro sont uniques entre tous les joueurs, tous modèles confondus.",
             L"Colour and number are unique across all players, whatever the model." },
     { WB_B, L"Course sur glace et rallye : on s'inscrit avec sa voiture des joueurs, VAZ ou addon.",
-            L"Ice race and rally: you sign up with your players' car, VAZ or add-on." },
+            L"Ice race and rally: you sign up with your players' car, VAZ or add-on.", 0, WG_MWC },
+    { WB_B, L"Sur My Summer Car : les mêmes voitures (le même téléchargement), posées sur la RUSCKO avec leurs roues et pneus de terre d'origine, et la tenue de route de la SATSUMA rallye. En attendant leurs photos d'été, leurs cartes montrent leur nom.",
+            L"On My Summer Car: the same cars (the same download), built on the RUSCKO with their own gravel wheels and tyres, and the handling of the rally SATSUMA. Until their summer photos arrive, their cards show their name.", 0, WG_MSC },
+    { WB_B, L"Rallye du week-end (My Summer Car) : amène ta voiture à la tente de Fleetari, plus près que ta SATSUMA. Inscription, parc fermé et spéciales se font alors avec elle ; casque obligatoire, comme d'habitude.",
+            L"Weekend rally (My Summer Car): bring your car to Fleetari's tent, closer than your SATSUMA. Registration, parc fermé and stages then go with it; helmet required, as usual.", 0, WG_MSC },
     { WB_H, L"Faire sa livrée",
             L"Making your livery", 0 },
     { WB_S, L"Onglet Addons : clique la voiture, puis Gabarit. Une copie du gabarit s'ouvre dans l'Explorateur.",
@@ -786,10 +790,12 @@ static const WikiBlock kW_MscBeta[] = {
     { WB_B, L"Depuis 1.1.1 : l'heure et la météo de l'hôte, la circulation et les PNJ, les boulots, l'argent et le porte-monnaie (N), les magasins de Teimo et de Fleetari, le carburant, et la mécanique : pièces, boulons, réglages, liquides et peinture.",
             L"Since 1.1.1: the host's time and weather, traffic and NPCs, jobs, money and the wallet (N), Teimo's and Fleetari's shops, fuel, and mechanics: parts, bolts, tuning, fluids and paint." },
     { WB_B, L"Depuis 1.9.0 : la radio et le lecteur CD (même morceau à la même seconde, la radio de chaque voiture entendue là où elle est), les voix des PNJ, les particules du monde, la vapeur du sauna, les portes automatiques, les chocs entre voitures de joueurs, les fuites, les commandes tenues, les gestes et les outils en main, la cuisine, la maison (fusibles, kilju), les évènements du monde, tout le reste du monde, la partie de l'hôte rangée chez l'invité, les voitures IA et les résultats du rallye avec les temps des pilotes humains.", L"Since 1.9.0: the radio and the CD player (same song at the same second, each car's radio heard where it is), the NPCs' voices, the particles of the world, the sauna steam, the automatic doors, crashes between players' cars, leaks, held controls, gestures and hand tools, cooking, the house (fuses, kilju), the world's events, everything else of the world, the host's game kept on the guest's side, the rally's AI cars and results with the human drivers' times." },
+    { WB_B, L"Depuis 1.14 : la VAZ-2108 et les voitures addons (F10 > Voitures, page Personnage > Addons du lanceur), sur la base de la RUSCKO, avec leurs roues de terre et la tenue de route de la SATSUMA rallye ; le rallye du week-end avec elles.",
+            L"Since 1.14: the VAZ-2108 and the add-on cars (F10 > Cars, launcher's Character > Add-ons page), built on the RUSCKO, with their gravel wheels and the rally SATSUMA's handling; the weekend rally with them." },
     { WB_H, L"Pas encore", L"Not yet" },
     { WB_B, L"Les prix du rallye et les résultats des dragsters des autres joueurs : pas encore.", L"Rally prizes and the drag race results of the other players: not yet." },
-    { WB_B, L"Course sur glace, VAZ-2108, boutique OSUUSKAUPPA, musée, sacs de couchage, caméscope et cassettes VHS : des ajouts faits pour My Winter Car, absents de My Summer Car.",
-            L"Ice race, VAZ-2108, OSUUSKAUPPA shop, museum, sleeping bags, camcorder and VHS tapes: additions made for My Winter Car, not in My Summer Car." },
+    { WB_B, L"Course sur glace, boutique OSUUSKAUPPA, musée, sacs de couchage, caméscope et cassettes VHS : des ajouts faits pour My Winter Car, absents de My Summer Car.",
+            L"Ice race, OSUUSKAUPPA shop, museum, sleeping bags, camcorder and VHS tapes: additions made for My Winter Car, not in My Summer Car." },
     { WB_TIP, L"Quelque chose cloche ? Envoie le zip des journaux sur le Discord (#bug-reports) : la BETA avance avec vos retours.",
               L"Something wrong? Send the logs zip on the Discord (#bug-reports): the BETA moves on with your reports." },
     { WB_GO, L"Changer de jeu (MSC ou MWC)", L"Switch game (MSC or MWC)", 1000 + WA_UPDATE },
@@ -1063,7 +1069,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WARTG(WG_MWC, 1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
     WARTG(WG_MWC, 1, L"Monter et exporter une cassette", L"Edit and export a tape", L"Touche R : rogner, effacer, .mp4", L"Press R: trim, erase, .mp4", kW_Montage),
     WARTG(WG_MWC, 1, L"Le musée de la Corse", L"The Museum of Corsica", L"Relief, bustes, tableaux, rallye", L"Relief model, busts, paintings, rallying", kW_Museo),
-    WARTG(WG_MWC, 1, L"La VAZ-2108 de rallye", L"The rally VAZ-2108", L"Une couleur et un numéro par joueur", L"A colour and a number per player", kW_Vaz),
+    WART(1, L"La VAZ-2108 de rallye", L"The rally VAZ-2108", L"Une couleur et un numéro par joueur", L"A colour and a number per player", kW_Vaz),   // (My Summer Car aussi depuis le 24/10)
     WARTG(WG_MWC, 1, L"Copilote de rallye (KARTTURI 2000)", L"Rally co-driver (KARTTURI 2000)", L"Le GPS qui annonce les virages", L"The GPS that calls the corners", kW_Kartturi),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
@@ -1082,7 +1088,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Linux et Steam Deck", L"Linux and Steam Deck", L"Proton, option de lancement, limites", L"Proton, launch option, limits", kW_Linux),   // (WA_LINUX = 31)
     WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
     WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, relief, végétation, lumières, co-op", L"Objects, roads, terrain, plants, lights, co-op", kW_Editor),   // (WA_EDITOR = 33)
-    WARTG(WG_MWC, 2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34)
+    WART(2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34 ; My Summer Car aussi depuis le 24/10)
     WARTG(WG_MWC, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
     WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
     WART(2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)

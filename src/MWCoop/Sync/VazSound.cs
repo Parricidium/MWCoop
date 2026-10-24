@@ -184,8 +184,27 @@ namespace MWCoop
                 }
             Transform far = Find(car.transform, "sound_exhaust");
             if (far != null && far.GetComponent<AudioSource>() != null) muted.Add(far.GetComponent<AudioSource>());
+            // My Summer Car : bruit moteur de la Ruscko fait par le SoundController de UnityCar (sources creees a son Start, voiture
+            // encore eteinte ici, et celles deja creees sur la vraie Ruscko, copiees avec elle) -> ses clips du moteur et du
+            // demarreur retires, les sources qui les jouent rendues muettes (pack rallye MSC)
+            if (Game.Msc)
+            {
+                Component scn = car.GetComponent("SoundController");
+                var engClips = new List<AudioClip>();
+                if (scn != null)
+                    foreach (string fn in new[] { "engineThrottle", "engineNoThrottle", "startEngine" })
+                    {
+                        System.Reflection.FieldInfo fi = scn.GetType().GetField(fn, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (fi == null || fi.FieldType != typeof(AudioClip)) continue;
+                        AudioClip c = fi.GetValue(scn) as AudioClip;
+                        if (c != null) engClips.Add(c);
+                        fi.SetValue(scn, null);
+                    }
+                foreach (AudioSource a in car.GetComponentsInChildren<AudioSource>(true))
+                    if (a.name == "Exhaust" || (a.clip != null && engClips.Contains(a.clip))) muted.Add(a);
+            }
             // demarreur
-            Transform st = Find(car.transform, "STARTERxSorbet");
+            Transform st = Find(car.transform, Game.Msc ? "Starter" : "STARTERxSorbet");
             if (st != null && starter.Count > 0)
             {
                 foreach (PlayMakerFSM f in st.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Starter") starterFsm = f;
@@ -195,8 +214,10 @@ namespace MWCoop
                     // (sons du jeu coupes seulement s'ils sont remplaces : la cle -- JD 21/10, addons : « pour le contact le son
                     // d'origine de la cle du jeu » -- et la prise du moteur)
                     bool keyOwn = starter.ContainsKey("cle"), catchOwn = starter.ContainsKey("prise") || starter.ContainsKey("demarrage");
+                    // (Ruscko : 'Turn key' et 'Starting engine' jouent le lancement du diesel -- la cle est dans l'automate du contact)
+                    bool crankOwn = Game.Msc && (starter.ContainsKey("demarreur") || starter.ContainsKey("demarrage"));
                     foreach (FsmState state in starterFsm.FsmStates)
-                        if ((state.Name == "Turn key" && keyOwn) || (state.Name == "Start engine" && catchOwn))
+                        if ((state.Name == "Turn key" && (Game.Msc ? crankOwn : keyOwn)) || (state.Name == "Starting engine" && crankOwn) || (state.Name == "Start engine" && catchOwn))
                             foreach (FsmStateAction ac in state.Actions)
                                 if (ac.GetType().Name == "MasterAudioPlaySound") ac.Enabled = false;
                     Transform ss = Find(car.transform, "StarterSound");
@@ -259,7 +280,7 @@ namespace MWCoop
                 if (s == "Start engine") { catchTime = Time.time; if (crank.isPlaying) crank.Stop(); if (starter.TryGetValue("prise", out c)) oneShot.PlayOneShot(c, 1f); }
                 starterState = s;
             }
-            bool cranking = s == "Fuel Mixture" || s == "Fuel Mixture 2";
+            bool cranking = Game.Msc ? s == "Turn key" || s == "Starting engine" : s == "Fuel Mixture" || s == "Fuel Mixture 2";
             // demarrage complet enregistre (rFactor : lancement + prise, « demarrage ») : depuis le debut a chaque appui sur le
             // demarreur ; coupe si on lache avant que le moteur prenne, sinon joue jusqu'au bout
             if (startSrc != null && startSrc.clip != null)

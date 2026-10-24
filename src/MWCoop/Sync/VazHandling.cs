@@ -55,8 +55,24 @@ namespace MWCoop
         static float mass = 950f;
         static float comFrac = -1f, comHeight = float.NaN;
 
+        // My Summer Car (JD 24/10, « la tenue de route comme la 205 ou l'Escort du pack MSC ») : base de la SATSUMA (moteur,
+        // essieux, formules des pneus, matieres du sol), puis la Satsuma montee en rallye du pack MSC (Peugeot205.cs,
+        // SatsumaRally, valide par JD le 19/10) : ressorts 25 000 N/m et amortisseurs 1 400 pour 495 kg (a l'echelle de la
+        // masse : memes frequences de caisse), course 0,15, braquage 33, inertie des roues 1,3 avant / 0,8 arriere, centre de
+        // gravite 0,3 m au-dessus des moyeux, trainee 0,02 ; pneus de rallye selon le sol (MscGrip). Le rallye moderne des
+        // addons (adherence arriere, frein a main qui fait pivoter, barres, lacet) par-dessus, comme sur My Winter Car.
+        static bool Msc { get { return Game.Msc; } }
+        const float SatMass = 495f, SatSpring = 25000f, SatDamp = 1400f, SatTravel = 0.15f, SatSteer = 33f, SatComAbove = 0.3f, SatDrag = 0.02f;
+        static readonly Dictionary<string, float> MscGrip = new Dictionary<string, float> { { "Track", 0.95f }, { "Offroad", 1.25f }, { "Grass", 1.15f }, { "Swamp", 1.0f } };
+
         static GameObject Source(out string name)
         {
+            if (Msc)
+            {
+                GameObject s = Game.FindAny("SATSUMA(557kg, 248)");
+                name = "Satsuma (SATSUMA)";
+                return s != null && s.GetComponent<Drivetrain>() != null ? s : null;
+            }
             GameObject c = Game.FindAny("CORRIS");
             if (c != null && c.GetComponent<Drivetrain>() != null) { name = "Rivett (CORRIS)"; return c; }
             name = "RALLYCAR3";
@@ -76,7 +92,7 @@ namespace MWCoop
                 {
                     Rigidbody srb = src.GetComponent<Rigidbody>();
                     if (srb != null && srb.mass > 600f) mass = srb.mass;
-                    if (b.Rb != null && srb != null) { b.Rb.drag = srb.drag; b.Rb.angularDrag = srb.angularDrag; }
+                    if (b.Rb != null && srb != null) { b.Rb.drag = Msc ? SatDrag : srb.drag; b.Rb.angularDrag = srb.angularDrag; }
                     n += CopyFields(src.GetComponent<Drivetrain>(), b.Dt, BaseDrive);
                     n += CopyFields(src.GetComponent("CarDynamics"), car.GetComponent("CarDynamics"), new[] { "inertiaFactor", "physicMaterials" });
                     Component sa = src.GetComponent("Axles"), ca = car.GetComponent("Axles");
@@ -105,6 +121,7 @@ namespace MWCoop
                         if (f > 0.2f && f < 0.8f) { comFrac = f; comHeight = lp.y - yW; }
                     }
                 }
+                if (Msc) comHeight = SatComAbove;
                 int off = 0;
                 foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "SetGrip" || (f.FsmName == "Suspension" && f.transform.name == "CoG")) { f.enabled = false; off++; }
@@ -142,7 +159,8 @@ namespace MWCoop
             int n = 0;
             VazCar.Spec sp = Sp(b);
             bool evo = sp != null;
-            float wantMass = evo ? sp.Mass : mass, steer = evo ? sp.Steer : SteerDeg, spring = evo ? sp.Spring : SpringRate, damp = evo ? sp.Damp : Damp;
+            float wantMass = evo ? sp.Mass : mass, steer = evo ? sp.Steer : SteerDeg, spring = evo ? sp.Spring : SpringRate, damp = evo ? sp.Damp : Damp, travel = SpringTravel;
+            if (Msc) { steer = SatSteer; spring = SatSpring * wantMass / SatMass; damp = SatDamp * wantMass / SatMass; travel = SatTravel; }
             Drivetrain.Transmissions tr = evo ? Drivetrain.Transmissions.AWD : Drivetrain.Transmissions.RWD;
             float[] gears = evo ? sp.Gears : Gears;
             if (b.Rb != null && !Mathf.Approximately(b.Rb.mass, wantMass)) { b.Rb.mass = wantMass; n++; }
@@ -184,7 +202,7 @@ namespace MWCoop
                     FieldInfo af = ax.GetType().GetField(an);
                     object axl = af != null ? af.GetValue(ax) : null;
                     if (axl == null) continue;
-                    n += SetF(axl, "suspensionRate", spring) + SetF(axl, "suspensionTravel", SpringTravel) + SetF(axl, "bumpRate", damp) + SetF(axl, "reboundRate", damp);
+                    n += SetF(axl, "suspensionRate", spring) + SetF(axl, "suspensionTravel", travel) + SetF(axl, "bumpRate", damp) + SetF(axl, "reboundRate", damp);
                     float ar = evo ? (an == "frontAxle" && sp.AntiRollFront > 0f ? sp.AntiRollFront : an == "rearAxle" && sp.AntiRollRear > 0f ? sp.AntiRollRear : sp.AntiRoll) : 0f;
                     if (ar > 0f) n += SetF(axl, "antiRollBarRate", ar);
                     if (an == "frontAxle") n += SetF(axl, "maxSteeringAngle", steer);
@@ -195,7 +213,8 @@ namespace MWCoop
             if (evo && sp.Handbrake > 0f)
                 foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true))
                     if (w.wheelPos.ToString().StartsWith("REAR")) n += SetF(w, "handbrakeFrictionTorque", sp.Handbrake);
-            foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", 0.753f); }
+            foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", Msc ? (w.wheelPos.ToString().StartsWith("FRONT") ? 1.3f : 0.8f) : 0.753f); }
+            if (Msc && b.Rb != null && !Mathf.Approximately(b.Rb.drag, SatDrag)) { b.Rb.drag = SatDrag; n++; }
             if (cd != null) n += SetF(cd, "frontRearBrakeBalance", 0.6f);
             // retour de force coupe : le couple d'auto-alignement (Wheel.CalcAligningForce, qui ne sert qu'a lui) divise par la
             // charge de la roue -- roue avant en l'air sur les bosses de la glace : 0/0 = NaN, 48 fois en 15 min de course (JD 21/10)
@@ -217,7 +236,7 @@ namespace MWCoop
                     FsmFloat mx = f.FsmVariables.GetFsmFloat("MaxAngle");
                     if (mx != null && !Mathf.Approximately(mx.Value, steer)) { mx.Value = steer; n++; }
                 }
-            if (first) Log.Info("vaz : " + (evo ? sp.Name : "Rivett rallye") + " : " + n + " valeurs posees, " + (dt != null ? dt.maxPower.ToString("F0") + " ch x " + dt.powerMultiplier.ToString("F2") + ", " + dt.maxTorque.ToString("F0") + " Nm, " + dt.transmission : "sans Drivetrain")
+            if (first) Log.Info("vaz : " + (evo ? sp.Name : Msc ? "Satsuma rallye" : "Rivett rallye") + (Msc ? " (My Summer Car : ressorts " + spring.ToString("F0") + ", amortisseurs " + damp.ToString("F0") + ")" : "") + " : " + n + " valeurs posees, " + (dt != null ? dt.maxPower.ToString("F0") + " ch x " + dt.powerMultiplier.ToString("F2") + ", " + dt.maxTorque.ToString("F0") + " Nm, " + dt.transmission : "sans Drivetrain")
                                 + ", " + wantMass.ToString("F0") + " kg, aide d'adherence " + helper.ToString("F2") + ", braquage " + steer);
             else if (n > 0 && respec++ < 5) Log.Info("vaz : " + n + " reglage(s) remis (le jeu les avait changes)");
         }
@@ -230,16 +249,17 @@ namespace MWCoop
             if (ax == null) return;
             float helper = Helper();
             float[] g = { -1f, -1f };
+            Dictionary<string, float> soils = Msc ? MscGrip : GripBySoil;
             foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>(true))
             {
                 float v;
-                if (w.physicMaterial == null || !GripBySoil.TryGetValue(w.physicMaterial.name.Replace(" (Instance)", ""), out v)) continue;
+                if (w.physicMaterial == null || !soils.TryGetValue(w.physicMaterial.name.Replace(" (Instance)", ""), out v)) continue;
                 int k = w.wheelPos.ToString().StartsWith("FRONT") ? 0 : 1;
                 g[k] = g[k] < 0f ? v : Mathf.Min(g[k], v);
             }
             for (int k = 0; k < 2; k++)
             {
-                if (g[k] < 0f) g[k] = b.LastGrip[k] > 0f ? b.LastGrip[k] : GripBySoil["RoadSnow"];
+                if (g[k] < 0f) g[k] = b.LastGrip[k] > 0f ? b.LastGrip[k] : Msc ? 1.0f : GripBySoil["RoadSnow"];
                 b.LastGrip[k] = g[k];
                 FieldInfo af = ax.GetType().GetField(k == 0 ? "frontAxle" : "rearAxle");
                 object axl = af != null ? af.GetValue(ax) : null;
@@ -275,7 +295,7 @@ namespace MWCoop
             Transform ct = b.Car.transform;
             if (b.Priming == null) { Transform r = ct.Find("Simulation/CarTempSorbet/Radiator"); b.Priming = r != null ? Game.FsmOn(r.gameObject, "Priming") : null; }
             if (b.Power == null) { Transform e = ct.Find("Simulation/Electricity"); b.Power = e != null ? Game.FsmOn(e.gameObject, "Power") : null; }
-            if (b.Tank == null) { Transform t = ct.Find("Simulation/FuelTankSorbett"); b.Tank = t != null ? Game.FsmOn(t.gameObject, "Data") : null; }
+            if (b.Tank == null) { Transform t = ct.Find(VazCar.PTank); b.Tank = t != null ? Game.FsmOn(t.gameObject, "Data") : null; }
             string what = "";
             if (b.Priming != null)
             {

@@ -234,7 +234,8 @@ namespace MWCoop
             new Mod("chandelles", ModJackStands.Update),
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
-            new Mod("rallye (MSC)", RallyMsc.Update),   // (22/10 : temps des pilotes humains au classement du rallye de My Summer Car)
+            new Mod("rallye (MSC)", RallyMsc.Update),
+            new Mod("rallye avec sa voiture (MSC)", RallyMscVaz.Update),   // (24/10 : VAZ et addons au rallye de My Summer Car)   // (22/10 : temps des pilotes humains au classement du rallye de My Summer Car)
             new Mod("trace", Trace.Update),
             new Mod("deroule", Flow.Update),
             new Mod("ecran d'attente", WaitScreen.Update),
@@ -407,7 +408,8 @@ namespace MWCoop
                                     Voices.OnLevelLoaded, Particles.OnLevelLoaded, Sauna.OnLevelLoaded, NearDoors.OnLevelLoaded, CarHits.OnLevelLoaded,
                                     CarLeaks.OnLevelLoaded, Knobs.OnLevelLoaded, AssembleIcon.OnLevelLoaded,   // (22/10 : modules generiques)
                                     Gestures.OnLevelLoaded, HandTools.OnLevelLoaded, Cooking.OnLevelLoaded, Home.OnLevelLoaded, Events.OnLevelLoaded,
-                                    WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded, WoodCarriers.OnLevelLoaded };   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
+                                    WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded, WoodCarriers.OnLevelLoaded,
+                                    Vaz.OnLevelLoaded, RallyMscVaz.OnLevelLoaded };   // (24/10 : voitures VAZ et addons sur la Ruscko)   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -432,7 +434,7 @@ namespace MWCoop
             // le reste du monde (WorldFsms : balayage, racines a ignorer communes), partie de l'hote rangee chez l'invite (Game.Name).
             "gestes", "outils en main", "cuisine", "maison", "evenements", "monde (automates)", "partie chez l'invite",
             "courses",   // (22/10 : voitures IA et resultats du rallye de MSC -- racine RALLY, Races.Rp)
-            "rallye (MSC)",
+            "rallye (MSC)", "rallye avec sa voiture (MSC)",
             "monde",   // (heure et meteo : World.FindMsc / SendMsc)
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
@@ -455,6 +457,7 @@ namespace MWCoop
             "feux",   // (20/10, joueurs : « le bois ne prend pas » -- cheminees, poeles et grill de MSC : memes automates WoodTrigger / SetFire que MWC)
             "phares", "capots du pack", "cablage", "porte-buches",   // (24/10 : faisceau tenu par un autre, Markos -- WiringGuard)
               // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)
+            "vaz-2108",   // (24/10, JD : les voitures addons sur MSC -- VazCar copie la RUSCKO, onglet Voitures du F10)
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;
