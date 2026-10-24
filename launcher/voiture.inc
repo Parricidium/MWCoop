@@ -1094,9 +1094,12 @@ static Bitmap *AddonPic(const Addon &a)
         return b;
     }
     // (My Summer Car : apercu-msc.png de l'addon ; l'apercu.png des addons est pris dans l'hiver de My Winter Car -- sans lui,
-    // vignette provisoire au nom de la voiture)
-    Bitmap *b = LoadAnyImage(AddonDir(a) + (CarMsc() ? L"apercu-msc.png" : L"apercu.png"), NULL);
-    g_addonPics[a.key] = b;
+    // l'image MSC du catalogue (ApercuMsc=, photos de JD du 24/10 : les paquets deja installes n'en ont pas), sinon vignette
+    // provisoire au nom de la voiture)
+    std::wstring f = AddonDir(a) + (CarMsc() ? L"apercu-msc.png" : L"apercu.png");
+    if (CarMsc() && !FileExists(f) && !a.builtin && FileExists(AddonPicCache(a.key, a.remoteVer))) f = AddonPicCache(a.key, a.remoteVer);
+    Bitmap *b = FileExists(f) ? LoadAnyImage(f, NULL) : NULL;
+    if (b || !CarMsc() || a.builtin) g_addonPics[a.key] = b;   // (MSC : sans image, redemande tant que celle du catalogue n'est pas arrivee)
     return b;
 }
 // Etiquettes : NEW (pas installee, apparue au catalogue depuis la derniere visite d'avant cette session), UPDATE (installee,

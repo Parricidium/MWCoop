@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using HutongGames.PlayMaker;
 using UnityEngine;
@@ -303,6 +303,7 @@ namespace MWCoop
             public VazSound Sound;
             public VazFlaps Flaps;
             public FsmFloat BrakeKnob;
+            public PlayMakerFSM DriveFsm;     // (My Summer Car : PlayerTrigger de la zone conducteur, MscDriven)
             public int Number, Shown;   // (Shown : numero sur les portieres -- celui de la course s'il y en a un, SetNumber)
             public Transform Roof; public BoxCollider RoofZone; public bool RoofOpen, RoofHover; public float RoofAngle;
             public Vector3 SteerAxis = Vector3.forward;
@@ -546,7 +547,7 @@ namespace MWCoop
         public static string PDoorL { get { return Msc ? "DriverDoors/doorl" : "Doors/DoorFront(leftx)"; } }
         public static string PDoorR { get { return Msc ? "DriverDoors/doorr" : "Doors/DoorFront(right)"; } }
         public static string PTank { get { return Msc ? "FuelTank" : "Simulation/FuelTankSorbett"; } }
-        static string PLever { get { return Msc ? "LOD/Dashboard/ParkingBrake" : "Functions/HandBrake/LeverPivot"; } }
+        public static string PLever { get { return Msc ? "LOD/Dashboard/ParkingBrake" : "Functions/HandBrake/LeverPivot"; } }
         static string NSteer { get { return Msc ? "RusckoSteeringPivot" : "SteeringPivotSorbett"; } }
         static string[] PRearDoors { get { return Msc ? new string[0] : new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)" }; } }
         static string[] PSeats { get { return Msc ? new string[0] : new[] { "Colliders/seats1", "Colliders/seats2", "Colliders/seats3", "Colliders/seats4", "Colliders/bench", "RearSeat/Pivot/Coll" }; } }
@@ -573,8 +574,9 @@ namespace MWCoop
 
         // Ruscko copiee (pack rallye MSC du 19/10, retours de JD) : nid de guepes retire (son automate Starter le reveille au
         // demarrage : des guepes dans la voiture) ; automates 'Angle' des roues arriere coupes (essieu oscillant : roues
-        // inclinees) ; tirette de frein de parking coupee (ses automates ecrivent handbrakeInput a chaque image, par-dessus la
-        // touche du frein a main : voir MscBrake) ; refroidissement coupe (Cooling : un moteur de rallye a fond chauffait, le
+        // inclinees) ; automate 'Brake' de la tirette coupe (il ecrit handbrakeInput a chaque image, par-dessus la touche du
+        // frein a main ; son 'Use' -- clic gauche tire, droit relache -- reste : tirette posee sur le levier du modele, voir
+        // MscBrake) ; refroidissement coupe (Cooling : un moteur de rallye a fond chauffait, le
         // frottement du moteur montait) ; contact sans la cle de la Ruscko ('Check key' : PlayerKeyRuscko) ; demarreur de
         // diesel fatigue rendu sur ('Check clutch' grince 4 fois sur 5, 'Starting engine' lance de 0,5 a 15 s : 0,6-1,4 s) ;
         // FixedJoint de la racine retire (pose par l'automate LOD de la vraie Ruscko loin de la camera : la copie serait
@@ -589,7 +591,7 @@ namespace MWCoop
             foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 string on = f.transform.name;
-                if ((f.FsmName == "Angle" && f.GetComponent<Wheel>() != null) || on == "ParkingBrake" || (f.FsmName == "Cooling" && on == "Cooling")) { f.enabled = false; n++; continue; }
+                if ((f.FsmName == "Angle" && f.GetComponent<Wheel>() != null) || (on == "ParkingBrake" && f.FsmName == "Brake") || (f.FsmName == "Cooling" && on == "Cooling")) { f.enabled = false; n++; continue; }
                 if (f.FsmName == "Use" && on == "Ignition")
                     foreach (FsmState st in f.FsmStates)
                         if (st.Name == "Check key")
@@ -924,13 +926,11 @@ namespace MWCoop
             if (lever != null)
             {
                 // (addons : zone cliquable ramenee a la poignee -- celle de la SORBET masquait le bouton du warning de la Subaru)
-                if (Msc) foreach (Collider k in lever.GetComponentsInChildren<Collider>(true)) { k.enabled = false; b.OffColl.Add(k); }   // (Ruscko : touche du frein a main, MscBrake)
-                else
-                {
-                    if (cur.ControlSize > 0f) Shrink(lever, cur.ControlSize * 2f);
-                    MoveOnto(lever, body.transform.TransformPoint(cur.BrakeGrip));
-                    b.SorbetBrake = lever; b.SorbetBrakeRest = lever.localRotation;
-                }
+                // (My Summer Car : la tirette de la Ruscko aussi -- JD 24/10 : « la voiture n'a pas de frein a main » --, sa
+                // position lue dans MscBrake)
+                if (cur.ControlSize > 0f) Shrink(lever, cur.ControlSize * 2f);
+                MoveOnto(lever, body.transform.TransformPoint(cur.BrakeGrip));
+                b.SorbetBrake = lever; b.SorbetBrakeRest = lever.localRotation;
                 b.BrakePivot = new GameObject("VAZ_frein").transform;
                 b.BrakePivot.SetParent(body.transform, false);
                 b.BrakePivot.localPosition = cur.BrakePivot;
@@ -938,7 +938,8 @@ namespace MWCoop
                 inner.SetParent(b.BrakePivot, false);
                 inner.localPosition = -cur.BrakePivot;
                 AddParts(b, inner, "frein.p205", basePaint, paint, number);
-                if (!Msc) FitLever(lever, b.BrakePivot);
+                FitLever(lever, b.BrakePivot);
+                if (Msc && MscKnob(b) > 0f) b.BrakeKnob.Value = 0f;   // (tirette de la Ruscko copiee serree : relachee, l'embrayage serait coupe)
             }
             else Log.Warn("vaz : frein a main du jeu (" + PLever + ") introuvable");
 
@@ -1277,13 +1278,34 @@ namespace MWCoop
             Log.Info("vaz : vue de conduite recalee de " + ct.InverseTransformPoint(was).ToString("F2") + " a " + ct.InverseTransformPoint(want).ToString("F2") + " (repere de la voiture)");
         }
 
-        // My Summer Car : la tirette de la Ruscko (automates coupes, MscFixes) remplacee par la touche de frein a main du jeu
-        // (CarController : wheel.handbrake = handbrakeInput tant qu'on conduit) ; personne au volant ici et voiture pas suivie
-        // pour un autre : frein serre sur les roues arriere (elle ne roule pas seule) ; le levier du modele suit (20 degres serre).
+        // My Summer Car : touche de frein a main du jeu (CarController : wheel.handbrake = handbrakeInput tant qu'on conduit) ET
+        // tirette de la Ruscko posee sur le levier du modele (automate 'Use' : KnobPos 0-0,1 ; son 'Brake' coupe, MscFixes --
+        // JD 24/10 : « la voiture n'a pas de frein a main, il n'est pas possible de leur en mettre un ? ») ; personne au volant
+        // ici et voiture pas suivie pour un autre : frein serre sur les roues arriere (elle ne roule pas seule) ; le levier du
+        // modele suit (20 degres serre).
+        static float MscKnob(Built b)
+        {
+            if (b.BrakeKnob == null && b.SorbetBrake != null)
+            {
+                PlayMakerFSM f = Game.FsmOn(b.SorbetBrake.gameObject, "Use");
+                b.BrakeKnob = f != null ? f.FsmVariables.FindFsmFloat("KnobPos") : null;
+            }
+            return b.BrakeKnob != null ? Mathf.Clamp01(b.BrakeKnob.Value * 10f) : 0f;
+        }
+
+        // (au volant ici : la liste des voitures de VehicleSync n'est tenue qu'en partie a plusieurs -- en solo, l'automate
+        // PlayerTrigger de la zone conducteur, comme VehicleSync)
+        static bool MscDriven(Built b)
+        {
+            if (VehicleSync.LocalDrivingRoot == b.Car.transform) return true;
+            if (b.DriveFsm == null) { Transform dt = b.Car.transform.Find(PDriveTrigger); b.DriveFsm = dt != null ? Game.FsmOn(dt.gameObject, "PlayerTrigger") : null; }
+            return b.DriveFsm != null && b.DriveFsm.ActiveStateName == "Player in car";
+        }
+
         static void MscBrake(Built b)
         {
-            bool driven = VehicleSync.LocalDrivingRoot == b.Car.transform;
-            float hb = 0f;
+            bool driven = MscDriven(b);
+            float hb = MscKnob(b);
             foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>(true))
             {
                 if (!w.wheelPos.ToString().StartsWith("REAR")) continue;
@@ -1291,6 +1313,19 @@ namespace MWCoop
                 hb = Mathf.Max(hb, w.handbrake);
             }
             if (b.BrakePivot != null) b.BrakePivot.localRotation = Quaternion.AngleAxis(-Mathf.Clamp01(hb) * 20f * (b.M != null ? b.M.BrakeAngle : 1f), Vector3.right);
+        }
+
+        // (apres CarController.Update, qui relit la touche : tirette serree, handbrakeInput tenu pour la physique suivante)
+        static System.Reflection.FieldInfo hbInput;
+        public static void MscBrakeLate(Built b)
+        {
+            if (!Msc || b.Axis == null || b.Car == null || !MscDriven(b)) return;
+            float k = MscKnob(b);
+            if (k <= 0f) return;
+            if (hbInput == null) hbInput = b.Axis.GetType().GetField("handbrakeInput");
+            if (hbInput == null) return;
+            object v = hbInput.GetValue(b.Axis);
+            if (!(v is float) || (float)v < k) hbInput.SetValue(b.Axis, k);
         }
 
         static void Brake(Built b)

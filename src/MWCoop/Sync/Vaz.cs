@@ -171,7 +171,7 @@ namespace MWCoop
         public static void LateUpdate()
         {
             if (!PlayerSync.InGame) return;
-            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) VazHandling.Idle(r.Car);
+            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) { VazHandling.Idle(r.Car); VazCar.MscBrakeLate(r.Car); }
         }
 
         public static void Update()
@@ -804,7 +804,7 @@ namespace MWCoop
                 {
                     assisStep = 4;
                     GameObject cam = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera");
-                    Transform lv = car.Find("Functions/HandBrake/LeverPivot");
+                    Transform lv = car.Find(VazCar.PLever);
                     Collider lc = lv != null ? lv.GetComponentInChildren<Collider>() : null;
                     if (cam != null && lc != null)
                     {
@@ -867,18 +867,32 @@ namespace MWCoop
             }
             if (rouleStarter != null && t > 51f) rouleStarter.FsmVariables.GetFsmBool("Starting").Value = false;
             bool gas = t > 53f && t < 65f;
+            // (65 s : tirette du frein a main tiree comme au clic -- KnobPos de son automate Use --, pas la pedale ; JD 24/10)
+            bool lever = Game.Msc && t > 65f;
+            if (lever && rouleKnob == null)
+            {
+                Transform lv = car.Find(VazCar.PLever);
+                PlayMakerFSM u = lv != null ? Game.FsmOn(lv.gameObject, "Use") : null;
+                rouleKnob = u != null ? u.FsmVariables.FindFsmFloat("KnobPos") : null;
+                if (rouleKnob != null) rouleKnob.Value = 0.1f;
+                Log.Info("autotest vaz : roule, tirette " + (rouleKnob != null ? "serree" : "introuvable") + (lv != null ? ", zone " + string.Join(" ", System.Array.ConvertAll(lv.GetComponents<Collider>(), c => c.GetType().Name + (c.enabled ? "" : "(off)"))) : ""));
+            }
             if (t > 52f && t < 67f)
             {
-                ax.throttleInput = gas ? 1f : 0f; ax.throttle = gas ? 1f : 0f; ax.brakeInput = gas ? 0f : 1f; ax.steerInput = gas && t > 58f ? 0.3f : 0f;
+                ax.throttleInput = gas ? 1f : 0f; ax.throttle = gas ? 1f : 0f; ax.brakeInput = gas || lever ? 0f : 1f; ax.steerInput = gas && t > 58f ? 0.3f : 0f;
                 if (gas && dt.gear < 2) dt.gear = 2;
             }
-            if (t > 47f && t < 68f && t >= rouleLog)
+            if (t > 47f && t < 69f && t >= rouleLog)
             {
                 rouleLog = Mathf.Floor(t) + 1f;
+                float rh = 0f;
+                foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) if (w.wheelPos.ToString().StartsWith("REAR")) rh = Mathf.Max(rh, w.handbrake);
                 Log.Info("autotest vaz : roule t=" + t.ToString("F0") + " " + (rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, regime " + dt.rpm.ToString("F0") + ", rapport " + dt.gear + ", gaz " + ax.throttle.ToString("F2")
-                         + (dt.enabled ? "" : " (moteur coupe)") + (rouleStarter != null ? ", demarreur " + rouleStarter.ActiveStateName : "") + ", cap " + car.eulerAngles.y.ToString("F0") + ", roulis " + car.eulerAngles.z.ToString("F0"));
+                         + (dt.enabled ? "" : " (moteur coupe)") + (rouleStarter != null ? ", demarreur " + rouleStarter.ActiveStateName : "") + ", cap " + car.eulerAngles.y.ToString("F0") + ", roulis " + car.eulerAngles.z.ToString("F0")
+                         + ", frein a main " + ax.handbrakeInput.ToString("F2") + " (roues AR " + rh.ToString("F2") + ")");
             }
         }
+        static FsmFloat rouleKnob;
 
         // [Test] VazPlaces=1 (autotest vaz, 35 s) : carte de l'habitacle (repere de la voiture, pas 10 cm) : pour chaque point du
         // plancher, le joueur (capsule de son CharacterController, pieds au plancher) y tient-il sans toucher un collider de la
