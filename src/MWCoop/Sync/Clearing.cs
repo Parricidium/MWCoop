@@ -28,7 +28,11 @@ namespace MWCoop
         static Vector2[] osatPlot = new Vector2[0];
         static bool osatOn;
         public static float OsatPadY = float.NaN;
-        static readonly string[] Visual = { "TREES1", "TREES2", "TREES_MEDIUM1", "TREES_MEDIUM2", "TREES_MEDIUM3", "TREES_SMALL1", "TREES_SMALL2", "TREES_SMALL3", "TREES_SMALL4" };
+        // (BUSHES1..7 : touffes d'herbe haute de My Summer Car -- elles poussaient dans la boutique, 24/10 ; absentes de MWC)
+        static readonly string[] Visual = { "TREES1", "TREES2", "TREES_MEDIUM1", "TREES_MEDIUM2", "TREES_MEDIUM3", "TREES_SMALL1", "TREES_SMALL2", "TREES_SMALL3", "TREES_SMALL4",
+                                            "BUSHES1", "BUSHES2", "BUSHES3", "BUSHES4", "BUSHES5", "BUSHES6", "BUSHES7" };
+        // Sol du jeu (MAP/MESH/TERRAIN_OBJ) : « Grass » dans My Winter Car, deux maillages « Grass1 » et « Grass2 » dans My Summer Car.
+        static bool IsSoil(string n) { return Game.Msc ? n == "Grass1" || n == "Grass2" : n == "Grass"; }
         static readonly string[] Colls = { "TREES1_COLL", "TREES2_COLL", "TREES3_COLL" };
         static bool done;
         static float at = -1f;
@@ -176,7 +180,7 @@ namespace MWCoop
             // deplacement que le sol sous elles, mesure sur le sol AVANT de le toucher. Sinon elles flottaient au-dessus du sol abaisse
             // (plaque blanche, liseré sous les murs : retour de JD, 13/10).
             var grassCols = new List<MeshCollider>();
-            foreach (Transform t in terr.transform) if (t.name == "Grass" && t.GetComponent<MeshCollider>() != null) grassCols.Add(t.GetComponent<MeshCollider>());
+            foreach (Transform t in terr.transform) if (IsSoil(t.name) && t.GetComponent<MeshCollider>() != null) grassCols.Add(t.GetComponent<MeshCollider>());
             System.Func<float, float, float> grassY = (x, z) =>
             {
                 RaycastHit h; var ray = new Ray(new Vector3(x, 300f, z), Vector3.down);
@@ -186,7 +190,7 @@ namespace MWCoop
             int layers = 0;
             foreach (Transform t in terr.transform)
             {
-                if (t.name == "Grass") continue;
+                if (IsSoil(t.name)) continue;
                 MeshFilter mf = t.GetComponent<MeshFilter>(); MeshCollider mc = t.GetComponent<MeshCollider>();
                 Mesh m = mf != null ? mf.sharedMesh : null;
                 if (m == null) continue;
@@ -219,10 +223,31 @@ namespace MWCoop
                 layers += n;
                 Log.Info("defrichage : couche " + t.name + " : " + n + " sommet(s) suivent le sol");
             }
+            // My Summer Car : sommets gardes (triangle hors du terrain, plus bas) par position, sur ses deux maillages du sol qui se
+            // touchent (Grass1, Grass2) -- un sommet du bord commun garde dans l'un et deplace dans l'autre ouvrait une fente. (My
+            // Winter Car : par maillage, comme avant.)
+            var keepAt = new HashSet<long>();
+            System.Func<Vector3, long> cell = w => ((long)Mathf.RoundToInt(w.x * 20f) << 32) ^ (long)(uint)Mathf.RoundToInt(w.z * 20f);
+            foreach (Transform t in terr.transform)
+            {
+                if (!Game.Msc || !IsSoil(t.name)) continue;
+                MeshFilter mf = t.GetComponent<MeshFilter>();
+                Mesh m = mf != null ? mf.sharedMesh : null;
+                if (m == null) continue;
+                Vector3[] v;
+                try { v = m.vertices; } catch { continue; }
+                Matrix4x4 l2w = t.localToWorldMatrix;
+                var outV = new bool[v.Length];
+                for (int i = 0; i < v.Length; i++) { Vector3 w0 = l2w.MultiplyPoint3x4(v[i]); outV[i] = !Inside(w0.x, w0.z); }
+                int[] tri = m.triangles;
+                for (int i = 0; i + 2 < tri.Length; i += 3)
+                    if (outV[tri[i]] || outV[tri[i + 1]] || outV[tri[i + 2]])
+                        for (int j = 0; j < 3; j++) keepAt.Add(cell(l2w.MultiplyPoint3x4(v[tri[i + j]])));
+            }
             int moved = 0;
             foreach (Transform t in terr.transform)
             {
-                if (t.name != "Grass") continue;
+                if (!IsSoil(t.name)) continue;
                 MeshFilter mf = t.GetComponent<MeshFilter>(); MeshCollider mc = t.GetComponent<MeshCollider>();
                 Mesh m = mf != null ? mf.sharedMesh : null;
                 if (m == null) continue;
@@ -234,12 +259,21 @@ namespace MWCoop
                 // Sommet fixe si l'un de ses triangles sort du terrain : le sol du jeu est fait de triangles de 5 a 10 m, et un
                 // triangle a cheval sur la petite route penchait quand son sommet sud descendait -- le sol passait sous le bourrelet
                 // de neige du bord nord (fixe, dans le maillage de la route) : une fente au pied du bourrelet (retour de JD, 14/10).
-                var fixedV = new bool[v.Length];
-                for (int i = 0; i < v.Length; i++) { Vector3 w0 = l2w.MultiplyPoint3x4(v[i]); fixedV[i] = !Inside(w0.x, w0.z); }
-                var keepV = (bool[])fixedV.Clone();
-                int[] tri = m.triangles;
-                for (int i = 0; i + 2 < tri.Length; i += 3)
-                    if (fixedV[tri[i]] || fixedV[tri[i + 1]] || fixedV[tri[i + 2]]) keepV[tri[i]] = keepV[tri[i + 1]] = keepV[tri[i + 2]] = true;
+                bool[] keepV;
+                if (Game.Msc)
+                {
+                    keepV = new bool[v.Length];
+                    for (int i = 0; i < v.Length; i++) keepV[i] = keepAt.Contains(cell(l2w.MultiplyPoint3x4(v[i])));
+                }
+                else
+                {
+                    var fixedV = new bool[v.Length];
+                    for (int i = 0; i < v.Length; i++) { Vector3 w0 = l2w.MultiplyPoint3x4(v[i]); fixedV[i] = !Inside(w0.x, w0.z); }
+                    keepV = (bool[])fixedV.Clone();
+                    int[] tri = m.triangles;
+                    for (int i = 0; i + 2 < tri.Length; i += 3)
+                        if (fixedV[tri[i]] || fixedV[tri[i + 1]] || fixedV[tri[i + 2]]) keepV[tri[i]] = keepV[tri[i + 1]] = keepV[tri[i + 2]] = true;
+                }
                 int n = 0, kept = 0;
                 for (int i = 0; i < v.Length; i++)
                 {

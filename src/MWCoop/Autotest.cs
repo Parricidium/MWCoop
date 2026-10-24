@@ -578,6 +578,9 @@ namespace MWCoop
             if (mode == "sondeplaces") return;
             if (mode == "portiere" && t > 30f && !done) { done = true; Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "SATSUMA"), true, Config.Get("Test", "TestPorte", ""))); }
             if (mode == "portiere") return;
+            // (24/10 : KARTTURI de la boutique s21 sur les speciales de My Summer Car -- copilote : notes ; copilote3 : en voiture)
+            if (mode == "copilote" || mode == "copilote3" || mode == "copilote4") { Kartturi.Test(mode, t); Kauppa.TestKartturiDrive(mode, t); return; }
+            if (mode == "sac") { SleepingBags.Test(mode, t); return; }   // (sacs de couchage : depliage et sommeil -- [Test] SacDormir)
             if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             if (mode == "cdmsc") { CdMsc(t); return; }
             if (mode == "mscguepe") { MscGuepe(t); return; }

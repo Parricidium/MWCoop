@@ -505,19 +505,32 @@ namespace MWCoop
                     switch (a[1])
                     {
                         case "heure":
-                            GameObject sun = GameObject.Find("MAP/Sun/PivotSun/SUN");
+                            GameObject sun = GameObject.Find(Game.Msc ? "MAP/SUN/Pivot/SUN" : "MAP/Sun/PivotSun/SUN");
                             foreach (PlayMakerFSM f in sun != null ? sun.GetComponents<PlayMakerFSM>() : new PlayMakerFSM[0])
                                 if (f.FsmName == "Color") { f.FsmVariables.GetFsmInt("Time").Value = int.Parse(a[2]); f.SendEvent("TIMESKIP"); }
                             break;
                         case "argent": if (money != null) money.Value = F(a[2]); L("essai : argent " + a[2]); break;
                         case "tex": DumpTex(string.Join(" ", a, 2, a.Length - 2)); break;
+                        case "materiaux":
+                        {
+                            // (essais : toutes les matieres du jeu chargees -- nom, shader, texture -- dans dumps\materiaux.txt)
+                            var seen = new SortedDictionary<string, string>();
+                            foreach (Material x in Resources.FindObjectsOfTypeAll<Material>())
+                                if (x != null && !seen.ContainsKey(x.name)) seen[x.name] = (x.shader != null ? x.shader.name : "?") + " | " + (x.mainTexture != null ? x.mainTexture.name + " " + x.mainTexture.width + "x" + x.mainTexture.height : "-");
+                            var sbm = new System.Text.StringBuilder();
+                            foreach (KeyValuePair<string, string> kv in seen) sbm.Append(kv.Key).Append(" | ").Append(kv.Value).Append('\n');
+                            string dm = Path.Combine(Log.DataDir, "dumps"); Directory.CreateDirectory(dm);
+                            File.WriteAllText(Path.Combine(dm, "materiaux.txt"), sbm.ToString());
+                            L("essai : " + seen.Count + " matieres ecrites");
+                            break;
+                        }
                         case "museo": forceMuseoDoor = a.Length > 2 && a[2] == "auki"; L("essai : portes du musee " + (forceMuseoDoor ? "ouvertes" : "libres")); break;
                         case "ota": { Offer o = a.Length > 2 ? offers.Find(x => x.Item == a[2]) : (offers.Count > 0 ? offers[0] : null); if (o != null) Take(o); break; }
                         case "nauhuri": TestVcr(); break;
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
                         case "filmi": TestFilm(); break;
                         case "tuo": { Esine tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null && EyeT != null) { tp.Rb.isKinematic = true; tp.Go.transform.SetParent(EyeT, true); } ChatCommand("/importer " + string.Join(" ", a, 2, a.Length - 2)); if (tp != null) { tp.Go.transform.SetParent(null, true); tp.Rb.isKinematic = false; } break; }
-                        case "prends": { Esine k = esineet.Find(e => e.Kind == KKamera); PlayMakerFSM pf = PickUpFsm(); if (k != null && pf != null) { if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, "Set pivot 3"); } L("essai : prise du camescope (" + (pf != null ? pf.ActiveStateName : "pas de main") + ")"); break; }
+                        case "prends": { Esine k = esineet.Find(e => e.Kind == KKamera); PlayMakerFSM pf = PickUpFsm(); if (k != null && pf != null) { if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, PickSetState); } L("essai : prise du camescope (" + (pf != null ? pf.ActiveStateName : "pas de main") + ")"); break; }
                         case "equipe": { Esine k = HeldKamera(); L("essai : en main " + (k != null)); if (k != null) Equip(k); break; }
                         case "rec": { Esine k = eqCam ?? HeldKamera(); if (k != null) { if (rec != null && eqStage == 2) Pause(!rec.Paused); else if (rec != null) StopRec("essai"); else StartRec(k); } break; }
                         case "pause": Pause(rec != null && !rec.Paused); break;
@@ -533,14 +546,14 @@ namespace MWCoop
                         case "echap":
                         {
                             CloseMontage();
-                            GameObject od = GameObject.Find("Systems/OptionsDB") ?? GameObject.Find("OptionsDB");
+                            GameObject od = GameObject.Find(Game.Msc ? "Systems/Options" : "Systems/OptionsDB") ?? GameObject.Find("OptionsDB");
                             PlayMakerFSM om = null;
                             foreach (PlayMakerFSM pf in UnityEngine.Object.FindObjectsOfType<PlayMakerFSM>()) if (pf.FsmName == "Open Menu") om = pf;
                             if (om != null) om.SendEvent("MENU");
                             L("essai : Echap (menu du jeu " + (om != null ? om.ActiveStateName : "?") + ")");
                             break;
                         }
-                        case "prendsvhs": { Esine k = esineet.FindLast(e => e.Kind == KVhs); PlayMakerFSM pf = PickUpFsm(); if (k != null && pf != null) { k.Rb.isKinematic = false; if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, "Set pivot 3"); } L("essai : prise de la cassette (" + (pf != null ? pf.ActiveStateName : "pas de main") + "), tenue " + (HeldTape() != null)); break; }
+                        case "prendsvhs": { Esine k = esineet.FindLast(e => e.Kind == KVhs); PlayMakerFSM pf = PickUpFsm(); if (k != null && pf != null) { k.Rb.isKinematic = false; if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, PickSetState); } L("essai : prise de la cassette (" + (pf != null ? pf.ActiveStateName : "pas de main") + "), tenue " + (HeldTape() != null)); break; }
                         case "focus": testFocus = true; break;
                         case "photo": Autotest.CaptureSoon(a[2], 0.2f); break;
                         case "texte": { var tfi = typeof(GUIUtility).GetProperty("textFieldInput", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public); L("essai : keyboardControl " + GUIUtility.keyboardControl + ", textFieldInput " + (tfi != null ? tfi.GetValue(null, null) : "?") + ", eat " + Input.eatKeyPressOnTextFieldFocus); break; }

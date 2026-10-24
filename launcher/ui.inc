@@ -329,7 +329,7 @@ static void ContentSnapshot(bool restore);   // (modsync.inc)
 static void MscScan();                       // (mods.inc)
 static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_CONTENT; }
 // Pages absentes d'un jeu : sur My Summer Car, pas de cassettes VHS (camescope et magasin de MWC ; 19/10).
-static bool NavHidden(int p) { return g_game == GAME_MSC && p == TAB_VHS; }   // (addons : sur My Summer Car aussi depuis le 24/10)
+static bool NavHidden(int p) { return false; }   // (VHS et addons : sur My Summer Car aussi depuis le 24/10 -- coin video et voitures)
 static bool AddonsOn(); static void AddonsGo(); static void AddonsLeave();   // (voiture.inc : onglet Addons de la page Voiture)
 static bool PageEnabled(int p)
 {
@@ -701,7 +701,7 @@ static void DrawHeader(Graphics &g)
             UiSeg(g, r, lab, g_tab == TAB_CONTENT ? 0 : 1, UI_SEG, 13);
             right -= w + 10;
         } else if (g_tab == TAB_SKIN || g_tab == TAB_CAR) { g_persoTabRight = right; PersoTabsDraw(g); right -= PersoTabsW() + 10; }   // (Tenue / Visage / Voiture : tenue.inc)
-        else if ((g_tab == TAB_VHS || g_tab == TAB_ALBUM) && g_game != GAME_MSC) { g_mediaTabRight = right; MediaTabsDraw(g); right -= MediaTabsW() + 10; }   // (VHS / Album : media.inc)
+        else if (g_tab == TAB_VHS || g_tab == TAB_ALBUM) { g_mediaTabRight = right; MediaTabsDraw(g); right -= MediaTabsW() + 10; }   // (VHS / Album : media.inc)
         else if (g_tab == TAB_WIKI || g_tab == TAB_NOTES || g_tab == TAB_CREDITS) DrawGuideHead(g, right);   // (Chercher, Guide / Nouveautes / Credits : wiki.inc)
         else if (g_tab == TAB_LOBBY) DrawLobbyHeadControls(g, right);
         else if (g_tab == TAB_GFX || g_tab == TAB_COOP) DrawSetSearchBox(g, right);   // (Chercher un reglage)

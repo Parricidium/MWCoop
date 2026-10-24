@@ -60,12 +60,24 @@ namespace MWCoop
             if (Time.realtimeSinceStartup < buildAt) return false;
             buildAt = Time.realtimeSinceStartup + 10f;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            List<Vector3> dirt = Route("DirtRoad"), ss2 = Route("SaturdaySS2");
-            if (dirt.Count < 3700 || ss2.Count < 630) { Log.Info("copilote : routes du rallye absentes (" + dirt.Count + ", " + ss2.Count + ")"); return false; }
-            stages.Clear();
-            stages.Add(MakeStage("SS1", dirt, 2168, 3512));
-            stages.Add(MakeStage("SS2", ss2, 1, 627));
-            stages.Add(MakeStage("SS3", dirt, 56, 1846));
+            List<Vector3> dirt = Route("DirtRoad"), ss2 = Game.Msc ? new List<Vector3>() : Route("SaturdaySS2");
+            if (Game.Msc)
+            {
+                // My Summer Car (24/10) : deux speciales sur DirtRoad, celles des voitures IA (RALLY/RallyCars/RALLYCARn/Navigation :
+                // WaypointStart/EndSaturday 2168 -> 3640, Sunday 56 -> 1875) ; pas de SaturdaySS2
+                if (dirt.Count < 3642) { Log.Info("copilote : routes du rallye absentes (" + dirt.Count + ")"); return false; }
+                stages.Clear();
+                stages.Add(MakeStage("SS1", dirt, 2168, 3640));
+                stages.Add(MakeStage("SS2", dirt, 56, 1875));
+            }
+            else
+            {
+                if (dirt.Count < 3700 || ss2.Count < 630) { Log.Info("copilote : routes du rallye absentes (" + dirt.Count + ", " + ss2.Count + ")"); return false; }
+                stages.Clear();
+                stages.Add(MakeStage("SS1", dirt, 2168, 3512));
+                stages.Add(MakeStage("SS2", ss2, 1, 627));
+                stages.Add(MakeStage("SS3", dirt, 56, 1846));
+            }
             roadA.Clear(); roadB.Clear();
             GameObject routes = Game.FindAny("TRAFFIC/Routes");
             if (routes != null)
