@@ -124,9 +124,9 @@ Il n'y a aucun boulot, course ni événement à l'aérodrome. Le plus proche est
   MWCoop, canal « Voyage ») : ils voient l'avion partir et revenir. Pour aller ensemble au même circuit, chaque joueur
   doit l'avoir converti (même identifiant, donc même place). Les positions sont déjà partagées par MWCoop. L'heure
   n'avance pas pendant le vol (elle est commune). À l'arrivée, chacun a sa place (rangées de 5 de front, 1,1 m entre
-  deux joueurs, la rangée suivante 1,2 m derrière : jusqu'à 16 joueurs). Vérifié à deux sur My Winter Car le 24/10
-  (hôte + invité sur Magione) : chacun voit l'autre à côté de lui, annonces de l'avion reçues, retour au terminal pour
-  les deux.
+  deux joueurs, la rangée suivante 1,2 m derrière : jusqu'à 16 joueurs). Vérifié à deux sur My Winter Car et sur My
+  Summer Car le 24/10 (hôte + invité sur Magione) : chacun voit l'autre à côté de lui, annonces de l'avion reçues dans
+  les deux sens, retour au terminal pour les deux.
 - **Sauvegarde** : le billet et la destination où l'on se trouve sont gardés (SaveLoad de MSCLoader, clés `billet2` et
   `ailleurs2` ; clé suivie du pseudo pour un invité). En chargeant une partie sauvée sur un circuit, le circuit est
   rechargé. S'il a été supprimé, retour à l'aérodrome.
@@ -168,5 +168,4 @@ Crédit du Cessna dans le lanceur : Guide > Crédits > Modèles 3D (traductions 
 - Les circuits faits de nombreux `.kn5` très lourds (Nordschleife) : à essayer.
 - Textes du mod en russe et en arabe (FR et EN pour le moment ; le convertisseur a les quatre langues).
 - Marquer l'aérodrome sur la carte (M) de MWCoop.
-- My Summer Car : essai en co-op (instances `D:\Games\COOPTEST\Voyage-MSC`, MSCLoader de MWCoop par Doorstop) ; copier une
-  destination d'un jeu à l'autre depuis le convertisseur (pour l'instant : convertir deux fois).
+- Copier une destination d'un jeu à l'autre depuis le convertisseur (pour l'instant : convertir deux fois).
