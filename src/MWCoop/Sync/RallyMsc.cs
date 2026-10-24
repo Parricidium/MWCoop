@@ -190,6 +190,22 @@ namespace MWCoop
                 PlayMakerFSM g2 = sp2 != null ? Game.FsmOn(sp2, "Gold") : null;
                 FsmInt cnt = g2 != null ? g2.FsmVariables.FindFsmInt("ObjectNumberInt") : null;
                 Log.Info("autotest msctrophee : " + n + " objet(s) trophee a la racine ici :" + sb + " ; Gold " + (g2 != null ? g2.ActiveStateName + ", ObjectNumberInt " + (cnt != null ? cnt.Value.ToString() : "?") : "introuvable"));
+                // ([Test] TropheeCapture=1 : l'hote se place a 1,6 m du trophee, face a lui, capture dumps/ecran-trophee.png)
+                if (Session.IsHost && Config.GetInt("Test", "TropheeCapture", 0) != 0)
+                {
+                    GameObject tr = null;
+                    foreach (GameObject go in Resources.FindObjectsOfTypeAll(typeof(GameObject)))
+                        if (go.name == "1st place trophy(itemx)" && go.activeInHierarchy && go.hideFlags == HideFlags.None) tr = go;
+                    GameObject pl = Game.PlayerGo;
+                    var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (tr != null && cc != null)
+                    {
+                        Vector3 at = tr.transform.position + new Vector3(0f, 0f, -1.6f);
+                        cc.enabled = false; pl.transform.position = at + Vector3.up * 0.2f; pl.transform.rotation = Quaternion.LookRotation(Vector3.forward); cc.enabled = true;
+                        Autotest.CaptureSoon("trophee", 2f);
+                    }
+                    Log.Info("autotest msctrophee : capture " + (tr != null ? "devant le trophee" : "sans trophee"));
+                }
             }
         }
 

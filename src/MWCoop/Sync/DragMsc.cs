@@ -132,7 +132,7 @@ namespace MWCoop
         // [Test] Autotest=mscdrag (MSC, a deux, piste pas besoin d'etre ouverte) : a 30 s l'invite annonce un faux meilleur temps
         // ([Test] DragTemps, 12.345 par defaut) ; chacun note toutes les 5 s si la piste est suivie, les humains recus et les 12
         // premieres lignes (ResultsNames/ResultsTimes) de son classement.
-        static int tStep; static float tNext;
+        static int tStep, tCap; static float tNext;
         public static void Test(float t)
         {
             // ([Test] DragOuvrir=1 : piste allumee hors du vendredi, pour que 'Leaderboard' tourne ; DRAGRACE/TriggerIn :: Trigger,
@@ -152,6 +152,21 @@ namespace MWCoop
             {
                 tStep = 1;
                 SendBest(Session.Me != null ? Session.Me.Name : "?", "Satsuma", "150 km/h", Config.GetFloat("Test", "DragTemps", 12.345f));
+            }
+            // ([Test] DragCapture=1 : l'hote ouvre la feuille RESULTS une fois un humain recu dans ResultsNames -- le jeu ne la
+            // remplit qu'a son passage suivant dans 'State 1', toutes les 4 s -- capture dumps/ecran-drag-resultats.png)
+            if (tCap == 0 && Session.IsHost && board != null && Config.GetInt("Test", "DragCapture", 0) != 0)
+            {
+                bool listed = false;
+                foreach (PlayMakerArrayListProxy p in board.GetComponents<PlayMakerArrayListProxy>())
+                    if (p.referenceName == "ResultsNames") foreach (KeyValuePair<int, Human> kv in humans) if (p.arrayList.Contains(kv.Value.Name)) listed = true;
+                if (listed)
+                {
+                    tCap = 1;
+                    GameObject sheet = Game.FindAny("Sheets/DragResults");
+                    if (sheet != null) { sheet.SetActive(true); Autotest.CaptureSoon("drag-resultats", 3f); }
+                    Log.Info("autotest mscdrag : feuille RESULTS " + (sheet != null ? "ouverte" : "introuvable"));
+                }
             }
             if (t < tNext || t < 20f) return;
             tNext = t + 5f;
