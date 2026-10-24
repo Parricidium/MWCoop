@@ -829,6 +829,15 @@ namespace MWCoop
             return d.Key + (open ? " -> " + d.Open : " -> " + d.Close);
         }
 
+        // Essais : les cles des portieres suivies de 'car'.
+        public static string Keys(string car)
+        {
+            Scan();
+            var sb = new System.Text.StringBuilder();
+            foreach (string k in byKey.Keys) if (k.StartsWith(car)) sb.Append(' ').Append(k);
+            return sb.ToString();
+        }
+
         // Essais : pousse la portiere ouverte de 'car' de 'deg' degres (ressort local, comme une main).
         public static string TestPush(string car, float deg)
         {
