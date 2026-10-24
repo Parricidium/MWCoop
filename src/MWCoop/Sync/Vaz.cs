@@ -461,9 +461,35 @@ namespace MWCoop
             }
             if (t > 55.5f) acc.enabled = true;
         }
-        static float cleLog; static bool cleDump, panneDone, sonDone, moteurDone;
+        static float cleLog; static bool cleDump, panneDone, sonDone, moteurDone, sondeSons;
         static void TestKey(float t)
         {
+            // [Test] SondeSons=<voiture du jeu> (ex. SATSUMA(557kg, 248)) : a 25 s, ses sources de son (clip, volume, hauteur) et les
+            // automates des objets qui en portent -- pour choisir le son moteur de la VAZ sur My Summer Car
+            string sonde = Config.Get("Test", "SondeSons", "");
+            if (sonde.Length > 0 && !sondeSons && t > 25f)
+            {
+                sondeSons = true;
+                GameObject g = Game.FindAny(sonde);
+                if (g == null) Log.Info("autotest vazcle : sonde des sons : " + sonde + " introuvable");
+                else
+                {
+                    var seen = new HashSet<GameObject>();
+                    foreach (AudioSource a in g.GetComponentsInChildren<AudioSource>(true))
+                    {
+                        Log.Info("autotest vazcle : sonde source " + Recon.Path(a.transform) + " clip " + (a.clip != null ? a.clip.name + " " + a.clip.length.ToString("F1") + " s" : "-") + (a.loop ? " boucle" : "") + (a.gameObject.activeInHierarchy ? "" : " inactif") + (a.isPlaying ? " joue" : "") + " v " + a.volume.ToString("F2") + " h " + a.pitch.ToString("F2") + " portee " + a.maxDistance.ToString("F0"));
+                        for (Transform p = a.transform; p != null && p != g.transform.parent; p = p.parent)
+                        {
+                            if (!seen.Add(p.gameObject)) continue;
+                            foreach (PlayMakerFSM f in p.GetComponents<PlayMakerFSM>())   // (objet inactif : automate pas encore initialise)
+                                try { f.Fsm.InitData(); Log.Info("autotest vazcle : sonde " + DumpFsm(f)); }
+                                catch (System.Exception e) { Log.Info("autotest vazcle : sonde " + Recon.Path(f.transform) + "::" + f.FsmName + " illisible (" + e.GetType().Name + ")"); }
+                            if (p == g.transform) break;
+                        }
+                    }
+                    foreach (Component c in g.GetComponents<Component>()) if (c != null && c.GetType().Name.Contains("Sound")) Log.Info("autotest vazcle : sonde composant " + c.GetType().Name + " sur " + g.name);
+                }
+            }
             bool asker = Config.GetInt("Test", "CleInvite", 0) != 0 ? !Host : Host;
             if (asker && testStep == 0 && t > (Host ? 8f : 4f)) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
             GameObject car = Game.FindAny(Config.Get("Test", "TestVoiture", "MWCoop-VAZ-3"));
@@ -487,6 +513,7 @@ namespace MWCoop
                     foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
                         if (f.FsmName == "Priming") { f.FsmVariables.FindFsmFloat("FuelChamber").Value = 10f; f.FsmVariables.FindFsmBool("PrimingOK").Value = false; Log.Info("autotest vazcle : " + Recon.Path(f.transform) + " chambre 10, PrimingOK faux (" + f.ActiveStateName + ")"); }
             }
+            if (car != null && t > 50f) TestSound(car, t);
             if (car == null || t < 31f || t > 50f || t < cleLog) return;
             cleLog = Mathf.Floor(t) + 1f;
             Drivetrain dt = car.GetComponent<Drivetrain>();
@@ -544,16 +571,23 @@ namespace MWCoop
                     Log.Info(sd.ToString());
                 }
             }
-            // [Test] VazSon=1 : a 40 s (moteur tourne), les automates du son de la Rivett copie et ses sources (volume, hauteur)
-            if (t > 40f && !sonDone && Config.GetInt("Test", "VazSon", 0) != 0)
+            TestSound(car, t);
+        }
+
+        // [Test] VazSon=1 : a 40 s (moteur tourne ; 52 s avec VazVitesses, qui tient le moteur), les automates du son copie (Rivett
+        // sur MWC) et ses sources (volume, hauteur)
+        static void TestSound(GameObject car, float t)
+        {
+            if (car != null && t > (Config.GetInt("Test", "VazVitesses", 0) != 0 ? 52f : 40f) && !sonDone && Config.GetInt("Test", "VazSon", 0) != 0)
             {
                 sonDone = true;
-                Transform snd = car.transform.Find("VAZ/VAZ_moteur_son/AudioEngineCorrisTune");
+                Transform snd = car.transform.Find("VAZ/VAZ_moteur_son/" + (Game.Msc ? "AudioEngineSatsuma" : "AudioEngineCorrisTune"));
                 Rent sr; rents.TryGetValue(Me, out sr);
-                if (snd == null) Log.Info("autotest vazcle : son de la Rivett introuvable" + (sr != null && sr.Car != null && sr.Car.Sound != null ? " ; son du modele : " + sr.Car.Sound.Describe() : ""));
-                else { foreach (PlayMakerFSM f in snd.GetComponentsInChildren<PlayMakerFSM>(true)) Log.Info("autotest vazcle : son " + DumpFsm(f)); foreach (AudioSource a in snd.GetComponentsInChildren<AudioSource>(true)) Log.Info("autotest vazcle : source " + Recon.Path(a.transform) + " " + (a.clip != null ? a.clip.name : "-") + (a.gameObject.activeInHierarchy ? "" : " inactif") + (a.isPlaying ? " joue" : "") + " v " + a.volume.ToString("F2") + " h " + a.pitch.ToString("F2") + (a.mute ? " muet" : "")); }
+                if (snd == null || Game.Msc) Log.Info("autotest vazcle : son " + (snd == null ? "de la Rivett / Satsuma introuvable" : "de la Satsuma") + (sr != null && sr.Car != null && sr.Car.Sound != null ? " ; son du modele : " + sr.Car.Sound.Describe() : ""));
+                if (snd != null) { if (!Game.Msc) foreach (PlayMakerFSM f in snd.GetComponentsInChildren<PlayMakerFSM>(true)) Log.Info("autotest vazcle : son " + DumpFsm(f)); foreach (AudioSource a in snd.GetComponentsInChildren<AudioSource>(true)) Log.Info("autotest vazcle : source " + Recon.Path(a.transform) + " " + (a.clip != null ? a.clip.name : "-") + (a.gameObject.activeInHierarchy ? "" : " inactif") + (a.isPlaying ? " joue" : "") + " v " + a.volume.ToString("F2") + " h " + a.pitch.ToString("F2") + (a.mute ? " muet" : "")); }
                 GameObject ct = Game.FindAny("CORRIS/Simulation/ExhaustCorris/ExhaustSmoke/AudioEngineCorrisTune");
-                if (ct != null) foreach (PlayMakerFSM f in ct.GetComponentsInChildren<PlayMakerFSM>(true)) Log.Info("autotest vazcle : CORRIS " + DumpFsm(f));
+                if (ct != null) foreach (PlayMakerFSM f in ct.GetComponentsInChildren<PlayMakerFSM>(true))
+                        try { f.Fsm.InitData(); Log.Info("autotest vazcle : CORRIS " + DumpFsm(f)); } catch (System.Exception e) { Log.Info("autotest vazcle : CORRIS " + f.FsmName + " illisible (" + e.GetType().Name + ")"); }
             }
         }
 
@@ -853,6 +887,15 @@ namespace MWCoop
 
         static PlayMakerFSM rouleStarter;
         static float rouleLog;
+        // (VazRoule : le son du moteur copie -- sources jouees, volume, hauteur -- et l'echappement)
+        static string RouleSound(Transform car)
+        {
+            Rent sr; rents.TryGetValue(Me, out sr);
+            var sb = new System.Text.StringBuilder(sr != null && sr.Car != null && sr.Car.Sound != null ? " ; son " + sr.Car.Sound.Describe() : "");
+            Transform snd = car.Find("VAZ/VAZ_moteur_son/" + (Game.Msc ? "AudioEngineSatsuma" : "AudioEngineCorrisTune"));
+            if (snd != null) foreach (AudioSource a in snd.GetComponentsInChildren<AudioSource>(true)) if (a.isPlaying && a.volume > 0.01f) sb.Append(' ').Append(a.name).Append(" v ").Append(a.volume.ToString("F2")).Append(" h ").Append(a.pitch.ToString("F2"));
+            return sb.ToString();
+        }
         static void TestDrive(Transform car, float t)
         {
             Drivetrain dt = car.GetComponent<Drivetrain>(); AxisCarController ax = car.GetComponent<AxisCarController>(); Rigidbody rb = car.GetComponent<Rigidbody>();
@@ -889,7 +932,7 @@ namespace MWCoop
                 foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) if (w.wheelPos.ToString().StartsWith("REAR")) rh = Mathf.Max(rh, w.handbrake);
                 Log.Info("autotest vaz : roule t=" + t.ToString("F0") + " " + (rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, regime " + dt.rpm.ToString("F0") + ", rapport " + dt.gear + ", gaz " + ax.throttle.ToString("F2")
                          + (dt.enabled ? "" : " (moteur coupe)") + (rouleStarter != null ? ", demarreur " + rouleStarter.ActiveStateName : "") + ", cap " + car.eulerAngles.y.ToString("F0") + ", roulis " + car.eulerAngles.z.ToString("F0")
-                         + ", frein a main " + ax.handbrakeInput.ToString("F2") + " (roues AR " + rh.ToString("F2") + ")");
+                         + ", frein a main " + ax.handbrakeInput.ToString("F2") + " (roues AR " + rh.ToString("F2") + ")" + RouleSound(car));
             }
         }
         static FsmFloat rouleKnob;

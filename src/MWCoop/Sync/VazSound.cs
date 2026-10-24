@@ -55,8 +55,65 @@ namespace MWCoop
         {
             var s = new VazSound { dir = Path.Combine(m.Dir, "sons") };
             if (s.HasFiles) s.Setup(car, at);
-            if (s.loops.Count == 0) s.Rivett(car, at);
-            return s.loops.Count > 0 || s.rivett ? s : null;
+            if (s.loops.Count == 0) { if (Game.Msc) s.Satsuma(car, at); else s.Rivett(car, at); }
+            return s.loops.Count > 0 || s.rivett || s.satsuma ? s : null;
+        }
+
+        // My Summer Car, sans fichiers de sons (JD 24/10, la VAZ avait le diesel de la Ruscko copiee) : le moteur de la Satsuma.
+        // AudioEngineSatsuma (Low/Med/High et Throttle, comme AudioEngineCorrisTune) copie au moteur de la VAZ : son automate
+        // Throttle lit le regime et les gaz sur le Drivetrain de la Satsuma (GetProperty) -> ramene a celui de la VAZ ; le nom
+        // AudioEngine... fait que VehicleSync en envoie volume et hauteur aux autres. Echappement : le son des collecteurs
+        // (CarSimulation/Exhaust/FromHeaders, idle_sisa4), hauteur comme son automate ExhaustSound (regime / 10 000 + 0,55),
+        // mais au regime de la VAZ (l'automate lit la variable globale RPM : celle de la Satsuma). Demarreur : celui de la
+        // Satsuma (StarterSound) a la place du lancement du diesel. Sons du moteur de la Ruscko coupes.
+        bool satsuma;
+        AudioSource exhaust;
+        void Satsuma(GameObject car, Transform at)
+        {
+            dt = car.GetComponent<Drivetrain>();
+            const string sat = "SATSUMA(557kg, 248)";
+            GameObject src = Game.FindAny(sat), tune = Game.FindAny(sat + "/AudioEngineSatsuma");
+            if (src == null || tune == null) { Log.Warn("vaz : sons de la Satsuma (AudioEngineSatsuma) introuvables : son de la Ruscko garde"); return; }
+            Drivetrain sdt = src.GetComponent<Drivetrain>();
+            GameObject cp = Object.Instantiate(tune);
+            cp.name = "AudioEngineSatsuma";
+            cp.transform.SetParent(at, false);
+            cp.transform.localPosition = Vector3.zero; cp.transform.localRotation = Quaternion.identity;
+            foreach (Transform t in cp.GetComponentsInChildren<Transform>(true)) t.gameObject.SetActive(true);
+            int rebound = 0;
+            foreach (PlayMakerFSM f in cp.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                try
+                {
+                    f.Fsm.InitData();
+                    foreach (FsmObject ov in f.FsmVariables.ObjectVariables) if (ov.Value is Drivetrain) { ov.Value = dt; rebound++; }
+                    foreach (FsmState st in f.FsmStates)
+                        foreach (FsmStateAction ac in st.Actions)
+                            foreach (System.Reflection.FieldInfo fi in ac.GetType().GetFields())
+                            {
+                                FsmProperty pr = fi.GetValue(ac) as FsmProperty;
+                                if (pr != null && pr.TargetObject != null && pr.TargetObject.Value is Drivetrain && pr.TargetObject.Value == sdt) { pr.TargetObject.Value = dt; rebound++; }
+                            }
+                    f.enabled = true;
+                }
+                catch (System.Exception e) { Log.Warn("vaz : son de la Satsuma, automate " + f.FsmName + " : " + e.Message); }
+            }
+            Transform hd = src.transform.Find("CarSimulation/Exhaust/FromHeaders");
+            AudioSource hs = hd != null ? hd.GetComponent<AudioSource>() : null;
+            if (hs != null && hs.clip != null)
+            {
+                var go = new GameObject("VAZ_echappement");
+                go.transform.SetParent(at, false);
+                go.transform.localPosition = new Vector3(0f, -0.3f, -1.6f);   // (sortie vers l'arriere, sous la caisse)
+                exhaust = go.AddComponent<AudioSource>();
+                exhaust.clip = hs.clip; exhaust.loop = true; exhaust.volume = 0f; exhaust.spatialBlend = 1f; exhaust.minDistance = 2f; exhaust.maxDistance = 150f; exhaust.dopplerLevel = 0.3f; exhaust.playOnAwake = false;
+            }
+            MuteRuscko(car);
+            Transform ss = Find(src.transform, "StarterSound");
+            if (ss != null && ss.GetComponent<AudioSource>() != null && ss.GetComponent<AudioSource>().clip != null) starter["demarreur"] = ss.GetComponent<AudioSource>().clip;
+            HookStarter(car, at);
+            satsuma = true;
+            Log.Info("vaz : son moteur de la Satsuma (AudioEngineSatsuma" + (exhaust != null ? " + echappement " + exhaust.clip.name : "") + ") : " + cp.GetComponentsInChildren<AudioSource>(true).Length + " sources, " + rebound + " lectures du Drivetrain ramenees a la VAZ, " + muted.Count + " sons de la Ruscko coupes" + (starterFsm != null ? ", demarreur de la Satsuma" : ""));
         }
 
         bool rivett;
@@ -184,26 +241,34 @@ namespace MWCoop
                 }
             Transform far = Find(car.transform, "sound_exhaust");
             if (far != null && far.GetComponent<AudioSource>() != null) muted.Add(far.GetComponent<AudioSource>());
-            // My Summer Car : bruit moteur de la Ruscko fait par le SoundController de UnityCar (sources creees a son Start, voiture
-            // encore eteinte ici, et celles deja creees sur la vraie Ruscko, copiees avec elle) -> ses clips du moteur et du
-            // demarreur retires, les sources qui les jouent rendues muettes (pack rallye MSC)
-            if (Game.Msc)
-            {
-                Component scn = car.GetComponent("SoundController");
-                var engClips = new List<AudioClip>();
-                if (scn != null)
-                    foreach (string fn in new[] { "engineThrottle", "engineNoThrottle", "startEngine" })
-                    {
-                        System.Reflection.FieldInfo fi = scn.GetType().GetField(fn, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        if (fi == null || fi.FieldType != typeof(AudioClip)) continue;
-                        AudioClip c = fi.GetValue(scn) as AudioClip;
-                        if (c != null) engClips.Add(c);
-                        fi.SetValue(scn, null);
-                    }
-                foreach (AudioSource a in car.GetComponentsInChildren<AudioSource>(true))
-                    if (a.name == "Exhaust" || (a.clip != null && engClips.Contains(a.clip))) muted.Add(a);
-            }
-            // demarreur
+            if (Game.Msc) MuteRuscko(car);
+            HookStarter(car, at);
+            Log.Info("vaz : son moteur : " + loops.Count + " boucles, " + starter.Count + " sons de demarreur" + (starterFsm == null ? " (automate Starter introuvable)" : "") + ", " + muted.Count + " sons de la SORBET coupes");
+        }
+
+        // My Summer Car : bruit moteur de la Ruscko fait par le SoundController de UnityCar (sources creees a son Start, voiture
+        // encore eteinte ici, et celles deja creees sur la vraie Ruscko, copiees avec elle) -> ses clips du moteur et du
+        // demarreur retires, les sources qui les jouent rendues muettes (pack rallye MSC)
+        void MuteRuscko(GameObject car)
+        {
+            Component scn = car.GetComponent("SoundController");
+            var engClips = new List<AudioClip>();
+            if (scn != null)
+                foreach (string fn in new[] { "engineThrottle", "engineNoThrottle", "startEngine" })
+                {
+                    System.Reflection.FieldInfo fi = scn.GetType().GetField(fn, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (fi == null || fi.FieldType != typeof(AudioClip)) continue;
+                    AudioClip c = fi.GetValue(scn) as AudioClip;
+                    if (c != null) engClips.Add(c);
+                    fi.SetValue(scn, null);
+                }
+            foreach (AudioSource a in car.GetComponentsInChildren<AudioSource>(true))
+                if (a.name == "Exhaust" || (a.clip != null && engClips.Contains(a.clip))) muted.Add(a);
+        }
+
+        // demarreur : sons du jeu coupes et remplaces par ceux de 'starter' (cle, demarreur, prise, demarrage)
+        void HookStarter(GameObject car, Transform at)
+        {
             Transform st = Find(car.transform, Game.Msc ? "Starter" : "STARTERxSorbet");
             if (st != null && starter.Count > 0)
             {
@@ -231,7 +296,6 @@ namespace MWCoop
                     if (starter.TryGetValue("demarreur", out c)) { crank.clip = c; crank.loop = true; }
                 }
             }
-            Log.Info("vaz : son moteur : " + loops.Count + " boucles, " + starter.Count + " sons de demarreur" + (starterFsm == null ? " (automate Starter introuvable)" : "") + ", " + muted.Count + " sons de la SORBET coupes");
         }
 
         static Transform Find(Transform t, string name)
@@ -246,6 +310,18 @@ namespace MWCoop
             if (dt == null) return;
             foreach (AudioSource a in muted) if (a != null && !a.mute) a.mute = true;
             if (rivett) { float r = dt.rpm; foreach (FsmFloat v in rpmVars) v.Value = r; return; }   // (automates du jeu, au regime de la VAZ)
+            if (satsuma)
+            {
+                Starter();
+                if (exhaust != null)
+                {
+                    bool run = dt.rpm > 300f;
+                    exhaust.pitch = dt.rpm / 10000f + 0.55f;
+                    exhaust.volume = run ? 0.55f + 0.45f * Mathf.Clamp01(dt.throttle) : 0f;
+                    if (run && !exhaust.isPlaying) exhaust.Play(); else if (!run && exhaust.isPlaying) exhaust.Stop();
+                }
+                return;
+            }
             float rpm = dt.rpm, thr = Mathf.Clamp01(dt.throttle);
             load = Mathf.MoveTowards(load, thr, Time.deltaTime * 6f);
             bool on = rpm > 300f;
@@ -263,7 +339,7 @@ namespace MWCoop
         // ([Test] VazSon) etat des boucles
         public string Describe()
         {
-            var sb = new System.Text.StringBuilder(rivett ? "Rivett" : loops.Count + " boucles, regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + " :");
+            var sb = new System.Text.StringBuilder(rivett ? "Rivett" : satsuma ? "Satsuma, regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + (exhaust != null ? ", echappement v " + exhaust.volume.ToString("F2") + " h " + exhaust.pitch.ToString("F2") + (exhaust.isPlaying ? "" : " ARRET") : "") : loops.Count + " boucles, regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + " :");
             foreach (Loop l in loops) if (l.Src != null && l.Src.volume > 0.001f) sb.Append(' ').Append(l.Src.clip != null ? l.Src.clip.name : "?").Append(l.Load ? "(c)" : "(f)").Append(" v ").Append(l.Src.volume.ToString("F2")).Append(" h ").Append(l.Src.pitch.ToString("F2")).Append(l.Src.isPlaying ? "" : " ARRET");
             return sb.ToString();
         }
