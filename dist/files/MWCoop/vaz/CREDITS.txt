@@ -6,7 +6,8 @@ https://creativecommons.org/licenses/by-nc/4.0/
 
 Modifications pour MWCoop : maillage allege (~54 000 triangles : train roulant, moteur et petites pieces retires, le reste
 reduit), livree retiree (caisse peinte a la couleur du joueur), portieres decoupees, plaques de numero ajoutees
-(numero-01..16.png, MWCoop). Roues : celles des voitures du rallye de My Winter Car (non incluses ici).
+(numero-01..16.png, MWCoop). Roues : celles du modele (roue.p205) sur My Summer Car, celles des voitures du rallye
+de My Winter Car sur My Winter Car (non incluses ici).
 Usage non commercial seulement.
 
 3D model: "VAZ-2108 Rally" by matthew0451, CC BY-NC 4.0. Modified for MWCoop (lighter mesh, livery removed, doors split,

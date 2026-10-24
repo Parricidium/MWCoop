@@ -1161,7 +1161,7 @@ namespace MWCoop
         // Apres la logique du jeu : la chaleur de l'habitacle de la copie est celle de chez le conducteur.
         public static void LateUpdate()
         {
-            if (!scanned) return;
+            if (!scanned) { Vaz.LateUpdate(); return; }   // (solo : ralenti et tirette des VAZ/addons quand meme)
             float now = Time.realtimeSinceStartup;
             foreach (Car c in cars)
                 if (c.Heat != null && !float.IsNaN(c.RemoteHeat) && c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving)
