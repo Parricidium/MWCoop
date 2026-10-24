@@ -29,7 +29,7 @@ namespace Voyage
             Spots.Clear();
             // (chaque lieu a part : une erreur dans l'un ne prive pas des autres)
             try { Agency(); } catch (System.Exception e) { Journal.Info("agence : " + e); }
-            try { Airfield(); } catch (System.Exception e) { Journal.Info("aerodrome : " + e); }
+            try { if (Jeu.Msc) AirfieldMsc(); else Airfield(); } catch (System.Exception e) { Journal.Info("aerodrome : " + e); }
         }
 
         static Spot AddSpot(Kind k, Transform parent, Vector3 local, Vector3 size, Destination d = null, float reach = Jeu.Reach)

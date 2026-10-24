@@ -14,9 +14,12 @@ namespace Voyage
     {
         static readonly Vector3 AgencyAt = new Vector3(-1535f, 0f, 1080f);
         const float AgencyYaw = 0f;            // (facade au nord, vers la petite route)
-        static readonly Vector3 TerminalAt = new Vector3(-380f, 0f, 1668f);
-        const float TerminalYaw = 180f;        // (facade au sud, vers la route ; piste au nord)
+        static Vector3 TerminalAt = new Vector3(-380f, 0f, 1668f);
+        static float TerminalYaw = 180f;       // (facade au sud, vers la route ; piste au nord)
         public const float RunwayZ = 1745f;
+        // repere de la piste (cinematiques de l'avion) : origine, sens du decollage, abscisses du depart et de l'approche
+        public static Vector3 RunO = new Vector3(0f, 0f, RunwayZ), RunDir = Vector3.right;
+        public static float StartU = -470f, ApproachU = -760f;
         const float RunwayX0 = -530f, RunwayX1 = -230f, RunwayHalfW = 10f;
         public static Vector3 CineDepart, CineArrivee;   // (cameras de cinema, bord sud de la piste)
 
@@ -298,6 +301,32 @@ namespace Voyage
             Windsock(root.transform, new Vector3(-250f, 0f, 1770f));
             RoadSign(root.transform, new Vector3(-371f, 0f, 1598f));
             Journal.Info("aerodrome construit (piste " + RunwayX0 + ".." + RunwayX1 + " a z " + RunwayZ + ")");
+        }
+
+        // ---------------------------------------------------------------- My Summer Car : l'ancien aeroport du jeu (JD, 24/10)
+        // MAP/MESH/AIRPORT : piste de 26,5 m de large au cap 278 degres (axe mesure dans le maillage), bout est vers (-277, -1080) ;
+        // les dragsters du vendredi n'utilisent que l'ouest (depart x -1278, arrivee x -880, tentes x -1304 et -739). Ici, rien
+        // a dessiner au sol : le terminal et le Cessna dans la boucle du taxiway au nord du bout est (epave remorquable
+        // Spawn/JunkCar1 a 150 m, tente des resultats a 260 m). Repere de piste : u le long de l'axe vers l'ouest (0 a 28 m
+        // du bout est), v vers le nord (cote taxiway).
+        static Vector3 Rw(float u, float v) { Vector3 n = new Vector3(-RunDir.z, 0f, RunDir.x); return RunO + RunDir * u - n * v; }
+
+        static void AirfieldMsc()
+        {
+            var root = new GameObject("VOYAGE_AERODROME");
+            Aerodrome = root;
+            RunO = new Vector3(-304.2f, 0f, -1075.5f); RunDir = new Vector3(-0.9912f, 0f, 0.1323f).normalized;
+            StartU = 10f; ApproachU = -240f;   // (toucher vers u 45, arret vers u 120)
+            float north = Mathf.Atan2(RunDir.z, -RunDir.x) * Mathf.Rad2Deg;   // (cap de la normale cote nord : facade vers le taxiway)
+            TerminalAt = Rw(70f, 70f); TerminalYaw = north;
+            Terminal(root.transform);
+            Cessna(root.transform, Rw(70f, 35f), Mathf.Atan2(RunDir.x, RunDir.z) * Mathf.Rad2Deg);
+            Vector3 cd = Rw(170f, -22f), ca = Rw(25f, -22f);
+            CineDepart = new Vector3(cd.x, GroundY(cd.x, cd.z) + 2.2f, cd.z);
+            CineArrivee = new Vector3(ca.x, GroundY(ca.x, ca.z) + 2.2f, ca.z);
+            Windsock(root.transform, Rw(-10f, -32f));
+            RoadSign(root.transform, Rw(70f, 98f));
+            Journal.Info("aerodrome construit (ancien aeroport de My Summer Car, terminal en " + TerminalAt + ")");
         }
 
         // grillage de (x0, z0) a (x1, z1), monde : poteaux tous les 3 m qui suivent le sol, panneaux de maille des deux

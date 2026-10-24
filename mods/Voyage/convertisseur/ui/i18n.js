@@ -29,7 +29,7 @@ window.I18N = {
     annuler: "Annuler", convertir: "Convertir", reconvertir: "Reconvertir", fermer: "Fermer", reessayer: "Réessayer", voirDest: "Voir la destination",
     convEnCours: "Conversion en cours…", convFinie: "Destination prête", convAnnulee: "Conversion annulée", convEchec: "La conversion a échoué",
     sLecture: "Lecture des fichiers du circuit", sTextures: "Textures", sMaillages: "Maillages", sCollisions: "Collisions", sFiche: "Fiche et images",
-    pret: "C'est prêt !", pretSous: "Lance une partie : l'agence de voyage de Peräjärvi vend maintenant des billets pour ce circuit. Prends l'avion à l'aérodrome près du cinéma.",
+    pret: "C'est prêt !", pretSous: "Lance une partie : l'agence de voyage de Peräjärvi vend maintenant des billets pour ce circuit. Prends l'avion {0}.", aero_mwc: "à l'aérodrome près du cinéma", aero_msc: "à l'ancien aéroport", jeuMsc: "My Summer Car", jeuMwc: "My Winter Car",
     triangles: "triangles", texturesN: "textures", surDisque: "sur le disque", duree: "durée", collisions: "collisions",
     grises: "{0} texture(s) dans un format non pris en charge : elles seront grises.", grisesCourt: "grises",
     triN: "{0} triangles", chargeMaillages: "Chargement du circuit… {0} %", chargeTex: "Textures {0}/{1}", apercuErreur: "Aperçu impossible : {0}",
@@ -75,7 +75,7 @@ window.I18N = {
     annuler: "Cancel", convertir: "Convert", reconvertir: "Reconvert", fermer: "Close", reessayer: "Try again", voirDest: "Open the destination",
     convEnCours: "Converting…", convFinie: "Destination ready", convAnnulee: "Conversion cancelled", convEchec: "Conversion failed",
     sLecture: "Reading the track files", sTextures: "Textures", sMaillages: "Meshes", sCollisions: "Collisions", sFiche: "Sheet and pictures",
-    pret: "All set!", pretSous: "Start a game: the Peräjärvi travel agency now sells tickets to this track. Take the plane at the airfield near the cinema.",
+    pret: "All set!", pretSous: "Start a game: the Peräjärvi travel agency now sells tickets to this track. Take the plane {0}.", aero_mwc: "at the airfield near the cinema", aero_msc: "at the old airport", jeuMsc: "My Summer Car", jeuMwc: "My Winter Car",
     triangles: "triangles", texturesN: "textures", surDisque: "on disk", duree: "time", collisions: "colliders",
     grises: "{0} texture(s) in an unsupported format: they will be grey.", grisesCourt: "grey",
     triN: "{0} triangles", chargeMaillages: "Loading the track… {0} %", chargeTex: "Textures {0}/{1}", apercuErreur: "Preview unavailable: {0}",
@@ -121,7 +121,7 @@ window.I18N = {
     annuler: "Отмена", convertir: "Конвертировать", reconvertir: "Переконвертировать", fermer: "Закрыть", reessayer: "Повторить", voirDest: "Открыть направление",
     convEnCours: "Конвертация…", convFinie: "Направление готово", convAnnulee: "Конвертация отменена", convEchec: "Конвертация не удалась",
     sLecture: "Чтение файлов трассы", sTextures: "Текстуры", sMaillages: "Модели", sCollisions: "Коллизии", sFiche: "Карточка и картинки",
-    pret: "Готово!", pretSous: "Запусти игру: турагентство в Перяярви теперь продаёт билеты на эту трассу. Самолёт — на аэродроме у кинотеатра.",
+    pret: "Готово!", pretSous: "Запусти игру: турагентство в Перяярви теперь продаёт билеты на эту трассу. Самолёт — {0}.", aero_mwc: "на аэродроме у кинотеатра", aero_msc: "в старом аэропорту",
     triangles: "треугольников", texturesN: "текстур", surDisque: "на диске", duree: "время", collisions: "коллизий",
     grises: "Текстур в неподдерживаемом формате: {0}. Они будут серыми.", grisesCourt: "серых",
     triN: "{0} треугольников", chargeMaillages: "Загрузка трассы… {0} %", chargeTex: "Текстуры {0}/{1}", apercuErreur: "Просмотр недоступен: {0}",
@@ -167,7 +167,7 @@ window.I18N = {
     annuler: "إلغاء", convertir: "تحويل", reconvertir: "إعادة التحويل", fermer: "إغلاق", reessayer: "إعادة المحاولة", voirDest: "فتح الوجهة",
     convEnCours: "جارٍ التحويل…", convFinie: "الوجهة جاهزة", convAnnulee: "أُلغي التحويل", convEchec: "فشل التحويل",
     sLecture: "قراءة ملفات الحلبة", sTextures: "الخامات", sMaillages: "الشبكات", sCollisions: "التصادم", sFiche: "البطاقة والصور",
-    pret: "جاهز!", pretSous: "ابدأ لعبة: وكالة السفر في Peräjärvi تبيع الآن تذاكر إلى هذه الحلبة. استقل الطائرة من المطار قرب السينما.",
+    pret: "جاهز!", pretSous: "ابدأ لعبة: وكالة السفر في Peräjärvi تبيع الآن تذاكر إلى هذه الحلبة. استقل الطائرة {0}.", aero_mwc: "من المطار قرب السينما", aero_msc: "من المطار القديم",
     triangles: "مثلث", texturesN: "خامة", surDisque: "على القرص", duree: "المدة", collisions: "تصادم",
     grises: "{0} خامة بصيغة غير مدعومة: ستظهر رمادية.", grisesCourt: "رمادية",
     triN: "{0} مثلث", chargeMaillages: "تحميل الحلبة… {0} %", chargeTex: "الخامات {0}/{1}", apercuErreur: "تعذّر العرض: {0}",
@@ -186,11 +186,12 @@ window.I18N = {
   },
 };
 window.LANG = "fr";
+window.GAME = "mwc";   // (jeu choisi : les textes qui nomment My Winter Car nomment My Summer Car sur MSC)
 window.T = function (k, ...v) {
   const d = window.I18N[window.LANG] || window.I18N.fr;
   let s = d[k] ?? window.I18N.en[k] ?? window.I18N.fr[k] ?? k;
   v.forEach((x, i) => { s = s.split("{" + i + "}").join(x); });
-  return s;
+  return window.GAME === "msc" ? s.split("My Winter Car").join("My Summer Car") : s;
 };
 window.applyI18n = function () {
   document.documentElement.lang = window.LANG;

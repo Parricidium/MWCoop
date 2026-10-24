@@ -1,4 +1,4 @@
-# Voyage (mod MSCLoader pour My Winter Car, compatible MWCoop)
+# Voyage (mod MSCLoader pour My Summer Car et My Winter Car, compatible MWCoop)
 
 Une agence de voyage à Peräjärvi vend des billets aller-retour vers des **circuits d'Assetto Corsa que le joueur a
 convertis lui-même** avec le convertisseur Voyage. À l'aérodrome, près du cinéma, le guichetier demande si tu utilises
@@ -8,12 +8,32 @@ Un guichet du retour, posé à côté du point d'arrivée, te ramène en Finland
 Le mod ne contient aucun circuit. Chaque joueur convertit les circuits de son propre Assetto Corsa, sur son PC. Rien
 n'est envoyé ni partagé, et le mod ne contourne aucune protection : les fichiers chiffrés sont refusés.
 
+Une seule DLL pour les deux jeux (`Game.MySummerCar_And_MyWinterCar`). Elle n'utilise ni Assembly-CSharp ni firstpass,
+qui diffèrent d'un jeu à l'autre ; Unity, PlayMaker et MSCLoader 1.4.2 sont les mêmes. Le jeu est reconnu par
+`Jeu.Msc` (dossier `mysummercar_Data`). Ce qui change sur My Summer Car (24/10) :
+- **Aérodrome** : l'ancien aéroport du jeu (`MAP/MESH/AIRPORT`). La piste existe déjà ; son axe a été mesuré dans le
+  maillage (26,5 m de large, cap 278°, bout est vers (-277, -1080)). Le terminal, le Cessna, la manche à air et le panneau
+  sont posés dans la boucle du taxiway, au nord du bout est. Les dragsters du vendredi n'utilisent que l'ouest (départ
+  x -1278, arrivée x -880) : la tente des résultats est à 260 m, l'épave remorquable `Spawn/JunkCar1` à 150 m. Le terrain
+  de MWC (au nord du cinéma) est hors de la carte de MSC.
+- **Agence** : la même place qu'à MWC (clairière au bord du chemin, près du magasin de Teimo ; rien à moins de 25 m).
+- **Matières** : `ASPHALT`, `roof_metal 1` et `2` (pas de neige sur les toits), `wood_panel16` à la place de celles de MWC.
+- **Son de l'hélice** : `boat_4000rpm` (MSC n'a pas l'hydroglisseur).
+- **Phrases des PNJ** : « l'ancien aéroport, près de la décharge », « près du magasin de Teimo ».
+- Les cinématiques suivent un repère de piste (`Lieux.RunO`, `RunDir`, `StartU`, `ApproachU`) : l'avion décolle vers
+  l'ouest sur MSC et vers l'est sur MWC.
+
+Recherche des sites sur MSC : vue de dessus de la carte tirée du cache de l'éditeur de carte (relief, routes de terrain,
+bâtiments, murs de forêt, marais), puis relevés en jeu (`alentours`) pour écarter boulots et événements. Écartés : le
+marais à l'est (`MAP/MESH/SWAMP`), le nord de Peräjärvi (départ du rallye), les abords de la maison du kilju, les champs
+cultivés sous la maison.
+
 Mod à part, séparé de MWCoop : ses mises à jour n'y touchent pas. Plus tard, il pourra rejoindre MWCoop comme le musée
 (ajout COOP au choix) ou devenir un addon téléchargeable.
 
 ## Installer
 
-1. Compiler le mod : `build.cmd` (il faut MSCLoader dans le jeu ; sortie `build\Voyage.dll`, environ 2 Mo avec le Cessna).
+1. Compiler le mod : `build.cmd` (il faut MSCLoader dans My Winter Car ; la DLL sert aux deux jeux ; sortie `build\Voyage.dll`, environ 2 Mo avec le Cessna).
    Le Cessna est embarqué dans la DLL : `outils\glb2voyage.py` convertit le `.glb` en `modeles\cessna.vmesh` et ses
    textures (`python -I outils\glb2voyage.py plane.glb modeles cessna --a-part propelting`).
 2. Copier `build\Voyage.dll` dans le dossier `Mods` du jeu
@@ -28,6 +48,9 @@ Fenêtre sombre comme l'éditeur de carte (WinForms + WebView2, interface dans `
 russe et arabe. Il trouve Assetto Corsa et My Winter Car dans les bibliothèques Steam ; sinon, on choisit les dossiers
 (retenus dans `%LOCALAPPDATA%\MWCoop\convertisseur\convertisseur.ini`).
 
+- **Jeu** : My Summer Car ou My Winter Car, en haut de la barre de gauche (accent jaune ou bleu). Chaque jeu a ses
+  destinations (dans son dossier `Mods`), son dossier et son état du mod. MSCLoader est reconnu dans le jeu ou dans
+  `%LOCALAPPDATA%\MWCoop\mscloader-mwcoop[-msc]` (celui que le lanceur télécharge). Le lanceur passe `--jeu`.
 - **Bibliothèque** : les circuits de `assettocorsa\content\tracks`, avec leur image et leur tracé, la longueur, le nombre
   de stands et la taille. On peut chercher (nom, pays, auteur), filtrer (à convertir, convertis, officiels, mods) et trier.
 - **Conversion** : choix du tracé (pour les circuits qui en ont plusieurs), du nom affiché à l'agence, du prix du billet
@@ -124,7 +147,8 @@ jeu par MWCoop), `photo`, `photojoueur nom [cap]`, `dessus`, `sonde` (hauteurs),
 automates), `chercher`, `matieres`, `quitter`.
 Le journal est dans `<jeu>\Mods\Voyage.log` ; les photos et relevés dans `<jeu>\Mods\voyage-essai\`.
 
-Convertisseur : `CONVERTISSEUR_JEU=<dossier du jeu>` impose le dossier de My Winter Car, `CONVERTISSEUR_HORS_ECRAN=1`
+Convertisseur : `CONVERTISSEUR_JEU=<dossier du jeu>` impose le dossier de My Winter Car (`CONVERTISSEUR_JEU_MSC` celui de
+My Summer Car), `CONVERTISSEUR_HORS_ECRAN=1`
 ouvre la fenêtre hors de l'écran ; `--debug` active les outils de développement de WebView2.
 
 ## Publication
@@ -141,3 +165,5 @@ Crédit du Cessna dans le lanceur : Guide > Crédits > Modèles 3D (traductions 
 - Les circuits faits de nombreux `.kn5` très lourds (Nordschleife) : à essayer.
 - Textes du mod en russe et en arabe (FR et EN pour le moment ; le convertisseur a les quatre langues).
 - Marquer l'aérodrome sur la carte (M) de MWCoop.
+- My Summer Car : essai en co-op (instances `D:\Games\COOPTEST\Voyage-MSC`, MSCLoader de MWCoop par Doorstop) ; copier une
+  destination d'un jeu à l'autre depuis le convertisseur (pour l'instant : convertir deux fois).

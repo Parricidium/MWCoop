@@ -2006,6 +2006,8 @@ Official and mod tracks, converted on your PC: nothing is shared	حلبات رس
 Voyage mod included (agency, airfield, Cessna flight): installed by the converter	مود Voyage مرفق (الوكالة، المطار، رحلة Cessna): يثبّته المحوّل
 My Winter Car only, with MSCLoader; in co-op, everyone converts the same track	My Winter Car فقط، مع MSCLoader؛ في اللعب الجماعي يحوّل كل لاعب الحلبة نفسها
 The Cessna 172 at the airfield of the Voyage mod (travel agency, flights to converted tracks), from the Plane model by osmosikum on Sketchfab: sketchfab.com/osmosikum, CC BY 4.0 license. Textures reduced for the game.	طائرة Cessna 172 في مطار تعديل Voyage (وكالة سفر، رحلات إلى الحلبات المحوّلة)، عن نموذج Plane من osmosikum على Sketchfab: sketchfab.com/osmosikum، ترخيص CC BY 4.0. خامات مصغّرة للعبة.
+My Summer Car and My Winter Car, with MSCLoader; in co-op, everyone converts the same track	My Summer Car وMy Winter Car، مع MSCLoader؛ في اللعب الجماعي يحوّل كل لاعب الحلبة نفسها
+Turns the tracks of your Assetto Corsa into travel destinations: a ticket at the Peräjärvi agency, then the plane.	يحوّل حلبات Assetto Corsa الخاصة بك إلى وجهات سفر: تذكرة من وكالة Peräjärvi، ثم الطائرة.
 These guests are still receiving your mods: 	هؤلاء الضيوف ما زالوا يستلمون مودّاتك: 
 \n\nWait for their download to finish before starting the game.	\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة.
 Sending mods (%d)\u2026	إرسال المودّات (%d)…
@@ -2678,3 +2680,4 @@ For each one: a 3D preview (overview, arrival point, colliders) and its sheet: n
 Reconvert it (with other settings), open its folder, or delete it: it goes to the Windows Recycle Bin.	أعد تحويلها (بإعدادات أخرى)، أو افتح مجلدها، أو احذفها: تذهب إلى سلة محذوفات Windows.
 In co-op, every player converts the same track (and the same layout) from their own Assetto Corsa: you land at the same place and see each other on the track.	في اللعب الجماعي، يحوّل كل لاعب الحلبة نفسها (والتخطيط نفسه) من Assetto Corsa الخاصة به: تصلون إلى المكان نفسه ويرى بعضكم بعضًا على الحلبة.
 Nothing is uploaded or shared: the tracks come from your Assetto Corsa and stay on your PC, the host doesn't send them. Early version: a very heavy track can be slow to load; report it on the Discord.	لا يُرسل ولا يُشارك شيء: الحلبات تأتي من Assetto Corsa الخاصة بك وتبقى على حاسوبك، والمضيف لا يرسلها. نسخة Early مبكرة: قد تتأخر حلبة ثقيلة جدًا في التحميل؛ أبلغ عنها على Discord.
+At the airfield (My Winter Car: north of the cinema; My Summer Car: the old airport, near the landfill): TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track.	في المطار (My Winter Car: شمال السينما؛ My Summer Car: المطار القديم قرب المكب): تحدّث عند المكتب، ثم انقر لتقول نعم. تقلع طائرة Cessna وتصل إلى الحلبة.

@@ -30,6 +30,9 @@ namespace Voyage
     // Le jeu : joueur, camera, globales de l'interface (texte et icones de la main, sous-titres), argent.
     static class Jeu
     {
+        // My Summer Car (le meme mod pour les deux jeux, JD 24/10) : lieux, matieres et sons propres a chaque jeu
+        static int msc = -1;
+        public static bool Msc { get { if (msc < 0) msc = Application.dataPath.IndexOf("mysummercar", StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0; return msc == 1; } }
         static Transform player;
         static int playerLook = -1;
 
@@ -137,10 +140,32 @@ namespace Voyage
             }
         }
         public static string T(string f, string e) { return Fr ? f : e; }
+        // ou est l'aerodrome / l'agence, pour les phrases des PNJ (My Summer Car : l'ancien aeroport du jeu)
+        public static string AirFr { get { return Msc ? "à l'ancien aéroport, près de la décharge" : "près du cinéma"; } }
+        public static string AirEn { get { return Msc ? "at the old airport, near the landfill" : "near the cinema"; } }
+        public static string AgencyFr { get { return Msc ? "à Perajarvi, près du magasin de Teimo" : "à Perajarvi, près du musée"; } }
+        public static string AgencyEn { get { return Msc ? "in Perajarvi, near Teimo's shop" : "in Perajarvi, near the museum"; } }
 
+        // sons du jeu (MasterAudio, dans Assembly-CSharp-firstpass) : par reflexion, la DLL ne depend que de bibliotheques
+        // identiques dans My Summer Car et My Winter Car (Unity, PlayMaker, MSCLoader)
+        static MethodInfo playAt;
+        static bool playLooked;
         public static void Sound(string group, string variation, Vector3 at)
         {
-            try { MasterAudio.PlaySound3DAtVector3AndForget(group, at, 1f, null, 0f, variation); } catch { }
+            try
+            {
+                if (!playLooked)
+                {
+                    playLooked = true;
+                    Type ma = Type.GetType("DarkTonic.MasterAudio.MasterAudio, Assembly-CSharp-firstpass") ?? Type.GetType("MasterAudio, Assembly-CSharp-firstpass") ?? Type.GetType("MasterAudio, Assembly-CSharp");
+                    if (ma != null)
+                        foreach (MethodInfo m in ma.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                            if (m.Name == "PlaySound3DAtVector3AndForget" && m.GetParameters().Length == 6) { playAt = m; break; }
+                    if (playAt == null) Journal.Info("sons du jeu : MasterAudio introuvable");
+                }
+                if (playAt != null) playAt.Invoke(null, new object[] { group, at, 1f, null, 0f, variation });
+            }
+            catch { }
         }
     }
 

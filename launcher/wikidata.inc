@@ -1029,8 +1029,8 @@ static const WikiBlock kW_Voyage[] = {   // (convertisseur de circuits Assetto C
             L"The trip", 0 },
     { WB_S, L"À l'agence, clic sur l'affiche du circuit : un billet aller-retour, payé en liquide.",
             L"At the agency, click the track's poster: a return ticket, paid in cash." },
-    { WB_S, L"À l'aérodrome, au nord du cinéma : PARLER au guichet, puis clic pour dire oui. Le Cessna décolle, et tu arrives au circuit.",
-            L"At the airfield, north of the cinema: TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track." },
+    { WB_S, L"À l'aérodrome (My Winter Car : au nord du cinéma ; My Summer Car : l'ancien aéroport, près de la décharge) : PARLER au guichet, puis clic pour dire oui. Le Cessna décolle, et tu arrives au circuit.",
+            L"At the airfield (My Winter Car: north of the cinema; My Summer Car: the old airport, near the landfill): TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track." },
     { WB_S, L"Pour rentrer : le guichet du retour, à côté du point d'arrivée. L'avion te ramène à l'aérodrome.",
             L"To come back: the return desk, next to the arrival point. The plane brings you back to the airfield." },
     { WB_H, L"Gérer ses destinations",
@@ -1085,5 +1085,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WARTG(WG_MWC, 2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34)
     WARTG(WG_MWC, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
     WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
-    WARTG(WG_MWC, 2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)
+    WART(2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)
 };
