@@ -85,7 +85,7 @@ namespace MWCoop
 
         static void MscReset()
         {
-            mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear();
+            mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear(); keptJoints.Clear();
         }
 
         // ---------------------------------------------------------------- cles
@@ -195,6 +195,7 @@ namespace MWCoop
                 FsmState rs = f.Fsm.GetState("Remove part");
                 if (!rs.IsInitialized || !Inject(rs, new MscRemovalHook { F = f })) return false;
                 mscRemovals.Add(f);
+                if (f.GetComponent<PartWatch>() == null) f.gameObject.AddComponent<PartWatch>();
                 return true;
             }
             bool swap = IsSwapPoint(f);
@@ -259,6 +260,22 @@ namespace MWCoop
         // actions de 'Remove part' (SwitchLater). 'BoltCheck' recoit la nouvelle attache (sa variable Joint, lue a l'entree de
         // Bolts ON 2 seulement).
         static int keepLogs;
+        static readonly Dictionary<Joint, Rigidbody> keptJoints = new Dictionary<Joint, Rigidbody>();
+        static float nextKept;
+        static void MscCheckKept(float now)
+        {
+            if (keptJoints.Count == 0 || now < nextKept) return;
+            nextKept = now + 0.5f;
+            List<Joint> done = null;
+            foreach (KeyValuePair<Joint, Rigidbody> kv in keptJoints)
+            {
+                if (kv.Key != null && kv.Value != null && VehicleSync.Authority(kv.Value) != Session.LocalId) continue;
+                if (kv.Key != null && float.IsInfinity(kv.Key.breakForce)) { kv.Key.breakForce = 200f; kv.Key.breakTorque = 200f; }
+                if (done == null) done = new List<Joint>();
+                done.Add(kv.Key);
+            }
+            if (done != null) foreach (Joint j in done) keptJoints.Remove(j);
+        }
         static bool MscKeepOnCopy(PlayMakerFSM rem)
         {
             if (!Session.Active) return false;
@@ -275,6 +292,11 @@ namespace MWCoop
             FixedJoint fj = rem.gameObject.AddComponent<FixedJoint>();
             fj.connectedBody = to;
             VehicleSync.AdoptJoint(cb, fj, new Vector2(200f, 200f));   // (InitialAttachForce du montage)
+            // Voiture garee menee par l'autre, libre ici (pas une copie cinematique) : l'attache neuve a 200 recassait a chaque pas
+            // tant que la piece restait pressee (pare-chocs contre la porte du garage apres une poussee : 60 casses en 1 s, force
+            // 1,1e9, la caisse secouee ici -- partie de JD et Kristof, 24/10, rejoue par Autotest=mscmontage PousseA). Incassable
+            // tant qu'un autre la mene ; ses limites quand elle redevient la notre (MscTick).
+            if (!float.IsInfinity(fj.breakForce)) { fj.breakForce = Mathf.Infinity; fj.breakTorque = Mathf.Infinity; keptJoints[fj] = cb; }
             PlayMakerFSM bc = Game.FsmOn(rem.gameObject, "BoltCheck");
             FsmObject jv = bc != null ? bc.FsmVariables.FindFsmObject("Joint") : null;
             if (jv != null) jv.Value = fj;
@@ -313,6 +335,79 @@ namespace MWCoop
             Props.SettleHere(rem.gameObject);
         }
 
+        // Temoin sur chaque piece de MSC (24/10, partie de JD et Kristof : aile gauche cassee 0,05 a 0,3 s apres chaque montage chez
+        // l'hote, tableau de bord casse a la pose des compteurs) : a la rupture de son attache, la force et les derniers contacts
+        // (autre collisionneur, vitesse relative, il y a combien) -- ce qui l'a poussee.
+        public class PartWatch : MonoBehaviour
+        {
+            readonly string[] what = new string[6]; readonly float[] at = new float[6]; int next;
+            void OnCollisionEnter(Collision c)
+            {
+                if (c == null || c.collider == null) return;
+                Rigidbody o = c.rigidbody;
+                what[next] = Recon.Path(c.collider.transform) + (o == null ? " (fixe)" : o.isKinematic ? " (cinematique)" : "") + " " + (c.relativeVelocity.magnitude * 3.6f).ToString("F0") + " km/h";
+                at[next] = Time.realtimeSinceStartup; next = (next + 1) % what.Length;
+            }
+            void OnJointBreak(float force) { try { OnPartJointBreak(this, force); } catch (System.Exception e) { Replay.HookError(e); } }
+            public string Recent(float within)
+            {
+                var sb = new System.Text.StringBuilder();
+                float now = Time.realtimeSinceStartup;
+                for (int i = 0; i < what.Length; i++)
+                    if (what[i] != null && now - at[i] < within) sb.Append(sb.Length > 0 ? " ; " : "").Append(what[i]).Append(" il y a ").Append((now - at[i]).ToString("F2")).Append(" s");
+                return sb.Length > 0 ? sb.ToString() : "aucun";
+            }
+        }
+        static int breakLogs;
+        static void OnPartJointBreak(PartWatch w, float force)
+        {
+            if (!Session.Active || breakLogs++ >= 60) return;
+            Joint j = w.GetComponent<Joint>();
+            Rigidbody prb = w.GetComponent<Rigidbody>();
+            Transform car = VehicleSync.CarRoot(w.transform);
+            Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+            Log.Info("piece " + MscPartKey(w.gameObject) + " : attache rompue, force " + force.ToString("F0") + (j != null ? " (limite " + j.breakForce.ToString("F0") + ")" : "")
+                     + (prb != null ? ", piece v " + prb.velocity.magnitude.ToString("F2") + (prb.isKinematic ? " cin" : "") : "")
+                     + (cb != null ? ", voiture v " + cb.velocity.magnitude.ToString("F2") + " rot " + cb.angularVelocity.magnitude.ToString("F2") + (cb.isKinematic ? " cin" : "") + " menee par #" + VehicleSync.Authority(cb) : "")
+                     + " ; contacts 1 s : " + w.Recent(1f));
+        }
+
+        // Essais ([Test] Autotest=mscmontage) : clic de montage comme celui du joueur -- la piece tenue (cinematique) au declencheur,
+        // 'Wait for assembly', puis ASSEMBLE a l'image suivante.
+        static PlayMakerFSM testClick; static int testClickFrame;
+        public static string MscTestClick(string pointKey, string partKey)
+        {
+            MscPoint p;
+            if (!mscPoints.TryGetValue(pointKey, out p) || p.Fsm == null) { MscScan(); mscPoints.TryGetValue(pointKey, out p); }
+            if (p == null || p.Fsm == null) return "point " + pointKey + " introuvable";
+            GameObject part = MscFindPart(partKey) ?? Props.ObjectOf("w:" + partKey);
+            if (part == null) return "piece " + partKey + " introuvable";
+            if (!p.Fsm.gameObject.activeInHierarchy) return "point " + pointKey + " eteint";
+            Rigidbody prb = part.GetComponent<Rigidbody>();
+            if (prb != null) { prb.velocity = Vector3.zero; prb.angularVelocity = Vector3.zero; prb.isKinematic = true; }
+            FsmGameObject pv = p.Fsm.FsmVariables.FindFsmGameObject("Parent");
+            part.transform.position = p.Fsm.transform.position;
+            part.transform.rotation = pv != null && pv.Value != null ? pv.Value.transform.rotation : p.Fsm.transform.rotation;
+            p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
+            Game.SetState(p.Fsm, "Wait for assembly");
+            testClick = p.Fsm; testClickFrame = Time.frameCount + 2;
+            return "clic de montage de " + partKey + " sur " + pointKey;
+        }
+        public static string MscTestHolds(string pointKey)
+        {
+            MscPoint p;
+            if (!mscPoints.TryGetValue(pointKey, out p) || p.Fsm == null) return "point introuvable";
+            string id = MscInstalledId(p);
+            return id.Length > 0 ? "monte : " + id : "vide (etat " + p.Fsm.ActiveStateName + ")";
+        }
+        static void MscTestClickTick()
+        {
+            if (testClick == null || Time.frameCount < testClickFrame) return;
+            PlayMakerFSM f = testClick; testClick = null;
+            Log.Info("autotest : ASSEMBLE dans " + f.ActiveStateName);
+            f.SendEvent("ASSEMBLE");
+        }
+
         class MscOut { public PlayMakerFSM Rem; public string Key, Id; public int Flags; }
         static readonly List<MscOut> mscOut = new List<MscOut>();
         static int mscOutSerial;
@@ -320,6 +415,8 @@ namespace MWCoop
         // Demontage d'une piece « echange » fait ici : la nouvelle piece libre ({Part} de 'Removal') recoit une cle commune.
         static void MscTick()
         {
+            if (testClick != null) MscTestClickTick();
+            MscCheckKept(Time.realtimeSinceStartup);
             if (mscOut.Count == 0) return;
             foreach (MscOut o in mscOut)
             {
