@@ -16,22 +16,25 @@ namespace Voyage
         static Mode mode;
         static float t0, until;
 
-        const float StartX = -470f, Accel = 3.2f, LiftT = 9f;           // (roulage : 1,6 t^2 m, decollage a 9 s, 29 m/s)
-        const float ApproachX = -760f, TouchT = 9.5f, Brake = 6f;      // (approche a 30 m/s, toucher a 9,5 s, freinage 6 m/s^2)
+        const float Accel = 3.2f, LiftT = 9f;           // (roulage : 1,6 t^2 m, decollage a 9 s, 29 m/s)
+        const float TouchT = 9.5f, Brake = 6f;          // (approche a 30 m/s, toucher a 9,5 s, freinage 6 m/s^2)
+        static float StartX { get { return Lieux.StartU; } }       // (abscisses le long de la piste : repere Lieux.RunO / RunDir)
+        static float ApproachX { get { return Lieux.ApproachU; } }
         const float Sink = 0.09f;                                       // (origine du modele : roues 2 cm au-dessus du sol)
 
         public static void Setup(Transform t, Transform prop)
         {
             T = t; Prop = prop; park = t.position; parkRot = t.rotation; mode = Mode.Parked;
             AudioClip clip = null;
-            foreach (AudioClip c in Resources.FindObjectsOfTypeAll<AudioClip>()) if (c != null && c.name == "propeller1") { clip = c; break; }
+            string want = Jeu.Msc ? "boat_4000rpm" : "propeller1";   // (My Summer Car n'a pas l'hydroglisseur : le moteur du bateau)
+            foreach (AudioClip c in Resources.FindObjectsOfTypeAll<AudioClip>()) if (c != null && c.name == want) { clip = c; break; }
             if (clip != null)
             {
                 snd = t.gameObject.AddComponent<AudioSource>();
                 snd.clip = clip; snd.loop = true; snd.playOnAwake = false; snd.spatialBlend = 1f;
                 snd.rolloffMode = AudioRolloffMode.Logarithmic; snd.minDistance = 15f; snd.maxDistance = 700f; snd.volume = 0.9f; snd.dopplerLevel = 0.6f;
             }
-            Journal.Info("avion : gare en " + park + (clip != null ? ", son propeller1" : ", sans son (propeller1 introuvable)"));
+            Journal.Info("avion : gare en " + park + (clip != null ? ", son " + want : ", sans son (" + want + " introuvable)"));
         }
 
         public static bool Busy { get { return mode == Mode.TakeOff || mode == Mode.Landing; } }
@@ -62,11 +65,12 @@ namespace Voyage
             if (snd != null) snd.Stop();
         }
 
-        static void Put(float x, float h, float pitch)
+        // u : abscisse le long de la piste (sens du decollage), h : hauteur au-dessus du sol, pitch : nez leve
+        static void Put(float u, float h, float pitch)
         {
-            float z = Lieux.RunwayZ;
-            T.position = new Vector3(x, Lieux.GroundY(x, z) - Sink + h, z);
-            T.rotation = Quaternion.Euler(-pitch, 90f, 0f);   // (nez vers l'est, -pitch : nez leve)
+            Vector3 p = Lieux.RunO + Lieux.RunDir * u;
+            T.position = new Vector3(p.x, Lieux.GroundY(p.x, p.z) - Sink + h, p.z);
+            T.rotation = Quaternion.LookRotation(Lieux.RunDir) * Quaternion.Euler(-pitch, 0f, 0f);
         }
 
         public static void Tick()

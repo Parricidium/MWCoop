@@ -92,6 +92,9 @@ function renderAll() {
 // ---------------------------------------------------------------- barre de gauche
 function renderSide() {
   const ds = state.destinations;
+  window.GAME = state.jeu || "mwc";
+  document.body.className = window.GAME;
+  document.querySelectorAll("#games button").forEach(b => b.classList.toggle("on", b.dataset.g === window.GAME));
   $("nb-circuits").textContent = state.circuits.length || "";
   $("nb-dest").textContent = ds.length || "";
   const box = $("dests");
@@ -114,6 +117,12 @@ function renderSide() {
   if ($("mod-inst")) $("mod-inst").addEventListener("click", () => send({ type: "installerMod" }));
 }
 $("nav-biblio").addEventListener("click", showLibrary);
+document.querySelectorAll("#games button").forEach(b => b.addEventListener("click", () => {
+  if (state && b.dataset.g === state.jeu) return;
+  if (viewer) viewer.clear();
+  showLibrary();
+  send({ type: "jeu", id: b.dataset.g });
+}));
 document.querySelectorAll("[data-pick]").forEach(b => b.addEventListener("click", () => send({ type: "choisirDossier", quoi: b.dataset.pick })));
 
 // ---------------------------------------------------------------- bibliotheque
@@ -254,7 +263,7 @@ function renderConv() {
       <div class="prog"><div class="prog-h"><b id="cv-pc">${pct} %</b><span id="cv-txt">${esc(conv.texte || "")}</span></div>
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span id="cv-bar" style="width:${pct}%"></span></div></div>
       <ol class="steps" id="cv-steps">${STEPS.map((k, i) => `<li class="${stepClass(i)}"><span class="ic">${stepClass(i) === "done" ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>` : ""}</span>${esc(T(k))}<span class="v">${stepClass(i) === "cur" ? Math.round(conv.f * 100) + " %" : ""}</span></li>`).join("")}</ol>
-      ${conv.mode === "done" ? `<div class="done-box"><b>${esc(T("pret"))}</b><span>${esc(T("pretSous"))}</span></div>
+      ${conv.mode === "done" ? `<div class="done-box"><b>${esc(T("pret"))}</b><span>${esc(T("pretSous", T("aero_" + window.GAME)))}</span></div>
         <div class="sum"><div><b>${num(conv.res.triangles)}</b><small>${esc(T("triangles"))}</small></div><div><b>${conv.res.textures}</b><small>${esc(T("texturesN"))}</small></div>
           <div><b>${esc(size(conv.res.octets))}</b><small>${esc(T("surDisque"))}</small></div><div><b>${(conv.res.ms / 1000).toFixed(1).replace(".", dec())} s</b><small>${esc(T("duree"))}</small></div></div>
         ${conv.res.grises ? `<div class="info warn">${ICON_WARN}<span>${esc(T("grises", conv.res.grises))}</span></div>` : ""}` : ""}
@@ -423,7 +432,10 @@ function onMessage(m) {
   switch (m.type) {
     case "etat": {
       const first = !state;
+      const gameChanged = state && state.jeu !== m.jeu;
       state = m;
+      window.GAME = m.jeu || "mwc";
+      if (first || gameChanged) applyI18n();
       if (first && m.langue && !lang0) setLang(m.langue);   // (langue du lanceur, sauf choix fait ici)
       renderAll();
       if (first && page === "biblio") $("q").focus();

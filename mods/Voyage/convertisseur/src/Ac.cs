@@ -43,20 +43,40 @@ namespace Convertisseur
         }
         public static bool CheckAc(string d) { return !string.IsNullOrEmpty(d) && Directory.Exists(Path.Combine(d, @"content\tracks")); }
 
-        public static string FindMwc()
+        // les deux jeux (le mod Voyage marche dans les deux, JD 24/10) : dossier Steam, exe, dossier _Data, cle du .ini
+        public class GameInfo { public string Id, Name, Exe, Data, Steam, Key, LoaderPack; }
+        public static readonly GameInfo Mwc = new GameInfo { Id = "mwc", Name = "My Winter Car", Exe = "mywintercar.exe", Data = "mywintercar_Data", Steam = "My Winter Car", Key = "MyWinterCar", LoaderPack = "mscloader-mwcoop" };
+        public static readonly GameInfo Msc = new GameInfo { Id = "msc", Name = "My Summer Car", Exe = "mysummercar.exe", Data = "mysummercar_Data", Steam = "My Summer Car", Key = "MySummerCar", LoaderPack = "mscloader-mwcoop-msc" };
+        public static GameInfo GameOf(string id) { return id == "msc" ? Msc : Mwc; }
+
+        public static string FindGame(GameInfo g)
         {
-            string o = Environment.GetEnvironmentVariable("CONVERTISSEUR_JEU");
-            if (CheckMwc(o)) return o;
-            string saved = IniGet(ConfIni, "Dossiers", "MyWinterCar");
-            if (CheckMwc(saved)) return saved;
+            string o = Environment.GetEnvironmentVariable(g == Msc ? "CONVERTISSEUR_JEU_MSC" : "CONVERTISSEUR_JEU");   // (essais : instances de test)
+            if (CheckGame(g, o)) return o.TrimEnd('\\', '/');
+            string saved = IniGet(ConfIni, "Dossiers", g.Key);
+            if (CheckGame(g, saved)) return saved;
             foreach (string lib in SteamLibraries())
             {
-                string d = Path.Combine(lib, @"steamapps\common\My Winter Car");
-                if (CheckMwc(d)) return d;
+                string d = Path.Combine(lib, @"steamapps\common\" + g.Steam);
+                if (CheckGame(g, d)) return d;
             }
             return null;
         }
-        public static bool CheckMwc(string d) { return !string.IsNullOrEmpty(d) && File.Exists(Path.Combine(d, "mywintercar.exe")); }
+        public static bool CheckGame(GameInfo g, string d) { return !string.IsNullOrEmpty(d) && File.Exists(Path.Combine(d, g.Exe)); }
+        public static string FindMwc() { return FindGame(Mwc); }
+        public static bool CheckMwc(string d) { return CheckGame(Mwc, d); }
+
+        // MSCLoader : installe dans le jeu (officiel), ou celui que le lanceur de MWCoop telecharge pour ce jeu
+        // (%LOCALAPPDATA%\MWCoop\mscloader-mwcoop[-msc], lance par le lanceur)
+        public static bool HasLoader(GameInfo g, string dir)
+        {
+            if (dir == null) return false;
+            if (File.Exists(Path.Combine(Path.Combine(Path.Combine(dir, g.Data), "Managed"), "MSCLoader.dll"))) return true;
+            if (File.Exists(Path.Combine(dir, "winhttp.dll")) && File.Exists(Path.Combine(dir, "doorstop_config.ini"))) return true;
+            string own = Path.Combine(Path.Combine(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWCoop"), g.LoaderPack), "Managed");
+            return File.Exists(Path.Combine(own, "MSCLoader.dll"));
+        }
+
         // circuits d'origine du jeu (Kunos Simulazioni) : leur ui_track.json ne donne pas d'auteur
         static readonly string[] Kunos = { "imola", "magione", "monza", "mugello", "spa", "drift", "trento-bondone", "vallelunga", "nurburgring", "silverstone" };
         public static bool IsKunos(string id) { return id.StartsWith("ks_") || Array.IndexOf(Kunos, id) >= 0; }

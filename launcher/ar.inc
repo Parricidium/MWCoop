@@ -2008,6 +2008,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Voyage mod included (agency, airfield, Cessna flight): installed by the converter", L"مود Voyage مرفق (الوكالة، المطار، رحلة Cessna): يثبّته المحوّل" },
     { L"My Winter Car only, with MSCLoader; in co-op, everyone converts the same track", L"My Winter Car فقط، مع MSCLoader؛ في اللعب الجماعي يحوّل كل لاعب الحلبة نفسها" },
     { L"The Cessna 172 at the airfield of the Voyage mod (travel agency, flights to converted tracks), from the Plane model by osmosikum on Sketchfab: sketchfab.com/osmosikum, CC BY 4.0 license. Textures reduced for the game.", L"طائرة Cessna 172 في مطار تعديل Voyage (وكالة سفر، رحلات إلى الحلبات المحوّلة)، عن نموذج Plane من osmosikum على Sketchfab: sketchfab.com/osmosikum، ترخيص CC BY 4.0. خامات مصغّرة للعبة." },
+    { L"My Summer Car and My Winter Car, with MSCLoader; in co-op, everyone converts the same track", L"My Summer Car وMy Winter Car، مع MSCLoader؛ في اللعب الجماعي يحوّل كل لاعب الحلبة نفسها" },
+    { L"Turns the tracks of your Assetto Corsa into travel destinations: a ticket at the Peräjärvi agency, then the plane.", L"يحوّل حلبات Assetto Corsa الخاصة بك إلى وجهات سفر: تذكرة من وكالة Peräjärvi، ثم الطائرة." },
     { L"These guests are still receiving your mods: ", L"هؤلاء الضيوف ما زالوا يستلمون مودّاتك: " },
     { L"\n\nWait for their download to finish before starting the game.", L"\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة." },
     { L"Sending mods (%d)\u2026", L"إرسال المودّات (%d)…" },
@@ -2680,4 +2682,5 @@ static const wchar_t *const kAr[][2] = {
     { L"Reconvert it (with other settings), open its folder, or delete it: it goes to the Windows Recycle Bin.", L"أعد تحويلها (بإعدادات أخرى)، أو افتح مجلدها، أو احذفها: تذهب إلى سلة محذوفات Windows." },
     { L"In co-op, every player converts the same track (and the same layout) from their own Assetto Corsa: you land at the same place and see each other on the track.", L"في اللعب الجماعي، يحوّل كل لاعب الحلبة نفسها (والتخطيط نفسه) من Assetto Corsa الخاصة به: تصلون إلى المكان نفسه ويرى بعضكم بعضًا على الحلبة." },
     { L"Nothing is uploaded or shared: the tracks come from your Assetto Corsa and stay on your PC, the host doesn't send them. Early version: a very heavy track can be slow to load; report it on the Discord.", L"لا يُرسل ولا يُشارك شيء: الحلبات تأتي من Assetto Corsa الخاصة بك وتبقى على حاسوبك، والمضيف لا يرسلها. نسخة Early مبكرة: قد تتأخر حلبة ثقيلة جدًا في التحميل؛ أبلغ عنها على Discord." },
+    { L"At the airfield (My Winter Car: north of the cinema; My Summer Car: the old airport, near the landfill): TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track.", L"في المطار (My Winter Car: شمال السينما؛ My Summer Car: المطار القديم قرب المكب): تحدّث عند المكتب، ثم انقر لتقول نعم. تقلع طائرة Cessna وتصل إلى الحلبة." },
 };

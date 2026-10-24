@@ -20,7 +20,8 @@ namespace Convertisseur
         readonly WebView2 web = new WebView2();
         readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
         const int Grip = 5;
-        string ac, mwc;
+        string ac, mwc;   // (mwc : dossier du jeu choisi, My Winter Car ou My Summer Car)
+        Ac.GameInfo game = Ac.Mwc;
         List<Track> tracks = new List<Track>();
         Conversion running;
 
@@ -96,7 +97,9 @@ namespace Convertisseur
             w.Settings.AreBrowserAcceleratorKeysEnabled = Program.Debug;
             w.SetVirtualHostNameToFolderMapping("app.local", Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "ui"), CoreWebView2HostResourceAccessKind.Allow);
             ac = Ac.FindAc();
-            mwc = Ac.CheckMwc(Program.GameDir) ? Program.GameDir.TrimEnd('\\', '/') : Ac.FindMwc();
+            string jeu = Program.Game ?? Ac.IniGet(Ac.ConfIni, "Dossiers", "Jeu");
+            game = !string.IsNullOrEmpty(jeu) ? Ac.GameOf(jeu) : Ac.FindGame(Ac.Mwc) != null || Ac.FindGame(Ac.Msc) == null ? Ac.Mwc : Ac.Msc;
+            mwc = Ac.CheckGame(game, Program.GameDir) ? Program.GameDir.TrimEnd('\\', '/') : Ac.FindGame(game);
             MapHosts();
             w.WebMessageReceived += OnMessage;
             w.NewWindowRequested += (s, e) => { e.Handled = true; try { Process.Start(e.Uri); } catch { } };
@@ -156,6 +159,13 @@ namespace Convertisseur
                     }
                     case "lien": try { Process.Start(S(m, "url")); } catch { } break;
                     case "installerMod": InstallMod(); break;
+                    case "jeu":   // (My Summer Car / My Winter Car : chacun ses destinations, dans son dossier Mods)
+                        game = Ac.GameOf(S(m, "id"));
+                        Ac.Remember("Jeu", game.Id);
+                        mwc = Ac.FindGame(game);
+                        MapHosts();
+                        SendState(false);
+                        break;
                 }
             }
             catch (Exception ex) { Post(new Dictionary<string, object> { { "type", "erreur" }, { "texte", ex.Message } }); }
@@ -163,11 +173,11 @@ namespace Convertisseur
 
         void PickFolder(string what)
         {
-            using (var d = new FolderBrowserDialog { Description = what == "ac" ? "Dossier d'Assetto Corsa (celui qui contient « content »)" : "Dossier de My Winter Car (celui qui contient mywintercar.exe)", ShowNewFolderButton = false })
+            using (var d = new FolderBrowserDialog { Description = what == "ac" ? "Dossier d'Assetto Corsa (celui qui contient « content »)" : "Dossier de " + game.Name + " (celui qui contient " + game.Exe + ")", ShowNewFolderButton = false })
             {
                 if (d.ShowDialog(this) != DialogResult.OK) return;
                 if (what == "ac") { if (!Ac.CheckAc(d.SelectedPath)) { Post(new Dictionary<string, object> { { "type", "toast" }, { "cle", "pasAc" } }); return; } ac = d.SelectedPath; Ac.Remember("AssettoCorsa", ac); }
-                else { if (!Ac.CheckMwc(d.SelectedPath)) { Post(new Dictionary<string, object> { { "type", "toast" }, { "cle", "pasMwc" } }); return; } mwc = d.SelectedPath; Ac.Remember("MyWinterCar", mwc); }
+                else { if (!Ac.CheckGame(game, d.SelectedPath)) { Post(new Dictionary<string, object> { { "type", "toast" }, { "cle", "pasMwc" } }); return; } mwc = d.SelectedPath; Ac.Remember(game.Key, mwc); }
                 MapHosts();
                 SendState(true);
             }
@@ -198,7 +208,8 @@ namespace Convertisseur
             Post(new Dictionary<string, object>
             {
                 { "type", "etat" }, { "ac", ac ?? "" }, { "mwc", mwc ?? "" }, { "destDir", destRoot ?? "" }, { "circuits", tl }, { "destinations", dests },
-                { "modVoyage", ModState() }, { "mscloader", mwc != null && File.Exists(Path.Combine(mwc, @"mywintercar_Data\Managed\MSCLoader.dll")) },
+                { "modVoyage", ModState() }, { "mscloader", Ac.HasLoader(game, mwc) },
+                { "jeu", game.Id }, { "jeuNom", game.Name }, { "autreJeu", Ac.FindGame(game == Ac.Mwc ? Ac.Msc : Ac.Mwc) != null },
                 { "langue", Program.Lang ?? "" },
             });
         }

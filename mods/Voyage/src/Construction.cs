@@ -28,6 +28,12 @@ namespace Voyage
         static Dictionary<string, Material> gameMats;
         static Font arial;
 
+        // matieres de My Winter Car absentes de My Summer Car : leur equivalent d'ete (ni neige ni route enneigee)
+        static readonly Dictionary<string, string> MscNames = new Dictionary<string, string>
+        {
+            { "mwc_asphalt", "ASPHALT" }, { "metal_galvanized", "roof_metal 1" }, { "SNOW", "roof_metal 2" }, { "wood_panel20", "wood_panel16" },
+        };
+
         public static Material GameMat(string name)
         {
             if (gameMats == null)
@@ -36,6 +42,8 @@ namespace Voyage
                 foreach (Material m in Resources.FindObjectsOfTypeAll<Material>()) if (m != null && !gameMats.ContainsKey(m.name)) gameMats[m.name] = m;
             }
             Material r;
+            string alt;
+            if (Jeu.Msc && MscNames.TryGetValue(name, out alt)) name = alt;
             return gameMats.TryGetValue(name, out r) ? r : null;
         }
 

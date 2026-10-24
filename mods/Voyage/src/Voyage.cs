@@ -15,9 +15,9 @@ namespace Voyage
         public override string ID { get { return "Voyage"; } }
         public override string Name { get { return "Voyage"; } }
         public override string Author { get { return "JD"; } }
-        public override string Version { get { return "0.1.0"; } }
+        public override string Version { get { return "0.2.0"; } }   // (0.2.0 : My Summer Car aussi, 24/10)
         public override string Description { get { return "Agence de voyage, aérodrome et vols vers tes circuits Assetto Corsa convertis (compatible MWCoop)."; } }
-        public override Game SupportedGames { get { return Game.MyWinterCar; } }
+        public override Game SupportedGames { get { return Game.MySummerCar_And_MyWinterCar; } }
 
         public static Voyage Instance;
 
@@ -83,7 +83,7 @@ namespace Voyage
             if (ticket.Length > 0)
             {
                 Destination t = Destinations.Find(ticket);
-                Jeu.Say("Agent : tu as déjà ton billet pour " + (t != null ? t.Name : ticket) + ". L'aérodrome est près du cinéma.", "Agent: you already have your ticket to " + (t != null ? t.Name : ticket) + ". The airfield is near the cinema.");
+                Jeu.Say("Agent : tu as déjà ton billet pour " + (t != null ? t.Name : ticket) + ". L'aérodrome est " + Jeu.AirFr + ".", "Agent: you already have your ticket to " + (t != null ? t.Name : ticket) + ". The airfield is " + Jeu.AirEn + ".");
                 return;
             }
             if (Jeu.Money == null || Jeu.Money.Value < d.Price)
@@ -95,8 +95,8 @@ namespace Voyage
             Jeu.Money.Value -= d.Price;   // (MWCoop, Wallet : une depense reste au joueur)
             ticket = d.Id; ticketPrice = d.Price;
             if (Lieux.Agence != null) Jeu.Sound("Store", "cash_register_2", Lieux.Agence.transform.position);
-            Jeu.Say("Agent : Kiitos ! Aller-retour pour " + d.Name + ". Présente-toi au guichet de l'aérodrome, près du cinéma.",
-                    "Agent: Kiitos! Return ticket to " + d.Name + ". Go to the airfield desk, near the cinema.");
+            Jeu.Say("Agent : Kiitos ! Aller-retour pour " + d.Name + ". Présente-toi au guichet de l'aérodrome, " + Jeu.AirFr + ".",
+                    "Agent: Kiitos! Return ticket to " + d.Name + ". Go to the airfield desk, " + Jeu.AirEn + ".");
             Journal.Info("billet achete pour " + d.Id + ", reste " + Jeu.Money.Value.ToString("F0") + " mk");
         }
         int ticketPrice = 400;
@@ -309,7 +309,7 @@ namespace Voyage
                     {
                         Jeu.GuiText.Value = Jeu.T("PARLER", "TALK");
                         if (!click) break;
-                        if (!island && ticket.Length == 0) { Jeu.Say("Guichet : il te faut un billet. L'agence de voyage est à Perajarvi, près du musée.", "Desk: you need a ticket. The travel agency is in Perajarvi, near the museum."); break; }
+                        if (!island && ticket.Length == 0) { Jeu.Say("Guichet : il te faut un billet. L'agence de voyage est " + Jeu.AgencyFr + ".", "Desk: you need a ticket. The travel agency is " + Jeu.AgencyEn + "."); break; }
                         if (island && abroad.Length == 0) { Jeu.Say("Guichet : bonjour !", "Desk: hello!"); break; }
                         asking = hit; askUntil = now + 12f;
                         Destination td = Destinations.Find(ticket);
@@ -334,7 +334,7 @@ namespace Voyage
             if (a && !inAgency && now - lastHello > 40f)
             {
                 lastHello = now;
-                if (ticket.Length > 0) Jeu.Say("Agent : ton billet est prêt. L'aérodrome est dans le champ près du cinéma.", "Agent: your ticket is ready. The airfield is in the field near the cinema.");
+                if (ticket.Length > 0) Jeu.Say("Agent : ton billet est prêt. L'aérodrome est " + Jeu.AirFr + ".", "Agent: your ticket is ready. The airfield is " + Jeu.AirEn + ".");
                 else if (Destinations.All.Count == 0) Jeu.Say("Agent : Tervetuloa ! Pas encore de vol : convertis un circuit avec le convertisseur Voyage.", "Agent: Tervetuloa! No flights yet: convert a track with the Voyage converter.");
                 else Jeu.Say("Agent : Tervetuloa ! Choisis ta destination sur une affiche.", "Agent: Tervetuloa! Pick your destination on a poster.");
             }

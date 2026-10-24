@@ -112,7 +112,10 @@ static void ToolLaunch(ToolPkg &t)
         cmd += std::wstring(L" --jeu ") + GM().id + L" --lanceur \"" + g_self + L"\"";
         if (!dir.empty()) cmd += L" --dossier \"" + dir + L"\"";
         if (!g_modRoot.empty()) cmd += L" --mod \"" + g_modRoot + L"MWCoop\"";   // (cartes compilees : <MWCoop du mod>\cartes, lues par MapPacks.cs)
-    } else if (!wcscmp(GM().id, L"mwc") && !dir.empty()) cmd += L" --dossier \"" + dir + L"\"";
+    } else {   // (convertisseur : le jeu choisi ici, My Summer Car ou My Winter Car, et son dossier)
+        cmd += std::wstring(L" --jeu ") + GM().id;
+        if (!dir.empty()) cmd += L" --dossier \"" + dir + L"\"";
+    }
     STARTUPINFOW si = { sizeof(si) }; PROCESS_INFORMATION pi = {};
     std::vector<wchar_t> cb(cmd.begin(), cmd.end()); cb.push_back(0);
     if (CreateProcessW(exe.c_str(), cb.data(), NULL, NULL, FALSE, 0, NULL, ToolDir(t).c_str(), &si, &pi)) {
@@ -174,7 +177,7 @@ static void DrawToolCard(Graphics &g, ToolPkg &t, RectF c, const ToolText &tx, i
         } else DrawConvArt(g, img);
         g.Restore(st);
         Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
-        const wchar_t *tag = &t == &g_ed ? L"MSC · MWC" : L"Assetto Corsa → MWC";
+        const wchar_t *tag = &t == &g_ed ? L"MSC · MWC" : L"Assetto Corsa → MSC · MWC";
         float pw = PillW(tag, 10.5f);
         Pill(g, RectF(img.X + 14, img.Y + 14, pw, 22), Color(200, 10, 14, 24), tag, Color(255, 255, 255, 255), 10.5f);
     }
@@ -246,12 +249,12 @@ static void DrawToolsPage(Graphics &g)
           { IC_CHECK, L"Les fichiers du jeu restent sur ton PC, tes sauvegardes ne sont pas touchées", L"Game files stay on your PC, your saves are not touched" } } };
     static const ToolText cv = {
         L"Convertisseur de circuits", L"Track converter", L"EARLY",
-        L"Transforme les circuits de ton Assetto Corsa en destinations de voyage pour My Winter Car : un billet à l'agence de Peräjärvi, l'avion à l'aérodrome près du cinéma.",
-        L"Turns the tracks of your Assetto Corsa into travel destinations for My Winter Car: a ticket at the Peräjärvi agency, the plane at the airfield near the cinema.",
+        L"Transforme les circuits de ton Assetto Corsa en destinations de voyage : un billet à l'agence de Peräjärvi, puis l'avion.",
+        L"Turns the tracks of your Assetto Corsa into travel destinations: a ticket at the Peräjärvi agency, then the plane.",
         L"Pas encore installé · version %s, environ 3 Mo", L"Not installed yet · version %s, about 3 MB",
         { { IC_CHECK, L"Circuits officiels et mods, convertis sur ton PC : rien n'est partagé", L"Official and mod tracks, converted on your PC: nothing is shared" },
           { IC_CHECK, L"Mod Voyage inclus (agence, aérodrome, vol en Cessna) : installé par le convertisseur", L"Voyage mod included (agency, airfield, Cessna flight): installed by the converter" },
-          { IC_ALERT, L"My Winter Car seulement, avec MSCLoader ; en co-op, chacun convertit le même circuit", L"My Winter Car only, with MSCLoader; in co-op, everyone converts the same track" } } };
+          { IC_ALERT, L"My Summer Car et My Winter Car, avec MSCLoader ; en co-op, chacun convertit le même circuit", L"My Summer Car and My Winter Car, with MSCLoader; in co-op, everyone converts the same track" } } };
     DrawToolCard(g, g_ed, kToolEd, ed, UI_TOOL_GET);
     DrawToolCard(g, g_cv, kToolCv, cv, UI_TOOL_CV_GET);
 }

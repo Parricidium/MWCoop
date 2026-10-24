@@ -4,9 +4,11 @@
   --bg: #1a1a1a; --side: #171717; --pane: #1d1d1d; --card: #202020; --dlg: #232323;
   --ink: #ececec; --grey: #a3a3a3; --line: rgba(255,255,255,.08);
   --acc: #a6e1ff; --acc-on: #061325;
+  --msc: #ffcd46; --msc-on: #1e1606; --mwc: #a6e1ff; --mwc-on: #061325;
   --ok: #7cf2c4; --warn: #ffc46b; --red: #ff6e6e;
   --mono: "Cascadia Mono", Consolas, monospace;
 }
+body.msc { --acc: var(--msc); --acc-on: var(--msc-on); }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px Nunito, "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
 button { font: inherit; color: inherit; }
@@ -239,3 +241,12 @@ button.chip:hover { border-color: rgba(255,255,255,.3); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.26); background-clip: padding-box; border: 2px solid transparent; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* choix du jeu (My Summer Car / My Winter Car) : chacun ses destinations, dans son dossier Mods */
+.games { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; margin-bottom: 8px; background: #121212; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; }
+.games button { height: 32px; border: 0; border-radius: 7px; background: transparent; color: #a8a8a8; font-weight: 800; font-size: 11.5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.games button:hover { color: #fff; }
+.games button .gdot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .5; }
+.games button[data-g=msc].on { background: color-mix(in srgb, var(--msc) 20%, #1d1d1d); color: var(--msc); }
+.games button[data-g=mwc].on { background: color-mix(in srgb, var(--mwc) 20%, #1d1d1d); color: var(--mwc); }
+.games button.on .gdot { opacity: 1; }
