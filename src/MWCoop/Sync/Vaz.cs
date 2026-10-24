@@ -203,7 +203,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
-            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f;
+            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f; stageStep = stageIdx = 0; stageLog = stageEnd = 0f;
             if (!hooked)
             {
                 hooked = true;
@@ -973,10 +973,94 @@ namespace MWCoop
             // Starting comme la cle) ; 53-65 s plein gaz en 2e, volant a 0,3 apres 58 s ; vitesse, regime et rapport chaque seconde.
             bool roule = Config.GetInt("Test", "VazRoule", 0) != 0;
             if (host && roule && assisStep >= 2 && CarOf(Me) != null) TestDrive(CarOf(Me), t);
+            if (host && Game.Msc && Config.GetInt("Test", "VazSpeciale", 0) != 0) { TestStage(t); return; }
             if (host && testStep == 2 && t > (roule ? 70f : 50f)) { testStep = 3; Call(); Log.Info("autotest vaz : appelee, " + State()); }
             if (Config.GetInt("Test", "VazGarder", 0) != 0) return;
             if (host && testStep == 3 && t > 60f) { testStep = 4; Release(); Log.Info("autotest vaz : rendue"); }
             if (testStep >= 2 && testStep < 5 && t > 70f) { testStep = 5; Log.Info("autotest vaz : apres retour : " + State()); }
+        }
+
+        // [Test] VazSpeciale=1 (MSC, avec VazAssis=1 ; 24/10) : la speciale du samedi entiere avec ma voiture du F10 -- 12 s :
+        // samedi 12 h, joueur pose 30 m derriere la ligne Staging (RALLY/Saturday/TimingSaturday/Lines) ; voiture a 20 s, assis
+        // a 40 s ; 44 s : TimingSaturday allume (comme la feuille d'inscription confirmee) ; la voiture (cinematique, joueur a
+        // bord) entre dans Staging, attend 'Timing'.Start (compte a rebours de 25 s, sinon depart vole = 2 min), puis suit la
+        // route des IA du samedi (TRAFFIC/Routes/DirtRoad 2168-3511, ~8 km, ~40 m/s) jusqu'a Checkpoint04 (l'arrivee) ; bilan
+        // chaque 10 s (etat de 'Timing', points de passage, chrono) et 15 s apres la fin (PlayerTimeTotal de ResultsWeekend).
+        static int stageStep, stageIdx; static float stageLog, stageEnd;
+        static readonly Vector3 StagingAt = new Vector3(-1263.1f, 0f, 1279.0f), StartAt = new Vector3(-1255.6f, 0f, 1281.9f);
+        static string GlobalStr(string n) { FsmString v = FsmVariables.GlobalVariables.FindFsmString(n); return v != null ? v.Value : "?"; }
+        static void TestStage(float t)
+        {
+            GameObject pl = GameObject.Find("PLAYER");
+            if (stageStep == 0 && t > 12f && pl != null)
+            {
+                stageStep = 1;
+                FsmInt day = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay"); if (day != null) day.Value = 6;
+                Cheats.SetHour(12);
+                Vector3 back = StagingAt + (StagingAt - StartAt).normalized * 30f, g;
+                Ground(back, back.y + 10f, out g);
+                var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = g + Vector3.up * 0.5f; pl.transform.rotation = Quaternion.LookRotation((StartAt - StagingAt).normalized);
+                if (cc != null) cc.enabled = true;
+                Log.Info("autotest vaz : speciale, samedi 12 h, joueur derriere la ligne en " + pl.transform.position.ToString("F1"));
+            }
+            Transform car = CarOf(Me);
+            if (car == null || assisStep < 2 || t < 44f) return;
+            GameObject timingGo = Game.FindAny("RALLY/Saturday/TimingSaturday");
+            PlayMakerFSM timing = timingGo != null ? Game.FsmOn(timingGo, "Timing") : null, clock = timingGo != null ? Game.FsmOn(timingGo, "Clock") : null;
+            if (stageStep == 1)
+            {
+                stageStep = 2;
+                for (Transform p = timingGo != null ? timingGo.transform : null; p != null; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
+                Log.Info("autotest vaz : speciale, TimingSaturday " + (timingGo != null ? "allume, Timing '" + (timing != null ? timing.ActiveStateName : "?") + "'" : "INTROUVABLE") + ", vehicule du joueur '" + GlobalStr("PlayerCurrentVehicle") + "'");
+            }
+            Rigidbody rb = car.GetComponent<Rigidbody>();
+            if (rb != null && !rb.isKinematic && stageStep < 6) rb.isKinematic = true;
+            FsmBool started = timing != null ? timing.FsmVariables.FindFsmBool("Start") : null;
+            Vector3 target = Vector3.zero; bool moving = false;
+            if (stageStep == 2) { target = StagingAt; moving = true; }   // (entrer dans Staging, s'y arreter)
+            else if (stageStep == 3 && started != null && started.Value) { stageStep = 4; Log.Info("autotest vaz : speciale, DRIVE ! (t=" + t.ToString("F0") + ")"); }
+            if (stageStep == 4)
+            {
+                Transform route = Game.FindAny("TRAFFIC/Routes/DirtRoad") != null ? Game.FindAny("TRAFFIC/Routes/DirtRoad").transform : null;
+                if (stageIdx == 0) stageIdx = 2168;
+                Transform wp = route != null ? route.Find(stageIdx.ToString()) : null;
+                if (wp == null) { stageStep = 5; stageEnd = t; Log.Info("autotest vaz : speciale, repere " + stageIdx + " introuvable"); }
+                else { target = wp.position; moving = true; }
+            }
+            if (moving)
+            {
+                Vector3 p = car.position, d = target - p; d.y = 0f;
+                float step = 40f * Time.deltaTime;
+                if (d.magnitude <= step)
+                {
+                    if (stageStep == 2) { stageStep = 3; Log.Info("autotest vaz : speciale, dans Staging, Timing '" + (timing != null ? timing.ActiveStateName : "?") + "'"); }
+                    else if (stageStep == 4) { stageIdx++; if (stageIdx > 3511) { stageStep = 5; stageEnd = t; Log.Info("autotest vaz : speciale, route finie (t=" + t.ToString("F0") + ")"); } }
+                }
+                Vector3 np = d.magnitude <= step ? new Vector3(target.x, p.y, target.z) : p + d.normalized * step;
+                Vector3 gp; if (Ground(np, (stageStep == 4 ? target.y : p.y), out gp) != null) np.y = gp.y - 0.1f;
+                car.position = np;
+                if (d.sqrMagnitude > 0.01f) car.rotation = Quaternion.Slerp(car.rotation, Quaternion.LookRotation(d.normalized, Vector3.up), 0.2f);
+            }
+            if (t >= stageLog && stageStep >= 2 && stageStep <= 5)
+            {
+                stageLog = Mathf.Floor(t) + 10f;
+                var sb = new System.Text.StringBuilder("autotest vaz : speciale t=" + t.ToString("F0") + " etape " + stageStep + " repere " + stageIdx + ", Timing '" + (timing != null ? timing.ActiveStateName : "?") + "'");
+                if (timing != null) foreach (string b in new[] { "Start", "JumpStart", "Checkpoint01", "Checkpoint02", "Checkpoint03", "Checkpoint04" }) { FsmBool v = timing.FsmVariables.FindFsmBool(b); if (v != null) sb.Append(' ').Append(b).Append('=').Append(v.Value); }
+                if (clock != null) foreach (string f in new[] { "TimeTotal", "TimeTotalFPS", "Penalty" }) { FsmFloat v = clock.FsmVariables.FindFsmFloat(f); if (v != null) sb.Append(' ').Append(f).Append('=').Append(v.Value.ToString("F1")); }
+                sb.Append(", voiture ").Append(car.position.ToString("F0")).Append(", vehicule '").Append(GlobalStr("PlayerCurrentVehicle")).Append("'");
+                Log.Info(sb.ToString());
+            }
+            if (stageStep == 5 && t > stageEnd + 15f)
+            {
+                stageStep = 6;
+                if (rb != null) rb.isKinematic = false;
+                GameObject rw = Game.FindAny("RALLY/ResultsWeekend");
+                PlayMakerFSM data = rw != null ? Game.FsmOn(rw, "Data") : null;
+                FsmFloat tot = data != null ? data.FsmVariables.FindFsmFloat("PlayerTimeTotal") : null;
+                Log.Info("autotest vaz : speciale finie : Timing '" + (timing != null ? timing.ActiveStateName : "eteint") + "', ResultsWeekend '" + (data != null ? data.ActiveStateName : "?") + "', PlayerTimeTotal " + (tot != null ? tot.Value.ToString("F1") : "?")
+                         + (clock != null && clock.FsmVariables.FindFsmFloat("TimeTotal") != null ? ", chrono " + clock.FsmVariables.FindFsmFloat("TimeTotal").Value.ToString("F1") : ""));
+            }
         }
 
         static PlayMakerFSM rouleStarter;
