@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -6900,6 +6900,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             float x = pt.x / g_scale - kM, y = pt.y / g_scale - kM;
             float step = -(short)HIWORD(wp) / 120.0f * 64;
             if (g_tab == TAB_SKIN && SkinWheel(x, y, (short)HIWORD(wp))) return 0;   // (apercu du personnage : zoom)
+            if (g_railScrollMax > 0 && g_railView.Contains(x, y)) { g_railScroll = min(max(g_railScroll + step * 0.6f, 0.0f), g_railScrollMax); return 0; }   // (barre de gauche, quand elle defile)
             if (g_tab == TAB_NOTES && kNotesList.Contains(x, y)) g_noteListScroll += step;
             else if (g_tab == TAB_WIKI && kWikiList.Contains(x, y)) g_wikiListScroll += step;
             else g_scroll[g_tab] = min(max(g_scroll[g_tab] + step, 0.0f), MaxScroll(g_tab));
@@ -7525,6 +7526,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_tab = TAB_MODS;
                 }
         else if (st == L"menu-ip") g_steamNet = false;
+        else if (st == L"rail-defile") { UpdSet(L"1.15.2"); EnterCriticalSection(&g_cs); g_updLanc = L"1.15.1"; LeaveCriticalSection(&g_cs); g_tab = TAB_NOTES; g_notesDone = true; }   // (barre de gauche qui defile : les deux mises a jour proposees, Nouveautes -- en bas -- choisie, donc ramenee dans la vue)
         else if (st == L"steam-refus") SetStatus(K_ERR, L"%s", SteamInitWhy().c_str());   // (raison d'un refus de Steam, telle que ce PC la verrait)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)

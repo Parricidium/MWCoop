@@ -419,6 +419,17 @@ static void RailToggle(int k)
 }
 static int MscModCount();   // (mods.inc)
 static RectF g_navR[TAB_COUNT];   // (bulles de la visite)
+// Defilement de la barre (Markos, 24/10 : « a scroll feature » ; lanceur 1.15.1) : quand les pages ne tiennent plus, meme
+// resserrees, la liste defile a la molette entre les boutons de mise a jour et Discord. g_railView : la zone visible ;
+// les zones de clic des lignes y sont coupees (une ligne cachee ne prend pas le clic de Discord ou d'une mise a jour).
+static float g_railScroll, g_railScrollMax;
+static RectF g_railView;
+static RectF RailClip(RectF r)
+{
+    if (g_railScrollMax <= 0) return r;
+    RectF c;
+    return RectF::Intersect(c, r, g_railView) ? c : RectF();
+}
 
 static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t *label)
 {
@@ -461,7 +472,7 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
         Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), kAcc, s, kOnAcc, 10);
     }
     if (on && page != TAB_LOBBY && page != TAB_MODS && page != TAB_CAR) { SolidBrush db(kAcc); g.FillEllipse(&db, rx - 6, r.Y + r.Height / 2 - 3, 6.0f, 6.0f); }
-    if (en) HotZone(r, UI_NAV + page);
+    if (en) { RectF z = RailClip(r); if (z.Height > 0) HotZone(z, UI_NAV + page); }
 }
 
 static void DrawRail(Graphics &g)
@@ -522,17 +533,42 @@ static void DrawRail(Graphics &g)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 22; step = 40; }   // (bouton de mise a jour + 9 pages)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 20; step = 37; }   // (11 pages depuis MEDIA)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 18; step = 34; }
-    // (toujours trop : les deux boutons de mise a jour, mod et lanceur, et toutes les pages -- lignes resserrees juste ce qu'il
-    // faut ; avant, la derniere page passait sous Discord)
-    if (avail - kNavGroups * lab - nItems * step < 6 && nItems > 0) { lab = 16; step = max(26.0f, floorf((avail - kNavGroups * lab - 6) / nItems)); }
-    float gap = min(20.0f, max(0.0f, (avail - kNavGroups * lab - nItems * step) / (kNavGroups - 1))), y = y0;
+    // (toujours trop : les deux boutons de mise a jour, mod et lanceur, et toutes les pages -- lignes resserrees jusqu'a 28 px ;
+    // avant 1.15.0, la derniere page passait sous Discord)
+    if (avail - kNavGroups * lab - nItems * step < 6 && nItems > 0) { lab = 16; step = max(28.0f, floorf((avail - kNavGroups * lab - 6) / nItems)); }
+    // (encore trop, meme a 28 px : la liste defile, Markos 24/10 -- plus de place entre les groupes)
+    float content = kNavGroups * lab + nItems * step;
+    g_railView = RectF(20, y0, 228, avail);
+    g_railScrollMax = content > avail ? content - avail + 6 : 0;
+    float gap = g_railScrollMax > 0 ? 0 : min(20.0f, max(0.0f, (avail - content) / (kNavGroups - 1)));
+    {   // (page choisie hors de la vue, a son changement : ramenee dedans)
+        static int lastTab = -1;
+        if (g_railScrollMax > 0 && g_tab != lastTab) {
+            float ty = y0, s = g_railScroll;
+            for (int k = 0, i = 0; k < kNavGroups; k++) {
+                ty += lab;
+                for (int j = 0; j < kNavGroupN[k]; j++, i++) {
+                    if (NavHidden(kNav[i].page) || (RailFolded(k) && kNav[i].page != g_tab)) continue;
+                    if (kNav[i].page == g_tab) { if (ty - s < y0) s = ty - y0; else if (ty + step - s > y0 + avail) s = ty + step - y0 - avail; }
+                    ty += step;
+                }
+            }
+            g_railScroll = s;
+        }
+        lastTab = g_tab;
+    }
+    g_railScroll = g_railScrollMax > 0 ? min(max(g_railScroll, 0.0f), g_railScrollMax) : 0;
+    float y = y0 - g_railScroll;
+    GraphicsState railSt = g.Save();
+    if (g_railScrollMax > 0) g.SetClip(g_railView, CombineModeIntersect);
     for (int k = 0, i = 0; k < kNavGroups; k++) {
         SmallLabel(g, T(kNavGroupFr[k], kNavGroupEn[k]), RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
         if (RailFoldable(k)) {   // chevron a droite du titre ; clic sur la ligne du titre : plier / deplier
             RectF hr(28, y, 208, lab);
             bool hot = g_uiHot == UI_NAV_GROUP + k;
             Icon(g, RailFolded(k) ? IC_CHEVR : IC_CHEVD, 220, y + 12, 12, WithA(hot ? kAcc : kGrey, 0.9f), 2.0f);
-            HotZone(hr, UI_NAV_GROUP + k);
+            RectF hz = RailClip(hr);
+            if (hz.Height > 0) HotZone(hz, UI_NAV_GROUP + k);
         }
         y += lab;
         for (int j = 0; j < kNavGroupN[k]; j++, i++) {
@@ -542,6 +578,12 @@ static void DrawRail(Graphics &g)
             y += step;
         }
         y += gap;
+    }
+    g.Restore(railSt);
+    if (g_railScrollMax > 0) {   // barre de defilement, fine, a droite des lignes
+        float th = max(30.0f, avail * avail / (avail + g_railScrollMax)), ty = y0 + (avail - th) * g_railScroll / g_railScrollMax;
+        GraphicsPath tp; RoundRect(tp, RectF(240, ty, 4, th), 2);
+        SolidBrush tb(WithA(kGrey, 0.55f)); g.FillPath(&tb, &tp);
     }
     // bas de la barre : Discord, le code source (le < >, GitHub) et Soutenir (coeur, Ko-fi). Retour de JD (18/10) : le < >
     // rouvre le depot comme avant ; Journaux, API moddeurs et Credits sont revenus dans l'en-tete (HeadPage).
@@ -625,7 +667,7 @@ static void HeadPage(Graphics &g, RectF r, int page, int icon)
         SolidBrush rb(kRed); g.FillEllipse(&rb, d);
         Text(g, L"!", d, 10.5f, FontStyleBold, Color(255, 255, 255, 255));
     }
-    if (en) HotZone(r, UI_NAV + page);
+    if (en) { RectF z = RailClip(r); if (z.Height > 0) HotZone(z, UI_NAV + page); }
 }
 static float g_headRight = 940;   // bord gauche des raccourcis de l'en-tete (champ Chercher de la visite : tuto.inc)
 static void DrawGuideHead(Graphics &g, float &right);   // (wiki.inc : champ Chercher et pilules du Guide)
