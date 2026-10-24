@@ -92,7 +92,7 @@ namespace MWCoop
             {
                 mFold = LoadMesh("MWCoop.sac-plie.mwm", FoldScale);
                 mUnfold = LoadMesh("MWCoop.sac-deplie.mwm", 1f, Config.GetInt("Test", "SacRetourne", 1) != 0);   // (modele fourni a l'envers : oreiller dessous)
-                GameObject sofa = Game.FindAny("EQUIPMENTS/sofa(itemx)");
+                GameObject sofa = Game.FindAny(SofaPath);
                 Transform sl = sofa != null ? sofa.transform.Find("Sleep") : null;
                 if (sl == null) { GameObject bed = Game.FindAny("YARD/Building/BEDROOM1/LOD_bedroom1/Sleep 1"); sl = bed != null ? bed.transform : null; }
                 if (sl == null) { Log.Warn("sacs de couchage : declencheur de sommeil du jeu introuvable"); return false; }
@@ -154,7 +154,7 @@ namespace MWCoop
             b.Sleep.SetParent(go.transform, false);
             b.Fsm = null;
             foreach (PlayMakerFSM f in sl.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Activate") b.Fsm = f;
-            Transform pivot = b.Sleep.Find("AnimPivotSleep"), trig = b.Fsm != null ? b.Fsm.transform : null;
+            Transform pivot = SleepPivot(b), trig = b.Fsm != null ? b.Fsm.transform : null;
             foreach (Renderer r in sl.GetComponentsInChildren<Renderer>(true)) r.enabled = false;   // (reperes du corps : invisibles)
             if (pivot != null)
             {
@@ -409,7 +409,7 @@ namespace MWCoop
                     var p = new Vector3(float.Parse(c[2], ci), float.Parse(c[3], ci), float.Parse(c[4], ci));
                     var q = new Quaternion(float.Parse(c[5], ci), float.Parse(c[6], ci), float.Parse(c[7], ci), float.Parse(c[8], ci));
                     Vector3 np;
-                    if (c[1] == "1" && (p - OldSpawn).sqrMagnitude < 4f && SpawnPoint(bags.Count, out np))
+                    if (!Game.Msc && c[1] == "1" && (p - OldSpawn).sqrMagnitude < 4f && SpawnPoint(bags.Count, out np))
                     {
                         Log.Info("sacs de couchage : " + c[0] + " ramene de l'ancien point (maison du jardin) a la maison du depart");
                         p = np; q = Quaternion.identity;
@@ -443,6 +443,15 @@ namespace MWCoop
         static bool SpawnPoint(int k, out Vector3 at)
         {
             at = Vector3.zero;
+            if (Game.Msc)
+            {
+                // My Summer Car (24/10) : la chambre de la maison (YARD/Building/BEDROOM1), l'ancien point de My Winter Car
+                if (Game.FindAny("YARD/Building/BEDROOM1") == null) return false;
+                at = OldSpawn + new Vector3(0f, 0.6f, -k * 0.45f);
+                Vector3 gm = Ground(at);
+                if (gm.y < at.y && at.y - gm.y < 2.5f) at = gm + Vector3.up * 0.25f;
+                return true;
+            }
             GameObject home = Game.FindAny("HOMENEW");
             if (home == null) return false;
             at = home.transform.position + new Vector3(0.9f, 0.6f, 1.7f + k * 0.45f);   // (racine (-1285,6 ; 1,5 ; 1078,8), armoire (-1286,5 ; 1080,7))
@@ -454,13 +463,17 @@ namespace MWCoop
         // Ancien point (0.75.18 : chambre de la maison du jardin, YARD/Building/BEDROOM1) : un sac encore plie qui y est
         // toujours est ramene au nouveau.
         static readonly Vector3 OldSpawn = new Vector3(-10.1f, -0.6f, 11.8f);
+        // pivot anime du lit copie (My Summer Car : « AnimPivot »)
+        static Transform SleepPivot(Bag b) { return b.Sleep.Find("AnimPivotSleep") ?? b.Sleep.Find("AnimPivot"); }
+        // canape du jeu : son declencheur de sommeil est copie sur les sacs (My Summer Car : ITEMS, pas EQUIPMENTS)
+        static string SofaPath { get { return Game.Msc ? "ITEMS/sofa(itemx)" : "EQUIPMENTS/sofa(itemx)"; } }
 
         static void EnsureCount()
         {
             int want = Mathf.Max(1, Session.RemoteCount + 1);
             if (bags.Count >= want) return;
             Transform pl = Game.PlayerT;
-            if (pl == null && Game.FindAny("HOMENEW") == null) return;
+            if (pl == null && Game.FindAny(Game.Msc ? "YARD" : "HOMENEW") == null) return;
             while (bags.Count < want)
             {
                 int k = bags.Count;
@@ -544,14 +557,15 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode != "sac") return;
+            bool host = Session.IsHost || !Session.Active;   // (solo aussi : essais sur My Summer Car, 24/10)
             // [Test] SacPrendre=1 : a 50 s l'hote lance la prise du jeu sur sac2 (comme un clic), a 53 s note ou il est.
-            if (Session.IsHost && Config.GetInt("Test", "SacPrendre", 0) != 0 && bags.Count > 1)
+            if (host && Config.GetInt("Test", "SacPrendre", 0) != 0 && bags.Count > 1)
             {
                 if (t > 50f && pickStep == 0) { pickStep = 1; clickBag = bags[1]; clickFrame = Time.frameCount - 1; PickAssist(null, Time.realtimeSinceStartup); }
                 if (t > 53f && pickStep == 1) { pickStep = 2; Transform p = bags[1].Go.transform.parent; Log.Info("autotest : sac, sac2 " + (p != null ? "dans la main (" + p.name + ")" : "pas pris") + ", main " + (hand != null ? hand.ActiveStateName : "?")); }
             }
             // (captures : camera d'essai qui vise le premier sac, plie a 27 s, deplie a 40 s -- dumps\sac-*.png)
-            if (Session.IsHost && bags.Count > 0 && t > 20f && t < 44f)
+            if (host && bags.Count > 0 && t > 20f && t < 44f)
             {
                 if (testCam == null) { testCam = new GameObject("MWCoop-CameraSac").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 55f; }
                 Transform bt = bags[0].Go.transform;
@@ -569,14 +583,14 @@ namespace MWCoop
                 }
             }
             if (t > 44f && testCam != null) { UnityEngine.Object.Destroy(testCam.gameObject); testCam = null; }
-            if (Session.IsHost && bags.Count > 0)
+            if (host && bags.Count > 0)
             {
                 Bag b = bags[0];
                 // [Test] SacCanape=1 : sac plie pose sur le canape du jeu a 24 s (deplie dessus a 30 s ; Vaydon, 0.79.2 : « a l'envers »).
                 if (Config.GetInt("Test", "SacCanape", 0) != 0 && t > 24f && !sofaPut)
                 {
                     sofaPut = true;
-                    GameObject sofa = Game.FindAny("EQUIPMENTS/sofa(itemx)");
+                    GameObject sofa = Game.FindAny(SofaPath);
                     if (sofa != null) { b.Go.transform.position = sofa.transform.position + Vector3.up * 0.9f; if (b.Rb != null) b.Rb.velocity = Vector3.zero; }
                     Log.Info("autotest : sac sur le canape " + (sofa != null ? sofa.transform.position.ToString("F2") : "introuvable"));
                 }
@@ -597,18 +611,18 @@ namespace MWCoop
                         Transform pl = Game.PlayerT;
                         Log.Info("autotest : sac, lit " + b.Fsm.ActiveStateName + ", dort " + Game.GlobalBool("PlayerSleeps") + ", joueur " + (pl != null ? b.Go.transform.InverseTransformPoint(pl.position).ToString("F2") + " parent " + (pl.parent != null ? pl.parent.name : "-") : "?")
                                  + ", camera " + (Game.MainCam != null ? b.Go.transform.InverseTransformPoint(Game.MainCam.transform.position).ToString("F2") : "?")
-                                 + ", pivot " + b.Go.transform.InverseTransformPoint(b.Sleep.Find("AnimPivotSleep").position).ToString("F2") + " rot " + (Quaternion.Inverse(b.Go.transform.rotation) * b.Sleep.Find("AnimPivotSleep").rotation).eulerAngles.ToString("F0"));
+                                 + ", pivot " + b.Go.transform.InverseTransformPoint(SleepPivot(b).position).ToString("F2") + " rot " + (Quaternion.Inverse(b.Go.transform.rotation) * SleepPivot(b).rotation).eulerAngles.ToString("F0"));
                     }
                 }
                 else if (t > 45f && testStep == 2) { testStep = 3; SetState(b, true, b.Go.transform.position + Vector3.up * 0.25f, b.Go.transform.rotation, true); }
             }
-            if (t > 38f && (testStep == 1 || !Session.IsHost && testStep == 0))
+            if (t > 38f && (testStep == 1 || !host && testStep == 0))
             {
                 testStep = 2; Log.Info("autotest : sacs " + Describe());
                 Camera mc = Game.MainCam;
                 if (mc != null) Log.Info("autotest : sacs, camera du joueur " + mc.name + " : couches 0 " + ((mc.cullingMask & 1) != 0) + ", 2 " + ((mc.cullingMask & 4) != 0) + ", 19 " + ((mc.cullingMask & (1 << 19)) != 0));
             }
-            if (t > 52f && testStep == 3 || !Session.IsHost && t > 60f && testStep == 2) { testStep = 4; Log.Info("autotest : sacs " + Describe()); }
+            if (t > 52f && testStep == 3 || !host && t > 60f && testStep == 2) { testStep = 4; Log.Info("autotest : sacs " + Describe()); }
         }
 
         public static string Describe()

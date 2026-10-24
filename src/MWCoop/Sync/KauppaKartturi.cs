@@ -219,7 +219,7 @@ namespace MWCoop
             {
                 gpsTest = 2;
                 Esine k = esineet.FindLast(e => e.Kind == KKartturi); PlayMakerFSM pf = PickUpFsm();
-                if (k != null && pf != null) { k.Rb.isKinematic = false; if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, "Set pivot 3"); }
+                if (k != null && pf != null) { k.Rb.isKinematic = false; if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, PickSetState); }
                 L("essai : KARTTURI " + (k != null ? k.Id : "absent") + ", main " + (pf != null ? pf.ActiveStateName : "?"));
             }
             if (guest && gpsTest == 2 && t > 37f) { gpsTest = 3; L("essai : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), 0) + ", tenu " + (HeldKartturi() != null)); }
@@ -273,22 +273,33 @@ namespace MWCoop
             {
                 gpsTest = 2;
                 Esine k = esineet.FindLast(e => e.Kind == KKartturi); PlayMakerFSM pf = PickUpFsm();
-                if (k != null && pf != null) { k.Rb.isKinematic = false; k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, "Set pivot 3"); }
+                if (k != null && pf != null) { k.Rb.isKinematic = false; k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, PickSetState); }
             }
-            if (gpsTest == 2 && t > 31f) { gpsTest = 3; L("essai : " + Seats.TestSit("SORBET", 0)); }
+            string carName = Game.Msc ? "SATSUMA" : "SORBET";   // (My Summer Car : la Satsuma, 24/10)
+            if (gpsTest == 2 && t > 31f) { gpsTest = 3; L("essai : " + Seats.TestSit(carName, 0)); }
             if (gpsTest == 3 && t > 34f) { gpsTest = 4; gpsTestUp = true; }
-            Rigidbody car = VehicleSync.Body("SORBET");
-            if (gpsTest == 4 && t > 37f && car != null)
+            Rigidbody car = VehicleSync.Body(carName);
+            // (en solo sur My Summer Car, pas de voitures suivies ni de places : le joueur lui-meme suit la speciale, GPS en main)
+            Transform walker = car == null && Game.Msc ? Game.PlayerT : null;
+            if (gpsTest == 4 && t > 37f && (car != null || walker != null))
             {
-                if (t > 67f) { gpsTest = 5; car.isKinematic = false; L("essai : fin du parcours"); return; }
-                car.isKinematic = true;
+                if (t > 67f) { gpsTest = 5; if (car != null) car.isKinematic = false; L("essai : fin du parcours"); return; }
+                if (car != null) car.isKinematic = true;
                 gpsDrive = (t - 37f) * Config.GetFloat("Test", "CopiloteVitesse", 20f);
                 Vector3 p, d;
                 if (Kartturi.StagePoint(0, gpsDrive, out p, out d))
                 {
-                    car.transform.position = p + Vector3.up * 0.6f;
-                    car.transform.rotation = Quaternion.LookRotation(d, Vector3.up);
-                    car.velocity = Vector3.zero;
+                    if (car != null)
+                    {
+                        car.transform.position = p + Vector3.up * 0.6f;
+                        car.transform.rotation = Quaternion.LookRotation(d, Vector3.up);
+                        car.velocity = Vector3.zero;
+                    }
+                    else
+                    {
+                        var cc = walker.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                        walker.position = p + Vector3.up * 1.0f; walker.rotation = Quaternion.LookRotation(d, Vector3.up);
+                    }
                 }
                 int sec = (int)t;
                 if (sec != gpsShot)
