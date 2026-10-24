@@ -2783,6 +2783,16 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // Essais : boite au point mort (rapport de rapport nul) ; rend le rapport choisi.
+        public static string TestNeutral(string name)
+        {
+            Car c = Named(name);
+            if (c == null || c.Dt == null || c.Dt.gearRatios == null) return "?";
+            for (int i = 0; i < c.Dt.gearRatios.Length; i++)
+                if (Mathf.Abs(c.Dt.gearRatios[i]) < 0.001f) { c.Dt.gear = i; return "point mort (rapport " + i + ")"; }
+            return "pas de point mort";
+        }
+
         // Essais : frein a main du controleur de conduite pose a la main (FreinForce).
         public static void TestHandbrake(string name, float v) { Car c = Named(name); if (c != null && c.Axis != null) c.Axis.handbrakeInput = v; }
 

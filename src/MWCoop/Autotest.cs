@@ -644,6 +644,58 @@ namespace MWCoop
             { fmLog = Time.realtimeSinceStartup + 2f; Log.Info("autotest : freinmain, " + (MWCoop.Net.Session.IsHost ? "hote" : "invite") + " : " + VehicleSync.HandbrakeState(car) + " ; " + Knobs.Describe()); }
         }
 
+        // [Test] Autotest=freinpente (MWC ; летвин 23/10 : « le frein a main laisse rouler la voiture ») : l'hote (ou le joueur seul) pose
+        // [Test] TestVoiture a 25 s sur une pente de 6 a 12 degres trouvee autour d'elle (rayons depuis le ciel, 300 m), nez vers la descente,
+        // point mort, frein a main serre ([Test] FreinCommande / FreinValeur, KnobPos 20) ; a 40 s note sa position, a 45 s la reveille
+        // ([Test] PenteReveil=1, Rigidbody.WakeUp comme une reprise ou un recalage du mod ; 0 : temoin) ; note ce qu'elle a roule a 50, 55 et 60 s.
+        static int fpStep; static Vector3 fpPos; static bool fpNear;
+        static void FreinPente(float t)
+        {
+            string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            Rigidbody b = VehicleSync.Body(car);
+            if (b == null || !MWCoop.Net.Session.IsHost && MWCoop.Net.Session.Active) return;
+            if (t > 25f && fpStep == 0)
+            {
+                fpStep = 1;
+                Vector3 c0 = b.position, best = Vector3.zero, bestN = Vector3.up; float bestA = 0f;
+                float amin = Config.GetFloat("Test", "PenteMin", 6f), amax = Config.GetFloat("Test", "PenteMax", 12f);
+                for (int r = 10; r <= 300 && bestA == 0f; r += 10)
+                    for (int k = 0; k < 24 && bestA == 0f; k++)
+                    {
+                        float ang = k * 15f * Mathf.Deg2Rad;
+                        Vector3 top = c0 + new Vector3(Mathf.Cos(ang) * r, 80f, Mathf.Sin(ang) * r);
+                        RaycastHit h;
+                        if (!Physics.Raycast(top, Vector3.down, out h, 200f) || h.collider.transform.IsChildOf(b.transform)) continue;
+                        float a = Vector3.Angle(h.normal, Vector3.up);
+                        if (a < amin || a > amax) continue;
+                        // (place libre : pas d'arbre ni de mur a moins de 3 m au-dessus du sol)
+                        if (Physics.CheckSphere(h.point + h.normal * 1.6f, 1.4f)) continue;
+                        best = h.point; bestN = h.normal; bestA = a;
+                    }
+                if (bestA == 0f) { Log.Info("autotest : freinpente, aucune pente de " + amin + " a " + amax + " degres trouvee"); fpStep = 99; return; }
+                Vector3 down = Vector3.ProjectOnPlane(Vector3.down, bestN).normalized;
+                b.isKinematic = false; b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero;
+                b.position = best + bestN * 0.8f; b.rotation = Quaternion.LookRotation(down, bestN);
+                b.transform.position = b.position; b.transform.rotation = b.rotation;
+                Log.Info("autotest : freinpente, " + car + " posee sur une pente de " + bestA.ToString("F1") + " deg en " + best.ToString("F1") + ", " + VehicleSync.TestNeutral(car)
+                    + ", frein a main " + Knobs.TestHold(Config.Get("Test", "FreinCommande", "SORBET(190-200psi)/Functions/HandBrake"), Config.GetFloat("Test", "FreinValeur", 20f)));
+            }
+            // ([Test] PentePres=1 : le joueur pose a 3 m de la voiture a 27 s -- tableau de bord et frein a main de la voiture actifs pres d'un joueur ?)
+            if (t > 27f && fpStep == 1 && Config.GetInt("Test", "PentePres", 0) != 0 && !fpNear)
+            {
+                fpNear = true;
+                var cc = Game.PlayerGo != null ? Game.PlayerGo.GetComponent<CharacterController>() : null;
+                if (cc != null) { cc.enabled = false; Game.PlayerGo.transform.position = b.position + b.transform.right * -3f + Vector3.up; cc.enabled = true; Log.Info("autotest : freinpente, joueur pose a 3 m"); }
+            }
+            if (t > 40f && fpStep == 1) { fpStep = 2; fpPos = b.position; Log.Info("autotest : freinpente, a 40 s : " + (b.IsSleeping() ? "endormie" : "eveillee") + ", " + VehicleSync.HandbrakeState(car)); }
+            if (t > 45f && fpStep == 2) { fpStep = 3; if (Config.GetInt("Test", "PenteReveil", 1) != 0) { b.WakeUp(); Log.Info("autotest : freinpente, reveillee (WakeUp)"); } }
+            if (fpStep >= 3 && fpStep <= 5 && t > 50f + 5f * (fpStep - 3))
+            {
+                fpStep++;
+                Log.Info("autotest : freinpente, a " + (45 + 5 * (fpStep - 3)) + " s : roule de " + (b.position - fpPos).magnitude.ToString("F2") + " m, " + b.velocity.magnitude.ToString("F2") + " m/s, " + (b.IsSleeping() ? "endormie" : "eveillee") + " ; " + VehicleSync.HandbrakeState(car));
+            }
+        }
+
         static bool tricheDone;   // ([Test] Triche=<commande du tchat> : une fois, a 30 s)
         static void CdMsc(float t)
         {
@@ -1556,6 +1608,7 @@ namespace MWCoop
             if (mode == "conduite") Conduite(t);
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
+            if (mode == "freinpente") FreinPente(t);
             // [Test] JournalPieds=1 : toutes les 2 s, chevilles des avatars dans le repere de leur voiture et plancher sous chacune.
             if (Config.GetInt("Test", "JournalPieds", 0) != 0 && t > 20f && Time.realtimeSinceStartup >= feetLogAt)
             {
