@@ -210,6 +210,7 @@ namespace MWCoop
             new Mod("sauvegarde du jeu", SaveHook.Update),
             new Mod("partie chez l'invite", GuestSlot.Update),
             new Mod("phares", LightsGuard.Update),
+            new Mod("cablage", WiringGuard.Update),
             new Mod("capots du pack", PackHoods.Update),
             new Mod("fils", WiringMsc.Update),   // (MSC : bornes electriques de la SATSUMA)
             new Mod("luge de Teimo", TeimoSled.Update),
@@ -357,6 +358,7 @@ namespace MWCoop
             SaveStats.OnLevelLoaded();   // (partie.txt pour le lanceur)
             GuestSlot.OnLevelLoaded();
             LightsGuard.OnLevelLoaded();
+            WiringGuard.OnLevelLoaded();
             PackHoods.OnLevelLoaded();
             MapPacks.OnLevelLoaded();
             TeimoSled.OnLevelLoaded();
@@ -404,7 +406,7 @@ namespace MWCoop
                                     Voices.OnLevelLoaded, Particles.OnLevelLoaded, Sauna.OnLevelLoaded, NearDoors.OnLevelLoaded, CarHits.OnLevelLoaded,
                                     CarLeaks.OnLevelLoaded, Knobs.OnLevelLoaded, AssembleIcon.OnLevelLoaded,   // (22/10 : modules generiques)
                                     Gestures.OnLevelLoaded, HandTools.OnLevelLoaded, Cooking.OnLevelLoaded, Home.OnLevelLoaded, Events.OnLevelLoaded,
-                                    WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded };   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
+                                    WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded };   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -450,7 +452,8 @@ namespace MWCoop
             "interactions", "portes poussees",
             "fils",   // (20/10, Reinmansed : fils de la SATSUMA branches par l'invite, invisibles chez l'hote -- WiringMsc)
             "feux",   // (20/10, joueurs : « le bois ne prend pas » -- cheminees, poeles et grill de MSC : memes automates WoodTrigger / SetFire que MWC)
-            "phares", "capots du pack",   // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)
+            "phares", "capots du pack", "cablage",   // (24/10 : faisceau tenu par un autre, Markos -- WiringGuard)
+              // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;

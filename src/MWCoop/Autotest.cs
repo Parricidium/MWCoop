@@ -954,12 +954,41 @@ namespace MWCoop
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
 
         // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
+        // [Test] Autotest=texte, Texte=<mot> : chaque TextMesh (eteints compris) dont le texte contient le mot, avec son chemin et
+        // les automates de ses parents (qui l'allume ?).
+        static void DumpTexts(string word)
+        {
+            int n = 0;
+            foreach (TextMesh tm in Resources.FindObjectsOfTypeAll<TextMesh>())
+            {
+                if (tm == null || tm.text == null || tm.gameObject.hideFlags != HideFlags.None) continue;
+                if (word.Length > 0 && tm.text.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (n++ > 40) break;
+                var fs = new System.Text.StringBuilder();
+                for (Transform p = tm.transform; p != null; p = p.parent)
+                    foreach (PlayMakerFSM f in p.GetComponents<PlayMakerFSM>()) fs.Append(' ').Append(p.name).Append("::").Append(f.FsmName).Append('[').Append(f.ActiveStateName).Append(']');
+                Log.Info("autotest : texte '" + tm.text.Replace('\n', ' ') + "' " + Recon.Path(tm.transform) + (tm.gameObject.activeInHierarchy ? " (allume)" : " (eteint)") + " ;" + fs);
+            }
+            Log.Info("autotest : textes '" + word + "' : " + n);
+        }
+
         static void DumpFsms(string specs)
         {
-            foreach (string spec in specs.Split(','))
+            foreach (string spec in specs.Split(specs.Contains(";") ? ';' : ','))   // (« ; » quand un chemin contient une virgule : SATSUMA(557kg, 248))
             {
                 int c = spec.LastIndexOf(':'); if (c <= 0) continue;
                 GameObject go = Game.FindAny(spec.Substring(0, c).Trim());
+                // (nom « * » : la liste des automates de l'objet et de ses enfants, avec leurs etats -- pour trouver lequel vider)
+                if (go != null && spec.Substring(c + 1).Trim() == "*")
+                {
+                    foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
+                    {
+                        var sts = new System.Text.StringBuilder();
+                        foreach (FsmState st in f.Fsm.States) sts.Append(st.Name).Append(" | ");
+                        Log.Info("autotest : automate " + Recon.Path(f.transform) + " :: " + f.FsmName + " [" + f.ActiveStateName + "] " + sts);
+                    }
+                    continue;
+                }
                 PlayMakerFSM fsm = go != null ? Game.FsmOn(go, spec.Substring(c + 1).Trim()) : null;
                 if (fsm == null) { Log.Info("autotest : automate " + spec + " introuvable"); continue; }
                 Log.Info("autotest : automate " + spec + " (" + Recon.Path(fsm.transform) + "), etat " + fsm.ActiveStateName);
@@ -1060,6 +1089,15 @@ namespace MWCoop
             if (Game.Msc)   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC ; vidage d'automates : les deux jeux)
             {
                 if (mode == "automate" && t > 40f && step == 0) { step = 1; DumpFsms(Config.Get("Test", "Automate", "")); }
+                if (mode == "texte" && t > 40f && step == 0) { step = 1; DumpTexts(Config.Get("Test", "Texte", "")); }
+                // [Test] Autotest=cablage (MSC, 2 joueurs) : l'invite tient le faisceau de 40 a 55 s ; l'hote note toutes les 3 s ce que
+                // vaut sa globale WiringTool (attendu : l'objet lointain pendant la prise, le faisceau ensuite) -- WiringGuard, 24/10.
+                if (mode == "cablage")
+                {
+                    if (!MWCoop.Net.Session.IsHost && t > 40f && t < 55f && PlayerSync.LocalCamera != null) { Props.TestHold(Props.FindKey("wiring mess"), PlayerSync.LocalCamera); if (step == 0) { step = 1; Log.Info("autotest : cablage, faisceau pris par l'invite (" + Props.FindKey("wiring mess") + ")"); } }
+                    if (!MWCoop.Net.Session.IsHost && t > 55f && step == 1) { step = 2; Props.TestHold(Props.FindKey("wiring mess"), null); Log.Info("autotest : cablage, faisceau lache"); }
+                    if (MWCoop.Net.Session.IsHost && t > 35f && t < 75f && t >= holdLog) { holdLog = t + 3f; FsmGameObject wt = FsmVariables.GlobalVariables.FindFsmGameObject("WiringTool"); Log.Info("autotest : cablage, WiringTool ici = " + (wt != null && wt.Value != null ? wt.Value.name : "null")); }
+                }
                 MscTest(mode, t); return;
             }
             if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
