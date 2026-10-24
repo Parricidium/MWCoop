@@ -512,6 +512,23 @@ namespace MWCoop
             if (digestLogs++ < 3 || now >= lastDigestLog + 120f) { lastDigestLog = now; Log.Info("pieces : controle envoye aux invites (" + total + " points, " + totalB + " vis)"); }
         }
 
+        // Garde du controle (24/10, Markos) : un paquet qui demanderait plus de MaxDigestRemovals demontages n'en applique aucun, et
+        // les paquets des 20 s suivantes non plus (meme tour de controle, etat de l'hote pas fiable : pieces pas encore relevees).
+        const int MaxDigestRemovals = 3;
+        static float digestDistrustUntil = -1f, digestDistrustLog = -100f;
+        static bool DigestTrusted(int wouldRemove, float now)
+        {
+            if (Config.GetInt("Test", "ControleSansGarde", 0) != 0) return true;   // (essais : comme 1.10.2)
+            if (wouldRemove > MaxDigestRemovals) digestDistrustUntil = now + 20f;
+            if (now >= digestDistrustUntil) return true;
+            if (wouldRemove > 0 && now >= digestDistrustLog + 30f)
+            {
+                digestDistrustLog = now;
+                Log.Warn("pieces : controle de l'hote ignore : " + wouldRemove + " piece(s) a demonter d'un coup (plus de " + MaxDigestRemovals + " : etat de l'hote pas encore fiable, rien de demonte)");
+            }
+            return false;
+        }
+
         public static void OnDigest(int who, NetReader r)
         {
             if (Session.IsHost) return;
@@ -523,9 +540,21 @@ namespace MWCoop
             List<int> ask = null; int removed = 0, fixedBolts = 0, unknown = 0, resent = 0;
             if (kind == 0)
             {
-                while (r.More)
+                var rows = new List<KeyValuePair<uint, KeyValuePair<string, float>>>();
+                while (r.More) { uint h0 = (uint)r.I32(); string id0 = r.Str(); float a0 = r.F32(); rows.Add(new KeyValuePair<uint, KeyValuePair<string, float>>(h0, new KeyValuePair<string, float>(id0, a0))); }
+                int would = 0;
+                foreach (var row in rows)
                 {
-                    uint h = (uint)r.I32(); string id = r.Str(); float hostAge = r.F32();
+                    Point q;
+                    if (!pointsByHash.TryGetValue(row.Key, out q) || q.Fsm == null || Recent(row.Key, now) || !q.Fsm.gameObject.activeInHierarchy) continue;
+                    GameObject qp = q.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+                    if (!Holds(q.Fsm, qp) || IdOf(qp) == row.Value.Key || mounting.ContainsKey(qp) || PendingReinstall(qp)) continue;
+                    if (!(Age(row.Key, now) + 0.5f < row.Value.Value && row.Value.Value > 0f)) would++;
+                }
+                bool trusted = DigestTrusted(would, now);
+                foreach (var row in rows)
+                {
+                    uint h = row.Key; string id = row.Value.Key; float hostAge = row.Value.Value;
                     Point p;
                     if (!pointsByHash.TryGetValue(h, out p) || p.Fsm == null) { unknown++; continue; }
                     if (Recent(h, now) || !p.Fsm.gameObject.activeInHierarchy) continue;
@@ -541,6 +570,7 @@ namespace MWCoop
                         Touch(h); resent++;
                         continue;
                     }
+                    if (isIn && !trusted) continue;   // (controle pas fiable : rien de demonte, rien demande)
                     if (isIn) { ReplayRemove(p, part, mine, who, "pas montee chez l'hote" + (id.Length > 0 ? " (il y a " + id + ")" : "")); removed++; }
                     if (id.Length > 0 && !AskedLately(h, now)) { if (ask == null) ask = new List<int>(); if (ask.Count < 20) ask.Add((int)h); }
                     Touch(h);
@@ -635,18 +665,20 @@ namespace MWCoop
         {
             if (ecartDone || Config.GetInt("Test", "PiecesEcart", 0) == 0 || Time.timeSinceLevelLoad < 45f) return;   // (hote ou invite : celui qui a la cle)
             ecartDone = true;
-            foreach (KeyValuePair<string, Point> kv in points)
+            // (PiecesEcart=2 : 10 pieces d'un coup -- l'autre cote doit refuser ce controle, garde du 24/10)
+            int want = Config.GetInt("Test", "PiecesEcart", 0) == 2 ? 10 : 1, doneN = 0;
+            foreach (KeyValuePair<string, Point> kv in new List<KeyValuePair<string, Point>>(points))
             {
                 Point p = kv.Value;
                 if (p.Fsm == null || !p.Fsm.gameObject.activeInHierarchy) continue;
                 GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
-                if (!Holds(p.Fsm, part) || IdOf(part).Length == 0 || !p.Key.Contains("VINP_Seat")) continue;
+                if (!Holds(p.Fsm, part) || IdOf(part).Length == 0 || want == 1 && !p.Key.Contains("VINP_Seat")) continue;
                 applying = true; Replay.Depth++;
                 try { Game.SetState(p.Fsm, "Remove part"); }
                 finally { applying = false; Replay.Depth--; }
                 Touch(H(p.Key));   // (un vrai geste d'ici dont le message se serait perdu)
                 Log.Info("autotest : ecart provoque : " + IdOf(part) + " retiree de " + p.Key + " sans rien envoyer");
-                break;
+                if (++doneN >= want) break;
             }
             // (et une vis desserree sans rien envoyer : le controle doit la resserrer au cran de l'hote)
             foreach (Bolt b in bolts)
