@@ -313,8 +313,40 @@ namespace MWCoop
         // de l'hote, Cars[n], chronos). [Test] VazLoin=1 : la VAZ reste a 30 m (attendu : refus du jeu, xNoCar).
         static int vazTest; static bool mondeZero, mapShot;
         static bool carsShot; static Camera shotCam;
+        // [Test] GlaceTours=1 (hote, a partir de 58 s) : ma VAZ menee pas a pas (cinematique, ~40 m/s, sans saut : pas une
+        // teleportation pour TrackRental) par la ligne, CP1, CP2, la ligne, deux fois -- le chrono des tours d'une location,
+        // jamais roule en essai (JD 18/10) ; bilan (tours, meilleur tour, table) a la fin
+        static int tourStep; static bool tourStarted, tourDone;
+        static readonly int[] tourPath = { 2, 0, 1, 2, 0, 1, 2 };
+        static void TestTours(float t)
+        {
+            if (tourDone || Config.GetInt("Test", "GlaceTours", 0) == 0 || !Session.IsHost || t < 58f) return;
+            Transform car = Vaz.CarOf(Session.LocalId);
+            if (car == null || lines == null) return;
+            Rigidbody rb = car.GetComponent<Rigidbody>();
+            if (!tourStarted)
+            {
+                tourStarted = true;
+                Log.Info("autotest glacevaz : tours, piste " + (track != null ? "'" + track.ActiveStateName + "'" : "?") + ", essais " + (lineTime != null && lineTime.activeInHierarchy) + ", manche " + (lineLaps != null && lineLaps.activeInHierarchy) + ", location " + myRental + " n" + myNum);
+            }
+            if (tourStep >= tourPath.Length)
+            {
+                tourDone = true;
+                if (rb != null) rb.isKinematic = false;
+                Log.Info("autotest glacevaz : tours finis : meilleur tour " + bestLap.ToString("F1") + " s, tours de manche " + laps + ", table " + (lapTimes != null && lapTimes.ContainsKey(MyKey()) ? ToF(lapTimes[MyKey()]).ToString("F2") : "-"));
+                return;
+            }
+            if (rb != null && !rb.isKinematic) rb.isKinematic = true;
+            Vector3 target = lines[tourPath[tourStep]].center, p = car.position;
+            Vector3 d = new Vector3(target.x - p.x, 0f, target.z - p.z);
+            float step = 40f * Time.deltaTime;
+            if (d.magnitude <= step) { car.position = new Vector3(target.x, p.y, target.z); tourStep++; Log.Info("autotest glacevaz : tours, " + new[] { "CP1", "CP2", "ligne" }[tourPath[tourStep - 1]] + " atteint (" + tourStep + "/" + tourPath.Length + ")"); }
+            else car.position = p + d.normalized * step;
+        }
+
         static void TestVaz(float t)
         {
+            TestTours(t);
             // [Test] MondeZero=1 : PlayerID pose a 0 a 5 s (nouvelle partie pas encore sauvegardee, comme chez JD)
             if (vazTest == 0 && t > 5f && Config.GetInt("Test", "MondeZero", 0) != 0 && !mondeZero) { mondeZero = true; FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID"); if (pid != null) pid.Value = 0f; Log.Info("autotest glacevaz : PlayerID = 0"); }
             if (vazTest == 0 && t > (Session.IsHost ? 8f : 6f)) { vazTest = 1; Log.Info("autotest glacevaz : demande -> " + Vaz.Request(Session.IsHost ? 3 : 5, Config.GetInt("Test", "VazModele", 0))); }
