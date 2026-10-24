@@ -41,6 +41,8 @@ namespace MWCoop
             O("JaugeTemperature", "Température", "Body temperature", 1, 2),
             O("JaugeSueur", "Sueur", "Sweat", 1, 2),
             O("JaugeArgent", "Argent", "Money", 1, 2),
+            O("JaugeVie", "Vie (PvP)", "Health (PvP)", 1, 2, null, null, null,
+              "Seulement quand l'hôte a activé le PvP : chaque coup reçu la vide", "Only when the host turned PvP on: every hit taken drains it"),
             O("JaugeJour", "Jour", "Day", 1, 2),
             O("Equipe", "Panneau Équipe", "Team panel", 1, 3, null, null, null,
               "Les jauges des autres joueurs, en petit (aussi avec Vanilla)", "The other players' gauges, small (also with Vanilla)"),

@@ -39,7 +39,9 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- valeurs du jeu
-        class Gauge { public string Key, Icon, Fr, En; public float V; public bool Low; }   // Low : le danger est en bas (temperature)
+        class Gauge { public string Key, Icon, Fr, En, Val; public float V; public bool Low, Hp; }   // Low : le danger est en bas (temperature) ; Hp : vie (barre = ce qui reste, V = degats)
+        static float Fill(Gauge g) { return g.Hp ? 1f - g.V / 100f : g.V / 100f; }
+        static bool Rest(Gauge g) { return !g.Hp && Resting(g.V); }   // (la vie ne s'estompe ni ne se cache jamais)
         static readonly List<Gauge> gauges = new List<Gauge>();
         static float money, temp, trend;
         static bool alcoholic, inJail, mortal;
@@ -77,6 +79,12 @@ namespace MWCoop
             Add("JaugeFatigue", "fatigue", "Fatigue", "Fatigue", Game.GlobalFloat("PlayerFatigue"));
             Add("JaugeSalete", "salete", "Saleté", "Dirtiness", Game.GlobalFloat("PlayerDirtiness"));
             if (!Game.Msc) Add("JaugeSueur", "sueur", "Sueur", "Sweat", Game.GlobalFloat("PlayerSweat"));
+            // Vie PvP (JD, 24/10) : sous les stats du jeu, seulement quand l'hote a active le PvP.
+            if ((Pvp.Allowed || Config.GetInt("Test", "HudVie", 0) != 0) && HudSettings.On("JaugeVie"))
+            {
+                int max = Mathf.Max(1, Pvp.MaxHits), hit = Mathf.Clamp(Pvp.HitsNow + Config.GetInt("Test", "HudVieCoups", 0), 0, max);
+                gauges.Add(new Gauge { Key = "JaugeVie", Icon = "vie", Fr = "Vie", En = "Health", V = 100f * hit / max, Hp = true, Val = (max - hit) + "/" + max });
+            }
             money = Game.GlobalFloat("PlayerMoney");
             temp = Game.Msc ? 70f : Game.GlobalFloat("PlayerTemp");   // (MSC : neutre, jamais « gele »)
             trend = bodyTempTrend != null ? bodyTempTrend.Value : 0f;
@@ -332,13 +340,13 @@ namespace MWCoop
             }
             foreach (Gauge g in gauges)
             {
-                Style.Alpha = Resting(g.V) ? 0.4f : 1f;
+                Style.Alpha = Rest(g) ? 0.4f : 1f;
                 Color c = Tone(g.V, false);
                 bool hot = g.V >= 70f;
                 Icon(new Rect(x, y + (rowH - iw) / 2, iw, iw), g.Icon, hot ? c : new Color(0.79f, 0.84f, 0.90f));
                 Style.Text(new Rect(x + iw + P(8), y, lw, rowH), Lang.T(g.Fr, g.En), F(15), TextAnchor.MiddleLeft, hot ? Color.Lerp(Txt, c, 0.5f) : Txt);
-                Style.Bar(new Rect(bx, y + rowH / 2 - P(4), bw, P(8)), g.V / 100f, c);
-                if (vw > 0) Style.Text(new Rect(r.xMax - pad - vw, y, vw, rowH), Mathf.RoundToInt(g.V).ToString(), F(13), TextAnchor.MiddleRight, Dim);
+                Style.Bar(new Rect(bx, y + rowH / 2 - P(4), bw, P(8)), Fill(g), c);
+                if (vw > 0) Style.Text(new Rect(r.xMax - pad - vw, y, vw, rowH), g.Val ?? Mathf.RoundToInt(g.V).ToString(), F(13), TextAnchor.MiddleRight, Dim);
                 y += rowH;
             }
             Style.Alpha = 1f;
@@ -409,7 +417,7 @@ namespace MWCoop
         static void DrawRings(int pos)
         {
             var show = new List<Gauge>();
-            foreach (Gauge g in gauges) if (!Resting(g.V)) show.Add(g);
+            foreach (Gauge g in gauges) if (!Rest(g)) show.Add(g);
             bool tempOn = HudSettings.On("JaugeTemperature"), head = HudSettings.On("JaugeJour") || HudSettings.On("JaugeArgent");
             bool names = HudSettings.On("Valeurs");
             float ring = P(50), cell = P(60), pad = P(12);
@@ -435,7 +443,7 @@ namespace MWCoop
             foreach (Gauge g in show)
             {
                 Color c = Tone(g.V, false);
-                RingCell(new Rect(x, r.y + pad, cell, ring + P(18)), ring, g.V / 100f, c, g.Icon, g.V >= 70f ? c : new Color(0.86f, 0.90f, 0.95f), names || g.V >= 70f ? Lang.T(g.Fr, g.En) : null);
+                RingCell(new Rect(x, r.y + pad, cell, ring + P(18)), ring, Fill(g), c, g.Icon, g.V >= 70f ? c : new Color(0.86f, 0.90f, 0.95f), names || g.V >= 70f ? Lang.T(g.Fr, g.En) : null);
                 x += cell;
             }
             if (tempOn)
@@ -544,7 +552,7 @@ namespace MWCoop
             for (int i = 0; i < gauges.Count; i++)
             {
                 Gauge g = gauges[i];
-                Style.Alpha = Resting(g.V) ? 0.4f : 1f;
+                Style.Alpha = Rest(g) ? 0.4f : 1f;
                 Color col = Tone(g.V, false);
                 bool hot = g.V >= 70f;
                 var c = new Rect(x, cy, parts[i], chipH);
@@ -552,7 +560,7 @@ namespace MWCoop
                 if (hot) Style.Ring(c, chipH / 2, new Color(col.r, col.g, col.b, 0.45f));
                 float ix = c.x + P(10);
                 Icon(new Rect(ix, c.center.y - P(8), P(16), P(16)), g.Icon, hot ? col : new Color(0.79f, 0.84f, 0.90f));
-                Style.Bar(new Rect(ix + P(24), c.center.y - P(3), P(42), P(6)), g.V / 100f, col);
+                Style.Bar(new Rect(ix + P(24), c.center.y - P(3), P(42), P(6)), Fill(g), col);
                 if (names || hot) Style.Text(new Rect(ix + P(72), c.y, c.xMax - ix - P(72), chipH), Lang.T(g.Fr, g.En), F(12), TextAnchor.MiddleLeft, hot ? Color.Lerp(Txt, col, 0.5f) : Dim);
                 x += parts[i] + gap;
             }

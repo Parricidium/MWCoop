@@ -1,0 +1,3 @@
+HV001	Health (PvP)
+HV002	Only when the host turned PvP on
+HV003	Health (PvP): when the host turned PvP on, a Health gauge under the game's stats, full when you are fine; every hit taken drains it (5 hits in 20 s: death). \"Health (PvP)\" option to hide it.

@@ -1926,6 +1926,8 @@ static const wchar_t *const kRu[][2] = {
     { L"Film reels: at the KINO TÄHTI cinema counter (49 mk).", L"Киноплёнки: у прилавка кинотеатра KINO TÄHTI (49 mk)." },
     { L"Buy a film reel at the cinema counter (49 mk, next to the soda).", L"Купите киноплёнку у прилавка кинотеатра (49 mk, рядом с лимонадом)." },
     { L"Village store: cabinets, shelves, till", L"Сельский магазин: витрины, полки, касса" },
+    { L"Health (PvP)", L"Здоровье (PvP)" },
+    { L"Only when the host turned PvP on", L"Только когда хост включил PvP" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
@@ -2658,4 +2660,5 @@ static const wchar_t *const kRu[][2] = {
     { L"Rally prizes and the drag race results of the other players: not yet.", L"Призы ралли и результаты драг-рейсинга других игроков: пока нет." },
     { L"My Summer Car in BETA: nearly everything of My Winter Car is shared now (players, cars, mechanics, money, jobs, radio, world). What's left is listed in \"What works on My Summer Car\".", L"My Summer Car в BETA: почти всё, что есть в My Winter Car, теперь общее (игроки, машины, механика, деньги, работа, радио, мир). Что осталось — в «Что работает в My Summer Car»." },
     { L"My Summer Car (BETA): a few side things are not shared yet (rally prizes, drag race results); see \"What works on My Summer Car\".", L"My Summer Car (BETA): кое-что ещё не общее (призы ралли, результаты драг-рейсинга); см. «Что работает в My Summer Car»." },
+    { L"Health (PvP): when the host turned PvP on, a Health gauge under the game's stats, full when you are fine; every hit taken drains it (5 hits in 20 s: death). \"Health (PvP)\" option to hide it.", L"Здоровье (PvP): когда хост включил PvP, под показателями игры появляется шкала здоровья, полная, когда ты в порядке; каждый полученный удар её уменьшает (5 ударов за 20 с: смерть). Опция «Здоровье (PvP)», чтобы её скрыть." },
 };

@@ -111,3 +111,14 @@ save(im, "monte")
 im, d = canvas()
 line(d, [(128, 46), (128, 206)]); line(d, [(72, 150), (128, 206), (184, 150)])
 save(im, "descend")
+
+# vie (PvP) : coeur
+im, d = canvas()
+heart = []
+for i in range(0, 361, 4):
+    t = math.radians(i)
+    x = 16 * math.sin(t) ** 3
+    y = 13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)
+    heart.append((128 + x * 6.2, 120 - y * 6.2))
+line(d, heart)
+save(im, "vie")
