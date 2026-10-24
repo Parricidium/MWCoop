@@ -52,9 +52,9 @@ Beaucoup de noms de MSC existent déjà dans la scène de MWC : GIFU, KEKMET, JO
 
 - **Course sur glace** : IceRace, IceRaceVaz, Jokkis, JokkisPanel, RacePanel.
 - **VAZ-2108** : Vaz, VazCar, VazHandling, VazSound, VazPanel, RallyVaz.
-- **Boutique et musée** : Kauppa, KauppaKalusteet, KauppaOsto, KauppaRakennus, KauppaVideo, KauppaKartturi, Clearing, MuseoRakennus, MuseoNayttely.
+- ~~**Boutique et musée**~~ : portés sur MSC le 24/10 (voir plus bas).
 - **Hiver et lieux de MWC** : Frost, WindowCranks (SORBET), CarSale (Rivett), Plats (PSK), TaxiCustomer, TeimoSled, Parked, Vin, WoodCarriers.
-- Kartturi : les tracés du rallye pourraient se refaire pour MSC.
+- ~~Kartturi~~ : tracés du rallye de MSC faits le 24/10 (voir plus bas).
 
 ## Ce qui suppose My Winter Car en dur
 
@@ -261,3 +261,48 @@ Essai `[Test] Autotest=mscreste` (2 joueurs, 280 s), réussi :
 - colis sorti chez l'hôte.
 
 Pas éprouvé en jeu : la poursuite de l'invité (pas de barrage près de la maison dans l'essai).
+
+## Boutique s21, coin vidéo, musée et sacs de couchage sur MSC (24/10)
+
+Demande de JD : la boutique et le musée « au même endroit, mais dans MSC », avec toutes leurs fonctions.
+Ajouts.B_Msc ouvre les sacs, la boutique et le musée, et le lanceur montre leurs 4 interrupteurs (`kAjoutMsc = 4`).
+Les modules boutique, sacs de couchage, vêtements, défrichage et sauvegarde du jeu tournent sur MSC (Core.MscModules / MscLevelLoaded).
+
+La carte de Peräjärvi est la même dans les deux jeux : on garde la même place (-1591,1 ; 1098,5) et le même cap.
+Les différences sont rangées par nom, sous `Game.Msc` :
+- **Objets copiés** (`KauppaRakennus.MscPaths`) :
+  - la caisse de Teimo `STORE/StoreCashRegister` (écran : son enfant `Register`) ;
+  - la caisse de l'inspection ;
+  - le radiateur de la prison, l'horloge `YARD/Building/Dynamics/SuomiClock` et le casque `ITEMS/helmet(itemx)` ;
+  - l'abri `STORE/LOD/NoRain`, la TV du salon (lit les cassettes) et le sac de courses de Teimo.
+  - Mêmes chemins dans les deux jeux : la lampe de la chambre, le mobilier du chalet et la TV de la prison (modèle des TV vendues).
+- **Matières absentes** (`MscMats`, `MscKeyMats`) :
+  - wood_panel20 devient wall_paint6 ;
+  - metal_galvanized et store_shelfs deviennent shelf_flats ;
+  - le perron passe en wood_panel9.
+  - Pas de neige sur les toits : la clé « lumi » est ignorée.
+- **Sol** :
+  - deux maillages, `Grass1` et `Grass2` (Clearing.IsSoil), dont les sommets du bord commun sont gardés par position ;
+  - touffes d'herbe `BUSHES1..7` retirées du terrain.
+  - Les planchers sont à hauteur fixe : boutique 4,85 et musée 3,62. Le sol de MSC, plus grossier, perçait à 4,46.
+- **Sacs de couchage** :
+  - le canapé est `ITEMS/sofa(itemx)` et son pivot `AnimPivot` ;
+  - les sacs posés d'office (sans boutique) vont dans la chambre de YARD.
+- **Casques** : Wear ne suit que le casque sur MSC. Il n'y a ni veste ni combinaison, donc pas de paires par joueur.
+- **KARTTURI** : deux spéciales sur DirtRoad, celles des voitures IA :
+  - SS1, samedi : 2168 → 3640 ;
+  - SS2, dimanche : 56 → 1875.
+
+Essais : copie isolée `D:\Games\COOPTEST\My Summer Car\Boutique-Essai`, sans MSCLoader, en solo, profil « Boutique ».
+Le script est dans le scratchpad, sous le nom `bmsc-essai.ps1`.
+Vérifié en solo :
+- construction, achat payé et sac de courses ;
+- vitrines ;
+- caméscope (au viseur et posé), montage rogné, lecture à la TV ;
+- casque acheté puis mis ;
+- sac de couchage déplié, puis nuit dormie dessus ;
+- KARTTURI sur SS1 ;
+- musée et son exposition.
+
+Pas essayé à deux : l'envoi des films, les achats d'un invité.
+Restent coupés sur MSC : la VAZ-2108, le cinéma et CARDINAL.

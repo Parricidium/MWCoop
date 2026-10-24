@@ -153,6 +153,9 @@ namespace MWCoop
         static Vector3 eqPos; static Quaternion eqRot;
         static readonly List<KeyValuePair<GameObject, int>> eqLayers = new List<KeyValuePair<GameObject, int>>();
 
+        // (essais : prise simulee -- etat de la main qui mene a « Part picked » : « Set pivot 3 » dans MWC, « Set pivot » dans MSC)
+        static string PickSetState { get { return Game.Msc ? "Set pivot" : "Set pivot 3"; } }
+
         static PlayMakerFSM PickUpFsm()
         {
             GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");

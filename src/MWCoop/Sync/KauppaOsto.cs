@@ -57,7 +57,7 @@ namespace MWCoop
             cg.transform.localPosition = rb.center;
             var bc = cg.AddComponent<BoxCollider>(); bc.isTrigger = true; bc.size = rb.size + new Vector3(0.08f, 0.08f, 0.08f);
             registerCol = bc;
-            Transform logic = regSrc.transform.Find("CashRegisterLogic");
+            Transform logic = regSrc.transform.Find("CashRegisterLogic") ?? regSrc.transform.Find("Register");   // (My Summer Car : STORE/StoreCashRegister/Register)
             TextMesh src = logic != null ? logic.GetComponent<TextMesh>() : null;
             if (src == null) { L("caisse : ecran de la PSK introuvable"); return; }
             var tg = new GameObject("osuus_kassa_naytto");

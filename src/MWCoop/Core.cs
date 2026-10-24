@@ -407,7 +407,9 @@ namespace MWCoop
                                     Voices.OnLevelLoaded, Particles.OnLevelLoaded, Sauna.OnLevelLoaded, NearDoors.OnLevelLoaded, CarHits.OnLevelLoaded,
                                     CarLeaks.OnLevelLoaded, Knobs.OnLevelLoaded, AssembleIcon.OnLevelLoaded,   // (22/10 : modules generiques)
                                     Gestures.OnLevelLoaded, HandTools.OnLevelLoaded, Cooking.OnLevelLoaded, Home.OnLevelLoaded, Events.OnLevelLoaded,
-                                    WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded, WoodCarriers.OnLevelLoaded };   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
+                                    WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded, WoodCarriers.OnLevelLoaded,   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
+                                    // (24/10 : boutique s21, coin video, musee, sacs de couchage, casques achetes ; terrain defriche ; sauvegarde de leurs objets)
+                                    Wear.OnLevelLoaded, SleepingBags.OnLevelLoaded, Kauppa.OnLevelLoaded, Clearing.OnLevelLoaded, SaveHook.OnLevelLoaded };
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -437,7 +439,11 @@ namespace MWCoop
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
             "triches", "panneau des triches",   // (19/10 : triches de MSC -- lieux, heure par pas de 2 h, pluie, argent, soin, prison)
-            "ajouts (hote)",   // (sur MSC : la camera drone seulement, Ajouts.B_Msc)
+            "ajouts (hote)",   // (sur MSC : drone, sacs de couchage, boutique s21 et musee -- Ajouts.B_Msc)
+            // 24/10 (JD : la boutique et le musee « au meme endroit, mais dans MSC ») : boutique s21 et son coin video, musee,
+            // sacs de couchage, casques achetes (Wear : le casque seul sur MSC), terrain defriche, et la sauvegarde de leurs objets
+            // (SaveHook : Systems/Setup Game :: WaitPlayer "Save game", le meme dans les deux jeux)
+            "boutique", "sacs de couchage", "vetements", "defrichage", "sauvegarde du jeu",
             "graphismes",   // (Systems/Options de MSC : Gfx.GameOptsMsc)
             "couleur", "peinture",   // (19/10 : couleur et peinture perso de la SATSUMA sur une nouvelle partie ; Paint ne charge rien sur MSC)
             "reapparition",   // (19/10 : Systems/Death et son 'Activate Dead Body' comme dans MWC ; un seul choix, la maison)

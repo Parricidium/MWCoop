@@ -18,10 +18,14 @@ namespace MWCoop
         static Vector3 Place = new Vector3(-1591.1f, 0f, 1098.5f);
         static float Yaw = 25f;
         static float FloorY = 4.46f;   // hauteur du plancher, la meme chez tous (sol nivele par Clearing, mesure 3,38..4,06 + 0,4)
+        // (My Summer Car, 24/10 : son sol, plus grossier, reste a 3,68..4,71 sous la boutique apres nivellement -- il percait le
+        // plancher au fond a gauche ; plancher plus haut, une marche de plus)
+        static float FloorDefault { get { return Game.Msc ? 4.85f : 4.46f; } }
         static bool floorAuto;
         // [Boutique] Paikka=x,z,cap[,plancher|auto] : autre emplacement (essais du coin s21 a Perajarvi)
         static void ReadPlace()
         {
+            FloorY = FloorDefault; floorAuto = false;
             string s = Config.Get("Boutique", "Paikka", "");
             if (s.Length == 0) return;
             string[] a = s.Split(',');
@@ -64,8 +68,20 @@ namespace MWCoop
             return gameMats.TryGetValue(name, out r) ? r : null;
         }
 
+        // My Summer Car (24/10) : matieres de My Winter Car absentes, et leur remplacante (releve de toutes ses matieres)
+        static readonly Dictionary<string, string> MscMats = new Dictionary<string, string>
+        {
+            { "wood_panel20", "wall_paint6" },        // (bordures blanches : peinture blanche)
+            { "metal_galvanized", "shelf_flats" },    // (metal brosse des rayonnages)
+            { "store_shelfs", "shelf_flats" },
+        };
+        // (et par usage : wood_panel19 de My Summer Car est un bois gris delave -- le perron paraissait blanc au soleil)
+        static readonly Dictionary<string, string> MscKeyMats = new Dictionary<string, string> { { "terassi", "wood_panel9" } };
+
         static void Mat(string key, string game, float tile, Color? tint = null)
         {
+            string alt;
+            if (Game.Msc && (MscKeyMats.TryGetValue(key, out alt) || GameMat(game) == null && MscMats.TryGetValue(game, out alt))) game = alt;
             Material src = GameMat(game);
             Material m = src != null ? new Material(src) : new Material(Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Diffuse"));
             if (src == null) L("materiau du jeu introuvable : " + game);
@@ -137,7 +153,7 @@ namespace MWCoop
         // quadrilatere a (bas gauche), b (bas droite), c (haut droite), d (haut gauche) vu de face ; UV en metres / tuile
         static void Quad(string key, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2[] uv = null)
         {
-            if (key == null) return;
+            if (key == null || key == "lumi" && Game.Msc) return;   // (My Summer Car : l'ete, pas de neige sur les toits)
             Part p = P(key);
             Vector3 ud = (b - a).normalized, vd = (d - a).normalized, n = Vector3.Cross(vd, ud).normalized;
             float t = tiles.ContainsKey(key) ? tiles[key] : 1f;
@@ -543,8 +559,26 @@ namespace MWCoop
             L("zone abritee : calque " + g.layer);
         }
 
+        // My Summer Car (24/10) : objets du jeu copies par la boutique, le musee et le coin video -- leurs equivalents (vidage
+        // ref\msc-v.250908-04). Les autres chemins (lampe de la chambre de YARD, mobilier du chalet, TV de la prison...) sont
+        // les memes dans les deux jeux.
+        static readonly Dictionary<string, string> MscPaths = new Dictionary<string, string>
+        {
+            { "PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister", "STORE/StoreCashRegister" },
+            { "PERAPORTTI/Building/LOD100/Staff/Cashier1PIVOT", "STORE/TeimoInShop" },
+            { "INSPECTION/LOD/inspection_desk/CashRegister/InspectionCashRegister", "INSPECTION/LOD/inspection_desk/InspectionCashRegister" },
+            { "HOMENEW/Functions/ElectricThings/RadiatorsApartment/Radiator3", "JAIL/MESh/jail_radiator" },
+            { "HOMENEW/Functions/Clock", "YARD/Building/Dynamics/SuomiClock" },
+            { "EQUIPMENTS/Helmet/helmet(itemx)", "ITEMS/helmet(itemx)" },
+            { "STORE_AREA/Stuff/LOD/NoRain", "STORE/LOD/NoRain" },
+            { "HOMENEW/Functions/FunctionsDisable/TV/TVScreen", "YARD/Building/LIVINGROOM/TV/TVScreen" },
+            { "shoppingbag", "STORE/LOD/ShopFunctions/ShoppingBagSpawn/shopping bagx" },   // (sac de courses de Teimo)
+        };
+
         static GameObject FindPath(string path, int index = 0)
         {
+            string msc;
+            if (Game.Msc && MscPaths.TryGetValue(path, out msc)) path = msc;
             if (byName == null)
             {
                 byName = new Dictionary<string, List<Transform>>();
