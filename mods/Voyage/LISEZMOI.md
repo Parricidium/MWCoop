@@ -132,6 +132,10 @@ Il n'y a aucun boulot, course ni événement à l'aérodrome. Le plus proche est
   rechargé. S'il a été supprimé, retour à l'aérodrome.
 - **Chute** sous le circuit (30 m sous son point le plus bas) : retour au guichet du retour.
 - **PNJ** : le corps des PNJ de MWCoop (le vendeur de l'épicerie). Sans MWCoop, c'est une silhouette simple.
+- **Langues** : celle de MWCoop (sinon celle de Windows) : français, anglais, russe. En russe, les panneaux (Arial) et
+  le noir du vol sont traduits ; les sous-titres des PNJ et le texte de la main restent en anglais (police du jeu sans
+  cyrillique, comme dans MWCoop). Arabe : l'anglais en jeu, comme MWCoop (le texte d'Unity 5 ne lie pas les lettres
+  et n'écrit pas de droite à gauche) ; le convertisseur, lui, a les quatre langues.
 
 ## Crédits
 
@@ -166,6 +170,5 @@ Crédit du Cessna dans le lanceur : Guide > Crédits > Modèles 3D (traductions 
 
 - Une voiture de location à l'arrivée (copies de la SORBET, comme les Jokkis de MWCoop) pour rouler sur le circuit.
 - Les circuits faits de nombreux `.kn5` très lourds (Nordschleife) : à essayer.
-- Textes du mod en russe et en arabe (FR et EN pour le moment ; le convertisseur a les quatre langues).
 - Marquer l'aérodrome sur la carte (M) de MWCoop.
 - Copier une destination d'un jeu à l'autre depuis le convertisseur (pour l'instant : convertir deux fois).

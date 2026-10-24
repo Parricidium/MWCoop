@@ -119,27 +119,35 @@ namespace Voyage
         }
         public const float Reach = 2.2f;
 
-        // Langue : celle de MWCoop s'il est la (Lang.Code : 1 = francais), sinon le francais si Windows est en francais
-        static int fr = -1;
-        public static bool Fr
+        // Langue : celle de MWCoop s'il est la (Lang.Fr / Lang.Ru), sinon celle de Windows (francais, russe, sinon anglais).
+        // Arabe : l'anglais, comme MWCoop en jeu (le texte d'Unity 5 ne lie pas les lettres et n'ecrit pas de droite a gauche).
+        static int lang = -1;   // 0 anglais, 1 francais, 2 russe
+        static int Code
         {
             get
             {
-                if (fr < 0)
+                if (lang < 0)
                 {
-                    fr = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr" ? 1 : 0;
+                    string w = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+                    lang = w == "fr" ? 1 : w == "ru" ? 2 : 0;
                     try
                     {
-                        Type lang = Type.GetType("MWCoop.Lang, MWCoop");
-                        PropertyInfo p = lang != null ? lang.GetProperty("Fr", BindingFlags.Public | BindingFlags.Static) : null;
-                        if (p != null) fr = (bool)p.GetValue(null, null) ? 1 : 0;
+                        Type l = Type.GetType("MWCoop.Lang, MWCoop");
+                        PropertyInfo fr = l != null ? l.GetProperty("Fr", BindingFlags.Public | BindingFlags.Static) : null;
+                        PropertyInfo ru = l != null ? l.GetProperty("Ru", BindingFlags.Public | BindingFlags.Static) : null;
+                        if (fr != null) lang = (bool)fr.GetValue(null, null) ? 1 : ru != null && (bool)ru.GetValue(null, null) ? 2 : 0;
                     }
                     catch { }
                 }
-                return fr == 1;
+                return lang;
             }
         }
+        public static bool Fr { get { return Code == 1; } }
+        public static bool Ru { get { return Code == 2; } }
+        // textes ecrits avec la police du jeu (sous-titres GUIsubtitle, main GUIinteraction) : pas de cyrillique, l'anglais en russe
         public static string T(string f, string e) { return Fr ? f : e; }
+        // textes en Arial (panneaux TextMesh) et de l'IMGUI (noir du vol) : le russe aussi
+        public static string T(string f, string e, string r) { return Fr ? f : Ru ? r : e; }
         // ou est l'aerodrome / l'agence, pour les phrases des PNJ (My Summer Car : l'ancien aeroport du jeu)
         public static string AirFr { get { return Msc ? "à l'ancien aéroport, près de la décharge" : "près du cinéma"; } }
         public static string AirEn { get { return Msc ? "at the old airport, near the landfill" : "near the cinema"; } }

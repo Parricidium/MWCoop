@@ -213,15 +213,15 @@ namespace Voyage
             var all = Destinations.All;
             if (all.Count == 0)
             {
-                Poster(c, places[1].Key + new Vector3(0.6f, 0f, 0f), 0f, Jeu.T("AUCUNE DESTINATION", "NO DESTINATION"), Jeu.T("Convertis un circuit", "Convert a track"),
-                       Jeu.T("avec le convertisseur Voyage", "with the Voyage converter"), new Color(0.3f, 0.3f, 0.33f), null, 2.2f);
+                Poster(c, places[1].Key + new Vector3(0.6f, 0f, 0f), 0f, Jeu.T("AUCUNE DESTINATION", "NO DESTINATION", "НЕТ НАПРАВЛЕНИЙ"), Jeu.T("Convertis un circuit", "Convert a track", "Конвертируй трассу"),
+                       Jeu.T("avec le convertisseur Voyage", "with the Voyage converter", "конвертером Voyage"), new Color(0.3f, 0.3f, 0.33f), null, 2.2f);
                 return;
             }
             for (int k = 0; k < all.Count && k < places.Count; k++)
             {
                 Destination d = all[k];
                 bool more = k == places.Count - 1 && all.Count > places.Count;
-                if (more) { Poster(c, places[k].Key, places[k].Value, "+" + (all.Count - k), Jeu.T("autres destinations", "more destinations"), Jeu.T("au comptoir", "at the counter"), Teintes[k % Teintes.Length], null, 1.1f); break; }
+                if (more) { Poster(c, places[k].Key, places[k].Value, "+" + (all.Count - k), Jeu.T("autres destinations", "more destinations", "направлений ещё"), Jeu.T("au comptoir", "at the counter", "у стойки"), Teintes[k % Teintes.Length], null, 1.1f); break; }
                 Poster(c, places[k].Key, places[k].Value, d.Name.ToUpperInvariant(), d.Country, d.Price + " MK", Teintes[k % Teintes.Length], d, 1.1f);
             }
         }
@@ -435,13 +435,13 @@ namespace Voyage
             AddSpot(Kind.Airfield, c.Root.transform, new Vector3(3.0f, 1.2f, -1.6f), new Vector3(1.4f, 1.9f, 1.4f));
             // tableau des departs, bancs, tapis
             c.Box(new Vector3(-4.6f, 1.7f, -hd + t), new Vector3(-1.6f, 2.6f, -hd + t + 0.06f), "musta", false);
-            c.Text(Jeu.T("DÉPARTS · LÄHTEVÄT", "DEPARTURES · LÄHTEVÄT"), new Vector3(-3.1f, 2.42f, -hd + t + 0.07f), 180f, 0.1f, new Color(1f, 0.8f, 0.2f));
-            c.Text(Jeu.T("Cessna 172 : modèle 3D de osmosikum (Sketchfab), CC BY 4.0", "Cessna 172: 3D model by osmosikum (Sketchfab), CC BY 4.0"), new Vector3(-3.1f, 1.5f, -hd + t + 0.02f), 180f, 0.05f, new Color(0.25f, 0.22f, 0.2f));
+            c.Text(Jeu.T("DÉPARTS · LÄHTEVÄT", "DEPARTURES · LÄHTEVÄT", "ВЫЛЕТЫ · LÄHTEVÄT"), new Vector3(-3.1f, 2.42f, -hd + t + 0.07f), 180f, 0.1f, new Color(1f, 0.8f, 0.2f));
+            c.Text(Jeu.T("Cessna 172 : modèle 3D de osmosikum (Sketchfab), CC BY 4.0", "Cessna 172: 3D model by osmosikum (Sketchfab), CC BY 4.0", "Cessna 172: 3D-модель osmosikum (Sketchfab), CC BY 4.0"), new Vector3(-3.1f, 1.5f, -hd + t + 0.02f), 180f, 0.05f, new Color(0.25f, 0.22f, 0.2f));
             for (int k = 0; k < 3; k++)   // (trois premieres destinations ; sans circuit converti, des tirets)
             {
                 string l = k < Destinations.All.Count ? Destinations.All[k].Name.ToUpperInvariant() : "---";
                 if (l.Length > 16) l = l.Substring(0, 15) + ".";
-                c.Text(l.PadRight(17) + (k < Destinations.All.Count ? Jeu.T("À L'HEURE", "ON TIME") : ""), new Vector3(-3.1f, 2.14f - k * 0.2f, -hd + t + 0.07f), 180f, 0.065f, new Color(1f, 0.8f, 0.2f));
+                c.Text(l.PadRight(17) + (k < Destinations.All.Count ? Jeu.T("À L'HEURE", "ON TIME", "ПО ПЛАНУ") : ""), new Vector3(-3.1f, 2.14f - k * 0.2f, -hd + t + 0.07f), 180f, 0.065f, new Color(1f, 0.8f, 0.2f));
             }
             foreach (float bx in new[] { -4.2f, -2.2f })
             {
@@ -561,9 +561,9 @@ namespace Voyage
             c.Cylinder("metalli", new Vector3(0.9f, 0f, 0f), 0.04f, 0.04f, 2.6f, 6, true);
             c.Box(new Vector3(-1.2f, 1.7f, -0.03f), new Vector3(1.2f, 2.6f, 0.03f), "kyltti", false);
             c.Text("LENTOKENTTÄ", new Vector3(0f, 2.3f, 0.04f), 180f, 0.13f, Color.white);
-            c.Text(Jeu.T("AÉRODROME  »", "AIRFIELD  »"), new Vector3(0f, 1.95f, 0.04f), 180f, 0.09f, Color.white);
+            c.Text(Jeu.T("AÉRODROME  »", "AIRFIELD  »", "АЭРОДРОМ  »"), new Vector3(0f, 1.95f, 0.04f), 180f, 0.09f, Color.white);
             c.Text("LENTOKENTTÄ", new Vector3(0f, 2.3f, -0.04f), 0f, 0.13f, Color.white);
-            c.Text(Jeu.T("«  AÉRODROME", "«  AIRFIELD"), new Vector3(0f, 1.95f, -0.04f), 0f, 0.09f, Color.white);
+            c.Text(Jeu.T("«  AÉRODROME", "«  AIRFIELD", "«  АЭРОДРОМ"), new Vector3(0f, 1.95f, -0.04f), 0f, 0.09f, Color.white);
             c.Flush();
         }
     }

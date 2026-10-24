@@ -84,9 +84,10 @@ namespace Voyage
             k.Box(new Vector3(-3.4f, 2.8f, -2.4f), new Vector3(3.4f, 2.95f, 2.6f), "metalli", "metalli", "lista", "lista", "metalli", "metalli");
             k.Box(new Vector3(-1.6f, 0f, -0.9f), new Vector3(1.6f, 1.05f, -0.4f), "tiski");
             k.Box(new Vector3(-3.0f, 2.25f, 2.2f), new Vector3(3.0f, 2.75f, 2.26f), "kyltti", false);
-            k.Text(Jeu.T("VOYAGE · RETOUR EN FINLANDE", "VOYAGE · BACK TO FINLAND"), new Vector3(0f, 2.5f, 2.27f), 180f, 0.1f, Color.white);
-            string credit = d.Author.Length > 0 ? Jeu.T(d.Name + " : circuit de " + d.Author + " (converti depuis ton Assetto Corsa)", d.Name + ": track by " + d.Author + " (converted from your Assetto Corsa)")
-                                                : Jeu.T(d.Name + " : converti depuis ton Assetto Corsa", d.Name + ": converted from your Assetto Corsa");
+            k.Text(Jeu.T("VOYAGE · RETOUR EN FINLANDE", "VOYAGE · BACK TO FINLAND", "VOYAGE · ОБРАТНО В ФИНЛЯНДИЮ"), new Vector3(0f, 2.5f, 2.27f), 180f, 0.1f, Color.white);
+            string credit = d.Author.Length > 0 ? Jeu.T(d.Name + " : circuit de " + d.Author + " (converti depuis ton Assetto Corsa)", d.Name + ": track by " + d.Author + " (converted from your Assetto Corsa)",
+                                                         d.Name + ": трасса " + d.Author + " (сконвертирована из твоей Assetto Corsa)")
+                                                : Jeu.T(d.Name + " : converti depuis ton Assetto Corsa", d.Name + ": converted from your Assetto Corsa", d.Name + ": сконвертирована из твоей Assetto Corsa");
             k.Text(credit, new Vector3(0f, 1.6f, -1.97f), 180f, 0.035f, new Color(0.9f, 0.9f, 0.85f));
             Npc(k, "VOYAGE-retour", new Vector3(0f, 0f, -1.5f), 0f);
             AddSpot(Kind.Return, k.Root.transform, new Vector3(0f, 1.0f, -1.0f), new Vector3(1.6f, 1.9f, 1.4f), d);
