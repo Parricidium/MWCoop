@@ -80,6 +80,14 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode != "tas") return;
+            // (invite, 46 s : son plateau passe a "Pay" comme a la fin d'un dechargement -- l'hote doit ignorer ce rejeu, 24/10)
+            if (!Session.IsHost && t > 46f && testStep == 0 && piles.Count > 0 && piles[0].F != null && piles[0].F.Fsm.GetState("Pay") != null)
+            {
+                testStep = 9;
+                FsmBool un = piles[0].F.FsmVariables.FindFsmBool("Unload");
+                if (un != null) un.Value = true;   // (comme la benne levee : "Wait log" -> "Wait" ... -> "Pay" par de vraies transitions)
+                Log.Info("autotest : tas, plateau de l'invite decharge (Unload)");
+            }
             if (Session.IsHost && (t > 30f && testStep == 0 || t > 36f && testStep == 1))
             {
                 testStep++;
@@ -104,6 +112,8 @@ namespace MWCoop
                     }
                 foreach (Pile p in piles)
                 {
+                    FsmFloat pr = p.F != null ? p.F.FsmVariables.FindFsmFloat("Price") : null;
+                    if (pr != null) Log.Info("autotest : tas " + p.Key + " prix " + pr.Value.ToString("F0"));
                     GameObject bed = p.Bed != null ? p.Bed.Value : null;
                     Log.Info("autotest : tas " + p.Key + " buches " + (p.Firewood != null ? p.Firewood.Value.ToString("F0") : "?") + ", tas " + (bed != null ? bed.transform.localScale.ToString("F2") + (bed.activeInHierarchy ? " visible" : " cache") : "?"));
                 }
@@ -122,6 +132,10 @@ namespace MWCoop
                 bool was = p.Firewood != null && p.Firewood.Value != fw || p.Logs != null && p.Logs.Value != lg;
                 if (p.Firewood != null) p.Firewood.Value = fw;
                 if (p.Logs != null) p.Logs.Value = lg;
+                // (MSC : le prix n'est calcule que dans "Add scale", apres une buche comptee ici -- recalcule pareil, sinon celui
+                // des premieres buches restait : paie de 60 mk, 24/10 ; MWC le calcule a la paie, pas de variable a tenir)
+                FsmFloat price = Game.Msc ? p.F.FsmVariables.FindFsmFloat("Price") : null;
+                if (price != null) price.Value = Mathf.Clamp(fw * 2f, 0f, 3200f);
                 GameObject bed = p.Bed != null ? p.Bed.Value : null;
                 if (bed != null)
                 {
