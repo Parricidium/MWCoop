@@ -174,7 +174,7 @@ static int LobbyPort() { const Opt *po = OptByKey("Port"); return po ? OptGet(*p
 // option nouvelle : une ligne ici, son identifiant suit (UI_LOBBY_OPT, uikit.inc) ; LobbyOptOn la cache sur l'autre jeu.
 struct LobbyOptDef { const char *key; int def; bool host; int only; };
 static const LobbyOptDef kLobbyOptDefs[] = {
-    { "ArgentDepart", 1, true }, { "Triches", 0, true }, { "Renverser", 1, true }, { "PvP", 0, true }, { "Jokkis", 0, true, 1 }, { "VenttiEnjeux", 1, true },
+    { "ArgentDepart", 1, true }, { "Triches", 0, true }, { "Renverser", 1, true }, { "PvP", 0, true }, { "VenttiEnjeux", 1, true },
     { "Difficulte", 0, true }, { "VitesseVitres", 1, true }, { "PencheVitre", 1, true },
     { "SansAjouts", 0, true }, { "AjoutDrone", 1, true }, { "AjoutSacs", 1, true }, { "AjoutBoutique", 1, true }, { "AjoutMusee", 1, true }, { "AjoutVaz", 1, true }, { "AjoutKino", 1, true, 1 }, { "AjoutOsat", 1, true, 1 },
     { "Vocal", 1, false }, { "VocalPortee", 35, false }, { "VolumeVocal", 100, false }, { "GainMicro", 100, false },

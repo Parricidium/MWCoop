@@ -227,7 +227,6 @@ static const std::vector<GfxRow> &GfxRows()
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion de квазарик, 13/10 : « tuer les autres a coups de poing, option de l'hote ») -- Sync/Pvp.cs
         { "PvP", L"Coups de poing entre joueurs (hôte)", L"Punches between players (host)", 0, {}, {}, {}, 0, 8, "Coop" },
-        { "Jokkis", L"Course sur glace : Jokkis à louer (hôte, bêta)", L"Ice race: Jokkis rentals (host, beta)", 0, {}, {}, {}, 0, 8, "Coop" },   // (Sync/Jokkis.cs : les joueurs sans la Rivett courent dans une des 16 Jokkis du jeu ; en essai)
         // Ventti (16/10, lu par l'HOTE seulement) : au-dela de 4000 mk le cochon joue la Ruscko, la Rivett ou la maison ; gagnees ou
         // perdues par un joueur, elles le sont pour tout le monde (c'est la sauvegarde de l'hote). 0 : chacun ses enjeux. La table
         // renversee par le cochon fache est toujours partagee. (La table n'a pas de texte d'aide : ce commentaire en tient lieu.)
@@ -585,7 +584,7 @@ static const SetItem kSetItems[] = {
     { 9, SI_GFX, "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", NULL, NULL },
     { 9, SI_SEC, NULL, L"Jeux & ajouts", L"Games & additions", NULL, NULL },
     { 9, SI_GFX, "VenttiEnjeux", NULL, NULL, NULL, NULL },
-    // (Jokkis a louer retirees le 18/10 : la VAZ-2108 prend la place d'une IA a la course sur glace)
+    // (Jokkis a louer retirees du salon le 18/10, du mod le 24/10 : la VAZ-2108 et les voitures addons a la place)
     { 9, SI_X, "ajouts", L"Ajouts MWCoop", L"MWCoop additions", L"Aucun = jeu vanilla", L"None = vanilla game" },
     { 9, SI_X, "ajoutchips", NULL, NULL, NULL, NULL },
     { 9, SI_SEC, NULL, L"Salon", L"Lobby", NULL, NULL },
@@ -841,7 +840,7 @@ static RectF SetCtlRect(RectF row, const std::wstring &lab, float wid, float ch)
     bool st = SetStacked(lab, row.Width, wid);
     return RectF(row.X + row.Width - wid, st ? row.Y + row.Height - ch - 5 : row.Y + (row.Height - ch) / 2, wid, ch);
 }
-// Nom suffixe " (beta)" : le mot va dans un jeton rose a part (maquette Co-op : Jokkis).
+// Nom suffixe " (beta)" : le mot va dans un jeton rose a part (maquette Co-op).
 static bool SetBetaStrip(std::wstring &t)
 {
     for (const wchar_t *suf : { L" (bêta)", L" (beta)" }) {

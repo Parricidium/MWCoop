@@ -320,7 +320,6 @@ Shared marker (tap: place, hold: remove)	علامة مشتركة (ضغطة: وض
 Marker	علامة
 Shared marker: middle click (configurable) on what you look at, or right-click on the M map: a beacon in your colour, visible to everyone in the world and on the map, with the distance. One per player; hold the key to remove it.	علامة مشتركة: نقرة زر العجلة (قابلة للتعديل) على ما تنظر إليه، أو نقرة يمنى على الخريطة M: إشارة بلونك يراها الجميع في العالم وعلى الخريطة مع المسافة. واحدة لكل لاعب؛ الضغط المطوّل يزيلها.
 Something looks wrong on your side (missing item, a door closed for you only)? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s).	شيء غير صحيح عندك (غرض مفقود، باب مغلق لك وحدك)؟ F10 > المزامنة > إعادة مزامنة العالم: يعيد المضيف إرسال حالته كاملة إليك كما عند دخولك (مرة كل 30 ثانية).
-Ice race: Jokkis rentals (host, beta)	سباق الجليد: استئجار سيارات Jokkis (المضيف، تجريبي)
 My Winter Car is still open but no longer answers MWCoop (stuck after closing, or started without MWCoop).\n\nClose it so you can launch again from the launcher?	My Winter Car لا تزال مفتوحة لكنها لم تعد تستجيب لـ MWCoop (علقت بعد الإغلاق، أو شُغّلت بدون MWCoop).\n\nهل نغلقها لتتمكن من التشغيل مجدداً من المشغّل؟
  (copy)	 (نسخة)
  · UDP blocked	 · UDP محظور
@@ -610,7 +609,6 @@ Host included · above 10, a good connection is advised	بما فيهم المض
 IP · port 	IP · المنفذ 
 Image tab	تبويب الصورة
 Import an image	استيراد صورة
-Jokkis night	أمسية Jokkis
 Kick?	طرد؟
 Last lobby on %s · %d mod(s) · kept	آخر ردهة في %s · %d تعديل(ات) · محفوظة
 Last lobby: %s · %d mod(s) · kept	آخر ردهة: %s · %d تعديل(ات) · محفوظة
@@ -2033,6 +2031,7 @@ Steam is open but no account is logged in: log in, or play over IP / VPN	Steam �
 MWCoop runs as administrator, Steam does not: restart MWCoop normally	MWCoop يعمل كمسؤول وSteam لا: أعد تشغيل MWCoop بشكل عادي
 Steam runs as administrator, MWCoop does not: restart Steam normally	Steam يعمل كمسؤول وMWCoop لا: أعد تشغيل Steam بشكل عادي
 Steam refuses MWCoop: is %s in your Steam library? Else use IP / VPN	Steam يرفض MWCoop: هل %s في مكتبة Steam لديك؟ وإلا فاستخدم IP / VPN
+Rally night	أمسية الرالي
 MOD SUPPORT / KNOWN INCOMPATIBILITIES	دعم المودّات / حالات عدم التوافق
 Remove dents…	إزالة الانبعاجات…
 Close the game to remove the dents	أغلق اللعبة لإزالة الانبعاجات
@@ -2592,7 +2591,6 @@ The F10 menu	قائمة F10
 Tabs on the left, in three groups: Game (Players, Chat, Ice race), Me (Appearance, HUD, Graphics) and Advanced (Sync).	علامات التبويب على اليسار في ثلاث مجموعات: اللعبة (اللاعبون، الدردشة، سباق الجليد)، أنا (المظهر، HUD، الرسوميات)، ومتقدم (المزامنة).
 Keyboard: Up/Down switch tabs, Right or Enter go into the list, Left comes back; Tab goes to the next tab. The mouse works everywhere.	لوحة المفاتيح: أعلى/أسفل للتنقل بين علامات التبويب، يمين أو Enter للدخول إلى القائمة، يسار للعودة؛ Tab للانتقال إلى التبويب التالي. الفأرة تعمل في كل مكان.
 Players: one card per player (where they are, ping) with Go to, and for the host Bring here and Kick; then invite Steam friends and resync the world.	اللاعبون: بطاقة لكل لاعب (مكانه، زمن الاستجابة) مع زر الذهاب إليه، وللمضيف زرا الاستدعاء والطرد؛ ثم دعوة أصدقاء Steam وإعادة مزامنة العالم.
-Ice race: the 16 rental Jokkis, free, one per player, with the 3D preview. Left/Right filter a model, Enter or a double click chooses or gives back the car.	سباق الجليد: سيارات Jokkis الـ16 المؤجرة، مجانًا، واحدة لكل لاعب، مع معاينة ثلاثية الأبعاد. يسار/يمين لتصفية الطراز، وEnter أو النقر المزدوج لاختيار السيارة أو إعادتها.
 Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to cheats (F7), the wallet (N) and the chat.	حجم القائمة (صغير، عادي، كبير) ومكانها (الوسط أو اليسار): F10 › الرسوميات › قائمة MWCoop. ويسري أيضًا على الغش (F7) والمحفظة (N) والدردشة.
 If the FPS option of the game's settings is on, the frame counter shows up in the chosen style: a pill in the Card's header, a ring at the end of Rings, a pill at the end of Strip (green, orange or red depending on smoothness).	إذا كان خيار FPS مفعّلًا في إعدادات اللعبة، يظهر عدّاد الإطارات في النمط المختار: شارة في رأس البطاقة، وحلقة في آخر الحلقات، وشارة في آخر الشريط (أخضر أو برتقالي أو أحمر حسب السلاسة).
 My Winter Car only exists for Windows: on Linux and Steam Deck it runs through Proton, Steam's compatibility layer. MWCoop runs with it, inside the same Proton: no separate Linux version, the same files as on Windows.	My Winter Car متوفرة لنظام Windows فقط: على Linux وSteam Deck تعمل عبر Proton، طبقة التوافق في Steam. ويعمل MWCoop معها، داخل Proton نفسه: لا توجد نسخة Linux منفصلة، بل الملفات نفسها كما في Windows.

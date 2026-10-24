@@ -123,7 +123,7 @@ tour for every new button.
     <td width="50%"><img src="docs/img/jeu-f10-apparence.jpg" alt="F10 menu, appearance"></td>
   </tr>
   <tr>
-    <td align="center"><b>Ice race</b>: a free rental Jokkis each, with a 3D preview (beta)</td>
+    <td align="center"><b>Ice race</b>: race with the VAZ-2108 or an add-on car</td>
     <td align="center">Change your look in game with a live 3D preview</td>
   </tr>
   <tr>
@@ -225,7 +225,7 @@ Pick the network on the home page: **STEAM** (easiest) or **IP / VPN**.
   ZeroTier…) and share your VPN address.
 - **The lobby**: players with their outfit, version, ping and a UDP check; a lobby chat; **Public** or **Private**
   (session code to COPY), 2 to 16 players; the host's options for this lobby (guests' starting money, cheats, cars run
-  players over, punches, Ventti stakes, Jokkis rentals, MWCoop additions). Pick *Continue my game* or *New game*, then
+  players over, punches, Ventti stakes, MWCoop additions). Pick *Continue my game* or *New game*, then
   START: everyone's game starts. A friend who arrives later joins the running game.
 - **Saves**: the *Saves* page keeps several games, one per group of friends; the host picks which one to play. **A
   guest's own save is never touched**: guests play in a separate profile, and a copy of the host's game is kept for
@@ -269,8 +269,7 @@ Pick the network on the home page: **STEAM** (easiest) or **IP / VPN**.
 - **Voice chat**: proximity voice through Steam, held key (**V**), volume and range in the launcher.
 - **Cheats** (**F7**, or chat commands `/help`): go to a player, bring one, places, heal, money, time, snow — only if
   the host allows them, and each one is announced to everyone.
-- **Ice race** (beta): a free rental Jokkis each, picked in F10 > Ice race with a 3D preview (host option, off by
-  default).
+- **Ice race**: race with the VAZ-2108 or an add-on car (F10 > Ice race).
 - **Drone camera** (**F8**): photo mode — your character stays put while a small drone flies around (viewfinder,
   zoom, tilt, flash); photos land in Pictures\CoopPictures. The others see the drone and its flash.
 - **OSUUSKAUPPA 𝔰21 shop** (Peräjärvi): a co-op village shop — sleeping bags and a **video corner**: VHS tapes, VCRs,
@@ -439,7 +438,7 @@ Choisissez le réseau sur l'accueil : **STEAM** (le plus simple) ou **IP / VPN**
   ZeroTier…).
 - **Le salon** : joueurs avec tenue, version, ping et test UDP ; un tchat ; **Public** ou **Privé** (code de session à
   COPIER), 2 à 16 joueurs ; les options de l'hôte pour ce salon (argent de départ des invités, triches, voitures qui
-  renversent, coups de poing, enjeux du Ventti, Jokkis de location, ajouts MWCoop). *Continuer ma partie* ou *Nouvelle
+  renversent, coups de poing, enjeux du Ventti, ajouts MWCoop). *Continuer ma partie* ou *Nouvelle
   partie*, puis LANCER : le jeu de chacun démarre. Un ami qui arrive plus tard rejoint la partie en cours.
 - **Sauvegardes** : la page *Sauvegardes* garde plusieurs parties, une par groupe d'amis ; l'hôte choisit laquelle jouer.
   **La sauvegarde d'un invité n'est jamais touchée** : il joue dans un profil à part, et une copie de la partie de l'hôte
@@ -478,8 +477,7 @@ Choisissez le réseau sur l'accueil : **STEAM** (le plus simple) ou **IP / VPN**
 - **Carte** (**M**) : les autres joueurs en direct, les lieux et des marqueurs partagés (une couleur par joueur).
 - **Vocal** de proximité par Steam, touche tenue (**V**), volume et portée réglables.
 - **Triches** (**F7**, ou commandes du tchat `/aide`) : seulement si l'hôte les autorise, chacune annoncée à tous.
-- **Course sur glace** (bêta) : une Jokkis de location gratuite chacun, choisie dans F10 > Course sur glace avec un aperçu
-  3D (option de l'hôte, coupée par défaut).
+- **Course sur glace** : avec la VAZ-2108 ou une voiture addon (F10 > Course sur glace).
 - **Caméra drone** (**F8**) : mode photo, viseur, zoom, flash ; photos dans Images\CoopPictures.
 - **Boutique OSUUSKAUPPA 𝔰21** (Peräjärvi) : sacs de couchage et **coin vidéo** (cassettes, magnétoscopes, télé, caméscope
   des années 90) ; guide : [docs/GUIDE-VIDEO.md](docs/GUIDE-VIDEO.md). **Musée de la Corse** à côté.
