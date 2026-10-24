@@ -253,7 +253,7 @@ namespace MWCoop
             int kind = r.U8();
             if (kind >= 30) { Vaz.OnMessage(kind, from, r); return; }      // VAZ-2108 des joueurs (18/10)
             if (kind == 29) { IceRace.OnMessage(kind, from, r); return; }   // VAZ inscrite a la course sur glace (18/10)
-            if (kind >= 24) { Jokkis.OnMessage(kind, from, r); return; }   // voitures Jokkis de location (16/10)
+            if (kind >= 24) return;   // (24-28 : voitures Jokkis de location, retirees le 24/10 -- JD : les voitures addons a la place)
             if (kind >= 20) { IceRace.OnMessage(kind, from, r); return; }   // course sur glace a plusieurs pilotes
             if (kind >= 10) { Rally.OnMessage(kind, from, r); return; }   // rallye a plusieurs pilotes
             if (kind == K_HASH)

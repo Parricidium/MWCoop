@@ -133,7 +133,6 @@ namespace MWCoop
             new Mod("panneau des triches", CheatPanel.Update),
             new Mod("carte", MapRender.Update),
             new Mod("panneau carte", MapPanel.Update),
-            new Mod("panneau jokkis", JokkisPanel.Update),
             new Mod("panneau vaz", VazPanel.Update),
             new Mod("marqueurs", Markers.Update),
             new Mod("mods (compatibilite)", ModSecondMachtwagen.Update),
@@ -202,7 +201,6 @@ namespace MWCoop
             new Mod("monde (automates)", WorldFsms.Update),
             new Mod("trafic", Traffic.Update),
             new Mod("courses", Races.Update),
-            new Mod("jokkis", Jokkis.Update),
             new Mod("vaz-2108", Vaz.Update),
             new Mod("portes poussees", PushDoors.Update),
             new Mod("molettes", Knobs.Update),
@@ -351,7 +349,6 @@ namespace MWCoop
             WorldFsms.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             Races.OnLevelLoaded();
-            Jokkis.OnLevelLoaded();
             Vaz.OnLevelLoaded();
             PushDoors.OnLevelLoaded();
             Knobs.OnLevelLoaded();

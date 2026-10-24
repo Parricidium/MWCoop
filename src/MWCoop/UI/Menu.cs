@@ -1252,7 +1252,6 @@ namespace MWCoop
 
         public static void Test(string mode, float t)
         {
-            JokkisPanel.Test(mode, t);   // (Autotest=jokkispanel : panneau des Jokkis ouvert chez l'hote a 25 s, bilan a 30 s, ferme a 35 s)
             VazPanel.Test(mode, t);      // (Autotest=vazpanel : onglet VAZ-2108 ouvert chez l'hote a 25 s, bilan a 32 s, ferme a 35 s)
             if (mode == "tchat") { TestChat(t); return; }
             if (mode == "resync") { PlayerSync.TestResync(t); return; }   // (demande de l'invite a 30 s, bilan a 45 s)

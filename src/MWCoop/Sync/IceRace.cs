@@ -43,7 +43,8 @@ namespace MWCoop
     //    (places fusionnees), le classe (manche la plus avancee, place, tour) et le renvoie a tous ;
     //  - invite : sa participation est gardee par monde (glace.ini, comme rallye.ini) ; la sauvegarde recue a chaque
     //    connexion contient celle de l'hote, remplacee par la sienne (ou effacee) au chargement.
-    // Locations Jokkis (16/10, module Jokkis : voitures de location conduisibles) : un joueur qui loue une voiture court avec
+    // Locations (16/10 : Jokkis de location, retires le 24/10 -- JD : les voitures addons a la place ; aujourd'hui la VAZ ou une
+    // voiture addon du F10, IceRaceVaz, qui passe par le meme chemin) : un joueur qui loue une voiture court avec
     // le numero de CETTE voiture (p. ex. 33) et sa livree ; l'IA de ce numero ne court pas de la semaine :
     //  - numeros : Jokkis.ChosenNumber(id) = n > 0 remplace la case 15-43 (hote compris : lui n'est alors plus la 14, son
     //    numero voyage dans K_GRID comme celui des invites, identifiant 0) ; chez le locataire pas d'echange 14/N (son
@@ -107,9 +108,9 @@ namespace MWCoop
         static readonly HashSet<string> seen = new HashSet<string>();
         static int arrivalsHeat = -1, arrivalsWeek = -1;
         static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
-        // Locations Jokkis (16/10)
+        // Locations (16/10 : Jokkis, retires le 24/10 ; aujourd'hui la VAZ et les voitures addons, IceRaceVaz)
         static bool myRental;                       // le joueur d'ici court dans une location : numero reel, pas d'echange 14/N
-        static bool hookedTrack, jokkisHooked, rentalsDirty, placeAnyState, linesWarned, slotWarned, testNoBroadcast;
+        static bool hookedTrack, jokkisCleaned, rentalsDirty, placeAnyState, linesWarned, slotWarned, testNoBroadcast;
         static float nextRentals, nextLineLog;
         static readonly Dictionary<string, float> aiSaved = new Dictionary<string, float>();       // hote : tour IA remplace par un locataire
         static readonly Dictionary<int, GameObject> carsOrig = new Dictionary<int, GameObject>();  // Cars[n] du jeu remplace par une location
@@ -135,7 +136,8 @@ namespace MWCoop
             aiSaved.Clear(); carsOrig.Clear(); aiHidden.Clear(); allCars = null; muted.Clear(); mutedFrame = prizeIdx = prizeFrame = -1;
             lines = null; lineLaps = lineTime = null; hasLast = cp1 = cp2 = timing = finished = false; bestLap = 0f; laps = 0; lapsKey = placedKey = "";
             testStep = 0; VazReset();
-            if (!jokkisHooked) { jokkisHooked = true; try { Jokkis.Changed += OnJokkisChanged; } catch (System.Exception e) { Log.Warn("glace : module Jokkis : " + e.Message); } }
+            // (Jokkis de location retires le 24/10 -- JD : les voitures addons a la place : leur table d'hote, s'il en reste une, effacee)
+            if (!jokkisCleaned) { jokkisCleaned = true; try { string jf = System.IO.Path.Combine(Log.DataDir, "jokkis-hote.ini"); if (System.IO.File.Exists(jf)) { System.IO.File.Delete(jf); Log.Info("glace : jokkis-hote.ini (Jokkis retires) efface"); } } catch (System.Exception e) { Log.Warn("glace : jokkis-hote.ini : " + e.Message); } }
             enabled = Config.GetInt("Coop", "CourseGlace", 1) != 0;
             readyAt = PlayerSync.InGame && enabled ? Time.realtimeSinceStartup + 10f : -1;
             if (PlayerSync.InGame && !enabled) Log.Info("glace : module coupe ([Coop] CourseGlace=0)");
@@ -273,7 +275,7 @@ namespace MWCoop
             if (t > 0) return t;
             int v = VazNumber(id);   // (VAZ-2108 inscrite : le numero de l'IA qu'elle remplace, IceRaceVaz.cs)
             if (v > 0) return v;
-            try { return Jokkis.ChosenNumber(id); } catch { return 0; }
+            return 0;
         }
 
         static Transform RentalCar(int id)
@@ -285,19 +287,15 @@ namespace MWCoop
                 if (go == null) { go = new GameObject("MWCoop-Jokkis-" + t); go.transform.position = new Vector3(-1150f, -4.5f, 900f); go.AddComponent<Rigidbody>().isKinematic = true; }
                 return go.transform;
             }
-            if (VazNumber(id) > 0) return Vaz.CarOf(id);
-            try { return Jokkis.CarOf(id); } catch { return null; }
+            return VazNumber(id) > 0 ? Vaz.CarOf(id) : null;
         }
 
         static string RentalModel(int n)
         {
             if (Config.Testing && n == Config.GetInt("Test", "GlaceJokkis", 0)) return "Fittan";
             foreach (KeyValuePair<int, int> kv in numbers) if (kv.Value == n && Vaz.CarOf(kv.Key) != null) return Vaz.ModelName(kv.Key);
-            try { foreach (Jokkis.Def d in Jokkis.All()) if (d.Number == n) return d.Model ?? "-"; } catch { }
             return "-";
         }
-
-        static void OnJokkisChanged() { rentalsDirty = true; }
 
         // Numeros des locataires (hote : numbers, identifiant 0 pour lui-meme) et situation d'ici (myNum/myRental) ; a
         // chaque changement du module Jokkis et toutes les 2 s. Hote : un locataire garde son numero de voiture ; une
