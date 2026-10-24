@@ -535,6 +535,83 @@ namespace MWCoop
                 }
         }
 
+        // [Test] Autotest=gifulevier (MWC, 2 joueurs) : main de l'avatar au levier de vitesses de la GIFU (Menor, 21/10). L'invite
+        // prend le volant de [Test] TestVoiture (GIFU) a 15/22 s et passe 1-2-3-2 de 30 a 70 s (champ gear du
+        // Drivetrain, comme TestGear ; [Test] LevierPas=s, 3 par defaut ; [Test] LevierForce=deg : tourne aussi le levier lui-meme de +-deg, si le jeu ne le bouge
+        // pas) et note l'angle du levier. L'hote va a 4 m de la GIFU a 8 s (tableau de bord actif), note les mains de l'avatar
+        // chaque seconde de 20 a 100 s et capture (CameraAvatar...) ecran-gifu-volant (assis, main au volant) puis
+        // ecran-gifu-levier (premiere fois main au levier > 0,9).
+        static readonly System.Collections.Generic.Dictionary<Transform, Quaternion> leverRest = new System.Collections.Generic.Dictionary<Transform, Quaternion>();
+        static float glNext, glLog, glTryAt, glSeatedAt = -1f; static int glShifts, glTries; static bool glWheelCap, glLeverCap, glRepose, glDumped, glSeat;
+        static string LeverAngle(Rigidbody b)
+        {
+            string s = "";
+            foreach (Transform x in b.GetComponentsInChildren<Transform>(true))
+            {
+                if (x.parent == null || !(x.name.ToLowerInvariant().Contains("gear") || x.parent.name.ToLowerInvariant().Contains("gear") || (x.parent.parent != null && x.parent.parent.name.ToLowerInvariant().Contains("gear")))) continue;
+                if (!leverRest.ContainsKey(x)) leverRest[x] = x.localRotation;
+                float a = Quaternion.Angle(leverRest[x], x.localRotation);
+                if (a > 0.5f) s += " " + x.parent.name + "/" + x.name + " " + a.ToString("F0") + " deg";
+            }
+            return s.Length > 0 ? "levier" + s : "levier immobile";
+        }
+        static void GifuLevier(float t)
+        {
+            string car = Config.Get("Test", "TestVoiture", "GIFU(750/450psi)");
+            Rigidbody b = VehicleSync.Body(car);
+            if (!MWCoop.Net.Session.IsHost)
+            {
+                if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                // (vehicule loin : son declencheur s'allume apres la 1re pose -- reposee a 19 s pour y entrer, comme cabine)
+                if (t > 19f && step == 1 && !glRepose) { glRepose = true; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 24f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); if (b != null) LeverAngle(b); }
+                // (pas au volant -- declencheur pas encore pret selon le chargement : reposee puis volant, toutes les 4 s, 4 fois ;
+                // ensuite l'automate d'entree au journal, pour voir ce qu'il attend)
+                bool driving = b != null && ReferenceEquals(VehicleSync.LocalDrivingRoot, b.transform);
+                if (step == 2 && !driving && t > 26f && glTries < 4 && t >= glTryAt) { glTryAt = t + 4f; glTries++; glSeat = true; Log.Info("autotest : gifulevier, essai " + glTries + " : " + VehicleSync.TestEnter(car, false)); }
+                if (step == 2 && !driving && glSeat && t >= glTryAt - 2f) { glSeat = false; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (step == 2 && !driving && glTries >= 4 && t >= glTryAt && !glDumped && b != null)
+                {
+                    glDumped = true;
+                    foreach (PlayMakerFSM f in b.GetComponentsInChildren<PlayMakerFSM>(true))
+                        if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) DumpFsms(car + "/" + VehicleSync.RelPath(b.transform, f.transform) + ":PlayerTrigger");
+                }
+                if (step == 2 && t > 30f && t < 70f && Time.realtimeSinceStartup >= glNext)
+                {
+                    glNext = Time.realtimeSinceStartup + Config.GetFloat("Test", "LevierPas", 3f);   // (3 s : la main revient au volant entre deux passages)
+                    int g = new[] { 1, 2, 3, 2 }[glShifts % 4];
+                    string r = VehicleSync.TestGear(car, g);
+                    float force = Config.GetFloat("Test", "LevierForce", 0f);
+                    if (force != 0f && b != null)
+                        foreach (Transform x in b.GetComponentsInChildren<Transform>(true))
+                            if (x.name == "Lever" && x.parent != null && x.parent.name == "Pivot")
+                            {
+                                if (!leverRest.ContainsKey(x)) leverRest[x] = x.localRotation;
+                                x.localRotation = leverRest[x] * Quaternion.Euler(glShifts % 2 == 0 ? force : -force, 0f, 0f);
+                            }
+                    if (glShifts++ < 8 && b != null) Log.Info("autotest : gifulevier, invite : " + r + ", " + LeverAngle(b) + ", au volant " + (ReferenceEquals(VehicleSync.LocalDrivingRoot, b.transform) ? "oui" : "non"));
+                }
+                return;
+            }
+            if (t > 8f && !teleported && b != null)
+            {
+                teleported = true;
+                var cc = Game.PlayerGo != null ? Game.PlayerGo.GetComponent<CharacterController>() : null;
+                if (cc != null) { cc.enabled = false; Game.PlayerGo.transform.position = b.position + b.transform.right * -4f + Vector3.up; cc.enabled = true; Log.Info("autotest : gifulevier, hote pres de la GIFU"); }
+            }
+            if (t < 20f || t > 100f) return;
+            foreach (Avatar a in PlayerSync.Avatars)
+            {
+                if (a.Root == null) continue;
+                bool seated = VehicleSync.RemoteCarTransform(a.Player.Id) != null;
+                if (seated && glSeatedAt < 0f) glSeatedAt = t;
+                bool settled = seated && t > glSeatedAt + 3f;   // (camera et pose posees)
+                if (Time.realtimeSinceStartup >= glLog || (a.ShiftWeight > 0.9f && !glLeverCap)) { glLog = Time.realtimeSinceStartup + 1f; Log.Info("autotest : gifulevier, hote : " + (seated ? "" : "pas au volant, ") + a.HandsState() + (seated && b != null ? " ; repere GIFU : " + a.CarFrame(b.transform) : "")); }
+                if (settled && !glWheelCap && a.ShiftWeight < 0.01f) { glWheelCap = true; CaptureSoon("gifu-volant", 0.1f); }
+                else if (settled && glWheelCap && !glLeverCap && a.ShiftWeight > 0.9f && capName == null) { glLeverCap = true; CaptureSoon("gifu-levier", 0.02f); }
+            }
+        }
+
         static bool tricheDone;   // ([Test] Triche=<commande du tchat> : une fois, a 30 s)
         static void CdMsc(float t)
         {
@@ -1376,6 +1453,7 @@ namespace MWCoop
                 if (cf != null && t > 46f && step == 2) { step = 3; Game.SetState(cf, "Move up"); Log.Info("autotest : debout"); }
             }
             if (mode == "conduite") Conduite(t);
+            if (mode == "gifulevier") GifuLevier(t);
             // [Test] Autotest=graphismes : etat des reglages a 25 s (journal).
             if (mode == "graphismes" && t > 25f && step == 0) { step = 1; Log.Info("autotest : graphismes " + Gfx.Describe()); }
             if (mode == "graphismes" && t > 28f && step == 1) { step = 2; Gfx.ApplyPreset(Config.GetInt("Test", "TestPrereglage", 3)); }
@@ -3035,6 +3113,7 @@ namespace MWCoop
                     if (f.FsmName == "Use" || f.FsmName == "Data" && f.gameObject.name.Contains("(itemx)"))
                         sb.Append(' ').Append(f.gameObject.name).Append('=').Append(f.ActiveStateName).Append(';');
                 Log.Info(sb.ToString());
+                Log.Info("autotest : " + (step == 1 ? "avant" : "apres") + " SAVEGAME, " + Parts.Census());
             }
             if (mode == "sauver" && t > 60f && !done)
             {

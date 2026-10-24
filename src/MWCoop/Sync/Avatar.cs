@@ -992,15 +992,25 @@ namespace MWCoop
                 Transform hr = Bone("hand_right"), hl = Bone("hand_left");
                 handErrR = hr != null ? (hr.position - pr).magnitude : -1f; handErrL = hl != null ? (hl.position - pl).magnitude : -1f;
             }
-            if (gearT != null && wShift > 0.001f)
-            {
-                // Pommeau : le haut du maillage du levier (GIFU : levier haut sous GearLever/Pivot/Lever ; SORBET : le pommeau au bout
-                // de Gearstick/Pivot) -- avant, 10 cm au-dessus du pivot, trop bas pour le camion (Menor, 21/10).
-                Vector3 knob = gearT.position + car.up * 0.1f;
-                Renderer kr = gearT.GetComponentInChildren<Renderer>();
-                if (kr != null) knob = kr.bounds.center + car.up * kr.bounds.extents.y;
-                ArmTo(true, knob, wShift);
-            }
+            if (gearT != null && wShift > 0.001f) ArmTo(true, KnobPoint(car), wShift);
+        }
+
+        // Pommeau : le haut du maillage du levier (GIFU : levier haut sous GearLever/Pivot/Lever ; SORBET : le pommeau au bout
+        // de Gearstick/Pivot) -- avant, 10 cm au-dessus du pivot, trop bas pour le camion (Menor, 21/10).
+        Vector3 KnobPoint(Transform car)
+        {
+            Vector3 knob = gearT.position + car.up * 0.1f;
+            Renderer kr = gearT.GetComponentInChildren<Renderer>();
+            if (kr != null) knob = kr.bounds.center + car.up * kr.bounds.extents.y;
+            return knob;
+        }
+        public float ShiftWeight { get { return wShift; } }
+        // Essais : tete, main droite et pommeau dans le repere de la voiture (placer une camera d'essai, CameraVoiture).
+        public string CarFrame(Transform car)
+        {
+            Transform hr = Bone("hand_right");
+            return "racine " + car.InverseTransformPoint(Root.transform.position).ToString("F2") + ", tete " + (headBone != null ? car.InverseTransformPoint(headBone.position).ToString("F2") : "?")
+                   + ", main D " + (hr != null ? car.InverseTransformPoint(hr.position).ToString("F2") : "?") + ", pommeau " + (gearT != null && steerCar != null ? car.InverseTransformPoint(KnobPoint(steerCar)).ToString("F2") : "?");
         }
 
         float handErrR = -1f, handErrL = -1f, leanDeg, wStalk;
@@ -1378,7 +1388,8 @@ namespace MWCoop
         public string HandsState()
         {
             return Player.Name + " : volant " + (steerT != null ? steerT.name : "-") + ", main D a " + handErrR.ToString("F2") + " m de sa prise, G a " + handErrL.ToString("F2")
-                   + " m, penche " + leanDeg.ToString("F0") + " deg, levier " + (gearT != null ? gearT.parent.name + "/" + gearT.name : "-") + ", main au levier " + wShift.ToString("F2");
+                   + " m, penche " + leanDeg.ToString("F0") + " deg, levier " + (gearT != null ? gearT.parent.name + "/" + gearT.name : "-") + ", main au levier " + wShift.ToString("F2")
+                   + (gearT != null && steerCar != null && Bone("hand_right") != null ? " (main D a " + (Bone("hand_right").position - KnobPoint(steerCar)).magnitude.ToString("F2") + " m du pommeau)" : "");
         }
 
         // Dosage selon la portee : 1 jusqu'a 105 % de la longueur du bras, 0 au-dela de 130 % (le bras, tendu, s'arrete a

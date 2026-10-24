@@ -475,6 +475,20 @@ namespace MWCoop
                 boltsByHashN = bolts.Count;
             }
         }
+        // Essais : points de montage actifs, et combien tiennent leur piece (avant / apres SAVEGAME, Autotest=sauver).
+        public static string Census()
+        {
+            int act = 0, held = 0, all = 0;
+            foreach (Point p in points.Values)
+            {
+                if (p.Fsm == null) continue;
+                all++;
+                if (!p.Fsm.gameObject.activeInHierarchy) continue;
+                act++;
+                if (Holds(p.Fsm, p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value)) held++;
+            }
+            return "points de montage : " + all + ", actifs " + act + ", tenant leur piece " + held;
+        }
         static bool PendingReinstall(GameObject part) { foreach (Reinstall ri in reinstall) if (ri.Part == part) return true; return false; }
         // (une piece manquante introuvable ici serait redemandee a chaque controle : une fois par minute au plus, par point)
         static readonly Dictionary<uint, float> asked = new Dictionary<uint, float>();
@@ -485,7 +499,7 @@ namespace MWCoop
             if (!Session.Active || !Session.IsHost || Session.RemoteCount == 0 || now < nextDigest || now - loadedAt < 30f) return;
             nextDigest = now + 10f;
             if (Game.Msc) { MscDigest(now); return; }
-            NetWriter w = null; int n = 0, total = 0, totalB = 0;
+            NetWriter w = null; int n = 0, total = 0, totalB = 0, big = 0;
             foreach (KeyValuePair<string, Point> kv in points)
             {
                 Point p = kv.Value;
@@ -495,7 +509,8 @@ namespace MWCoop
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
                 uint hk = H(p.Key);
                 w.I32((int)hk).Str(id).F32(Age(hk, now)); n++; total++;
-                if (n >= 40) { Session.SendAll(w, true); w = null; }
+                big = Mathf.Max(big, w.Length);
+                if (n >= 40 || w.Length > 900) { Session.SendAll(w, true); w = null; }   // (coupe aussi a la taille : ID longs -> paquet > Transport.MaxPayload, controle perdu -- vu sur MSC, 24/10)
             }
             if (w != null) Session.SendAll(w, true);
             w = null; n = 0;
@@ -509,7 +524,7 @@ namespace MWCoop
                 if (n >= 100) { Session.SendAll(w, true); w = null; }
             }
             if (w != null) Session.SendAll(w, true);
-            if (digestLogs++ < 3 || now >= lastDigestLog + 120f) { lastDigestLog = now; Log.Info("pieces : controle envoye aux invites (" + total + " points, " + totalB + " vis)"); }
+            if (digestLogs++ < 3 || now >= lastDigestLog + 120f) { lastDigestLog = now; Log.Info("pieces : controle envoye aux invites (" + total + " points, " + totalB + " vis, paquet de points " + big + " octets au plus)"); }
         }
 
         // Garde du controle (24/10, Markos) : un paquet qui demanderait plus de MaxDigestRemovals demontages n'en applique aucun, et
