@@ -673,7 +673,7 @@ namespace MWCoop
             if (se != null) sb.Append(" [").Append(se.ActiveStateName).Append(se.enabled ? "]" : ", coupe]");
             return sb.ToString();
         }
-        static int mscGear, mscVaz; static float mscHandsAt;
+        static int mscGear, mscVaz, mscLieu; static float mscHandsAt;
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -1021,6 +1021,31 @@ namespace MWCoop
                 // ([Test] MortVaz=<modele> : VAZ n 5 de ce modele appelee a 8 s -- TestVoiture=MWCoop-VAZ-5 ; crash de JD apres la
                 // reapparition, mort dans la 205 T16 Evo 2, 24/10)
                 if (mscVaz == 0 && t > 8f && Config.Get("Test", "MortVaz", "").Length > 0) { mscVaz = 1; Log.Info("autotest : mscmort, VAZ 5 -> " + Vaz.Request(5, Config.GetInt("Test", "MortVaz", 0))); }
+                // ([Test] MortRoule=<m/s> : la voiture poussee droit devant, au volant, jusqu'a l'accident de 30 s -- elle roule encore
+                // pendant la mort et la reapparition, comme celle de JD)
+                // ([Test] MortLieu=x;y;z;cap : la voiture posee la, au volant, a 23 s -- la route de JD avant son accident)
+                string lieu = Config.Get("Test", "MortLieu", "");
+                if (lieu.Length > 0 && mscStep >= 2 && mscLieu == 0 && tm > 23f)
+                {
+                    mscLieu = 1;
+                    string[] p = lieu.Split(';');
+                    Rigidbody rb = VehicleSync.Body(moto);
+                    if (rb != null && p.Length >= 4)
+                    {
+                        var ic = System.Globalization.CultureInfo.InvariantCulture;
+                        Vector3 at = new Vector3(float.Parse(p[0], ic), float.Parse(p[1], ic), float.Parse(p[2], ic));
+                        Quaternion q = Quaternion.Euler(0f, float.Parse(p[3], ic), 0f);
+                        rb.transform.position = at; rb.transform.rotation = q; rb.position = at; rb.rotation = q; rb.velocity = Vector3.zero;
+                        Log.Info("autotest : mscmort, " + moto + " posee en " + at + " cap " + p[3]);
+                    }
+                }
+                float roule = Config.GetFloat("Test", "MortRoule", 0f);
+                if (roule > 0f && mscStep >= 2 && mscStep < 4 && tm > 24f)
+                {
+                    Rigidbody rb = VehicleSync.Body(moto);
+                    if (rb != null && !rb.isKinematic) { Vector3 f = rb.transform.forward; f.y = 0f; rb.velocity = f.normalized * roule + Vector3.up * Mathf.Min(rb.velocity.y, 0f); }
+                    if (Time.frameCount % 60 == 0) Log.Info("autotest : mscmort, " + moto + " poussee a " + roule + " m/s, en " + (rb != null ? rb.position.ToString("F1") : "?"));
+                }
                 if (tm > 18f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscmort, " + VehicleSync.TestEnter(moto, false)); }
                 if (tm > 22f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscmort, guidon -> " + VehicleSync.TestEnter(moto, true)); }
                 if (tm > 26f && mscStep == 2) { mscStep = 3; DumpFsms(Config.Get("Test", "Automate", "")); Log.Info("autotest : mscmort, conduite " + VehicleSync.TestDriveDump(moto)); Log.Info("autotest : mscmort, posture au guidon : " + PoseInfo()); Log.Info("autotest : mscmort, " + Respawn.ProbeBlood()); }
