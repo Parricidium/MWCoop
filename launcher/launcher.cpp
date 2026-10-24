@@ -1220,7 +1220,7 @@ static bool IsWritableDir(const std::wstring &dir)
 // Texte de chaque release GitHub : en francais, puis une ligne "---", puis en anglais. Gardees dans
 // <jeu>\MWCoop\notes-maj.json pour les lire hors ligne.
 // (depuis 0.92.3, demande de JD : encore une ligne "---" et en russe ; sans : l'anglais en russe)
-struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor; bool pre = false; };   // pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc)
+struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor, conv; bool pre = false; };   // pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc) ; conv : convertisseur de circuits (.convertisseur)
 static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
@@ -1320,6 +1320,7 @@ static std::vector<Note> ParseReleases(const std::string &json)
             // (Nightly : paquet en .nightly, un zip sous un autre nom, que les lanceurs d'avant 0.95.2 ne prennent pas ; editeur de
             // carte : .editeur, a part -- 20/10)
             if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".editeur")) { if (n.editor.empty()) n.editor = Widen(url); continue; }
+            if (url.size() > 14 && !_stricmp(url.c_str() + url.size() - 14, ".convertisseur")) { if (n.conv.empty()) n.conv = Widen(url); continue; }   // (convertisseur Voyage, 24/10)
             if (!n.zip.empty()) continue;
             if (url.size() > 4 && !_stricmp(url.c_str() + url.size() - 4, ".zip")) { n.zip = Widen(url); continue; }
             if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".nightly")) { n.zip = Widen(url); n.pre = true; continue; }
@@ -7418,9 +7419,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         // page OUTILS (outils.inc) : editeur pas installe (version publiee factice), installe, a mettre a jour, en telechargement
         else if (!wcsncmp(st.c_str(), L"outils", 6)) {
             g_tab = TAB_TOOLS; g_notesDone = true; g_relState = REL_OK;
-            g_edRemoteVer = st == L"outils-maj" ? L"1.2.1" : L"1.2.0"; g_edRemoteUrl = L"https://example.invalid/EditeurCarte.editeur";
-            if (st == L"outils-telechargement") { g_edBusy = true; g_edProg = 0.42f; }
-            if (st == L"outils-installe" || st == L"outils-maj") g_edFakeLocal = L"1.2.0";
+            g_ed.remoteVer = st == L"outils-maj" ? L"1.2.1" : L"1.2.0"; g_ed.remoteUrl = L"https://example.invalid/EditeurCarte.editeur";
+            g_cv.remoteVer = L"1.13.0"; g_cv.remoteUrl = L"https://example.invalid/ConvertisseurVoyage.convertisseur";
+            if (st == L"outils-telechargement") { g_cv.busy = true; g_cv.prog = 0.42f; }
+            if (st == L"outils-installe" || st == L"outils-maj") g_ed.fakeLocal = L"1.2.0";
             if (st == L"outils-survol") g_uiHot = UI_TOOL_GET;
         }
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)

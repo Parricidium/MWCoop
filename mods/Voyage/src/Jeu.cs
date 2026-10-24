@@ -1,0 +1,226 @@
+﻿using System;
+using System.IO;
+using System.Reflection;
+using HutongGames.PlayMaker;
+using UnityEngine;
+
+namespace Voyage
+{
+    // Journal du mod : <dossier du jeu>\Mods\Voyage.log (et la console de MSCLoader)
+    static class Journal
+    {
+        static string path;
+        public static void Info(string s)
+        {
+            string line = DateTime.Now.ToString("HH:mm:ss.fff") + " " + s;
+            try
+            {
+                if (path == null) path = Path.Combine(Path.GetDirectoryName(Application.dataPath), Path.Combine("Mods", "Voyage.log"));
+                File.AppendAllText(path, line + "\r\n");
+            }
+            catch { }
+            try { MSCLoader.ModConsole.Print("[Voyage] " + s); } catch { }
+        }
+        public static void Start()
+        {
+            try { path = Path.Combine(Path.GetDirectoryName(Application.dataPath), Path.Combine("Mods", "Voyage.log")); File.WriteAllText(path, ""); } catch { }
+        }
+    }
+
+    // Le jeu : joueur, camera, globales de l'interface (texte et icones de la main, sous-titres), argent.
+    static class Jeu
+    {
+        static Transform player;
+        static int playerLook = -1;
+
+        // Joueur local (PLAYER, avec son Pivot : assis dans une voiture, il est range sous le siege)
+        public static Transform Player
+        {
+            get
+            {
+                if (player == null && Time.frameCount != playerLook)
+                {
+                    playerLook = Time.frameCount;
+                    GameObject g = GameObject.Find("PLAYER");
+                    player = g != null && g.transform.Find("Pivot") != null ? g.transform : null;
+                    for (Transform t = player == null && Camera.main != null ? Camera.main.transform : null; t != null; t = t.parent)
+                        if (t.name == "PLAYER" && t.Find("Pivot") != null) { player = t; break; }
+                }
+                return player;
+            }
+        }
+
+        public static Camera Cam { get { return Camera.main; } }
+
+        public static FsmBool GuiUse, GuiBuy, Stop, InCar;
+        public static FsmString GuiText, GuiSub;
+        public static FsmFloat Money;
+
+        public static bool Ready
+        {
+            get
+            {
+                if (GuiText == null)
+                {
+                    var gv = FsmVariables.GlobalVariables;
+                    GuiUse = gv.FindFsmBool("GUIuse"); GuiBuy = gv.FindFsmBool("GUIbuy"); GuiText = gv.FindFsmString("GUIinteraction");
+                    GuiSub = gv.FindFsmString("GUIsubtitle"); Money = gv.FindFsmFloat("PlayerMoney");
+                    Stop = gv.FindFsmBool("PlayerStop"); InCar = gv.FindFsmBool("PlayerInCar");
+                }
+                return GuiText != null && Player != null;
+            }
+        }
+
+        public static void Reset() { GuiText = null; player = null; }
+
+        public static void ClearHand() { if (GuiUse != null) GuiUse.Value = false; if (GuiBuy != null) GuiBuy.Value = false; if (GuiText != null) GuiText.Value = ""; }
+
+        static float subUntil;
+        static string subText;
+        public static void Say(string fr, string en)
+        {
+            subText = T(fr, en);
+            if (GuiSub != null) GuiSub.Value = subText;
+            subUntil = Time.realtimeSinceStartup + 4f;
+            Journal.Info("dit : " + subText);
+        }
+        public static void TickSay()
+        {
+            if (subUntil > 0f && Time.realtimeSinceStartup >= subUntil)
+            {
+                subUntil = 0f;
+                if (GuiSub != null && GuiSub.Value == subText) GuiSub.Value = "";
+            }
+        }
+
+        // Teleportation du joueur (pieds en 'feet', regard vers 'yaw') : controleur coupe le temps du deplacement
+        public static void Teleport(Vector3 feet, float yaw)
+        {
+            Transform p = Player;
+            if (p == null) return;
+            var cc = p.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            p.position = feet + Vector3.up * 1.0f;
+            p.rotation = Quaternion.Euler(0f, yaw, 0f);
+            if (cc != null) cc.enabled = true;
+            Journal.Info("teleporte en " + feet);
+        }
+
+        // Rayon de visee (centre de l'ecran) et distance de la main du jeu
+        public static bool Aim(out Ray ray)
+        {
+            Camera c = Cam;
+            if (c == null) { ray = new Ray(); return false; }
+            ray = c.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            return true;
+        }
+        public const float Reach = 2.2f;
+
+        // Langue : celle de MWCoop s'il est la (Lang.Code : 1 = francais), sinon le francais si Windows est en francais
+        static int fr = -1;
+        public static bool Fr
+        {
+            get
+            {
+                if (fr < 0)
+                {
+                    fr = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr" ? 1 : 0;
+                    try
+                    {
+                        Type lang = Type.GetType("MWCoop.Lang, MWCoop");
+                        PropertyInfo p = lang != null ? lang.GetProperty("Fr", BindingFlags.Public | BindingFlags.Static) : null;
+                        if (p != null) fr = (bool)p.GetValue(null, null) ? 1 : 0;
+                    }
+                    catch { }
+                }
+                return fr == 1;
+            }
+        }
+        public static string T(string f, string e) { return Fr ? f : e; }
+
+        public static void Sound(string group, string variation, Vector3 at)
+        {
+            try { MasterAudio.PlaySound3DAtVector3AndForget(group, at, 1f, null, 0f, variation); } catch { }
+        }
+    }
+
+    // MWCoop, s'il est installe : son API publique (CoopApi) et le corps de PNJ de ses avatars (Avatar.CreatePreview),
+    // trouves par reflexion -- sans MWCoop, le mod marche seul (PNJ de remplacement, pas de messages).
+    static class Coop
+    {
+        static Type api, avatar;
+        static bool looked;
+
+        static void Look()
+        {
+            if (looked) return;
+            looked = true;
+            try { api = Type.GetType("MWCoop.CoopApi, MWCoop"); avatar = Type.GetType("MWCoop.Avatar, MWCoop"); } catch { }
+            Journal.Info("MWCoop : " + (api != null ? "present (API " + Get<int>("Version", -1, true) + ")" : "absent"));
+        }
+
+        public static bool Present { get { Look(); return api != null; } }
+
+        static T Get<T>(string name, T def, bool field = false)
+        {
+            try
+            {
+                if (field) { FieldInfo f = api.GetField(name, BindingFlags.Public | BindingFlags.Static); return f != null ? (T)f.GetValue(null) : def; }
+                PropertyInfo p = api.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
+                return p != null ? (T)p.GetValue(null, null) : def;
+            }
+            catch { return def; }
+        }
+
+        public static bool InSession { get { return Present && Get("InSession", false); } }
+        public static bool IsHost { get { return !InSession || Get("IsHost", false); } }
+        public static int LocalId { get { return Present ? Get("LocalPlayerId", 0) : 0; } }
+
+        public static string LocalName
+        {
+            get
+            {
+                if (!InSession) return "";
+                try { return (string)api.GetMethod("PlayerName").Invoke(null, new object[] { LocalId }) ?? ""; } catch { return ""; }
+            }
+        }
+
+        // messages entre joueurs (CoopApi.Send / Listen, canal « Voyage ») : depart et retour de l'avion
+        const string Channel = "Voyage";
+        public static float LastMessageAt = -1f;
+        public static void Send(string msg)
+        {
+            if (!InSession) return;
+            try { api.GetMethod("Send").Invoke(null, new object[] { Channel, System.Text.Encoding.UTF8.GetBytes(msg) }); } catch (Exception e) { Journal.Info("envoi : " + e.Message); }
+        }
+        public static void Listen(Action<string> handler)
+        {
+            if (!Present) return;
+            try
+            {
+                api.GetMethod("Listen").Invoke(null, new object[] { Channel, new Action<int, byte[]>((from, data) => { string m = System.Text.Encoding.UTF8.GetString(data); Journal.Info("message de #" + from + " : " + m); LastMessageAt = Time.realtimeSinceStartup; handler(m); }) });
+            }
+            catch (Exception e) { Journal.Info("ecoute : " + e.Message); }
+        }
+
+        // corps de PNJ de MWCoop (le meme que le vendeur de son epicerie) ; null sans MWCoop
+        public static GameObject Npc(string name)
+        {
+            Look();
+            if (avatar == null) return null;
+            try
+            {
+                MethodInfo m = avatar.GetMethod("CreatePreview", BindingFlags.Public | BindingFlags.Static);
+                if (m == null) return null;
+                object[] args = new object[m.GetParameters().Length];
+                args[0] = name; args[1] = 0;
+                for (int i = 2; i < args.Length; i++) args[i] = null;
+                object a = m.Invoke(null, args);
+                if (a == null) return null;
+                FieldInfo root = avatar.GetField("Root");
+                return root != null ? root.GetValue(a) as GameObject : null;
+            }
+            catch (Exception e) { Journal.Info("PNJ de MWCoop : " + e.Message); return null; }
+        }
+    }
+}

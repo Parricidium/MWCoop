@@ -1311,6 +1311,9 @@ enum { CRED_3D, CRED_IMG, CRED_THANKS, CRED_SUPPORT };
 struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    { CRED_3D, L"osmosikum", L"Modèle 3D", L"3D model",
+      L"Le Cessna 172 de l'aérodrome du mod Voyage (agence de voyage, vols vers les circuits convertis), d'après le modèle « Plane » de osmosikum sur Sketchfab : sketchfab.com/osmosikum, licence CC BY 4.0. Textures réduites pour le jeu.",
+      L"The Cessna 172 at the airfield of the Voyage mod (travel agency, flights to converted tracks), from the Plane model by osmosikum on Sketchfab: sketchfab.com/osmosikum, CC BY 4.0 license. Textures reduced for the game.", L"23/10/2026", 0 },
     { CRED_3D, L"matthew0451", L"Modèle 3D", L"3D model",
       L"La VAZ-2108 des joueurs (F10), d'après le modèle « VAZ-2108 Rally » de matthew0451 sur Sketchfab : sketchfab.com/matthew0451, licence CC BY-NC 4.0. Allégée, livrée retirée (une couleur et un numéro par joueur).",
       L"The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).", L"18/10/2026", 0 },
@@ -1624,7 +1627,7 @@ static bool UiClick(int id)
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 200) { LobbyOptClick(id); return true; }   // (3200-3399 : salon.inc)
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
-    if (id >= UI_TOOL_GET && id <= UI_TOOL_DIR) { ToolsClick(id); return true; }
+    if (id >= UI_TOOL_GET && id <= UI_TOOL_CV_DIR) { ToolsClick(id); return true; }
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
     if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)
     if (id >= UI_ALB_OPEN && id < UI_ALB + 4000) { AlbClick(id); return true; }

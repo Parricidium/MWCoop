@@ -1992,6 +1992,20 @@ Village store: cabinets, shelves, till	بقالة القرية: خزائن، ر�
 Health (PvP)	الصحة (PvP)
 Only when the host turned PvP on	فقط عندما يفعّل المضيف وضع PvP
 Health (PvP): when the host turned PvP on, a Health gauge under the game's stats, full when you are fine; every hit taken drains it (5 hits in 20 s: death). \"Health (PvP)\" option to hide it.	الصحة (PvP): عندما يفعّل المضيف وضع PvP، يظهر مقياس صحة تحت إحصاءات اللعبة، ممتلئ عندما تكون بخير؛ كل ضربة تتلقاها تنقصه (5 ضربات خلال 20 ثانية: موت). خيار «الصحة (PvP)» لإخفائه.
+Track converter %s installed: click Launch	تم تثبيت محوّل الحلبات %s: انقر تشغيل
+Could not download the track converter (%s)	تعذّر تنزيل محوّل الحلبات (%s)
+Close the track converter before updating it	أغلق محوّل الحلبات قبل تحديثه
+Could not start the tool (error %lu)	تعذّر تشغيل الأداة (الخطأ %lu)
+A separate program to edit the map of My Summer Car or My Winter Car: roads, game objects, 3D models, vegetation, terrain.	برنامج منفصل لتعديل خريطة My Summer Car أو My Winter Car: طرق، أغراض اللعبة، نماذج ثلاثية الأبعاد، نباتات، تضاريس.
+Compiled maps: added to the game, sent to guests in co-op	الخرائط المجمّعة: تُضاف إلى اللعبة وتُرسل إلى الضيوف في اللعب الجماعي
+Game files stay on your PC, your saves are not touched	تبقى ملفات اللعبة على حاسوبك، ولا تُمسّ حفظاتك
+Track converter	محوّل الحلبات
+Turns the tracks of your Assetto Corsa into travel destinations for My Winter Car: a ticket at the Peräjärvi agency, the plane at the airfield near the cinema.	يحوّل حلبات Assetto Corsa الخاصة بك إلى وجهات سفر في My Winter Car: تذكرة من وكالة Peräjärvi، والطائرة من المطار قرب السينما.
+Not installed yet · version %s, about 3 MB	غير مثبّت بعد · الإصدار %s، نحو 3 م.ب
+Official and mod tracks, converted on your PC: nothing is shared	حلبات رسمية ومودات، تُحوَّل على حاسوبك: لا يُشارك شيء
+Voyage mod included (agency, airfield, Cessna flight): installed by the converter	مود Voyage مرفق (الوكالة، المطار، رحلة Cessna): يثبّته المحوّل
+My Winter Car only, with MSCLoader; in co-op, everyone converts the same track	My Winter Car فقط، مع MSCLoader؛ في اللعب الجماعي يحوّل كل لاعب الحلبة نفسها
+The Cessna 172 at the airfield of the Voyage mod (travel agency, flights to converted tracks), from the Plane model by osmosikum on Sketchfab: sketchfab.com/osmosikum, CC BY 4.0 license. Textures reduced for the game.	طائرة Cessna 172 في مطار تعديل Voyage (وكالة سفر، رحلات إلى الحلبات المحوّلة)، عن نموذج Plane من osmosikum على Sketchfab: sketchfab.com/osmosikum، ترخيص CC BY 4.0. خامات مصغّرة للعبة.
 These guests are still receiving your mods: 	هؤلاء الضيوف ما زالوا يستلمون مودّاتك: 
 \n\nWait for their download to finish before starting the game.	\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة.
 Sending mods (%d)\u2026	إرسال المودّات (%d)…
