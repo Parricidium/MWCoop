@@ -618,6 +618,7 @@ namespace MWCoop
             // (24/10 : KARTTURI de la boutique s21 sur les speciales de My Summer Car -- copilote : notes ; copilote3 : en voiture)
             if (mode == "copilote" || mode == "copilote3" || mode == "copilote4") { Kartturi.Test(mode, t); Kauppa.TestKartturiDrive(mode, t); return; }
             if (mode == "sac") { SleepingBags.Test(mode, t); return; }   // (sacs de couchage : depliage et sommeil -- [Test] SacDormir)
+            if (mode == "mscsauve") { SaveBatchMsc.Test(t); return; }   // (sauvegarde en jeu groupee contre une par une, gel de l'hote 24/10)
             if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             if (mode == "cdmsc") { CdMsc(t); return; }
             if (mode == "mscguepe") { MscGuepe(t); return; }

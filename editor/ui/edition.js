@@ -872,9 +872,14 @@ export class Edition {
   // route epouse le sol (rayons vers le bas, en cache). Eau : un plan (deplacer, tourner, echelle) a la matiere d'eau du jeu.
   surfacePresets(type) {
     const ms = this.v.info.matieres, out = [];
-    // (eau : l'eau simple d'abord -- celle du jeu, Water4, depend des scripts de reflet du lac et sort grise sur un plan a nous)
-    if (type === "eau") out.push({ k: "eau", nom: T("eauSimple"), ref: "eau:" });
-    const want = type === "talus" ? [/^ROADSIDE$/i, /^mwc_dirtroad$/i, /^GRAVEL$/i] : type === "eau" ? [/^Water4Simple$/i, /^Water4Adv/i] : [/^ROAD$/, /^ASPHALT$/i, /^mwc_asphalt$/i, /^GRAVEL$/i, /^DIRTROAD$/i, /^mwc_dirtroad$/i, /^mwc_iceroad$/i];
+    // eau : « Eau du lac » d'abord quand le jeu a l'eau Water4 du lac (MSC) -- le mod lui donne ses propres scripts de reflet
+    // et des reglages d'etang (avant le 24/10 elle sortait grise : matiere du lac posee seule) --, puis l'eau simple
+    if (type === "eau") {
+      if (ms.some(m => /^Water4Adv/i.test(m.n))) out.push({ k: "lac", nom: T("eauLac"), ref: "eau:lac" });
+      out.push({ k: "eau", nom: T("eauSimple"), ref: "eau:" });
+      return out;
+    }
+    const want = type === "talus" ? [/^ROADSIDE$/i, /^mwc_dirtroad$/i, /^GRAVEL$/i] : [/^ROAD$/, /^ASPHALT$/i, /^mwc_asphalt$/i, /^GRAVEL$/i, /^DIRTROAD$/i, /^mwc_dirtroad$/i, /^mwc_iceroad$/i];
     for (const re of want) { const mi = ms.findIndex(m => re.test(m.n)); if (mi >= 0 && !out.some(h => h.mi === mi)) out.push({ k: "mat", mi, nom: ms[mi].n, ref: "mat:" + ms[mi].n }); }
     return out;
   }
