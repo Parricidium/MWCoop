@@ -316,6 +316,34 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=portemagasin (MSC, 2 joueurs, Markos 24/10) : les deux vont a 10 s devant la porte du magasin ; a 20 s
+        // horaires figes, magasin FERME chez l'hote et ouvert chez l'invite (STORE/OpeningHours.OpenStore) ; l'invite ouvre la
+        // porte a 50 s et la referme a 62 s. Attendu : la porte suit l'invite chez l'hote (avant : fermee a cle chez lui).
+        static int pmStep; static float pmLog;
+        static void PorteMagasin(float t)
+        {
+            bool host = Net.Session.IsHost;
+            if (t > 10f && pmStep == 0) { pmStep = 1; Teleport("STORE/LOD/DoorStore", new Vector3(2f, 0.5f, 2f)); Log.Info("autotest : portemagasin, devant le magasin"); }
+            if (t > 20f && pmStep == 1)
+            {
+                pmStep = 2;
+                PlayMakerFSM oh = Game.FindFsm("STORE", "OpeningHours");
+                if (oh != null) { oh.enabled = false; oh.FsmVariables.GetFsmBool("OpenStore").Value = !host; }
+                Log.Info("autotest : portemagasin, magasin " + (host ? "ferme" : "ouvert") + " ici" + (oh == null ? " (horaires introuvables)" : ""));
+            }
+            if (!host && t > 50f && pmStep == 2) { pmStep = 3; Log.Info("autotest : portemagasin, " + Interactions.TestNamed("STORE/LOD/DoorStore")); }
+            if (!host && t > 62f && pmStep == 3) { pmStep = 4; Log.Info("autotest : portemagasin, " + Interactions.TestNamed("STORE/LOD/DoorStore")); }
+            if (t > 45f && t < 80f && Time.realtimeSinceStartup >= pmLog)
+            {
+                pmLog = Time.realtimeSinceStartup + 4f;
+                PlayMakerFSM door = Game.FindFsm("STORE/LOD/DoorStore/Pivot/Handle", "Use");
+                FsmBool open = door != null ? door.FsmVariables.FindFsmBool("DoorOpen") : null;
+                GameObject piv = Game.FindAny("STORE/LOD/DoorStore/Pivot");
+                Log.Info("autotest : portemagasin (" + (host ? "hote" : "invite") + ") porte " + (open != null ? (open.Value ? "ouverte" : "fermee") : "?") + " [" + (door != null ? door.ActiveStateName : "?") + "]"
+                         + (piv != null ? " " + piv.transform.localEulerAngles.ToString("F0") : ""));
+            }
+        }
+
         // [Test] Autotest=mscporte (19/10, retour de Vaydon : portes de la maison et du garage) -- l'hote : 60 s ouvre la porte
         // d'entree, 66 s allume la cuisine, 72 s pousse la porte gauche du garage (2 s), 85 s referme la porte d'entree. Chacun note
         // toutes les 5 s : porte d'entree (DoorOpen), portes du garage (angle).
@@ -551,6 +579,7 @@ namespace MWCoop
             if (mode == "cdmsc") { CdMsc(t); return; }
             if (mode == "mscguepe") { MscGuepe(t); return; }
             if (mode == "mscporte") { MscPorte(t); return; }
+            if (mode == "portemagasin") { PorteMagasin(t); return; }
             if (mode == "mscreste") { MscReste(t); return; }
             if (mode == "mscregles") { MscRegles(t); return; }
             if (mode == "mscmeca") { MscMeca(t); return; }
