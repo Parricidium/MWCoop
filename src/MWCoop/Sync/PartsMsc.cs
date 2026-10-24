@@ -43,7 +43,8 @@ namespace MWCoop
                 try
                 {
                     FsmState prev = P.Fsm.Fsm.PreviousActiveState;
-                    if (!applying && Replay.Depth == 0 && prev != null && (prev.Name == "Wait for assembly" || P.Swap && prev.Name == "Check bolts")) MscLocalInstall(P);
+                    // (« Wait for assembly 2 », « 3 »... : points a plusieurs pieces, ClickFor)
+                    if (!applying && Replay.Depth == 0 && prev != null && (prev.Name.StartsWith("Wait for assembly") || P.Swap && prev.Name == "Check bolts")) MscLocalInstall(P);
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
@@ -164,6 +165,39 @@ namespace MWCoop
             return null;
         }
 
+        // Point a plusieurs pieces (volant : GT, rallye, sport, stock sur trigger_steering_wheel) : 'Find correct part 2' compare la
+        // piece en main a {Part1}..{Part4} (GameObjectCompare) et mene a 'Wait for assembly', 'Wait for assembly 2'... ; chaque branche
+        // ('Wait' -> 'GT', 'Wait 4' -> 'Stock') pose SA piece et met Installed a SON entree de Database. Le rejeu par le clic de la
+        // 1re branche montait le volant stock en le declarant GT : GT remonte au rechargement (Kamixak/Mikol, 24/10). Le montage
+        // local par une autre branche n'etait pas annonce non plus (crochet sur la 1re seulement : rattrape par le controle).
+        static string WaitStateFor(PlayMakerFSM f, GameObject part)
+        {
+            if (part == null) return null;
+            foreach (FsmState s in f.FsmStates)
+            {
+                FsmStateAction[] acts;
+                try { acts = s.Actions; } catch { continue; }
+                if (acts == null) continue;
+                foreach (FsmStateAction a in acts)
+                {
+                    if (a == null || a.GetType().Name != "GameObjectCompare") continue;   // (action d'Assembly-CSharp de MSC : par reflexion)
+                    System.Reflection.FieldInfo cf = a.GetType().GetField("compareTo"), ef = a.GetType().GetField("equalEvent");
+                    FsmGameObject c = cf != null ? cf.GetValue(a) as FsmGameObject : null;
+                    FsmEvent e = ef != null ? ef.GetValue(a) as FsmEvent : null;
+                    if (c == null || e == null || c.Value != part) continue;
+                    foreach (FsmTransition t in s.Transitions) if (t.EventName == e.Name && t.ToState.StartsWith("Wait for assembly")) return t.ToState;
+                }
+            }
+            return null;
+        }
+        static string ClickFor(MscPoint p, GameObject part)
+        {
+            string w = WaitStateFor(p.Fsm, part);
+            FsmState ws = w != null ? p.Fsm.Fsm.GetState(w) : null;
+            if (ws != null) foreach (FsmTransition t in ws.Transitions) if (t.EventName == "ASSEMBLE") return t.ToState;
+            return p.Click;
+        }
+
         static int MscConsider(PlayMakerFSM f)
         {
             if (waitingSet.Contains(f)) return 0;
@@ -204,7 +238,21 @@ namespace MWCoop
             FsmState cs = click != null ? f.Fsm.GetState(click) : null;
             if (cs == null || !cs.IsInitialized) return false;
             var p = new MscPoint { Key = MscPointKey(f.transform), Fsm = f, Click = click, Swap = swap };
-            if (!Inject(cs, new MscPointHook { P = p })) return false;
+            // (toutes les branches d'un point a plusieurs pieces : 'Wait for assembly N' -ASSEMBLE-> 'Wait N')
+            var hooked = new List<FsmState> { cs };
+            if (!swap)
+                foreach (FsmState s in f.FsmStates)
+                {
+                    if (!s.Name.StartsWith("Wait for assembly ")) continue;
+                    foreach (FsmTransition t in s.Transitions)
+                    {
+                        FsmState ts = t.EventName == "ASSEMBLE" ? f.Fsm.GetState(t.ToState) : null;
+                        if (ts == null || hooked.Contains(ts)) continue;
+                        if (!ts.IsInitialized) return false;
+                        hooked.Add(ts);
+                    }
+                }
+            foreach (FsmState hs in hooked) if (!Inject(hs, new MscPointHook { P = p })) return false;
             mscPoints[p.Key] = p; mscPointOf[f] = p;
             return true;
         }
@@ -389,10 +437,51 @@ namespace MWCoop
             part.transform.position = p.Fsm.transform.position;
             part.transform.rotation = pv != null && pv.Value != null ? pv.Value.transform.rotation : p.Fsm.transform.rotation;
             p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
-            Game.SetState(p.Fsm, "Wait for assembly");
+            Game.SetState(p.Fsm, WaitStateFor(p.Fsm, part) ?? "Wait for assembly");   // (branche de la piece, comme 'Find correct part 2')
             testClick = p.Fsm; testClickFrame = Time.frameCount + 2;
             return "clic de montage de " + partKey + " sur " + pointKey;
         }
+        // [Test] Autotest=mscvolant (24/10, volant stock declare GT) : le joueur [Test] Monteur demonte le volant stock a 40 s et le
+        // remonte a 50 s (branche 'Wait for assembly 4') ; a 60 s chacun note le volant monte et les Installed de la Database.
+        static int volStep;
+        public static void TestVolant(float t)
+        {
+            const string point = "SATSUMA(557kg, 248)/Dashboard/Steering/CarSteeringPivot/steering column(xxxxx)/pivot_steering_wheel";
+            bool me = Session.LocalId == Config.GetInt("Test", "Monteur", 0);
+            if (volStep == 0 && t > 40f)
+            {
+                volStep = 1;
+                GameObject part = MscFindPart("db:Database/DatabaseMechanics/SteeringWheel");
+                PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                // (comme le joueur : 'Mouse over' -REMOVE->, pas un decrochage depuis 'Mouse off')
+                if (me && rem != null) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); }
+                Log.Info("autotest mscvolant : " + (me ? "demontage du volant stock (" + (rem != null ? "Removal " + rem.ActiveStateName : "introuvable") + ")" : "attente du demontage"));
+            }
+            if (volStep == 1 && t > 50f)
+            {
+                volStep = 2;
+                string pk = null;
+                foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith("trigger_steering_wheel")) pk = kv.Key;
+                Log.Info("autotest mscvolant : point " + (pk ?? "?") + (me && pk != null ? ", " + MscTestClick(pk, "db:Database/DatabaseMechanics/SteeringWheel") : ""));
+            }
+            if (volStep == 2 && t > 62f)
+            {
+                volStep = 3;
+                var sb = new System.Text.StringBuilder("autotest mscvolant : ");
+                foreach (string db in new[] { "Database/DatabaseMechanics/SteeringWheel", "Database/DatabaseOrders/SteeringWheelGT", "Database/DatabaseOrders/SportWheel", "Database/DatabaseOrders/Rally Wheel" })
+                {
+                    GameObject g = Game.FindAny(db);
+                    PlayMakerFSM d = g != null ? Game.FsmOn(g, "Data") : null;
+                    FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+                    sb.Append(db.Substring(db.LastIndexOf('/') + 1)).Append(" Installed=").Append(inst != null ? inst.Value.ToString() : "?").Append(" ; ");
+                }
+                Transform piv = Game.FindAny(point) != null ? Game.FindAny(point).transform : null;
+                sb.Append("sur le pivot : ");
+                if (piv != null) foreach (Transform c in piv) sb.Append(c.name).Append(' ');
+                Log.Info(sb.ToString());
+            }
+        }
+
         public static string MscTestHolds(string pointKey)
         {
             MscPoint p;
@@ -506,9 +595,10 @@ namespace MWCoop
                     Trace.Watch(p.Fsm, "point " + key, 8f);
                     PlayMakerFSM prem = Game.FsmOn(part, "Removal");
                     if (prem != null) Trace.Watch(prem, "piece " + id, 8f);
-                    Game.SetState(p.Fsm, p.Click);
+                    string click = ClickFor(p, part);
+                    Game.SetState(p.Fsm, click);
                     Freshen(part, p.Fsm, id);
-                    Log.Info("piece " + id + " montee sur " + key + " (joueur #" + who + ")");
+                    Log.Info("piece " + id + " montee sur " + key + " (joueur #" + who + (click != p.Click ? ", branche " + click : "") + ")");
                 }
                 else
                 {
