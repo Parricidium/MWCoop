@@ -442,7 +442,7 @@ namespace MWCoop
             return "clic de montage de " + partKey + " sur " + pointKey;
         }
         // [Test] Autotest=mscvolant (24/10, volant stock declare GT) : le joueur [Test] Monteur demonte le volant stock a 40 s et le
-        // remonte a 50 s (branche 'Wait for assembly 4') ; a 60 s chacun note le volant monte et les Installed de la Database.
+        // remonte a 50 s (branche 'Wait for assembly 4') ; a 62 s ([Test] VolantFin) chacun note le volant monte et les Installed.
         static int volStep;
         public static void TestVolant(float t)
         {
@@ -464,7 +464,7 @@ namespace MWCoop
                 foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith("trigger_steering_wheel")) pk = kv.Key;
                 Log.Info("autotest mscvolant : point " + (pk ?? "?") + (me && pk != null ? ", " + MscTestClick(pk, "db:Database/DatabaseMechanics/SteeringWheel") : ""));
             }
-            if (volStep == 2 && t > 62f)
+            if (volStep == 2 && t > Config.GetFloat("Test", "VolantFin", 62f))
             {
                 volStep = 3;
                 var sb = new System.Text.StringBuilder("autotest mscvolant : ");

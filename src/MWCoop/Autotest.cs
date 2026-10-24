@@ -680,13 +680,13 @@ namespace MWCoop
             // passager, sonde des places.
             CameraKnobs(t);
             // (24/10, pommeau sorti dans Avatar.KnobPoint par [MWC]) [Test] PassageVitesse=1 : le conducteur passe 1, 2, 3 a 40/43/46 s ;
-            // [Test] JournalMains=1 : mains des avatars des autres et rapport de la voiture, toutes les 0,5 s de 30 a 50 s.
+            // [Test] JournalMains=1 : mains des avatars des autres et rapport de la voiture, toutes les 0,5 s de 30 a 130 s.
             if (Config.GetInt("Test", "PassageVitesse", 0) != 0 && VehicleSync.LocalDrivingName != null)
             {
                 string drv = VehicleSync.LocalDrivingName;
                 if (t > 40f && mscGear == 0 || t > 43f && mscGear == 1 || t > 46f && mscGear == 2) { mscGear++; Log.Info("autotest : vitesse " + mscGear + " -> " + VehicleSync.TestGear(drv, mscGear)); }
             }
-            if (Config.GetInt("Test", "JournalMains", 0) != 0 && t > 30f && t < 50f && Time.realtimeSinceStartup >= mscHandsAt)
+            if (Config.GetInt("Test", "JournalMains", 0) != 0 && t > 30f && t < 130f && Time.realtimeSinceStartup >= mscHandsAt)
             {
                 mscHandsAt = Time.realtimeSinceStartup + 0.5f;
                 foreach (Avatar a in PlayerSync.Avatars) Log.Info("autotest : mains " + a.HandsState() + " ; " + VehicleSync.GearState(Config.Get("Test", "TestVoiture", "SATSUMA")));
@@ -716,6 +716,24 @@ namespace MWCoop
             if (mode == "portemagasin") { PorteMagasin(t); return; }
             if (mode == "mscmontage") { MscMontage(t); return; }
             if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
+            if (mode == "mscdrag") { DragMsc.Test(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10)
+            if (mode == "msctrophee") { RallyMsc.Test(t); return; }   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)
+            // [Test] Autotest=mscreparation (comme modereparation de MWC, [MWC] 24/10) : l'hote diffuse REPAIRMODE_ON a 40 s et
+            // REPAIRMODE_OFF a 55 s ; chacun note toutes les 2 s (30-100 s) l'etat de la vis du volant de la SATSUMA -- chez
+            // l'invite elle doit rester dans son etat a lui.
+            if (mode == "mscreparation")
+            {
+                if (Net.Session.IsHost && t > 40f && step == 0) { step = 1; PlayMakerFSM.BroadcastEvent("REPAIRMODE_ON"); Log.Info("autotest : mscreparation, REPAIRMODE_ON diffuse ici"); }
+                if (Net.Session.IsHost && t > 55f && step == 1) { step = 2; PlayMakerFSM.BroadcastEvent("REPAIRMODE_OFF"); Log.Info("autotest : mscreparation, REPAIRMODE_OFF diffuse ici"); }
+                if (t > 30f && t < 100f && Time.realtimeSinceStartup >= mscHandsAt)
+                {
+                    mscHandsAt = Time.realtimeSinceStartup + 2f;
+                    GameObject bv = Game.FindAny("SATSUMA(557kg, 248)/Dashboard/Steering/CarSteeringPivot/steering column(xxxxx)/pivot_steering_wheel/stock steering wheel(Clone)/Bolts/BoltPM");
+                    PlayMakerFSM sf = bv != null ? Game.FsmOn(bv, "Screw") : null;
+                    Log.Info("autotest : mscreparation, " + (Net.Session.IsHost ? "hote" : "invite") + " : vis du volant [" + (sf != null ? sf.ActiveStateName : "introuvable") + "]");
+                }
+                return;
+            }
             // [Test] Autotest=sondedetach (24/10) : actions qui ecrivent la variable [Test] SondeVar (Detach) d'un autre automate.
             if (mode == "sondedetach" && t > 40f && step == 0)
             {
