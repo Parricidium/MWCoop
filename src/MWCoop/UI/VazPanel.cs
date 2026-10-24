@@ -304,7 +304,7 @@ namespace MWCoop
             bool evo = sm != VazCar.ModelVaz;
             Style.Title(new Rect(r.x, cy, r.width, P(26)), VazCar.ModelOf(sm).Name + "  n\u00B0 " + hi, Kit.Ink, TextAnchor.MiddleLeft, 17);
             cy += P(26);
-            string desc = evo ? VazCar.ModelOf(sm).Desc : Lang.T("r\u00E9glages de la Rivett rallye", "set up like the rally Rivett");
+            string desc = evo ? VazCar.ModelOf(sm).Desc : Game.Msc ? Lang.T("r\u00E9glages de la Satsuma rallye", "set up like the rally Satsuma") : Lang.T("r\u00E9glages de la Rivett rallye", "set up like the rally Rivett");
             if (Style.Width(Vaz.ColorName(hi) + "  \u00B7  " + desc, 12, false) <= r.width)
                 Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi) + "  \u00B7  " + desc, 12, TextAnchor.MiddleLeft, Kit.Muted, false);
             else
