@@ -316,13 +316,24 @@ namespace MWCoop
         {
             Drivetrain dt = b.Dt;
             if (dt == null || dt.rpm <= 300f) return;
-            dt.idlethrottle = Mathf.Clamp(IdleBase + IdleGain * (IdleRpm - dt.rpm), IdleBase - 0.04f, IdleBase + 0.05f);
+            // My Summer Car (24/10) : sur la Ruscko copiee avec le moteur de la Satsuma rallye, le ralenti de MWC calait au point
+            // mort ~5 s apres le demarrage (0,08-0,13 : 1 300 -> 0 tr/min) ; ce moteur est tres pointu (0,14 tenu : 4 500 tr/min,
+            // 0,21 : 7 600 -- essais VazRouleRalenti) -> vrai regulateur PI sur une plage large : base 0,135 (equilibre ~0,137 a 880 tr/min), proportionnel fort (0,0004 par tr/min), et un
+            // terme integral appris au ralenti (pied leve, moteur simule ici), garde pour la suite.
+            if (Game.Msc)
+            {
+                float err = IdleRpm - dt.rpm;
+                bool idling = dt.enabled && b.Rb != null && !b.Rb.isKinematic && dt.rpm < 2500f && dt.throttle <= dt.idlethrottle + 0.005f;
+                if (idling) b.IdleTrim = Mathf.Clamp(b.IdleTrim + Config.GetFloat("Test", "VazRalentiI", 0.00002f) * err * Time.deltaTime, -0.1f, 0.15f);
+                dt.idlethrottle = Mathf.Clamp(Config.GetFloat("Test", "VazRalentiGazMsc", 0.135f) + b.IdleTrim + Config.GetFloat("Test", "VazRalentiGainMsc", 0.0004f) * err, 0.02f, 0.3f);
+            }
+            else dt.idlethrottle = Mathf.Clamp(IdleBase + IdleGain * (IdleRpm - dt.rpm), IdleBase - 0.04f, IdleBase + 0.05f);
             // Moteur simule ici (pas une copie) : jamais sous le gaz de ralenti. A la prise du volant d'une VAZ qui tournait chez
             // un autre, le gaz restait a 0 quelques images (commandes pas encore la) ; avec l'inertie du moteur de la Rivett (0,4,
             // SORBET 2,75) il passait de 1 065 a 213 tr/min en deux images et calait (essai vazcle CleReprise, 18/10).
             if (dt.enabled && b.Rb != null && !b.Rb.isKinematic && dt.throttle < dt.idlethrottle) dt.throttle = dt.idlethrottle;
             if (Config.GetInt("Test", "VazRalentiLog", 0) != 0 && Time.frameCount % 20 == 0)
-                Log.Info("vaz : ralenti " + b.Car.name + " regime " + dt.rpm.ToString("F0") + " gaz " + dt.throttle.ToString("F3") + " ralenti " + dt.idlethrottle.ToString("F3") + (dt.enabled ? "" : " coupe") + " base " + IdleBase + " vise " + IdleRpm);
+                Log.Info("vaz : ralenti " + b.Car.name + " regime " + dt.rpm.ToString("F0") + " gaz " + dt.throttle.ToString("F3") + " ralenti " + dt.idlethrottle.ToString("F3") + (dt.enabled ? "" : " coupe") + " base " + IdleBase + " vise " + IdleRpm + (Game.Msc ? " appris " + b.IdleTrim.ToString("F3") : ""));
         }
 
         public static void Tick(VazCar.Built b, float now)

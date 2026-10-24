@@ -909,9 +909,11 @@ namespace MWCoop
                 Log.Info("autotest vaz : roule, demarreur " + (rouleStarter != null ? rouleStarter.ActiveStateName : "introuvable"));
             }
             if (rouleStarter != null && t > 51f) rouleStarter.FsmVariables.GetFsmBool("Starting").Value = false;
-            bool gas = t > 53f && t < 65f;
+            // ([Test] VazRouleRalenti=1 : demarrage puis ralenti au point mort, ni gaz ni frein a main -- le ralenti tient-il ?)
+            bool idleOnly = Config.GetInt("Test", "VazRouleRalenti", 0) != 0;
+            bool gas = !idleOnly && t > 53f && t < 65f;
             // (65 s : tirette du frein a main tiree comme au clic -- KnobPos de son automate Use --, pas la pedale ; JD 24/10)
-            bool lever = Game.Msc && t > 65f;
+            bool lever = !idleOnly && Game.Msc && t > 65f;
             if (lever && rouleKnob == null)
             {
                 Transform lv = car.Find(VazCar.PLever);
@@ -925,7 +927,7 @@ namespace MWCoop
                 ax.throttleInput = gas ? 1f : 0f; ax.throttle = gas ? 1f : 0f; ax.brakeInput = gas || lever ? 0f : 1f; ax.steerInput = gas && t > 58f ? 0.3f : 0f;
                 if (gas && dt.gear < 2) dt.gear = 2;
             }
-            if (t > 47f && t < 69f && t >= rouleLog)
+            if (t > 47f && t < (idleOnly ? 110f : 69f) && t >= rouleLog)
             {
                 rouleLog = Mathf.Floor(t) + 1f;
                 float rh = 0f;
