@@ -27,7 +27,72 @@ namespace MWCoop
         static bool hooked;
         static string lastSent = "";
 
-        public static void OnLevelLoaded() { humans.Clear(); data = null; names = times = null; nextLook = 0f; hooked = false; lastSent = ""; }
+        public static void OnLevelLoaded() { humans.Clear(); data = null; names = times = null; nextLook = 0f; hooked = false; lastSent = ""; trophiesHooked = false; nextTrophyLook = 0f; }
+
+        // Trophees du podium (prix du rallye, 24/10) : 'Player position' -> 'Gold' / 'Silver' / 'Bronze' envoie SPAWNITEM a
+        // Spawner/CreateTrophiesAmateur (ou Junior) :: Gold / Silver / Bronze, dont 'State 7' cree le trophee a l'arrivee du
+        // dimanche et compte ObjectNumberInt (sauve dans trophies.txt) -- chez le gagnant seulement : un invite qui gagnait avait
+        // son trophee chez lui, jamais chez l'hote, donc absent de la sauvegarde (perdu au rechargement). Ici : crochet en tete de
+        // 'State 7' ; fait ici -> @trophee a tous, qui rejouent SPAWNITEM (meme trophee, meme compteur). Le prix en argent
+        // (RALLY/Sunday/FinishArea/Stuff/PayMoney) reste celui de chacun (portefeuilles separes).
+        static readonly string[] TrophyRoots = { "Spawner/CreateTrophiesAmateur", "Spawner/CreateTrophiesJunior" };
+        static readonly string[] TrophyFsms = { "Gold", "Silver", "Bronze" };
+        static bool trophiesHooked, trophyApplying;
+        static float nextTrophyLook;
+
+        class TrophyHook : ModHook
+        {
+            public override string Module { get { return "rallye (MSC)"; } }
+            public string Root, Fsm;
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (!trophyApplying && Session.Active && Session.RemoteCount > 0)
+                    {
+                        Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@trophee").Str(Root).Str(Fsm), true);
+                        MWCoop.Log.Info("rallye (MSC) : trophee " + Fsm + " (" + Root + ") cree ici, envoye");
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static void HookTrophies()
+        {
+            if (trophiesHooked || Time.realtimeSinceStartup < nextTrophyLook) return;
+            nextTrophyLook = Time.realtimeSinceStartup + 10f;
+            int n = 0;
+            foreach (string root in TrophyRoots)
+            {
+                GameObject go = Game.FindAny(root);
+                if (go == null) continue;
+                foreach (string fn in TrophyFsms)
+                {
+                    PlayMakerFSM f = Game.FsmOn(go, fn);
+                    FsmState s = f != null ? f.Fsm.GetState("State 7") : null;
+                    if (s == null || !s.IsInitialized) continue;
+                    FsmHooks.Prepend(s, new TrophyHook { Root = root, Fsm = fn });
+                    n++;
+                }
+            }
+            if (n == 0) return;
+            trophiesHooked = true;
+            Log.Info("rallye (MSC) : " + n + " createurs de trophees suivis");
+        }
+
+        public static void OnTrophy(int who, NetReader r)
+        {
+            string root = r.Str(), fn = r.Str();
+            GameObject go = Game.FindAny(root);
+            PlayMakerFSM f = go != null ? Game.FsmOn(go, fn) : null;
+            if (f == null) { Log.Warn("rallye (MSC) : createur de trophee " + root + "::" + fn + " introuvable ici"); return; }
+            trophyApplying = true; Replay.Depth++;
+            try { f.SendEvent("SPAWNITEM"); }
+            finally { trophyApplying = false; Replay.Depth--; }
+            Log.Info("rallye (MSC) : trophee " + fn + " de #" + who + " cree ici aussi");
+        }
 
         class Hook : ModHook
         {
@@ -72,6 +137,7 @@ namespace MWCoop
         {
             if (!Session.Active || !PlayerSync.InGame) return;
             Find();
+            HookTrophies();
         }
 
         // Fin d'une journee ici : temps cumule et classe envoyes a tous (une fois par valeur).
@@ -95,6 +161,36 @@ namespace MWCoop
             var h = new Human { Name = r.Str(), Cls = r.Str(), Day = r.U8(), Time = r.F32() };
             humans[who] = h;
             Log.Info("rallye (MSC) : " + h.Name + " (#" + who + ") journee " + h.Day + " : " + h.Time.ToString("F1") + " s (" + h.Cls + ")");
+        }
+
+        // [Test] Autotest=msctrophee (24/10, prix du rallye) : le joueur [Test] Monteur (0 = hote) envoie a 40 s SPAWNITEM a
+        // Spawner/CreateTrophiesAmateur :: Gold, comme le podium du jeu ('Player position' -> 'Gold') ; a 60 s chacun compte ses
+        // trophees d'or (objets trophygold*) et leur position.
+        static int tStep;
+        public static void Test(float t)
+        {
+            if (tStep == 0 && t > 40f)
+            {
+                tStep = 1;
+                if (Session.LocalId != Config.GetInt("Test", "Monteur", 0)) return;
+                GameObject sp = Game.FindAny("Spawner/CreateTrophiesAmateur");
+                PlayMakerFSM g = sp != null ? Game.FsmOn(sp, "Gold") : null;
+                if (g != null) g.SendEvent("SPAWNITEM");
+                Log.Info("autotest msctrophee : SPAWNITEM -> " + (g != null ? "Gold (" + g.ActiveStateName + ")" : "Spawner/CreateTrophiesAmateur::Gold introuvable"));
+            }
+            if (tStep == 1 && t > 60f)
+            {
+                tStep = 2;
+                var sb = new System.Text.StringBuilder();
+                int n = 0;
+                foreach (GameObject go in Resources.FindObjectsOfTypeAll(typeof(GameObject)))
+                    if (go.name.ToLowerInvariant().Contains("troph") && go.hideFlags == HideFlags.None && go.transform.parent == null)
+                    { n++; sb.Append(' ').Append(go.name).Append(go.transform.position.ToString("F1")).Append(go.activeInHierarchy ? "" : " (eteint)"); }
+                GameObject sp2 = Game.FindAny("Spawner/CreateTrophiesAmateur");
+                PlayMakerFSM g2 = sp2 != null ? Game.FsmOn(sp2, "Gold") : null;
+                FsmInt cnt = g2 != null ? g2.FsmVariables.FindFsmInt("ObjectNumberInt") : null;
+                Log.Info("autotest msctrophee : " + n + " objet(s) trophee a la racine ici :" + sb + " ; Gold " + (g2 != null ? g2.ActiveStateName + ", ObjectNumberInt " + (cnt != null ? cnt.Value.ToString() : "?") : "introuvable"));
+            }
         }
 
         // Classement affiche ici : les autres humains de ma classe dans les tables, avant que le jeu ne les copie dans les listes.

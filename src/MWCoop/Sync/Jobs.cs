@@ -2018,6 +2018,8 @@ namespace MWCoop
                 case "@carbu": FuelPrices.OnMessage(who, r); break;
                 case "@tel": PhoneMsc.OnMessage(who, r); break;   // (MSC : appel decroche par un autre)
                 case "@rallymsc": RallyMsc.OnMessage(who, r); break;   // (MSC : temps d'un pilote humain au rallye)
+                case "@dragmsc": DragMsc.OnMessage(who, r); break;   // (MSC : meilleur temps d'un pilote humain aux dragsters)
+                case "@trophee": RallyMsc.OnTrophy(who, r); break;   // (MSC : trophee du podium du rallye cree chez le gagnant)
                 case "@capot": PackHoods.OnMessage(who, r); break;   // (capot d'une voiture du pack rallye de JD)
                 case "@fils": WiringMsc.OnMessage(who, r); break;   // (MSC : borne electrique de la SATSUMA branchee)
                 case "@pompe": PumpsMsc.OnMessage(who, r); break;   // (MSC : pistolet et afficheurs d'une pompe)

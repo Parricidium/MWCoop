@@ -235,6 +235,7 @@ namespace MWCoop
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
             new Mod("rallye (MSC)", RallyMsc.Update),
+            new Mod("dragsters (MSC)", DragMsc.Update),   // (24/10 : temps des pilotes humains sur la feuille RESULTS de la piste)
             new Mod("rallye avec sa voiture (MSC)", RallyMscVaz.Update),   // (24/10 : VAZ et addons au rallye de My Summer Car)   // (22/10 : temps des pilotes humains au classement du rallye de My Summer Car)
             new Mod("trace", Trace.Update),
             new Mod("deroule", Flow.Update),
@@ -411,7 +412,7 @@ namespace MWCoop
                                     WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded, WoodCarriers.OnLevelLoaded,   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
                                     // (24/10 : boutique s21, coin video, musee, sacs de couchage, casques achetes ; terrain defriche ; sauvegarde de leurs objets)
                                     Wear.OnLevelLoaded, SleepingBags.OnLevelLoaded, Kauppa.OnLevelLoaded, Clearing.OnLevelLoaded, SaveHook.OnLevelLoaded,
-                                    Vaz.OnLevelLoaded, RallyMscVaz.OnLevelLoaded };   // (24/10 : voitures VAZ et addons sur la Ruscko)
+                                    Vaz.OnLevelLoaded, RallyMscVaz.OnLevelLoaded, DragMsc.OnLevelLoaded };   // (24/10 : voitures VAZ et addons sur la Ruscko)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -436,7 +437,7 @@ namespace MWCoop
             // le reste du monde (WorldFsms : balayage, racines a ignorer communes), partie de l'hote rangee chez l'invite (Game.Name).
             "gestes", "outils en main", "cuisine", "maison", "evenements", "monde (automates)", "partie chez l'invite",
             "courses",   // (22/10 : voitures IA et resultats du rallye de MSC -- racine RALLY, Races.Rp)
-            "rallye (MSC)", "rallye avec sa voiture (MSC)",
+            "rallye (MSC)", "rallye avec sa voiture (MSC)", "dragsters (MSC)",
             "monde",   // (heure et meteo : World.FindMsc / SendMsc)
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
