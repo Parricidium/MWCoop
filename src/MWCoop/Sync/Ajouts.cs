@@ -22,9 +22,9 @@ namespace MWCoop
         static float nextSend, loadedAt;
         static int lastRemote;
 
-        // My Summer Car (19/10) : seul le drone existe pour ce jeu (sacs de couchage, boutique s21, musee et VAZ-2108 sont faits
-        // pour la carte et l'hiver de My Winter Car) -- les autres bits restent coupes, quels que soient les reglages.
-        const int B_Msc = B_Drone;
+        // My Summer Car (19/10) : seul le drone existait pour ce jeu (sacs de couchage, boutique s21, musee et VAZ-2108 etaient faits
+        // pour la carte et l'hiver de My Winter Car) ; voitures (VAZ et addons, sur la Ruscko) depuis le 24/10. Les autres bits restent coupes.
+        const int B_Msc = B_Drone | B_Vaz;
         public static bool On { get { return Config.GetInt("Coop", "SansAjouts", 0) == 0; } }
         static int LocalBits
         {

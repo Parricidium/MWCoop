@@ -773,7 +773,10 @@ static void AddonsLeave() { g_addonsTab = false; }
 // .<cle>-nouveau, puis l'ancien dossier remplace : le scan saute les noms a point).
 // Vus : [Lanceur] AddonsVus (cles du catalogue deja montrees) ; NEW sur la barre tant qu'une voiture du catalogue n'a pas
 // ete vue, sur la carte pendant la session ou elle est apparue.
-struct AddonCat { std::wstring key, ver, name, nameShort, desc, descEn, url, pic, modMin, group; long long size = 0; bool livery = false; };
+// My Summer Car (JD 24/10 : « l'onglet addons sur MSC avec leurs versions MSC ») : le meme paquet sert aux deux jeux (le mod
+// pose la voiture sur la Ruscko, avec les roues de terre du modele) ; cles facultatives : Jeux= (mwc, msc ou les deux ; absent :
+// les deux), ApercuMsc= (image prise dans MSC ; absente : vignette provisoire au nom de la voiture, AddonDrawPic), ModMinMsc=.
+struct AddonCat { std::wstring key, ver, name, nameShort, desc, descEn, url, pic, modMin, group, games, picMsc, modMinMsc; long long size = 0; bool livery = false; };
 static std::wstring g_addonsRepo = L"Parricidium/MWCoop-Addons";   // (/depotaddons : autre depot, pour les essais)
 static std::vector<AddonCat> g_addonCat;                           // (sous g_cs)
 static volatile bool g_addonCatBusy;
@@ -785,7 +788,8 @@ static std::set<std::wstring> g_addonSeen, g_addonSeenStart;
 static bool g_addonSeenRead;
 static bool GameProcessRunning(DWORD *pidOut);   // (launcher.cpp)
 static void DeleteTree(const std::wstring &dir);
-static std::wstring AddonPicCache(const std::wstring &key, const std::wstring &ver) { return LocalDir() + L"addons-apercus\\" + key + L"-" + ver + L".png"; }
+static std::wstring AddonPicCache(const std::wstring &key, const std::wstring &ver) { return LocalDir() + L"addons-apercus\\" + key + (CarMsc() ? L"-msc-" : L"-") + ver + L".png"; }
+static std::wstring AddonPicUrl(const AddonCat &c) { return CarMsc() ? c.picMsc : c.pic; }
 static int AddonCmpVer(const std::wstring &a, const std::wstring &b) { return a.empty() || b.empty() ? (a.empty() ? (b.empty() ? 0 : -1) : 1) : CmpVer(a, b); }   // (sans Version= : la plus ancienne)
 
 static std::vector<AddonCat> AddonCatParse(const std::string &src)
@@ -816,10 +820,12 @@ static std::vector<AddonCat> AddonCatParse(const std::string &src)
         else if (k == "Livree") c.livery = val == L"1"; else if (k == "Taille") c.size = _wtoi64(val.c_str());
         else if (k == "Paquet") c.url = val; else if (k == "Apercu") c.pic = val; else if (k == "ModMin") c.modMin = val;
         else if (k == "Categorie") c.group = val;
+        else if (k == "Jeux") { c.games = val; for (wchar_t &ch : c.games) ch = towlower(ch); }
+        else if (k == "ApercuMsc") c.picMsc = val; else if (k == "ModMinMsc") c.modMinMsc = val;
     }
     std::vector<AddonCat> o;
     for (const AddonCat &c : v)
-        if (!c.key.empty() && !c.ver.empty() && !_wcsnicmp(c.url.c_str(), L"https://", 8)) { o.push_back(c); if (o.back().nameShort.empty()) o.back().nameShort = c.name; }
+        if (!c.key.empty() && !c.ver.empty() && !_wcsnicmp(c.url.c_str(), L"https://", 8) && (c.games.empty() || c.games.find(CarMsc() ? L"msc" : L"mwc") != std::wstring::npos)) { o.push_back(c); if (o.back().nameShort.empty()) o.back().nameShort = c.name; }
     return o;
 }
 
@@ -840,11 +846,11 @@ static DWORD WINAPI AddonCatThread(void *)
     LaunchLog("addons : catalogue %s (code HTTP %lu), %d voiture(s)", got ? "recu" : "pas recu, copie locale", code, (int)cat.size());
     if (!local.empty())
         for (const AddonCat &c : cat) {   // apercus (une fois par version)
-            std::wstring f = AddonPicCache(c.key, c.ver);
-            if (FileExists(f) || _wcsnicmp(c.pic.c_str(), L"https://", 8)) continue;
+            std::wstring f = AddonPicCache(c.key, c.ver), u = AddonPicUrl(c);
+            if (FileExists(f) || _wcsnicmp(u.c_str(), L"https://", 8)) continue;
             SHCreateDirectoryExW(NULL, (local + L"addons-apercus").c_str(), NULL);
             DWORD pc = 0;
-            if (!HttpGet(c.pic, NULL, f, false, &pc) || pc != 200) DeleteFileW(f.c_str());
+            if (!HttpGet(u, NULL, f, false, &pc) || pc != 200) DeleteFileW(f.c_str());
         }
     EnterCriticalSection(&g_cs);
     if (got || !cat.empty() || g_addonCat.empty()) g_addonCat = cat;
@@ -1032,7 +1038,7 @@ static void AddonsScan()
         }
     }
     // catalogue : version publiee des installees, cartes « Telecharger » pour les autres
-    if (!g_gameDir.empty() && !CarMsc()) {
+    if (!g_gameDir.empty()) {
         EnterCriticalSection(&g_cs);
         for (const AddonCat &c : g_addonCat) {
             Addon *in = NULL;
@@ -1047,7 +1053,7 @@ static void AddonsScan()
     std::sort(v.begin(), v.end(), [](const Addon &x, const Addon &y) { return x.name < y.name; });
     // La VAZ-2108, livree avec le mod (MWCoop\vaz, jamais dans addons\) : une carte comme les autres, avec sa livree (JD, 21/10 :
     // « la VAZ reste compilee avec le mod, mais donne la possibilite de faire une livree »). Toujours en tete.
-    if (!g_gameDir.empty() && !CarMsc()) {
+    if (!g_gameDir.empty()) {
         std::wstring vd = g_modRoot + L"MWCoop\\vaz\\";
         if (FileExists(vd + L"carrosserie.p205")) {
             Addon a; a.key = L"vaz"; a.dir = vd; a.name = L"VAZ-2108"; a.nameShort = L"VAZ"; a.livery = true; a.builtin = true; a.group = L"MWCoop";
@@ -1087,7 +1093,9 @@ static Bitmap *AddonPic(const Addon &a)
         if (b) g_addonPics[a.key] = b;
         return b;
     }
-    Bitmap *b = LoadAnyImage(AddonDir(a) + L"apercu.png", NULL);
+    // (My Summer Car : apercu-msc.png de l'addon ; l'apercu.png des addons est pris dans l'hiver de My Winter Car -- sans lui,
+    // vignette provisoire au nom de la voiture)
+    Bitmap *b = LoadAnyImage(AddonDir(a) + (CarMsc() ? L"apercu-msc.png" : L"apercu.png"), NULL);
     g_addonPics[a.key] = b;
     return b;
 }
@@ -1245,10 +1253,21 @@ static void AddonRemove()
     LaunchLog("livree %ls retiree", a->key.c_str());
 }
 // Image contenue (proportions gardees) et coins arrondis.
-static void AddonDrawPic(Graphics &g, Bitmap *b, RectF r, float rad)
+// Sans image (My Summer Car, en attendant les photos de JD -- 24/10 : « pour le moment une vignette temporaire avec les noms
+// des voitures ») : degrade aux couleurs de l'edition, nom de la voiture en grand, « My Summer Car » dessous.
+static void AddonDrawPic(Graphics &g, Bitmap *b, RectF r, float rad, const std::wstring &name = L"")
 {
     GraphicsPath p; RoundRect(p, r, rad);
     SolidBrush f(TH(field)); g.FillPath(&f, &p);
+    if (!b && CarMsc() && !name.empty()) {
+        LinearGradientBrush lg(PointF(r.X, r.Y), PointF(r.X + r.Width, r.Y + r.Height), Color(255, 255, 196, 54), Color(255, 214, 92, 30));
+        g.FillPath(&lg, &p);
+        Icon(g, IC_CAR, r.X + r.Width - 34, r.Y + 30, 34, Color(70, 255, 255, 255), 1.4f);
+        float fs = min(r.Height * 0.2f, 30.0f);
+        Text(g, name, RectF(r.X + 12, r.Y + r.Height * 0.28f, r.Width - 24, fs * 1.6f), fs, FontStyleBold, Color(255, 40, 26, 10));
+        Text(g, L"My Summer Car", RectF(r.X + 12, r.Y + r.Height * 0.28f + fs * 1.6f, r.Width - 24, 22), min(fs * 0.5f, 13.0f), FontStyleBold, Color(200, 40, 26, 10));
+        return;
+    }
     if (!b) { Icon(g, IC_CAR, r.X + r.Width / 2, r.Y + r.Height / 2, 44, WithA(kGrey, 0.6f), 1.4f); return; }
     float k = max(r.Width / b->GetWidth(), r.Height / b->GetHeight()), w = b->GetWidth() * k, h = b->GetHeight() * k;
     GraphicsState st = g.Save(); g.SetClip(&p, CombineModeIntersect);   // (sans ResetClip : la liste des addons est elle-meme decoupee)
@@ -1343,7 +1362,7 @@ static void DrawAddonList(Graphics &g)
             LeaveCriticalSection(&g_cs);
             wchar_t b[96];
             if (mine) swprintf_s(b, T(L"Téléchargement… %d %%", L"Downloading… %d%%"), (int)(max(0.0f, g_addonDlProg) * 100));
-            else if (!c.modMin.empty() && !g_localVer.empty() && CmpVer(c.modMin, g_localVer) > 0) { swprintf_s(b, T(L"MWCoop %s requis", L"MWCoop %s required"), c.modMin.c_str()); btnOn = false; }
+            else if (!(CarMsc() && !c.modMinMsc.empty() ? c.modMinMsc : c.modMin).empty() && !g_localVer.empty() && CmpVer(CarMsc() && !c.modMinMsc.empty() ? c.modMinMsc : c.modMin, g_localVer) > 0) { swprintf_s(b, T(L"MWCoop %s requis", L"MWCoop %s required"), (CarMsc() && !c.modMinMsc.empty() ? c.modMinMsc : c.modMin).c_str()); btnOn = false; }
             else if (upd) swprintf_s(b, T(L"Mettre à jour · v%s", L"Update · v%s"), a.remoteVer.c_str());
             else if (c.size > 0) swprintf_s(b, T(L"Télécharger · %.0f Mo", L"Download · %.0f MB"), c.size / 1048576.0);
             else swprintf_s(b, L"%s", T(L"Télécharger", L"Download"));
@@ -1352,14 +1371,14 @@ static void DrawAddonList(Graphics &g)
         RectF br;
         if (list) {
             // ligne : vignette a gauche (16/9), nom, fiche, livree ; bouton du catalogue a droite
-            AddonDrawPic(g, AddonPic(a), RectF(r.X + 8, r.Y + 8, (r.Height - 16) * 16 / 9, r.Height - 16), 10);
+            AddonDrawPic(g, AddonPic(a), RectF(r.X + 8, r.Y + 8, (r.Height - 16) * 16 / 9, r.Height - 16), 10, a.nameShort);
             float tx = r.X + 8 + (r.Height - 16) * 16 / 9 + 18, tw = r.X + r.Width - 16 - tx - (get ? 236 : 0);
             Text(g, a.name, RectF(tx, r.Y + 10, tw, 24), 16, FontStyleBold, kInk, StringAlignmentNear);
             Text(g, desc, RectF(tx, r.Y + 34, tw, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             if (!liv.empty()) Text(g, liv, RectF(tx, r.Y + 54, tw, 20), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
             br = RectF(r.X + r.Width - 16 - 220, r.Y + (r.Height - 40) / 2, 220, 40);
         } else {
-            AddonDrawPic(g, AddonPic(a), RectF(r.X + 10, r.Y + 10, r.Width - 20, 160), 12);
+            AddonDrawPic(g, AddonPic(a), RectF(r.X + 10, r.Y + 10, r.Width - 20, 160), 12, a.nameShort);
             Text(g, a.name, RectF(r.X + 16, r.Y + 180, r.Width - 32, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
             Text(g, desc, RectF(r.X + 16, r.Y + 206, r.Width - 32, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             if (!liv.empty() && !get) Text(g, liv, RectF(r.X + 16, r.Y + 232, r.Width - 32, 22), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
@@ -1426,7 +1445,7 @@ static void DrawAddonView(Graphics &g, const Addon &a)
     // fiche (a la place des couleurs de la CORRIS)
     RectF pn = kCarPanel;
     Title(g, T(L"Fiche", L"Details"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 16, kInk);
-    AddonDrawPic(g, AddonPic(a), RectF(pn.X + 24, pn.Y + 60, pn.Width - 48, 180), 14);
+    AddonDrawPic(g, AddonPic(a), RectF(pn.X + 24, pn.Y + 60, pn.Width - 48, 180), 14, a.nameShort);
     Text(g, a.name, RectF(pn.X + 24, pn.Y + 252, pn.Width - 48, 28), 17, FontStyleBold, kInk, StringAlignmentNear);
     Para(g, !g_fr && !a.descEn.empty() ? a.descEn : a.desc, RectF(pn.X + 24, pn.Y + 284, pn.Width - 48, 44), 13, kGrey);
     float y = pn.Y + 344;
@@ -1506,7 +1525,7 @@ static void DrawCarWheel(Graphics &g, RectF r)
 
 static void DrawCar(Graphics &g)
 {
-    if (g_addonsTab && !CarMsc()) { DrawAddons(g); return; }   // (onglet Addons : voitures en extension)
+    if (g_addonsTab) { DrawAddons(g); return; }   // (onglet Addons : voitures en extension ; My Summer Car aussi depuis le 24/10)
     CarCheckFile();
     Glass(kCarCard);
     Glass(kCarPanel);

@@ -596,7 +596,7 @@ struct TileSec { int id, f; const wchar_t *fr, *en; };     // f : partie (PF_*),
 static const TileSec kTenueSecs[] = { { SEC_SHIRT, PF_SHIRT, L"Haut", L"Top" }, { SEC_PANTS, PF_PANTS, L"Bas", L"Bottom" }, { SEC_BODY, PF_BODY, L"Silhouette", L"Build" } };
 static const TileSec kVisageSecs[] = { { SEC_FACE, PF_FACE, L"Visage", L"Face" }, { SEC_HAT, PF_HAT, L"Chapeau", L"Hat" }, { SEC_GLASSES, PF_GLASSES, L"Lunettes", L"Glasses" }, { SEC_HAIR, PF_HAIR, L"Cheveux", L"Hair" } };
 static const wchar_t *kPersoTabFr[4] = { L"Tenue", L"Visage", L"Voiture", L"Addons" }, *kPersoTabEn[4] = { L"Outfit", L"Face", L"Car", L"Add-ons" };   // (Addons : voiture.inc, g_addonsTab)
-static int PersoTabCount() { return g_game == GAME_MSC ? 3 : 4; }   // (pas d'addons sur My Summer Car)
+static int PersoTabCount() { return 4; }   // (Addons aussi sur My Summer Car depuis le 24/10 : voitures sur la Ruscko)
 static const wchar_t *kViewFr[3] = { L"Pied", L"Portrait", L"Volant" }, *kViewEn[3] = { L"Full", L"Portrait", L"Wheel" };
 static void LookReset();
 

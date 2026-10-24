@@ -155,7 +155,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
-            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false;
+            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f;
             if (!hooked)
             {
                 hooked = true;
@@ -391,7 +391,7 @@ namespace MWCoop
             Transform car = CarOf(Me); GameObject pl = GameObject.Find("PLAYER");
             var d = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool("GUIdrive");
             var p = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool("GUIpassenger");
-            Transform dt = car != null ? car.Find("Functions/PlayerTrigger/DriveTriggerX") : null;
+            Transform dt = car != null ? car.Find(VazCar.PDriveTrigger) : null;
             PlayMakerFSM f = dt != null ? Game.FsmOn(dt.gameObject, "PlayerTrigger") : null;
             string geo = "";
             if (entryStep <= 1 && dt != null)
@@ -493,7 +493,7 @@ namespace MWCoop
             var sb = new System.Text.StringBuilder("autotest vazcle : regime " + (dt != null ? dt.rpm.ToString("F0") + " gaz " + dt.throttle.ToString("F3") + " ralenti " + dt.idlethrottle.ToString("F3") + (dt.enabled ? "" : " DRIVETRAIN COUPE") + (dt.canStall ? " peut caler" : "") + " rb " + (car.GetComponent<Rigidbody>() != null && car.GetComponent<Rigidbody>().isKinematic ? "cinematique" : "libre") + " " + VehicleSync.StarterState(car.name) : "?"));
             foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
             {
-                if (f.FsmName == "Data" && f.name == "FuelTankSorbett") { FsmFloat v = f.FsmVariables.FindFsmFloat("FuelLevel"); sb.Append(", reservoir ").Append(v != null ? v.Value.ToString("F1") : "?"); }
+                if (f.FsmName == "Data" && (f.name == "FuelTankSorbett" || (Game.Msc && f.name == "FuelTank"))) { FsmFloat v = f.FsmVariables.FindFsmFloat("FuelLevel"); sb.Append(", reservoir ").Append(v != null ? v.Value.ToString("F1") : "?"); }
                 if (f.FsmName == "FuelLine") { FsmFloat v = f.FsmVariables.FindFsmFloat("FuelLevel"); sb.Append(", conduite ").Append(v != null ? v.Value.ToString("F2") : "?").Append(" (").Append(f.ActiveStateName).Append(f.enabled ? "" : " COUPE").Append(')'); }
                 if (f.FsmName == Config.Get("Test", "VazDump", "Starter") && (Config.Get("Test", "VazDump", "") == "" || f.name == "Radiator") && !cleDump && t > 35f)
                 {
@@ -599,7 +599,7 @@ namespace MWCoop
             {
                 // (captures : dans la cour, a 7 m a droite de la Rivett, regard dans son sens)
                 testMoved = true;
-                GameObject c = Game.FindAny("CORRIS"), pl = GameObject.Find("PLAYER");
+                GameObject c = Game.FindAny(Game.Msc ? "SATSUMA(557kg, 248)" : "CORRIS"), pl = GameObject.Find("PLAYER");
                 if (c != null && pl != null)
                 {
                     Vector3 f = c.transform.forward; f.y = 0f; f.Normalize();
@@ -619,11 +619,11 @@ namespace MWCoop
                 openDone = true;
                 RoofToggle(Mine, true);
                 Transform c = CarOf(Me);
-                Transform sh = c != null ? c.Find("Hatch/Hatch") : null;
+                Transform sh = c != null ? c.Find(VazCar.PHatch) : null;
                 HingeJoint hj = sh != null ? sh.GetComponent<HingeJoint>() : null;
                 if (hj != null) { JointLimits l = hj.limits; l.min = 60f; l.max = 65f; hj.limits = l; hj.useLimits = true; }
                 // (et la portiere conducteur, butees forcees -- contre-porte de la 205, JD 21/10)
-                Transform dl = c != null ? c.Find("Doors/DoorFront(leftx)") : null;
+                Transform dl = c != null ? c.Find(VazCar.PDoorL) : null;
                 HingeJoint dj = dl != null ? dl.GetComponent<HingeJoint>() : null;
                 if (dj != null) { JointLimits l = dj.limits; Log.Info("autotest vaz : portiere, butees " + l.min + ".." + l.max); float a = Config.GetFloat("Test", "VazPorteAngle", 65f)   /* (+ : vers l'exterieur ; -65 la rentrait dans l'habitacle) */; l.min = a - 3f; l.max = a + 3f; dj.limits = l; dj.useLimits = true; }
                 Autotest.CaptureSoon("vaz-ouvert", 4f);
@@ -767,7 +767,7 @@ namespace MWCoop
                     {
                         // (portieres ouvertes simulees : leurs colliders coupes le temps du balayage)
                         Transform cv = CarOf(Me);
-                        if (cv != null) foreach (string dp in new[] { "Doors/DoorFront(leftx)", "Doors/DoorFront(right)" }) { Transform d = cv.Find(dp); if (d != null) foreach (Collider c in d.GetComponentsInChildren<Collider>(true)) c.enabled = false; }
+                        if (cv != null) foreach (string dp in new[] { VazCar.PDoorL, VazCar.PDoorR }) { Transform d = cv.Find(dp); if (d != null) foreach (Collider c in d.GetComponentsInChildren<Collider>(true)) c.enabled = false; }
                     }
                     entryStep = k + 1;
                     int side = k / 12, j = k % 12;
@@ -781,7 +781,7 @@ namespace MWCoop
             if (host && testStep == 2 && Config.GetInt("Test", "VazAssis", 0) != 0)
             {
                 Transform car = CarOf(Me);
-                Transform dt = car != null ? car.Find("Functions/PlayerTrigger/DriveTriggerX") : null;
+                Transform dt = car != null ? car.Find(VazCar.PDriveTrigger) : null;
                 if (dt != null && t > 38f && assisStep == 0) { assisStep = 1; Vector3 l = car.InverseTransformPoint(dt.position); PutPlayer(new Vector3(l.x, -0.05f, l.z)); }
                 if (dt != null && t > 39.5f && assisStep == 1)
                 {
@@ -791,7 +791,7 @@ namespace MWCoop
                 }
                 if (car != null && t > 45f && assisStep == 2)
                 {
-                    assisStep = 3; GameObject cam = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera"); Transform hp = car.Find("Functions/PlayerTrigger/DriverHeadPivot");
+                    assisStep = 3; GameObject cam = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera"); Transform hp = car.Find(VazCar.PHeadPivot);
                     PlayMakerFSM f = dt != null ? Game.FsmOn(dt.gameObject, "PlayerTrigger") : null;
                     Log.Info("autotest vaz : assis, etat " + (f != null ? f.ActiveStateName : "?") + ", yeux " + (cam != null ? car.InverseTransformPoint(cam.transform.position).ToString("F3") : "?")
                              + ", pivot de tete " + (hp != null ? car.InverseTransformPoint(hp.position).ToString("F3") : "?") + ", zone " + (dt != null ? car.InverseTransformPoint(dt.position).ToString("F3") : "?")
@@ -841,10 +841,43 @@ namespace MWCoop
                     else Log.Info("autotest vaz : frein a main : " + (cam == null ? "camera" : "levier du jeu") + " introuvable");
                 }
             }
-            if (host && testStep == 2 && t > 50f) { testStep = 3; Call(); Log.Info("autotest vaz : appelee, " + State()); }
+            // [Test] VazRoule=1 (avec VazAssis ; 24/10, voitures sur la Ruscko) : 47 s, demarreur (Ruscko : automate Starter, ACC et
+            // Starting comme la cle) ; 53-65 s plein gaz en 2e, volant a 0,3 apres 58 s ; vitesse, regime et rapport chaque seconde.
+            bool roule = Config.GetInt("Test", "VazRoule", 0) != 0;
+            if (host && roule && assisStep >= 2 && CarOf(Me) != null) TestDrive(CarOf(Me), t);
+            if (host && testStep == 2 && t > (roule ? 70f : 50f)) { testStep = 3; Call(); Log.Info("autotest vaz : appelee, " + State()); }
             if (Config.GetInt("Test", "VazGarder", 0) != 0) return;
             if (host && testStep == 3 && t > 60f) { testStep = 4; Release(); Log.Info("autotest vaz : rendue"); }
             if (testStep >= 2 && testStep < 5 && t > 70f) { testStep = 5; Log.Info("autotest vaz : apres retour : " + State()); }
+        }
+
+        static PlayMakerFSM rouleStarter;
+        static float rouleLog;
+        static void TestDrive(Transform car, float t)
+        {
+            Drivetrain dt = car.GetComponent<Drivetrain>(); AxisCarController ax = car.GetComponent<AxisCarController>(); Rigidbody rb = car.GetComponent<Rigidbody>();
+            if (dt == null || ax == null || rb == null) return;
+            if (t > 47f && rouleLog == 0f)
+            {
+                rouleLog = 47f;
+                Transform st = Game.Msc ? car.Find("Starter") : null;
+                if (st != null) foreach (PlayMakerFSM f in st.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Starter") rouleStarter = f;
+                if (rouleStarter != null) { rouleStarter.FsmVariables.GetFsmBool("ACC").Value = true; rouleStarter.FsmVariables.GetFsmBool("Starting").Value = true; }
+                Log.Info("autotest vaz : roule, demarreur " + (rouleStarter != null ? rouleStarter.ActiveStateName : "introuvable"));
+            }
+            if (rouleStarter != null && t > 51f) rouleStarter.FsmVariables.GetFsmBool("Starting").Value = false;
+            bool gas = t > 53f && t < 65f;
+            if (t > 52f && t < 67f)
+            {
+                ax.throttleInput = gas ? 1f : 0f; ax.throttle = gas ? 1f : 0f; ax.brakeInput = gas ? 0f : 1f; ax.steerInput = gas && t > 58f ? 0.3f : 0f;
+                if (gas && dt.gear < 2) dt.gear = 2;
+            }
+            if (t > 47f && t < 68f && t >= rouleLog)
+            {
+                rouleLog = Mathf.Floor(t) + 1f;
+                Log.Info("autotest vaz : roule t=" + t.ToString("F0") + " " + (rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, regime " + dt.rpm.ToString("F0") + ", rapport " + dt.gear + ", gaz " + ax.throttle.ToString("F2")
+                         + (dt.enabled ? "" : " (moteur coupe)") + (rouleStarter != null ? ", demarreur " + rouleStarter.ActiveStateName : "") + ", cap " + car.eulerAngles.y.ToString("F0") + ", roulis " + car.eulerAngles.z.ToString("F0"));
+            }
         }
 
         // [Test] VazPlaces=1 (autotest vaz, 35 s) : carte de l'habitacle (repere de la voiture, pas 10 cm) : pour chaque point du
@@ -856,7 +889,7 @@ namespace MWCoop
             GameObject pl = GameObject.Find("PLAYER");
             CharacterController cc = pl != null ? pl.GetComponent<CharacterController>() : null;
             if (car == null || cc == null) { Log.Info("autotest vaz : places : voiture ou joueur absent"); return; }
-            Transform dt = car.Find("Functions/PlayerTrigger/DriveTriggerX");
+            Transform dt = car.Find(VazCar.PDriveTrigger);
             Collider dtc = dt != null ? dt.GetComponent<Collider>() : null;
             float r = cc.radius * Mathf.Max(pl.transform.lossyScale.x, pl.transform.lossyScale.z), h = cc.height * pl.transform.lossyScale.y;
             var sb = new System.Text.StringBuilder("autotest vaz : places (rayon " + r.ToString("F2") + ", hauteur " + h.ToString("F2") + ", zone " + (dtc != null ? car.InverseTransformPoint(dtc.bounds.center).ToString("F2") + " taille " + dtc.bounds.size.ToString("F2") : "?") + ")");

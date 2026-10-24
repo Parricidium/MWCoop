@@ -565,6 +565,8 @@ namespace MWCoop
             // passager, sonde des places.
             CameraKnobs(t);
             if (mode == "conduite") { Conduite(t); return; }
+            if (mode == "vaz" || mode == "vazcle") { Vaz.Test(mode, t); return; }   // (24/10 : voitures sur la Ruscko)
+            if (mode == "vazrallye") { RallyMscVaz.Test(mode, t); return; }   // (24/10 : rallye de MSC avec sa voiture du F10)
             if (mode == "tas") { LogPiles.Test(mode, t); return; }
             if (mode == "outils") { HandTools.Test(mode, t); return; }
             if (mode == "gifumain") { Knobs.Test(mode, t); return; }   // (accelerateur a main de la GIFU tire par l'invite, Markos 24/10)

@@ -31,11 +31,11 @@ namespace MWCoop
             get
             {
                 string[] a = Game.Msc ? Lang.A(tabsMscFr, tabsMscEn) : Lang.A(tabsFr, tabsEn);
-                if (!Game.Msc && Vaz.EvoAvailable) { a = (string[])a.Clone(); a[TabVaz] = Lang.T("Voitures", "Cars"); }   // (Evo III : extension privee)
+                if (Vaz.EvoAvailable) { a = (string[])a.Clone(); a[TabVaz] = Lang.T("Voitures", "Cars"); }   // (addons ; My Summer Car aussi depuis le 24/10)
                 return a;
             }
         }
-        static bool TabHidden(int i) { return Game.Msc && i == TabVaz; }
+        static bool TabHidden(int i) { return false; }   // (My Summer Car : onglet des voitures ouvert le 24/10, JD)
         static int StepTab(int from, int d) { int n = tabsFr.Length, i = from; do i = (i + d + n) % n; while (TabHidden(i) && i != from); return i; }
         public const int TabPlayers = 0, TabChat = 1, TabRace = 2, TabRally = 3, TabVaz = 4, TabLook = 5, TabHud = 6, TabGfx = 7, TabSync = 8;   // (Rallye : 18/10)
         public static int Tab { get { return tab; } }

@@ -329,7 +329,7 @@ static void ContentSnapshot(bool restore);   // (modsync.inc)
 static void MscScan();                       // (mods.inc)
 static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_CONTENT; }
 // Pages absentes d'un jeu : sur My Summer Car, pas de cassettes VHS (camescope et magasin de MWC ; 19/10).
-static bool NavHidden(int p) { return g_game == GAME_MSC && (p == TAB_VHS || p == TAB_ADDONS); }   // (addons : voitures de My Winter Car)
+static bool NavHidden(int p) { return g_game == GAME_MSC && p == TAB_VHS; }   // (addons : sur My Summer Car aussi depuis le 24/10)
 static bool AddonsOn(); static void AddonsGo(); static void AddonsLeave();   // (voiture.inc : onglet Addons de la page Voiture)
 static bool PageEnabled(int p)
 {
