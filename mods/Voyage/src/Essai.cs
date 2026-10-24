@@ -115,6 +115,11 @@ namespace Voyage
                         if (Coop.LastMessageAt < 0f && Time.realtimeSinceStartup - msgWaitFrom < 150f) { Requeue(c); quiet = true; }
                         else { Journal.Info("essai : message recu (ou delai)"); Coop.LastMessageAt = -1f; msgWaitFrom = -1f; }
                         break;
+                    case "ecran":   // ecran nom : capture de l'ecran du jeu (camera et eclairage du jeu, sans la lumiere ajoutee des photos)
+                        Application.CaptureScreenshot(Path.Combine(Dir, a[1] + ".png"));
+                        waitUntil = Time.realtimeSinceStartup + 1f;
+                        Journal.Info("essai : ecran " + a[1] + " (heure du jeu : soleil " + SunInfo() + ")");
+                        break;
                     case "photocine":   // ce que montre la camera de cinema du vol
                         if (Cine.Cam != null) { Shot(a[1], Cine.Cam); } else Journal.Info("essai : pas de camera de cinema");
                         break;
@@ -169,9 +174,8 @@ namespace Voyage
         // photo d'une camera existante (cinema du vol), lumiere de jour ajoutee comme pour Photo
         static void Shot(string name, Camera cam)
         {
-            var lg = new GameObject("voyage photo (lumiere)");
-            var li = lg.AddComponent<Light>(); li.type = LightType.Directional; li.intensity = 1.1f; lg.transform.rotation = Quaternion.Euler(50, 30, 0);
-            Color amb = RenderSettings.ambientLight; RenderSettings.ambientLight = new Color(0.55f, 0.58f, 0.62f);
+            Color amb = RenderSettings.ambientLight;
+            GameObject lg = NightLight();
             var rt = new RenderTexture(1280, 720, 24);
             RenderTexture keep = cam.targetTexture;
             cam.targetTexture = rt; cam.Render(); cam.targetTexture = keep;
@@ -181,7 +185,8 @@ namespace Voyage
             RenderTexture.active = null;
             File.WriteAllBytes(Path.Combine(Dir, name + ".png"), tex.EncodeToPNG());
             RenderSettings.ambientLight = amb;
-            UnityEngine.Object.Destroy(lg); UnityEngine.Object.Destroy(rt); UnityEngine.Object.Destroy(tex);
+            if (lg != null) UnityEngine.Object.Destroy(lg);
+            UnityEngine.Object.Destroy(rt); UnityEngine.Object.Destroy(tex);
             Journal.Info("essai : photo " + name + " (cinema, avion en " + (Avion.T != null ? Avion.T.position.ToString("F1") : "?") + ")");
         }
 
@@ -189,9 +194,8 @@ namespace Voyage
         {
             var go = new GameObject("voyage photo");
             var cam = go.AddComponent<Camera>();
-            var lg = new GameObject("voyage photo (lumiere)");
-            var li = lg.AddComponent<Light>(); li.type = LightType.Directional; li.intensity = 1.1f; lg.transform.rotation = Quaternion.Euler(50, 30, 0);
-            Color amb = RenderSettings.ambientLight; RenderSettings.ambientLight = new Color(0.55f, 0.58f, 0.62f);
+            Color amb = RenderSettings.ambientLight;
+            GameObject lg = NightLight();
             bool fog = RenderSettings.fog; RenderSettings.fog = false;
             go.transform.position = from;
             go.transform.LookAt(at);
@@ -207,7 +211,8 @@ namespace Voyage
             RenderTexture.active = null; cam.targetTexture = null;
             File.WriteAllBytes(Path.Combine(Dir, name + ".png"), tex.EncodeToPNG());
             RenderSettings.ambientLight = amb; RenderSettings.fog = fog;
-            UnityEngine.Object.Destroy(lg); UnityEngine.Object.Destroy(go); UnityEngine.Object.Destroy(rt); UnityEngine.Object.Destroy(tex);
+            if (lg != null) UnityEngine.Object.Destroy(lg);
+            UnityEngine.Object.Destroy(go); UnityEngine.Object.Destroy(rt); UnityEngine.Object.Destroy(tex);
             Journal.Info("essai : photo " + name);
         }
 
@@ -287,6 +292,28 @@ namespace Voyage
             lines.Sort(string.CompareOrdinal);
             File.WriteAllText(Path.Combine(Dir, "chercher_" + motif + ".txt"), string.Join(Environment.NewLine, lines.ToArray()));
             Journal.Info("essai : chercher " + motif + " : " + lines.Count);
+        }
+
+        // lumiere de jour ajoutee aux photos quand le soleil du jeu est couche (une nouvelle partie MWC commence le soir) ; pas
+        // quand il est leve : en plein midi sur MSC, elle doublait le soleil et blanchissait le sol des circuits (24/10)
+        static GameObject NightLight()
+        {
+            foreach (Light x in UnityEngine.Object.FindObjectsOfType<Light>())
+                if (x.type == LightType.Directional && x.enabled && x.gameObject.activeInHierarchy && x.intensity > 0.5f && x.transform.forward.y < -0.2f) return null;
+            var lg = new GameObject("voyage photo (lumiere)");
+            var li = lg.AddComponent<Light>(); li.type = LightType.Directional; li.intensity = 1.1f; lg.transform.rotation = Quaternion.Euler(50, 30, 0);
+            RenderSettings.ambientLight = new Color(0.55f, 0.58f, 0.62f);
+            return lg;
+        }
+
+        // lumieres directionnelles du jeu : intensite et hauteur (le jour sur MSC, la nuit au debut d'une partie MWC)
+        static string SunInfo()
+        {
+            var l = new List<string>();
+            foreach (Light x in UnityEngine.Object.FindObjectsOfType<Light>())
+                if (x.type == LightType.Directional && x.enabled && x.gameObject.activeInHierarchy)
+                    l.Add(x.name + " " + x.intensity.ToString("F2", ci) + " (vers le bas " + (-x.transform.forward.y).ToString("F2", ci) + ")");
+            return string.Join(", ", l.ToArray()) + ", ambiante " + RenderSettings.ambientLight;
         }
 
         static string PathOf(Transform t) { string s = t.name; for (Transform p = t.parent; p != null; p = p.parent) s = p.name + "/" + s; return s; }
