@@ -204,7 +204,9 @@ namespace MWCoop
                     // traversait (JD, 21/10) : 8 cm sous les yeux du conducteur ([Test] BanquetteSorbet, m).
                     // (et 17 cm plus en avant : a 85 cm le buste rentrait dans la custode, le bras sortait par la tole -- capture du 21/10 ;
                     // [Test] BanquetteSorbetRecul, m)
-                    float by = n.StartsWith("SORBET") ? Config.GetFloat("Test", "BanquetteSorbet", -0.08f) : 0.06f;
+                    // (CORRIS, la Rivett coupe : toit bas, 3 cm seulement entre les yeux du passager arriere et le pavillon a +6 cm -- la
+                    // tete sortait du toit, capture du 24/10 ; [Test] BanquetteCorris, m)
+                    float by = n.StartsWith("SORBET") ? Config.GetFloat("Test", "BanquetteSorbet", -0.08f) : n.StartsWith("CORRIS") ? Config.GetFloat("Test", "BanquetteCorris", -0.10f) : 0.06f;
                     float bz = n.StartsWith("SORBET") ? Config.GetFloat("Test", "BanquetteSorbetRecul", 0.68f) : 0.85f;
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + by, d.z - bz) });
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x + xm, d.y + by, d.z - bz) });

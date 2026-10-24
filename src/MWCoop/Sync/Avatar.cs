@@ -1005,6 +1005,27 @@ namespace MWCoop
             return knob;
         }
         public float ShiftWeight { get { return wShift; } }
+        // Essais : chevilles dans le repere de la voiture et plancher sous chacune (rayon vers le bas sur les collisions de la voiture) :
+        // un pied sous le plancher passe par la caisse (passager arriere, 24/10).
+        public string FeetState()
+        {
+            if (vehicleT == null) return "pas en voiture";
+            var sb = new System.Text.StringBuilder();
+            foreach (string an in new[] { "ankle_left", "ankle_right" })
+            {
+                Transform a = Bone(an);
+                if (a == null) continue;
+                sb.Append(an == "ankle_left" ? " G " : " D ").Append(vehicleT.InverseTransformPoint(a.position).ToString("F2"));
+                // (rayon vers le haut depuis 1 m sous la cheville : la premiere collision de la voiture touchee = le dessous de caisse a
+                // l'aplomb du pied -- un rayon parti de l'interieur d'une collision ne la touche pas)
+                float under = float.NaN;
+                foreach (RaycastHit h in Physics.RaycastAll(a.position - vehicleT.up * 1f, vehicleT.up, 1.2f))
+                    if (h.collider != null && !h.collider.isTrigger && h.collider.transform.IsChildOf(vehicleT))
+                    { float y = vehicleT.InverseTransformPoint(h.point).y; if (float.IsNaN(under) || y < under) under = y; }
+                sb.Append(" dessous de caisse ").Append(float.IsNaN(under) ? "?" : under.ToString("F2"));
+            }
+            return sb.ToString();
+        }
         // Essais : tete, main droite et pommeau dans le repere de la voiture (placer une camera d'essai, CameraVoiture).
         public string CarFrame(Transform car)
         {
@@ -1138,6 +1159,26 @@ namespace MWCoop
             }
             return res;
         }
+        // Pied d'un passager pose sur le plancher (My Winter Car) : la cheville jamais sous la surface de la voiture la plus haute a
+        // l'aplomb du pied (rayon vers le bas depuis 40 cm au-dessus) -- les pieds sortaient sous la caisse a l'arriere de la SORBET,
+        // plancher plus haut qu'a l'avant (JD, 24/10). [Test] PiedsPlancher=0 : comme avant ; [Test] ChevilleSol (m, 0,09).
+        Vector3 OnFloor(Transform car, Vector3 at, bool rail)
+        {
+            if (rail || Game.Msc || Config.GetInt("Test", "PiedsPlancher", 1) == 0) return at;
+            float ankle = Config.GetFloat("Test", "ChevilleSol", 0.09f), best = float.NegativeInfinity;
+            float ay = car.InverseTransformPoint(at).y;
+            RaycastHit[] hits = Physics.RaycastAll(at + car.up * 0.4f, -car.up, 0.8f);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || c.isTrigger || !c.transform.IsChildOf(car)) continue;
+                float y = car.InverseTransformPoint(hits[i].point).y;
+                if (y <= ay + 0.25f && y > best) best = y;   // (pas l'assise d'un siege au-dessus du pied)
+            }
+            if (float.IsNegativeInfinity(best) || ay >= best + ankle) return at;
+            return at + car.up * (best + ankle - ay);
+        }
+
         void SeatFit(bool rear)
         {
             // (GIFU ; et la famille du taxi -- MACHTWAGEN, mods Machtwagen300D et SECONDMACHTWAGEN, copies du taxi : interieur
@@ -1179,12 +1220,19 @@ namespace MWCoop
                 bool rail = carName.StartsWith("FLATBED");
                 if (rail) { pf = Config.GetFloat("Test", "RidellePieds", 0.22f); pd = Config.GetFloat("Test", "RidelleChute", 0.62f); ps = 0f; }   // (ridelle de la remorque : assis sur le bord, jambes pendantes)
                 if (Game.Msc && !rail) { pf = Config.GetFloat("Test", "MscPieds", 0.45f); pd = Config.GetFloat("Test", "MscChute", 0.32f); }   // (My Summer Car : plancher plus bas, genoux au menton sinon -- essai HAYOSIKO, 21/10)
+                // (banquette arriere : pieds plus pres et plus bas -- a 45 cm devant, les genoux rentraient dans le dossier du siege avant de
+                // la SORBET, Menor 24/10 ; choix de JD : 30 cm devant, 32 cm plus bas. [Test] ArrierePieds / ArriereChute, m)
+                else if (!rail && Seats.RemoteSeatIndex(Player.Id) >= 1)
+                {
+                    pf = Config.GetFloat("Test", "ArrierePieds", 0.30f); pd = Config.GetFloat("Test", "ArriereChute", 0.32f);
+                    if (carName.StartsWith("CORRIS")) pf = Config.GetFloat("Test", "RivettPieds", 0.45f);   // (Rivett : siege avant loin, genoux au menton a 30 cm)
+                }
                 // (dans le repere de l'avatar, pas de la voiture : sur une ridelle il regarde l'interieur de la remorque)
                 Transform av = Root.transform;
                 float side = rail ? 0f : car.InverseTransformPoint(pelvis.position).x >= 0f ? 1f : -1f;   // (cote de la voiture ou il est assis : les pieds vont vers le milieu)
                 Transform gr = Bone("thig_right"), gl = Bone("thig_left");
-                if (gr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", gr.position + av.forward * pf - av.up * pd + av.right * (0.05f - side * ps));
-                if (gl != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", gl.position + av.forward * pf - av.up * pd - av.right * (0.05f + side * ps));
+                if (gr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", OnFloor(car, gr.position + av.forward * pf - av.up * pd + av.right * (0.05f - side * ps), rail));
+                if (gl != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", OnFloor(car, gl.position + av.forward * pf - av.up * pd - av.right * (0.05f + side * ps), rail));
                 return;
             }
             if (van)
@@ -1775,6 +1823,14 @@ namespace MWCoop
                 {
                     pos += pCar.up * Config.GetFloat("Test", "CouchetteLeve", 0.22f) + pCar.forward * Config.GetFloat("Test", "CouchetteAvance", 0.1f);   // (dos contre la paroi, pas dedans)
                     leanOff = new Vector3(0f, 0f, Config.GetFloat("Test", "CouchetteVoute", 0.5f));
+                }
+                // Banquette arriere de la CORRIS (Rivett coupe, pavillon tres bas) : yeux 10 cm plus bas (Seats), corps remonte sur l'assise et
+                // voute vers l'avant -- la tete passait par le toit, et baissee seule le bassin s'enfoncait de 15 cm dans la banquette (24/10).
+                // [Test] RivettLeve (m), RivettVoute, RivettPieds (m, pieds devant les hanches).
+                else if (pName != null && pName.StartsWith("CORRIS") && Seats.RemoteSeatIndex(pi.Id) >= 1)
+                {
+                    pos += pCar.up * Config.GetFloat("Test", "RivettLeve", 0.06f);
+                    leanOff = new Vector3(0f, 0f, Config.GetFloat("Test", "RivettVoute", 0.35f));
                 }
                 yaw = pCar.eulerAngles.y + seatYaw;
                 placed = true;

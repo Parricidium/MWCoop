@@ -1068,6 +1068,7 @@ namespace MWCoop
                                Lang.T("RAY TRACING (EN D\u00C9VELOPPEMENT)", "RAY TRACING (IN DEVELOPMENT)") };
             foreach (int g in new[] { 5, 0, 1, 6, 4, 2, 3 })
             {
+                if (g == 6 && !RayTracing.Disponible) continue;   // (ray tracing cache pour le moment, JD 24/10)
                 Header(heads[g]);
                 foreach (Gfx.Row r in Gfx.Rows)
                 {

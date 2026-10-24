@@ -542,6 +542,7 @@ namespace MWCoop
         // chaque seconde de 20 a 100 s et capture (CameraAvatar...) ecran-gifu-volant (assis, main au volant) puis
         // ecran-gifu-levier (premiere fois main au levier > 0,9).
         static readonly System.Collections.Generic.Dictionary<Transform, Quaternion> leverRest = new System.Collections.Generic.Dictionary<Transform, Quaternion>();
+        static bool camDoorDone; static float feetLogAt;
         static float glNext, glLog, glTryAt, glSeatedAt = -1f; static int glShifts, glTries; static bool glWheelCap, glLeverCap, glRepose, glDumped, glSeat;
         static string LeverAngle(Rigidbody b)
         {
@@ -1516,6 +1517,20 @@ namespace MWCoop
             }
             if (mode == "conduite") Conduite(t);
             if (mode == "gifulevier") GifuLevier(t);
+            // [Test] JournalPieds=1 : toutes les 2 s, chevilles des avatars dans le repere de leur voiture et plancher sous chacune.
+            if (Config.GetInt("Test", "JournalPieds", 0) != 0 && t > 20f && Time.realtimeSinceStartup >= feetLogAt)
+            {
+                feetLogAt = Time.realtimeSinceStartup + 2f;
+                foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null) Log.Info("autotest : pieds de " + a.Player.Name + " :" + a.FeetState());
+            }
+            // [Test] CameraPorte=<morceau du nom de la portiere> : a 45 s, cette portiere de [Test] TestVoiture ouverte ici (captures d'un
+            // passager vu par la portiere ouverte, comme celles des joueurs -- Menor, 24/10).
+            if (Config.Get("Test", "CameraPorte", "").Length > 0 && t > 45f && !camDoorDone)
+            {
+                camDoorDone = true;
+                Log.Info("autotest : portieres de " + Config.Get("Test", "TestVoiture", "SORBET") + " :" + CarDoors.Keys(Config.Get("Test", "TestVoiture", "SORBET")));
+                Log.Info("autotest : portiere " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "SORBET"), true, Config.Get("Test", "CameraPorte", "")));
+            }
             // [Test] Autotest=modereparation (MWC, 2 joueurs, sauvegarde Rivett) : l'hote diffuse REPAIRMODE_ON a 40 s (cle sortie)
             // et REPAIRMODE_OFF a 55 s ; chacun note a 48 et 63 s l'etat de la vis du culbuteur 1. Chez l'invite elle doit rester
             // dans son etat a lui (avant le 24/10 : rejouee, On puis Off comme chez l'hote).
