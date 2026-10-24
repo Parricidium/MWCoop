@@ -674,7 +674,7 @@ namespace MWCoop
             if (se != null) sb.Append(" [").Append(se.ActiveStateName).Append(se.enabled ? "]" : ", coupe]");
             return sb.ToString();
         }
-        static int mscGear, mscVaz, mscLieu; static float mscHandsAt;
+        static int mscGear, mscVaz, mscLieu, mscDouble; static float mscHandsAt;
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -1039,6 +1039,13 @@ namespace MWCoop
                         rb.transform.position = at; rb.transform.rotation = q; rb.position = at; rb.rotation = q; rb.velocity = Vector3.zero;
                         Log.Info("autotest : mscmort, " + moto + " posee en " + at + " cap " + p[3]);
                     }
+                }
+                // ([Test] MortDouble=1 : la tete de la voiture recassee 2 s apres la reapparition, joueur a la maison -- seconde mort
+                // de JD le 24/10 22:17 ; doit etre ignoree)
+                if (Config.GetInt("Test", "MortDouble", 0) != 0 && mscDouble == 0 && mscStep >= 4 && !Respawn.Choosing && tm > 32f)
+                {
+                    mscDouble = 1;
+                    Log.Info("autotest : mscmort, double : " + Respawn.TestCrash(moto.Split('(')[0].Trim()));
                 }
                 float roule = Config.GetFloat("Test", "MortRoule", 0f);
                 if (roule > 0f && mscStep >= 2 && mscStep < 4 && tm > 24f)

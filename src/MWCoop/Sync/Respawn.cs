@@ -228,6 +228,15 @@ namespace MWCoop
             foreach (FsmBool b in deathFsm.FsmVariables.BoolVariables)
                 if (b.Value && b.Name != "Smoking") { causes.Add(CauseName(b.Name)); crash |= b.Name == "Crash"; b.Value = false; }
             cause = causes.Count > 0 ? string.Join(", ", causes.ToArray()) : "inconnue";
+            // Seconde mort juste apres la reapparition (JD, MSC, 24/10 22:17 : revenu a la maison, « mort (crash) » 18 ms apres, pantin,
+            // reapparition encore) : la tete du conducteur, rattachee a la voiture, recasse dans le meme choc alors que le joueur n'est
+            // plus a bord. Mort par le seul Crash, a pied, dans les 5 s d'une reapparition : annulee (rien ne s'est encore joue).
+            if (crash && causes.Count == 1 && Time.realtimeSinceStartup - revivedAt < 5f && VehicleSync.LocalDriving < 0 && !Seats.Seated)
+            {
+                Log.Info("reapparition : mort (" + cause + ") " + (Time.realtimeSinceStartup - revivedAt).ToString("F2") + " s apres la reapparition, joueur a pied : ignoree (tete de la voiture recassee)");
+                foreach (Head h in heads) RestoreHead(h);   // (rattachee pour le prochain conducteur)
+                return true;
+            }
             Log.Info("reapparition : mort (" + cause + "), mort du jeu arretee");
             diedAt = Time.realtimeSinceStartup;
             Needs();
@@ -303,10 +312,12 @@ namespace MWCoop
             catch (System.Exception e) { MWCoop.Log.Error("reapparition : " + e); }
         }
 
+        static float revivedAt = -100f;
         static void Revive(Place place)
         {
             GameObject pl = Game.PlayerGo;
             if (pl == null) return;
+            revivedAt = Time.realtimeSinceStartup;
             // Accident : liaisons de tete recreees, mannequins ranges (avant de sortir du vehicule).
             foreach (Head h in heads) RestoreHead(h);
             if (Seats.Seated) Seats.TestLeave();
