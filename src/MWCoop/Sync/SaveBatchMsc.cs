@@ -285,7 +285,7 @@ namespace MWCoop
         // duree de Game.SaveInPlace et plus longue image des 5 s suivantes, fichiers copies 5 s apres chaque sauvegarde dans
         // dumps/es2-groupee.txt et dumps/es2-uneparune.txt (a comparer etiquette par etiquette : scratchpad es2diff.py).
         static bool testOld;
-        static int tStep;
+        static int tStep, tWatch;
         static float tCopyAt = -1, tWorst, tProbeAt = -1;
         static string tName;
         // Sonde (avec l'autotest) : points de montage « trigger_* » eteints (piece montee) avant SAVEGAME, et ceux qui se
@@ -306,8 +306,54 @@ namespace MWCoop
             Log.Info("autotest mscsauve : " + when + " : " + n + " point(s) de montage rallume(s) sur " + probeOff.Count + " eteints :" + sb);
         }
 
+        // Suivi de valeurs sauvegardees ([Test] SauveSuivi = etiquettes separees par ';') : la variable lue par l'action
+        // SaveFloat/SaveInt/SaveBool de cette etiquette, journalisee a chaque etape (qui la change, et quand).
+        static Dictionary<string, NamedVariable> watched;
+        static string Transitions(FsmState s)
+        {
+            var sb = new System.Text.StringBuilder();
+            if (s.Transitions != null) foreach (FsmTransition tr in s.Transitions) sb.Append(tr.EventName).Append('>').Append(tr.ToState).Append(' ');
+            return sb.ToString();
+        }
+        static void Watch(string when)
+        {
+            if (watched == null)
+            {
+                watched = new Dictionary<string, NamedVariable>();
+                var want = new HashSet<string>(Config.Get("Test", "SauveSuivi", "racing carburators(Clone)Adjust1;racing carburators(Clone)Adjust2;oilpan(Clone)OilLevel").Split(';'));
+                foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                {
+                    FsmState[] sts; try { sts = f.FsmStates; } catch { continue; }
+                    foreach (FsmState s in sts)
+                    {
+                        FsmStateAction[] acts; try { acts = s.Actions; } catch { continue; }
+                        if (acts == null) continue;
+                        foreach (FsmStateAction a in acts)
+                        {
+                            Kind k = KindOf(a);
+                            if (k == null || k.Value == null || k.Transform) continue;
+                            FsmString tag = (FsmString)k.Tag.GetValue(a);
+                            if (tag != null && want.Contains(tag.Value) && !watched.ContainsKey(tag.Value))
+                            {
+                                watched[tag.Value] = k.Value.GetValue(a) as NamedVariable;
+                                Log.Info("autotest mscsauve : suivi " + tag.Value + " = " + Recon.Path(f.transform) + "::" + f.FsmName + " [" + s.Name + "] {" + (watched[tag.Value] != null ? watched[tag.Value].Name : "?") + "}, actif " + f.ActiveStateName);
+                                if (Config.GetInt("Test", "SauveSuiviEtats", 0) != 0)
+                                    foreach (FsmState s2 in sts) Log.Info("autotest mscsauve :   [" + s2.Name + "] " + Jobs.DumpActions(f, s2.Name) + " -> " + Transitions(s2));
+                            }
+                        }
+                    }
+                }
+            }
+            var sb = new System.Text.StringBuilder("autotest mscsauve : valeurs " + when + " :");
+            foreach (KeyValuePair<string, NamedVariable> kv in watched) sb.Append(' ').Append(kv.Key).Append('=').Append(ValueOf(kv.Value)).Append(';');
+            Log.Info(sb.ToString());
+        }
+
         public static void Test(float t)
         {
+            if (tStep == 0 && watched == null && t > 15f) Watch("au chargement");
+            if (tStep == 1 && tWatch == 1 && t > 50f) { tWatch = 2; Watch("10 s apres"); }
+            if (tStep == 1 && tWatch == 0 && t > 44f) { tWatch = 1; Watch("apres la remise des automates"); }
             if (tProbeAt > 0 && t >= tProbeAt) { tProbeAt = -1; ProbeCheck("apres la remise des automates"); }
             if (tCopyAt > 0)
             {
@@ -330,11 +376,13 @@ namespace MWCoop
                 tName = testOld ? "uneparune" : "groupee";
                 tStep++;
                 ProbeSnap();
+                if (watched != null) Watch("avant " + tName);
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 Game.SaveInPlace();
                 testOld = false;
                 Log.Info("autotest mscsauve : " + tName + ", Game.SaveInPlace en " + sw.ElapsedMilliseconds + " ms");
                 ProbeCheck("juste apres SAVEGAME");
+                if (watched != null) Watch("juste apres " + tName);
                 tWorst = 0; tCopyAt = t + 5f; tProbeAt = t + 3.5f;
             }
         }
