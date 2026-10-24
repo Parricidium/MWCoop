@@ -109,6 +109,11 @@ static const GameDef kGames[2] = {
 };
 static int g_game = GAME_MWC;
 static const GameDef &GM() { return kGames[g_game]; }
+// Ray tracing cache (decision de JD du 24/10 : « retirer le Raytracing en option (cache pour le moment) [...] mais ne pas
+// supprimer la fonctionnalite ») : false = ses lignes et son encart des Reglages, le RT du prereglage Ultra, l'option de
+// lancement -force-gfx-direct et sa mention dans les titres coupes ; ses cles des mwcoop.ini remises a 0 une fois
+// (RtHiddenMigrate, gfx.inc). true pour le rallumer ; MWCoopRT.dll reste dans les paquets.
+static const bool kRtShown = false;
 // Nom du mod affiche : « MSCoop » sur My Summer Car (retour de Vaydon, 19/10 : « It should be MSCOOP »), « MWCoop » sinon. Les
 // noms de fichiers et de dossiers (MWCoop.dll, dossier MWCoop, %LOCALAPPDATA%\MWCoop) ne changent pas.
 static const wchar_t *ProductName() { return g_game == GAME_MSC ? L"MSCoop" : L"MWCoop"; }
@@ -3957,7 +3962,7 @@ static void Launch(int mode, const char *partie = NULL)
     if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
     if (!g_exportDir.empty()) args += L" -mwcoop-profil carte-export -mwcoop-arriereplan";   // (export de la carte : fenetre hors de l'ecran)
     // Ray tracing (MWCoopRT.dll) : Unity doit dessiner sur un seul fil pour que le mod s'insere dans son rendu.
-    if (GetPrivateProfileIntW(L"Graphismes", L"RayTracing", 0, ModIni().c_str()) == 1) { args += L" -force-gfx-direct"; LaunchLog("ray tracing demande : -force-gfx-direct"); }
+    if (kRtShown && GetPrivateProfileIntW(L"Graphismes", L"RayTracing", 0, ModIni().c_str()) == 1) { args += L" -force-gfx-direct"; LaunchLog("ray tracing demande : -force-gfx-direct"); }
     SteamDown();   // (le lanceur ne passe plus pour le jeu aupres de Steam)
     // MSCLoader installe mais coupe dans l'onglet MODS : son prechargeur s'arrete tout de suite (rien n'est desinstalle).
     bool mscOff = syncKind ? syncKind == 1 : !g_mscOn;   // (salon : comme l'hote)
@@ -7257,6 +7262,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         SetGame(IsGameDir(d) ? d : L"");
         g_launcherLog = std::wstring(argv[3]) + L".lanceur.log"; g_debug = true;   // (detail des requetes -- miroirs, 21/10)
         // ([Lanceur] MajAuto=1 : installe, comme StartUpdate, puis le lanceur s'il y a lieu -- flux, 1.15.0)
+        RtHiddenMigrate();   // (comme au demarrage de la fenetre : essais de la migration)
         bool autoMaj = GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0;
         if (!g_gameDir.empty()) { g_busy = true; UpdateThread((void *)(INT_PTR)(autoMaj ? UPD_INSTALL : UPD_CHECK)); }
         FILE *f = _wfopen(argv[3], L"w, ccs=UTF-8");
@@ -7850,6 +7856,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     g_dib = CreateDIBSection(g_memDC, &bi, DIB_RGB_COLORS, &g_bits, NULL, 0);
     SelectObject(g_memDC, g_dib);
 
+    RtHiddenMigrate();   // (ray tracing cache : coupe dans les mwcoop.ini des deux jeux, une fois)
     Present();
     ShowWindow(g_wnd, SW_SHOW);
     SetTimer(g_wnd, 1, 16, NULL);

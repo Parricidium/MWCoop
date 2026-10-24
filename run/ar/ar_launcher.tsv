@@ -2032,6 +2032,21 @@ MWCoop runs as administrator, Steam does not: restart MWCoop normally	MWCoop ي�
 Steam runs as administrator, MWCoop does not: restart Steam normally	Steam يعمل كمسؤول وMWCoop لا: أعد تشغيل Steam بشكل عادي
 Steam refuses MWCoop: is %s in your Steam library? Else use IP / VPN	Steam يرفض MWCoop: هل %s في مكتبة Steam لديك؟ وإلا فاستخدم IP / VPN
 Rally night	أمسية الرالي
+Settings > Game: display, comfort, light and shadows, player names (distance, or hidden); the Image tab for the rest. One-click presets; in game: F10 menu.	الإعدادات > اللعبة: العرض، الراحة، الضوء والظلال، أسماء اللاعبين (المسافة، أو مخفية)؛ علامة تبويب الصورة للبقية. إعدادات مسبقة بنقرة واحدة؛ داخل اللعبة: قائمة F10.
+One page, seven tabs: Game, Image, Sound & voice, Co-op (your lobbies, the network, the port), Keys, Theme, Launcher (language, updates, game folder, troubleshooting).	صفحة واحدة، سبع علامات تبويب: اللعبة، الصورة، الصوت والمحادثة الصوتية، اللعب الجماعي (ردهاتك، الشبكة، المنفذ)، المفاتيح، المظهر، المشغّل (اللغة، التحديثات، مجلد اللعبة، استكشاف الأخطاء).
+Preset, Display, Comfort & in-game display, and the Light & shadows summary; everything else is in the Image tab. Unity's configuration window is now skipped: set your screen here.	الإعداد المسبق، العرض، الراحة والعرض داخل اللعبة، وملخص الضوء والظلال؛ كل ما تبقى في علامة تبويب الصورة. نافذة إعدادات Unity تُتخطى الآن: اضبط شاشتك هنا.
+Vanilla and Ultra	الأصلية وفائق
+Vanilla brings the game back as it is, without MWCoop's additions; Ultra turns everything up to the max. Every row stays editable: the pill then moves to Custom.	الأصلية تعيد اللعبة كما هي، بلا إضافات MWCoop؛ فائق يرفع كل شيء إلى الحد الأقصى. يبقى كل صف قابلاً للتعديل: تنتقل الشريحة حينها إلى مخصّص.
+SETTINGS — Game, Co-op and Mods. Game and Co-op open the same Settings page, with its tabs (Game, Image, Sound & voice, Co-op, Keys, Theme, Launcher) and its \"Search a setting…\" field.	الإعدادات — اللعبة، اللعب الجماعي والتعديلات. تفتح اللعبة واللعب الجماعي صفحة الإعدادات نفسها، بعلامات تبويبها (اللعبة، الصورة، الصوت والمحادثة الصوتية، اللعب الجماعي، المفاتيح، المظهر، المشغّل) وحقلها «ابحث عن إعداد…».
+Game and Image	اللعبة والصورة
+Image: the whole picture (HDR, bloom, contrast, sun shafts, lamp coronas, headlight range) and the shadows (sun, moon, houses, distance, detail, headlights, street lights).	الصورة: الصورة كلها (HDR، التوهج، التباين، أشعة الشمس، هالات المصابيح، مدى المصابيح الأمامية)، الظلال (الشمس، القمر، المنازل، المسافة، الدقة، المصابيح الأمامية، مصابيح الشوارع).
+Graphics: Settings > Game and Image	الرسوميات: الإعدادات > اللعبة والصورة
+The Preset card of the Game tab sets everything at once: Vanilla (the game as is, without MWCoop's additions), Light (old PC), Balanced, Pretty (shadows, HDR), Ultra (everything max). As soon as you change a row, the pill moves to Custom. Just for you: the others see no difference; in game, the F10 menu has the same settings.	بطاقة الإعداد المسبق في علامة تبويب اللعبة تضبط كل شيء دفعة واحدة: الأصلية (اللعبة كما هي، بلا إضافات MWCoop)، خفيف (حاسوب قديم)، متوازن، جميل (الظلال، HDR)، فائق (كل شيء بأقصى حد). ما إن تغيّر صفًا حتى تنتقل الشريحة إلى مخصّص. لك وحدك: لا يرى الآخرون أي فرق؛ وداخل اللعبة، قائمة F10 تحوي الإعدادات نفسها.
+Image > Image and Shadows: HDR, bloom, contrast, sun shafts, GTA-style coronas, headlight range; sun, moon and house shadows, shadow distance and detail, headlight and street light shadows. The \"medium\" and \"heavy\" tags say what each row costs.	الصورة > الصورة والظلال: HDR، التوهج، التباين، أشعة الشمس، هالات على طراز GTA، مدى المصابيح الأمامية؛ ظلال الشمس والقمر والمنازل، مسافة الظلال ودقتها، ظلال المصابيح الأمامية ومصابيح الشوارع. وسما «متوسط» و«ثقيل» يبيّنان كلفة كل صف.
+Ray tracing: set aside for now, it will come back later. The game's light and shadows stay adjustable in the Image tab.	تتبع الأشعة: مؤجَّل حالياً، وسيعود لاحقاً. يبقى ضوء اللعبة وظلالها قابلين للضبط في علامة تبويب الصورة.
+Light, shadows · in game: F10	الضوء، الظلال · داخل اللعبة: F10
+The whole Image tab	علامة تبويب الصورة كاملة
+everything max	كل شيء بأقصى حد
 MOD SUPPORT / KNOWN INCOMPATIBILITIES	دعم المودّات / حالات عدم التوافق
 Remove dents…	إزالة الانبعاجات…
 Close the game to remove the dents	أغلق اللعبة لإزالة الانبعاجات

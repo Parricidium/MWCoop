@@ -377,7 +377,7 @@ static void GfxSet(const char *k, int v)
 // Ligne sans effet : reglages RT sans carte compatible ou RT coupe ; ombres d'Unity remplacees quand le RT est actif.
 static bool GfxRowOff(const GfxRow &r, const wchar_t **why)
 {
-    bool rt = GfxGet("RayTracing") == 1 && GfxDxr();
+    bool rt = kRtShown && GfxGet("RayTracing") == 1 && GfxDxr();
     if (r.group == 14 && !GfxDxr()) { *why = T(L"carte non compatible", L"GPU not supported"); return true; }
     if ((r.group == 17 || r.group == 18) && GfxGet("Style") == 0) { *why = T(L"style Vanilla", L"Vanilla style"); return true; }
     if (r.group == 14 && strcmp(r.key, "RayTracing") && !rt) { *why = T(L"RT coupé", L"RT off"); return true; }
@@ -436,8 +436,8 @@ static const std::vector<GfxPreset> &GfxPresets()
     for (int k = 0; k < 4; k++) {
         std::vector<std::pair<const char *, int>> v;
         for (int i = 0; i < n; i++) v.push_back(std::make_pair(keys[i], vals[k][i]));
-        if (k == 3 && !GfxDxr()) v.back().second = 0;   // (Ultra sans carte DXR : tout au max, sans ray tracing)
-        p.push_back({ nf[k], ne[k], df[k], de[k], v });
+        if (k == 3 && (!GfxDxr() || !kRtShown)) v.back().second = 0;   // (Ultra sans carte DXR, ou RT cache : tout au max, sans ray tracing)
+        p.push_back({ nf[k], ne[k], k == 3 && !kRtShown ? L"tout au max" : df[k], k == 3 && !kRtShown ? L"everything max" : de[k], v });
     }
     // My Summer Car : sans les ombres de la lune, retroviseurs oui / non, ses reflets en plus (coupes en Leger, sinon oui)
     if (g_game == GAME_MSC)
@@ -469,8 +469,8 @@ static int GfxPresetOn()
 // Chercher de l'en-tete filtre ces memes lignes, toutes cartes confondues. Les pastilles (choix a segments) suivent la
 // maquette : valeurs courtes (GfxRow::pv), un nom qui ne tient pas passe sur deux lignes, sinon ◀ valeur ▶.
 enum { SET_JEU, SET_IMAGE, SET_HUD, SET_SON, SET_COOP, SET_TOUCHES, SET_THEME, SET_LANCEUR, SET_N };
-static const wchar_t *kSetTabFr[SET_N] = { L"Jeu", L"Image & ray tracing", L"HUD", L"Son & vocal", L"Co-op", L"Touches", L"Thème", L"Lanceur" };
-static const wchar_t *kSetTabEn[SET_N] = { L"Game", L"Image & ray tracing", L"HUD", L"Sound & voice", L"Co-op", L"Keys", L"Theme", L"Launcher" };
+static const wchar_t *kSetTabFr[SET_N] = { L"Jeu", kRtShown ? L"Image & ray tracing" : L"Image", L"HUD", L"Son & vocal", L"Co-op", L"Touches", L"Thème", L"Lanceur" };
+static const wchar_t *kSetTabEn[SET_N] = { L"Game", kRtShown ? L"Image & ray tracing" : L"Image", L"HUD", L"Sound & voice", L"Co-op", L"Keys", L"Theme", L"Launcher" };
 static int g_setTab = SET_JEU;
 static std::wstring g_setSearch;        // champ Chercher (vide : les onglets)
 static bool g_setFocus;                 // champ Chercher actif (curseur)
@@ -539,7 +539,7 @@ static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
 // wide : 1 toute la largeur avant les sous-colonnes, 2 apres (pied de carte : boutons Par defaut / Enregistrer...).
 // only : 0 les deux jeux, 1 My Winter Car seulement, 2 My Summer Car seulement (19/10 : une ligne propre a un jeu, ou sa
-// variante pour l'autre ; un reglage du jeu absent de GfxRows pour ce jeu est cache de meme, SetItemOn).
+// variante pour l'autre ; un reglage du jeu absent de GfxRows pour ce jeu est cache de meme, SetItemOn) ; 3 seulement quand le ray tracing est cache (kRtShown).
 // Pied ("footer") : fr/en = legende, dFr = boutons -- D Par defaut, E Enregistrer, G Revoir le guide de l'hote, T Tester ma connexion.
 struct SetItem { int card, kind; const char *key; const wchar_t *fr, *en, *dFr, *dEn; int wide, only; };
 static const SetItem kSetItems[] = {
@@ -567,6 +567,7 @@ static const SetItem kSetItems[] = {
     { 6, SI_GFX, "RTCorps", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTReflets", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTVitres", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTRebond", NULL, NULL, NULL, NULL },
     { 6, SI_GFX, "RTOcclusion", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTLampes", NULL, NULL, NULL, NULL },
     { 6, SI_X, "footer", L"Appliqués au prochain lancement du jeu · en jeu : F10.", L"Applied at the next game start · in game: F10.", L"DE", NULL, 2 },
+    { 5, SI_X, "footer", L"Appliqués au prochain lancement du jeu · en jeu : F10.", L"Applied at the next game start · in game: F10.", L"DE", NULL, 2, 3 },   // (ray tracing cache : le pied de l'onglet Image passe sous Ombres)
     { 7, SI_GFX, "Vocal", NULL, NULL, NULL, NULL }, { 7, SI_GFX, "VocalPortee", NULL, NULL, NULL, NULL }, { 7, SI_GFX, "VolumeVocal", NULL, NULL, L"Ce que tu entends", L"What you hear" },
     { 7, SI_GFX, "GainMicro", L"Mon micro (pour les autres)", L"My microphone (for the others)", NULL, NULL },
     // (1.8.9 : les lignes de 1.8.8 n'etaient dans aucune carte -- JD : « laisser le choix, appuyer sur V ou detection automatique »)
@@ -800,10 +801,48 @@ static void DroneLayoutSet(int k)
 
 // ---- petits elements de la page
 static int SetGfxIdx(const char *key) { const auto &rows = GfxRows(); for (int i = 0; i < (int)rows.size(); i++) if (!strcmp(rows[i].key, key)) return i; return -1; }
+// Ray tracing cache (kRtShown, launcher.cpp) : ses lignes (RayTracing, RT...) et l'encart rtbox.
+static const int kRtCard = 6;   // (kSetCards : la carte Ray tracing de l'onglet Image)
+static bool IsRtKey(const char *k) { return k && (!strcmp(k, "RayTracing") || !strncmp(k, "RT", 2) || !strcmp(k, "rtbox")); }
+// Un joueur qui l'avait allume ne doit pas rester bloque avec une option invisible : [Graphismes] RayTracing et [Test] RT a 0
+// dans les mwcoop.ini des deux jeux (MWC\ et MSC\ du lanceur installe, le dossier du jeu choisi, ceux retenus pour chaque
+// jeu en mode « dans le jeu »), une fois ([Lanceur] RtCoupe=1). Les autres reglages RT (rayons, portee, reflets...) restent :
+// ils ne servent qu'avec le RT allume.
+static void RtHiddenMigrate()
+{
+    if (kRtShown || g_iniLauncher.empty() || GetPrivateProfileIntW(L"Lanceur", L"RtCoupe", 0, g_iniLauncher.c_str()) != 0) return;
+    std::vector<std::wstring> inis;
+    auto add = [&](const std::wstring &root) {
+        if (root.empty()) return;
+        std::wstring p = WithSlash(root) + L"MWCoop\\mwcoop.ini";
+        for (auto &q : inis) if (!_wcsicmp(q.c_str(), p.c_str())) return;
+        inis.push_back(p);
+    };
+    std::wstring home = LocalDir();
+    if (!home.empty()) { add(WithSlash(home) + L"MWC"); add(WithSlash(home) + L"MSC"); }
+    add(g_modRoot);
+    for (int g = 0; g < 2; g++) {
+        wchar_t d[MAX_PATH] = L"";
+        GetPrivateProfileStringW(L"Lanceur", kGames[g].iniDir, L"", d, MAX_PATH, g_iniLauncher.c_str());
+        if (d[0]) add(d);
+    }
+    int n = 0;
+    for (auto &p : inis) {
+        if (!FileExists(p)) continue;
+        bool on = GetPrivateProfileIntW(L"Graphismes", L"RayTracing", 0, p.c_str()) != 0, test = GetPrivateProfileIntW(L"Test", L"RT", 0, p.c_str()) != 0;
+        if (on) WritePrivateProfileStringW(L"Graphismes", L"RayTracing", L"0", p.c_str());
+        if (test) WritePrivateProfileStringW(L"Test", L"RT", L"0", p.c_str());
+        if (on || test) { n++; LaunchLog("ray tracing cache : coupe dans %s", Narrow(p, CP_UTF8).c_str()); }
+    }
+    WritePrivateProfileStringW(L"Lanceur", L"RtCoupe", L"1", g_iniLauncher.c_str());
+    LaunchLog("ray tracing cache : %d mwcoop.ini sur %d avaient le RT allume", n, (int)inis.size());
+}
 // Ligne montree pour le jeu choisi (SetItem::only ; reglage du jeu absent de GfxRows pour ce jeu : cache, pas de trou).
 static bool SetItemOn(const SetItem &it)
 {
     if (it.only == (g_game == GAME_MSC ? 1 : 2)) return false;
+    if (it.only == 3) return !kRtShown;
+    if (!kRtShown && (IsRtKey(it.key) || it.card == kRtCard)) return false;   // (carte Ray tracing entiere, son pied compris)
     return it.kind != SI_GFX || SetGfxIdx(it.key) >= 0;
 }
 static bool SetDrawn(RectF r) { return r.Y + r.Height > g_setTop && r.Y < g_setBottom; }
@@ -1513,7 +1552,7 @@ static void SetCardHeader(Graphics &g, const SetCard &c, float right, float y, f
     if (!c.hdr) return;
     float cy = y + 26;
     if (!strcmp(c.hdr, "goimage")) {   // lien vers l'onglet Image & ray tracing
-        std::wstring s = T(L"Tout l'onglet Image & ray tracing", L"The whole Image & ray tracing tab");
+        std::wstring s = kRtShown ? T(L"Tout l'onglet Image & ray tracing", L"The whole Image & ray tracing tab") : T(L"Tout l'onglet Image", L"The whole Image tab");
         float tw = MeasureW(MeasureG(), s, 12, FontStyleBold) + 22;
         if (tw > w) { s = T(L"Onglet Image", L"Image tab"); tw = MeasureW(MeasureG(), s, 12, FontStyleBold) + 22; }   // (gros texte : court)
         RectF r(right - tw, cy - 12, tw, 24);
@@ -1758,7 +1797,11 @@ static void DrawSettingsPage(Graphics &g)
         for (int ci = 0; ci < kSetCardN; ci++) {
             const SetCard &c = kSetCards[ci];
             if (c.tab != g_setTab) continue;
-            cy[c.col] += SetDrawCard(g, ci, cx[c.col], cy[c.col], cw[c.col]) + 12;
+            bool any = false;   // (carte sans aucune ligne montree -- Ray tracing cache : pas de carte vide)
+            for (int i = 0; i < kSetItemN && !any; i++) any = kSetItems[i].card == ci && kSetItems[i].kind != SI_SEC && kSetItems[i].kind != SI_BREAK && SetItemOn(kSetItems[i]);
+            if (!any) continue;
+            int col = !kRtShown && ci == kRtCard - 1 ? 1 : c.col;   // (ray tracing cache : Ombres prend sa colonne)
+            cy[col] += SetDrawCard(g, ci, cx[col], cy[col], cw[col]) + 12;
         }
         bottom = max(cy[0], cy[1]) - 12;
     }
@@ -1775,9 +1818,9 @@ static void DrawSettingsPage(Graphics &g)
 static std::wstring SetHeaderSub()
 {
     if (!g_setSearch.empty()) { wchar_t b[96]; swprintf_s(b, T(L"%d réglages trouvés · Échap : effacer", L"%d settings found · Esc: clear"), g_setFound); return b; }
-    static const wchar_t *fr[SET_N] = { L"Durables, pour toutes tes parties · « Jeu » = la valeur du jeu lui-même", L"Lumière, ombres, ray tracing · en jeu : F10", L"Jauges en jeu : Vanilla, Carte, Anneaux ou Bandeau · en jeu : F10 › HUD", L"Vocal de proximité : qui t'entend, à quel volume",
+    static const wchar_t *fr[SET_N] = { L"Durables, pour toutes tes parties · « Jeu » = la valeur du jeu lui-même", kRtShown ? L"Lumière, ombres, ray tracing · en jeu : F10" : L"Lumière, ombres · en jeu : F10", L"Jauges en jeu : Vanilla, Carte, Anneaux ou Bandeau · en jeu : F10 › HUD", L"Vocal de proximité : qui t'entend, à quel volume",
                                         L"Ce que tu proposes en hébergeant, et ce que tu veux chez toi", L"Touches de MWCoop · celles du jeu : dans le jeu (Options > Contrôles)", L"Thème, couleur d'accent, aurore et neige, verre, densité, texte", L"Lanceur : langue, version, dossier du jeu, mises à jour, journaux" };
-    static const wchar_t *en[SET_N] = { L"Lasting, for all your games · \"Game\" = the game's own value", L"Light, shadows, ray tracing · in game: F10", L"In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD", L"Proximity voice: who hears you, how loud",
+    static const wchar_t *en[SET_N] = { L"Lasting, for all your games · \"Game\" = the game's own value", kRtShown ? L"Light, shadows, ray tracing · in game: F10" : L"Light, shadows · in game: F10", L"In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD", L"Proximity voice: who hears you, how loud",
                                         L"What you offer when hosting, and what you want on your side", L"MWCoop keys · the game's own: in the game (Options > Controls)", L"Theme, accent colour, aurora and snow, glass, density, text", L"Launcher: language, version, game folder, updates, logs" };
     if (g_game == GAME_MSC && g_setTab == SET_THEME) return T(L"Thème, couleur d'accent, fond animé, verre, densité, texte", L"Theme, accent colour, animated background, glass, density, text");   // (scene d'ete : ni aurore ni neige)
     return T(fr[g_setTab], en[g_setTab]);
@@ -1927,7 +1970,7 @@ static bool SetClick(int id)
     case UI_SET_REPAIR: RepairMWCoop(); return true;
     case UI_SET_NIGHTLY: WritePrivateProfileStringW(L"Lanceur", L"Nightly", NightlyOn() ? NULL : L"1", g_iniLauncher.c_str()); if (!g_busy) StartUpdate(false); return true;
     case UI_SET_GLASS: ThemeSetGlass(!g_glass); return true;
-    case UI_SET_RTTOGGLE: if (GfxDxr()) GfxSet("RayTracing", GfxGet("RayTracing") == 1 ? 0 : 1); return true;
+    case UI_SET_RTTOGGLE: if (kRtShown && GfxDxr()) GfxSet("RayTracing", GfxGet("RayTracing") == 1 ? 0 : 1); return true;
     case UI_SET_PRIV: case UI_SET_PRIV + 1: WritePrivateProfileStringW(L"Lanceur", L"SalonPrive", id == UI_SET_PRIV ? L"0" : L"1", g_iniLauncher.c_str()); return true;
     case UI_SET_NOTES: GoPage(TAB_NOTES); return true;
     case UI_SET_API: GoPage(TAB_API); return true;

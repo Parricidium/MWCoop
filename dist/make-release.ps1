@@ -183,10 +183,9 @@ finally {
     # (essai sans -Publier, ou echec avant la publication : le numero remis comme avant)
     if (-not $Publier -or -not $built) { Unstamp; if ($stamped) { "Numero remis comme avant dans : $($stamped -join ', ')" } }
 }
-if (-not $Publier) { return }
-
-# ---- pont pour les anciens lanceurs : zip classique vX.Y.N = lanceur courant + mod de 1.15.0 (version.txt « 1.15.0 »)
-function Publish-Pont($exe, $lancVersion) {
+# ---- pont pour les anciens lanceurs : zip classique vX.Y.N = lanceur courant + mod de 1.15.0 (version.txt « 1.15.0 »).
+# -Essai : le zip seulement, dans dist\out (essai sans -Publier de -Jeu lanceur : a installer avec un vieux lanceur).
+function Publish-Pont($exe, $lancVersion, [switch]$Essai) {
     $base = "$PSScriptRoot\out\pont-base"
     if (Test-Path $base) { Remove-Item $base -Recurse -Force }
     New-Item -ItemType Directory -Force $base | Out-Null
@@ -203,7 +202,11 @@ function Publish-Pont($exe, $lancVersion) {
     Set-Content "$stage\MWCoop\version.txt" $kLastGlobal -NoNewline -Encoding ASCII   # (toujours 1.15.0 : le nouveau lanceur reprend ensuite le flux du jeu)
     $pz = "$PSScriptRoot\out\MWCoop-$pv.zip"
     Zip $stage $pz
-    $pn = "- MWC et MSC : nouveau lanceur $lancVersion. Les mises a jour de My Winter Car, de My Summer Car et du lanceur sont maintenant separees : mets a jour, puis le lanceur propose la version de ton jeu.`n---`n- MWC and MSC: new launcher $lancVersion. My Winter Car, My Summer Car and launcher updates are now separate: update, then the launcher offers your game's version."
+    if ($Essai) { "Pont d'essai : $pz (v$pv, lanceur $lancVersion, mod $kLastGlobal) -- pas publie"; return }
+    $pn = "- MWC et MSC : nouveau lanceur $lancVersion. Les mises à jour de My Winter Car, de My Summer Car et du lanceur sont maintenant séparées : mets à jour, puis le lanceur propose la version de ton jeu.`n---`n" +
+          "- MWC and MSC: new launcher $lancVersion. My Winter Car, My Summer Car and launcher updates are now separate: update, then the launcher offers your game's version.`n---`n" +
+          "- MWC и MSC: новый лаунчер $lancVersion. Обновления My Winter Car, My Summer Car и лаунчера теперь отдельные: обновись, затем лаунчер предложит версию твоей игры.`n---`n" +
+          "- MWC وMSC: مشغّل جديد $lancVersion. أصبحت تحديثات My Winter Car وMy Summer Car والمشغّل منفصلة: حدّث، ثم يعرض المشغّل إصدار لعبتك."
     $nf = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($nf, $pn, (New-Object System.Text.UTF8Encoding $false))
     gh release create "v$pv" $pz --repo $repo --title "MWCoop $pv (launcher $lancVersion)" --notes-file $nf --target main --latest
@@ -211,7 +214,10 @@ function Publish-Pont($exe, $lancVersion) {
     Remove-Item $nf
     if ($rc -ne 0) { Write-Warning "pont v$pv : echec de la publication" } else { "Pont publie : v$pv (lanceur $lancVersion)" }
 }
-
+if (-not $Publier) {
+    if ($Jeu -eq 'lanceur' -and -not $Nightly -and -not $SansPont) { Publish-Pont "$root\build\MWCoop.exe" $Version -Essai }
+    return
+}
 $Notes = if ($Notes) { $Notes } else { "$streamName $Version" }
 # " --- " au milieu d'une ligne vaut une ligne --- (0.63.0 : tout etait reste colle, francais et anglais, dans les
 # notes du lanceur comme dans l'annonce Discord, qui ne doit avoir que l'anglais)
