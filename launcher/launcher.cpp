@@ -7525,6 +7525,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_tab = TAB_MODS;
                 }
         else if (st == L"menu-ip") g_steamNet = false;
+        else if (st == L"steam-refus") SetStatus(K_ERR, L"%s", SteamInitWhy().c_str());   // (raison d'un refus de Steam, telle que ce PC la verrait)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)
         else if (!wcsncmp(st.c_str(), L"reglages-", 9)) { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(st); }   // reglages-jeu|image|son|coop|touches|theme|lanceur|recherche

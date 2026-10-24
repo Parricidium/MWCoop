@@ -1,0 +1,5 @@
+STM01	Steam is not running: start Steam, or play over IP / VPN
+STM02	Steam is open but no account is logged in: log in, or play over IP / VPN
+STM03	MWCoop runs as administrator, Steam does not: restart MWCoop normally
+STM04	Steam runs as administrator, MWCoop does not: restart Steam normally
+STM05	Steam refuses MWCoop: is %s in your Steam library? Else use IP / VPN

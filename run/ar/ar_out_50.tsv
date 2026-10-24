@@ -1,0 +1,5 @@
+STM01	Steam لا يعمل: شغّل Steam أو العب عبر IP / VPN
+STM02	Steam مفتوح لكن لا يوجد حساب مسجّل الدخول: سجّل الدخول أو العب عبر IP / VPN
+STM03	MWCoop يعمل كمسؤول وSteam لا: أعد تشغيل MWCoop بشكل عادي
+STM04	Steam يعمل كمسؤول وMWCoop لا: أعد تشغيل Steam بشكل عادي
+STM05	Steam يرفض MWCoop: هل %s في مكتبة Steam لديك؟ وإلا فاستخدم IP / VPN

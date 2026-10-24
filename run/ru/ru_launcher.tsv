@@ -1958,3 +1958,8 @@ Tools 	Инструменты
  · Tools	 · Инструменты
 Launcher · 	Лаунчер · 
  · launcher 	 · лаунчер 
+Steam is not running: start Steam, or play over IP / VPN	Steam не запущен: запусти Steam или играй по IP / VPN
+Steam is open but no account is logged in: log in, or play over IP / VPN	Steam открыт, но вход в аккаунт не выполнен: войди или играй по IP / VPN
+MWCoop runs as administrator, Steam does not: restart MWCoop normally	MWCoop запущен от администратора, а Steam нет: перезапусти MWCoop обычным способом
+Steam runs as administrator, MWCoop does not: restart Steam normally	Steam запущен от администратора, а MWCoop нет: перезапусти Steam обычным способом
+Steam refuses MWCoop: is %s in your Steam library? Else use IP / VPN	Steam не пускает MWCoop: есть ли %s в твоей библиотеке Steam? Иначе — IP / VPN
