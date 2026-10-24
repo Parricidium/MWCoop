@@ -673,7 +673,7 @@ namespace MWCoop
             if (se != null) sb.Append(" [").Append(se.ActiveStateName).Append(se.enabled ? "]" : ", coupe]");
             return sb.ToString();
         }
-        static int mscGear; static float mscHandsAt;
+        static int mscGear, mscVaz; static float mscHandsAt;
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -1018,6 +1018,9 @@ namespace MWCoop
                 // 33 s ([Test] TestReapparition=2), sonde du sang et posture avant, pendant et apres ; captures.
                 string moto = Config.Get("Test", "TestVoiture", "JONNEZ ES(Clone)");
                 float tm = t - Config.GetInt("Test", "Decale", 0);   // ([Test] Decale=<s> : tout plus tard, voiture d'un mod appelee apres le chargement)
+                // ([Test] MortVaz=<modele> : VAZ n 5 de ce modele appelee a 8 s -- TestVoiture=MWCoop-VAZ-5 ; crash de JD apres la
+                // reapparition, mort dans la 205 T16 Evo 2, 24/10)
+                if (mscVaz == 0 && t > 8f && Config.Get("Test", "MortVaz", "").Length > 0) { mscVaz = 1; Log.Info("autotest : mscmort, VAZ 5 -> " + Vaz.Request(5, Config.GetInt("Test", "MortVaz", 0))); }
                 if (tm > 18f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscmort, " + VehicleSync.TestEnter(moto, false)); }
                 if (tm > 22f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscmort, guidon -> " + VehicleSync.TestEnter(moto, true)); }
                 if (tm > 26f && mscStep == 2) { mscStep = 3; DumpFsms(Config.Get("Test", "Automate", "")); Log.Info("autotest : mscmort, conduite " + VehicleSync.TestDriveDump(moto)); Log.Info("autotest : mscmort, posture au guidon : " + PoseInfo()); Log.Info("autotest : mscmort, " + Respawn.ProbeBlood()); }
