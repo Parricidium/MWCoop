@@ -610,8 +610,19 @@ namespace MWCoop
                             var rf = ac as HutongGames.PlayMaker.Actions.RandomFloat;
                             if (st.Name == "Starting engine" && rf != null) { rf.min.Value = 0.6f; rf.max.Value = 1.4f; n++; }
                         }
+                // touche du frein a main (Espace) : la Ruscko du jeu n'a que sa tirette -- l'action « handbrakeAxis := Handbrake » de
+                // son entree au volant (DriveTrigger 'PlayerTrigger', etat 'Player in car') est desactivee dans le jeu ; rallumee sur nos
+                // copies, comme sur la Satsuma (JD 24/10 : « ESPACE pour tirer le frein a main, ca ne marche pas » sur la 205 Ebo 2)
+                if (f.FsmName == "PlayerTrigger" && on == "DriveTrigger")
+                    foreach (FsmState st in f.FsmStates)
+                        if (st.Name == "Player in car")
+                            foreach (FsmStateAction ac in st.Actions)
+                            {
+                                var sp = ac as HutongGames.PlayMaker.Actions.SetProperty;
+                                if (sp != null && !ac.Enabled && sp.targetProperty != null && sp.targetProperty.PropertyName == "handbrakeAxis") { ac.Enabled = true; n++; }
+                            }
             }
-            Log.Info("vaz : Ruscko copiee : " + n + " correction(s) (guepes, roues arriere, tirette, refroidissement, contact sans cle, demarreur)");
+            Log.Info("vaz : Ruscko copiee : " + n + " correction(s) (guepes, roues arriere, tirette, refroidissement, contact sans cle, demarreur, touche du frein a main)");
         }
 
         // Voiture du rallye du jeu (RACES/.../RALLYCAR3 ; chez l'invite, Races la sort de son parent) : recherche parmi tous les

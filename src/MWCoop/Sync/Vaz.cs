@@ -624,11 +624,47 @@ namespace MWCoop
             return d.ToString();
         }
 
+        // [Test] SondeFrein=1 (autotest vaz, 36 s) : frein a main -- champs du controleur (AxisCarController) de la SATSUMA, de la
+        // Ruscko et de ma voiture du F10, et automates des objets « hand/brake » de chacune (My Summer Car : Espace ne serrait pas
+        // le frein a main des addons, JD 24/10)
+        static bool frontProbe;
+        static void ProbeHandbrake(float t)
+        {
+            float at = Config.GetFloat("Test", "SondeFrein", 0f); if (frontProbe || at <= 0f || t < (at > 1f ? at : 36f)) return;   // (SondeFrein=1 : 36 s ; =n : a n s, au volant avec VazRoule)
+            frontProbe = true;
+            Transform mine = CarOf(Me);
+            foreach (GameObject g in new[] { Game.FindAny("SATSUMA(557kg, 248)"), Game.FindAny("RCO_RUSCKO12(270)"), mine != null ? mine.gameObject : null })
+            {
+                if (g == null) continue;
+                foreach (Component c in g.GetComponents<Component>())
+                {
+                    if (c == null || !(c.GetType().Name.Contains("Controller") || c.GetType().Name.Contains("Drivetrain"))) continue;
+                    var sb = new System.Text.StringBuilder("autotest vaz : frein " + g.name + " " + c.GetType().Name + " :");
+                    foreach (System.Reflection.FieldInfo fi in c.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                    {
+                        string n = fi.Name.ToLowerInvariant();
+                        if (!(n.Contains("hand") || n.Contains("brake") || n.Contains("axis") || n.Contains("input"))) continue;
+                        object v = fi.GetValue(c);
+                        sb.Append(' ').Append(fi.Name).Append('=').Append(v is UnityEngine.Object ? ((UnityEngine.Object)v).name : v != null ? v.ToString() : "null");
+                    }
+                    Log.Info(sb.ToString());
+                }
+                foreach (PlayMakerFSM f in g.GetComponentsInChildren<PlayMakerFSM>(true))
+                {
+                    string n = (f.gameObject.name + " " + f.FsmName).ToLowerInvariant();
+                    if (!(n.Contains("hand") || n.Contains("brake") || f.FsmName == "PlayerTrigger")) continue;
+                    try { f.Fsm.InitData(); Log.Info("autotest vaz : frein " + DumpFsm(f)); }
+                    catch (System.Exception e) { Log.Info("autotest vaz : frein " + Recon.Path(f.transform) + "::" + f.FsmName + " illisible (" + e.GetType().Name + ")"); }
+                }
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "vazcle") { TestKey(t); return; }
             if (mode != "vaz") return;
             bool host = Host;
+            ProbeHandbrake(t);
             if (testStep == 0 && !testMoved && t > 12f && Config.GetInt("Test", "VazDehors", 0) != 0)
             {
                 // (captures : dans la cour, a 7 m a droite de la Rivett, regard dans son sens)
