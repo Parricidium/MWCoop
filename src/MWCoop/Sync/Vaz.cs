@@ -82,6 +82,15 @@ namespace MWCoop
         public static string MineModelName { get { return ModelName(Me); } }
         public static string LiveryOf(int playerId) { Slot s; return wanted.TryGetValue(playerId, out s) ? s.Livery ?? "" : ""; }
 
+        static float appLog;
+        // un toit (collider fixe, pas un declencheur) au-dessus de ce point, jusqu'a 30 m
+        static bool Roofed(Vector3 p)
+        {
+            foreach (RaycastHit h in Physics.RaycastAll(p + Vector3.up * 1.6f, Vector3.up, 30f))
+                if (!h.collider.isTrigger && h.collider.attachedRigidbody == null) return true;
+            return false;
+        }
+
         // Place a cote du joueur d'ici : 4 m a sa droite, meme cap, posee sur le sol.
         static void SpotNearMe(out Vector3 pos, out float yaw)
         {
@@ -92,17 +101,56 @@ namespace MWCoop
             if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
             fwd.Normalize();
             Vector3 right = new Vector3(fwd.z, 0f, -fwd.x);
-            Vector3 at = (t != null ? t.position : Vector3.zero) + right * 3.5f + fwd * 2f;
-            if (Config.GetInt("Test", "VazDevant", 0) != 0) at = (t != null ? t.position : Vector3.zero) + fwd * 6.5f;   // (essais : de profil devant la camera)
-            float y = at.y + 0.8f, best = float.MaxValue;
-            // (depuis 2 m au-dessus des pieds : un auvent ou un toit plus haut n'est pas le sol -- essai du 18/10, chute de 3 m)
-            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(at.x, at.y + 2f, at.z), Vector3.down, 12f))
+            Vector3 me = t != null ? t.position : Vector3.zero;
+            yaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg + (Config.GetInt("Test", "VazDevant", 0) != 0 ? 90f : 0f);
+            Vector3 first = me + right * 3.5f + fwd * 2f;
+            if (Config.GetInt("Test", "VazDevant", 0) != 0) first = me + fwd * 6.5f;   // (essais : de profil devant la camera)
+            // Place libre et dehors (18/10 puis 24/10 : demandee dans une maison, la VAZ y apparaissait, coincee dans les murs, et
+            // la physique la secouait) : d'abord la place habituelle, puis des cercles autour du joueur (4 a 28 m, tous les 30
+            // degres en partant de sa droite) ; la premiere ou la voiture tient sans toucher de mur ni d'objet fixe, sous le ciel.
+            Vector3 dir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            Vector3 p;
+            if (FreeSpot(first, me.y, dir, out p)) { pos = p; return; }
+            foreach (float r in new[] { 4f, 7f, 10f, 14f, 20f, 28f })
+                for (int k = 0; k < 12; k++)
+                {
+                    Vector3 o = Quaternion.Euler(0f, k * 30f, 0f) * right * r;
+                    if (FreeSpot(me + o, me.y, dir, out p)) { pos = p; Log.Info("vaz : place libre a " + r + " m du joueur (la place habituelle " + (Roofed(first) ? "est sous un toit" : "est encombree") + ")"); return; }
+                }
+            Ground(first, me.y, out pos);
+            Log.Warn("vaz : aucune place libre a moins de 28 m, voiture posee a cote du joueur");
+        }
+
+        // sol sous ce point (premier collider fixe depuis 2 m au-dessus des pieds : un auvent ou un toit plus haut n'est pas le
+        // sol -- essai du 18/10, chute de 3 m) ; pos = 0,8 m au-dessus
+        static Collider Ground(Vector3 at, float feetY, out Vector3 pos)
+        {
+            float y = feetY + 0.8f, best = float.MaxValue; Collider c = null;
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(at.x, feetY + 2f, at.z), Vector3.down, 12f))
             {
                 if (h.collider.isTrigger || h.collider.attachedRigidbody != null) continue;
-                if (h.distance < best) { best = h.distance; y = h.point.y + 0.8f; }
+                if (h.distance < best) { best = h.distance; y = h.point.y + 0.8f; c = h.collider; }
             }
             pos = new Vector3(at.x, y, at.z);
-            yaw = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg + (Config.GetInt("Test", "VazDevant", 0) != 0 ? 90f : 0f);
+            return c;
+        }
+
+        // La voiture (4,3 x 1,7 m environ, cap dir) tient-elle ici : sol trouve, pas de toit, rien de fixe dans trois spheres de
+        // 0,85 m le long de la caisse (hors le sol lui-meme, declencheurs, objets legers, le joueur et ma voiture -- « Faire venir ») ?
+        static bool FreeSpot(Vector3 at, float feetY, Vector3 dir, out Vector3 pos)
+        {
+            Transform mine = CarOf(Me);
+            Collider ground = Ground(at, feetY, out pos);
+            if (ground == null || Roofed(pos)) return false;
+            foreach (float d in new[] { -1.4f, 0f, 1.4f })
+                foreach (Collider c in Physics.OverlapSphere(pos + dir * d + Vector3.up * 0.25f, 0.85f))
+                {
+                    if (c == null || c == ground || c.isTrigger || c is CharacterController) continue;
+                    if (c.attachedRigidbody != null && c.attachedRigidbody.mass < 100f) continue;   // (objets qu'on pousse ; une voiture garee, elle, gene)
+                    if (c.transform.root.name == "PLAYER" || (mine != null && c.transform.IsChildOf(mine))) continue;
+                    return false;
+                }
+            return true;
         }
 
         // Prendre la couleur n (gratuit). Faux : refus connu d'avance (message a l'ecran).
@@ -155,7 +203,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
-            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f;
+            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f;
             if (!hooked)
             {
                 hooked = true;
@@ -665,6 +713,16 @@ namespace MWCoop
             if (mode != "vaz") return;
             bool host = Host;
             ProbeHandbrake(t);
+            // [Test] VazApparition=1 : de 20 a 32 s, chaque seconde, ma voiture (position, vitesse, toit au-dessus) et le joueur --
+            // VAZ demandee dans une maison : elle y apparaissait et etait projetee (18/10)
+            if (Config.GetInt("Test", "VazApparition", 0) != 0 && t > 20f && t < 32f && t >= appLog)
+            {
+                appLog = Mathf.Floor(t) + 1f;
+                Transform c = CarOf(Me); Rigidbody rb = c != null ? c.GetComponent<Rigidbody>() : null;
+                GameObject pl = GameObject.Find("PLAYER");
+                Log.Info("autotest vaz : apparition t=" + t.ToString("F0") + " joueur " + (pl != null ? pl.transform.position.ToString("F1") + (Roofed(pl.transform.position) ? " (sous un toit)" : " (dehors)") : "?")
+                         + " ; voiture " + (c != null ? c.position.ToString("F1") + (Roofed(c.position) ? " (sous un toit)" : " (dehors)") + ", " + (rb != null ? (rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, rotation " + rb.angularVelocity.magnitude.ToString("F1") : "?") : "pas encore"));
+            }
             if (testStep == 0 && !testMoved && t > 12f && Config.GetInt("Test", "VazDehors", 0) != 0)
             {
                 // (captures : dans la cour, a 7 m a droite de la Rivett, regard dans son sens)
