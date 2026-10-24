@@ -63,6 +63,7 @@ namespace MWCoop
             public Vector3 RelPos; public Quaternion RelRot;   // support de la copie dans le repere de la camera
             public Transform GripT; public Vector3 GripA, GripB; public bool Two;   // prises (repere du maillage principal)
             public Animation Anim; public Light Lamp; public bool AnimWas;
+            public float SwingAt = -10f;   // coup (hache, masse, barre a mine) : debut, temps reel
         }
         static readonly Dictionary<int, Remote> remote = new Dictionary<int, Remote>();
 
@@ -140,6 +141,7 @@ namespace MWCoop
                     if (an != null && an.isPlaying) { fl |= F_Anim; break; }
                 }
             }
+            if (Time.realtimeSinceStartup < testSwingUntil) fl |= F_Anim;   // (essai : coup simule, OutilCoup)
             if ((fl & F_Anim) != 0 && (flags & F_Anim) == 0 && t >= 1 && t <= 3 && t == tool) Pvp.OnLocalSwing(t);   // (hache, masse, barre a mine : coup porte, Pvp)
             tool = t; flags = fl;
             if (ThirdPerson.HasBody) Local(t, fl); else if (remote.ContainsKey(Session.LocalId)) PlayerLeft(Session.LocalId);
@@ -285,8 +287,25 @@ namespace MWCoop
                 r.Holder.transform.position = hp + hr * r.RelPos;
                 r.Holder.transform.rotation = hr * r.RelRot;
                 bool anim = (r.Flags & F_Anim) != 0;
-                if (r.Anim != null && anim && !r.AnimWas && r.Anim.clip != null) r.Anim.Play(r.Anim.clip.name);
-                if (r.Anim != null && anim && !r.AnimWas && r.Anim.clip == null) foreach (AnimationState s in r.Anim) { r.Anim.Play(s.name); break; }
+                // Coup de hache, de masse ou de barre a mine (Menor, suggestion 33 : « animation d'attaque ») : vu des autres, l'animation
+                // a la premiere personne ne bougeait que l'outil devant la camera. Ici l'outil tourne autour de l'epaule droite -- leve
+                // au-dessus de la tete, abattu devant, puis revient -- les mains le suivent (prises) et le buste se penche dans le coup.
+                // [Coop] CoupAnime=0 : comme avant.
+                bool swingTool = r.Tool >= 1 && r.Tool <= 3 && Config.GetInt("Coop", "CoupAnime", 1) != 0;
+                float now = Time.realtimeSinceStartup;
+                if (swingTool && anim && !r.AnimWas) r.SwingAt = now;
+                float ang, lean;
+                SwingCurve(now - r.SwingAt, out ang, out lean);
+                if (swingTool && (ang != 0f || lean != 0f))
+                {
+                    Vector3 pivot = hp + hr * new Vector3(0.15f, -0.3f, 0f);
+                    Quaternion q = Quaternion.AngleAxis(ang, hr * Vector3.right);
+                    r.Holder.transform.position = pivot + q * (r.Holder.transform.position - pivot);
+                    r.Holder.transform.rotation = q * r.Holder.transform.rotation;
+                }
+                a.ToolLean = swingTool ? lean : 0f;
+                if (!swingTool && r.Anim != null && anim && !r.AnimWas && r.Anim.clip != null) r.Anim.Play(r.Anim.clip.name);
+                if (!swingTool && r.Anim != null && anim && !r.AnimWas && r.Anim.clip == null) foreach (AnimationState s in r.Anim) { r.Anim.Play(s.name); break; }
                 r.AnimWas = anim;
                 if (r.Lamp != null) r.Lamp.enabled = (r.Flags & F_Light) != 0;
                 a.ToolW = Mathf.MoveTowards(a.ToolW, 1f, Time.deltaTime * 4f);
@@ -299,6 +318,19 @@ namespace MWCoop
             }
         }
 
+        // Coup : angle de l'outil autour de l'epaule (degres, negatif = leve) et penche du buste (degres, positif = en avant), selon le
+        // temps depuis le debut du coup -- leve 0,28 s, frappe 0,17 s, tenu 0,1 s, retour 0,4 s.
+        static float Smooth(float u) { u = Mathf.Clamp01(u); return u * u * (3f - 2f * u); }
+        static void SwingCurve(float t, out float ang, out float lean)
+        {
+            const float up = -75f, down = 55f;
+            if (t < 0f || t > 0.95f) { ang = 0f; lean = 0f; return; }
+            if (t < 0.28f) { float u = Smooth(t / 0.28f); ang = up * u; lean = -8f * u; return; }
+            if (t < 0.45f) { float u = Smooth((t - 0.28f) / 0.17f); ang = Mathf.Lerp(up, down, u); lean = Mathf.Lerp(-8f, 25f, u); return; }
+            if (t < 0.55f) { ang = down; lean = 25f; return; }
+            float v = Smooth((t - 0.55f) / 0.4f); ang = Mathf.Lerp(down, 0f, v); lean = Mathf.Lerp(25f, 0f, v);
+        }
+
         // [Test] Autotest=outils : l'invite montre chaque outil 5 s a partir de 25 s (OutilDebut=n : a partir du n-ieme) ;
         // l'hote (CameraAvatar=...) capture a 4 s de chacun (outil-n) et note l'etat.
         static int testTool;
@@ -308,7 +340,29 @@ namespace MWCoop
             int first = Config.GetInt("Test", "OutilDebut", 1);
             int i = first + (int)((t - 25f) / 5f);
             if (i > Table.Length) { if (testTool != 0) { testTool = 0; } return; }
-            if (!Session.IsHost) { testTool = i; return; }
+            bool coups = Config.GetInt("Test", "OutilCoup", 0) != 0;
+            if (!Session.IsHost)
+            {
+                testTool = i;
+                // ([Test] OutilCoup=1 : un coup simule a 1 et 3 s de chaque outil, hache / masse / barre a mine)
+                float k = (t - 25f) % 5f;
+                if (coups && i <= 3 && (k > 1f && k < 1.2f || k > 3f && k < 3.2f) && Time.realtimeSinceStartup >= testSwingUntil + 0.5f) testSwingUntil = Time.realtimeSinceStartup + 0.8f;
+                return;
+            }
+            // (hote : a chaque coup recu, capture -- le 1er de l'outil leve, le 2e a la frappe : coup-n-haut, coup-n-frappe)
+            if (coups)
+                foreach (KeyValuePair<int, Remote> kv in remote)
+                {
+                    Remote rr = kv.Value;
+                    if (rr.SwingAt > testSwingSeen && Time.realtimeSinceStartup - rr.SwingAt < 0.1f)
+                    {
+                        testSwingSeen = rr.SwingAt;
+                        int rt = Mathf.Abs(rr.Tool);
+                        bool firstSwing = testSwingTool != rt; testSwingTool = rt;
+                        Autotest.CaptureSoon("coup-" + rt + (firstSwing ? "-haut" : "-frappe"), firstSwing ? 0.25f : 0.44f);
+                        Log.Info("autotest : coup de #" + kv.Key + " avec " + State(kv.Key));
+                    }
+                }
             // (hote : 3,5 s apres chaque changement d'outil recu, capture nommee d'apres l'outil recu)
             foreach (KeyValuePair<int, Remote> kv in remote)
             {
@@ -324,7 +378,7 @@ namespace MWCoop
                 break;
             }
         }
-        static int testCapped, testSeen; static float testSeenAt;
+        static int testCapped, testSeen, testSwingTool; static float testSeenAt, testSwingUntil = -10f, testSwingSeen;
 
         public static string State(int id)
         {

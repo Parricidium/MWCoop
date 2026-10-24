@@ -508,6 +508,7 @@ namespace MWCoop
         public bool InVehicle { get { return inCar; } }
         // Outil en main (HandTools) : prises du manche (monde), dosage ; main gauche aussi pour un outil long.
         public float ToolW; public Vector3 ToolGripR, ToolGripL; public bool ToolTwo;
+        public float ToolLean;   // coup d'outil (HandTools) : buste penche, degres (positif = en avant)
         public Transform PelvisBone { get { return Bone("pelvis"); } }
         public Transform VehicleT { get { return inCar ? vehicleT : null; } }
 
@@ -1652,6 +1653,13 @@ namespace MWCoop
             // Outil en main (hache, masse, lampe, pistolet de la pompe...) : main droite au manche, gauche plus loin dessus.
             if (ToolW > 0.001f)
             {
+                // (coup de hache / masse : le buste suit le coup avant que les mains prennent le manche)
+                if (Mathf.Abs(ToolLean) > 0.01f)
+                    foreach (string sp in new[] { "spine_middle", "spine_upper" })
+                    {
+                        Transform b = Bone(sp);
+                        if (b != null) b.rotation = Quaternion.AngleAxis(ToolLean * 0.5f * ToolW, r.right) * b.rotation;
+                    }
                 ArmTo(true, ToolGripR, ToolW);
                 if (ToolTwo) ArmTo(false, ToolGripL, ToolW);
             }
