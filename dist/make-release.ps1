@@ -202,14 +202,20 @@ function Publish-Pont($exe, $lancVersion, [switch]$Essai) {
     Set-Content "$stage\MWCoop\version.txt" $kLastGlobal -NoNewline -Encoding ASCII   # (toujours 1.15.0 : le nouveau lanceur reprend ensuite le flux du jeu)
     $pz = "$PSScriptRoot\out\MWCoop-$pv.zip"
     Zip $stage $pz
-    if ($Essai) { "Pont d'essai : $pz (v$pv, lanceur $lancVersion, mod $kLastGlobal) -- pas publie"; return }
+    # (empreintes, comme les autres releases ; les anciens lanceurs ne prennent que le premier .zip, le .txt ne les gene pas)
+    $ps = "$PSScriptRoot\out\SHA256SUMS-v$pv.txt"
+    $pl = foreach ($f in @($pz, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll", "$stage\MWCoop\MWCoopRT.dll")) {
+        "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())  $(if ($f -eq $pz) { Split-Path $f -Leaf } else { $f.Substring($stage.Length + 1).Replace('\', '/') })"
+    }
+    [System.IO.File]::WriteAllText($ps, ($pl -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding $false))
+    if ($Essai) { "Pont d'essai : $pz (v$pv, lanceur $lancVersion, mod $kLastGlobal) + $(Split-Path $ps -Leaf) -- pas publie"; return }
     $pn = "- MWC et MSC : nouveau lanceur $lancVersion. Les mises à jour de My Winter Car, de My Summer Car et du lanceur sont maintenant séparées : mets à jour, puis le lanceur propose la version de ton jeu.`n---`n" +
           "- MWC and MSC: new launcher $lancVersion. My Winter Car, My Summer Car and launcher updates are now separate: update, then the launcher offers your game's version.`n---`n" +
           "- MWC и MSC: новый лаунчер $lancVersion. Обновления My Winter Car, My Summer Car и лаунчера теперь отдельные: обновись, затем лаунчер предложит версию твоей игры.`n---`n" +
           "- MWC وMSC: مشغّل جديد $lancVersion. أصبحت تحديثات My Winter Car وMy Summer Car والمشغّل منفصلة: حدّث، ثم يعرض المشغّل إصدار لعبتك."
     $nf = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($nf, $pn, (New-Object System.Text.UTF8Encoding $false))
-    gh release create "v$pv" $pz --repo $repo --title "MWCoop $pv (launcher $lancVersion)" --notes-file $nf --target main --latest
+    gh release create "v$pv" $pz $ps --repo $repo --title "MWCoop $pv (launcher $lancVersion)" --notes-file $nf --target main --latest
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { Write-Warning "pont v$pv : echec de la publication" } else { "Pont publie : v$pv (lanceur $lancVersion)" }

@@ -1235,7 +1235,7 @@ static bool IsWritableDir(const std::wstring &dir)
 // dernieres releases : ignores ici.
 enum { STR_GLOBAL, STR_MWC, STR_MSC, STR_LANCEUR, STR_OUTILS };
 static const wchar_t *kLastGlobal = L"1.15.0";
-struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor, conv; bool pre = false; int stream = STR_GLOBAL; };   // pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc) ; conv : convertisseur de circuits (.convertisseur) ; zip : paquet du flux (.zip / .nightly en global)
+struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor, conv; std::string when; bool pre = false; int stream = STR_GLOBAL; };   // when : published_at de GitHub (ISO, tri des Nouveautes) ; pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc) ; conv : convertisseur de circuits (.convertisseur) ; zip : paquet du flux (.zip / .nightly en global)
 static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
@@ -1308,6 +1308,7 @@ static std::vector<Note> ParseReleases(const std::string &json)
             if (!_wcsnicmp(n.ver.c_str(), k.pre, wcslen(k.pre))) { n.stream = k.s; ext = k.ext; n.ver.erase(0, wcslen(k.pre)); break; }
         if (n.stream == STR_GLOBAL && !n.ver.empty() && (n.ver[0] == L'v' || n.ver[0] == L'V')) n.ver.erase(0, 1);
         std::string d = JsonField(json, "published_at", p, end);
+        n.when = d;
         if (d.size() >= 10) n.date = Widen(d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4));
         std::wstring body = Widen(JsonField(json, "body", p, end));
         size_t sep = body.find(L"\n---");
@@ -1573,7 +1574,8 @@ static Note MscBetaNote()
 }
 // Notes montrees : le flux du jeu affiche, le lanceur et les outils (1.15.0), et l'histoire d'avant (releases globales
 // jusqu'a kLastGlobal, sans les ponts), sauf les pre-releases d'avant 0.96 ; sur My Summer Car, dans l'histoire, celles de
-// MSC seulement (plus haut). Ordre de GitHub (les plus recentes d'abord), flux melanges.
+// MSC seulement (plus haut). Les plus recentes d'abord, par heure de publication : GitHub, lui, range par JOUR puis par nom de
+// tag (les vX.Y.Z avant les flux du meme jour -- la v1.15.0 passait au-dessus de msc-1.15.1 et lanceur-1.15.1, 24/10).
 static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
 {
     std::vector<Note> out;
@@ -1581,6 +1583,7 @@ static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
         if (n.stream == STR_GLOBAL ? IsBridge(n) || (n.pre && !IsReworkedVer(n.ver)) : (n.stream != ModStream() && n.stream != STR_LANCEUR && n.stream != STR_OUTILS) || (n.pre && !NightlyOn())) continue;   // (flux : Nightly seulement en canal Nightly)
         out.push_back(n);
     }
+    std::stable_sort(out.begin(), out.end(), [](const Note &a, const Note &b) { return a.when > b.when; });   // (ISO 8601 : l'ordre du texte est celui du temps)
     if (g_game != GAME_MSC) return out;
     std::vector<Note> msc;
     bool first = false;
