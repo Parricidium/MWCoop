@@ -10,9 +10,9 @@ if not exist build mkdir build
 
 call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
 
-rem Version du mod (src\MWCoop\Version.cs) dans les informations de version de version.dll et MWCoop.exe
-for /f "tokens=2 delims==;" %%v in ('findstr /c:"Text = " src\MWCoop\Version.cs') do set "MWV=%%v"
-set "MWV=%MWV:"=%"
+rem Version du lanceur (launcher\version.txt, flux lanceur- depuis 1.15.0 ; dist\make-release.ps1 -Jeu lanceur l'ecrit) dans les
+rem informations de version de MWCoop.exe et de version.dll (chargeur, livre dans l'exe). Le mod a la sienne (Version.cs).
+set /p MWV=<launcher\version.txt
 set "MWV=%MWV: =%"
 for /f "tokens=1-3 delims=.-" %%a in ("%MWV%") do set "MWVN=%%a,%%b,%%c,0"
 > build\mwversion.h echo #define MWV_NUM %MWVN%

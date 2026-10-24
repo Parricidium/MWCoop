@@ -67,7 +67,8 @@ static RectF kChoiceR[2] = { RectF(950, 136, 296, 50), RectF(950, 192, 296, 50) 
 static const float kLobbyRowH = 72;
 static DWORD g_lobbySinceT;                         // entree dans ce salon (bandeau de l'invite : « dans ce salon depuis »)
 static int g_lobbySinceGen = -1;                    // ... pour quel salon (g_lobbyGen)
-// Identifiants des nouvelles commandes du salon (suite de UI_LOBBY_* de uikit.inc ; 3200-3399 : LobbyOptClick, ui.inc)
+// Identifiants des nouvelles commandes du salon (suite de UI_LOBBY_* de uikit.inc ; 3300-3399 et 10400-10999 : LobbyOptClick,
+// ui.inc ; plages par session : uikit.inc)
 enum { UI_LOBBY_AJOUTS = 3312,   // + k : ajouts MWCoop Tous / Choisir / Aucun
        UI_LOBBY_MAXSEG = 3316,   // + k : joueurs au plus 4 / 8 / 12 / 16
        UI_LOBBY_OPTRESET = 3320, UI_LOBBY_OPTKEEP,   // Remettre (les Reglages), Garder comme defauts
@@ -168,17 +169,20 @@ static bool RecvMsg(SOCKET s, std::string &out)
 
 static int LobbyPort() { const Opt *po = OptByKey("Port"); return po ? OptGet(*po) : 7870; }
 
-// --- options du salon (voir en tete) : cle de [Coop], valeur par defaut (celle du mod), decidee par l'hote ou par chacun
-struct LobbyOptDef { const char *key; int def; bool host; };
+// --- options du salon (voir en tete) : cle de [Coop], valeur par defaut (celle du mod), decidee par l'hote ou par chacun ;
+// only : 0 les deux jeux, 1 My Winter Car seulement, 2 My Summer Car seulement (comme SetItem::only, gfx.inc ; 1.15.0). Une
+// option nouvelle : une ligne ici, son identifiant suit (UI_LOBBY_OPT, uikit.inc) ; LobbyOptOn la cache sur l'autre jeu.
+struct LobbyOptDef { const char *key; int def; bool host; int only; };
 static const LobbyOptDef kLobbyOptDefs[] = {
-    { "ArgentDepart", 1, true }, { "Triches", 0, true }, { "Renverser", 1, true }, { "PvP", 0, true }, { "Jokkis", 0, true }, { "VenttiEnjeux", 1, true },
+    { "ArgentDepart", 1, true }, { "Triches", 0, true }, { "Renverser", 1, true }, { "PvP", 0, true }, { "Jokkis", 0, true, 1 }, { "VenttiEnjeux", 1, true },
     { "Difficulte", 0, true }, { "VitesseVitres", 1, true }, { "PencheVitre", 1, true },
-    { "SansAjouts", 0, true }, { "AjoutDrone", 1, true }, { "AjoutSacs", 1, true }, { "AjoutBoutique", 1, true }, { "AjoutMusee", 1, true }, { "AjoutVaz", 1, true }, { "AjoutKino", 1, true }, { "AjoutOsat", 1, true },
+    { "SansAjouts", 0, true }, { "AjoutDrone", 1, true }, { "AjoutSacs", 1, true }, { "AjoutBoutique", 1, true }, { "AjoutMusee", 1, true }, { "AjoutVaz", 1, true }, { "AjoutKino", 1, true, 1 }, { "AjoutOsat", 1, true, 1 },
     { "Vocal", 1, false }, { "VocalPortee", 35, false }, { "VolumeVocal", 100, false }, { "GainMicro", 100, false },
     { "VocalActivation", 0, false }, { "VocalSeuil", 12, false }, { "Ronflements", 1, false },
     { "VoirVisages", 1, false }, { "CarteMaintenir", 0, false }, { "Marqueurs", 1, false }, { "ModsAuto", 0, false },
 };
 static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));
+static bool LobbyOptOn(const LobbyOptDef &d) { return d.only != (g_game == GAME_MSC ? 1 : 2); }
 static std::map<std::string, int> g_lobbyOpt;       // mes choix pour CE salon (hote : options de la partie et les miennes ; invite : les miennes)
 static std::map<std::string, int> g_hostOpt;        // invite : options de la partie recues de l'hote (sous g_lcs)
 static int g_lobbyOptTab = -1;                      // carte des options du salon : 0 la partie (de l'hote), 1 les miennes ; -1 : selon le role
@@ -379,6 +383,7 @@ static void VersionMismatch(const std::wstring &hisFull)
         swprintf_s(q, T(L"L'h\u00F4te a MWCoop %s et toi %s : il faut la m\u00EAme version pour jouer ensemble.\n\nMettre \u00E0 jour maintenant ? Le lanceur se relance tout seul, puis tu pourras rejoindre.",
                         L"The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join."), his.c_str(), mine.c_str());
         TestLog("salon : version de l'hote %s, la mienne %s : mise a jour proposee", Narrow(his, CP_UTF8).c_str(), Narrow(mine, CP_UTF8).c_str());
+        if (!g_testSalon.empty()) return;   // (/testsalon : jamais de fenetre)
         if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION) == IDYES) StartUpdate(true);
         return;
     }
