@@ -26,7 +26,7 @@ namespace Convertisseur
 
     public class Conversion
     {
-        public const string Version = "3";   // (2 : repere retourne en X, aides AC_ / KS_START_LIGHT ignorees ; 3 : matieres multicouches cuites)
+        public const string Version = "4";   // (2 : repere retourne en X, aides AC_ / KS_START_LIGHT ignorees ; 3 : matieres multicouches cuites ; 4 : decalques souleves)
         public volatile bool Cancel;
         public Action<int, double, string> Progress = (s, f, t) => { };   // (etape 0..4, avancement 0..1, texte)
         public Action<string> Log = s => { };
@@ -79,6 +79,7 @@ namespace Convertisseur
                 var phys = new Regex(@"^\d+(" + string.Join("|", keys.ConvertAll(Regex.Escape).ToArray()) + ")", RegexOptions.IgnoreCase);
                 var groups = new Dictionary<string, Group>();
                 var colliders = new List<Item>();
+                var decals = DecalLayers(files);
                 foreach (Kn5 kn in files)
                     foreach (Kn5.Mesh me in kn.Meshes)
                     {
@@ -97,9 +98,15 @@ namespace Convertisseur
                         // quatre textures de detail melangees par un masque -> une texture « cuite » par matiere
                         bool multi = mat != null && tex != null && mat.Shader.StartsWith("ksMultilayer", StringComparison.OrdinalIgnoreCase) && mat.Samplers.ContainsKey("txMask");
                         if (multi) { cut = false; two = false; }
-                        string gk = Path.GetFileName(kn.File) + "|" + (multi ? "ml:" + mat.Name : tex ?? "-") + "|" + (cut ? 1 : 0) + (two ? 1 : 0);
+                        // decalques (traces de gomme, lignes, bords des bacs a sable) : poses pile sur la route ; Assetto Corsa les
+                        // dessine apres, sans ecrire la profondeur. Ici, souleves de quelques cm (une couche de plus par matiere,
+                        // dans l'ordre du fichier) : sinon ils clignotent avec la route (z-fighting, JD 24/10, Laguna Seca)
+                        float lift = 0f;
+                        int layer;
+                        if (!multi && decals.TryGetValue(DecalKey(kn, me), out layer)) lift = 0.02f + 0.01f * Math.Min(layer, 5);
+                        string gk = Path.GetFileName(kn.File) + "|" + (multi ? "ml:" + mat.Name : tex ?? "-") + "|" + (cut ? 1 : 0) + (two ? 1 : 0) + "|" + lift.ToString(ci);
                         Group g;
-                        if (!groups.TryGetValue(gk, out g)) groups[gk] = g = new Group { File = kn, Texture = tex, Cut = cut, TwoSided = two, Multi = multi ? mat : null };
+                        if (!groups.TryGetValue(gk, out g)) groups[gk] = g = new Group { File = kn, Texture = tex, Cut = cut, TwoSided = two, Multi = multi ? mat : null, Lift = lift, Mat = mat != null ? mat.Name : "-" };
                         g.Items.Add(new Item { File = kn, Mesh = me });
                         st.Meshes++;
                     }
@@ -145,7 +152,8 @@ namespace Convertisseur
                     {
                         if (Cancel) throw new OperationCanceledException();
                         int flags = (g.Cut ? 32 : 0) | (g.TwoSided ? 2 : 0);
-                        subs += WriteChunks(w, "m" + gi, g.TexFile ?? "", flags, g.Items, g.TwoSided ? 30000 : 60000, false, st);
+                        Log("m" + gi + " : " + g.Mat + " (" + Path.GetFileName(g.File.File) + ", " + (g.Texture ?? "sans texture") + (g.Lift > 0 ? ", souleve de " + (g.Lift * 100).ToString("0.#", ci) + " cm" : "") + ")");
+                        subs += WriteChunks(w, "m" + gi, g.TexFile ?? "", flags, g.Items, g.TwoSided ? 30000 : 60000, false, st, g.Lift);
                         Progress(2, ++gi / (double)groups.Count, "");
                     }
                     subs += WriteChunks(w, "collision", "", 4 | 16 | 8, colliders, 60000, true, st);
@@ -217,6 +225,50 @@ namespace Convertisseur
             }
         }
 
+        static bool IsDecal(Kn5.Material m) { return m != null && (m.Blend != 0 || m.Depth != 0); }
+        static string DecalKey(Kn5 kn, Kn5.Mesh me) { return Path.GetFileName(kn.File) + "|" + me.MaterialId; }
+
+        // couches des decalques : une matiere passe au-dessus de toutes celles d'avant (ordre du fichier, celui d'Assetto Corsa)
+        // qu'elle recouvre (cases de 30 cm) ; deux decalques qui ne se touchent jamais restent a la meme hauteur
+        Dictionary<string, int> DecalLayers(List<Kn5> files)
+        {
+            var order = new List<string>();
+            var cells = new Dictionary<string, HashSet<long>>();
+            foreach (Kn5 kn in files)
+                foreach (Kn5.Mesh me in kn.Meshes)
+                {
+                    if (!me.Renderable || !me.Visible || me.LodIn > 0.01f || Helper(me.Name) || me.IndexCount < 3) continue;
+                    Kn5.Material mat = me.MaterialId >= 0 && me.MaterialId < kn.Materials.Count ? kn.Materials[me.MaterialId] : null;
+                    if (!IsDecal(mat)) continue;
+                    string dk = DecalKey(kn, me);
+                    HashSet<long> hs;
+                    if (!cells.TryGetValue(dk, out hs)) { cells[dk] = hs = new HashSet<long>(); order.Add(dk); }
+                    byte[] d = kn.Data;
+                    for (int i = 0; i + 2 < me.IndexCount; i += 3)
+                    {
+                        float cx = 0, cz = 0;
+                        for (int c = 0; c < 3; c++)
+                        {
+                            int o = me.VertexOffset + BitConverter.ToUInt16(d, me.IndexOffset + (i + c) * 2) * 44;
+                            float x, y, z;
+                            me.World.Point(BitConverter.ToSingle(d, o), BitConverter.ToSingle(d, o + 4), BitConverter.ToSingle(d, o + 8), out x, out y, out z);
+                            cx += x / 3f; cz += z / 3f;
+                        }
+                        hs.Add(((long)Math.Floor(cx / 0.3f) << 32) | (uint)(int)Math.Floor(cz / 0.3f));
+                    }
+                }
+            var layer = new Dictionary<string, int>();
+            for (int i = 0; i < order.Count; i++)
+            {
+                int l = 0;
+                for (int j = 0; j < i; j++)
+                    if (layer[order[j]] + 1 > l && cells[order[i]].Overlaps(cells[order[j]])) l = layer[order[j]] + 1;
+                layer[order[i]] = l;
+            }
+            if (order.Count > 0) Log(order.Count + " decalque(s) (traces, lignes, bordures) en " + (1 + System.Linq.Enumerable.Max(layer.Values)) + " couche(s)");
+            return layer;
+        }
+
         // reperes et aides du jeu, pas du decor : equipe des stands, cases de depart, feux de depart (100.kn5)...
         static readonly string[] helpers = { "AC_CREW", "AC_PIT_", "AC_START_", "AC_HOTLAP_", "AC_TIME_", "AC_AUDIO", "KS_START_LIGHT" };
         static bool Helper(string n) { foreach (string h in helpers) if (n.StartsWith(h, StringComparison.OrdinalIgnoreCase)) return true; return false; }
@@ -224,7 +276,7 @@ namespace Convertisseur
         static string F(float v) { return v.ToString("0.###", ci); }
 
         class Item { public Kn5 File; public Kn5.Mesh Mesh; }
-        class Group { public Kn5 File; public string Texture, TexFile; public bool Cut, TwoSided; public Kn5.Material Multi; public readonly List<Item> Items = new List<Item>(); }
+        class Group { public Kn5 File; public string Texture, TexFile; public bool Cut, TwoSided; public float Lift; public string Mat; public Kn5.Material Multi; public readonly List<Item> Items = new List<Item>(); }
 
         // couleur = base x (somme des couleurs moyennes des details R, G, B, A ponderees par le masque) x magicMult ; le
         // grain fin des details (repetes a petite echelle) est perdu, les couleurs sont justes. null : on garde la base.
@@ -265,7 +317,7 @@ namespace Convertisseur
         // sommets transformes dans le repere monde du circuit ; morceaux de 'limit' sommets au plus. Assetto Corsa (DirectX) est
         // en repere droit, Unity en repere gauche : X retourne (positions, normales) et triangles dans l'autre sens, sinon tout
         // est en miroir (numeros des stands, panneaux a l'envers)
-        int WriteChunks(BinaryWriter w, string name, string tex, int flags, List<Item> items, int limit, bool collider, Stats st)
+        int WriteChunks(BinaryWriter w, string name, string tex, int flags, List<Item> items, int limit, bool collider, Stats st, float lift = 0f)
         {
             int written = 0;
             var pos = new List<float>(); var nor = new List<float>(); var uv = new List<float>(); var idx = new List<int>();
@@ -292,6 +344,7 @@ namespace Convertisseur
                     me.World.Point(BitConverter.ToSingle(d, o), BitConverter.ToSingle(d, o + 4), BitConverter.ToSingle(d, o + 8), out x, out y, out z);
                     me.World.Dir(BitConverter.ToSingle(d, o + 12), BitConverter.ToSingle(d, o + 16), BitConverter.ToSingle(d, o + 20), out nx, out ny, out nz);
                     float nl = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz); if (nl > 1e-6f) { nx /= nl; ny /= nl; nz /= nl; }
+                    if (lift > 0f) y += lift;   // (decalque : au-dessus de la route ; a la verticale : leurs normales ne pointent pas toujours vers le haut)
                     tv[i * 8] = -x; tv[i * 8 + 1] = y; tv[i * 8 + 2] = z; tv[i * 8 + 3] = -nx; tv[i * 8 + 4] = ny; tv[i * 8 + 5] = nz;
                     tv[i * 8 + 6] = BitConverter.ToSingle(d, o + 24); tv[i * 8 + 7] = BitConverter.ToSingle(d, o + 28);
                     if (!collider)

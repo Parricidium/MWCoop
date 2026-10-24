@@ -59,6 +59,10 @@ russe et arabe. Il trouve Assetto Corsa et My Winter Car dans les bibliothèques
   vient de quatre textures de détail mélangées par un masque. Le convertisseur « cuit » une texture par matière :
   base × somme des couleurs moyennes des détails, pondérées par le masque. Les couleurs sont justes, le grain fin des
   détails est perdu.
+- **Décalques** (traces de gomme, lignes, bordures des bacs à sable : matières en fondu ou au mode de profondeur 1/2) :
+  posés pile sur la route, ils clignotaient avec elle (z-fighting, Laguna Seca, JD 24/10). Ils sont soulevés à la
+  verticale de 2 cm, plus 1 cm par couche : une matière passe au-dessus de celles d'avant (ordre du fichier) qu'elle
+  recouvre (cases de 30 cm), 7 cm au plus. Le journal de conversion liste chaque groupe et sa hauteur.
 - **Collisions** : les maillages physiques nommés d'après `data\surfaces.ini` (`1ROAD`, `08WALL`…), invisibles. Si un
   circuit n'en a pas, ce sont les maillages affichés.
 - **Arrivée** : `AC_PIT_0`, `AC_START_0` ou `AC_HOTLAP_START_0`. Le cap est vérifié avec la trajectoire de l'IA
