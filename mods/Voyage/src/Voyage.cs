@@ -120,7 +120,7 @@ namespace Voyage
                 new Step(0.7f, Fade.In),
                 new Step(13f, Fade.None),
                 new Step(1.6f, Fade.Out, null, () => { Cine.Stop(); }),
-                new Step(0.2f, Fade.Black, Jeu.T("Vol pour " + d.Name + "…", "Flying to " + d.Name + "…"), () =>
+                new Step(0.2f, Fade.Black, Jeu.T("Vol pour " + d.Name + "…", "Flying to " + d.Name + "…", "Рейс: " + d.Name + "…"), () =>
                 {
                     if (!Destinations.Load(d))
                     {
@@ -131,7 +131,7 @@ namespace Voyage
                     }
                     abroad = d.Id; Jeu.Teleport(Spread(d.ArrivalWorld, d.Yaw), d.Yaw);
                 }),
-                new Step(2.8f, Fade.Black, Jeu.T("Vol pour " + d.Name + "…", "Flying to " + d.Name + "…"), () => { if (abroad == d.Id) Jeu.Teleport(Spread(d.ArrivalWorld, d.Yaw), d.Yaw); }),
+                new Step(2.8f, Fade.Black, Jeu.T("Vol pour " + d.Name + "…", "Flying to " + d.Name + "…", "Рейс: " + d.Name + "…"), () => { if (abroad == d.Id) Jeu.Teleport(Spread(d.ArrivalWorld, d.Yaw), d.Yaw); }),
                 new Step(1.6f, Fade.In, null, Arrived));
         }
 
@@ -143,7 +143,7 @@ namespace Voyage
             // noir « Retour en Finlande », l'atterrissage vu du bord de la piste, le terminal ; le circuit est decharge
             Begin("vers la Finlande",
                 new Step(1.6f, Fade.Out),
-                new Step(3f, Fade.Black, Jeu.T("Retour en Finlande…", "Flying back to Finland…"),
+                new Step(3f, Fade.Black, Jeu.T("Retour en Finlande…", "Flying back to Finland…", "Обратно в Финляндию…"),
                          () => { Jeu.Teleport(to, yaw); abroad = ""; Destinations.Unload(); Coop.Send("atterrit"); Avion.Land(); Cine.Watch(Lieux.CineArrivee); }),
                 new Step(0.8f, Fade.In),
                 new Step(13f, Fade.None),
