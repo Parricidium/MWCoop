@@ -1468,6 +1468,44 @@ namespace MWCoop
             }
             if (mode == "conduite") Conduite(t);
             if (mode == "gifulevier") GifuLevier(t);
+            // [Test] Autotest=modereparation (MWC, 2 joueurs, sauvegarde Rivett) : l'hote diffuse REPAIRMODE_ON a 40 s (cle sortie)
+            // et REPAIRMODE_OFF a 55 s ; chacun note a 48 et 63 s l'etat de la vis du culbuteur 1. Chez l'invite elle doit rester
+            // dans son etat a lui (avant le 24/10 : rejouee, On puis Off comme chez l'hote).
+            if (mode == "modereparation")
+            {
+                if (MWCoop.Net.Session.IsHost && t > 40f && step == 0) { step = 1; PlayMakerFSM.BroadcastEvent("REPAIRMODE_ON"); Log.Info("autotest : modereparation, REPAIRMODE_ON diffuse ici"); }
+                if (MWCoop.Net.Session.IsHost && t > 55f && step == 1) { step = 2; PlayMakerFSM.BroadcastEvent("REPAIRMODE_OFF"); Log.Info("autotest : modereparation, REPAIRMODE_OFF diffuse ici"); }
+                if (t > 48f && step2 == 0 || t > 63f && step2 == 1)
+                {
+                    step2++;
+                    GameObject rk = Game.FindAny("CORRIS/MotorPivot/MassCenter/Block/VINP_Block/Engine Block(VINX0)/VINP_Cylinderhead/Cylinder Head(VINX0)/ValvesExhaust/Cyl1Exh/VINP_Rocker1Exh/Rocker(VINXX)/Bolts/BoltPM");
+                    PlayMakerFSM sf = rk != null ? Game.FsmOn(rk, "Screw") : null;
+                    Log.Info("autotest : modereparation, " + (MWCoop.Net.Session.IsHost ? "hote" : "invite") + " (" + step2 + ") : vis du culbuteur 1 [" + (sf != null ? sf.ActiveStateName : "introuvable") + "]");
+                }
+            }
+            // [Test] Autotest=sondeautomates ([Test] SondeMot=mot, [Test] SondeSous=CORRIS) : a 40 s, chaque etat d'automate sous cet
+            // objet dont les actions citent ce mot (ce qui ecrit Drivetrain.clutchEngageSpeed, NotHuyarma 24/10).
+            if (mode == "sondeautomates" && t > 40f && !done)
+            {
+                done = true;
+                string word = Config.Get("Test", "SondeMot", "clutch"), under = Config.Get("Test", "SondeSous", "CORRIS");
+                GameObject root = Game.FindAny(under);
+                int n = 0;
+                if (root != null)
+                    foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
+                        foreach (FsmState st in f.Fsm.States)
+                        {
+                            string a;
+                            try { a = Jobs.DumpActions(f, st.Name); } catch { continue; }
+                            if (a.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                            n++; Log.Info("autotest : sonde " + Recon.Path(f.transform) + "::" + f.FsmName + " [" + f.ActiveStateName + "] " + a);
+                        }
+                Log.Info("autotest : sonde '" + word + "' sous " + under + " : " + n + " etat(s)");
+                foreach (MonoBehaviour m in root != null ? root.GetComponentsInChildren<MonoBehaviour>(true) : new MonoBehaviour[0])
+                    if (m != null && m.GetType().Name == "Drivetrain")
+                        foreach (System.Reflection.FieldInfo fi in m.GetType().GetFields())
+                            if (fi.Name.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) Log.Info("autotest : sonde Drivetrain." + fi.Name + " = " + fi.GetValue(m));
+            }
             // [Test] Autotest=graphismes : etat des reglages a 25 s (journal).
             if (mode == "graphismes" && t > 25f && step == 0) { step = 1; Log.Info("autotest : graphismes " + Gfx.Describe()); }
             if (mode == "graphismes" && t > 28f && step == 1) { step = 2; Gfx.ApplyPreset(Config.GetInt("Test", "TestPrereglage", 3)); }
