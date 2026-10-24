@@ -31,8 +31,11 @@ namespace MWCoop
     // Bois et fosses septiques : voir en bas du fichier.
     public static class Jobs
     {
+        // REPAIRMODE_ON/OFF : le jeu les diffuse a toutes les vis quand le joueur sort ou range sa cle (On/Off : collision de la vis
+        // allumee ou eteinte, ce qu'il peut viser) -- etat de CE joueur. Rejoues, la cle rangee de l'un eteignait chez l'autre les
+        // vis des culbuteurs qu'il reglait (NotHuyarma, 24/10 : « reglage des culbuteurs bizarre », ~600 rejeux par partie).
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE",
-                                                                        "TERRAIN", "DEEPSNOW", "RIM", "LOOP" };
+                                                                        "TERRAIN", "DEEPSNOW", "RIM", "LOOP", "REPAIRMODE_ON", "REPAIRMODE_OFF" };
         static readonly HashSet<string> RandomActions = new HashSet<string> { "SendRandomEvent", "RandomEvent" };
         // Evenements des portieres ("Open door"/"Close door" les envoient a la lumiere de l'habitacle) : CarDoors
         // rejoue ces etats chez les autres, qui les envoient donc eux-memes -- les rejouer aussi allumait ou
