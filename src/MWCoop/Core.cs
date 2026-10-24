@@ -54,7 +54,8 @@ namespace MWCoop
         {
             if (Game.Msc)   // (My Summer Car : voitures, avatars et tenues ; CarVisuals avant les mains, comme dans MWC)
             {
-                try { CarVisuals.LateUpdate(); PlayerSync.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); Studio.LateUpdate(); }
+                // (HandTools : outils dans la main des avatars -- manquait sur MSC, la hache des autres restait invisible : Markos et Squier, 24/10)
+                try { CarVisuals.LateUpdate(); HandTools.LateUpdate(); PlayerSync.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); Studio.LateUpdate(); }
                 catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
                 return;
             }
