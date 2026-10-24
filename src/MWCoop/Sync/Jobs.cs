@@ -905,6 +905,19 @@ namespace MWCoop
             // ignore (relecture du 15/10 ; usine 16/10).
             string own = OwnTransition(j, prev, state);
             if (own != null) { Log.Info("quete de #" + who + " : " + key + " " + prev + " -" + ev + "-> " + state + " (" + own + "), ignore"); return; }
+            // Plateau a bois : seul celui qui le compte (BedAuthority) fait foi. Chez les autres le declencheur est coupe mais
+            // l'automate deroule quand meme le dechargement et arrive a "Pay" avec un prix perime ; son rejeu recopiait ce prix
+            // chez l'autorite avant l'etat (Kamixak, MSC, 24/10 : 60 mk pour une remorque pleine).
+            if (j.Kind == K_LOGTRIGGER && Config.GetInt("Test", "PlateauToutRejeu", 0) == 0)
+            {
+                FindBed();
+                int auth = BedAuthority();
+                if (who != auth)
+                {
+                    if (plateauIgnoreLogs++ < 20) Log.Info("quete de #" + who + " : " + key + " -" + ev + "-> " + state + " ignore (le plateau est compte chez #" + auth + ")");
+                    return;
+                }
+            }
             // Fendeuse arretee ici (mise en marche pas recue : arrivee en cours de buche) : seule la fin de la
             // buche est reprise (rend le declencheur), une etape rejouee sur l'automate inactif ne mene a rien.
             if (j.Kind == K_FEEDLOG && !j.F.gameObject.activeInHierarchy && state != "State 1")
@@ -1750,6 +1763,7 @@ namespace MWCoop
         }
 
         static int BedAuthority() { return flatbed != null ? VehicleSync.Authority(flatbed) : 0; }
+        static int plateauIgnoreLogs;
 
         // Angle (degres) de la benne autour de l'axe de sa charniere depuis la pose baissee.
         static float BedAngle()

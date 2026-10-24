@@ -537,6 +537,7 @@ namespace MWCoop
             // passager, sonde des places.
             CameraKnobs(t);
             if (mode == "conduite") { Conduite(t); return; }
+            if (mode == "tas") { LogPiles.Test(mode, t); return; }   // (plateau a bois : comptes et prix chez l'invite, rejeu de la paie, 24/10)
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SATSUMA"), Config.GetInt("Test", "TestPlace", 0))); }
             if (mode == "passager") return;
             if (mode == "sondeplaces" && t > 30f && !done) { done = true; Log.Info("autotest : places" + Seats.ProbeSeats(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
@@ -1056,7 +1057,11 @@ namespace MWCoop
             if (Game.LevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
-            if (Game.Msc) { MscTest(mode, t); return; }   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC)
+            if (Game.Msc)   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC ; vidage d'automates : les deux jeux)
+            {
+                if (mode == "automate" && t > 40f && step == 0) { step = 1; DumpFsms(Config.Get("Test", "Automate", "")); }
+                MscTest(mode, t); return;
+            }
             if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t); Vitrines.Test(mode, t);
