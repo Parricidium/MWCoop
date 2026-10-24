@@ -27,6 +27,8 @@ namespace MWCoop
     public static class WoodCarriers
     {
         const string Mod = "porte-buches";
+        // (My Summer Car : les porte-buches sont sous ITEMS -- Markos et Squier, 24/10 : « un porte-buches ne marche ni chez l'hote ni chez l'invite »)
+        static string Root { get { return Game.Msc ? "ITEMS" : "EQUIPMENTS"; } }
         class Carrier
         {
             public string Key; public PlayMakerFSM Trigger, Pickup; public FsmInt Index; public FsmGameObject Firewood, NewWood, Prefab;
@@ -63,7 +65,7 @@ namespace MWCoop
 
         static void Scan()
         {
-            GameObject eq = Game.FindAny("EQUIPMENTS");
+            GameObject eq = Game.FindAny(Root);
             if (eq == null) return;
             int found = 0;
             foreach (PlayMakerFSM f in eq.GetComponentsInChildren<PlayMakerFSM>(true))
@@ -171,7 +173,7 @@ namespace MWCoop
                 GameObject prefab = c.Prefab != null ? c.Prefab.Value : null;
                 if (prefab == null) { Log.Info("autotest : portebuches, pas de modele firewood"); return; }
                 tLogGo = (GameObject)Object.Instantiate(prefab, c.Trigger.transform.position + Vector3.up * 0.25f, Quaternion.identity);
-                GameObject eq = Game.FindAny("EQUIPMENTS"); if (eq != null) tLogGo.transform.SetParent(eq.transform, true);
+                GameObject eq = Game.FindAny(Root); if (eq != null) tLogGo.transform.SetParent(eq.transform, true);
                 tLogGo.transform.SetParent(null, true);
                 tLogGo.name = "firewood(Clone)";
                 tLogGo.SetActive(true);
@@ -255,7 +257,7 @@ namespace MWCoop
                 if (id.Length > 0 && prefab != null && !Jobs.HasTag(id))
                 {
                     var made = (GameObject)Object.Instantiate(prefab, pos, rot);
-                    GameObject eq = Game.FindAny("EQUIPMENTS");
+                    GameObject eq = Game.FindAny(Root);
                     if (eq != null) made.transform.SetParent(eq.transform, true);
                     made.SetActive(true);
                     Jobs.TagAs(made, id);

@@ -538,7 +538,8 @@ namespace MWCoop
             CameraKnobs(t);
             if (mode == "conduite") { Conduite(t); return; }
             if (mode == "tas") { LogPiles.Test(mode, t); return; }
-            if (mode == "outils") { HandTools.Test(mode, t); return; }   // (outils en main sur MSC : hache, Markos/Squier 24/10)   // (plateau a bois : comptes et prix chez l'invite, rejeu de la paie, 24/10)
+            if (mode == "outils") { HandTools.Test(mode, t); return; }
+            if (mode == "portebuches") { WoodCarriers.Test(mode, t); return; }   // (outils en main sur MSC : hache, Markos/Squier 24/10)   // (plateau a bois : comptes et prix chez l'invite, rejeu de la paie, 24/10)
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SATSUMA"), Config.GetInt("Test", "TestPlace", 0))); }
             if (mode == "passager") return;
             if (mode == "sondeplaces" && t > 30f && !done) { done = true; Log.Info("autotest : places" + Seats.ProbeSeats(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
