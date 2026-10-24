@@ -729,6 +729,9 @@ static DWORD WINAPI SyncCheckThread(void *p)
     std::string names;
     for (auto &m : o.mods) names += " " + m;
     LaunchLog("mods : %d mod(s) chez l'hote :%s, %d fichier(s) a recevoir (%llu octets)", (int)o.mods.size(), names.c_str(), (int)need.size(), (unsigned long long)bytes);
+    // (les 10 premiers, nommes : Mr_Hokly, 24/10, « les mods sont retelecharges » -- des reglages reecrits a chaque partie ?)
+    for (size_t k = 0; k < need.size() && k < 10; k++)
+        LaunchLog("mods : a recevoir %s (%u octets)", o.files[need[k]].path.c_str(), o.files[need[k]].size);
     // Mods de l'hote : acceptes d'office (demande de JD, 10/10 : « si quelqu'un rejoint une partie avec des mods, que ca lui
     // installe MSCLoader et lui prenne les mods » ; retour de Menos : un ami sans les mods entrait quand meme). Seul ce qui
     // n'est que du contenu (CD, images) demande encore TOUT ACCEPTER, sauf ModsAuto.
