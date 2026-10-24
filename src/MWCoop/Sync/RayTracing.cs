@@ -161,7 +161,12 @@ namespace MWCoop
         static Camera hooked;
         static Texture2D devTex;
 
-        public static bool Wanted { get { return Config.GetInt("Test", "RT", 0) != 0 || Gfx.Get("RayTracing", 0) != 0; } }
+        // Ray tracing cache pour le moment (JD, 24/10 : « on se penchera dessus plus tard ») : jamais active, quoi que dise mwcoop.ini
+        // (ancien [Graphismes] RayTracing=1, [Test] RT=1, lanceur pas a jour, reglage recu), et ses lignes du menu F10 cachees. Le code reste :
+        // true le rallume.
+        public static readonly bool Disponible = false;
+
+        public static bool Wanted { get { return Disponible && (Config.GetInt("Test", "RT", 0) != 0 || Gfx.Get("RayTracing", 0) != 0); } }
 
         // Jeu lance avec -force-gfx-direct : Unity dessine sur son fil principal, le mod peut appeler la DLL au bon moment.
         static int direct = -1;
