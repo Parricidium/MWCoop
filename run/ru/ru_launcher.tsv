@@ -1167,7 +1167,6 @@ To join a private lobby by IP: the host's address and, here, the code they gave 
 See others' markers	Видеть маркеры других
 Shared marker (tap: place, hold: remove)	Общий маркер (нажать: поставить, удерживать: убрать)
 Marker	Маркер
-Ice race: Jokkis rentals (host, beta)	Гонка на льду: аренда Йоккис (хост, бета)
 My Winter Car is still open but no longer answers MWCoop (stuck after closing, or started without MWCoop).\n\nClose it so you can launch again from the launcher?	My Winter Car всё ещё открыта, но больше не отвечает MWCoop (зависла после закрытия или запущена без MWCoop).\n\nЗакрыть её, чтобы снова запустить из лаунчера?
  (copy)	 (копия)
  · UDP blocked	 · UDP заблокирован
@@ -1457,7 +1456,6 @@ Host included · above 10, a good connection is advised	Включая хост�
 IP · port 	IP · порт 
 Image tab	Вкладка «Изображение»
 Import an image	Импортировать картинку
-Jokkis night	Вечер Йоккис
 Kick?	Выгнать?
 Last lobby on %s · %d mod(s) · kept	Последнее лобби %s · %d мод(ов) · сохранены
 Last lobby: %s · %d mod(s) · kept	Последнее лобби: %s · %d мод(ов) · сохранены
@@ -1963,3 +1961,4 @@ Steam is open but no account is logged in: log in, or play over IP / VPN	Steam �
 MWCoop runs as administrator, Steam does not: restart MWCoop normally	MWCoop запущен от администратора, а Steam нет: перезапусти MWCoop обычным способом
 Steam runs as administrator, MWCoop does not: restart Steam normally	Steam запущен от администратора, а MWCoop нет: перезапусти Steam обычным способом
 Steam refuses MWCoop: is %s in your Steam library? Else use IP / VPN	Steam не пускает MWCoop: есть ли %s в твоей библиотеке Steam? Иначе — IP / VPN
+Rally night	Вечер ралли

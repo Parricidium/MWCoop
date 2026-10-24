@@ -5039,7 +5039,6 @@ static void LobbyRowLabel(const LobbyOptDef &d, const GfxRow *r, std::wstring &l
         { "Renverser", L"Les voitures renversent les joueurs", L"Cars run players over", L"Amis et PNJ", L"Friends and NPCs" },
         { "PvP", L"Coups de poing entre joueurs", L"Punches between players", NULL, NULL },
         { "VenttiEnjeux", L"Ventti : enjeux pour tout le groupe", L"Ventti: stakes for the whole group", NULL, NULL },
-        { "Jokkis", L"Jokkis à louer (course sur glace)", L"Jokkis rentals (ice race)", NULL, NULL },
         { "GainMicro", L"Micro", L"Mic", NULL, NULL },   // (mon micro, pour les autres ; court : les pastilles prennent la place)
         { "VocalActivation", L"Parler", L"Talk", NULL, NULL },   // (1.8.9, JD : « laisser le choix » ; sans petite ligne : la carte de l'invite est pleine)
         { "Difficulte", L"Difficulté de départ", L"Start difficulty", L"Nouvelle partie : argent et carburant", L"New game: money and fuel" },
@@ -5123,10 +5122,6 @@ static void DrawLobbyOptRow(Graphics &g, RectF row, int i, int val, bool edit, b
         Text(g, FitText(lab, 12.5f, FontStyleBold, textW), RectF(row.X + ind, cy - 18, textW, 18), 12.5f, FontStyleBold, ink, StringAlignmentNear);
         Text(g, FitText(sub, 10.5f, FontStyleRegular, textW), RectF(row.X + ind, cy + 1, textW, 16), 10.5f, FontStyleRegular, WithA(kGrey, a), StringAlignmentNear);
     }
-    if (!strcmp(d.key, "Jokkis")) {   // en essai : pastille BETA apres le libelle, si elle tient
-        float tw = MeasureW(MeasureG(), lab, 12.5f, FontStyleBold);
-        if (tw + 8 + 38 <= textW) Pill(g, RectF(row.X + tw + 8, cy - 8, 38, 16), Color(255, 255, 107, 139), T(L"BÊTA", L"BETA"), Color(255, 255, 255, 255), 8.5f);
-    }
     if (!seg) {   // interrupteur (plus petit sur la ligne d'un ajout)
         float th = min(24.0f, row.Height - 2), tw = th == 24 ? 42.0f : 34.0f, ph = min(22.0f, row.Height - 2);
         if (edit) { UiToggle(g, RectF(row.X + row.Width - tw, cy - th / 2, tw, th), val == 1, hot); HotZone(row, id); }
@@ -5198,7 +5193,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         if (!host) for (const char *k : { "Difficulte", "VitesseVitres" }) row(k, false);   // (lecture seule ; l'hote les regle dans la carte de droite -- 1.8.9)
         y += 6;
         caption(T(L"JEUX & AJOUTS", L"GAMES & ADDITIONS"), false);
-        row("VenttiEnjeux", false);   // (Jokkis a louer retirees le 18/10 : la VAZ les remplace)
+        row("VenttiEnjeux", false);   // (Jokkis a louer retirees le 18/10, du mod le 24/10 : la VAZ et les voitures addons les remplacent)
         // ajouts MWCoop : Tous / Choisir / Aucun (SansAjouts et les quatre AjoutX)
         int on = 0;
         for (const char *k : kAjoutKeys) on += val(k) == 1;

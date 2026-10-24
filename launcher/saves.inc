@@ -197,7 +197,7 @@ static void SavesFake()
     g_saves.clear();
     SaveSlot a; a.name = T(L"Partie principale", L"Main game"); a.has = true; a.bytes = 153 * 1024; a.stats = true; a.jour = 14; a.argent = 12450; a.banque = 3800; a.heures = 31.2f;
     a.date = SaveFakeDate(1, 22, 7); a.avec = L"Teppo|Pekka"; a.role = L"hote"; GetSystemTimeAsFileTime(&a.mtime);
-    SaveSlot b; b.prof = L"partie-1"; b.name = T(L"Soirée Jokkis", L"Jokkis night"); b.has = true; b.bytes = 41 * 1024; b.stats = true; b.jour = 3; b.argent = 2100; b.banque = 0; b.heures = 4.5f;
+    SaveSlot b; b.prof = L"partie-1"; b.name = T(L"Soirée rallye", L"Rally night"); b.has = true; b.bytes = 41 * 1024; b.stats = true; b.jour = 3; b.argent = 2100; b.banque = 0; b.heures = 4.5f;
     b.date = SaveFakeDate(2, 21, 30); b.role = L"solo"; b.mtime = a.mtime;
     SaveSlot c; c.prof = L"partie-2"; c.name = T(L"Test vanilla", L"Vanilla test"); c.has = true; c.bytes = 12 * 1024; c.mtime = a.mtime;   // (jamais jouee avec le mod : pas de partie.txt)
     g_saves = { a, b, c };
