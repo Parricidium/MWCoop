@@ -2028,6 +2028,11 @@ The host isn't sending mods: \"Join in game\"	المضيف لا يرسل مود�
 %s is already playing: receiving their mods, then you join	%s يلعب بالفعل: جارٍ استلام مودّاته، ثم تدخل اللعبة
 HOST'S MODS…	مودّات المضيف…
 The host is already playing: receiving their mods (%d %%), then you join. Click to cancel.	المضيف يلعب بالفعل: جارٍ استلام مودّاته (%d %%)، ثم تدخل اللعبة. انقر للإلغاء.
+Steam is not running: start Steam, or play over IP / VPN	Steam لا يعمل: شغّل Steam أو العب عبر IP / VPN
+Steam is open but no account is logged in: log in, or play over IP / VPN	Steam مفتوح لكن لا يوجد حساب مسجّل الدخول: سجّل الدخول أو العب عبر IP / VPN
+MWCoop runs as administrator, Steam does not: restart MWCoop normally	MWCoop يعمل كمسؤول وSteam لا: أعد تشغيل MWCoop بشكل عادي
+Steam runs as administrator, MWCoop does not: restart Steam normally	Steam يعمل كمسؤول وMWCoop لا: أعد تشغيل Steam بشكل عادي
+Steam refuses MWCoop: is %s in your Steam library? Else use IP / VPN	Steam يرفض MWCoop: هل %s في مكتبة Steam لديك؟ وإلا فاستخدم IP / VPN
 MOD SUPPORT / KNOWN INCOMPATIBILITIES	دعم المودّات / حالات عدم التوافق
 Remove dents…	إزالة الانبعاجات…
 Close the game to remove the dents	أغلق اللعبة لإزالة الانبعاجات

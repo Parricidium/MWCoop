@@ -160,6 +160,49 @@ static void OnSteamJoinRequested(const void *p);
 static void OnSteamInvite(const void *p);
 static SteamCb g_cbJoin(sizeof(SJoinRequested), OnSteamJoinRequested), g_cbInvite(sizeof(SLobbyInvite), OnSteamInvite);
 
+// SteamAPI_Init refuse le lanceur : pourquoi, au mieux (Zivertik, 24/10 : « Steam is not running (or not logged in) »
+// avec Steam ouvert et connecte). Steam ferme ; ouvert sans compte connecte (ActiveProcess\ActiveUser = 0) ; pas au meme
+// niveau que nous (l'un en administrateur, l'autre non : son jeton illisible d'ici, ou lisible et different) ; sinon, le
+// compte connecte n'a pas le jeu (copie hors Steam, autre compte). Au journal quand la raison change (essai toutes les 5 s).
+static std::wstring SteamInitWhy()
+{
+    DWORD pid = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe = { sizeof(pe) };
+        for (BOOL ok = Process32FirstW(snap, &pe); ok && !pid; ok = Process32NextW(snap, &pe)) if (!_wcsicmp(pe.szExeFile, L"steam.exe")) pid = pe.th32ProcessID;
+        CloseHandle(snap);
+    }
+    DWORD user = 0, sz = sizeof(user);
+    bool userRead = RegGetValueW(HKEY_CURRENT_USER, L"Software\\Valve\\Steam\\ActiveProcess", L"ActiveUser", RRF_RT_REG_DWORD, NULL, &user, &sz) == ERROR_SUCCESS;
+    auto elevated = [](HANDLE proc, int *res) {   // (1 oui, 0 non, -1 jeton illisible : refuse d'ici)
+        HANDLE tok = NULL;
+        if (!OpenProcessToken(proc, TOKEN_QUERY, &tok)) { *res = GetLastError() == ERROR_ACCESS_DENIED ? -1 : -2; return; }
+        TOKEN_ELEVATION e = {}; DWORD n = 0;
+        *res = GetTokenInformation(tok, TokenElevation, &e, sizeof(e), &n) ? (e.TokenIsElevated ? 1 : 0) : -2;
+        CloseHandle(tok);
+    };
+    int me = -2, steam = -2;
+    elevated(GetCurrentProcess(), &me);
+    if (pid) {
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (h) { elevated(h, &steam); CloseHandle(h); } else if (GetLastError() == ERROR_ACCESS_DENIED) steam = -1;
+    }
+    bool levels = pid && me >= 0 && (steam == -1 ? me == 0 : steam >= 0 && steam != me);
+    static std::string last;
+    char d[160];
+    sprintf_s(d, "steam.exe %s, ActiveUser %s%lu, lanceur %s, Steam %s", pid ? "ouvert" : "absent", userRead ? "" : "illisible ", user,
+              me == 1 ? "administrateur" : me == 0 ? "normal" : "?", steam == 1 ? "administrateur" : steam == 0 ? "normal" : steam == -1 ? "jeton refuse" : "?");
+    if (last != d) { last = d; LaunchLog("steam : SteamAPI_Init a echoue (%s)", d); }   // (lanceur.log : dans le zip des journaux)
+    if (!pid) return T(L"Steam n'est pas ouvert : lance Steam, ou joue en IP / VPN", L"Steam is not running: start Steam, or play over IP / VPN");
+    if (userRead && user == 0) return T(L"Steam est ouvert mais sans compte connecté : connecte-toi, ou joue en IP / VPN", L"Steam is open but no account is logged in: log in, or play over IP / VPN");
+    if (levels) return me == 1 ? T(L"MWCoop tourne en administrateur, pas Steam : relance MWCoop normalement", L"MWCoop runs as administrator, Steam does not: restart MWCoop normally")
+                               : T(L"Steam tourne en administrateur, pas MWCoop : relance Steam normalement", L"Steam runs as administrator, MWCoop does not: restart Steam normally");
+    wchar_t b[300];
+    swprintf_s(b, T(L"Steam refuse MWCoop : %s est-il dans ta bibliothèque Steam ? Sinon, IP / VPN", L"Steam refuses MWCoop: is %s in your Steam library? Else use IP / VPN"), GM().name);
+    return b;
+}
+
 static bool SteamUp()
 {
     if (g_steamUp == 1) return true;
@@ -183,8 +226,7 @@ static bool SteamUp()
     SetEnvironmentVariableW(L"SteamAppId", GM().appid);
     SetEnvironmentVariableW(L"SteamGameId", GM().appid);
     if (!sapi::Init()) {
-        g_steamWhy = T(L"Steam n'est pas ouvert (ou pas connecté)", L"Steam is not running (or not logged in)");
-        TestLog("steam : SteamAPI_Init a echoue");
+        g_steamWhy = SteamInitWhy();
         return false;
     }
     intptr_t c = sapi::Client();
