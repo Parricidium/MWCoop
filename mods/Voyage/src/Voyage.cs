@@ -15,7 +15,7 @@ namespace Voyage
         public override string ID { get { return "Voyage"; } }
         public override string Name { get { return "Voyage"; } }
         public override string Author { get { return "JD"; } }
-        public override string Version { get { return "0.2.0"; } }   // (0.2.0 : My Summer Car aussi, 24/10)
+        public override string Version { get { return "0.2.1"; } }   // (0.2.0 : My Summer Car aussi, 24/10 ; 0.2.1 : places d'arrivee pour 16 joueurs)
         public override string Description { get { return "Agence de voyage, aérodrome et vols vers tes circuits Assetto Corsa convertis (compatible MWCoop)."; } }
         public override Game SupportedGames { get { return Game.MySummerCar_And_MyWinterCar; } }
 
@@ -151,8 +151,13 @@ namespace Voyage
                 new Step(0.8f, Fade.In, null, Arrived));
         }
 
-        // (co-op : chacun son pas a l'arrivee, pas tous sur le meme point)
-        static Vector3 Spread(Vector3 at, float yaw) { return at + Quaternion.Euler(0f, yaw, 0f) * Vector3.right * (((Coop.LocalId % 5) - 2) * 1.1f); }
+        // (co-op : chacun son pas a l'arrivee, pas tous sur le meme point ; rangees de 5 de front, la suivante 1,2 m derriere --
+        // le salon va jusqu'a 16 joueurs, le 6e arrivait sur le 1er)
+        static Vector3 Spread(Vector3 at, float yaw)
+        {
+            int id = Mathf.Max(0, Coop.LocalId);
+            return at + Quaternion.Euler(0f, yaw, 0f) * new Vector3(((id % 5) - 2) * 1.1f, 0f, -(id / 5) * 1.2f);
+        }
 
         void Arrived()
         {
