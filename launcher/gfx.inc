@@ -1117,11 +1117,12 @@ static void SetThemePreview(Graphics &g, RectF r, Color sky0, Color sky1, Color 
 }
 
 // Jetons des ajouts : noms, et nombre de lignes pour une largeur (w <= 0 : la derniere largeur mesuree).
-// Ajouts du jeu choisi (19/10) : My Summer Car n'a que le drone (sacs, boutique s21, musee et VAZ sont faits pour My Winter
-// Car ; le mod les coupe aussi, Sync/Ajouts.cs B_Msc). Ceux des deux jeux d'abord : kAjoutKeys et kAjoutN (aussi le salon,
+// Ajouts du jeu choisi (19/10) : My Summer Car a le drone, et depuis le 24/10 les sacs, la boutique s21, le musee et la VAZ
+// (voitures sur la Ruscko) ; cinema et pieces CARDINAL : My Winter Car seul ; le mod les coupe aussi, Sync/Ajouts.cs B_Msc). Ceux des deux jeux
+// d'abord : kAjoutKeys et kAjoutN (aussi le salon,
 // launcher.cpp : « for (k : kAjoutKeys) », « kAjoutN ») ne parcourent que les kAjoutMsc premiers sur My Summer Car.
 static const char *kAjoutAll[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee", "AjoutVaz", "AjoutKino", "AjoutOsat" };
-static const int kAjoutMsc = 1;
+static const int kAjoutMsc = 5;
 static int AjoutCount() { return g_game == GAME_MSC ? kAjoutMsc : (int)(sizeof(kAjoutAll) / sizeof(kAjoutAll[0])); }
 struct AjoutList {
     const char *const *begin() const { return kAjoutAll; }

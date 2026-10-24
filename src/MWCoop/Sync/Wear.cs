@@ -29,7 +29,11 @@ namespace MWCoop
     {
         // (3 : tasse a cafe -- pas un vetement : jamais « portee », juste une par joueur ; ᏒullΞᏒ, 12/10)
         const int NBase = 4;
-        static readonly string[] Paths = { "EQUIPMENTS/winter jacket(itemx)", "EQUIPMENTS/winter coverall(itemx)", "EQUIPMENTS/Helmet/helmet(itemx)", "EQUIPMENTS/coffee cup(itemx)" };
+        static readonly string[] PathsMwc = { "EQUIPMENTS/winter jacket(itemx)", "EQUIPMENTS/winter coverall(itemx)", "EQUIPMENTS/Helmet/helmet(itemx)", "EQUIPMENTS/coffee cup(itemx)" };
+        // My Summer Car (24/10, casques de la boutique s21) : seulement le casque (ITEMS/helmet(itemx), memes automates 'Use' et
+        // 'Paint') ; ni veste ni combinaison dans ce jeu, donc pas de paires par joueur, et la tasse reste celle du jeu.
+        static readonly string[] PathsMsc = { "", "", "ITEMS/helmet(itemx)", "" };
+        static string[] Paths { get { return Game.Msc ? PathsMsc : PathsMwc; } }
         static readonly string[] Kinds = { "veste", "combinaison", "casque", "tasse" };
         static readonly string[] CopyNames = { "winter jacket", "winter coverall", "helmet", "coffee cup" };
         const int PerSet = 4;   // (par joueur en plus : veste, combinaison, casque, tasse)
@@ -96,7 +100,7 @@ namespace MWCoop
             found = true;
             for (int i = 0; i < NBase; i++)
             {
-                if (items[i].Go != null) continue;
+                if (items[i].Go != null || Paths[i].Length == 0) continue;
                 items[i].Go = Game.FindAny(Paths[i]);
                 if (items[i].Go == null) found = false;
             }
