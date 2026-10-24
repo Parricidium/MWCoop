@@ -123,7 +123,10 @@ Il n'y a aucun boulot, course ni événement à l'aérodrome. Le plus proche est
 - **Co-op** : chacun prend et utilise son billet ; le décollage et l'atterrissage sont annoncés aux autres (API de
   MWCoop, canal « Voyage ») : ils voient l'avion partir et revenir. Pour aller ensemble au même circuit, chaque joueur
   doit l'avoir converti (même identifiant, donc même place). Les positions sont déjà partagées par MWCoop. L'heure
-  n'avance pas pendant le vol (elle est commune).
+  n'avance pas pendant le vol (elle est commune). À l'arrivée, chacun a sa place (rangées de 5 de front, 1,1 m entre
+  deux joueurs, la rangée suivante 1,2 m derrière : jusqu'à 16 joueurs). Vérifié à deux sur My Winter Car le 24/10
+  (hôte + invité sur Magione) : chacun voit l'autre à côté de lui, annonces de l'avion reçues, retour au terminal pour
+  les deux.
 - **Sauvegarde** : le billet et la destination où l'on se trouve sont gardés (SaveLoad de MSCLoader, clés `billet2` et
   `ailleurs2` ; clé suivie du pseudo pour un invité). En chargeant une partie sauvée sur un circuit, le circuit est
   rechargé. S'il a été supprimé, retour à l'aérodrome.
