@@ -959,6 +959,9 @@ namespace MWCoop
             { "Film received: the show starts once everyone has it.", "Фильм получен: сеанс начнётся, когда он будет у всех." },
             { "Others", "Другие" },
             { "Steam is starting with the game...", "Steam запускается вместе с игрой..." },
+            { "Health (PvP)", "Здоровье (PvP)" },
+            { "Health", "Здоровье" },
+            { "Only when the host turned PvP on: every hit taken drains it", "Только когда хост включил PvP: каждый полученный удар её уменьшает" },
         };
     }
 }

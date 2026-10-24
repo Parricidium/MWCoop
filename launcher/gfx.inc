@@ -196,6 +196,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "JaugeTemperature", L"Température", L"Body temperature", 1, {}, {}, {}, 0, 18, "Hud" },
         { "JaugeSueur", L"Sueur", L"Sweat", 1, {}, {}, {}, 0, 18, "Hud" },
         { "JaugeArgent", L"Argent", L"Money", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeVie", L"Vie (PvP)", L"Health (PvP)", 1, {}, {}, {}, 0, 18, "Hud" },
         { "JaugeJour", L"Jour", L"Day", 1, {}, {}, {}, 0, 18, "Hud" },
         { "Equipe", L"Panneau Équipe", L"Team panel", 1, {}, {}, {}, 0, 19, "Hud" },
         { "Alertes", L"Alertes en haut de l'écran", L"Alerts at the top of the screen", 1, {}, {}, {}, 0, 19, "Hud" },
@@ -680,6 +681,7 @@ static const SetItem kSetItems[] = {
     { 24, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
     { 24, SI_GFX, "JaugeSalete", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeTemperature", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeSueur", NULL, NULL, NULL, NULL },
     { 24, SI_GFX, "JaugeArgent", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeJour", NULL, NULL, NULL, NULL },
+    { 24, SI_GFX, "JaugeVie", NULL, NULL, L"Seulement quand l'hôte a activé le PvP", L"Only when the host turned PvP on" },
     { 25, SI_GFX, "Equipe", NULL, NULL, L"Les jauges des autres joueurs, en petit", L"The other players' gauges, small" },
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé, gelé… toi et tes amis", L"Very hungry, exhausted, freezing… you and your friends", 0, 1 },
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé… toi et tes amis", L"Very hungry, exhausted… you and your friends", 0, 2 },   // (pas de froid dans My Summer Car)
