@@ -76,8 +76,8 @@ namespace MWCoop
                 if (held == null) { restore.Add(new KeyValuePair<PlayMakerFSM, string>(setup, setup.ActiveStateName)); setup = null; odd = true; }
                 else held.ToState = HoldState;
             }
-            try { PlayMakerFSM.BroadcastEvent("SAVEGAME"); }
-            finally { if (held != null) held.ToState = heldTo; }
+            try { SaveBatchMsc.Begin(restore, setup); PlayMakerFSM.BroadcastEvent("SAVEGAME"); }
+            finally { if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); }
             afterSave = new Dictionary<PlayMakerFSM, string>();
             foreach (KeyValuePair<PlayMakerFSM, string> kv in restore) if (kv.Key != null) afterSave[kv.Key] = kv.Key.ActiveStateName;
             restoreAt = Time.realtimeSinceStartup + 2.5f;

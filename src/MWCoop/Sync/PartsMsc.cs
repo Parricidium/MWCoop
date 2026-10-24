@@ -576,18 +576,22 @@ namespace MWCoop
             GameObject part = pv != null ? pv.Value : null;
             return part != null && MscHolds(p.Fsm, part) ? MscPartKey(part) : "";
         }
+        static int lastDigestMounted = -1;
         static void MscDigest(float now)
         {
-            NetWriter w = null; int n = 0, total = 0, totalB = 0;
+            NetWriter w = null; int n = 0, total = 0, totalB = 0, mounted = 0;
             foreach (KeyValuePair<string, MscPoint> kv in mscPoints)
             {
                 MscPoint p = kv.Value;
                 if (p.Fsm == null || p.Swap) continue;
                 string id = MscInstalledId(p);
+                if (id.Length > 0) mounted++;
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
                 uint hk = H(p.Key);
                 w.I32((int)hk).Str(id).F32(Age(hk, now)); n++; total++;
-                if (n >= 40) { Session.SendAll(w, true); w = null; }
+                // (coupe aussi a la taille : 40 points aux cles longues d'une SATSUMA montee depassaient Transport.MaxPayload,
+                // l'envoi levait et tout le controle de ce tour etait perdu, vis comprises -- 24/10)
+                if (n >= 40 || w.Length > 900) { Session.SendAll(w, true); w = null; }
             }
             if (w != null) Session.SendAll(w, true);
             w = null; n = 0;
@@ -601,8 +605,11 @@ namespace MWCoop
                 if (n >= 100) { Session.SendAll(w, true); w = null; }
             }
             if (w != null) Session.SendAll(w, true);
-            if (digestLogs++ < 3 || now >= lastDigestLog + 120f) { lastDigestLog = now; Log.Info("pieces (MSC) : controle envoye aux invites (" + total + " points, " + totalB + " vis)"); }
+            // (nombre de points montes : journal aussi quand il change -- une chute sans geste de joueur = etat de l'hote faux)
+            if (digestLogs++ < 3 || now >= lastDigestLog + 120f || mounted != lastDigestMounted) { lastDigestLog = now; Log.Info("pieces (MSC) : controle envoye aux invites (" + total + " points dont " + mounted + " montes, " + totalB + " vis)"); }
+            lastDigestMounted = mounted;
         }
+        static float lastWouldLog = -100f;
         static void MscOnDigest(int who, NetReader r, int kind, float now)
         {
             MscHashMaps();
@@ -612,6 +619,7 @@ namespace MWCoop
                 var rows = new List<KeyValuePair<uint, KeyValuePair<string, float>>>();
                 while (r.More) { uint h0 = (uint)r.I32(); string id0 = r.Str(); float a0 = r.F32(); rows.Add(new KeyValuePair<uint, KeyValuePair<string, float>>(h0, new KeyValuePair<string, float>(id0, a0))); }
                 int would = 0;
+                System.Text.StringBuilder wl = null;
                 foreach (var row in rows)
                 {
                     MscPoint q;
@@ -620,8 +628,15 @@ namespace MWCoop
                     GameObject qp = qv != null ? qv.Value : null;
                     string qm = MscInstalledId(q);
                     if (qm.Length == 0 || qm == row.Value.Key || mounting.ContainsKey(qp) || PendingReinstall(qp)) continue;
-                    if (!(Age(row.Key, now) + 0.5f < row.Value.Value && row.Value.Value > 0f)) would++;
+                    if (!(Age(row.Key, now) + 0.5f < row.Value.Value && row.Value.Value > 0f))
+                    {
+                        would++;
+                        if (wl == null) wl = new System.Text.StringBuilder();
+                        if (would <= 20) wl.Append(' ').Append(q.Key).Append(" [ici ").Append(qm).Append(", hote \"").Append(row.Value.Key).Append("\"]");
+                    }
                 }
+                // (quels points : cause du controle de l'hote qui demonte une SATSUMA montee, Markos 24/10 -- une fois par minute)
+                if (would > 0 && now >= lastWouldLog + 60f) { lastWouldLog = now; Log.Info("pieces (MSC) : controle de l'hote : " + would + " point(s) monte(s) ici, pas chez l'hote :" + wl); }
                 bool trusted = DigestTrusted(would, now);
                 foreach (var row in rows)
                 {

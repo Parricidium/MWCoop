@@ -47,7 +47,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            root = null; Objects = Hidden = Packs = 0; job = null; lamps.Clear(); suns = null; hiddenUnits.Clear();
+            root = null; Objects = Hidden = Packs = 0; job = null; lamps.Clear(); suns = null; hiddenUnits.Clear(); waters.Clear();
             loadAt = Game.LevelName == "GAME" && !MapExport.Active ? Time.realtimeSinceStartup + Config.GetFloat("Test", "CartesDelai", 6f) : -1;
             if (loadAt < 0) return;
             string d = LoadDir(false);
@@ -59,6 +59,7 @@ namespace MWCoop
         public static void Update()
         {
             NightLamps();
+            WaterColors();
             KeepHidden();
             if (job != null)
             {
@@ -94,6 +95,11 @@ namespace MWCoop
                 Packs++;
             }
             SceneBatches.Close();
+            if (Config.Get("Test", "CartesPhoto", "").Length > 0)   // (photo d'essai : les scripts ajoutes -- eau du lac -- demarrent a l'image suivante)
+            {
+                float t = Time.realtimeSinceStartup + Config.GetFloat("Test", "CartesPhotoDelai", 2f);
+                while (Time.realtimeSinceStartup < t) yield return true;
+            }
             TestPhoto();
             ProbeWater();
             ProbeUnits();
@@ -202,22 +208,117 @@ namespace MWCoop
             return clone;
         }
 
-        // eau « du lac » (MSC) : la matiere du lac et son WaterTile (reflets du PlanarReflection du lac) sur notre plan d'eau
+        // eau « du lac » (MSC : « eau:lac » ou une matiere Water4 du jeu, « mat:Water4Adv_Lake »...). Posee telle quelle, la
+        // matiere du lac sortait grise (son _ReflectionTex n'est rendu que par le PlanarReflection du lac, a la hauteur du lac) ou
+        // invisible (fondu de rive du nuanceur : alpha = _InvFadeParemeter.x (0,2) x profondeur, il faut 5 m de fond). Ici,
+        // chaque plan d'eau a sa copie de la matiere du lac affiche (LakeNice, ou LakeSimple selon les reglages graphiques),
+        // un fondu plus court et ses propres WaterBase + PlanarReflection + SpecularLighting + WaterTile (reflet a sa hauteur),
+        // sur le calque Water comme le lac ; couleurs recopiees du lac toutes les 2 s (le jeu les change avec l'heure).
+        class WaterCopy { public Material Mine; public Transform Lake; }
+        static readonly List<WaterCopy> waters = new List<WaterCopy>();
+        static float waterCheck;
         static void LakeWater(GameObject go)
         {
-            MeshRenderer mr = go.GetComponent<MeshRenderer>();
-            if (mr == null || mr.sharedMaterial == null || mr.sharedMaterial.name != "MWCoop eau lac") return;
-            Transform lake = Resolve("MAP/LakeNice/Lake");
-            MeshRenderer[] tiles = lake != null ? lake.GetComponentsInChildren<MeshRenderer>(true) : null;
-            MeshRenderer tile = tiles != null && tiles.Length > 0 ? tiles[0] : null;
-            if (tile == null) return;   // (pas de lac : l'eau simple reste)
-            mr.sharedMaterial = tile.sharedMaterial;
-            foreach (Component c in tile.GetComponents<Component>())
+            foreach (MeshRenderer mr in go.GetComponentsInChildren<MeshRenderer>())
             {
-                if (c == null || c.GetType().Name != "WaterTile") continue;
-                Component w = go.AddComponent(c.GetType());
-                foreach (System.Reflection.FieldInfo fi in c.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)) fi.SetValue(w, fi.GetValue(c));
+                Material m = mr.sharedMaterial;
+                if (m == null || !(m.name == "MWCoop eau lac" || (m.shader != null && m.shader.name.Contains("Water4")))) continue;
+                Transform lake = LiveLake();
+                Renderer tile = LakeTile(lake);
+                if (tile == null || tile.sharedMaterial == null) continue;   // (pas de lac, MWC : l'eau simple reste)
+                var w = new WaterCopy { Mine = new Material(tile.sharedMaterial), Lake = lake };
+                w.Mine.name = "MWCoop eau lac (copie)";
+                Shorter(w.Mine);
+                mr.sharedMaterial = w.Mine;
+                mr.gameObject.layer = tile.gameObject.layer;
+                Component wb = AddCopy(mr.gameObject, lake.GetComponent("WaterBase"));
+                if (wb == null) continue;
+                SetField(wb, "sharedMaterial", w.Mine);
+                Component pr = AddCopy(mr.gameObject, lake.GetComponent("PlanarReflection"));
+                AddCopy(mr.gameObject, lake.GetComponent("SpecularLighting"));
+                Component wt = AddCopy(mr.gameObject, tile.GetComponent("WaterTile"));
+                if (wt != null) { SetField(wt, "reflection", pr); SetField(wt, "waterBase", wb); }
+                waters.Add(w);
             }
+        }
+        // lac affiche : LakeNice/Lake (eau soignee) ou LakeSimple (reglages graphiques bas)
+        static Transform LiveLake()
+        {
+            Transform nice = Resolve("MAP/LakeNice/Lake"), simple = Resolve("MAP/LakeSimple");
+            if (nice != null && nice.gameObject.activeInHierarchy) return nice;
+            if (simple != null && simple.gameObject.activeInHierarchy) return simple;
+            return nice ?? simple;
+        }
+        static Renderer LakeTile(Transform lake)
+        {
+            MeshRenderer[] t = lake != null ? lake.GetComponentsInChildren<MeshRenderer>(true) : null;
+            return t != null && t.Length > 0 ? t[0] : null;
+        }
+        // reglages pour un etang : fondu de rive plein a ~0,7 m de fond (le lac : 5 m), ecume sur ~0,3 m (le lac : ~7 m, tout un
+        // etang en etait couvert), couleur de l'eau plus couvrante (le lac laisse voir son fond sombre a 71 % ; un etang creuse
+        // dans l'herbe montrait l'herbe)
+        static void Shorter(Material m)
+        {
+            if (m.HasProperty("_InvFadeParemeter"))
+            {
+                Vector4 f = m.GetVector("_InvFadeParemeter");
+                f.x = Mathf.Max(f.x, Config.GetFloat("Test", "EauFondu", 1.5f));
+                f.y = Mathf.Max(f.y, Config.GetFloat("Test", "EauEcume", 3f));
+                m.SetVector("_InvFadeParemeter", f);
+            }
+            if (m.HasProperty("_BaseColor"))
+            {
+                Color c = m.GetColor("_BaseColor");
+                c.a = Mathf.Max(c.a, Config.GetFloat("Test", "EauOpacite", 0.75f));
+                m.SetColor("_BaseColor", c);
+            }
+            // reflet : le lac le remplace par une couleur unie (_ReflectionColor.a = 1) et ne le montre qu'en rasant (Fresnel
+            // puissance 11, biais -0,5) -- d'ou la dalle grise ; ici le vrai reflet (ciel, sol) des qu'on regarde en biais
+            if (m.HasProperty("_ReflectionColor"))
+            {
+                Color r = m.GetColor("_ReflectionColor");
+                r.a = Mathf.Min(r.a, Config.GetFloat("Test", "EauRefletUni", 0.25f));
+                m.SetColor("_ReflectionColor", r);
+            }
+            if (m.HasProperty("_DistortParams"))
+            {
+                Vector4 d = m.GetVector("_DistortParams");
+                d.z = Mathf.Min(d.z, Config.GetFloat("Test", "EauFresnel", 4f));
+                d.w = Mathf.Max(d.w, Config.GetFloat("Test", "EauFresnelBiais", 0.1f));
+                m.SetVector("_DistortParams", d);
+            }
+        }
+        static void WaterColors()
+        {
+            if (waters.Count == 0 || Time.realtimeSinceStartup < waterCheck) return;
+            waterCheck = Time.realtimeSinceStartup + 2f;
+            Transform lake = LiveLake();
+            Renderer tile = LakeTile(lake);
+            if (tile == null || tile.sharedMaterial == null) return;
+            Material src = tile.sharedMaterial;
+            foreach (WaterCopy w in waters)
+            {
+                if (w.Mine == null) continue;
+                Texture refl = w.Mine.HasProperty("_ReflectionTex") ? w.Mine.GetTexture("_ReflectionTex") : null;   // (le notre, pas celui du lac)
+                if (w.Mine.shader != src.shader) w.Mine.shader = src.shader;
+                w.Mine.CopyPropertiesFromMaterial(src);
+                w.Mine.shaderKeywords = src.shaderKeywords;
+                if (refl != null) w.Mine.SetTexture("_ReflectionTex", refl);
+                Shorter(w.Mine);
+            }
+        }
+        // composant du jeu recopie (champs publics) sur un autre objet ; types pris sur le lac (scripts d'eau de MSC)
+        static Component AddCopy(GameObject go, Component from)
+        {
+            if (from == null) return null;
+            Component c = go.AddComponent(from.GetType());
+            foreach (System.Reflection.FieldInfo fi in from.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)) fi.SetValue(c, fi.GetValue(from));
+            return c;
+        }
+        static void SetField(Component c, string name, object v)
+        {
+            System.Reflection.FieldInfo fi = c != null ? c.GetType().GetField(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
+            if (fi != null) fi.SetValue(c, v);
         }
 
         // ---------------------------------------------------------------- lumieres
@@ -374,8 +475,62 @@ namespace MWCoop
                     }
                     if (comps.Count == 0) continue;
                     Log.Info("sonde eau : " + Recon.Path(c) + " [" + (c.gameObject.activeInHierarchy ? "actif" : "eteint") + ", calque " + c.gameObject.layer + ", " + c.position.ToString("F0") + "] " + string.Join(", ", comps.ToArray()));
-                    if (++n >= 120) return;
+                    if (nm.Contains("water") || nm.Contains("lake") || nm.Contains("vesi")) ProbeWaterDetail(c);
+                    if (++n >= 200) return;
                 }
+        }
+
+        // detail d'un objet d'eau : matieres (nuanceur, mots-cles, proprietes Water4 connues) et champs des scripts d'eau
+        static readonly string[] waterProps = { "_ReflectionTex", "_RefractionTex", "_BumpMap", "_ShoreTex", "_Fresnel", "_MainTex", "_InvFadeParemeter",
+            "_DistortParams", "_BaseColor", "_ReflectionColor", "_SpecularColor", "_Shininess", "_GerstnerIntensity", "_GAmplitude", "_GFrequency",
+            "_GSteepness", "_GSpeed", "_GDirectionAB", "_GDirectionCD", "_BumpTiling", "_BumpDirection", "_Foam", "_WorldLightDir", "_Color", "_WaveScale", "_HorizonColor" };
+        static void ProbeWaterDetail(Transform c)
+        {
+            Renderer r = c.GetComponent<Renderer>();
+            if (r != null)
+                foreach (Material m in r.sharedMaterials)
+                {
+                    if (m == null) continue;
+                    var props = new List<string>();
+                    foreach (string pn in waterProps)
+                    {
+                        if (!m.HasProperty(pn)) continue;
+                        string v;
+                        Texture t = null;
+                        try { t = m.GetTexture(pn); } catch { }
+                        if (t != null) v = "tex " + t.name + " " + t.width + "x" + t.height;
+                        else { Vector4 x = m.GetVector(pn); v = x.ToString("F3"); }
+                        props.Add(pn + "=" + v);
+                    }
+                    Log.Info("sonde eau :   matiere « " + m.name + " » nuanceur « " + (m.shader != null ? m.shader.name : "?") + " » file " + m.renderQueue
+                             + " mots-cles [" + string.Join(" ", m.shaderKeywords ?? new string[0]) + "] " + string.Join(" ; ", props.ToArray()));
+                }
+            MeshFilter mf = c.GetComponent<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null)
+                Log.Info("sonde eau :   maillage « " + mf.sharedMesh.name + " » " + mf.sharedMesh.vertexCount + " sommets, couleurs " + mf.sharedMesh.colors.Length + ", boite " + mf.sharedMesh.bounds.size.ToString("F1") + ", echelle " + c.lossyScale.ToString("F2"));
+            foreach (Component k in c.GetComponents<Component>())
+            {
+                if (k == null || k is Transform || k is Renderer || k is MeshFilter || k is Collider || k is PlayMakerFSM) continue;
+                var fs = new List<string>();
+                foreach (System.Reflection.FieldInfo fi in k.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                {
+                    object v = fi.GetValue(k);
+                    UnityEngine.Object uo = v as UnityEngine.Object;
+                    fs.Add(fi.Name + "=" + (uo != null ? "<" + uo.name + ">" : v is Component || v == null ? "null" : v.ToString()));
+                }
+                Log.Info("sonde eau :   " + k.GetType().FullName + " " + string.Join(" ; ", fs.ToArray()));
+            }
+            if (c.GetComponent("WaterBase") != null)   // (dalles du lac : noms sans « water »)
+            {
+                int n = 0;
+                foreach (Transform ch in c.GetComponentsInChildren<Transform>(true))
+                {
+                    if (ch == c) continue;
+                    Log.Info("sonde eau : dalle " + Recon.Path(ch) + " [" + (ch.gameObject.activeInHierarchy ? "actif" : "eteint") + ", calque " + ch.gameObject.layer + ", " + ch.position.ToString("F1") + "]");
+                    ProbeWaterDetail(ch);
+                    if (++n >= 6) break;
+                }
+            }
         }
 
         // [Test] SondeHauteur=x,z;x,z... : hauteur du sol (collision) sous ces points -- relief sculpte
@@ -430,6 +585,7 @@ namespace MWCoop
                 go.transform.position = new Vector3(Fl(p[0]), Fl(p[1]), Fl(p[2]));
                 go.transform.LookAt(new Vector3(Fl(p[3]), Fl(p[4]), Fl(p[5])));
                 cam.fieldOfView = 60; cam.farClipPlane = 3000;
+                cam.depthTextureMode = DepthTextureMode.Depth;   // (comme la camera du joueur : fondu de rive de l'eau Water4)
                 var rt = new RenderTexture(1280, 720, 24);
                 cam.targetTexture = rt; cam.Render();
                 RenderTexture.active = rt;
@@ -440,6 +596,27 @@ namespace MWCoop
                 RenderSettings.ambientLight = amb;
                 UnityEngine.Object.Destroy(lg); UnityEngine.Object.Destroy(go); UnityEngine.Object.Destroy(rt); UnityEngine.Object.Destroy(tex);
                 Log.Info("cartes : photo d'essai ecrite");
+                foreach (WaterCopy w in waters)   // (eau du lac : reflet bien rendu ?)
+                {
+                    Texture rt0 = w.Mine != null && w.Mine.HasProperty("_ReflectionTex") ? w.Mine.GetTexture("_ReflectionTex") : null;
+                    string pr = "";
+                    foreach (MeshRenderer mr in root.GetComponentsInChildren<MeshRenderer>())
+                    {
+                        if (mr.sharedMaterial != w.Mine) continue;
+                        Component c = mr.GetComponent("PlanarReflection");
+                        if (c == null) { pr = "pas de PlanarReflection"; break; }
+                        foreach (string fn in new[] { "m_ReflectionCamera", "m_SharedMaterial", "reflectionMask" })
+                        {
+                            System.Reflection.FieldInfo fi = c.GetType().GetField(fn, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                            object v = fi != null ? fi.GetValue(c) : null;
+                            UnityEngine.Object uo = v as UnityEngine.Object;
+                            pr += fn + "=" + (uo != null ? uo.name : v is LayerMask ? ((LayerMask)v).value.ToString() : "null") + " ";
+                        }
+                        break;
+                    }
+                    Log.Info("cartes : eau du lac : _ReflectionTex " + (rt0 != null ? rt0.name + " " + rt0.width + "x" + rt0.height : "aucune") + ", mots-cles globaux WATER_REFLECTIVE " + Shader.IsKeywordEnabled("WATER_REFLECTIVE")
+                             + " WATER_EDGEBLEND_ON " + Shader.IsKeywordEnabled("WATER_EDGEBLEND_ON") + " WATER_SIMPLE " + Shader.IsKeywordEnabled("WATER_SIMPLE") + ", maximumLOD " + Shader.globalMaximumLOD + "/" + (w.Mine != null ? w.Mine.shader.maximumLOD : 0) + ", " + pr);
+                }
             }
             catch (Exception e) { Log.Warn("cartes : photo d'essai : " + e.Message); }
         }
