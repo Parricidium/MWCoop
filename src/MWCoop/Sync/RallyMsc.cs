@@ -9,17 +9,24 @@ namespace MWCoop
     // Rallye de My Summer Car a plusieurs pilotes humains (22/10, JD : « fait tout »). Le jeu n'a qu'une participation,
     // RALLY/ResultsWeekend 'Data' : deux journees (samedi, dimanche), classe Junior / Amateur, adversaires tires de
     // RALLY/DriversList avec des temps au hasard (Opponent time), le joueur ajoute aux tables Names / Times par son
-    // PlayerIDstring ('Player name' / 'Player time', puis 'Player name 2' / 'Player time 2' le dimanche), classement bati dans
-    // 'Hash to array 2' (Names / Times -> NamesArray / TimesArray, tri). Les voitures IA et la table des pilotes IA (RallyCars ::
-    // Results) sont deja partagees par Races.
+    // PlayerIDstring ('Player name' / 'Player time', puis 'Player name 2' / 'Player time 2' le dimanche). Le dimanche, 'Player
+    // time 2' -> 'Hash to array' (Names / Times -> NamesArray / TimesArray) -> tri -> 'Class?' -> 'Player position' : le podium
+    // (or / argent / bronze, trophee, prix). 'Hash to array 2' (OPENRESULTS depuis 'Idle 4') ne sert qu'a la feuille de resultats.
+    // Les voitures IA et la table des pilotes IA (RallyCars :: Results) sont deja partagees par Races.
     // Ici : chaque joueur annonce son temps cumule (PlayerTimeTotal) et sa classe a la fin de chaque journee ('Idle 4' le
-    // samedi, 'Hash to array' le dimanche) ; a l'entree de 'Hash to array 2' chez chacun, les autres humains de sa classe sont
-    // ajoutes aux tables Names / Times (cle MWC<id>, valeur le pseudo / le temps) : ils apparaissent dans le classement, et le
-    // podium du jeu en tient compte. Rien d'autre n'est touche (les adversaires au hasard restent ceux de chacun). A verifier en
-    // jeu sur un vrai week-end de rallye : essai impossible a automatiser (deux journees de speciale).
+    // samedi, 'Hash to array' le dimanche) ; a l'entree de 'Hash to array' (podium) et de 'Hash to array 2' (feuille), les autres
+    // humains de sa classe sont ajoutes aux tables Names / Times (cle MWC<id>, valeur le pseudo / le temps). Rien d'autre n'est
+    // touche (les adversaires au hasard restent ceux de chacun).
+    // Podium (decision de JD, 24/10 : « une limite de temps, calculee sur le nombre de joueurs reels, avec une moyenne des temps
+    // des PNJ ») : 'Hash to array' passe en sequence et commence par Hold, qui attend que chaque humain engage (temps du samedi
+    // annonce dans la meme classe, toujours dans la partie) ait annonce son dimanche ; au plus (OppMinTimeD2 + OppMaxTimeD2) / 2
+    // x 1,25 + 60 s par humain attendu, compte depuis l'arrivee ici, message a l'ecran toutes les 10 s. Puis classement et podium
+    // avec les temps recus. [Test] RallyeAttente=s : delai maximum force (essais).
     public static class RallyMsc
     {
-        class Human { public string Name, Cls; public float Time; public int Day; }
+        // (temps cumules du samedi et du dimanche, gardes a part : la feuille du samedi et le podium du dimanche n'ont pas les memes)
+        class Human { public string Name, Cls; public float Time1, Time2; }
+        static int myDay;   // derniere journee annoncee ici (feuille de resultats : temps de cette journee-la)
         static readonly Dictionary<int, Human> humans = new Dictionary<int, Human>();
         static PlayMakerFSM data;
         static Hashtable names, times;
@@ -27,7 +34,74 @@ namespace MWCoop
         static bool hooked;
         static string lastSent = "";
 
-        public static void OnLevelLoaded() { humans.Clear(); data = null; names = times = null; nextLook = 0f; hooked = false; lastSent = ""; trophiesHooked = false; nextTrophyLook = 0f; }
+        public static void OnLevelLoaded() { humans.Clear(); data = null; names = times = null; nextLook = 0f; hooked = false; lastSent = ""; trophiesHooked = false; nextTrophyLook = 0f; myDay = 0; }
+
+        // Humains engages qui n'ont pas encore annonce leur temps du dimanche (ma classe, temps du samedi recu, encore la).
+        static List<Human> Pending()
+        {
+            var l = new List<Human>();
+            string cls = Cls();
+            foreach (KeyValuePair<int, Human> kv in humans)
+                if (kv.Value.Cls == cls && kv.Value.Time1 > 0f && kv.Value.Time2 <= 0f && Session.Players.ContainsKey(kv.Key)) l.Add(kv.Value);
+            return l;
+        }
+
+        static float MaxWait(int waited)
+        {
+            float forced = Config.GetFloat("Test", "RallyeAttente", 0f);
+            if (forced > 0f) return forced;
+            FsmFloat lo = data != null ? data.FsmVariables.FindFsmFloat("OppMinTimeD2") : null, hi = data != null ? data.FsmVariables.FindFsmFloat("OppMaxTimeD2") : null;
+            float avg = lo != null && hi != null && hi.Value > 0f ? (lo.Value + hi.Value) * 0.5f : 400f;
+            return avg * 1.25f + 60f * waited;
+        }
+
+        // En tete de 'Hash to array' (dimanche, sequence) : attend les autres humains engages, au plus MaxWait.
+        class Hold : ModHook
+        {
+            public override string Module { get { return "rallye (MSC)"; } }
+            float until, nextToast;
+            public override void OnEnter()
+            {
+                try
+                {
+                    List<Human> p = Pending();
+                    if (p.Count == 0 || !Session.Active) { Finish(); return; }
+                    float max = MaxWait(p.Count);
+                    until = Time.realtimeSinceStartup + max; nextToast = 0f;
+                    MWCoop.Log.Info("rallye (MSC) : podium en attente de " + Names(p) + " (au plus " + (int)max + " s)");
+                }
+                catch (System.Exception e) { Replay.HookError(e); Finish(); }
+            }
+            public override void OnUpdate()
+            {
+                try
+                {
+                    List<Human> p = Pending();
+                    float now = Time.realtimeSinceStartup;
+                    if (p.Count == 0 || now >= until || !Session.Active)
+                    {
+                        MWCoop.Log.Info("rallye (MSC) : podium calcule " + (p.Count == 0 ? "avec tous les temps" : "sans " + Names(p) + " (delai depasse)"));
+                        Finish();
+                        return;
+                    }
+                    if (now >= nextToast)
+                    {
+                        nextToast = now + 10f;
+                        int left = Mathf.CeilToInt(until - now);
+                        Hud.Toast(string.Format(Lang.T("Podium du rallye : en attente des temps de {0} (encore {1})", "Rally podium: waiting for the times of {0} ({1} left)"),
+                                                Names(p), (left / 60) + ":" + (left % 60).ToString("00")));
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); Finish(); }
+            }
+        }
+
+        static string Names(List<Human> p)
+        {
+            var n = new List<string>();
+            foreach (Human h in p) n.Add(h.Name);
+            return string.Join(", ", n.ToArray());
+        }
 
         // Trophees du podium (prix du rallye, 24/10) : 'Player position' -> 'Gold' / 'Silver' / 'Bronze' envoie SPAWNITEM a
         // Spawner/CreateTrophiesAmateur (ou Junior) :: Gold / Silver / Bronze, dont 'State 7' cree le trophee a l'arrivee du
@@ -97,10 +171,13 @@ namespace MWCoop
         class Hook : ModHook
         {
             public override string Module { get { return "rallye (MSC)"; } }
-            public int Kind;   // 0 : Hash to array 2 (classement) ; 1 : fin de journee (annonce)
+            public int Kind;   // 0 : classement (humains ajoutes) ; 1 : fin de journee (annonce)
+            // Journee : 1 ('Idle 4', samedi), 2 ('Hash to array', dimanche) ; 0 pour la feuille ('Hash to array 2') = myDay.
+            // (pas {SecondDay} du jeu : il passe a vrai des la fin du samedi, 'Day 1', et le restait -- le samedi partait en « journee 2 »)
+            public int Day;
             public override void OnEnter()
             {
-                try { if (Kind == 0) InjectHumans(); else Announce(); } catch (System.Exception e) { Replay.HookError(e); }
+                try { if (Kind == 0) InjectHumans(Day); else Announce(Day); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -124,8 +201,19 @@ namespace MWCoop
             if (!hooked)
             {
                 hooked = true;
-                foreach (string st in new[] { "Hash to array 2" }) { FsmState s = d.Fsm.GetState(st); if (s != null) FsmHooks.Prepend(s, new Hook { Kind = 0 }); else Log.Warn("rallye (MSC) : etat " + st + " absent"); }
-                foreach (string st in new[] { "Idle 4", "Hash to array" }) { FsmState s = d.Fsm.GetState(st); if (s != null) FsmHooks.Prepend(s, new Hook { Kind = 1 }); else Log.Warn("rallye (MSC) : etat " + st + " absent"); }
+                // (feuille de resultats : les humains ajoutes ; samedi : annonce)
+                FsmState sheet = d.Fsm.GetState("Hash to array 2"), sat = d.Fsm.GetState("Idle 4"), sun = d.Fsm.GetState("Hash to array");
+                if (sheet != null) FsmHooks.Prepend(sheet, new Hook { Kind = 0, Day = 0 }); else Log.Warn("rallye (MSC) : etat Hash to array 2 absent");
+                if (sat != null) FsmHooks.Prepend(sat, new Hook { Kind = 1, Day = 1 }); else Log.Warn("rallye (MSC) : etat Idle 4 absent");
+                // (dimanche, podium : annonce, attente des autres, humains ajoutes, puis les actions du jeu -- en sequence)
+                if (sun != null)
+                {
+                    FsmHooks.Prepend(sun, new Hook { Kind = 0, Day = 2 });
+                    FsmHooks.Prepend(sun, new Hold());
+                    FsmHooks.Prepend(sun, new Hook { Kind = 1, Day = 2 });
+                    sun.IsSequence = true;
+                }
+                else Log.Warn("rallye (MSC) : etat Hash to array absent");
             }
             Log.Info("rallye (MSC) : participation suivie (" + d.ActiveStateName + ", classe " + Cls() + ")");
             return true;
@@ -141,14 +229,14 @@ namespace MWCoop
         }
 
         // Fin d'une journee ici : temps cumule et classe envoyes a tous (une fois par valeur).
-        static void Announce()
+        static void Announce(int day)
         {
-            if (data == null || !Session.Active || Session.RemoteCount == 0) return;
+            if (data == null) return;
+            myDay = day;
+            if (!Session.Active || Session.RemoteCount == 0) return;
             FsmFloat tot = data.FsmVariables.FindFsmFloat("PlayerTimeTotal");
-            FsmBool d2 = data.FsmVariables.FindFsmBool("SecondDay");
             float t = tot != null ? tot.Value : 0f;
             if (t <= 0f) return;
-            int day = d2 != null && d2.Value ? 2 : 1;
             string key = Cls() + ":" + day + ":" + t.ToString("F1");
             if (key == lastSent) return;
             lastSent = key;
@@ -158,9 +246,47 @@ namespace MWCoop
 
         public static void OnMessage(int who, NetReader r)
         {
-            var h = new Human { Name = r.Str(), Cls = r.Str(), Day = r.U8(), Time = r.F32() };
-            humans[who] = h;
-            Log.Info("rallye (MSC) : " + h.Name + " (#" + who + ") journee " + h.Day + " : " + h.Time.ToString("F1") + " s (" + h.Cls + ")");
+            string name = r.Str(), cls = r.Str();
+            int day = r.U8();
+            float time = r.F32();
+            Human h;
+            if (!humans.TryGetValue(who, out h) || h.Cls != cls) humans[who] = h = new Human { Cls = cls };   // (autre classe : nouveau week-end)
+            h.Name = name;
+            if (day == 2) h.Time2 = time; else { h.Time1 = time; h.Time2 = 0f; }
+            Log.Info("rallye (MSC) : " + name + " (#" + who + ") journee " + day + " : " + time.ToString("F1") + " s (" + cls + ")");
+        }
+
+        // [Test] Autotest=mscpodium (24/10, attente du podium, a deux) : RALLY/ResultsWeekend allume (hors week-end) ; l'invite
+        // annonce un faux temps du samedi a 35 s et celui du dimanche a [Test] PodiumDimanche s (75 par defaut, 0 = jamais) ; l'hote
+        // entre dans 'Hash to array' a 50 s : il doit attendre l'invite (ou le delai), puis classer.
+        static int pStep;
+        public static void TestPodium(float t)
+        {
+            if (t > 20f && t < 200f)
+            {
+                GameObject rw = Game.FindAny("RALLY/ResultsWeekend");
+                for (Transform p = rw != null ? rw.transform : null; p != null; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
+                Find();
+            }
+            if (!Session.IsHost)
+            {
+                float d2 = Config.GetFloat("Test", "PodiumDimanche", 75f);
+                if (pStep == 0 && t > 35f) { pStep = 1; SendTime(1, 700f); }
+                if (pStep == 1 && d2 > 0f && t > d2) { pStep = 2; SendTime(2, 1400f); }
+                return;
+            }
+            if (pStep == 0 && t > 50f && data != null)
+            {
+                pStep = 1;
+                Log.Info("autotest mscpodium : humains " + humans.Count + ", attendus " + Names(Pending()) + ", classe " + Cls() + " ; entree dans Hash to array");
+                Game.SetState(data, "Hash to array");
+            }
+            if (pStep == 1 && data != null && Time.frameCount % 120 == 0) Log.Info("autotest mscpodium : Data [" + data.ActiveStateName + "]");
+        }
+        static void SendTime(int day, float time)
+        {
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@rallymsc").Str(Session.Me != null ? Session.Me.Name : "?").Str(Cls()).U8((byte)day).F32(time), true);
+            Log.Info("autotest mscpodium : temps du jour " + day + " (" + time + " s, classe " + Cls() + ") envoye");
         }
 
         // [Test] Autotest=msctrophee (24/10, prix du rallye) : le joueur [Test] Monteur (0 = hote) envoie a 40 s SPAWNITEM a
@@ -210,17 +336,20 @@ namespace MWCoop
         }
 
         // Classement affiche ici : les autres humains de ma classe dans les tables, avant que le jeu ne les copie dans les listes.
-        static void InjectHumans()
+        static void InjectHumans(int day)
         {
             if (names == null || times == null) return;
+            if (day == 0) day = myDay > 0 ? myDay : 1;
             string cls = Cls();
             int n = 0;
             foreach (KeyValuePair<int, Human> kv in humans)
             {
                 Human h = kv.Value;
-                if (h.Time <= 0f || h.Cls != cls) continue;
                 string key = "MWC" + kv.Key;
-                names[key] = h.Name; times[key] = h.Time;
+                float t = day == 2 ? h.Time2 : h.Time1;
+                // (pas de temps pour cette journee : retire s'il etait la -- le samedi seul ne compte pas au podium du dimanche)
+                if (t <= 0f || h.Cls != cls) { names.Remove(key); times.Remove(key); continue; }
+                names[key] = h.Name; times[key] = t;
                 n++;
             }
             if (n > 0) Log.Info("rallye (MSC) : classement d'ici avec " + n + " autre(s) pilote(s) humain(s) (" + cls + ")");

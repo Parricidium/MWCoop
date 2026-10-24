@@ -964,6 +964,7 @@ namespace MWCoop
             { "Only when the host turned PvP on: every hit taken drains it", "Только когда хост включил PvP: каждый полученный удар её уменьшает" },
             { "Rally: registration, parc fermé and stages with your car", "Ралли: регистрация, парк-ферме и спецучастки на твоей машине" },
             { "set up like the rally Satsuma", "настроена как раллийная Satsuma" },
+            { "Rally podium: waiting for the times of {0} ({1} left)", "Подиум ралли: ждём время {0} (осталось {1})" },
         };
     }
 }
