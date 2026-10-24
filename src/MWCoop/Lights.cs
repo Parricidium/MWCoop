@@ -83,6 +83,7 @@ namespace MWCoop
         public static void LateUpdate()
         {
             if (scanAt < 0) return;
+            if (testForce) ForceBeams();
             float now = Time.realtimeSinceStartup;
             // (releve : 12 s apres le chargement, puis chaque minute ou des qu'une voiture apparait -- FindObjectsOfTypeAll coute)
             if (now >= scanAt && (now >= nextScan || scanGen != VehicleSync.Generation)) { nextScan = now + 60f; bool newCars = scanGen != VehicleSync.Generation; scanGen = VehicleSync.Generation; Scan(newCars); }
@@ -284,6 +285,51 @@ namespace MWCoop
                 return true;
             }
             return false;
+        }
+
+        // [Test] Autotest=msclumieres (MSC, solo, 24/10) : a 25 s triche « heure 23 », a 35 s phares de la SATSUMA allumes (objets
+        // Beam* de ses Lights, comme l'interrupteur), joueur a 7 m devant elle ; etat des lumieres a 30/45/55 s, capture a 50 s
+        // (dumps/ecran-lumieres.png). Reglages : [Graphismes] OmbresPhares / Halos.
+        static int tStep;
+        public static void Test(float t)
+        {
+            if (tStep == 0 && t > 25f) { tStep = 1; Log.Info("autotest msclumieres : " + (Cheats.Command("heure 23") ?? "heure 23")); }
+            if (tStep == 1 && t > 30f) { tStep = 2; Log.Info("autotest msclumieres : " + Describe()); }
+            if (tStep == 2 && t > 35f)
+            {
+                tStep = 3;
+                GameObject car = Game.FindAny("SATSUMA(557kg, 248)");
+                int n = ForceBeams();
+                testForce = true;
+                GameObject pl = Game.PlayerGo;
+                var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                if (car != null && cc != null)
+                {
+                    // (derriere la voiture, decale sur le cote, dans l'axe des phares : ce qu'ils eclairent et les ombres)
+                    Vector3 at = car.transform.position - car.transform.forward * 3f + car.transform.right * 1.6f; at.y = car.transform.position.y + 0.5f;
+                    Vector3 fw = car.transform.forward; fw.y = 0f;
+                    cc.enabled = false; pl.transform.position = at; pl.transform.rotation = Quaternion.LookRotation(fw); cc.enabled = true;
+                }
+                Log.Info("autotest msclumieres : " + n + " phares de la SATSUMA allumes, joueur devant");
+            }
+            if (tStep == 3 && t > 45f) { tStep = 4; Log.Info("autotest msclumieres : " + Describe()); }
+            if (tStep == 4 && t > 50f) { tStep = 5; Autotest.CaptureSoon("lumieres", 0.1f); }
+            if (tStep == 5 && t > 55f) { tStep = 6; testForce = false; Log.Info("autotest msclumieres : " + Describe()); }
+        }
+        // (le jeu eteint Electricity/PowerON sans le contact : rallumes a chaque image, apres ses automates, pendant l'essai)
+        static bool testForce;
+        static int ForceBeams()
+        {
+            GameObject car = Game.FindAny("SATSUMA(557kg, 248)");
+            int n = 0;
+            if (car != null)
+                foreach (Light li in car.GetComponentsInChildren<Light>(true))
+                    if (li.name.StartsWith("BeamShort"))
+                    {
+                        for (Transform p = li.transform; p != null && p != car.transform; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
+                        li.enabled = true; if (li.intensity < 0.5f) li.intensity = 3f; n++;
+                    }
+            return n;
         }
 
         // Essais : etat.

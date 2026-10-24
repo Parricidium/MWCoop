@@ -57,6 +57,10 @@ namespace MWCoop
                 // (HandTools : outils dans la main des avatars -- manquait sur MSC, la hache des autres restait invisible : Markos et Squier, 24/10)
                 try { CarVisuals.LateUpdate(); HandTools.LateUpdate(); PlayerSync.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); Studio.LateUpdate(); }
                 catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
+                // (24/10 : ombres des phares et des lampadaires, halos, portee -- reglages [Graphismes] deja proposes sur MSC par le
+                // lanceur, sans effet jusqu'ici ; memes noms que MWC : MAP/StreetLights, SUN, phares en Spot sous CarDynamics)
+                try { Lights.LateUpdate(); }
+                catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("lumieres : " + e.Message); }
                 return;
             }
             // (CarVisuals d'abord : volant et levier de vitesse poses, puis les mains des avatars dessus -- elles avaient une image de retard.)
@@ -409,7 +413,7 @@ namespace MWCoop
                                     WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded, WoodCarriers.OnLevelLoaded,   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
                                     // (24/10 : boutique s21, coin video, musee, sacs de couchage, casques achetes ; terrain defriche ; sauvegarde de leurs objets)
                                     Wear.OnLevelLoaded, SleepingBags.OnLevelLoaded, Kauppa.OnLevelLoaded, Clearing.OnLevelLoaded, SaveHook.OnLevelLoaded,
-                                    Vaz.OnLevelLoaded, RallyMscVaz.OnLevelLoaded, DragMsc.OnLevelLoaded };   // (24/10 : voitures VAZ et addons sur la Ruscko)
+                                    Vaz.OnLevelLoaded, RallyMscVaz.OnLevelLoaded, DragMsc.OnLevelLoaded, Lights.OnLevelLoaded };   // (24/10 : voitures VAZ et addons sur la Ruscko)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }

@@ -717,7 +717,8 @@ namespace MWCoop
             if (mode == "mscmontage") { MscMontage(t); return; }
             if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
             if (mode == "mscdrag") { DragMsc.Test(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10)
-            if (mode == "msctrophee") { RallyMsc.Test(t); return; }   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)
+            if (mode == "msctrophee") { RallyMsc.Test(t); return; }
+            if (mode == "msclumieres") { Lights.Test(t); return; }   // (ombres des phares, halos, portee sur MSC, 24/10)   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)
             // [Test] Autotest=mscreparation (comme modereparation de MWC, [MWC] 24/10) : l'hote diffuse REPAIRMODE_ON a 40 s et
             // REPAIRMODE_OFF a 55 s ; chacun note toutes les 2 s (30-100 s) l'etat de la vis du volant de la SATSUMA -- chez
             // l'invite elle doit rester dans son etat a lui.
