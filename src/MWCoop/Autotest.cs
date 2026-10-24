@@ -539,6 +539,7 @@ namespace MWCoop
             if (mode == "conduite") { Conduite(t); return; }
             if (mode == "tas") { LogPiles.Test(mode, t); return; }
             if (mode == "outils") { HandTools.Test(mode, t); return; }
+            if (mode == "gifumain") { Knobs.Test(mode, t); return; }   // (accelerateur a main de la GIFU tire par l'invite, Markos 24/10)
             if (mode == "portebuches") { WoodCarriers.Test(mode, t); return; }   // (outils en main sur MSC : hache, Markos/Squier 24/10)   // (plateau a bois : comptes et prix chez l'invite, rejeu de la paie, 24/10)
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SATSUMA"), Config.GetInt("Test", "TestPlace", 0))); }
             if (mode == "passager") return;
@@ -979,7 +980,16 @@ namespace MWCoop
             foreach (string spec in specs.Split(specs.Contains(";") ? ';' : ','))   // (« ; » quand un chemin contient une virgule : SATSUMA(557kg, 248))
             {
                 int c = spec.LastIndexOf(':'); if (c <= 0) continue;
-                GameObject go = Game.FindAny(spec.Substring(0, c).Trim());
+                string path = spec.Substring(0, c).Trim();
+                GameObject go = Game.FindAny(path);
+                // (racine au nom avec « / » -- GIFU(750/450psi) : FindAny coupe au premier « / » ; par la voiture, puis le reste)
+                int close = path.IndexOf(')');
+                if (go == null && close > 0 && path.IndexOf('/') < close)
+                {
+                    Rigidbody vb = VehicleSync.Body(path.Substring(0, close + 1));
+                    Transform sub = vb == null ? null : close + 2 < path.Length ? vb.transform.Find(path.Substring(close + 2)) : vb.transform;
+                    if (sub != null) go = sub.gameObject;
+                }
                 // (nom « * » : la liste des automates de l'objet et de ses enfants, avec leurs etats -- pour trouver lequel vider)
                 if (go != null && spec.Substring(c + 1).Trim() == "*")
                 {
