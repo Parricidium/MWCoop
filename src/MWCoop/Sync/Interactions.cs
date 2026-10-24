@@ -43,7 +43,7 @@ namespace MWCoop
         static string Pat(int i) { int n = Allowed.GetLength(0); return i < n ? Allowed[i, 0] : AllowedMsc[i - n, 0]; }
         static string Tgt(int i) { int n = Allowed.GetLength(0); return i < n ? Allowed[i, 1] : AllowedMsc[i - n, 1]; }
 
-        class Entry { public string Id; public PlayMakerFSM Fsm; }
+        class Entry { public string Id; public PlayMakerFSM Fsm; public int DoorKind; public FsmBool Door; }   // DoorKind : 0 a lire, 1 porte (Open door / Close door), -1 non
         static readonly Dictionary<string, Entry> byId = new Dictionary<string, Entry>();
         static readonly HashSet<PlayMakerFSM> tracked = new HashSet<PlayMakerFSM>();
         static bool applying;
@@ -57,22 +57,83 @@ namespace MWCoop
             public string StateName;
             public override void OnEnter()
             {
-                try { if (!applying && Replay.Depth == 0) Send(Target, StateName); } catch (System.Exception e) { Replay.HookError(e); }
+                try
+                {
+                    if (!applying && Replay.Depth == 0)
+                    {
+                        if (IsDoor(Target)) pending.Add(new Pending { E = Target, Was = Target.Door.Value, Until = Time.realtimeSinceStartup + 1.5f });
+                        else Send(Target, StateName);
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
 
         public static void OnLevelLoaded()
         {
-            byId.Clear(); tracked.Clear();
+            byId.Clear(); tracked.Clear(); pending.Clear();
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
         }
 
         static readonly List<KeyValuePair<float, Entry>> checks = new List<KeyValuePair<float, Entry>>();
 
+        // Portes (Markos, MSC 24/10 : « la porte se bloque et devient invisible », journal de l'hote : la porte du magasin
+        // ouverte par l'invite restait fermee chez l'hote a chaque fois, DoorOpen False). Rejouer "Check position" refaisait
+        // chez chacun le test du verrou avec SES valeurs : horaires du magasin (STORE/OpeningHours.OpenStore), cle de la
+        // maison (PlayerKeyHome, a chacun la sienne)... -- ouverte chez l'un, fermee (LOCKED) chez l'autre. Maintenant celui
+        // qui clique decide : quand son jeu a ouvert ou ferme la porte (DoorOpen change dans les 1,5 s), il envoie le
+        // RESULTAT ("=porte") ; chez les autres, "Open door" ou "Close door" directement (animation, son, DoorOpen), sans
+        // verrou. Porte refusee chez lui (fermee a cle) : rien n'est envoye.
+        class Pending { public Entry E; public bool Was; public float Until; }
+        static readonly List<Pending> pending = new List<Pending>();
+        const string DoorResult = "=porte";
+
+        static bool IsDoor(Entry e)
+        {
+            if (e.DoorKind == 0)
+            {
+                e.DoorKind = -1;
+                try
+                {
+                    FsmBool b = e.Fsm.FsmVariables.FindFsmBool("DoorOpen");
+                    if (b != null && SetsDoor(e.Fsm, "Open door", true) && SetsDoor(e.Fsm, "Close door", false)) { e.Door = b; e.DoorKind = 1; }
+                }
+                catch { }
+            }
+            return e.DoorKind == 1 && e.Door != null;
+        }
+
+        static bool SetsDoor(PlayMakerFSM f, string state, bool value)
+        {
+            FsmState st = f.Fsm.GetState(state);
+            if (st == null) return false;
+            foreach (FsmStateAction a in st.Actions)
+            {
+                var sb = a as HutongGames.PlayMaker.Actions.SetBoolValue;
+                if (sb != null && sb.boolVariable != null && sb.boolVariable.Name == "DoorOpen" && sb.boolValue != null && sb.boolValue.Value == value) return true;
+            }
+            return false;
+        }
+
+        // Porte d'ici mise ouverte (true) ou fermee comme chez un autre joueur (resultat de son clic, ou etat de l'hote a l'arrivee).
+        static void SetDoor(Entry e, bool open)
+        {
+            applying = true; Replay.Depth++;
+            try { Game.SetState(e.Fsm, open ? "Open door" : "Close door"); }
+            finally { applying = false; Replay.Depth--; }
+        }
+
         public static void Update()
         {
             if (snapshots.Count > 0) SendSnapshots();
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                Pending pd = pending[i];
+                if (pd.E.Fsm == null || pd.E.Door == null) { pending.RemoveAt(i); continue; }
+                if (pd.E.Door.Value != pd.Was) { pending.RemoveAt(i); Send(pd.E, DoorResult); continue; }
+                if (Time.realtimeSinceStartup > pd.Until) pending.RemoveAt(i);   // (fermee a cle ici : rien)
+            }
             for (int i = checks.Count - 1; i >= 0; i--)
             {
                 if (Time.realtimeSinceStartup < checks[i].Key) continue;
@@ -195,6 +256,17 @@ namespace MWCoop
             // recherche effacait celui du joueur recherche, qui ne pouvait plus etre arrete de la session.
             for (int i = 0; i < n; i++) if (names[i] == "CopsAtHome") { FsmBool lb = e.Fsm.FsmVariables.GetFsmBool(names[i]); if (lb != null) vals[i] = lb.Value; }
             if (state == "=etat") { if (!Session.IsHost) ApplySnapshot(e, names, vals); return; }
+            if (state == DoorResult)
+            {
+                bool want = false; int at = System.Array.IndexOf(names, "DoorOpen"); if (at >= 0) want = vals[at];
+                if (!IsDoor(e)) { Log.Warn("interaction " + id + " : resultat de porte, pas une porte ici"); return; }
+                bool was = e.Door.Value;
+                if (was != want) SetDoor(e, want);
+                checks.Add(new KeyValuePair<float, Entry>(Time.realtimeSinceStartup + 2f, e));
+                PlayerSync.ReachFor(who, e.Fsm.transform);
+                Log.Info("interaction de #" + who + " : " + id + " " + (want ? "ouverte" : "fermee") + (was == want ? " (deja ici)" : "") + (e.Fsm.gameObject.activeInHierarchy ? "" : " (objet inactif)"));
+                return;
+            }
             for (int i = 0; i < n; i++)
             {
                 FsmBool b = e.Fsm.FsmVariables.GetFsmBool(names[i]);
@@ -238,6 +310,13 @@ namespace MWCoop
         // avec son animation et son son, et retombe sur l'etat de l'hote.
         static void ApplySnapshot(Entry e, string[] names, bool[] vals)
         {
+            // (porte : directement ouverte ou fermee, pas par son verrou -- voir pending)
+            int di = System.Array.IndexOf(names, "DoorOpen");
+            if (di >= 0 && IsDoor(e))
+            {
+                if (e.Door.Value != vals[di]) { SetDoor(e, vals[di]); Log.Info("interactions : " + e.Id + " remis comme chez l'hote (" + (vals[di] ? "ouverte" : "fermee") + ")"); }
+                return;
+            }
             string decisive = null;
             for (int i = 0; i < names.Length; i++)
             {
