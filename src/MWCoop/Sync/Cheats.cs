@@ -463,6 +463,13 @@ namespace MWCoop
                 Log.Info("autotest : trichestp, " + Places[i].Key + " -> " + (Game.PlayerT != null ? Game.PlayerT.position.ToString("F1") : "?"));
                 return;
             }
+            // [Test] Autotest=trichesonglets : panneau ouvert, chaque onglet 3 s, capture onglet-<n> (JD, 25/10 : onglets du F7)
+            if (mode == "trichesonglets")
+            {
+                int i = (int)((t - 40f) / 3f);
+                if (t > 40f && i < 5 && i >= testStep) { testStep = i + 1; CheatPanel.Open = true; CheatPanel.Tab = i; Autotest.CaptureSoon("onglet-" + i, 1.2f); }
+                return;
+            }
             if (mode != "triches") return;
             if (t > 30f && testStep == 0) { testStep = 1; if (!Session.IsHost) Command("/heure 6"); }
             if (t > 36f && testStep == 1) { testStep = 2; if (!Session.IsHost) Command("/neige oui"); }

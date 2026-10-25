@@ -944,6 +944,12 @@ namespace MWCoop
             { "No car to defrost (rivett, sorbet, taxi).", "Нет машины для разморозки (rivett, sorbet, taxi)." },
             { "Defrost the windows (all cars)", "Разморозить окна (все машины)" },
             { "Windows defrosted", "Окна разморожены" },
+            { "Places", "Места" },
+            { "World", "Мир" },
+            { "Bring back my clothes (jacket, coverall, helmet)", "Вернуть мою одежду (куртка, комбинезон, шлем)" },
+            { "Clothes brought back", "Одежда возвращена" },
+            { " in front of you", " перед тобой" },
+            { "Museum", "Музей" },
         };
     }
 }
