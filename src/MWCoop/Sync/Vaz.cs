@@ -231,6 +231,7 @@ namespace MWCoop
         public static void Update()
         {
             if (!PlayerSync.InGame) return;
+            if (!Enabled && rents.Count == 0 && wanted.Count == 0) return;   // (VAZ coupee, aucune sortie : rien a chaque image -- demande de Menor 25/10)
             float now = Time.realtimeSinceStartup;
             foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) VazCar.Tick(r.Car, now);
             if (now < nextTick) return;
