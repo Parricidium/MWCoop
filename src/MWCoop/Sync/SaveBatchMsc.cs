@@ -51,6 +51,72 @@ namespace MWCoop
             }
         }
 
+        // Lectures dans la meme diffusion (WIGA 25/10 : moto revenue a la maison, roues tournees, apres une sauvegarde en jeu) :
+        // des automates enchainent « Save game » -> « Load game » dans la meme image (roues : SaveVector3 puis LoadVector3 et
+        // SetRotation). Ecritures groupees en fin de diffusion, Load* relisait le fichier d'AVANT : valeurs de la sauvegarde
+        // precedente remises (position, rotation...). Une etiquette deja rangee pendant cette diffusion est relue depuis le
+        // lot ; les autres, depuis le fichier comme le jeu (action d'origine).
+        static readonly HashSet<string> LoadNames = new HashSet<string> { "LoadBool", "LoadInt", "LoadFloat", "LoadString", "LoadVector2", "LoadVector3", "LoadQuaternion", "LoadColor", "LoadTransform" };
+        class LoadKind { public FieldInfo Value, Tag, File; public bool Transform; }
+        static readonly Dictionary<System.Type, LoadKind> loadKinds = new Dictionary<System.Type, LoadKind>();
+        static int fromBatch;
+        static LoadKind LoadKindOf(FsmStateAction a)
+        {
+            if (a == null) return null;
+            System.Type t = a.GetType();
+            LoadKind k;
+            if (loadKinds.TryGetValue(t, out k)) return k;
+            k = null;
+            if (t.Namespace == "HutongGames.PlayMaker.Actions" && LoadNames.Contains(t.Name))
+            {
+                const BindingFlags F = BindingFlags.Public | BindingFlags.Instance;
+                FieldInfo v = t.GetField("loadValue", F), tag = t.GetField("uniqueTag", F), file = t.GetField("saveFile", F);
+                if (v != null && tag != null && file != null && tag.FieldType == typeof(FsmString) && file.FieldType == typeof(FsmString))
+                    k = new LoadKind { Value = v, Tag = tag, File = file, Transform = t.Name == "LoadTransform" };
+            }
+            loadKinds[t] = k;
+            return k;
+        }
+        class BatchedLoad : FsmStateAction
+        {
+            public FsmStateAction Orig; public LoadKind K;
+            public override void OnEnter()
+            {
+                bool done = false;
+                try { done = FromBatch(this, Orig, K); }
+                catch (System.Exception e) { MWCoop.Log.Warn("sauvegarde groupee : lecture : " + e.Message); }
+                if (done) { Finish(); return; }
+                Orig.OnEnter();   // (l'action du jeu : lit le fichier, finit d'elle-meme)
+                Finish();
+            }
+        }
+        static bool FromBatch(BatchedLoad b, FsmStateAction a, LoadKind k)
+        {
+            if (files == null) return false;
+            FsmString file = (FsmString)k.File.GetValue(a), tag = (FsmString)k.Tag.GetValue(a);
+            Pending p; int at;
+            if (file == null || tag == null || tag.Value == null || !files.TryGetValue(file.Value ?? "", out p) || !p.Index.TryGetValue(tag.Value, out at)) return false;
+            Entry e = p.List[at];
+            object v = k.Value.GetValue(a);
+            if (k.Transform)
+            {
+                GameObject go = b.Fsm != null ? b.Fsm.GetOwnerDefaultTarget(v as FsmOwnerDefault) : null;
+                if (go == null || e.T == null) return true;
+                if (go.transform != e.T) { go.transform.position = e.T.position; go.transform.rotation = e.T.rotation; }   // (meme objet : rien ne bouge)
+            }
+            else if (v is FsmBool && e.Value is bool) ((FsmBool)v).Value = (bool)e.Value;
+            else if (v is FsmInt && e.Value is int) ((FsmInt)v).Value = (int)e.Value;
+            else if (v is FsmFloat && e.Value is float) ((FsmFloat)v).Value = (float)e.Value;
+            else if (v is FsmString && e.Value is string) ((FsmString)v).Value = (string)e.Value;
+            else if (v is FsmVector2 && e.Value is Vector2) ((FsmVector2)v).Value = (Vector2)e.Value;
+            else if (v is FsmVector3 && e.Value is Vector3) ((FsmVector3)v).Value = (Vector3)e.Value;
+            else if (v is FsmQuaternion && e.Value is Quaternion) ((FsmQuaternion)v).Value = (Quaternion)e.Value;
+            else if (v is FsmColor && e.Value is Color) ((FsmColor)v).Value = (Color)e.Value;
+            else return false;
+            fromBatch++;
+            return true;
+        }
+
         static Kind KindOf(FsmStateAction a)
         {
             if (a == null) return null;
@@ -124,7 +190,7 @@ namespace MWCoop
             watch = System.Diagnostics.Stopwatch.StartNew();
             files = new Dictionary<string, Pending>();
             swapped = new List<KeyValuePair<FsmState, FsmStateAction[]>>();
-            added = skipped = 0;
+            added = skipped = fromBatch = 0;
             int n = 0;
             foreach (KeyValuePair<PlayMakerFSM, string> kv in listeners) { Swap(kv.Key); n++; }
             if (setup != null) Swap(setup);
@@ -193,10 +259,13 @@ namespace MWCoop
                 FsmStateAction[] n = null;
                 for (int i = 0; i < acts.Length; i++)
                 {
+                    if (acts[i] == null || !acts[i].Enabled) continue;
                     Kind k = KindOf(acts[i]);
-                    if (k == null || !acts[i].Enabled) continue;
+                    LoadKind lk = k == null && Config.GetInt("Test", "SauveLecturesBrutes", 0) == 0 ? LoadKindOf(acts[i]) : null;   // ([Test] SauveLecturesBrutes=1 : comme avant)
+                    if (k == null && lk == null) continue;
                     if (n == null) n = (FsmStateAction[])acts.Clone();
-                    n[i] = new Batched { Orig = acts[i], K = k };
+                    if (k != null) n[i] = new Batched { Orig = acts[i], K = k };
+                    else n[i] = new BatchedLoad { Orig = acts[i], K = lk };
                 }
                 if (n == null) continue;
                 swapped.Add(new KeyValuePair<FsmState, FsmStateAction[]>(s, acts));
@@ -278,7 +347,7 @@ namespace MWCoop
             files = null;
             Log.Info("sauvegarde groupee : " + tags + " etiquettes (" + added + " sauvegardes" + (skipped > 0 ? ", " + skipped + " sans valeur" : "") + ") ecrites en "
                      + (watch.ElapsedMilliseconds - hooked) + " ms, " + watch.ElapsedMilliseconds + " ms en tout : " + sb.ToString().TrimEnd(' ', ',')
-                     + (fallback > 0 ? " ; " + fallback + " fichier(s) ecrit(s) un par un" : ""));
+                     + (fallback > 0 ? " ; " + fallback + " fichier(s) ecrit(s) un par un" : "") + (fromBatch > 0 ? " ; " + fromBatch + " lecture(s) dans la meme diffusion prise(s) au lot" : ""));
         }
 
         // [Test] Autotest=mscsauve (solo, MSC) : a 40 s sauvegarde en jeu groupee, a 55 s une par une (ancien comportement) ;
@@ -349,8 +418,32 @@ namespace MWCoop
             Log.Info(sb.ToString());
         }
 
+        // ([Test] SauvePorte=<chemin de la poignee> : porte de la maison ouverte a 30 s, son angle et DoorOpen notes a 35, 39, 45 et
+        // 52 s -- WIGA 25/10 : « les portes de la maison se ferment a la sauvegarde »)
+        static int doorStep, moveStep; static float doorLogAt = 35f, moveLogAt = 35f;
         public static void Test(float t)
         {
+            string dp = Config.Get("Test", "SauvePorte", "");
+            if (dp.Length > 0)
+            {
+                PlayMakerFSM door = Game.FindFsm(dp, "Use");
+                if (doorStep == 0 && t > 30f && door != null) { doorStep = 1; Game.SetState(door, "Open door"); Log.Info("autotest mscsauve : porte " + dp + " ouverte"); }
+                if (doorStep == 1 && t >= doorLogAt && door != null)
+                {
+                    doorLogAt = doorLogAt < 39f ? 39f : doorLogAt < 45f ? 45f : doorLogAt < 52f ? 52f : 9999f;
+                    FsmBool open = door.FsmVariables.FindFsmBool("DoorOpen");
+                    Transform piv = door.transform.parent;
+                    Log.Info("autotest mscsauve : porte t=" + t.ToString("F0") + " etat " + door.ActiveStateName + ", DoorOpen " + (open != null && open.Value) + ", angle " + (piv != null ? piv.localEulerAngles.ToString("F0") : "?"));
+                }
+            }
+            // ([Test] SauveDeplace=<voiture> : deplacee de 20 m a 32 s ; sa position notee a 39, 45 et 52 s -- moto de WIGA)
+            string dv = Config.Get("Test", "SauveDeplace", "");
+            if (dv.Length > 0)
+            {
+                Rigidbody vb = VehicleSync.Body(dv);
+                if (moveStep == 0 && t > 32f && vb != null) { moveStep = 1; vb.isKinematic = true; vb.transform.position += vb.transform.right * 20f + Vector3.up * 0.3f; vb.isKinematic = false; vb.velocity = Vector3.zero; Log.Info("autotest mscsauve : " + dv + " deplacee en " + vb.position.ToString("F1")); }
+                if (moveStep == 1 && t >= moveLogAt && vb != null) { moveLogAt = moveLogAt < 39f ? 39f : moveLogAt < 45f ? 45f : moveLogAt < 52f ? 52f : 9999f; Log.Info("autotest mscsauve : " + dv + " t=" + t.ToString("F0") + " en " + vb.position.ToString("F1")); }
+            }
             if (tStep == 0 && watched == null && t > 15f) Watch("au chargement");
             if (tStep == 1 && tWatch == 1 && t > 50f) { tWatch = 2; Watch("10 s apres"); }
             if (tStep == 1 && tWatch == 0 && t > 44f) { tWatch = 1; Watch("apres la remise des automates"); }
