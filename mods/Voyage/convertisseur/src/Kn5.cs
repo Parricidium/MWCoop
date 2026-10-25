@@ -9,7 +9,7 @@ namespace Convertisseur
     // gardees telles quelles), materiaux (shader, transparence, textures par emplacement), arbre des noeuds (reperes,
     // maillages ; matrices 4x4 en lignes, translation dans la derniere ligne). Les sommets restent dans le fichier : on garde
     // leur position (Offset) et on les lit a l'ecriture. Format : « sc6969 », version (5 ou 6, +1 entier en 6).
-    public class Kn5
+    public class Kn5 : IDisposable
     {
         public class Texture { public string Name; public int Offset, Size; }
         public class Material
@@ -39,12 +39,38 @@ namespace Convertisseur
         public readonly List<Dummy> Dummies = new List<Dummy>();
         int p;
 
+        // Le fichier n'est lu en entier que le temps de sa description (textures, materiaux, noeuds), puis relache : les sommets,
+        // les indices et les textures sont relus par morceaux quand on les ecrit (avant : les .kn5 restaient tous en memoire,
+        // 1,3 Go au plus fort pour les 24 fichiers du Nordschleife -- outils-1.15.3, 25/10).
         public static Kn5 Read(string file, Mat root)
         {
             var k = new Kn5 { File = file, Data = System.IO.File.ReadAllBytes(file) };
             k.Parse(root);
+            k.Data = null;
             return k;
         }
+
+        FileStream fs;
+        public byte[] Bytes(int offset, int size)
+        {
+            if (fs == null) fs = new FileStream(File, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+            var b = new byte[size];
+            fs.Position = offset;
+            for (int r = 0; r < size; )
+            {
+                int n = fs.Read(b, r, size - r);
+                if (n <= 0) throw new EndOfStreamException(Path.GetFileName(File) + " : fin du fichier a " + (offset + r));
+                r += n;
+            }
+            return b;
+        }
+        // sommets puis indices d'un maillage (contigus dans le fichier) ; baseOffset : position du premier octet rendu
+        public byte[] MeshBytes(Mesh me, out int baseOffset)
+        {
+            baseOffset = me.VertexOffset;
+            return Bytes(me.VertexOffset, me.IndexOffset + me.IndexCount * 2 - me.VertexOffset);
+        }
+        public void Dispose() { if (fs != null) { fs.Dispose(); fs = null; } }
 
         int I() { int v = BitConverter.ToInt32(Data, p); p += 4; return v; }
         float F() { float v = BitConverter.ToSingle(Data, p); p += 4; return v; }

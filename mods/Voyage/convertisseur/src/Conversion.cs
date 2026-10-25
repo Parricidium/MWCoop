@@ -58,6 +58,7 @@ namespace Convertisseur
             string final = Path.Combine(destRoot, id), tmp = final + ".nouveau";
             if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
             Directory.CreateDirectory(Path.Combine(tmp, "textures"));
+            var files = new List<Kn5>();   // (fichiers ouverts a la demande : fermes a la fin, Kn5.Dispose)
             try
             {
                 // 1. lecture
@@ -65,7 +66,6 @@ namespace Convertisseur
                 if (models.Count == 0) throw new InvalidDataException("aucun fichier .kn5 pour cette configuration");
                 var keys = Ac.SurfaceKeys(l);
                 Log(models.Count + " fichier(s) .kn5, " + keys.Count + " surface(s) physique(s)");
-                var files = new List<Kn5>();
                 for (int k = 0; k < models.Count; k++)
                 {
                     if (Cancel) throw new OperationCanceledException();
@@ -130,7 +130,7 @@ namespace Convertisseur
                     if (!texFiles.TryGetValue(key, out fn))
                     {
                         Dds.Result r = g.Multi != null ? Bake(g.File, g.Multi, tx, o.MaxTexture) : null;
-                        if (r == null) r = Dds.Convert(g.File.Data, tx.Offset, tx.Size, o.MaxTexture);
+                        if (r == null) r = Dds.Convert(g.File.Bytes(tx.Offset, tx.Size), 0, tx.Size, o.MaxTexture);
                         fn = "textures/" + texFiles.Count + ".vtex";
                         File.WriteAllBytes(Path.Combine(tmp, fn.Replace('/', '\\')), r.Vtex);
                         texFiles[key] = fn;
@@ -223,6 +223,7 @@ namespace Convertisseur
                 try { if (Directory.Exists(tmp)) Directory.Delete(tmp, true); } catch { }
                 throw;
             }
+            finally { foreach (Kn5 k in files) k.Dispose(); }
         }
 
         static bool IsDecal(Kn5.Material m) { return m != null && (m.Blend != 0 || m.Depth != 0); }
@@ -243,13 +244,14 @@ namespace Convertisseur
                     string dk = DecalKey(kn, me);
                     HashSet<long> hs;
                     if (!cells.TryGetValue(dk, out hs)) { cells[dk] = hs = new HashSet<long>(); order.Add(dk); }
-                    byte[] d = kn.Data;
+                    int bo; byte[] d = kn.MeshBytes(me, out bo);
+                    int vo = me.VertexOffset - bo, io = me.IndexOffset - bo;
                     for (int i = 0; i + 2 < me.IndexCount; i += 3)
                     {
                         float cx = 0, cz = 0;
                         for (int c = 0; c < 3; c++)
                         {
-                            int o = me.VertexOffset + BitConverter.ToUInt16(d, me.IndexOffset + (i + c) * 2) * 44;
+                            int o = vo + BitConverter.ToUInt16(d, io + (i + c) * 2) * 44;
                             float x, y, z;
                             me.World.Point(BitConverter.ToSingle(d, o), BitConverter.ToSingle(d, o + 4), BitConverter.ToSingle(d, o + 8), out x, out y, out z);
                             cx += x / 3f; cz += z / 3f;
@@ -286,15 +288,15 @@ namespace Convertisseur
             Kn5.Texture mask = find("txMask");
             if (mask == null) { Log("matiere multicouche " + mat.Name + " : masque introuvable"); return null; }
             int w, h, mw, mh;
-            byte[] px = Dds.Decode(kn.Data, diffuse.Offset, diffuse.Size, maxSize, out w, out h);
-            byte[] mk = Dds.Decode(kn.Data, mask.Offset, mask.Size, maxSize, out mw, out mh);
+            byte[] px = Dds.Decode(kn.Bytes(diffuse.Offset, diffuse.Size), 0, diffuse.Size, maxSize, out w, out h);
+            byte[] mk = Dds.Decode(kn.Bytes(mask.Offset, mask.Size), 0, mask.Size, maxSize, out mw, out mh);
             if (px == null || mk == null || w % 4 != 0 || h % 4 != 0) { Log("matiere multicouche " + mat.Name + " : textures illisibles (" + (px == null ? "base" : mk == null ? "masque" : w + "x" + h) + ")"); return null; }
             var avg = new float[4][];
             string[] det = { "txDetailR", "txDetailG", "txDetailB", "txDetailA" };
             for (int i = 0; i < 4; i++)
             {
                 Kn5.Texture t = find(det[i]);
-                avg[i] = t != null ? Dds.Average(kn.Data, t.Offset, t.Size) : null;
+                avg[i] = t != null ? Dds.Average(kn.Bytes(t.Offset, t.Size), 0, t.Size) : null;
                 if (avg[i] == null) avg[i] = new[] { 0f, 0f, 0f };
             }
             float magic; if (!mat.Props.TryGetValue("magicMult", out magic) || magic <= 0) magic = 1f;
@@ -331,15 +333,17 @@ namespace Convertisseur
             };
             foreach (Item it in items)
             {
-                Kn5.Mesh me = it.Mesh; byte[] d = it.File.Data;
+                Kn5.Mesh me = it.Mesh;
                 if (me.VertexCount == 0 || me.IndexCount < 3) continue;
+                int bo; byte[] d = it.File.MeshBytes(me, out bo);
+                int vo = me.VertexOffset - bo, io = me.IndexOffset - bo;
                 int vbase = pos.Count / 3;
                 if (vbase + me.VertexCount > limit) { flush(); vbase = 0; }
                 bool whole = me.VertexCount <= limit;
                 var tv = new float[me.VertexCount * 8];
                 for (int i = 0; i < me.VertexCount; i++)
                 {
-                    int o = me.VertexOffset + i * 44;
+                    int o = vo + i * 44;
                     float x, y, z, nx, ny, nz;
                     me.World.Point(BitConverter.ToSingle(d, o), BitConverter.ToSingle(d, o + 4), BitConverter.ToSingle(d, o + 8), out x, out y, out z);
                     me.World.Dir(BitConverter.ToSingle(d, o + 12), BitConverter.ToSingle(d, o + 16), BitConverter.ToSingle(d, o + 20), out nx, out ny, out nz);
@@ -358,9 +362,9 @@ namespace Convertisseur
                     for (int i = 0; i < me.VertexCount; i++) Add(pos, nor, uv, tv, i);
                     for (int i = 0; i + 2 < me.IndexCount; i += 3)
                     {
-                        idx.Add(vbase + BitConverter.ToUInt16(d, me.IndexOffset + i * 2));
-                        idx.Add(vbase + BitConverter.ToUInt16(d, me.IndexOffset + (i + 2) * 2));
-                        idx.Add(vbase + BitConverter.ToUInt16(d, me.IndexOffset + (i + 1) * 2));
+                        idx.Add(vbase + BitConverter.ToUInt16(d, io + i * 2));
+                        idx.Add(vbase + BitConverter.ToUInt16(d, io + (i + 2) * 2));
+                        idx.Add(vbase + BitConverter.ToUInt16(d, io + (i + 1) * 2));
                     }
                 }
                 else   // (maillage plus grand que la limite : triangle par triangle)
@@ -371,7 +375,7 @@ namespace Convertisseur
                         if (pos.Count / 3 + 3 > limit) { flush(); remap.Clear(); }
                         foreach (int c in order)
                         {
-                            int src = BitConverter.ToUInt16(d, me.IndexOffset + (i + c) * 2), dst;
+                            int src = BitConverter.ToUInt16(d, io + (i + c) * 2), dst;
                             if (!remap.TryGetValue(src, out dst)) { dst = pos.Count / 3; remap[src] = dst; Add(pos, nor, uv, tv, src); }
                             idx.Add(dst);
                         }
