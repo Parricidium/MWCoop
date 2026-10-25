@@ -939,6 +939,11 @@ namespace MWCoop
             { "set up like the rally Satsuma", "настроена как раллийная Satsuma" },
             { "Rally podium: waiting for the times of {0} ({1} left)", "Подиум ралли: ждём время {0} (осталось {1})" },
             { "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema", "/place <имя>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema" },
+            { "/defrost [car]: windows defrosted for everyone (all cars, or rivett, sorbet, taxi)", "/defrost [машина]: окна оттаивают у всех (все машины или rivett, sorbet, taxi)" },
+            { "No frost in My Summer Car.", "В My Summer Car нет инея." },
+            { "No car to defrost (rivett, sorbet, taxi).", "Нет машины для разморозки (rivett, sorbet, taxi)." },
+            { "Defrost the windows (all cars)", "Разморозить окна (все машины)" },
+            { "Windows defrosted", "Окна разморожены" },
         };
     }
 }

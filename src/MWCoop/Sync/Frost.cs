@@ -87,6 +87,31 @@ namespace MWCoop
             if (now >= nextFog) { nextFog = now + 2f; PollFog(); }
         }
 
+        // Triche /degivrer (Kamixak, 25/10 : « defrost corris rivet ») : toutes les vitres de la voiture degagees, sa buee a 0 ;
+        // 'filter' vide : toutes les voitures. En partie, PollIce envoie ce saut vers 1 comme un grattage (les autres gardent le
+        // plus grand) ; en solo, rien a envoyer. Rend les voitures degivrees (vide : aucune).
+        public static List<string> Defrost(string filter)
+        {
+            var done = new List<string>();
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = (PlayMakerFSM)o;
+                if (f == null || f.FsmName != "Freezing" || f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;
+                string car = f.transform.root.name;
+                if (car == "JOBS") car = "MACHTWAGEN";   // (taxi, sous JOBS/TAXIJOB)
+                if (filter.Length > 0 && car.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                int n = 0;
+                foreach (string cut in Cutoffs) { FsmFloat v = f.FsmVariables.FindFsmFloat(cut); if (v != null) { v.Value = 1f; n++; } }
+                if (n == 0) continue;
+                PlayMakerFSM fog = Game.FsmOn(f.gameObject, "GlassFrosting");
+                FsmFloat fr = fog != null ? fog.FsmVariables.FindFsmFloat("Frost") : null;
+                if (fr != null) fr.Value = 0f;
+                done.Add(car);
+            }
+            if (done.Count > 0) Log.Info("givre : degivrees par triche : " + string.Join(", ", done.ToArray()));
+            return done;
+        }
+
         // ---------------------------------------------------------------- releve
         static void Scan()
         {
@@ -439,6 +464,19 @@ namespace MWCoop
             }
             c.Cut[i].Value += 0.005f;
             return "seuil direct";
+        }
+
+        // Essais : toutes les voitures suivies et leurs vitres (6 seuils, buee).
+        public static string StateAll()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Car c in cars)
+            {
+                sb.Append(c.Name).Append(" [");
+                for (int i = 0; i < N; i++) sb.Append(c.Cut[i] != null ? c.Cut[i].Value.ToString("F2") : "?").Append(i < N - 1 ? " " : "");
+                sb.Append("] buee ").Append(c.Frost != null ? c.Frost.Value.ToString("F2") : "?").Append(" ; ");
+            }
+            return sb.ToString();
         }
 
         static string Describe(Car c)

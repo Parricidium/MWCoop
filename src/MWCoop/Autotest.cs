@@ -819,7 +819,7 @@ namespace MWCoop
             { repriseProbeAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : boite t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
             if (mode == "mscreprise") { MscReprise(t); return; }   // (Satsuma qui roule seule chez le second conducteur, 25/10)
             if (mode == "mscsauve") { SaveBatchMsc.Test(t); return; }   // (sauvegarde en jeu groupee contre une par une, gel de l'hote 24/10)
-            if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
+            if (Config.Get("Test", "Triche", "").Length > 0 && t > Config.GetFloat("Test", "TricheA", 30f) && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             if (mode == "cdmsc") { CdMsc(t); return; }
             if (mode == "mscguepe") { MscGuepe(t); return; }
             if (mode == "mscporte") { MscPorte(t); return; }
@@ -1377,6 +1377,7 @@ namespace MWCoop
         // de la voiture ou l'invite est assis, pendant qu'elle roule : etendue de ses positions (0 attendu ; avant le
         // correctif du 10/10, vitesse x duree d'image vers l'arriere).
         static Transform pietonCible;
+        static bool givreEtat;
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
         public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
         // [Test] TestPedale=brake|clutch|throttle : de 40 a 60 s (temps de jeu), cette pedale de [Test] TestVoiture enfoncee ici
@@ -1470,7 +1471,7 @@ namespace MWCoop
                 }
                 MscTest(mode, t); return;
             }
-            if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
+            if (Config.Get("Test", "Triche", "").Length > 0 && t > Config.GetFloat("Test", "TricheA", 30f) && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t); Vitrines.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t); Fluids.TestFill(mode, t); ModMachtwagen300D.Test(mode, t); SleepingBags.Test(mode, t); ModCheatbox.Test(mode, t); CarLeaks.Test(mode, t); Sauna.Test(mode, t);
@@ -2547,6 +2548,8 @@ namespace MWCoop
                 }
                 else if (b != null && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : souleve, vue ici en " + b.position.ToString("F2") + (b.isKinematic ? " (copie)" : ""));
             }
+            // ([Test] GivreEtat=s : a s secondes, les vitres de toutes les voitures -- triche /degivrer, 25/10)
+            if (!givreEtat && Config.GetFloat("Test", "GivreEtat", 0f) > 0f && t > Config.GetFloat("Test", "GivreEtat", 0f)) { givreEtat = true; Log.Info("autotest : givre " + Frost.StateAll()); }
             if (mode == "pieton")
             {
                 // Au volant de [Test] TestVoiture, posee a 12 m d'un pieton a plus de 350 m de tous les autres joueurs, puis lancee

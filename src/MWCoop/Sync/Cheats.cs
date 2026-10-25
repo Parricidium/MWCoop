@@ -100,12 +100,14 @@ namespace MWCoop
             "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, cinema, musee, boutique, pieces",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
-            "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)" };
+            "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)",
+            "/degivrer [voiture] : vitres dégivrées pour tous (toutes les voitures, ou rivett, sorbet, taxi)" };
         static readonly string[] HelpEn = {
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop, parts",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
-            "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)" };
+            "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)",
+            "/defrost [car]: windows defrosted for everyone (all cars, or rivett, sorbet, taxi)" };
         // My Summer Car (19/10) : ses lieux (PlacesMsc), l'heure du jeu par pas de 2 h (MAP/SUN/Pivot/SUN::Color), la pluie
         // au lieu de la neige.
         static readonly string[] HelpMscFr = {
@@ -130,6 +132,7 @@ namespace MWCoop
                 case "place": case "go": return "lieu";
                 case "money": case "cash": return "argent";
                 case "heal": return "soin";
+                case "defrost": case "degivre": return "degivrer";
                 case "free": case "nojail": return "liberer";
                 case "clothes": case "wear": return "vetements";
                 case "car": case "vehicle": return "voiture";
@@ -228,6 +231,17 @@ namespace MWCoop
                     return null;
                 case "liberer":
                     return Free();
+                case "degivrer":
+                {
+                    // (My Winter Car : CORRIS = la Rivett, MACHTWAGEN = le taxi ; My Summer Car : pas de givre l'ete)
+                    if (Game.Msc) return Lang.T("Pas de givre dans My Summer Car.", "No frost in My Summer Car.");
+                    string fl = arg.Trim().ToLowerInvariant();
+                    if (fl == "rivett" || fl == "rivet" || fl == "corris") fl = "CORRIS";
+                    else if (fl == "taxi") fl = "MACHTWAGEN";
+                    List<string> done = Frost.Defrost(fl);
+                    if (done.Count == 0) return Lang.T("Aucune voiture à dégivrer (rivett, sorbet, taxi).", "No car to defrost (rivett, sorbet, taxi).");
+                    return null;
+                }
                 case "heure":
                 {
                     int h;

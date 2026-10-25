@@ -58,7 +58,7 @@ namespace MWCoop
                                                                     : Lang.T("Coup\u00E9es : lanceur, Options du jeu > Partie et partage > Autoriser les triches.", "Off: launcher, Game options > Game and sharing > Allow cheats."));
             float stH = Style.Height(state, 12, iw, false) + P(4);
             float h = pad + P(32) + stH + P(6) + (Session.Active ? sec + Mathf.Max(1, players.Count) * rowH : 0f)
-                    + sec + placeRows * (bh + gap) + sec + 2 * (bh + gap) + sec + 2 * (bh + gap) + P(28) + pad;
+                    + sec + placeRows * (bh + gap) + sec + (Game.Msc ? 2 : 3) * (bh + gap) + sec + 2 * (bh + gap) + P(28) + pad;
             h = Mathf.Min(h, Screen.height - P(24));
             float x = Screen.width - w - P(24), y = Mathf.Max(P(12), Mathf.Round((Screen.height - h) / 2)) + (1f - k) * P(10);   // (a droite, centre en hauteur : sous le panneau Equipe du HUD)
             Kit.Frame(new Rect(x, y, w, h));
@@ -105,6 +105,12 @@ namespace MWCoop
             if (Kit.Button(new Rect(ix, cy + bh + gap, mw, bh), "+1 000 mk", 0, false, ok, null, 12)) Do("/argent 1000", "+1 000 mk");
             if (Kit.Button(new Rect(ix + mw + gap, cy + bh + gap, mw, bh), "+10 000 mk", 0, false, ok, null, 12)) Do("/argent 10000", "+10 000 mk");
             cy += 2 * (bh + gap);
+            // (vitres de toutes les voitures, pour tous -- Kamixak, 25/10 ; pas de givre sur My Summer Car)
+            if (!Game.Msc)
+            {
+                if (Kit.Button(new Rect(ix, cy, iw, bh), Lang.T("D\u00E9givrer les vitres (toutes les voitures)", "Defrost the windows (all cars)"), 0, false, ok, null, 12)) Do("/degivrer", Lang.T("Vitres d\u00E9givr\u00E9es", "Windows defrosted"));
+                cy += bh + gap;
+            }
             // monde
             Kit.Section(new Rect(ix, cy, iw, sec - P(6)), Lang.T("MONDE \u00B7 POUR TOUS", "WORLD \u00B7 FOR EVERYONE"));
             cy += sec;

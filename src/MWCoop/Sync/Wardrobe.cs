@@ -27,6 +27,42 @@ namespace MWCoop
             if (home != null) foreach (Transform t in home.GetComponentsInChildren<Transform>(true)) if (t.name == "Closet 1" && t.GetComponent<Collider>() != null) closets.Add(t.GetComponent<Collider>());
             Log.Info("armoire : " + closets.Count + " armoire(s) (tenues par le menu)");
             listed = true;
+            if (Config.GetInt("Test", "ArmoireVisee", 0) != 0) Probe();
+        }
+
+        // Essais ([Test] ArmoireVisee=1) : chaque armoire, son collider, et ce que touche un rayon vise sur elle depuis 4 cotes
+        // (1,3 m, a la hauteur de son centre et a 1,6 m du sol) -- l'armoire est-elle dans les touches ?
+        static void Probe()
+        {
+            foreach (string root in new[] { "HOMENEW", "YARD" })
+            {
+                GameObject g = Game.FindAny(root);
+                if (g == null) continue;
+                foreach (Transform t in g.GetComponentsInChildren<Transform>(true))
+                {
+                    string n = t.name.ToLowerInvariant();
+                    if (!n.Contains("closet") && !n.Contains("wardrobe") && !n.Contains("kaappi") && !n.Contains("cabinet") && !n.Contains("cupboard")) continue;
+                    Collider cc = t.GetComponent<Collider>();
+                    Log.Info("armoire essai : objet " + Recon.Path(t) + " en " + t.position.ToString("F2") + (cc != null ? " collider " + cc.bounds.size.ToString("F2") : " sans collider"));
+                }
+            }
+            foreach (Collider c in closets)
+            {
+                Bounds bd = c.bounds;
+                Log.Info("armoire essai : " + Recon.Path(c.transform) + " " + c.GetType().Name + (c.enabled ? "" : " (COUPE)") + (c.isTrigger ? " declencheur" : "")
+                         + (c.gameObject.activeInHierarchy ? "" : " (ETEINT)") + ", couche " + c.gameObject.layer + ", centre " + bd.center.ToString("F2") + " taille " + bd.size.ToString("F2"));
+                foreach (Vector3 dir in new[] { Vector3.forward, Vector3.back, Vector3.left, Vector3.right })
+                    foreach (float h in new[] { bd.center.y, bd.min.y + 1.6f })
+                    {
+                        Vector3 target = new Vector3(bd.center.x, h, bd.center.z), from = target + dir * (Mathf.Max(bd.extents.x, bd.extents.z) + 1.3f);
+                        var sb = new System.Text.StringBuilder();
+                        bool got = false;
+                        RaycastHit[] hs = Physics.RaycastAll(from, (target - from).normalized, 2.2f);
+                        System.Array.Sort(hs, (a, x) => a.distance.CompareTo(x.distance));
+                        foreach (RaycastHit hh in hs) { sb.Append(' ').Append(hh.collider.name).Append('@').Append(hh.distance.ToString("F2")); if (hh.collider == c) got = true; }
+                        Log.Info("armoire essai :   depuis " + dir + " h " + h.ToString("F2") + " : " + (got ? "ARMOIRE TOUCHEE" : "pas l'armoire") + " ;" + sb);
+                    }
+            }
         }
 
         public static void Update()
