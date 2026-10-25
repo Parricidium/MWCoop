@@ -1,5 +1,5 @@
 PLACES 1
-# outil des places (25/10/2026 12:57:15) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+# outil des places (25/10/2026 14:36:47) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
 jeu mwc
 voiture SORBET(190-200psi)
 conducteur
@@ -29,12 +29,15 @@ os 0 thig_right -0.23366 0.79111 0.55453 0.1097
 corps 0 0.0436 0 0
 place 1 passager -0.356 0.707 -0.609 0 0.38 0.5
 os 1 arm_left 0.2801 0.22113 0.79314 -0.49353
+os 1 arm_right -0.04182 -0.2141 -0.05627 0.97429
 os 1 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 1 collar_right -0.10828 -0.8084 -0.00397 0.57857
 os 1 hand_left 0.18954 -0.03686 -0.27745 0.94114
 os 1 knee_left 0.01468 0.02045 0.95189 0.30541
 os 1 knee_right -0.02656 0.03161 0.96002 0.27686
 os 1 pelvis 0.62098 0.31893 -0.32837 0.63627
 os 1 shoulder_left 0.25104 -0.07166 0.75987 -0.59535
+os 1 shoulder_right 0.39345 -0.29239 -0.71024 0.50524
 os 1 spine_middle -0.00003 0.00057 -0.04964 0.99877
 os 1 spine_upper -0.01819 -0.03532 -0.26055 0.96464
 os 1 thig_left 0.28655 -0.59646 -0.64547 -0.38144
