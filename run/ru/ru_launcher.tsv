@@ -1989,3 +1989,8 @@ Bedroom and apartment, use key	Спальня и квартира, клавиш�
 1 file · %s	1 файл · %s
 %d files · %s	Файлов: %d · %s
 a place on the M map and in /lieu (v3)	место на карте M и в /lieu (v3)
+under a minute	меньше минуты
+about %d min	примерно %d мин
+Too big, not sent (2 GB / 3000 files at most): %s	Слишком большие, не отправлены (не больше 2 ГБ / 3000 файлов): %s
+Not sent by the host (too big): %s	Хост не отправил (слишком большие): %s
+ACCEPT · %s, %s	ПРИНЯТЬ · %s, %s

@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -5654,10 +5654,10 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
         { GraphicsPath p; RoundRect(p, kSyncBtn, 10); SolidBrush b(g_lobbyHot == 71 ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p); Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); Text(g, T(L"Choisir", L"Choose"), kSyncBtn, 12, FontStyleBold, kInk); }
         y += 34;
         bool msc;
-        std::vector<std::string> mods, cats;
+        std::vector<std::string> mods, cats, dropped;
         uint64_t bytes = 0;
         EnterCriticalSection(&g_lcs);
-        msc = g_offer.msc; mods = g_offer.mods; cats = g_offer.cats;
+        msc = g_offer.msc; mods = g_offer.mods; cats = g_offer.cats; dropped = g_offer.dropped;
         for (auto &f : g_offer.files) bytes += f.size;
         LeaveCriticalSection(&g_lcs);
         if (mods.empty() && cats.empty()) {
@@ -5685,6 +5685,14 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             swprintf_s(b, T(L"%s · copiés chez chaque invité à l'arrivée.", L"%s · copied to each guest on arrival."), SizeText(bytes).c_str());
             Text(g, b, RectF(x, y, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             y += 18;
+        }
+        if (!dropped.empty()) {   // (trop gros pour les plafonds : partis ni en entier ni en partie -- JD, 25/10)
+            std::wstring names;
+            for (size_t i = 0; i < dropped.size(); i++) names += (i ? L", " : L"") + Widen(dropped[i], CP_UTF8);
+            wchar_t b[400];
+            swprintf_s(b, T(L"Trop gros, pas envoyés (2 Go / 3000 fichiers au plus) : %s", L"Too big, not sent (2 GB / 3000 files at most): %s"), names.c_str());
+            Para(g, b, RectF(x, y + 2, w, 30), 10.5f, kWarn);
+            y += 34;
         }
         gap();
         // mods de la partie : chacun, et ou en sont les invites (l'avancement est global par invite)
@@ -5714,7 +5722,8 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
         Title(g, T(L"Envoi de l'hôte", L"Host's files"), RectF(x, y, w - 100, 24), 16, kInk);
         int s = g_sync, n;
         std::wstring why;
-        { std::lock_guard<std::mutex> lk(g_syncMx); n = (int)g_hostOffer.mods.size(); why = Widen(g_syncWhy, CP_UTF8); }
+        std::vector<std::string> dropped;
+        { std::lock_guard<std::mutex> lk(g_syncMx); n = (int)g_hostOffer.mods.size(); why = Widen(g_syncWhy, CP_UTF8); dropped = g_hostOffer.dropped; }
         uint64_t tot = g_syncTotal, got = g_syncGot;
         bool shown = SyncBarShown() && s != SY_NONE && s != SY_OFF;
         std::wstring chip = s == SY_GET ? T(L"En cours", L"In progress") : s == SY_DONE ? T(L"Prêt ✓", L"Ready ✓") : s == SY_ASK ? T(L"À accepter", L"To accept") : s == SY_FAIL ? T(L"Échec", L"Failed") : s == SY_CHECK ? T(L"Vérification…", L"Checking…") : T(L"Rien", L"Nothing");
@@ -5759,6 +5768,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
                 else { swprintf_s(b, T(L"%d fichiers reçus", L"%d files received"), sp.modsN); r1r = b; }
             }
             else if (s == SY_GET && !sp.cur.empty()) { swprintf_s(b, L"%d / %d · %s %d %%", sp.modsDone, sp.modsN, sp.cur.c_str(), sp.curPct); r1r = b; }
+            else if (s == SY_ASK) { swprintf_s(b, L"%s · %s", SizeText(tot).c_str(), SyncEta(tot).c_str()); r1r = b; c1 = kAcc; }   // (gros envoi : taille et temps, avant d'accepter)
             else if (sp.modsN == 1) { swprintf_s(b, T(L"1 fichier · %s", L"1 file · %s"), SizeText(sp.modsB).c_str()); r1r = b; }
             else { swprintf_s(b, T(L"%d fichiers · %s", L"%d files · %s"), sp.modsN, SizeText(sp.modsB).c_str()); r1r = b; }
             if (sp.contB) { r2 += L" · " + SizeText(sp.contB); }
@@ -5786,12 +5796,26 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             if (!go) HotZone(row, id);
             y += 42;
         }
+        if (!dropped.empty() && shown) {   // (dossiers que l'hote n'envoie pas, trop gros -- un circuit converti de Voyage)
+            std::wstring names;
+            for (size_t i = 0; i < dropped.size(); i++) names += (i ? L", " : L"") + Widen(dropped[i], CP_UTF8);
+            wchar_t b2[400];
+            swprintf_s(b2, T(L"Pas envoyés par l'hôte (trop gros) : %s", L"Not sent by the host (too big): %s"), names.c_str());
+            Text(g, FitText(b2, 10.5f, FontStyleRegular, w), RectF(x, y, w, 16), 10.5f, FontStyleRegular, kWarn, StringAlignmentNear);   // (une ligne : la colonne est comptee)
+            y += 20;
+        }
         if (s == SY_ASK || s == SY_FAIL) {   // TOUT ACCEPTER / REESSAYER (LobbyChoiceAt : 70)
             kSyncBtn = RectF(x, y, w, 40);
             GraphicsPath p; RoundRect(p, kSyncBtn, 12);
             SolidBrush lg(kAcc); g.FillPath(&lg, &p);
             if (g_lobbyHot == 70) { SolidBrush hb(Color(55, 255, 255, 255)); g.FillPath(&hb, &p); }
-            Text(g, s == SY_ASK ? T(L"TOUT ACCEPTER", L"ACCEPT ALL") : T(L"RÉESSAYER", L"RETRY"), kSyncBtn, 13, FontStyleBold, kOnAcc);
+            std::wstring bl = s == SY_ASK ? T(L"TOUT ACCEPTER", L"ACCEPT ALL") : T(L"RÉESSAYER", L"RETRY");
+            if (s == SY_ASK && tot > kSyncAskBytes) {   // gros envoi : la taille et le temps sur le bouton (JD, 25/10 : les voir avant d'accepter)
+                wchar_t b2[160];
+                swprintf_s(b2, T(L"ACCEPTER · %s, %s", L"ACCEPT · %s, %s"), SizeText(tot).c_str(), SyncEta(tot).c_str());
+                bl = FitText(b2, 13, FontStyleBold, kSyncBtn.Width - 16);
+            }
+            Text(g, bl, kSyncBtn, 13, FontStyleBold, kOnAcc);
             y += 48;
         }
         gap();
@@ -7509,6 +7533,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     // Auto-test de la liste des mods en plusieurs messages
     if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
+    // Essai : /testoffre <dossier Mods> <journal> -- l'offre de l'hote faite de ce dossier (ses DLL = les mods envoyes), par
+    // unites sous les plafonds, puis relue comme un invite (dossiers pas envoyes compris). Journal : celui du lanceur.
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/testoffre")) {
+        g_launcherLog = argv[3];
+        OfferJob *job = new OfferJob;
+        job->dir = WithSlash(argv[2]); job->msc = true;
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((job->dir + L"*.dll").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) { do { std::wstring f = fd.cFileName; job->mods.push_back(std::make_pair(f, f.substr(0, f.size() - 4))); } while (FindNextFileW(h, &fd)); FindClose(h); }
+        OfferThread(job);
+        SyncOffer back;
+        EnterCriticalSection(&g_lcs);
+        bool ok = OfferParse(g_offerBlob, back);
+        int extra = (int)g_offerExtra.size();
+        LeaveCriticalSection(&g_lcs);
+        std::string dr;
+        for (auto &s : back.dropped) dr += " " + s;
+        LaunchLog("testoffre : relue %s, %d fichier(s) dans le 1er message (%d attendus, %d message(s) de suite), pas envoyes :%s", ok ? "ok" : "ECHEC", (int)back.files.size(), back.expect, extra, dr.empty() ? " (aucun)" : dr.c_str());
+        return 0;
+    }
 
     // /boite <png> <ok|ouinon|ouinonannuler> <info|question|attention|erreur> : une fenetre de message (dialog.inc) en image
     if (argc >= 5 && !_wcsicmp(argv[1], L"/boite")) {
@@ -7682,7 +7726,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_setTab = SET_IMAGE; }         // (ray tracing et ombres)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
         else if (st == L"salon" || st == L"salon-nouvelle" || st == L"salon-invite" || st == L"salon-invite-hote" || st == L"salon-udp" || st == L"salon-options" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite (salon-invite-hote : ses options de l'hote)
-            bool host = st == L"salon" || st == L"salon-nouvelle" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir";   // (salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods ; salon-public : sans code ; salon-max : 12 joueurs ; salon-moi : mes options ; salon-choisir : ajouts au choix)
+            bool host = st == L"salon" || st == L"salon-nouvelle" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-mods-voyage" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir";   // (salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods ; salon-public : sans code ; salon-max : 12 joueurs ; salon-moi : mes options ; salon-choisir : ajouts au choix)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
                         { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38, UDP_OK },
@@ -7714,7 +7758,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_hostUdpTest = true;
             // mods de l'hote : salon-mods (hote), salon-mods-demande | -telechargement | -prets (invite)
             std::vector<std::string> mods = { "BetterHeadlights.dll", "TrunkLight.dll", "CDPlayerEnhanced.dll" };
-            if (st == L"salon-mods") {
+            if (st == L"salon-mods-voyage" || st == L"salon-mods-gros") {   // (Voyage et un circuit converti ; le Nordschleife ne tient pas -- JD, 25/10)
+                SyncOffer &o = st == L"salon-mods-voyage" ? g_offer : g_hostOffer;
+                o.msc = true; o.mods = { "Voyage.dll" }; o.cats = { "cd1", "peinture" }; o.dropped = { "ks_nordschleife-nordschleife" };
+                o.files = { { "Mods\\Voyage.dll", 2177536, 1 }, { "Mods\\Assets\\Voyage\\destinations\\ks_laguna_seca\\circuit.vmesh", 212352375, 2 }, { "Mods\\Assets\\Voyage\\destinations\\ks_laguna_seca\\textures\\0.vtex", 56898626, 3 } };
+                if (st == L"salon-mods-gros") { g_sync = SY_ASK; g_syncNeed = { 0, 1, 2 }; g_syncTotal = 271428537; g_syncGot = 0; g_lobbyHot = 70; }
+                else g_lobbyHot = 71;
+            } else if (st == L"salon-mods") {
                 g_offer.msc = true; g_offer.mods = mods; g_offer.cats = { "cd1", "peinture", "drapeau", "posters" };
                 g_offer.files = { { "BetterHeadlights.dll", 412000, 1 }, { "TrunkLight.dll", 96000, 2 }, { "CDPlayerEnhanced.dll", 1830000, 3 } };
                 g_lobbyHot = 71;

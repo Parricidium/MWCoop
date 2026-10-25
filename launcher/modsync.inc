@@ -32,7 +32,9 @@
 static const uint32_t kSyncChunk = 48 * 1024;
 static const int kSyncWindow = 8, kSyncChannel = 5;
 struct SyncFile { std::string path; uint32_t size; uint64_t hash; };
-struct SyncOffer { bool msc = false; std::string mscVer; std::vector<std::string> mods, cats; std::vector<SyncFile> files; uint64_t key = 0; int expect = 0; };
+// dropped : dossiers que l'hote n'envoie pas, trop gros pour les plafonds (3000 fichiers / 2 Go) -- un circuit converti de
+// Voyage le plus souvent (JD, 25/10 : « un dossier de destination part en entier ou pas du tout », et le salon le dit).
+struct SyncOffer { bool msc = false; std::string mscVer; std::vector<std::string> mods, cats, dropped; std::vector<SyncFile> files; uint64_t key = 0; int expect = 0; };
 
 static uint64_t Fnv(const void *p, size_t n, uint64_t h = 1469598103934665603ULL)
 {
@@ -118,8 +120,17 @@ static bool OfferParse(const std::string &m, SyncOffer &o)
         if (!SyncPathOk(f.path)) { LaunchLog("mods : chemin refuse dans la liste de l'hote (%s)", f.path.c_str()); return false; }
         o.files.push_back(f);
     }
-    // (liste trop longue pour un message : marque 0xC5 + nombre total de fichiers ; la suite arrive en M_MODSX)
-    if (r.ok && r.p < m.size()) { Rd t = r; if (t.u8() == 0xC5) { int total = t.u16(); if (t.ok && total > (int)o.files.size()) o.expect = total; } }
+    // Marques en fin de message, dans cet ordre : 0xC5 + nombre total de fichiers (liste trop longue pour un message : la suite
+    // arrive en M_MODSX) ; 0xC6 + noms des dossiers pas envoyes (1.15.x). Les lanceurs d'avant ne lisent que la premiere.
+    if (r.ok) {
+        Rd t = r;
+        while (t.ok && t.p < m.size()) {
+            int k = t.u8();
+            if (k == 0xC5) { int total = t.u16(); if (t.ok && total > (int)o.files.size()) o.expect = total; }
+            else if (k == 0xC6) { int nd = t.u16(); for (int i = 0; i < nd && t.ok; i++) { std::string s = t.str(); if (t.ok) o.dropped.push_back(s); } }
+            else break;
+        }
+    }
     o.key = Fnv(m.data(), m.size());
     return r.ok;
 }
@@ -273,8 +284,13 @@ static std::vector<std::wstring> ContentFiles(int i, const std::wstring &game, c
 }
 
 struct OfferJob { std::wstring dir, game, modDir, paint; bool msc; std::string ver; std::vector<std::pair<std::wstring, std::wstring>> mods; std::vector<int> cats; std::vector<std::wstring> priv; };   // mods : (fichier, ID) ; priv : ID et noms des mods gardes pour soi
-// Fichiers de base + rel (rel vide ou "\X\Y"), chemins dans la liste : prefix + "X\Y\<fichier>".
-static void OfferAddTree(const std::wstring &base, const std::wstring &rel, const std::string &prefix, std::vector<SyncFile> &out, uint64_t &total)
+// Une unite de l'offre : un dossier (ou une DLL) qui part en entier ou pas du tout (JD, 25/10). prio : ordre de passage
+// sous les plafonds -- 0 les DLL, 1 References et MSCLoader_*, 2 les dossiers des mods (Assets hors destinations\, reglages),
+// 3 le contenu du jeu, 4 les circuits convertis (Assets\<X>\destinations\<circuit>) ; a prio egale, les plus petits d'abord.
+struct OfferUnit { std::string name, cat; int prio = 0; std::vector<SyncFile> files; uint64_t bytes = 0; };
+// Fichiers de base + rel (rel vide ou "\X\Y") dans u, chemins prefix + "X\Y\<fichier>" ; skip : un sous-dossier de rel lui-meme
+// laisse de cote (destinations\ : chaque circuit est sa propre unite).
+static void OfferCollect(const std::wstring &base, const std::wstring &rel, const std::string &prefix, OfferUnit &u, const wchar_t *skip = NULL)
 {
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((base + rel + L"\\*").c_str(), &fd);
@@ -283,12 +299,12 @@ static void OfferAddTree(const std::wstring &base, const std::wstring &rel, cons
         std::wstring n = fd.cFileName;
         if (n == L"." || n == L"..") continue;
         std::wstring r = rel + L"\\" + n;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { OfferAddTree(base, r, prefix, out, total); continue; }
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { if (!skip || _wcsicmp(n.c_str(), skip)) OfferCollect(base, r, prefix, u); continue; }
         SyncFile f;
         f.path = prefix + Narrow(r.substr(1), CP_UTF8);   // (sans le \ de tete)
-        if (out.size() >= 3000 || total > (2ull << 30) || !SyncPathOk(f.path) || !FileFnvCached(base + r, &f.hash, &f.size)) continue;
-        total += f.size;
-        out.push_back(f);
+        if (!SyncPathOk(f.path) || !FileFnvCached(base + r, &f.hash, &f.size)) continue;
+        u.bytes += f.size;
+        u.files.push_back(f);
     } while (FindNextFileW(h, &fd));
     FindClose(h);
 }
@@ -302,9 +318,16 @@ static void OfferSplit(SyncOffer &o, std::string &blob, std::vector<std::string>
     // Liste trop longue pour un message du salon (64 Ko) : le premier message en garde ce qui y tient (les lanceurs d'avant
     // le lisent tel quel), suivi d'une marque (0xC5, nombre total) ; le reste part en messages M_MODSX (memes indices :
     // les demandes de fichiers restent valables). Avant : le reste etait coupe, les invites n'avaient pas ces fichiers.
-    while (blob.size() > 59990 && !o.files.empty()) { cut.push_back(o.files.back()); o.files.pop_back(); blob = OfferBlob(o); }
+    Wr dt;   // (dossiers pas envoyes : marque 0xC6, apres 0xC5 -- 40 noms au plus)
+    if (!o.dropped.empty()) {
+        int nd = min(40, (int)o.dropped.size());
+        dt.u8(0xC6); dt.u16(nd);
+        for (int i = 0; i < nd; i++) dt.str(o.dropped[i].substr(0, 80));
+    }
+    while (blob.size() + dt.d.size() + 3 > 59990 && !o.files.empty()) { cut.push_back(o.files.back()); o.files.pop_back(); blob = OfferBlob(o); }
     std::reverse(cut.begin(), cut.end());
     if (!cut.empty()) { Wr t; t.u8(0xC5); t.u16((int)full); blob += t.d; }
+    blob += dt.d;
     o.key = Fnv(blob.data(), blob.size());
     for (size_t i = 0; i < cut.size();) {
         Wr w; w.u8(M_MODSX); w.u32((uint32_t)o.key); w.u32((uint32_t)(o.key >> 32)); w.u16((int)(o.files.size() + i));
@@ -325,17 +348,37 @@ static DWORD WINAPI OfferThread(void *p)
     o.msc = job->msc;
     o.mscVer = job->ver;
     uint64_t total = 0;
+    // D'abord toutes les unites, sans plafond ; puis les plafonds (3000 fichiers, 2 Go), unite par unite dans l'ordre de
+    // passage : une unite qui ne tient plus est laissee entiere, nommee dans o.dropped et au journal (JD, 25/10 : avant, des
+    // fichiers sautes un par un sans rien dire -- un circuit converti a moitie envoye).
+    std::vector<OfferUnit> units;
+    auto unit = [&](const std::string &name, int prio) -> OfferUnit & { units.push_back(OfferUnit()); units.back().name = name; units.back().prio = prio; return units.back(); };
     if (o.msc) {
         std::wstring d = job->dir.substr(0, job->dir.size() - 1);   // (sans le \ final : chemins relatifs "X\Y")
+        // Assets\<n> : le dossier sans destinations\, puis chaque circuit de destinations\ a part (Voyage)
+        auto assets = [&](const std::wstring &n) {
+            OfferCollect(d, L"\\Assets\\" + n, "Mods\\", unit(Narrow(n, CP_UTF8), 2), L"destinations");
+            WIN32_FIND_DATAW dd;
+            HANDLE dh = FindFirstFileW((d + L"\\Assets\\" + n + L"\\destinations\\*").c_str(), &dd);
+            if (dh == INVALID_HANDLE_VALUE) return;
+            do {
+                std::wstring c = dd.cFileName;
+                if (!(dd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || c == L"." || c == L"..") continue;
+                if (c.size() > 8 && !_wcsicmp(c.c_str() + c.size() - 8, L".nouveau")) continue;   // (conversion en cours ou annulee : ignoree par le mod -- conversion.log, a la racine, ne part pas non plus)
+                OfferCollect(d, L"\\Assets\\" + n + L"\\destinations\\" + c, "Mods\\", unit(Narrow(c, CP_UTF8), 4));
+            } while (FindNextFileW(dh, &dd));
+            FindClose(dh);
+        };
         for (auto &m : job->mods) {
             o.mods.push_back(Narrow(m.first, CP_UTF8));
+            OfferUnit &u = unit(Narrow(m.first, CP_UTF8), 0);
             SyncFile f;
             f.path = "Mods\\" + Narrow(m.first, CP_UTF8);
-            if (SyncPathOk(f.path) && FileFnvCached(job->dir + m.first, &f.hash, &f.size)) { o.files.push_back(f); total += f.size; }
-            OfferAddTree(d, L"\\Assets\\" + m.second, "Mods\\", o.files, total);
-            OfferAddTree(d, L"\\Config\\Mod Settings\\" + m.second, "Mods\\", o.files, total);
+            if (SyncPathOk(f.path) && FileFnvCached(job->dir + m.first, &f.hash, &f.size)) { u.files.push_back(f); u.bytes += f.size; }
+            assets(m.second);
+            OfferCollect(d, L"\\Config\\Mod Settings\\" + m.second, "Mods\\", unit(Narrow(m.second, CP_UTF8) + " (settings)", 2));
         }
-        if (!job->mods.empty()) OfferAddTree(d, L"\\References", "Mods\\", o.files, total);
+        if (!job->mods.empty()) OfferCollect(d, L"\\References", "Mods\\", unit("References", 1));
         // Autres dossiers de Assets : un mod peut ranger les siens sous un autre nom que son ID (Peugeot205Rallye :
         // Assets\Peugeot205, 29 Mo -- l'invite n'avait pas la voiture, 11/10). Tous partent, sauf MSCLoader_* (plus bas)
         // et ceux d'un mod garde pour soi (son ID ou le nom de sa DLL, ou un nom qui commence par l'un d'eux).
@@ -350,7 +393,7 @@ static DWORD WINAPI OfferThread(void *p)
                     for (auto &p : job->priv) mine |= !_wcsnicmp(n.c_str(), p.c_str(), p.size()) || !_wcsnicmp(n.c_str(), p.c_str(), n.size());
                     for (auto &m : job->mods) sent |= !_wcsicmp(n.c_str(), m.second.c_str());
                     if (mine || sent) continue;
-                    OfferAddTree(d, L"\\Assets\\" + n, "Mods\\", o.files, total);
+                    assets(n);
                     LaunchLog("mods : dossier Assets\\%s envoye aussi (pas au nom d'un mod)", Narrow(n, CP_UTF8).c_str());
                 } while (FindNextFileW(ah, &ad));
                 FindClose(ah);
@@ -359,57 +402,38 @@ static DWORD WINAPI OfferThread(void *p)
         WIN32_FIND_DATAW fd;   // MSCLoader lui-meme (console, page des reglages)
         HANDLE h = FindFirstFileW((job->dir + L"Assets\\MSCLoader_*").c_str(), &fd);
         if (h != INVALID_HANDLE_VALUE) {
-            do if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) OfferAddTree(d, std::wstring(L"\\Assets\\") + fd.cFileName, "Mods\\", o.files, total);
+            do if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) OfferCollect(d, std::wstring(L"\\Assets\\") + fd.cFileName, "Mods\\", unit(Narrow(fd.cFileName, CP_UTF8), 1));
             while (FindNextFileW(h, &fd));
             FindClose(h);
         }
     }
-    for (int i : job->cats) {   // contenu du jeu coche
-        size_t before = o.files.size();
+    for (int i : job->cats) {   // contenu du jeu coche : une unite par categorie
+        OfferUnit &u = unit(kContent[i].key, 3);
+        u.cat = kContent[i].key;
         for (const std::wstring &rel : ContentFiles(i, job->game, job->modDir)) {
             SyncFile f;
             f.path = Narrow(rel, CP_UTF8);
             std::wstring src = !job->paint.empty() && IsCarPng(rel) ? job->paint : ContentBase(i, job->game, job->modDir) + rel;
-            if (o.files.size() >= 3000 || !SyncPathOk(f.path) || !FileFnvCached(src, &f.hash, &f.size)) continue;
-            total += f.size;
-            o.files.push_back(f);
+            if (!SyncPathOk(f.path) || !FileFnvCached(src, &f.hash, &f.size)) continue;
+            u.bytes += f.size;
+            u.files.push_back(f);
         }
-        if (o.files.size() > before) o.cats.push_back(kContent[i].key);
     }
-    // Ordre de la liste avant la coupe a 60 Ko (un message du salon : 64 Ko au plus). Retour de JD (11/10) : un mod prive de
-    // 2 000 fichiers (NDSerra) remplissait la liste ; la coupe, a la fin, enlevait la DLL de Peugeot205Rallye (rangee
-    // apres) sans rien dire, et l'invite la retirait meme de sa copie (« plus chez l'hote »). D'abord les DLL des mods,
-    // puis References et MSCLoader, puis les dossiers de chaque mod du plus petit au plus gros (les petits arrivent
-    // entiers), le contenu du jeu a la fin ; ce qui est coupe est ecrit dans le journal.
-    {
-        auto group = [](const std::string &p, int &prio) -> std::string {
-            const char *pre[] = { "Mods\\Assets\\", "Mods\\Config\\Mod Settings\\" };
-            if (!_strnicmp(p.c_str(), "Mods\\", 5) && p.find('\\', 5) == std::string::npos) { prio = 0; return ""; }
-            if (!_strnicmp(p.c_str(), "Mods\\References\\", 16)) { prio = 1; return ""; }
-            for (const char *x : pre) {
-                size_t n = strlen(x);
-                if (!_strnicmp(p.c_str(), x, n)) {
-                    size_t e = p.find('\\', n);
-                    std::string g = p.substr(n, e == std::string::npos ? std::string::npos : e - n);
-                    prio = !_strnicmp(g.c_str(), "MSCLoader_", 10) ? 1 : 2;
-                    return g;
-                }
-            }
-            prio = 3;
-            return "";
-        };
-        std::map<std::string, int> count;
-        for (auto &f : o.files) { int pr; std::string g = group(f.path, pr); if (pr == 2) count[g]++; }
-        std::stable_sort(o.files.begin(), o.files.end(), [&](const SyncFile &a, const SyncFile &b) {
-            int pa, pb;
-            std::string ga = group(a.path, pa), gb = group(b.path, pb);
-            if (pa != pb) return pa < pb;
-            if (pa != 2) return false;
-            int ca = count[ga], cb = count[gb];
-            return ca != cb ? ca < cb : _stricmp(ga.c_str(), gb.c_str()) < 0;
-        });
-    }
-    std::string blob;
+    // Ordre de la liste (et des plafonds) : DLL des mods d'abord -- le premier message du salon en garde le debut (retour de JD,
+    // 11/10 : une coupe a la fin enlevait la DLL de Peugeot205Rallye sans rien dire) --, puis References et MSCLoader, les
+    // dossiers des mods du plus petit au plus gros, le contenu du jeu, les circuits convertis en dernier.
+    std::stable_sort(units.begin(), units.end(), [](const OfferUnit &a, const OfferUnit &b) { return a.prio != b.prio ? a.prio < b.prio : a.bytes < b.bytes; });
+    for (OfferUnit &u : units) {
+        if (u.files.empty()) continue;
+        if (o.files.size() + u.files.size() > 3000 || total + u.bytes > (2ull << 30)) {
+            o.dropped.push_back(u.name);
+            LaunchLog("mods : %s PAS envoye (%d fichier(s), %llu octets : au-dela de 3000 fichiers ou 2 Go au total)", u.name.c_str(), (int)u.files.size(), (unsigned long long)u.bytes);
+            continue;
+        }
+        for (auto &f : u.files) o.files.push_back(f);
+        total += u.bytes;
+        if (!u.cat.empty()) o.cats.push_back(u.cat);
+    }    std::string blob;
     std::vector<std::string> extra;
     OfferSplit(o, blob, extra);
     EnterCriticalSection(&g_lcs);
@@ -551,6 +575,24 @@ static std::atomic<uint64_t> g_syncGot(0), g_syncTotal(0);
 static std::atomic<int> g_syncGen(0);
 static std::atomic<DWORD> g_syncLastT(0);
 static bool g_syncAccepted;               // TOUT ACCEPTER dans ce salon
+// Gros envoi (JD, 25/10 : les circuits convertis de Voyage, 270 a 350 Mo) : au-dela, l'invite accepte d'abord, en voyant la
+// taille et le temps estime (sauf « Tout accepter de cet hote »). Debit : celui du dernier telechargement ([Lanceur]
+// DebitMods, Ko/s), sinon 0,34 Mo/s par Steam (vu chez un joueur) ou 1 Mo/s par IP.
+static const uint64_t kSyncAskBytes = 100ull << 20;
+static ULONGLONG g_syncStartT;            // debut du telechargement (mesure du debit)
+static double SyncRate()   // octets par seconde
+{
+    int kb = GetPrivateProfileIntW(L"Lanceur", L"DebitMods", 0, g_iniLauncher.c_str());
+    return kb > 0 ? kb * 1024.0 : g_steamNet ? 0.34 * 1048576 : 1048576.0;
+}
+static std::wstring SyncEta(uint64_t bytes)
+{
+    double s = bytes / SyncRate();
+    wchar_t b[64];
+    if (s < 60) return T(L"moins d'une minute", L"under a minute");
+    swprintf_s(b, T(L"environ %d min", L"about %d min"), (int)(s / 60 + 0.5));
+    return b;
+}
 static std::string g_syncWhy;
 static uint64_t g_syncAskedKey;           // Steam : liste demandee pour cette empreinte
 
@@ -655,6 +697,14 @@ static void SyncFinishLocked()
     SyncPrune(CoopModsDir(), "Mods\\", L"*.dll");
     for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra", L"cartes" })   // (cartes : une carte retiree par l'hote ne reste pas chez l'invite)
         if (OfferHasRoot(g_hostOffer, r)) SyncPrune(ContentDir() + r + L"\\", Narrow(r) + "\\", L"*");
+    if (g_sync == SY_GET && g_syncStartT && g_syncGot > (20ull << 20)) {   // (debit de ce telechargement, pour la prochaine estimation)
+        double secs = (GetTickCount64() - g_syncStartT) / 1000.0;
+        if (secs > 1) {
+            int kb = (int)(g_syncGot / secs / 1024);
+            WritePrivateProfileStringW(L"Lanceur", L"DebitMods", std::to_wstring(kb).c_str(), g_iniLauncher.c_str());
+            LaunchLog("mods : debit mesure %d Ko/s (%llu octets en %.0f s)", kb, (unsigned long long)g_syncGot.load(), secs);
+        }
+    }
     g_sync = SY_DONE;
     LaunchLog("mods : copie de l'hote a jour (%d mod(s), %d contenu(s))", (int)g_hostOffer.mods.size(), (int)g_hostOffer.cats.size());
 }
@@ -672,6 +722,7 @@ static void SyncStartLocked()
     g_syncLastT = GetTickCount();
     if (g_syncNeed.empty()) { SyncFinishLocked(); return; }
     g_sync = SY_GET;
+    g_syncStartT = GetTickCount64();
     LaunchLog("mods : telechargement de %d fichier(s), %llu octets", (int)g_syncNeed.size(), (unsigned long long)total);
     // fichiers vides : rien a demander
     for (int i : g_syncNeed) if (!g_hostOffer.files[i].size) {
@@ -735,7 +786,9 @@ static DWORD WINAPI SyncCheckThread(void *p)
     // Mods de l'hote : acceptes d'office (demande de JD, 10/10 : « si quelqu'un rejoint une partie avec des mods, que ca lui
     // installe MSCLoader et lui prenne les mods » ; retour de Menos : un ami sans les mods entrait quand meme). Seul ce qui
     // n'est que du contenu (CD, images) demande encore TOUT ACCEPTER, sauf ModsAuto.
-    if (!o.mods.empty()) g_syncAccepted = true;
+    // (gros envoi : a accepter, avec la taille et le temps estime -- sauf « Tout accepter de cet hote »)
+    if (!o.mods.empty() && bytes <= kSyncAskBytes) g_syncAccepted = true;
+    if (bytes > kSyncAskBytes && !g_syncAccepted && !ModsAuto()) LaunchLog("mods : gros envoi (%llu octets, %s) : a accepter", (unsigned long long)bytes, Narrow(SyncEta(bytes), CP_UTF8).c_str());
     if (need.empty()) SyncFinishLocked();
     else if (g_syncAccepted || ModsAuto()) { g_syncAccepted = true; SyncStartLocked(); }
     else g_sync = SY_ASK;
