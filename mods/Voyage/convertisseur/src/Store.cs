@@ -28,7 +28,7 @@ namespace Convertisseur
 
         static void WriteIni(string file, Dictionary<string, string> d)
         {
-            var sb = new StringBuilder("; Destination du mod Voyage, convertie depuis l'Assetto Corsa du joueur (rien n'est partage)\r\n");
+            var sb = new StringBuilder("; Destination du mod Voyage, convertie depuis l'Assetto Corsa de ce joueur (en co-op, l'hote l'envoie a ses invites avec ses mods)\r\n");
             foreach (var kv in d) sb.Append(kv.Key).Append('=').Append(kv.Value).Append("\r\n");
             File.WriteAllText(file, sb.ToString(), new UTF8Encoding(false));
         }

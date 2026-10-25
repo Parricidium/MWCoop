@@ -6,7 +6,7 @@ namespace Convertisseur
 {
     // Convertisseur Voyage (demande de JD, 24/10) : convertit les circuits de l'Assetto Corsa du joueur en destinations du
     // mod Voyage (My Winter Car) et les gere (liste, apercu 3D, nom, prix, point d'arrivee, reconversion, suppression).
-    // Rien n'est livre ni partage : chaque joueur convertit ses propres circuits.
+    // Aucun circuit n'est livre : chaque joueur convertit les siens ; en co-op, l'hote envoie les siens a ses invites avec ses mods (JD, 25/10).
     // Arguments : --jeu msc|mwc, --dossier <dossier du jeu> et --langue fr|en|ru|ar (le lanceur de MWCoop, page Outils), --debug (outils de
     // WebView2) ; essais sans fenetre :
     //   --convertir <dossier du circuit> [--config <id>] --sortie <dossier des destinations> [--textures 1024] [--point pit]

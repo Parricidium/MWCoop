@@ -5,8 +5,9 @@ convertis lui-même** avec le convertisseur Voyage. À l'aérodrome, près du ci
 ton billet : oui, c'est le vol (le Cessna décolle, fondu au noir), puis l'arrivée au circuit, hors de la carte du jeu.
 Un guichet du retour, posé à côté du point d'arrivée, te ramène en Finlande.
 
-Le mod ne contient aucun circuit. Chaque joueur convertit les circuits de son propre Assetto Corsa, sur son PC. Rien
-n'est envoyé ni partagé, et le mod ne contourne aucune protection : les fichiers chiffrés sont refusés.
+Le mod ne contient aucun circuit. Chaque joueur convertit les circuits de son propre Assetto Corsa, sur son PC. En
+co-op, l'hôte envoie ses circuits convertis à ses invités avec ses mods (JD, 25/10 : « Garder l'envoi » ; le salon
+montre la taille). Le mod ne contourne aucune protection : les fichiers chiffrés sont refusés.
 
 Une seule DLL pour les deux jeux (`Game.MySummerCar_And_MyWinterCar`). Elle n'utilise ni Assembly-CSharp ni firstpass,
 qui diffèrent d'un jeu à l'autre ; Unity, PlayMaker et MSCLoader 1.4.2 sont les mêmes. Le jeu est reconnu par
@@ -121,8 +122,8 @@ Il n'y a aucun boulot, course ni événement à l'aérodrome. Le plus proche est
 - **Argent** : le billet se paie en liquide (PlayerMoney). Avec MWCoop, c'est une dépense ordinaire, qui reste au joueur.
   Si le circuit a été supprimé entre l'achat et le vol, le billet est remboursé.
 - **Co-op** : chacun prend et utilise son billet ; le décollage et l'atterrissage sont annoncés aux autres (API de
-  MWCoop, canal « Voyage ») : ils voient l'avion partir et revenir. Pour aller ensemble au même circuit, chaque joueur
-  doit l'avoir converti (même identifiant, donc même place). Les positions sont déjà partagées par MWCoop. L'heure
+  MWCoop, canal « Voyage ») : ils voient l'avion partir et revenir. Pour aller ensemble au même circuit, il faut la
+  même destination (même identifiant, donc même place) : les invités reçoivent celles de l'hôte avec ses mods. Les positions sont déjà partagées par MWCoop. L'heure
   n'avance pas pendant le vol (elle est commune). À l'arrivée, chacun a sa place (rangées de 5 de front, 1,1 m entre
   deux joueurs, la rangée suivante 1,2 m derrière : jusqu'à 16 joueurs). Vérifié à deux sur My Winter Car et sur My
   Summer Car le 24/10 (hôte + invité sur Magione) : chacun voit l'autre à côté de lui, annonces de l'avion reçues dans

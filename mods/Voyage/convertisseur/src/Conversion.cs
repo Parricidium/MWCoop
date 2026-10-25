@@ -183,7 +183,7 @@ namespace Convertisseur
                 int price = o.Price > 0 ? o.Price : (int)(Math.Round((300 + km * 60) / 50.0) * 50);
                 string name = string.IsNullOrEmpty(o.Name) ? l.Name : o.Name;
                 var ini = new StringBuilder();
-                ini.AppendLine("; Destination du mod Voyage, convertie depuis l'Assetto Corsa du joueur (rien n'est partage)");
+                ini.AppendLine("; Destination du mod Voyage, convertie depuis l'Assetto Corsa de ce joueur (en co-op, l'hote l'envoie a ses invites avec ses mods)");
                 ini.AppendLine("nom=" + name);
                 ini.AppendLine("pays=" + l.Country);
                 ini.AppendLine("auteur=" + l.Author);
