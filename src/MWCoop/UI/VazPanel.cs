@@ -1,4 +1,4 @@
-using MWCoop.Net;
+﻿using MWCoop.Net;
 using UnityEngine;
 
 namespace MWCoop
@@ -77,7 +77,7 @@ namespace MWCoop
             if (now != shown) { shown = now; if (now) Opened(); else Closed(); }
             if (!shown) return;
             if (pending != 0 && Time.realtimeSinceStartup - pendingAt > 6f) pending = 0;
-            Preview();
+            if (Vaz.Enabled) Preview();   // (coupee : pas d'apercu 3D -- son modele chargeait ~1 s a chaque ouverture de l'onglet, retour de Menor 25/10)
         }
 
         static void Opened()
@@ -97,7 +97,7 @@ namespace MWCoop
 
         static void Closed()
         {
-            DestroyPreview();
+            if (pv != null) pv.SetActive(false);   // (garde : rebatir le modele a chaque ouverture coutait ~1 s)
             if (rt != null) { rt.Release(); Object.Destroy(rt); rt = null; }
             rtReady = false; dragging = false;
         }
@@ -147,6 +147,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             int sm; string sl;
             Shown(hi, out sm, out sl);
+            if (pv != null && !pv.activeSelf) pv.SetActive(true);
             if (pv == null || pvNumber != hi || pvModel != sm)
             {
                 DestroyPreview();
