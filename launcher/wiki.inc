@@ -470,7 +470,7 @@ static void DrawWikiNews(Graphics &g)
     if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement…", L"Loading…") : T(L"Pas de notes pour l'instant.", L"No notes yet."), RectF(x, y + 10, w, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     for (size_t i = 0; i < notes.size() && i < 3; i++) {
         const Note &n = notes[i];
-        std::wstring ver = n.stream == STR_LANCEUR || n.stream == STR_OUTILS ? NoteName(n) : n.ver.substr(0, n.ver.find(L'-'));
+        std::wstring ver = NoteShort(n);
         bool fresh = i == 0 && NoteCmp(n) > 0;
         std::vector<std::wstring> lines = NoteBullets(n, 2);
         std::wstring title = lines.empty() ? T(L"(sans détail)", L"(no detail)") : lines[0], sub = lines.size() > 1 ? lines[1] : L"";

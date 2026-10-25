@@ -981,7 +981,7 @@ static void DrawHome(Graphics &g)
         float y = nc.Y + 46, rowH = (nc.Height - 54) / 2;
         for (size_t i = 0; i < notes.size() && i < 2; i++) {
             const Note &n = notes[i];
-            std::wstring ver = n.stream == STR_LANCEUR || n.stream == STR_OUTILS ? NoteName(n) : n.ver.substr(0, n.ver.find(L'-'));
+            std::wstring ver = NoteShort(n);   // (« MWC 1.15.3 », « Lanceur 1.15.4 »)
             bool fresh = i == 0 && NoteCmp(n) > 0;
             float pw = PillW(ver, 10);
             Pill(g, RectF(nc.X + 20, y + 4, pw, 20), fresh ? kRed : TH(cardSel), ver, fresh ? Color(255, 255, 255, 255) : kInk, 10);
@@ -1109,17 +1109,14 @@ static void DrawNotesPage(Graphics &g)
         int cmp = NoteCmp(notes[i]);
         SolidBrush dot(cmp > 0 ? kAcc : cmp == 0 ? kOk : WithA(kGrey, 0.6f));
         g.FillEllipse(&dot, r.X + 14, r.Y + r.Height / 2 - 5, 10.0f, 10.0f);
-        Text(g, notes[i].ver.substr(0, notes[i].ver.find(L'-')), RectF(r.X + 36, r.Y + 10, 120, 24), 15, FontStyleBold, kInk, StringAlignmentNear);
-        // (flux, depuis 1.15.0 : le jeu, le lanceur ou les outils, apres la date ; rien pour l'histoire)
-        std::wstring sub = notes[i].date;
-        if (notes[i].stream == STR_LANCEUR) sub += T(L" · Lanceur", L" · Launcher");
-        else if (notes[i].stream == STR_OUTILS) sub += T(L" · Outils", L" · Tools");
-        else if (notes[i].stream != STR_GLOBAL) sub += g_game == GAME_MSC ? L" · My Summer Car" : L" · My Winter Car";
-        Text(g, sub, RectF(r.X + 36, r.Y + 33, r.Width - 46 - 70, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        // (nom complet sur toute la largeur -- « My Winter Car 1.15.3 », « Lanceur 1.15.4 » : JD, 25/10, les numeros seuls se
+        // confondaient d'un flux a l'autre --, dessous la date et l'heure, et l'etat a droite)
+        Text(g, FitText(NoteName(notes[i]), 14.5f, FontStyleBold, r.Width - 46), RectF(r.X + 36, r.Y + 10, r.Width - 46, 24), 14.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, notes[i].date, RectF(r.X + 36, r.Y + 34, r.Width - 46 - 84, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         if (cmp >= 0 && (notes[i].stream == STR_LANCEUR || !g_localVer.empty())) {
             const wchar_t *lab = cmp == 0 ? T(L"INSTALLÉE", L"INSTALLED") : T(L"NOUVELLE", L"NEW");
             float w = PillW(lab, 9.5f);
-            Pill(g, RectF(r.X + r.Width - w - 10, r.Y + 22, w, 20), cmp == 0 ? WithA(kOk, 0.2f) : kAcc, lab, cmp == 0 ? kOk : kOnAcc, 9.5f);
+            Pill(g, RectF(r.X + r.Width - w - 10, r.Y + 34, w, 20), cmp == 0 ? WithA(kOk, 0.2f) : kAcc, lab, cmp == 0 ? kOk : kOnAcc, 9.5f);
         }
         HotZone(r, UI_NOTE + i);
     }

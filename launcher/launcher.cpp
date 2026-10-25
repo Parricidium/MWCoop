@@ -1309,7 +1309,16 @@ static std::vector<Note> ParseReleases(const std::string &json)
         if (n.stream == STR_GLOBAL && !n.ver.empty() && (n.ver[0] == L'v' || n.ver[0] == L'V')) n.ver.erase(0, 1);
         std::string d = JsonField(json, "published_at", p, end);
         n.when = d;
-        if (d.size() >= 10) n.date = Widen(d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4));
+        if (d.size() >= 16) {   // (date et heure du PC : « 25/10/2026 14:49 » -- JD, 25/10 : « met la date et l'heure de mise a jour »)
+            SYSTEMTIME u = {}, l = {};
+            u.wYear = (WORD)atoi(d.substr(0, 4).c_str()); u.wMonth = (WORD)atoi(d.substr(5, 2).c_str()); u.wDay = (WORD)atoi(d.substr(8, 2).c_str());
+            u.wHour = (WORD)atoi(d.substr(11, 2).c_str()); u.wMinute = (WORD)atoi(d.substr(14, 2).c_str());
+            if (!SystemTimeToTzSpecificLocalTime(NULL, &u, &l)) l = u;
+            wchar_t b[32];
+            swprintf_s(b, L"%02u/%02u/%04u %02u:%02u", l.wDay, l.wMonth, l.wYear, l.wHour, l.wMinute);
+            n.date = b;
+        }
+        else if (d.size() >= 10) n.date = Widen(d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4));
         std::wstring body = Widen(JsonField(json, "body", p, end));
         size_t sep = body.find(L"\n---");
         if (sep == std::wstring::npos) n.fr = n.en = CleanNote(body);
@@ -1479,13 +1488,22 @@ static int NoteCmp(const Note &n)
     if (n.stream == STR_LANCEUR) { std::wstring l = LauncherVer(); return l.empty() ? -2 : CmpVer(n.ver, l); }
     return g_localVer.empty() ? 1 : CmpVer(n.ver, g_localVer);
 }
-// Nom d'une note : « MWCoop 1.15.2 » (le mod ; MSCoop sur My Summer Car), « Lanceur 1.15.1 », « Outils 1.15.0 ».
+// Nom d'une note : « My Winter Car 1.15.3 » (le mod du jeu), « Lanceur 1.15.4 », « Outils 1.15.1 », « MWCoop 1.15.0 » (avant les flux).
 static std::wstring NoteName(const Note &n)
 {
     std::wstring v = n.ver.substr(0, n.ver.find(L'-'));
     if (n.stream == STR_LANCEUR) return std::wstring(T(L"Lanceur ", L"Launcher ")) + v;
     if (n.stream == STR_OUTILS) return std::wstring(T(L"Outils ", L"Tools ")) + v;
-    return std::wstring(n.stream == STR_GLOBAL ? L"MWCoop" : ProductName()) + L" " + v;
+    if (n.stream == STR_MWC || n.stream == STR_MSC) return std::wstring(kGames[n.stream == STR_MSC ? GAME_MSC : GAME_MWC].name) + L" " + v;   // (« My Winter Car 1.15.3 », JD 25/10)
+    return L"MWCoop " + v;
+}
+// Nom court (pastilles de l'accueil et du Guide) : « MWC 1.15.3 », « Lanceur 1.15.4 », « Outils 1.15.1 », « 1.15.0 ».
+static std::wstring NoteShort(const Note &n)
+{
+    std::wstring v = n.ver.substr(0, n.ver.find(L'-'));
+    if (n.stream == STR_MWC) return L"MWC " + v;
+    if (n.stream == STR_MSC) return L"MSC " + v;
+    return n.stream == STR_GLOBAL ? v : NoteName(n);
 }
 // My Summer Car (BETA, demande de JD du 19/10 : « les Nouveautes doivent parler de MSC ») : les versions d'avant kMscFirstVer
 // sont celles de My Winter Car, cachees. Dans les suivantes, une puce propre a MWC est retiree : « MWC » (mot entier, « [MWC] »
@@ -1523,6 +1541,39 @@ static std::vector<std::wstring> NoteItems(const std::wstring &body)
         if ((b != std::wstring::npos && l[b] == L'•') || it.empty()) it.push_back(l); else it.back() += L"\n" + l;
     }
     return it;
+}
+// Jeu d'une puce, d'apres son debut (regle des notes depuis le 20/10 : chaque puce commence par My Winter Car, My Summer Car
+// ou « MWC et MSC » ; les noms des jeux ne se traduisent pas) : GAME_MWC, GAME_MSC, ou -1 (les deux, ou rien de dit).
+static int BulletGame(const std::wstring &item)
+{
+    size_t b = item.find_first_not_of(L" \x202B\x202A\x200F\u2022");
+    if (b == std::wstring::npos) return -1;
+    std::wstring s = item.substr(b);
+    auto starts = [&](const wchar_t *w) { return !_wcsnicmp(s.c_str(), w, wcslen(w)); };
+    if (starts(L"My Winter Car") || starts(L"[MWC]")) return GAME_MWC;
+    if (starts(L"My Summer Car") || starts(L"[MSC]")) return GAME_MSC;
+    bool mwc = starts(L"MWC"), msc = starts(L"MSC");
+    if ((!mwc && !msc) || (s.size() > 3 && iswalnum(s[3]))) return -1;   // (MWCoop...)
+    size_t o = s.find(mwc ? L"MSC" : L"MWC", 3);   // (« MWC et MSC », « MWC and MSC », « MWC и MSC », « MWC وMSC » : les deux)
+    if (o != std::wstring::npos && o <= 8) return -1;
+    return mwc ? GAME_MWC : GAME_MSC;
+}
+// Note montree sur un jeu : sans les puces de l'autre jeu (JD, 25/10 : « que chacun recoive ce qui le concerne selon le jeu
+// choisi » -- notes du jeu, du lanceur et des outils) ; chaque langue pour elle ; faux s'il n'en reste rien.
+static std::vector<std::wstring> NoteItems(const std::wstring &body);
+static bool NoteForGame(Note &n, int game)
+{
+    auto filt = [&](std::wstring &body) {
+        std::wstring o;
+        for (const std::wstring &it : NoteItems(body)) {
+            int g = BulletGame(it);
+            if (g >= 0 && g != game) continue;
+            o += (o.empty() ? L"" : L"\n") + it;
+        }
+        body = o;
+    };
+    filt(n.fr); filt(n.en); filt(n.ru); filt(n.ar);
+    return !n.en.empty() || !n.fr.empty();
 }
 // Note d'une version de MSC : sans les puces de MWC ; faux s'il n'en reste rien.
 static bool NoteForMsc(Note &n)
@@ -1579,8 +1630,9 @@ static Note MscBetaNote()
 static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
 {
     std::vector<Note> out;
-    for (const Note &n : rel) {
+    for (Note n : rel) {
         if (n.stream == STR_GLOBAL ? IsBridge(n) || (n.pre && !IsReworkedVer(n.ver)) : (n.stream != ModStream() && n.stream != STR_LANCEUR && n.stream != STR_OUTILS) || (n.pre && !NightlyOn())) continue;   // (flux : Nightly seulement en canal Nightly)
+        if (!NoteForGame(n, g_game)) continue;   // (puces de l'autre jeu retirees ; plus rien : la note non plus)
         out.push_back(n);
     }
     std::stable_sort(out.begin(), out.end(), [](const Note &a, const Note &b) { return a.when > b.when; });   // (ISO 8601 : l'ordre du texte est celui du temps)
@@ -4810,6 +4862,7 @@ static void NetTest()
 #include "gfx.inc"
 #include "media.inc"
 #include "saves.inc"
+static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (plus bas ; Nouveautes, ui.inc)
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
