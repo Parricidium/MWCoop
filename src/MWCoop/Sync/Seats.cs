@@ -297,7 +297,7 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             // Liste des voitures changee apres le premier releve (taxi active) : releve tout de suite.
-            if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation) || FilesChanged) { nextScan = now + 30f; Scan(); }
+            if (now >= nextScan || (gen >= 0 && (gen != VehicleSync.Generation || FilesChanged))) { nextScan = now + 30f; Scan(); }
             if (!FindPlayer()) return;
             DriverBeltSend(now);
             DriverBeltHeal(now);

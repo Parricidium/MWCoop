@@ -181,14 +181,22 @@ namespace MWCoop
                 string n = VehicleSync.LocalKey(ci);
                 SeatFiles.CarFile f = rb != null ? SeatFiles.For(n) : null;
                 if (f == null || !done.Add(n)) continue;
-                // (SATSUMA : une place du fichier seulement si la place calculee existe -- siege monte)
-                var had = new HashSet<int>();
-                foreach (Seat s in seats) if (s.Car == n) had.Add(s.Index);
-                bool satsuma = n.StartsWith("SATSUMA");
+                // (SATSUMA : une place du fichier seulement si son siege est monte -- piece « seat passenger(Clone) » pour la place 0,
+                // « seat rear(Clone) » pour les autres, sous la voiture ; un siege pose en vrac dans la voiture n'en est pas l'enfant)
+                bool front = true, rear = true;
+                if (n.StartsWith("SATSUMA"))
+                {
+                    front = rear = false;
+                    foreach (Transform t in rb.GetComponentsInChildren<Transform>())
+                    {
+                        if (t.name == "seat passenger(Clone)") front = true;
+                        else if (t.name == "seat rear(Clone)") rear = true;
+                    }
+                }
                 seats.RemoveAll(s => s.Car == n);
                 foreach (SeatFiles.Place p in f.Places)
                 {
-                    if (satsuma && !had.Contains(p.N) && p.Kind != "ridelle" && p.Kind != "couchette") continue;
+                    if (!(p.N == 0 ? front : rear) && p.Kind != "ridelle" && p.Kind != "couchette") continue;
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = p.N, Head = p.Eyes, Yaw = p.Yaw, ZoneX = p.ZoneX, ZoneZ = p.ZoneZ, MaxX = p.MaxX,
                                          Bed = p.Kind == "ridelle", Stand = p.Kind == "debout" });
                 }
