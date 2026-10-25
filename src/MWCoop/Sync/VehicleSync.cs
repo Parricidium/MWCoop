@@ -408,11 +408,74 @@ namespace MWCoop
             Transform me = Game.PlayerT;
             if (me == null) return null;
             Vector3 fwd = me.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
-            Vector3 pos = me.position + fwd * 4.5f + Vector3.up * 0.5f; float yaw = me.eulerAngles.y;
+            float yaw = me.eulerAngles.y;
+            Vector3 pos = BringSpot(c, me.position, fwd);
             PlaceCar(c, pos, yaw);
+            broughtAt.Add(new Vector4(pos.x, lastHalf, pos.z, Time.realtimeSinceStartup));
             if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@voiturevers").Str(c.Key).Vec(pos).F32(yaw), true);
             return null;
         }
+        // Ou poser la voiture amenee : devant le joueur si la place est dehors et libre, sinon la premiere place libre sous le ciel
+        // sur des cercles autour de lui (6 a 40 m). Avant : 4,5 m devant lui, meme dans la maison ou le sauna (essai de [MSC] du
+        // 25/10, onglet Voitures du F7 : les 9 vehicules dans la chambre, empiles au meme endroit). Comme Vaz.SpotNearMe, mais a la
+        // longueur du vehicule ; une voiture deja amenee la occupe la place : la suivante va a cote.
+        static Vector3 BringSpot(Car c, Vector3 me, Vector3 fwd)
+        {
+            Bounds bd = new Bounds(c.Body.position, Vector3.zero);
+            foreach (Collider col in c.T.GetComponentsInChildren<Collider>())
+                if (col != null && col.enabled && !col.isTrigger) bd.Encapsulate(col.bounds);
+            float half = Mathf.Clamp(Mathf.Max(bd.size.x, bd.size.z) / 2f, 1.5f, 7f);
+            lastHalf = half;
+            Vector3 right = new Vector3(fwd.z, 0f, -fwd.x), p;
+            Vector3 first = me + fwd * (half + 3f);
+            if (BringFree(c, first, me.y, fwd, half, out p)) return p;
+            foreach (float r in new[] { 6f, 10f, 15f, 22f, 30f, 40f })
+                for (int k = 0; k < 12; k++)
+                {
+                    Vector3 o = Quaternion.Euler(0f, k * 30f, 0f) * right * (r + half);
+                    if (BringFree(c, me + o, me.y, fwd, half, out p)) { Log.Info("voitures : " + c.Key + " amenee a " + (r + half).ToString("F0") + " m (devant le joueur : sous un toit ou encombre)"); return p; }
+                }
+            Log.Warn("voitures : " + c.Key + " : aucune place libre dehors a moins de 47 m, posee devant le joueur");
+            return me + fwd * (half + 3f) + Vector3.up * 0.5f;
+        }
+        // Places donnees dans les 10 dernieres secondes (la physique ne voit une voiture deplacee qu'au pas suivant : plusieurs
+        // /voiture a la suite se posaient l'une sur l'autre) : centre, demi-longueur, heure.
+        static readonly List<Vector4> broughtAt = new List<Vector4>();   // (x, demi-longueur, z, heure)
+        static float lastHalf = 2.5f;
+        static bool NearBrought(Vector3 p, float half)
+        {
+            float now = Time.realtimeSinceStartup;
+            broughtAt.RemoveAll(v => now - v.w > 10f);
+            foreach (Vector4 v in broughtAt)
+                if ((new Vector2(v.x - p.x, v.z - p.z)).magnitude < v.y + half + 0.5f) return true;
+            return false;
+        }
+
+        // Sol fixe sous ce point (depuis 2 m au-dessus des pieds), pas de toit au-dessus, rien de fixe ni de lourd le long de la
+        // caisse (spheres de 0,9 m tous les 1,5 m) -- hors la voiture elle-meme, le joueur, les declencheurs et les objets legers.
+        static bool BringFree(Car c, Vector3 at, float feetY, Vector3 fwd, float half, out Vector3 pos)
+        {
+            pos = at;
+            Collider ground = null; float best = float.MaxValue;
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(at.x, feetY + 2f, at.z), Vector3.down, 12f))
+            {
+                if (h.collider.isTrigger || h.collider.attachedRigidbody != null || h.collider.transform.IsChildOf(c.T)) continue;
+                if (h.distance < best) { best = h.distance; ground = h.collider; pos = new Vector3(at.x, h.point.y + 0.8f, at.z); }
+            }
+            if (ground == null || NearBrought(pos, half)) return false;
+            foreach (RaycastHit h in Physics.RaycastAll(pos + Vector3.up * 1.6f, Vector3.up, 30f))
+                if (!h.collider.isTrigger && h.collider.attachedRigidbody == null) return false;   // (un toit)
+            for (float d = -half + 0.9f; d <= half - 0.9f + 0.01f; d += 1.5f)
+                foreach (Collider o in Physics.OverlapSphere(pos + fwd * d + Vector3.up * 0.3f, 0.9f))
+                {
+                    if (o == null || o == ground || o.isTrigger || o is CharacterController) continue;
+                    if (o.transform.IsChildOf(c.T) || o.transform.root.name == "PLAYER") continue;
+                    if (o.attachedRigidbody != null && o.attachedRigidbody.mass < 100f) continue;   // (objets qu'on pousse ; une voiture, elle, gene)
+                    return false;
+                }
+            return true;
+        }
+
         public static void OnBringCar(int who, NetReader r)
         {
             string key = r.Str(); Vector3 pos = r.Vec(); float yaw = r.F32();
@@ -430,7 +493,11 @@ namespace MWCoop
             if (!kin) { b.position = pos; b.rotation = q; }
             foreach (Rigidbody rb in c.T.GetComponentsInChildren<Rigidbody>()) if (rb != b && !rb.isKinematic) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
             ThawParts(c);
-            Log.Info("voitures : " + c.Key + " amenee en " + pos.ToString("F1") + " (triche /voiture)");
+            var up = new System.Text.StringBuilder();
+            foreach (RaycastHit h in Physics.RaycastAll(pos + Vector3.up * 1.6f, Vector3.up, 60f)) up.Append(' ').Append(h.collider.name).Append('@').Append(h.distance.ToString("F1"));
+            var down = new System.Text.StringBuilder();
+            foreach (RaycastHit h in Physics.RaycastAll(pos + Vector3.up * 50f, Vector3.down, 52f)) down.Append(' ').Append(h.collider.name).Append('@').Append((50f - h.distance).ToString("F1"));
+            Log.Info("voitures : " + c.Key + " amenee en " + pos.ToString("F1") + " (triche /voiture)" + (Config.GetInt("Test", "SondeAmener", 0) != 0 ? " ; au-dessus :" + up + " ; de haut :" + down : ""));
         }
 
         static Car Named(string name)

@@ -10,9 +10,9 @@ namespace MWCoop
     public static class Wardrobe
     {
         static readonly System.Collections.Generic.List<Collider> closets = new System.Collections.Generic.List<Collider>();
-        static float scanAt = -1, next; static bool aimed, listed;
+        static float scanAt = -1, next, lastHit = -1f; static bool aimed, listed;
 
-        public static void OnLevelLoaded() { closets.Clear(); aimed = false; listed = false; scanAt = PlayerSync.InGame && !Game.Msc ? Time.realtimeSinceStartup + 10f : -1; }
+        public static void OnLevelLoaded() { closets.Clear(); aimed = false; listed = false; lastHit = -1f; scanAt = PlayerSync.InGame && !Game.Msc ? Time.realtimeSinceStartup + 10f : -1; }
 
         static void Scan()
         {
@@ -71,17 +71,24 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (!listed) { if (now < scanAt) return; Scan(); }
             if (closets.Count == 0) return;
-            if (now < next) return;
-            next = now + 0.1f;
-            Transform cam = PlayerSync.LocalCamera;
-            bool hit = false;
-            if (cam != null && !Menu.Open && !Menu.ChatOpen && Config.GetInt("Coop", "Armoire", 1) != 0)
+            // (Menor, 25/10 : « le bouton TENUE clignote, impossible de cliquer, ca ne marche qu'en insistant ». La touche n'etait lue
+            // qu'au releve, toutes les 0,1 s -- un appui ne dure qu'une image : 1 sur 6 passait ; et l'invite s'eteignait au moindre
+            // releve manque -- rayon de 2,2 m, a la limite ou avec le balancement de la tete. Touche lue a chaque image, rayon de
+            // 2,6 m, invite gardee 0,3 s apres le dernier releve qui touche, et remise si un autre l'a effacee.)
+            bool on = Config.GetInt("Coop", "Armoire", 1) != 0 && !Menu.Open && !Menu.ChatOpen;
+            if (now >= next)
             {
-                foreach (RaycastHit h in Physics.RaycastAll(cam.position, cam.forward, 2.2f))
-                    if (closets.Contains(h.collider)) { hit = true; break; }
-                if (Config.GetInt("Test", "ArmoireEssai", 0) == 2 && Time.timeSinceLevelLoad > 30f) hit = true;   // (essais : comme visee, ou que l'on soit)
+                next = now + 0.1f;
+                Transform cam = PlayerSync.LocalCamera;
+                if (cam != null && on)
+                {
+                    foreach (RaycastHit h in Physics.RaycastAll(cam.position, cam.forward, 2.6f))
+                        if (closets.Contains(h.collider)) { lastHit = now; break; }
+                    if (Config.GetInt("Test", "ArmoireEssai", 0) == 2 && Time.timeSinceLevelLoad > 30f) lastHit = now;   // (essais : comme visee, ou que l'on soit)
+                }
             }
-            if (hit != aimed)
+            bool hit = on && now - lastHit < 0.3f;
+            if (hit != aimed || (hit && !Game.GlobalBool("GUIuse")))
             {
                 aimed = hit;
                 Game.SetGlobalBool("GUIuse", hit);
@@ -89,7 +96,7 @@ namespace MWCoop
             }
             if (hit && (Input.GetKeyDown(Keys.Use) || Config.GetInt("Test", "ArmoireEssai", 0) != 0))
             {
-                aimed = false; Game.SetGlobalBool("GUIuse", false); Game.SetGlobal("GUIinteraction", "");
+                aimed = false; lastHit = -1f; Game.SetGlobalBool("GUIuse", false); Game.SetGlobal("GUIinteraction", "");
                 Menu.Show(Menu.TabLook);
                 Log.Info("armoire : menu Personnage ouvert");
             }
