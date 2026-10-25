@@ -817,6 +817,22 @@ namespace MWCoop
             // ([Test] SondeBoite=1 : etat de la boite de TestVoiture chaque seconde, quel que soit l'essai)
             if (Config.GetInt("Test", "SondeBoite", 0) != 0 && mode != "mscreprise" && t > 20f && Time.realtimeSinceStartup >= repriseProbeAt)
             { repriseProbeAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : boite t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
+            // ([Test] Autotest=trichesonglets : onglets du F7 captures, comme sur MWC ; Autotest=mscvoitures : /voiture pour chaque voiture
+            // de l'onglet Voitures de MSC, une toutes les 6 s a partir de 30 s -- resultat et distance au joueur, capture voiture-<nom>)
+            if (mode == "trichesonglets") { Cheats.Test(mode, t); return; }
+            if (mode == "mscvoitures")
+            {
+                string[] cars = { "satsuma", "hayosiko", "ferndale", "ruscko", "kekmet", "gifu", "jonnez", "flatbed", "boat" };
+                int i = (int)((t - 30f) / 6f);
+                if (t > 30f && i < cars.Length && i >= step)
+                {
+                    step = i + 1;
+                    string r = Cheats.Command("/voiture " + cars[i]) ?? "ok";
+                    Log.Info("autotest : mscvoitures, " + cars[i] + " -> " + r);
+                    Autotest.CaptureSoon("voiture-" + cars[i], 3f);
+                }
+                return;
+            }
             if (mode == "mscposte") { FleetariMsc.Test(mode, t); return; }   // (commande par la poste partagee, Kamixak et Mikol 25/10)
             if (mode == "mscreprise") { MscReprise(t); return; }   // (Satsuma qui roule seule chez le second conducteur, 25/10)
             if (mode == "mscsauve") { SaveBatchMsc.Test(t); return; }   // (sauvegarde en jeu groupee contre une par une, gel de l'hote 24/10)
