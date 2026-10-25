@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -62,6 +62,8 @@ namespace MWCoop
             points.Add(new Point { Path = "REPAIRSHOP/Order", Fsm = "Data", State = "Reset job", Make = () => new Act { Run = OnLocalWorkDone, Send = true } });
             points.Add(new Point { Path = "STORE/LOD/ActivateStore/PostOffice/PostOrderBuy", Fsm = "Use", State = "State 3", Make = () => new Act { Run = () => OnLocalPost(false), Send = true } });
             points.Add(new Point { Path = "STORE/LOD/ActivateStore/PostOffice/PostOrderBuyComputer", Fsm = "Use", State = "State 3", Make = () => new Act { Run = () => OnLocalPost(true), Send = true } });
+            points.Add(new Point { Path = "STORE/LOD/Post Box/OrderTrigger", Fsm = "Open", State = "Car parts", Make = () => new Act { Run = () => OnLocalPostBox(false), Send = true } });
+            points.Add(new Point { Path = "STORE/LOD/Post Box/OrderTrigger", Fsm = "Open", State = "Computer", Make = () => new Act { Run = () => OnLocalPostBox(true), Send = true } });
         }
 
         class Act : ModHook
@@ -330,7 +332,149 @@ namespace MWCoop
                 done++;
             }
             Hud.Toast(Shop.PlayerName(who) + Lang.T(" a reçu une commande par la poste", " got a mail order"));
-            Log.Info("poste : commande de #" + who + " : " + done + "/" + names.Count + " colis sortis ici");
+            Log.Info("poste : commande de #" + who + " : " + done + "/" + names.Count + " colis sortis ici ; " + FinishOrder(computer));
+        }
+
+        // Commande payee par un autre (Kamixak et Mikol, 25/10) : ici elle restait en cours -- minuteur de livraison sur 'Pay',
+        // PhoneLogic.OrderReady vrai (Teimo rappelait de venir payer), OrderList.Wait vrai (le bouton du catalogue refusait toute
+        // nouvelle commande et cachait l'enveloppe). Finie comme le jeu : minuteur sur 'Pay' -> Paid (il passe a 'Fetch product',
+        // colis deja sortis, puis 'Reset purchase') ; sinon remise a zero faite a la main, comme 'Reset purchase'.
+        static string FinishOrder(bool computer)
+        {
+            string root = computer ? "Sheets/OrderComputer" : "Sheets/OrderList";
+            PlayMakerFSM phone = Game.FindFsm("YARD/Building/LIVINGROOM/Telephone/Logic/PhoneLogic", "Ring");
+            FsmBool ready = phone != null ? phone.FsmVariables.FindFsmBool("OrderReady") : null;
+            if (ready != null) ready.Value = false;
+            GameObject buy = Game.FindAny(computer ? "STORE/LOD/ActivateStore/PostOffice/PostOrderBuyComputer" : "STORE/LOD/ActivateStore/PostOffice/PostOrderBuy");
+            if (buy != null && buy.activeSelf) buy.SetActive(false);
+            PlayMakerFSM data = Game.FindFsm(root, "Data"), timer = Game.FindFsm(root + "/Timer", "Delivery");
+            if (data == null) return "pas de " + root;
+            if (timer != null && timer.gameObject.activeInHierarchy && timer.ActiveStateName == "Pay")
+            {
+                SetBool(data, "Paid", true);
+                return "commande finie par son minuteur (Paid)";
+            }
+            ClearList(data.gameObject, "Delivering");
+            SetBool(data, "Wait", false); SetBool(data, "Activated", false); SetBool(data, "Paid", false);
+            FsmFloat tc = data.FsmVariables.FindFsmFloat("TimeCurrent"); if (tc != null) tc.Value = 0f;
+            FsmFloat pt = data.FsmVariables.FindFsmFloat("PriceTotal"); if (pt != null) pt.Value = 0f;
+            if (timer != null && timer.gameObject.activeSelf) timer.gameObject.SetActive(false);
+            return "commande remise a zero (minuteur " + (timer != null ? timer.ActiveStateName : "?") + ")";
+        }
+        static void SetBool(PlayMakerFSM f, string n, bool v) { FsmBool b = f.FsmVariables.FindFsmBool(n); if (b != null) b.Value = v; }
+        static PlayMakerArrayListProxy ListOf(GameObject go, string reference)
+        {
+            foreach (PlayMakerArrayListProxy px in go.GetComponents<PlayMakerArrayListProxy>()) if (px.referenceName == reference && px.arrayList != null) return px;
+            return null;
+        }
+        static void ClearList(GameObject go, string reference) { PlayMakerArrayListProxy px = ListOf(go, reference); if (px != null) for (int i = 0; i < px.arrayList.Count; i++) px.arrayList[i] = ""; }
+
+        // Enveloppe du catalogue postee a la boite du magasin (STORE/LOD/Post Box/OrderTrigger 'Car parts' / 'Computer') : chez
+        // celui qui la poste seulement (le minuteur de livraison, puis l'appel de Teimo et le guichet, ne tournaient que chez lui ;
+        // chez l'hote rien, chez les autres la commande refusee ensuite). La liste du bon (Order, entrees vides comprises : le jeu la
+        // lit par rang) part a tous ; chacun la copie dans Delivering et lance son minuteur, comme 'Copy order list'.
+        static void OnLocalPostBox(bool computer)
+        {
+            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@postbox").Bool(computer);
+            int n = 0;
+            if (!computer)
+            {
+                GameObject ol = Game.FindAny("Sheets/OrderList");
+                PlayMakerArrayListProxy px = ol != null ? ListOf(ol, "Order") : null;
+                PlayMakerFSM data = ol != null ? Game.FsmOn(ol, "Data") : null;
+                FsmFloat pt = data != null ? data.FsmVariables.FindFsmFloat("PriceTotal") : null;
+                w.F32(pt != null ? pt.Value : 0f);
+                n = px != null ? px.arrayList.Count : 0;
+                w.U8(n);
+                for (int i = 0; i < n; i++) w.Str(px.arrayList[i] as string ?? "");
+            }
+            Session.SendAll(w, true);
+            Log.Info("poste : enveloppe " + (computer ? "de l'ordinateur" : "du catalogue (" + n + " lignes)") + " postee ici, envoyee aux autres");
+        }
+
+        public static void OnPostBox(int who, NetReader r)
+        {
+            bool computer = r.Bool();
+            string root = computer ? "Sheets/OrderComputer" : "Sheets/OrderList";
+            GameObject ol = Game.FindAny(root);
+            PlayMakerFSM data = ol != null ? Game.FsmOn(ol, "Data") : null;
+            var items = new List<string>();
+            float price = 0f;
+            if (!computer) { price = r.F32(); for (int i = 0, n = r.U8(); i < n; i++) items.Add(r.Str()); }
+            if (data == null) { Log.Warn("poste : enveloppe de #" + who + " : " + root + " introuvable"); return; }
+            FsmBool wait = data.FsmVariables.FindFsmBool("Wait");
+            if (wait != null && wait.Value) Log.Warn("poste : enveloppe de #" + who + " alors qu'une commande est deja en route ici : remplacee");
+            if (!computer)
+            {
+                foreach (string reference in new[] { "Order", "Delivering" })
+                {
+                    PlayMakerArrayListProxy px = ListOf(ol, reference);
+                    if (px == null) continue;
+                    for (int i = 0; i < items.Count; i++) { if (i < px.arrayList.Count) px.arrayList[i] = items[i]; else px.arrayList.Add(items[i]); }
+                }
+                FsmFloat pt = data.FsmVariables.FindFsmFloat("PriceTotal"); if (pt != null) pt.Value = price;
+            }
+            // (enveloppe : postee, donc rangee, comme 'Car parts' -- la sienne n'existait que chez lui)
+            Transform env = ol.transform.root.Find(computer ? "envelope(computer)" : "envelope(xxxxx)");
+            GameObject envGo = env != null ? env.gameObject : GameObject.Find(computer ? "envelope(computer)" : "envelope(xxxxx)");
+            if (envGo != null && envGo.activeSelf) envGo.SetActive(false);
+            SetBool(data, "Activated", false);
+            FsmFloat tc = data.FsmVariables.FindFsmFloat("TimeCurrent"); if (tc != null) tc.Value = 0f;
+            Transform tm = ol.transform.Find("Timer");
+            if (tm != null) { if (tm.gameObject.activeSelf) tm.gameObject.SetActive(false); tm.gameObject.SetActive(true); }
+            int lines = 0; foreach (string s in items) if (!string.IsNullOrEmpty(s)) lines++;
+            Hud.Toast(Shop.PlayerName(who) + Lang.T(" a posté une commande", " posted an order"));
+            Log.Info("poste : enveloppe de #" + who + " (" + (computer ? "ordinateur" : lines + " pieces, " + price.ToString("F0") + " mk") + ") : livraison lancee ici" + (tm != null ? "" : " (minuteur introuvable)"));
+        }
+
+        // [Test] Autotest=mscposte (2 joueurs ; Kamixak et Mikol 25/10) : chacun avance son minuteur de livraison a 5 s de l'arrivee ;
+        // l'invite (Triche=lieu magasin) remplit le bon avec les 2 premiers colis de STORE/Boxes et passe la boite du magasin a
+        // 'Car parts' a 45 s, paie au guichet ('State 3') a 75 s ; chacun note l'etat de la commande toutes les 5 s de 40 a 110 s.
+        static int posteStep; static float posteLog;
+        public static void Test(string mode, float t)
+        {
+            if (mode != "mscposte") return;
+            PlayMakerFSM timer = Game.FindFsm("Sheets/OrderList/Timer", "Delivery");
+            FsmFloat cur = timer != null ? timer.FsmVariables.FindFsmFloat("Current") : null;
+            if (timer != null && timer.gameObject.activeInHierarchy && timer.ActiveStateName == "State 1" && cur != null && cur.Value < 4990f) { cur.Value = 4995f; Log.Info("autotest : poste, minuteur avance a 4995"); }
+            if (!Session.IsHost && t > 32f && posteStep == 0) { posteStep = 10; Log.Info("autotest : poste, au magasin -> " + (Cheats.Command("lieu magasin") ?? "ok")); }
+            if (!Session.IsHost && t > 45f && posteStep == 10)
+            {
+                posteStep = 1;
+                GameObject ol = Game.FindAny("Sheets/OrderList"), store = Game.FindAny("STORE");
+                Transform boxes = store != null ? store.transform.Find("Boxes") : null;
+                PlayMakerArrayListProxy px = ol != null ? ListOf(ol, "Order") : null;
+                PlayMakerFSM trig = Game.FindFsm("STORE/LOD/Post Box/OrderTrigger", "Open");
+                if (px == null || boxes == null || boxes.childCount < 2 || trig == null) { Log.Info("autotest : poste, bon ou boite introuvable"); return; }
+                for (int i = 0; i < px.arrayList.Count; i++) px.arrayList[i] = i < 2 ? boxes.GetChild(i).name : "";
+                Log.Info("autotest : poste, bon rempli (" + boxes.GetChild(0).name + ", " + boxes.GetChild(1).name + "), boite " + trig.ActiveStateName + (trig.gameObject.activeInHierarchy ? "" : " (eteinte)"));
+                Game.SetState(trig, "Car parts");
+            }
+            if (!Session.IsHost && t > 75f && posteStep == 1)
+            {
+                posteStep = 2;
+                PlayMakerFSM buy = Game.FindFsm("STORE/LOD/ActivateStore/PostOffice/PostOrderBuy", "Use");
+                Log.Info("autotest : poste, guichet " + (buy == null ? "introuvable" : buy.ActiveStateName + (buy.gameObject.activeInHierarchy ? "" : " (eteint)")));
+                if (buy != null && buy.gameObject.activeInHierarchy) Game.SetState(buy, "State 3");
+                else
+                {   // (guichet sous le LOD : joueur devant le magasin -- ce que fait 'State 3' : Paid, et l'envoi du crochet)
+                    PlayMakerFSM d = Game.FindFsm("Sheets/OrderList", "Data");
+                    if (d != null) SetBool(d, "Paid", true);
+                    OnLocalPost(false);
+                }
+            }
+            if (t > 40f && t < 170f && t >= posteLog)
+            {
+                posteLog = t + 5f;
+                PlayMakerFSM data = Game.FindFsm("Sheets/OrderList", "Data"), phone = Game.FindFsm("YARD/Building/LIVINGROOM/Telephone/Logic/PhoneLogic", "Ring");
+                System.Func<PlayMakerFSM, string, string> B = (f, n) => { FsmBool b = f != null ? f.FsmVariables.FindFsmBool(n) : null; return b == null ? "?" : b.Value ? "1" : "0"; };
+                GameObject ol = Game.FindAny("Sheets/OrderList");
+                PlayMakerArrayListProxy dl = ol != null ? ListOf(ol, "Delivering") : null;
+                int lines = 0; if (dl != null) foreach (object o in dl.arrayList) if (!string.IsNullOrEmpty(o as string)) lines++;
+                Log.Info("autotest : poste t=" + t.ToString("F0") + " Wait " + B(data, "Wait") + " Activated " + B(data, "Activated") + " Paid " + B(data, "Paid") + " Delivering " + lines
+                         + " ; minuteur " + (timer == null ? "?" : timer.gameObject.activeInHierarchy ? timer.ActiveStateName + " " + (cur != null ? cur.Value.ToString("F0") : "?") : "eteint")
+                         + " ; OrderReady " + B(phone, "OrderReady"));
+            }
         }
 
         // Essais : commande de travaux (reglage du parallelisme, fini dans 1 s) envoyee comme le bouton de la brochure.
