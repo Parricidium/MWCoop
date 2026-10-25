@@ -1,0 +1,6 @@
+PLACES 1
+# outil des places (25/10/2026 13:35:39) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture EDM
+conducteur
+corps conducteur 0 0.0369 -0.397

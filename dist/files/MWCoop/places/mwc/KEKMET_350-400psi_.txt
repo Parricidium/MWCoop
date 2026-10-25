@@ -1,0 +1,32 @@
+PLACES 1
+# outil des places (25/10/2026 13:35:01) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture KEKMET(350-400psi)
+conducteur
+place 1 debout -0.28 1.5738 -0.8534 0 0.8 0.8 maxx=1.3
+os 1 arm_left -0.10672 -0.50055 0.11097 -0.85191
+os 1 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 1 pelvis 0.531 0.45317 -0.46589 0.54371
+os 1 shoulder_left 0.36808 -0.27735 0.49438 -0.73701
+os 1 spine_middle -0.00002 0.00057 -0.03236 0.99948
+os 1 spine_upper -0.00356 0.01862 -0.24466 0.96942
+os 1 thig_left -0.02349 -0.65489 -0.75274 0.06283
+os 1 thig_right 0.08177 0.67768 0.7298 0.0381
+place 2 debout 0.2737 1.5738 -0.8534 0 0.8 0.8 maxx=1.3
+os 2 ankle_right 0.02893 -0.05097 -0.67597 0.73459
+os 2 arm_left -0.06067 -0.16757 0.1415 -0.97376
+os 2 arm_right -0.00804 -0.55568 -0.03684 0.83054
+os 2 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 2 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 2 finger_left -0.19899 0.64813 0.23402 0.69682
+os 2 hand_left 0.16778 -0.09556 0.03824 0.98044
+os 2 hand_right -0.85434 0.18136 -0.18078 0.45226
+os 2 knee_left 0.05733 -0.06715 0.4506 0.88835
+os 2 knee_right 0.14007 -0.19401 0.4003 0.88459
+os 2 pelvis 0.531 0.45317 -0.46589 0.54371
+os 2 shoulder_left -0.02588 -0.42588 0.254 -0.86801
+os 2 shoulder_right 0.46681 -0.26266 -0.41206 0.73709
+os 2 spine_middle -0.00002 0.00057 -0.03236 0.99948
+os 2 spine_upper -0.00356 0.01862 -0.24466 0.96942
+os 2 thig_left 0.08462 -0.75478 -0.64845 0.05163
+os 2 thig_right 0.04817 0.66493 0.74204 -0.07008
