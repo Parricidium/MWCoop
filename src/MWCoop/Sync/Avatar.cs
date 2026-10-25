@@ -1826,8 +1826,11 @@ namespace MWCoop
                 // arriere : pose accroupie de l'avatar a [Test] DeboutPli (0..1, 0,5), les yeux a la place, [Test] DeboutYeux au-dessus des pieds)
                 bool standing = Seats.RemoteSeatStanding(pi.Id);
                 if (standing) seatCrouch = Mathf.Clamp01(Config.GetFloat("Test", "DeboutPli", 0.5f));
+                // (place de l'outil des places : le corps aux yeux de la place, comme dans l'outil -- la camera du joueur assis est ~15 cm
+                // derriere, le bassin rentrait dans le dossier, Bachglotz de JD 25/10 ; puis son decalage, pas les reglages par voiture ci-dessous)
+                SeatFiles.Place sfp = SeatFiles.For(pName, Seats.RemoteSeatIndex(pi.Id));
+                if (sfp != null) pHead = sfp.Eyes;
                 pos = pCar.TransformPoint(pHead) - seatQ * (standing ? new Vector3(0f, Config.GetFloat("Test", "DeboutYeux", 0.85f), 0.05f) : eyesRest);
-                SeatFiles.Place sfp = SeatFiles.For(pName, Seats.RemoteSeatIndex(pi.Id));   // (place de l'outil des places : son decalage, pas les reglages par voiture ci-dessous)
                 if (sfp != null) pos += pCar.TransformDirection(sfp.Body);
                 // Couchette de la GIFU : 67 cm seulement sous le toit, la tete (camera) juste dessous ; assis droit, le corps
                 // s'enfoncait de ~22 cm dans la couchette (retour d'un joueur, 09/10). Assis dessus, voute en avant : la tete

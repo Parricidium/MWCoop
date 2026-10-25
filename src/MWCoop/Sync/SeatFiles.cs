@@ -93,6 +93,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (now < nextCheck) return;
             nextCheck = now + 2f;
+            Probe();
             string dir = Dir, s = "";
             string[] list = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.txt") : new string[0];
             Array.Sort(list, StringComparer.OrdinalIgnoreCase);
@@ -130,7 +131,7 @@ namespace MWCoop
                 {
                     case "PLACES": ok = true; break;
                     case "voiture": f.Car = line.Substring(8).Trim(); break;
-                    case "conducteur": f.Driver.Lines = true; break;
+                    case "conducteur": break;   // (en-tete ecrit par l'outil : le conducteur ne compte que s'il a des lignes os / corps / pose)
                     case "place":
                         if (w.Length < 9) break;
                         var p = new Place { N = int.Parse(w[1], ci), Kind = w[2], Eyes = new Vector3(F(w[3]), F(w[4]), F(w[5])), Yaw = F(w[6]), ZoneX = F(w[7]), ZoneZ = F(w[8]), Lines = true };
@@ -167,6 +168,27 @@ namespace MWCoop
         }
 
         public static void OnLevelLoaded() { stamp = null; nextCheck = 0f; missing.Clear(); }
+
+        // [Test] PlacesSonde=<voiture> : toutes les 2 s, os des avatars dans cette voiture (repere de la voiture) -- a comparer avec
+        // l'outil des places, meme place (tete, mains, genoux, chevilles, bassin)
+        static readonly string[] ProbeBones = { "pelvis", "head", "hand_left", "hand_right", "knee_left", "knee_right", "ankle_left", "ankle_right" };
+        static void Probe()
+        {
+            string car = Config.Get("Test", "PlacesSonde", "");
+            if (car.Length == 0) return;
+            Transform ct = null;
+            for (int i = 0; i < VehicleSync.LocalCount && ct == null; i++) if (VehicleSync.LocalKey(i) != null && VehicleSync.LocalKey(i).StartsWith(car) && VehicleSync.LocalBody(i) != null) ct = VehicleSync.LocalBody(i).transform;
+            if (ct == null) return;
+            foreach (Avatar a in PlayerSync.Avatars)
+            {
+                if (a.Root == null || (a.Root.transform.position - ct.position).sqrMagnitude > 25f) continue;
+                var sb = new System.Text.StringBuilder("places : sonde " + car + " :");
+                foreach (string n in ProbeBones)
+                    foreach (Transform t in a.Root.GetComponentsInChildren<Transform>())
+                        if (t.name == n) { Vector3 l = ct.InverseTransformPoint(t.position); sb.Append(' ').Append(n).Append(' ').Append(l.x.ToString("F3", CultureInfo.InvariantCulture)).Append(',').Append(l.y.ToString("F3", CultureInfo.InvariantCulture)).Append(',').Append(l.z.ToString("F3", CultureInfo.InvariantCulture)); break; }
+                Log.Info(sb.ToString());
+            }
+        }
     }
 
     // Seats : places du fichier a la place de celles calculees (appele a la fin de Scan).
