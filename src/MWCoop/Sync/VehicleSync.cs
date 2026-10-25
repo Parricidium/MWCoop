@@ -1706,6 +1706,58 @@ namespace MWCoop
             return u.Car;
         }
 
+        // My Summer Car : copie redevenue physique (reprise) avec un objet du monde relie a elle par une articulation -- palan
+        // accroche au bloc moteur (WIGA et Ace, 25/10 : l'hote pousse la SATSUMA, moteur au palan ; a la fin de la poussee,
+        // chez l'invite la copie reprend, le palan colle a la voiture pendant la poussee est lache loin de son point
+        // d'attache : 117 puis 754 m/s, ailes, pare-chocs et reservoir arraches, voiture sous le sol une minute). Avant le
+        // premier pas de physique, l'objet est pose ou son articulation le veut (les deux ancrages au meme point) et prend
+        // la vitesse de la voiture. Pas les cordes de remorquage (Tow : leur longueur est voulue).
+        static void AlignExternalJoints(Car c)
+        {
+            if (!Game.Msc || c.T == null || Config.GetInt("Test", "SansAlignementAttaches", 0) != 0) return;
+            int n = 0, anchored = 0;
+            float worst = 0f;
+            Joint[] all = Object.FindObjectsOfType<Joint>();
+            // Bloc moteur visse et encore au palan : le jeu le range sous le palan et lui ajoute une articulation fixe reliee au
+            // MONDE (Hoist::Hook 'State 1', connectedBody vide) -- ancree la ou il etait. Voiture poussee depuis (copie deplacee
+            // par l'autre joueur) : a la reprise, cette ancre la ramenait d'un coup en arriere. Ancre remise a la pose actuelle.
+            var linked = new HashSet<Rigidbody>();
+            foreach (Joint j in all)
+                if (j != null && j.connectedBody != null && j.connectedBody.transform.IsChildOf(c.T) && j.GetComponent<Rigidbody>() != null) linked.Add(j.GetComponent<Rigidbody>());
+            foreach (Joint j in all)
+            {
+                if (j == null || j.connectedBody != null) continue;
+                Rigidbody a = j.GetComponent<Rigidbody>();
+                if (a == null || !(a.transform.IsChildOf(c.T) || linked.Contains(a))) continue;
+                Vector3 now = j.transform.TransformPoint(j.anchor);
+                float off = (now - j.connectedAnchor).magnitude;
+                if (!Finite(off) || off < 0.02f) continue;
+                j.autoConfigureConnectedAnchor = false;
+                j.connectedAnchor = now;
+                if (anchored++ < 3) Log.Info("voiture " + c.Key + " : " + a.name + " ancre au monde (" + j.GetType().Name + ") remise a sa pose, ecart " + off.ToString("F2") + " m");
+            }
+            foreach (Joint j in all)
+            {
+                if (j == null || j.connectedBody == null || Tow.IsRope(j)) continue;
+                Rigidbody a = j.GetComponent<Rigidbody>(), b = j.connectedBody;
+                if (a == null) continue;
+                bool aIn = a.transform.IsChildOf(c.T), bIn = b.transform.IsChildOf(c.T);
+                if (aIn == bIn) continue;
+                Vector3 wa = j.transform.TransformPoint(j.anchor), wb = b.transform.TransformPoint(j.connectedAnchor);
+                Rigidbody ext = aIn ? b : a;
+                if (CarOf(ext.transform) != null || ext.transform.root.name == "PLAYER") continue;   // (remorque attelee : elle a sa propre pose ; la main du joueur)
+                Vector3 d = aIn ? wa - wb : wb - wa;
+                if (!Finite(d.x) || !Finite(d.y) || !Finite(d.z) || d.sqrMagnitude < 0.0004f || d.sqrMagnitude > 400f) continue;
+                ext.transform.position += d;
+                ext.position = ext.transform.position;
+                if (!ext.isKinematic) { ext.velocity = c.Vel; ext.angularVelocity = Vector3.zero; }
+                worst = Mathf.Max(worst, d.magnitude);
+                n++;
+                if (n <= 3) Log.Info("voiture " + c.Key + " : " + ext.name + " relie a la voiture (" + j.GetType().Name + ") pose a son attache, ecart " + d.magnitude.ToString("F2") + " m");
+            }
+            if (n > 3) Log.Info("voiture " + c.Key + " : " + n + " objets relies poses a leur attache (ecart au plus " + worst.ToString("F2") + " m)");
+        }
+
         // Voiture reliee a l'objet par une articulation (pas une corde de Tow), dans un sens ou dans l'autre.
         static Car JointCar(Rigidbody item, Vector3 at)
         {
@@ -1818,6 +1870,7 @@ namespace MWCoop
                 float now0 = Time.realtimeSinceStartup;
                 if (c.JointsWas != null) { c.JointsLater = c.JointsWas; c.JointsWas = null; }
                 ThawParts(c);
+                AlignExternalJoints(c);
                 // (roues et transmission verifiees avant le premier pas de physique : des amortissements NaN figes pendant la copie
                 // faisaient partir la voiture en vrille des la reprise, 21/10)
                 if (c.Dt != null) { int nf = SanFields(c); if (nf > 0) Log.Warn("voiture " + c.Key + " reprise : " + nf + " valeur(s) non finie(s) des roues ou de la transmission corrigee(s) avant la physique"); }
@@ -3279,6 +3332,7 @@ namespace MWCoop
                 t.rotation = rq;
                 c.Body.velocity = vel;
                 c.Body.angularVelocity = ang;
+                AlignExternalJoints(c);   // (bloc moteur au palan : son ancre au monde suit la voiture recalee)
                 Log.Info("voiture " + c.Key + " recalee sur " + (who == 0 ? "l'hote" : "#" + who) + " (ecart " + d.magnitude.ToString("F2") + " m, hauteur " + dy.ToString("F2") + " m, cap " + yawD.ToString("F0") + " deg, assiette " + tilt.ToString("F0") + " deg)");
             }
         }

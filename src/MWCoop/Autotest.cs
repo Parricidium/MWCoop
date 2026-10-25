@@ -762,11 +762,59 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt;
+        static float repriseProbeAt, hoistLogAt; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
             float t0 = Config.GetFloat("Test", "RepriseA", 15f);
+            // ([Test] RepriseAncre=<s> : a ce moment, le bloc moteur de la SATSUMA recoit une articulation fixe reliee au monde, comme
+            // le palan quand le bloc est visse dans la voiture (Hoist::Hook 'State 1') ; sa distance a l'ancre notee de t0+6 a t0+14)
+            float ra = Config.GetFloat("Test", "RepriseAncre", 0f);
+            if (ra > 0f)
+            {
+                if (t > ra && blockJ == null)
+                {
+                    GameObject bg = Game.FindAny("SATSUMA(557kg, 248)/Chassis/sub frame(xxxxx)/CarMotorPivot/block(Clone)");
+                    if (bg != null && bg.GetComponent<Rigidbody>() != null) { blockJ = bg.AddComponent<FixedJoint>(); blockJ.breakForce = 62000f; blockJ.breakTorque = 62000f; Log.Info("autotest : reprise, bloc ancre au monde en " + bg.transform.position.ToString("F2")); }
+                    else { blockJ = new FixedJoint(); Log.Info("autotest : reprise, bloc introuvable ou sans corps"); }
+                }
+                if (blockJ != null && blockJ.gameObject != null && t > t0 + 6f && t < t0 + 14f && Time.realtimeSinceStartup >= hoistLogAt)
+                {
+                    hoistLogAt = Time.realtimeSinceStartup + 0.5f;
+                    Rigidbody carB = VehicleSync.Body(car);
+                    Log.Info("autotest : reprise, bloc a " + (blockJ.transform.TransformPoint(blockJ.anchor) - blockJ.connectedAnchor).magnitude.ToString("F2") + " m de son ancre" + (carB != null ? ", voiture " + carB.velocity.magnitude.ToString("F1") + " m/s " + carB.angularVelocity.magnitude.ToString("F1") + " rad/s en " + carB.position.ToString("F1") : ""));
+                }
+            }
+            // ([Test] RepriseAttache=1 : a t0+3, le palan relie a la voiture par une articulation fixe, a 1,5 m de son attache et
+            // cinematique comme colle a la copie ; lache a t0+7,5 ; sa distance a l'attache et la vitesse de la voiture notees)
+            if (Config.GetInt("Test", "RepriseAttache", 0) != 0)
+            {
+                Rigidbody carB = VehicleSync.Body(car);
+                if (t > t0 + 3f && hoistJ == null && carB != null)
+                {
+                    GameObject hg = Game.FindAny("ITEMS/motor hoist(itemx)");
+                    Rigidbody hb = null;
+                    if (hg != null) foreach (Rigidbody r in hg.GetComponentsInChildren<Rigidbody>()) if (r.name == "Hoist") hb = r;
+                    if (hb == null && hg != null) hb = hg.GetComponentInChildren<Rigidbody>();
+                    if (hb != null)
+                    {
+                        hb.isKinematic = true;
+                        Vector3 att = carB.transform.TransformPoint(new Vector3(0f, 0.8f, 1.2f));
+                        hb.transform.position = att + carB.transform.right * 1.5f;
+                        hoistJ = hb.gameObject.AddComponent<FixedJoint>();
+                        hoistJ.autoConfigureConnectedAnchor = false; hoistJ.anchor = Vector3.zero; hoistJ.connectedBody = carB; hoistJ.connectedAnchor = new Vector3(0f, 0.8f, 1.2f);
+                        Log.Info("autotest : reprise, palan " + hb.name + " relie a la voiture, a " + Vector3.Distance(hb.position, att).ToString("F2") + " m de son attache");
+                    }
+                    else Log.Info("autotest : reprise, palan introuvable");
+                }
+                if (hoistJ != null && t > t0 + 7.5f && hoistLet == 0) { hoistLet = 1; Rigidbody hb = hoistJ.GetComponent<Rigidbody>(); hb.isKinematic = false; Log.Info("autotest : reprise, palan lache"); }
+                if (hoistJ != null && carB != null && t > t0 + 6f && t < t0 + 14f && Time.realtimeSinceStartup >= hoistLogAt)
+                {
+                    hoistLogAt = Time.realtimeSinceStartup + 0.5f;
+                    Vector3 att = carB.transform.TransformPoint(hoistJ.connectedAnchor);
+                    Log.Info("autotest : reprise, palan a " + Vector3.Distance(hoistJ.transform.position, att).ToString("F2") + " m de son attache, voiture " + carB.velocity.magnitude.ToString("F1") + " m/s " + carB.angularVelocity.magnitude.ToString("F1") + " rad/s, " + carB.position.ToString("F1"));
+                }
+            }
             if (t > t0 && step == 0) { step = 1; Log.Info("autotest : reprise, portiere -> " + VehicleSync.TestEnter(car, false)); }
             if (t > t0 + 7f && step == 1) { step = 2; Log.Info("autotest : reprise, volant -> " + VehicleSync.TestEnter(car, true)); }
             if (t > t0 + 9f && step == 2) { step = 3; if (Config.GetInt("Test", "RepriseCircuits", 0) != 0) Log.Info("autotest : reprise, " + VehicleSync.TestSystems(car)); else if (Config.GetInt("Test", "RepriseForce", 0) != 0) Log.Info("autotest : reprise, " + VehicleSync.TestRunning(car)); else if (Config.GetInt("Test", "RepriseDemarre", 1) != 0) Log.Info("autotest : reprise, " + VehicleSync.TestKey(car, "ACC on")); }
