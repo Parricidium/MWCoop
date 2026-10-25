@@ -2049,6 +2049,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Light, shadows · in game: F10", L"الضوء، الظلال · داخل اللعبة: F10" },
     { L"The whole Image tab", L"علامة تبويب الصورة كاملة" },
     { L"everything max", L"كل شيء بأقصى حد" },
+    { L"Ice race and CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car.", L"سباق الجليد ومتجر قطع CARDINAL: إضافات صُنعت لـ My Winter Car، غير موجودة في My Summer Car." },
+    { L"The KINO TÄHTI cinema too, in the same place as in My Winter Car: by the road, east of the MAATALOUS silos.", L"وسينما KINO TÄHTI أيضاً، في المكان نفسه كما في My Winter Car: بجانب الطريق، شرق صوامع MAATALOUS." },
     { L"MOD SUPPORT / KNOWN INCOMPATIBILITIES", L"دعم المودّات / حالات عدم التوافق" },
     { L"Remove dents…", L"إزالة الانبعاجات…" },
     { L"Close the game to remove the dents", L"أغلق اللعبة لإزالة الانبعاجات" },

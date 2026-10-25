@@ -794,10 +794,12 @@ static const WikiBlock kW_MscBeta[] = {
             L"Since 1.14: the VAZ-2108 and the add-on cars (F10 > Cars, launcher's Character > Add-ons page), built on the RUSCKO, with their gravel wheels and the rally SATSUMA's handling; the weekend rally with them." },
     { WB_B, L"Depuis 1.14 : la boutique OSUUSKAUPPA s21 et son coin vidéo (caméscope, magnétoscope, télé, montage), le musée de la Corse, les sacs de couchage, les casques et le KARTTURI 2000 sur les spéciales de MSC, au même endroit que dans My Winter Car (Peräjärvi).",
             L"Since 1.14: the OSUUSKAUPPA s21 shop and its video corner (camcorder, VCR, TV, editing), the Museum of Corsica, sleeping bags, helmets and the KARTTURI 2000 on MSC's stages, in the same place as in My Winter Car (Peräjärvi)." },
+    { WB_B, L"Le cinéma KINO TÄHTI aussi, au même endroit que dans My Winter Car : au bord de la route, à l'est des silos MAATALOUS.",
+            L"The KINO TÄHTI cinema too, in the same place as in My Winter Car: by the road, east of the MAATALOUS silos." },
     { WB_H, L"Pas encore", L"Not yet" },
     { WB_B, L"Les prix du rallye et les résultats des dragsters des autres joueurs : pas encore.", L"Rally prizes and the drag race results of the other players: not yet." },
-    { WB_B, L"Course sur glace, cinéma KINO TÄHTI, magasin de pièces CARDINAL : des ajouts faits pour My Winter Car, absents de My Summer Car.",
-            L"Ice race, KINO TÄHTI cinema, CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car." },
+    { WB_B, L"Course sur glace et magasin de pièces CARDINAL : des ajouts faits pour My Winter Car, absents de My Summer Car.",
+            L"Ice race and CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car." },
     { WB_TIP, L"Quelque chose cloche ? Envoie le zip des journaux sur le Discord (#bug-reports) : la BETA avance avec vos retours.",
               L"Something wrong? Send the logs zip on the Discord (#bug-reports): the BETA moves on with your reports." },
     { WB_GO, L"Changer de jeu (MSC ou MWC)", L"Switch game (MSC or MWC)", 1000 + WA_UPDATE },
@@ -969,7 +971,7 @@ static const WikiBlock kW_Kino[] = {   // (cinema KINO TAHTI, 1.10.1 -- JD, 22/1
     { WB_S, L"Pour t'asseoir, place-toi devant un fauteuil et accroupis-toi (C), comme sur une chaise du jeu. Les autres joueurs te voient assis.",
             L"To sit, stand in front of a seat and crouch (C), like on one of the game's chairs. The other players see you seated." },
     { WB_B, L"Il fait 21 °C dans le cinéma : on s'y réchauffe.",
-            L"It's 21 °C inside the cinema: a good place to warm up." },
+            L"It's 21 °C inside the cinema: a good place to warm up.", 0, WG_MWC },
     { WB_H, L"Passer un film",
             L"Showing a film", 0 },
     { WB_S, L"Achète une bobine de film au comptoir du cinéma (49 mk, à côté de la limonade).",
@@ -1091,7 +1093,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
     WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, relief, végétation, lumières, co-op", L"Objects, roads, terrain, plants, lights, co-op", kW_Editor),   // (WA_EDITOR = 33)
     WART(2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34 ; My Summer Car aussi depuis le 24/10)
-    WARTG(WG_MWC, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
+    WARTG(WG_ALL, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
     WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
     WART(2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)
 };

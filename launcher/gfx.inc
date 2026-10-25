@@ -1160,7 +1160,7 @@ static void SetThemePreview(Graphics &g, RectF r, Color sky0, Color sky1, Color 
 // d'abord : kAjoutKeys et kAjoutN (aussi le salon,
 // launcher.cpp : « for (k : kAjoutKeys) », « kAjoutN ») ne parcourent que les kAjoutMsc premiers sur My Summer Car.
 static const char *kAjoutAll[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee", "AjoutVaz", "AjoutKino", "AjoutOsat" };
-static const int kAjoutMsc = 5;
+static const int kAjoutMsc = 6;   // (25/10 : + le cinema)
 static int AjoutCount() { return g_game == GAME_MSC ? kAjoutMsc : (int)(sizeof(kAjoutAll) / sizeof(kAjoutAll[0])); }
 struct AjoutList {
     const char *const *begin() const { return kAjoutAll; }
