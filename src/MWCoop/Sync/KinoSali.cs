@@ -62,7 +62,7 @@ namespace MWCoop
         static int KinoSeatTriggers()
         {
             GameObject src = FindPath("HOMENEW/FurnitureDisable/sofa/CrouchTriggerBasic");
-            if (src == null) foreach (string p in new[] { "HOMENEW/FurnitureDisable/chair/CrouchTriggerBasic", "COTTAGE/LOD/Chair/CrouchTriggerBasic" }) { src = FindPath(p); if (src != null) break; }
+            if (src == null) foreach (string p in new[] { "HOMENEW/FurnitureDisable/chair/CrouchTriggerBasic", "COTTAGE/LOD/Chair/CrouchTriggerBasic", "COTTAGE/LOD/Chair/CrouchTrigger" }) { src = FindPath(p); if (src != null) break; }
             if (src == null) { L("cinema : pas de declencheur de chaise du jeu a copier, fauteuils sans place assise"); return 0; }
             var holder = new GameObject("kino_istuimet");
             holder.transform.SetParent(kino.transform, false);

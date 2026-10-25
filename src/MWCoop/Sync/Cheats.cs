@@ -70,6 +70,8 @@ namespace MWCoop
             new Place { Key = "rykipohja", Alias = "rykipohja", Fr = "Rykipohja", En = "Rykipohja", At = new Vector3(-1333.1f, 1.4f, -664.0f) },
             new Place { Key = "dragsters", Alias = "drag", Fr = "Dragsters", En = "Drag strip", At = new Vector3(-1326.3f, 5.5f, -938.9f) },
             new Place { Key = "rallye", Alias = "rally", Fr = "Rallye", En = "Rally", At = new Vector3(-770.0f, 3.5f, 1273.0f) },
+            // (cinema KINO TAHTI, 25/10 : meme champ que dans My Winter Car)
+            new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f), Need = () => Kauppa.Active && Kauppa.KinoOn },
         };
 
         static bool hostAllows;
@@ -107,12 +109,12 @@ namespace MWCoop
         // My Summer Car (19/10) : ses lieux (PlacesMsc), l'heure du jeu par pas de 2 h (MAP/SUN/Pivot/SUN::Color), la pluie
         // au lieu de la neige.
         static readonly string[] HelpMscFr = {
-            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye",
+            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye, cinema",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous (par pas de 2 h)", "/pluie oui|non : pluie pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (satsuma, hayosiko, ferndale, ruscko, tracteur, camion, moto, remorque)" };
         static readonly string[] HelpMscEn = {
-            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally",
+            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day (2-hour steps)", "/rain on|off: rain for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)" };

@@ -74,6 +74,10 @@ namespace MWCoop
             { "wood_panel20", "wall_paint6" },        // (bordures blanches : peinture blanche)
             { "metal_galvanized", "shelf_flats" },    // (metal brosse des rayonnages)
             { "store_shelfs", "shelf_flats" },
+            // cinema (25/10) : peinture unie a teinter, asphalte de la route ; pas de neige l'ete
+            { "paint_black_matte", "paint 4" },
+            { "mwc_asphalt", "ASPHALT" },
+            { "SNOW", "paint 5" },
         };
         // (et par usage : wood_panel19 de My Summer Car est un bois gris delave -- le perron paraissait blanc au soleil)
         static readonly Dictionary<string, string> MscKeyMats = new Dictionary<string, string> { { "terassi", "wood_panel9" } };

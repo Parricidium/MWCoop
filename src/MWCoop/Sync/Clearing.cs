@@ -327,7 +327,7 @@ namespace MWCoop
             RaycastHit best = new RaycastHit(); bool got = false;
             foreach (RaycastHit h in Physics.RaycastAll(new Vector3(x, 300f, z), Vector3.down, 400f))
                 if (!h.collider.isTrigger && h.collider.GetComponentInParent<Rigidbody>() == null && (!got || h.distance < best.distance)) { best = h; got = true; }
-            return got && System.Array.IndexOf(RoadNames, best.collider.name) >= 0;
+            return got && (System.Array.IndexOf(RoadNames, best.collider.name) >= 0 || Game.Msc && best.collider.name == "4tie");   // (4tie : la route asphaltee de My Summer Car -- allees du cinema, 25/10)
         }
 
         static int Find(int[] p, int i) { while (p[i] != i) { p[i] = p[p[i]]; i = p[i]; } return i; }

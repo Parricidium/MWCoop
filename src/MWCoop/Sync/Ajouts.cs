@@ -25,8 +25,8 @@ namespace MWCoop
         // My Summer Car (19/10) : le drone ; depuis le 24/10 (JD : « une version du musee et du shop avec toutes les
         // fonctionnalites ... au launcher MSC ») aussi les sacs de couchage, la boutique s21 (coin video, KARTTURI, casques) et
         // le musee, au meme endroit (la carte de Perajarvi est la meme), et les voitures (VAZ et addons, sur la Ruscko).
-        // Cinema et magasin de pieces : coupes.
-        const int B_Msc = B_Drone | B_Bags | B_Shop | B_Museum | B_Vaz;
+        // Cinema KINO TAHTI aussi depuis le 25/10 (meme champ au nord de la route, la carte est la meme). Magasin de pieces : coupe.
+        const int B_Msc = B_Drone | B_Bags | B_Shop | B_Museum | B_Vaz | B_Kino;
         public static bool On { get { return Config.GetInt("Coop", "SansAjouts", 0) == 0; } }
         static int LocalBits
         {
