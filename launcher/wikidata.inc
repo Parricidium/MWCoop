@@ -1051,10 +1051,10 @@ static const WikiBlock kW_Voyage[] = {   // (convertisseur de circuits Assetto C
             L"For each one: a 3D preview (overview, arrival point, colliders) and its sheet: name, price, arrival point, applied the next time a save loads." },
     { WB_B, L"Reconvertir (avec d'autres réglages), ouvrir son dossier, ou la supprimer : elle part dans la Corbeille de Windows.",
             L"Reconvert it (with other settings), open its folder, or delete it: it goes to the Windows Recycle Bin." },
-    { WB_TIP, L"En co-op, chaque joueur convertit le même circuit (et le même tracé) depuis son Assetto Corsa : vous arrivez au même endroit et vous vous voyez sur la piste.",
-            L"In co-op, every player converts the same track (and the same layout) from their own Assetto Corsa: you land at the same place and see each other on the track." },
-    { WB_WARN, L"Rien n'est envoyé ni partagé : les circuits viennent de ton Assetto Corsa et restent sur ton PC, l'hôte ne les envoie pas. Version Early : un circuit très lourd peut être lent à charger ; signale-le sur le Discord.",
-            L"Nothing is uploaded or shared: the tracks come from your Assetto Corsa and stay on your PC, the host doesn't send them. Early version: a very heavy track can be slow to load; report it on the Discord." },
+    { WB_TIP, L"En co-op, les circuits convertis de l'hôte partent chez les invités avec ses mods (le salon montre la taille) : vous arrivez au même endroit et vous vous voyez sur la piste.",
+            L"In co-op, the host's converted tracks go to the guests with the host's mods (the lobby shows the size): you land at the same place and see each other on the track." },
+    { WB_WARN, L"Un circuit converti pèse lourd (le Nordschleife : environ 350 Mo) : un invité qui ne l'a pas encore le télécharge à son arrivée. Version Early : un circuit très lourd peut être lent à charger ; signale-le sur le Discord.",
+            L"A converted track is heavy (the Nordschleife: about 350 MB): a guest who doesn't have it yet downloads it on arrival. Early version: a very heavy track can be slow to load; report it on the Discord." },
     { WB_GO, L"Ouvrir les Outils", L"Open Tools", TAB_TOOLS },
 };
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)

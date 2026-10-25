@@ -2063,6 +2063,8 @@ static const wchar_t *const kAr[][2] = {
     { L"1 file · %s", L"ملف واحد · %s" },
     { L"%d files · %s", L"%d ملفات · %s" },
     { L"a place on the M map and in /lieu (v3)", L"مكان على خريطة M وفي /lieu (v3)" },
+    { L"In co-op, the host's converted tracks go to the guests with the host's mods (the lobby shows the size): you land at the same place and see each other on the track.", L"في اللعب الجماعي، تُرسل حلبات المضيف المحوَّلة إلى الضيوف مع تعديلاته (تعرض الردهة الحجم): تصلون إلى المكان نفسه وترون بعضكم على الحلبة." },
+    { L"A converted track is heavy (the Nordschleife: about 350 MB): a guest who doesn't have it yet downloads it on arrival. Early version: a very heavy track can be slow to load; report it on the Discord.", L"الحلبة المحوَّلة ثقيلة (النوردشلايفه: نحو 350 ميغابايت): الضيف الذي لا يملكها بعد ينزّلها عند وصوله. نسخة مبكرة: قد تتأخر حلبة ثقيلة جداً في التحميل؛ أبلغ عن ذلك على Discord." },
     { L"MOD SUPPORT / KNOWN INCOMPATIBILITIES", L"دعم المودّات / حالات عدم التوافق" },
     { L"Remove dents…", L"إزالة الانبعاجات…" },
     { L"Close the game to remove the dents", L"أغلق اللعبة لإزالة الانبعاجات" },

@@ -2061,6 +2061,8 @@ Bedroom and apartment, use key	غرفة النوم والشقة، مفتاح ا�
 1 file · %s	ملف واحد · %s
 %d files · %s	%d ملفات · %s
 a place on the M map and in /lieu (v3)	مكان على خريطة M وفي /lieu (v3)
+In co-op, the host's converted tracks go to the guests with the host's mods (the lobby shows the size): you land at the same place and see each other on the track.	في اللعب الجماعي، تُرسل حلبات المضيف المحوَّلة إلى الضيوف مع تعديلاته (تعرض الردهة الحجم): تصلون إلى المكان نفسه وترون بعضكم على الحلبة.
+A converted track is heavy (the Nordschleife: about 350 MB): a guest who doesn't have it yet downloads it on arrival. Early version: a very heavy track can be slow to load; report it on the Discord.	الحلبة المحوَّلة ثقيلة (النوردشلايفه: نحو 350 ميغابايت): الضيف الذي لا يملكها بعد ينزّلها عند وصوله. نسخة مبكرة: قد تتأخر حلبة ثقيلة جداً في التحميل؛ أبلغ عن ذلك على Discord.
 MOD SUPPORT / KNOWN INCOMPATIBILITIES	دعم المودّات / حالات عدم التوافق
 Remove dents…	إزالة الانبعاجات…
 Close the game to remove the dents	أغلق اللعبة لإزالة الانبعاجات
