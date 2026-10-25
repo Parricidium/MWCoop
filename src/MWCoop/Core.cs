@@ -244,6 +244,7 @@ namespace MWCoop
             new Mod("ecran d'attente", WaitScreen.Update),
             new Mod("autotest", Autotest.Update),
             new Mod("export carte", MapExport.Update),   // (editeur de carte : [Lancement] ExportCarte)
+            new Mod("export places", SeatExport.Update),   // (outil des places de JD : [Test] ExportPlaces)
             new Mod("cartes", MapPacks.Update),          // (cartes de l'editeur : <MWCoop>\cartes\*.mwcmap)
         };
 
@@ -423,7 +424,7 @@ namespace MWCoop
         static readonly System.Collections.Generic.HashSet<string> MscModules = new System.Collections.Generic.HashSet<string>
         {
             "session", "api", "sauvegarde en jeu", "coups de poing", "marqueurs", "vocal", "visage perso", "menu", "mscloader", "lanceur",
-            "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente", "export carte", "cartes",
+            "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente", "export carte", "export places", "cartes",
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
             "voitures", "portieres", "tableaux de bord", "passagers", "sommeil", "difficulte",
