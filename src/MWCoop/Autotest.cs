@@ -758,6 +758,28 @@ namespace MWCoop
             return sb.ToString();
         }
         static int mscGear, mscVaz, mscLieu, mscDouble; static float mscHandsAt;
+
+        // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
+        // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
+        // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
+        static float repriseProbeAt;
+        static void MscReprise(float t)
+        {
+            string car = Config.Get("Test", "TestVoiture", "SATSUMA");
+            float t0 = Config.GetFloat("Test", "RepriseA", 15f);
+            if (t > t0 && step == 0) { step = 1; Log.Info("autotest : reprise, portiere -> " + VehicleSync.TestEnter(car, false)); }
+            if (t > t0 + 7f && step == 1) { step = 2; Log.Info("autotest : reprise, volant -> " + VehicleSync.TestEnter(car, true)); }
+            if (t > t0 + 9f && step == 2) { step = 3; if (Config.GetInt("Test", "RepriseCircuits", 0) != 0) Log.Info("autotest : reprise, " + VehicleSync.TestSystems(car)); else if (Config.GetInt("Test", "RepriseForce", 0) != 0) Log.Info("autotest : reprise, " + VehicleSync.TestRunning(car)); else if (Config.GetInt("Test", "RepriseDemarre", 1) != 0) Log.Info("autotest : reprise, " + VehicleSync.TestKey(car, "ACC on")); }
+            if (t > t0 + 9f + Config.GetFloat("Test", "RepriseCle", 2.5f) && step == 3) { step = 31; Log.Info("autotest : reprise, " + VehicleSync.TestKey(car, "Shut off")); }
+            if (t > t0 + 12f + Config.GetFloat("Test", "RepriseCle", 2.5f) - 2.5f && step == 31) { step = 4; Log.Info("autotest : reprise, " + VehicleSync.TestFirst(car)); }
+            if (t > t0 + 20f && step == 4) { step = 5; Log.Info("autotest : reprise, " + VehicleSync.TestNeutral(car)); }
+            if (t > t0 + 24f && step == 5) { step = 6; if (Config.GetInt("Test", "RepriseSortie", 1) != 0) Log.Info("autotest : reprise, sortie -> " + VehicleSync.TestExit(car)); }
+            if (t > t0 + 6f && t < t0 + 40f && Time.realtimeSinceStartup >= repriseProbeAt)
+            {
+                repriseProbeAt = Time.realtimeSinceStartup + 1f;
+                Log.Info("autotest : reprise t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(car));
+            }
+        }
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -792,6 +814,10 @@ namespace MWCoop
             // (24/10 : KARTTURI de la boutique s21 sur les speciales de My Summer Car -- copilote : notes ; copilote3 : en voiture)
             if (mode == "copilote" || mode == "copilote3" || mode == "copilote4") { Kartturi.Test(mode, t); Kauppa.TestKartturiDrive(mode, t); return; }
             if (mode == "sac") { SleepingBags.Test(mode, t); return; }   // (sacs de couchage : depliage et sommeil -- [Test] SacDormir)
+            // ([Test] SondeBoite=1 : etat de la boite de TestVoiture chaque seconde, quel que soit l'essai)
+            if (Config.GetInt("Test", "SondeBoite", 0) != 0 && mode != "mscreprise" && t > 20f && Time.realtimeSinceStartup >= repriseProbeAt)
+            { repriseProbeAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : boite t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
+            if (mode == "mscreprise") { MscReprise(t); return; }   // (Satsuma qui roule seule chez le second conducteur, 25/10)
             if (mode == "mscsauve") { SaveBatchMsc.Test(t); return; }   // (sauvegarde en jeu groupee contre une par une, gel de l'hote 24/10)
             if (Config.Get("Test", "Triche", "").Length > 0 && t > 30f && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
             if (mode == "cdmsc") { CdMsc(t); return; }

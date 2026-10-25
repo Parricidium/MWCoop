@@ -223,7 +223,9 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!Session.Active || !PlayerSync.InGame) return;
+            // (My Summer Car seulement : sur My Winter Car, la recherche du rallye de MSC coutait 32 a 39 ms toutes les 10 s --
+            // a-coup regulier, journal de Menor 1.15.2, 25/10)
+            if (!Game.Msc || !Session.Active || !PlayerSync.InGame) return;
             Find();
             HookTrophies();
         }

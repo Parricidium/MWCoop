@@ -1693,6 +1693,7 @@ namespace MWCoop
                     bool hot = c.Index == LocalDriving && c.Rpm > 200f && Time.realtimeSinceStartup - c.LastRemote < 2f;
                     c.Dt.rpm = 0; c.Dt.throttle = 0; c.Dt.enabled = c.DtWas;
                     if (hot) HotStart(c);
+                    else if (c.Starter != null && c.Starter.ActiveStateName == c.RunState) StarterSystems(c);   // (laissee tournant depuis longtemps)
                 }
             }
             if (c.Axis != null) { if (on) { c.AxisWas = c.Axis.enabled; c.Axis.enabled = false; } else c.Axis.enabled = c.AxisWas; }
@@ -2185,6 +2186,7 @@ namespace MWCoop
             string to = c.RemoteRunning ? (s.Fsm.GetState("Start engine") != null ? "Start engine" : c.RunState)
                 : s.Fsm.GetState("Stall engine") != null ? "Stall engine" : c.RunState == "Motor running" && s.Fsm.GetState("State 1") != null ? "State 1" : null;
             if (to == null) return;
+            if (to == "Start engine") StarterSystems(c);
             Replay.Depth++;
             try { Game.SetState(s, to); }
             finally { Replay.Depth--; }
@@ -2513,8 +2515,40 @@ namespace MWCoop
             return "NaN " + c.Key + " : " + n + (c.Dt != null ? " (regime " + c.Dt.rpm.ToString("F0") + ", rapport " + c.Dt.gear + ")" : "") + sb;
         }
 
+        // My Summer Car : le demarrage du jeu allume CarSimulation/Engine (embrayage 'Clutch', limiteur, carburant, huile, boite)
+        // dans l'etat "Check clutch" du Starter (ou "Start", la poussee), et "Wait" l'eteint. Un demarreur mene ici directement a
+        // "Start engine" -- copie qui suit le conducteur, reprise moteur tournant -- sautait cet etat : moteur en marche sans
+        // embrayage ni limiteur chez celui qui prenait la voiture en second, qui roulait seule des qu'une vitesse etait passee et
+        // montait a 10 000 tr/min gaz relache (упердок, Yunus, Markos 25/10). Les ActivateGameObject de "Check clutch" sont
+        // rejoues tels que le jeu les fait.
+        static void StarterSystems(Car c)
+        {
+            if (!Game.Msc || c.Starter == null) return;
+            FsmState st = c.Starter.Fsm.GetState("Check clutch");
+            if (st == null) return;
+            int n = 0;
+            foreach (FsmStateAction a in st.Actions)
+            {
+                var ag = a as HutongGames.PlayMaker.Actions.ActivateGameObject;
+                if (ag == null) continue;
+                GameObject go = c.Starter.Fsm.GetOwnerDefaultTarget(ag.gameObject);
+                if (go == null) continue;
+                bool on = ag.activate.Value;
+                if (go.activeSelf == on && !(on && ag.recursive.Value)) continue;
+                if (ag.recursive.Value) SetActiveDeep(go.transform, on); else go.SetActive(on);
+                n++;
+            }
+            if (n > 0 && starterLogs++ < 20) Log.Info("moteur " + c.Key + " : circuits du demarrage allumes comme au contact (" + n + ")");
+        }
+        static void SetActiveDeep(Transform t, bool on)
+        {
+            t.gameObject.SetActive(on);
+            for (int i = 0; i < t.childCount; i++) SetActiveDeep(t.GetChild(i), on);
+        }
+
         static void HotStart(Car c)
         {
+            StarterSystems(c);
             hotCar = c;
             hotRpm = Mathf.Max(c.Rpm, 700f);
             hotAt = Time.realtimeSinceStartup;
@@ -2791,6 +2825,48 @@ namespace MWCoop
             for (int i = 0; i < c.Dt.gearRatios.Length; i++)
                 if (Mathf.Abs(c.Dt.gearRatios[i]) < 0.001f) { c.Dt.gear = i; return "point mort (rapport " + i + ")"; }
             return "pas de point mort";
+        }
+
+        // Essais (Satsuma qui roule seule chez le second conducteur, 25/10) : boite en premiere, demarrage comme une reprise
+        // a chaud, et l'etat de la transmission, de l'embrayage, des commandes et des roues.
+        public static string TestFirst(string name) { Car c = Named(name); if (c == null || c.Dt == null) return "?"; c.Dt.gear = c.Dt.first; return "premiere (rapport " + c.Dt.gear + ")"; }
+        public static string TestStart(string name) { Car c = Named(name); if (c == null || c.Dt == null) return "?"; HotStart(c); return "demarrage"; }
+        public static string TestSystems(string name) { Car c = Named(name); if (c == null) return "?"; StarterSystems(c); return "circuits du demarrage"; }
+        public static string TestRunning(string name) { Car c = Named(name); if (c == null || c.Starter == null) return "?"; Game.SetState(c.Starter, c.RunState); return "demarreur force a " + c.RunState; }
+        // (My Summer Car : la cle de la SATSUMA est l'automate 'UseNew' -- « ACC on » passe seul a « Motor starting » ; « Shut off » relache)
+        public static string TestKey(string name, string state)
+        {
+            Car c = Named(name);
+            if (c == null) return "?";
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                if ((f.FsmName == "UseNew" || f.FsmName == "Use") && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState(state) != null)
+                { Game.SetState(f, state); return "cle " + Recon.Path(f.transform) + " -> " + state + ", demarreur " + (c.Starter != null ? c.Starter.ActiveStateName : "?"); }
+            return "pas de cle";
+        }
+        public static string DriveProbe(string name)
+        {
+            Car c = Named(name);
+            if (c == null || c.Dt == null || c.Body == null) return "?";
+            Drivetrain d = c.Dt; AxisCarController a = c.Axis;
+            var sb = new System.Text.StringBuilder();
+            Transform eng = c.T.Find("CarSimulation/Engine"); Transform clu = eng != null ? eng.Find("Clutch") : null;
+            sb.Append("demarreur ").Append(c.Starter != null ? c.Starter.ActiveStateName : "?").Append(", Engine ").Append(eng == null ? "?" : eng.gameObject.activeInHierarchy ? "actif" : "eteint").Append(", Clutch ").Append(clu == null ? "?" : clu.gameObject.activeInHierarchy ? "actif" : "eteint").Append(" ; dt ").Append(d.enabled ? "on" : "off").Append(" rapport ").Append(d.gear).Append(" (pm ").Append(d.neutral).Append(", 1re ").Append(d.first).Append(", ar ").Append(d.firstReverse)
+              .Append(") ratio ").Append(d.ratio.ToString("F2")).Append(" regime ").Append(d.rpm.ToString("F0")).Append(" gaz ").Append(d.throttle.ToString("F2"))
+              .Append(" embrayage ").Append(d.clutch != null ? d.clutch.GetClutchPosition().ToString("F2") : "?").Append(" auto ").Append(d.autoClutch);
+            if (a != null) sb.Append(" ; axe ").Append(a.enabled ? "on" : "off").Append(" gazIn ").Append(a.throttleInput.ToString("F2")).Append(" freinIn ").Append(a.brakeInput.ToString("F2"))
+                             .Append(" embrIn ").Append(a.clutchInput.ToString("F2")).Append(" frein ").Append(a.brake.ToString("F2")).Append(" gaz ").Append(a.throttle.ToString("F2"));
+            foreach (CarController cc in c.T.GetComponents<CarController>()) if (cc != a) sb.Append(" ; autre ").Append(cc.GetType().Name).Append(cc.enabled ? " on" : " off");
+            sb.Append(" ; avance ").Append(Vector3.Dot(c.Body.velocity, c.Body.transform.forward).ToString("F2")).Append(" m/s, cin ").Append(c.Body.isKinematic).Append(", copie ").Append(c.Kinematic);
+            sb.Append(" ; roues");
+            foreach (Wheel w in c.Wheels) if (w != null) sb.Append(' ').Append(w.name).Append(w.enabled ? "" : "(off)").Append('=').Append(w.angularVelocity.ToString("F1")).Append('/').Append(w.brake.ToString("F1"));
+            // (My Summer Car : la timonerie -- serrage de la timonerie, du levier et de la console GT ; sous 48, le jeu force le rapport 0)
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Gear Linkage")
+                {
+                    sb.Append(" ; timonerie [").Append(f.ActiveStateName).Append(']');
+                    foreach (string v in new[] { "Tightness1", "Tightness2", "Tightness3", "TightnessAdded" }) { var fv = f.FsmVariables.FindFsmFloat(v); if (fv != null) sb.Append(' ').Append(v).Append('=').Append(fv.Value.ToString("F1")); }
+                }
+            return sb.ToString();
         }
 
         // Essais : frein a main du controleur de conduite pose a la main (FreinForce).
