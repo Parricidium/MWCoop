@@ -842,6 +842,7 @@ namespace MWCoop
             if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "portemagasin") { PorteMagasin(t); return; }
             if (mode == "mscmontage") { MscMontage(t); return; }
+            if (mode == "mscremonte") { Parts.TestRemount(t); return; }   // (aile arrachee au montage chez l'hote, WIGA 25/10)
             if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
             if (mode == "mscdrag") { DragMsc.Test(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10)
             if (mode == "msctrophee") { RallyMsc.Test(t); return; }   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)

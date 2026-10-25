@@ -651,7 +651,12 @@ namespace MWCoop
                    || p.Contains("/ButtonsCD/")
                    // (meme famille : les boutons a molette de la radio ordinaire -- radio(Clone)/RadioTuner, RadioVolume : automate Knob dont
                    // « Get scroll » retombe sur « Mouse off 2 » des que la souris n'y est pas ; vidage v.250908-04)
-                   || f.FsmName == "Knob" && f.Fsm != null && f.Fsm.GetState("Get scroll") != null && f.Fsm.GetState("Mouse off 2") != null;
+                   || f.FsmName == "Knob" && f.Fsm != null && f.Fsm.GetState("Get scroll") != null && f.Fsm.GetState("Mouse off 2") != null
+                   // Roues (SATSUMA/FL/AckerFL/wheelFL::Data ...) : adherence d'apres le terrain sous la roue, calculee par chacun ; sauvegardee
+                   // (« Save game » -> « Load game » : SetRotation de FL ; « Initialize » : Wheel.physicMaterial vide 11 s) donc suivie ici --
+                   // rejouee chez l'autre, roue sans matiere et pivot de roue tourne en pleine conduite : sursauts de la voiture, pieces
+                   // pas encore vissees arrachees au montage (aile de WIGA, 25/10 : 161 rejeux de roues en une partie).
+                   || f.FsmName == "Data" && f.Fsm != null && f.Fsm.GetState("Terrain Compare") != null && f.Fsm.GetState("Tire disable") != null;
         }
 
         static bool IgnitionLike(PlayMakerFSM f)

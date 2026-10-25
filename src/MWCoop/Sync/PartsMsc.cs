@@ -482,6 +482,36 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=mscremonte (WIGA 25/10 : aile montee chez l'hote, arrachee 50 ms apres, force 1e9) : le joueur [Test] Monteur
+        // demonte [Test] Piece (Fender_Left) comme le joueur a 40 s, la remonte sur son point ([Test] Point, fin du chemin) a 50 s ;
+        // a 60 s chacun note si elle est montee (les casses sont notees par PartWatch).
+        static int remStep;
+        public static void TestRemount(float t)
+        {
+            string partKey = Config.Get("Test", "Piece", "db:Database/DatabaseBody/Fender_Left"), pointEnd = Config.Get("Test", "Point", "trigger_fender_left");
+            bool me = Session.LocalId == Config.GetInt("Test", "Monteur", 0);
+            if (remStep == 0 && t > 40f)
+            {
+                remStep = 1;
+                GameObject part = MscFindPart(partKey);
+                PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                if (me && rem != null) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); }
+                Log.Info("autotest mscremonte : " + (me ? "demontage de " + partKey + " (" + (rem != null ? "Removal " + rem.ActiveStateName : "introuvable") + ")" : "attente du demontage"));
+            }
+            string pk = null;
+            foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith(pointEnd)) pk = kv.Key;
+            if (remStep == 1 && t > 50f)
+            {
+                remStep = 2;
+                Log.Info("autotest mscremonte : point " + (pk ?? "?") + (me && pk != null ? ", " + MscTestClick(pk, partKey) : ""));
+            }
+            if (remStep == 2 && t > 60f)
+            {
+                remStep = 3;
+                Log.Info("autotest mscremonte : " + (pk != null ? MscTestHolds(pk) : "point introuvable"));
+            }
+        }
+
         public static string MscTestHolds(string pointKey)
         {
             MscPoint p;
