@@ -129,6 +129,22 @@ static std::vector<std::wstring> SplitTab(const std::wstring &l)
     return v;
 }
 
+// Taille d'un dossier et de ses sous-dossiers (0 s'il n'existe pas) ; les jonctions ne sont jamais suivies.
+static unsigned long long MscTreeBytes(const std::wstring &dir)
+{
+    unsigned long long t = 0;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L".." || (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) continue;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) t += MscTreeBytes(dir + L"\\" + n);
+        else t += ((unsigned long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return t;
+}
 static void MscScan()
 {
     g_mscScanT = GetTickCount();
@@ -197,6 +213,23 @@ static void MscScan()
             FindClose(h);
         }
     }
+    // Taille envoyee (colonne « Envoye », total) : la DLL et ce qui part avec elle (modsync.inc, l'offre de l'hote) -- son dossier
+    // Assets\<ID> et ses reglages Config\Mod Settings\<ID> (JD, 25/10 : Voyage affichait 2,1 Mo, son invite en a recu 271 avec
+    // le circuit converti).
+    // (releve toutes les 3 s sur la page : un dossier relu au plus une fois par minute -- des Assets de plusieurs Go)
+    static std::map<std::wstring, std::pair<DWORD, unsigned long long>> treeCache;
+    auto cachedTree = [&](const std::wstring &dir) {
+        auto it = treeCache.find(dir);
+        if (it != treeCache.end() && GetTickCount() - it->second.first < 60000) return it->second.second;
+        unsigned long long t = MscTreeBytes(dir);
+        treeCache[dir] = std::make_pair(GetTickCount(), t);
+        return t;
+    };
+    if (!g_mscDir.empty())
+        for (MscMod &m : list) {
+            std::wstring id = m.id.empty() ? m.name : m.id;
+            if (!id.empty()) m.bytes += cachedTree(g_mscDir + L"Assets\\" + id) + cachedTree(g_mscDir + L"Config\\Mod Settings\\" + id);
+        }
     // recus de l'hote (mods-invite)
     g_mscRecv.clear(); g_mscRecvT = FILETIME();
     std::wstring ld = LocalDir();

@@ -5749,11 +5749,18 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             else if (s == SY_GET) { swprintf_s(b, T(L"%d %% de %s", L"%d%% of %s"), (int)(p1 * 100), SizeText(tot).c_str()); r1r = r2r = b; }
             else r1r = r2r = SizeText(tot);
         } else {
-            if (n) { swprintf_s(b, L" · %d / %d", sp.modsDone, max(n, sp.modsN)); r1 += b; }
+            // (a gauche le nombre de MODS, a droite leurs fichiers -- JD, 25/10 : « Mods · 102 / 102 » pour le seul Voyage, 100
+            // fichiers avec son circuit converti ; on lisait 102 mods)
+            if (n) { swprintf_s(b, L" · %d", n); r1 += b; }
             p1 = sp.modsB ? (float)((double)sp.modsGot / sp.modsB) : s == SY_DONE ? 1.0f : 0.0f;
-            if (s == SY_DONE || sp.modsDone == sp.modsN) r1r = n ? T(L"tous reçus", L"all received") : T(L"aucun", L"none");
-            else if (s == SY_GET && !sp.cur.empty()) { swprintf_s(b, L"%s %d %%", sp.cur.c_str(), sp.curPct); r1r = b; }
-            else { swprintf_s(b, T(L"%d mods · %s", L"%d mods · %s"), n, SizeText(sp.modsB).c_str()); r1r = b; }
+            if (s == SY_DONE || sp.modsDone == sp.modsN) {
+                if (!n) r1r = T(L"aucun", L"none");
+                else if (sp.modsN == 1) r1r = T(L"1 fichier reçu", L"1 file received");
+                else { swprintf_s(b, T(L"%d fichiers reçus", L"%d files received"), sp.modsN); r1r = b; }
+            }
+            else if (s == SY_GET && !sp.cur.empty()) { swprintf_s(b, L"%d / %d · %s %d %%", sp.modsDone, sp.modsN, sp.cur.c_str(), sp.curPct); r1r = b; }
+            else if (sp.modsN == 1) { swprintf_s(b, T(L"1 fichier · %s", L"1 file · %s"), SizeText(sp.modsB).c_str()); r1r = b; }
+            else { swprintf_s(b, T(L"%d fichiers · %s", L"%d files · %s"), sp.modsN, SizeText(sp.modsB).c_str()); r1r = b; }
             if (sp.contB) { r2 += L" · " + SizeText(sp.contB); }
             p2 = sp.contB ? (float)((double)sp.contGot / sp.contB) : s == SY_DONE ? 1.0f : 0.0f;
             std::vector<std::wstring> cl;
