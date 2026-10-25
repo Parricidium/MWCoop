@@ -15,7 +15,7 @@ namespace Voyage
         public override string ID { get { return "Voyage"; } }
         public override string Name { get { return "Voyage"; } }
         public override string Author { get { return "JD"; } }
-        public override string Version { get { return "0.2.1"; } }   // (0.2.0 : My Summer Car aussi, 24/10 ; 0.2.1 : places d'arrivee pour 16 joueurs)
+        public override string Version { get { return "0.2.2"; } }   // (0.2.0 : My Summer Car aussi, 24/10 ; 0.2.1 : places d'arrivee pour 16 joueurs ; 0.2.2 : aerodrome sur la carte M et dans /lieu, 25/10)
         public override string Description { get { return "Agence de voyage, aérodrome et vols vers tes circuits Assetto Corsa convertis (compatible MWCoop)."; } }
         public override Game SupportedGames { get { return Game.MySummerCar_And_MyWinterCar; } }
 
