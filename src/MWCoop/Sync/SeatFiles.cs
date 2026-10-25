@@ -175,7 +175,7 @@ namespace MWCoop
         {
             Check();
             float now = Time.realtimeSinceStartup;
-            if (now >= nextProbe) { nextProbe = now + 2f; Probe(); }
+            if (now >= nextProbe) { nextProbe = now + 2f; Probe(); DumpPoses(); }
             // [Test] PlacesAddon=<dossier> (t16e2...) : l'hote sort cet addon a 15 s (essais des places d'un addon : l'invite s'y assoit
             // avec Autotest=passager, TestVoiture=MWCoop-VAZ-)
             string ad = Config.Get("Test", "PlacesAddon", "");
@@ -186,6 +186,47 @@ namespace MWCoop
                 for (int i = 1; i < VazCar.Models.Length; i++) if (VazCar.Models[i].Folder == ad) id = i;
                 if (ad == "vaz") id = VazCar.ModelVaz;
                 Log.Info("places : addon d'essai " + ad + (id < 0 ? " inconnu" : !VazCar.Has(id) ? " pas installe" : " -> " + Vaz.Request(3, id)));
+            }
+        }
+
+        // [Test] PlacesPoses=<dossier> (avec PlacesSonde=<voiture>) : pose reelle des avatars assis dans cette voiture, pour l'outil (la
+        // moto : bassin sur la selle, pieds aux repose-pieds, mains au guidon ou au porte-bagages, calcules en jeu) -- pose-<voiture>-<place>.json :
+        // racine de l'avatar et chaque noeud (position et rotation locales), repere de la voiture
+        static void DumpPoses()
+        {
+            string dir = Config.Get("Test", "PlacesPoses", ""), car = Config.Get("Test", "PlacesSonde", "");
+            if (dir.Length == 0 || car.Length == 0) return;
+            Transform ct = null; string key = null;
+            for (int i = 0; i < VehicleSync.LocalCount && ct == null; i++)
+                if (VehicleSync.LocalKey(i) != null && VehicleSync.LocalKey(i).StartsWith(car) && VehicleSync.LocalBody(i) != null) { ct = VehicleSync.LocalBody(i).transform; key = Key(VehicleSync.LocalKey(i)); }
+            if (ct == null) return;
+            var ci = CultureInfo.InvariantCulture;
+            Func<float, string> F = x => x.ToString("R", ci);
+            Func<Vector3, string> V = v => "[" + F(v.x) + "," + F(v.y) + "," + F(v.z) + "]";
+            Func<Quaternion, string> Q = q => "[" + F(q.x) + "," + F(q.y) + "," + F(q.z) + "," + F(q.w) + "]";
+            foreach (Avatar a in PlayerSync.Avatars)
+            {
+                if (a.Root == null || a.Player == null || (a.Root.transform.position - ct.position).sqrMagnitude > 25f) continue;
+                int idx = Seats.RemoteSeatIndex(a.Player.Id);
+                string rc = VehicleSync.RemoteCarName(a.Player.Id);
+                string place = idx >= 0 ? idx.ToString(ci) : rc != null && rc.StartsWith(car) ? "c" : null;
+                if (place == null) continue;
+                Transform r = a.Root.transform;
+                var sb = new System.Text.StringBuilder("{\"cle\":\"" + key + "\",\"place\":\"" + place + "\",\"racine\":{\"p\":" + V(ct.InverseTransformPoint(r.position)) + ",\"q\":" + Q(Quaternion.Inverse(ct.rotation) * r.rotation) + "},\"noeuds\":{");
+                var seen = new HashSet<string>(); int n = 0;
+                foreach (Transform t in r.GetComponentsInChildren<Transform>())
+                {
+                    if (t == r || !seen.Add(t.name)) continue;
+                    sb.Append(n++ > 0 ? "," : "").Append('"').Append(t.name.Replace("\"", "")).Append("\":{\"p\":").Append(V(t.localPosition)).Append(",\"q\":").Append(Q(t.localRotation)).Append('}');
+                }
+                sb.Append("}}");
+                try
+                {
+                    Directory.CreateDirectory(dir);
+                    string safe = System.Text.RegularExpressions.Regex.Replace(key, "[^A-Za-z0-9_-]", "_");
+                    File.WriteAllText(Path.Combine(dir, "pose-" + safe + "-" + place + ".json"), sb.ToString());
+                }
+                catch (Exception e) { Log.Warn("places : pose " + key + " " + place + " : " + e.Message); }
             }
         }
 

@@ -731,7 +731,7 @@ namespace MWCoop
                 motoRaise = Vector3.zero;
                 seatFitted = false;
                 bool moto = carName != null && carName.StartsWith("JONNEZ");
-                if (moto) MotoPose(passenger);
+                if (moto) MotoPose(passenger, sf);
                 else if (passenger)
                 {
                     // Bras poses sur les cuisses.
@@ -1066,7 +1066,7 @@ namespace MWCoop
             Log.Info("avatar " + Player.Name + " : sur la Jonnez (gaz " + (motoThrottle != null) + ", embrayage " + (motoClutch != null) + ", kick " + (motoCrank != null) + ", selle " + (motoSeat != null) + ", porte-bagages " + (motoRack != null) + ")");
         }
 
-        void MotoPose(bool rear)
+        void MotoPose(bool rear, SeatFiles.Place file)
         {
             Transform car = vehicleT;
             MotoFind(car);
@@ -1085,9 +1085,9 @@ namespace MWCoop
                 Vector3 d = want - pc;
                 if (d.sqrMagnitude < 2.25f) { motoRaise = car.TransformVector(d); anim.transform.position += motoRaise; }
             }
-            // buste un peu en avant (conducteur), droit (passager)
-            Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "MotoBuste", rear ? 14f : 32f));   // (la pose de voiture est couchee en arriere)
-            Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "MotoBuste2", rear ? 8f : 14f));
+            // buste un peu en avant (conducteur), droit (passager) ; pas sur le dos du fichier de l'outil des places (il est deja la pose voulue)
+            if (file == null || !file.Bones.ContainsKey("spine_middle")) Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "MotoBuste", rear ? 14f : 32f));   // (la pose de voiture est couchee en arriere)
+            if (file == null || !file.Bones.ContainsKey("spine_upper")) Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "MotoBuste2", rear ? 8f : 14f));
             // pieds : repose-pieds au niveau du kick, de part et d'autre de la selle
             Vector3 mid = motoSeat != null ? motoSeat.bounds.center : car.position;
             Vector3 peg = motoCrank != null ? motoCrank.position : mid - car.up * 0.35f;
