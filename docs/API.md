@@ -38,7 +38,7 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 
 | Member | Description |
 |---|---|
-| `const int Version` | API version (2). Raised when members are added. |
+| `const int Version` | API version (3). Raised when members are added. |
 | `const int MaxReliableBytes` | Largest reliable payload: 64 KB (split into packets and rebuilt for you). |
 | `const int MaxUnreliableBytes` | Largest unreliable payload: 1000 bytes (one packet). |
 | `string GameName` | "My Winter Car" or "My Summer Car" (since 1.1.0). |
@@ -59,6 +59,8 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 | `bool ShopAvailable` | **v2.** The CARDINAL VARAOSAT parts shop exists in this game (My Winter Car, add-on on; the host's choice applies to everyone). |
 | `bool AddShopItem(string id, string name, float price, GameObject model, Action<int, bool, Vector3, Quaternion> onBought)` | **v2.** Puts an item of your mod on sale in the parts shop. See below. |
 | `void RemoveShopItem(string id)` | **v2.** Takes it off the shelves. |
+| `void AddMapPlace(string key, string alias, string nameFr, string nameEn, Vector3 at, Vector3 face)` | **v3.** Adds a place of your mod to the M map and to the `/place` cheat (`key` and `alias`: one lower-case word each; `at`: where the player is put, the ground below is found; `face`: a point he looks at). Same key again: replaced. Call it after each game load. |
+| `void RemoveMapPlace(string key)` | **v3.** Removes it. |
 
 Notes:
 

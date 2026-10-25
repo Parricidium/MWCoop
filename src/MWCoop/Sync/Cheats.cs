@@ -28,11 +28,22 @@ namespace MWCoop
                 if (placesFrame == Time.frameCount && placesCache != null) return placesCache;
                 var l = new System.Collections.Generic.List<Place>();
                 foreach (Place p in all) if (p.Need == null || p.Need()) l.Add(p);
+                l.AddRange(modPlaces);   // (lieux des mods : CoopApi.AddMapPlace -- aerodrome de Voyage)
                 placesCache = l.ToArray(); placesFrame = Time.frameCount;
                 return placesCache;
             }
         }
         static Place[] placesCache; static int placesFrame = -1;
+        static readonly System.Collections.Generic.List<Place> modPlaces = new System.Collections.Generic.List<Place>();
+        public static void AddPlace(string key, string alias, string fr, string en, Vector3 at, Vector3 face)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            RemovePlace(key);
+            modPlaces.Add(new Place { Key = key.ToLowerInvariant(), Alias = (alias ?? key).ToLowerInvariant(), Fr = fr ?? key, En = en ?? fr ?? key, At = at, Face = face });
+            placesFrame = -1;
+            Log.Info("triches : lieu de mod « " + key + " » en " + at.ToString("F1"));
+        }
+        public static void RemovePlace(string key) { if (key != null && modPlaces.RemoveAll(p => p.Key == key.ToLowerInvariant()) > 0) placesFrame = -1; }
         static readonly Place[] PlacesMwc = {
             new Place { Key = "appartement", Alias = "apartment", Fr = "Appartement", En = "Apartment", At = new Vector3(-1285.5f, 1.2f, 1076.4f) },
             new Place { Key = "maison", Alias = "home", Fr = "Maison des parents", En = "Parents' house", At = new Vector3(-6.2f, 1.0f, 6.6f) },

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
@@ -17,7 +17,7 @@ namespace MWCoop
     public static class CoopApi
     {
         /// <summary>API version: raised when something is added. Check it if you use a newer member.</summary>
-        public const int Version = 2;
+        public const int Version = 3;
 
         /// <summary>Largest payload of <see cref="Send"/> (reliable; it is split in packets and rebuilt on the other side).</summary>
         public const int MaxReliableBytes = 64 * 1024;
@@ -125,6 +125,15 @@ namespace MWCoop
 
         /// <summary>Takes an item added with <see cref="AddShopItem"/> off the shelves.</summary>
         public static void RemoveShopItem(string id) { Kauppa.OsatRemoveModItem(id); }
+
+        /// <summary>v3. Adds a place of your mod to the M map and to the /place cheat (same key again: replaced). <paramref name="key"/>
+        /// and <paramref name="alias"/>: one lower-case word each (/place key or /place alias) ; <paramref name="at"/>: where the player
+        /// is put (on the ground) ; <paramref name="face"/>: a point he looks at. Call it after each game load (places are kept until
+        /// you remove them).</summary>
+        public static void AddMapPlace(string key, string alias, string nameFr, string nameEn, Vector3 at, Vector3 face) { Cheats.AddPlace(key, alias, nameFr, nameEn, at, face); }
+
+        /// <summary>v3. Removes a place added with <see cref="AddMapPlace"/>.</summary>
+        public static void RemoveMapPlace(string key) { Cheats.RemovePlace(key); }
 
         // ------------------------------------------------------------ dessous (MWCoop)
         static class To { public const int All = 255; }

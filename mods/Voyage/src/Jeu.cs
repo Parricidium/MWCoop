@@ -236,6 +236,14 @@ namespace Voyage
             catch (Exception e) { Journal.Info("ecoute : " + e.Message); }
         }
 
+        // lieu sur la carte M et dans /lieu de MWCoop (API 3 : AddMapPlace ; rien avec un MWCoop plus ancien ou absent)
+        public static void MapPlace(string key, string alias, string fr, string en, Vector3 at, Vector3 face)
+        {
+            if (!Present) return;
+            try { MethodInfo m = api.GetMethod("AddMapPlace"); if (m != null) m.Invoke(null, new object[] { key, alias, fr, en, at, face }); else Journal.Info("lieu sur la carte : MWCoop trop ancien (API < 3)"); }
+            catch (Exception e) { Journal.Info("lieu sur la carte : " + e.Message); }
+        }
+
         // corps de PNJ de MWCoop (le meme que le vendeur de son epicerie) ; null sans MWCoop
         public static GameObject Npc(string name)
         {

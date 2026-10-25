@@ -30,6 +30,9 @@ namespace Voyage
             // (chaque lieu a part : une erreur dans l'un ne prive pas des autres)
             try { Agency(); } catch (System.Exception e) { Journal.Info("agence : " + e); }
             try { if (Jeu.Msc) AirfieldMsc(); else Airfield(); } catch (System.Exception e) { Journal.Info("aerodrome : " + e); }
+            // l'aerodrome sur la carte M et dans /lieu de MWCoop (devant le guichet ; demande de [Directives], 25/10)
+            if (Aerodrome != null && AirfieldArrival != Vector3.zero)
+                Coop.MapPlace("aerodrome", "airfield", "Aérodrome (Voyage)", "Airfield (Voyage)", AirfieldArrival + Vector3.up, AirfieldArrival + Quaternion.Euler(0f, AirfieldArrivalYaw, 0f) * Vector3.forward * 5f);
         }
 
         static Spot AddSpot(Kind k, Transform parent, Vector3 local, Vector3 size, Destination d = null, float reach = Jeu.Reach)
