@@ -130,9 +130,12 @@ namespace MWCoop
         {
             Bounds b = new Bounds(Vector3.zero, Vector3.zero);
             bool any = false;
+            Transform player = Game.PlayerT;   // (au volant, le joueur du jeu est rattache a la voiture : ses mains, ce qu'il tient -- pas le vehicule ;
+            string far = null; float farD = 0f;  //  boite de 8,6 x 6,7 m dans une VAZ, camera F5 tres haute, retour de квазарик 25/10)
             foreach (MeshFilter mf in car.GetComponentsInChildren<MeshFilter>())
             {
                 if (mf.sharedMesh == null) continue;
+                if (player != null && mf.transform.IsChildOf(player)) continue;
                 Renderer r = mf.GetComponent<Renderer>();
                 if (r == null || !r.enabled) continue;
                 Bounds lb = mf.sharedMesh.bounds;
@@ -140,11 +143,12 @@ namespace MWCoop
                 {
                     Vector3 p = car.InverseTransformPoint(mf.transform.TransformPoint(new Vector3((i & 1) != 0 ? lb.max.x : lb.min.x, (i & 2) != 0 ? lb.max.y : lb.min.y, (i & 4) != 0 ? lb.max.z : lb.min.z)));
                     if (p.sqrMagnitude > 400f) continue;   // (piece eloignee : pas le vehicule)
+                    if (p.sqrMagnitude > farD) { farD = p.sqrMagnitude; far = Recon.Path(mf.transform); }
                     if (!any) { b = new Bounds(p, Vector3.zero); any = true; } else b.Encapsulate(p);
                 }
             }
             if (!any) b = new Bounds(Vector3.up * 0.8f, new Vector3(1.8f, 1.5f, 4.2f));
-            Log.Info("vue : vehicule " + car.name + ", boite " + b.size.ToString("F1") + " centre " + b.center.ToString("F1"));
+            Log.Info("vue : vehicule " + car.name + ", boite " + b.size.ToString("F1") + " centre " + b.center.ToString("F1") + (far != null ? ", piece la plus loin " + far + " a " + Mathf.Sqrt(farD).ToString("F1") + " m" : ""));
             return b;
         }
 

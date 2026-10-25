@@ -209,7 +209,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
-            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f; stageStep = stageIdx = 0; stageLog = stageEnd = 0f;
+            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f; gearStep = 0; gearLog = 0f; stageStep = stageIdx = 0; stageLog = stageEnd = 0f;
             if (!hooked)
             {
                 hooked = true;
@@ -713,6 +713,81 @@ namespace MWCoop
             }
         }
 
+        // [Test] VazRapport=1 (avec Autotest=vaz) : au volant de sa VAZ a 33 s, puis toutes les 3 s un rapport engage, et ce que lit
+        // l'indicateur de vitesse du jeu (GUIgear, automate GearIndicator de la copie et sa cible) ; et les rendus loin de la voiture
+        // (boite de la vue F5). Retour de квазарик 25/10 : « N » dans la VAZ sur MSC, camera F5 tres haute.
+        static float gearLog; static int gearStep;
+        static void ProbeGear(float t)
+        {
+            Transform c = CarOf(Me);
+            if (c == null) return;
+            if (gearStep == 0 && t > 33f)
+            {
+                gearStep = 1;
+                // au volant comme VehicleSync.TestEnter (en solo, la copie n'est pas dans VehicleSync) : a cote de la zone, puis « Check seat »
+                PlayMakerFSM drive = null;
+                foreach (PlayMakerFSM f in c.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { drive = f; break; }
+                GameObject pl = Game.PlayerGo;
+                if (drive != null && pl != null)
+                {
+                    var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                    pl.transform.position = drive.transform.position + Vector3.up * 0.5f;
+                    if (cc != null) cc.enabled = true;
+                }
+                Log.Info("autotest vazrapport : zone du conducteur " + (drive != null ? Recon.Path(drive.transform) + " etat " + drive.ActiveStateName : "introuvable"));
+            }
+            if (gearStep == 1 && t > 35f)
+            {
+                gearStep = 2;
+                PlayMakerFSM drive = null;
+                foreach (PlayMakerFSM f in c.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { drive = f; break; }
+                if (drive != null) { if (drive.ActiveStateName == "Press return") drive.SendEvent("Key DOWN"); else Game.SetState(drive, "Check seat"); }
+                Log.Info("autotest vazrapport : volant -> " + (drive != null ? drive.ActiveStateName : "-"));
+            }
+            if (gearStep >= 2 && t > 40f && t < 62f && t >= gearLog)
+            {
+                gearLog = t + 3f;
+                if (gearStep == 2)
+                {
+                    // boite de la vue F5 (ThirdPerson.CarBox : coins des maillages, repere de la voiture, a moins de 20 m) : ce qui l'etire
+                    foreach (MeshFilter mf in c.GetComponentsInChildren<MeshFilter>())
+                    {
+                        Renderer r = mf.GetComponent<Renderer>();
+                        if (mf.sharedMesh == null || r == null || !r.enabled) continue;
+                        Bounds lb = mf.sharedMesh.bounds;
+                        for (int k = 0; k < 8; k++)
+                        {
+                            Vector3 p = c.InverseTransformPoint(mf.transform.TransformPoint(new Vector3((k & 1) != 0 ? lb.max.x : lb.min.x, (k & 2) != 0 ? lb.max.y : lb.min.y, (k & 4) != 0 ? lb.max.z : lb.min.z)));
+                            if (p.sqrMagnitude > 400f) continue;
+                            if (Mathf.Abs(p.x) > 1.3f || p.y > 2.2f || p.y < -1f || Mathf.Abs(p.z) > 3f) { Log.Info("autotest vazrapport : boite F5 etiree par " + Recon.Path(mf.transform) + " coin " + p.ToString("F1") + (mf.gameObject.activeInHierarchy ? "" : " (inactif)")); break; }
+                        }
+                    }
+                }
+                Drivetrain dt = c.GetComponent<Drivetrain>();
+                if (dt != null) dt.gear = 2 + gearStep++ % 4;
+                var gv = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmString("GUIgear");
+                var sb = new System.Text.StringBuilder("autotest vazrapport : rapport " + (dt != null ? dt.gear.ToString() : "?") + ", GUIgear '" + (gv != null ? gv.Value : "?") + "'");
+                foreach (PlayMakerFSM f in c.GetComponentsInChildren<PlayMakerFSM>(true))
+                {
+                    if (f.FsmName != "GearIndicator") continue;
+                    sb.Append(" | GearIndicator ").Append(Recon.Path(f.transform)).Append(f.enabled ? " actif" : " COUPE").Append(" etat '").Append(f.ActiveStateName).Append("'");
+                    foreach (HutongGames.PlayMaker.FsmState st in f.FsmStates)
+                        foreach (HutongGames.PlayMaker.FsmStateAction ac in st.Actions)
+                        {
+                            if (ac == null || ac.GetType().Name != "GetProperty") continue;
+                            object tp = ac.GetType().GetField("targetProperty").GetValue(ac);
+                            object to = tp != null ? tp.GetType().GetField("TargetObject").GetValue(tp) : null;
+                            Object v = to is HutongGames.PlayMaker.FsmObject ? ((HutongGames.PlayMaker.FsmObject)to).Value : null;
+                            Component cp = v as Component;
+                            sb.Append(" cible ").Append(cp != null ? Recon.Path(cp.transform) : v != null ? v.name : "-");
+                            goto next;
+                        }
+                    next:;
+                }
+                Log.Info(sb.ToString());
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "vazcle") { TestKey(t); return; }
@@ -746,6 +821,7 @@ namespace MWCoop
             if (host && testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
             if (host && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
             if (!host && testStep == 0 && t > 40f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-invite", 1f); }
+            if (host && Config.GetInt("Test", "VazRapport", 0) != 0) ProbeGear(t);
             // [Test] VazOuvrir=1 : trappe de toit et hayon ouverts a 31 s (hayon : butees de la charniere a 60-65 degres, comme son
             // automate), capture vaz-ouvert a 35 s.
             if (host && testStep == 2 && t > 31f && !openDone && Config.GetInt("Test", "VazOuvrir", 0) != 0)
