@@ -886,8 +886,17 @@ namespace MWCoop
         }
         static Vector3 RearBuckle(Belt b, Vector3 offset, bool mirror) { return (mirror ? b.Buckle : b.DriverBuckle) + offset; }
 
+        // Ceintures des places arriere (ajout de MWCoop, le jeu n'en a pas) : [Coop] CeinturesArriere=0 les retire -- choix de
+        // l'hote, transmis aux invites par le lanceur (Menor, 25/10 : « les ceintures arriere sont moches, retirez-les »).
+        public static bool RearBeltsOn { get { return Config.GetInt("Coop", "CeinturesArriere", 1) != 0; } }
+
         static void RearBeltInput()
         {
+            if (!RearBeltsOn)
+            {
+                if (beltOn) { beltOn = false; SendSeat(current.Car, current.Index, headLocal); Log.Info("ceinture arriere : option coupee, detachee"); }
+                return;
+            }
             Belt b = BeltOf(current.CarT);
             Vector3 off; bool mir;
             if (b == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return;
@@ -909,9 +918,10 @@ namespace MWCoop
         {
             var want = new Dictionary<Transform, HashSet<int>>();
             System.Action<Transform, int> add = (car, i) => { HashSet<int> h; if (!want.TryGetValue(car, out h)) want[car] = h = new HashSet<int>(); h.Add(i); };
-            if (current != null && current.Index > 0 && beltOn && current.CarT != null) add(current.CarT, current.Index);
+            bool on = RearBeltsOn;   // (coupees : aucune n'est montree, ni la mienne ni celles des autres)
+            if (on && current != null && current.Index > 0 && beltOn && current.CarT != null) add(current.CarT, current.Index);
             foreach (Remote r in remote.Values)
-                if (r.Index > 0 && r.Belt)
+                if (on && r.Index > 0 && r.Belt)
                     foreach (Seat s in seats) if (s.Car == r.Car && s.Index == r.Index && s.CarT != null) add(s.CarT, r.Index);
             foreach (Transform car in want.Keys) BeltOf(car);
             foreach (KeyValuePair<Transform, Belt> kv in belts)

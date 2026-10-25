@@ -175,10 +175,10 @@ static int LobbyPort() { const Opt *po = OptByKey("Port"); return po ? OptGet(*p
 struct LobbyOptDef { const char *key; int def; bool host; int only; };
 static const LobbyOptDef kLobbyOptDefs[] = {
     { "ArgentDepart", 1, true }, { "Triches", 0, true }, { "Renverser", 1, true }, { "PvP", 0, true }, { "VenttiEnjeux", 1, true },
-    { "Difficulte", 0, true }, { "VitesseVitres", 1, true }, { "PencheVitre", 1, true },
+    { "Difficulte", 0, true }, { "VitesseVitres", 1, true }, { "PencheVitre", 1, true }, { "CeinturesArriere", 1, true, 1 },
     { "SansAjouts", 0, true }, { "AjoutDrone", 1, true }, { "AjoutSacs", 1, true }, { "AjoutBoutique", 1, true }, { "AjoutMusee", 1, true }, { "AjoutVaz", 1, true }, { "AjoutKino", 1, true }, { "AjoutOsat", 1, true, 1 },
     { "Vocal", 1, false }, { "VocalPortee", 35, false }, { "VolumeVocal", 100, false }, { "GainMicro", 100, false },
-    { "VocalActivation", 0, false }, { "VocalSeuil", 12, false }, { "Ronflements", 1, false },
+    { "VocalActivation", 0, false }, { "VocalSeuil", 12, false }, { "Ronflements", 1, false }, { "Armoire", 1, false, 1 },
     { "VoirVisages", 1, false }, { "CarteMaintenir", 0, false }, { "Marqueurs", 1, false }, { "ModsAuto", 0, false },
 };
 static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));

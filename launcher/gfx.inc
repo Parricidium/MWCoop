@@ -223,6 +223,9 @@ static const std::vector<GfxRow> &GfxRows()
         { "VitesseVitres", L"Vitesse des vitres des voitures (hôte)", L"Car window speed (host)", 1, { 1, 2, 3, 4 },
           { L"Jeu", L"x2", L"x3", L"x4" }, { L"Game", L"x2", L"x3", L"x4" }, 0, 8, "Coop" },
         { "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", 1, {}, {}, {}, 0, 8, "Coop" },
+        // (Menor, 25/10 : « retirez les ceintures arriere et l'armoire ») -- Sync/Seats.cs RearBeltsOn (hote), Sync/Wardrobe.cs (chacun)
+        { "CeinturesArriere", L"Ceintures des places arrière (hôte)", L"Rear seat belts (host)", 1, {}, {}, {}, 0, 8, "Coop" },
+        { "Armoire", L"Armoire : changer de tenue", L"Wardrobe: change outfit", 1, {}, {}, {}, 0, 8, "Coop" },
         { "Triches", L"Autoriser les triches (hôte)", L"Allow cheats (host)", 0, {}, {}, {}, 0, 8, "Coop" },
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion de квазарик, 13/10 : « tuer les autres a coups de poing, option de l'hote ») -- Sync/Pvp.cs
@@ -583,6 +586,7 @@ static const SetItem kSetItems[] = {
     { 9, SI_GFX, "Difficulte", L"Difficulté de départ", L"Start difficulty", L"Nouvelle partie : argent et carburant · Vanilla = le jeu tel quel", L"New game: money and fuel · Vanilla = the game as is" },
     { 9, SI_GFX, "VitesseVitres", L"Vitesse des vitres des voitures", L"Car window speed", NULL, NULL },
     { 9, SI_GFX, "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", NULL, NULL },
+    { 9, SI_GFX, "CeinturesArriere", L"Ceintures des places arrière", L"Rear seat belts", L"Ajout MWCoop : le jeu n'en a pas", L"MWCoop addition: the game has none", 0, 1 },
     { 9, SI_SEC, NULL, L"Jeux & ajouts", L"Games & additions", NULL, NULL },
     { 9, SI_GFX, "VenttiEnjeux", NULL, NULL, NULL, NULL },
     // (Jokkis a louer retirees du salon le 18/10, du mod le 24/10 : la VAZ-2108 et les voitures addons a la place)
@@ -606,6 +610,7 @@ static const SetItem kSetItems[] = {
     { 10, SI_GFX, "Marqueurs", NULL, NULL, NULL, NULL },
     { 10, SI_GFX, "CarteMaintenir", L"Carte (M)", L"Map (M)", NULL, NULL },
     { 10, SI_GFX, "Ronflements", NULL, NULL, L"Les joueurs endormis, à 12 m", L"Sleeping players, within 12 m" },
+    { 10, SI_GFX, "Armoire", NULL, NULL, L"Chambre et appartement, touche d'usage", L"Bedroom and apartment, use key", 0, 1 },
     { 10, SI_OPT, "ContenuEnvoye", L"Mon contenu envoyé", L"My content sent", NULL, NULL },
     { 11, SI_X, "net", L"Réseau par défaut", L"Default network", L"Steam : amis ; IP / VPN : port à ouvrir", L"Steam: friends; IP / VPN: port to open", 1 },
     { 11, SI_OPT, "Port", L"Port (IP / VPN)", L"Port (IP / VPN)", L"UDP et TCP ; à rediriger sur la box", L"UDP and TCP; to forward on the router", 1 },

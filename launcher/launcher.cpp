@@ -5250,7 +5250,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
     };
     if (which == 0) {
         caption(T(L"RÈGLES", L"RULES"), !host);
-        for (const char *k : { "ArgentDepart", "Triches", "Renverser", "PvP" }) row(k, false);
+        for (const char *k : { "ArgentDepart", "Triches", "Renverser", "PvP", "CeinturesArriere" }) row(k, false);   // (ceintures arriere : MWC, cachees sur MSC par row)
         if (!host) for (const char *k : { "Difficulte", "VitesseVitres" }) row(k, false);   // (lecture seule ; l'hote les regle dans la carte de droite -- 1.8.9)
         y += 6;
         caption(T(L"JEUX & AJOUTS", L"GAMES & ADDITIONS"), false);
@@ -5292,7 +5292,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         for (const char *k : { "Vocal", "VocalActivation", "VocalPortee", "VolumeVocal", "GainMicro" }) row(k, false);
         y += 6;
         caption(T(L"AFFICHAGE", L"DISPLAY"), false);
-        for (const char *k : { "VoirVisages", "Marqueurs", "CarteMaintenir" }) row(k, false);
+        for (const char *k : { "VoirVisages", "Marqueurs", "CarteMaintenir", "Armoire" }) row(k, false);   // (armoire : MWC seulement)
         // (ModsAuto : chez l'invite, « Tout accepter de cet hote », carte de droite)
         if (!host) {   // resume de ce que l'hote a decide (lecture seule, deux colonnes)
             y += 4;

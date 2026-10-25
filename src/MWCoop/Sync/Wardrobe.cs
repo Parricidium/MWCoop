@@ -5,7 +5,8 @@ namespace MWCoop
     // Armoire (ᏒullΞᏒ, 17/10 : « changer de tenue -- celles du lanceur -- par l'armoire de la chambre, a l'appartement et chez les
     // parents ») : l'armoire visee a moins de 2 m (HOMENEW : « Closet 1 » ; YARD/Building/BEDROOM1 : « closet ») montre la main
     // du jeu et « TENUE » ; la touche d'usage ([Touches] Usage, F) ouvre l'onglet Personnage du menu (F10), ou l'on change de
-    // tenue, de pantalon et de visage. My Winter Car (les armoires du jeu sont les siennes).
+    // tenue, de pantalon et de visage. My Winter Car (les armoires du jeu sont les siennes). [Coop] Armoire=0 : rien (choix de
+    // chacun ; Menor, 25/10 : « l'armoire est tres buggee, retirez-la »).
     public static class Wardrobe
     {
         static readonly System.Collections.Generic.List<Collider> closets = new System.Collections.Generic.List<Collider>();
@@ -38,9 +39,12 @@ namespace MWCoop
             next = now + 0.1f;
             Transform cam = PlayerSync.LocalCamera;
             bool hit = false;
-            if (cam != null && !Menu.Open && !Menu.ChatOpen)
+            if (cam != null && !Menu.Open && !Menu.ChatOpen && Config.GetInt("Coop", "Armoire", 1) != 0)
+            {
                 foreach (RaycastHit h in Physics.RaycastAll(cam.position, cam.forward, 2.2f))
                     if (closets.Contains(h.collider)) { hit = true; break; }
+                if (Config.GetInt("Test", "ArmoireEssai", 0) == 2 && Time.timeSinceLevelLoad > 30f) hit = true;   // (essais : comme visee, ou que l'on soit)
+            }
             if (hit != aimed)
             {
                 aimed = hit;
