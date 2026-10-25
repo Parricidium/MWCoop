@@ -634,6 +634,25 @@ namespace MWCoop
             return null;
         }
 
+        // Ce qui est sous la SORBET sans etre a elle : le joueur local (assis ou au volant) et les pivots des places de Seats.
+        static List<KeyValuePair<Transform, Transform>> SetAside(Transform car)
+        {
+            var l = new List<KeyValuePair<Transform, Transform>>();
+            if (Config.GetInt("Test", "VazSansMiseDeCote", 0) != 0) return l;   // (essais : comme avant)
+            Transform pl = Game.PlayerT;
+            if (pl != null && pl != car && pl.IsChildOf(car)) l.Add(new KeyValuePair<Transform, Transform>(pl, pl.parent));
+            foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
+                if (t.name.StartsWith("MWCoop-Siege")) l.Add(new KeyValuePair<Transform, Transform>(t, t.parent));
+            foreach (KeyValuePair<Transform, Transform> kv in l) kv.Key.parent = null;   // (pose du monde gardee)
+            if (l.Count > 0) Log.Info("vaz : copie de la SORBET : " + l.Count + " objet(s) mis de cote (joueur assis ou au volant)");
+            return l;
+        }
+        static void PutBack(List<KeyValuePair<Transform, Transform>> l)
+        {
+            for (int i = l.Count - 1; i >= 0; i--)
+                if (l[i].Key != null && l[i].Value != null) l[i].Key.parent = l[i].Value;
+        }
+
         // ---------------------------------------------------------------- construction
         // name : nom de l'objet (le meme chez tous) ; number : 1-16 (numero et couleur). Rend null si la SORBET ou les fichiers manquent.
         public static Built Build(string name, int number, Color paint, Vector3 pos, Quaternion rot, Model carModel = null)
@@ -645,7 +664,13 @@ namespace MWCoop
             Dictionary<string, Vector3> inf = Info();
             var b = new Built { Number = number, Shown = number, M = cur, Paint = paint };
             ModSafe.Snapshot snap = ModSafe.Before(sorbet);
-            GameObject car = Object.Instantiate(sorbet);
+            // (le joueur local assis dans la SORBET -- passager : Seats le rattache a elle, conducteur : sous son CameraPivotPLR --
+            // partait dans la copie : un second PLAYER dans la VAZ, sa camera et ses commandes, le vrai joueur reste sur son siege,
+            // vue teleportee dans la nouvelle voiture et positions desynchronisees ; JD et Ali BERTA, 25/10. Detache le temps de la copie.)
+            List<KeyValuePair<Transform, Transform>> aside = SetAside(sorbet.transform);
+            GameObject car;
+            try { car = Object.Instantiate(sorbet); }
+            finally { PutBack(aside); }
             car.SetActive(false);   // (reglee eteinte : ses automates demarrent sur la version modifiee)
             ModSafe.Strip(car, snap, "vaz " + name);   // (scripts des mods de la SORBET : Sorbet Collection, JD 23/10)
             car.name = name;

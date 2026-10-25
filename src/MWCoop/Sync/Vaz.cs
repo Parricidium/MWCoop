@@ -818,8 +818,10 @@ namespace MWCoop
                 }
             }
             // ([Test] VazModele=1 : une Evo III, 2 : une 205 T16 -- extensions privees)
-            if (host && testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
-            if (host && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
+            // ([Test] VazDemande=s : demande a s secondes au lieu de 20 -- un invite deja assis dans la SORBET, VazCar.SetAside)
+            float ask = Config.GetFloat("Test", "VazDemande", 20f);
+            if (host && testStep == 0 && t > ask) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
+            if (host && testStep == 1 && t > ask + 10f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
             if (!host && testStep == 0 && t > 40f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-invite", 1f); }
             if (host && Config.GetInt("Test", "VazRapport", 0) != 0) ProbeGear(t);
             // [Test] VazOuvrir=1 : trappe de toit et hayon ouverts a 31 s (hayon : butees de la charniere a 60-65 degres, comme son
