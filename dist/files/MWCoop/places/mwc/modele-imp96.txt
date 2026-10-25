@@ -1,0 +1,20 @@
+PLACES 1
+# outil des places (25/10/2026 13:42:39) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture modele-imp96
+conducteur
+corps conducteur 0.0281 -0.0048 -0.234
+place 0 passager 0.3059 0.7447 0.0893 0 0.38 0.85
+os 0 HeadPivot 0.45622 -0.33028 -0.68524 -0.46177
+os 0 arm_right -0.72086 -0.06306 -0.12205 0.67933
+os 0 collar_left 0.03631 0.80196 0.095 0.58865
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 fingers_right -0.0521 -0.01833 0.18359 0.98145
+os 0 hand_right 0.03001 0.18169 -0.02612 0.98255
+os 0 head 0.64084 -0.29886 -0.64084 0.29886
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left -0.00011 -0.53307 0.43206 -0.72744
+os 0 shoulder_right 0.22252 -0.46726 -0.48351 0.70596
+os 0 spine_middle 0.00004 0.00057 0.0698 0.99756
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+corps 0 0 -0.0321 -0.3071

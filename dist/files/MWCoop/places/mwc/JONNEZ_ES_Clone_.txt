@@ -1,0 +1,9 @@
+PLACES 1
+# outil des places (25/10/2026 13:19:34) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture JONNEZ ES(Clone)
+conducteur
+place 1 passager -0 0.836 -0.273 0 0.45 0.45 maxx=0.6
+os 1 HeadPivot 0.75242 -0.26281 -0.40542 -0.44769
+os 1 spine_middle -0.00628 -0.00416 -0.21579 0.97641
+os 1 spine_upper -0.02759 -0.03446 -0.2123 0.97621

@@ -1,0 +1,18 @@
+PLACES 1
+# outil des places (25/10/2026 13:37:36) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture modele-vaz
+conducteur
+corps conducteur 0.0688 0.0234 0.209
+place 0 passager 0.35 0.6726 -0.18 0 0.38 0.85
+os 0 arm_left -0.01582 -0.23647 0.64155 -0.72955
+os 0 arm_right 0.00904 -0.13241 -0.03661 0.99048
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 hand_right -0.44167 0.41563 -0.18127 0.77416
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left -0.17498 -0.33072 0.49451 -0.78452
+os 0 shoulder_right 0.33219 -0.33525 -0.52846 0.70568
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+corps 0 0 0.0258 0.1469

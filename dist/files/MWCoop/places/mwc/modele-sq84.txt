@@ -1,0 +1,7 @@
+PLACES 1
+# outil des places (25/10/2026 13:43:07) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture modele-sq84
+conducteur
+corps conducteur 0.0926 0 -0.1296
+place 0 passager 0.36 0.6828 -0.1844 0 0.38 0.85

@@ -1,0 +1,6 @@
+PLACES 1
+# outil des places (25/10/2026 13:35:21) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture HEPPA
+conducteur
+corps conducteur -0.0133 0.0503 -0.1714

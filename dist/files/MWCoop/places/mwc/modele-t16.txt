@@ -1,0 +1,16 @@
+PLACES 1
+# outil des places (25/10/2026 13:41:23) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture modele-t16
+conducteur
+corps conducteur 0 0 -0.224
+place 0 passager 0.3815 0.7142 -0.0984 0 0.38 0.85
+os 0 arm_right 0.00904 -0.13241 -0.03661 0.99048
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 hand_right -0.44922 0.07429 0.00666 0.8903
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left 0.12891 -0.40672 0.549 -0.71872
+os 0 shoulder_right 0.23684 -0.46117 -0.56428 0.64251
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464
