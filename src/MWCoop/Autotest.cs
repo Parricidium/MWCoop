@@ -1376,6 +1376,7 @@ namespace MWCoop
         // [Test] Autotest=cabine, CabinePassager=1 : en fin d'image (ce qui est rendu), l'avatar du conducteur dans le repere
         // de la voiture ou l'invite est assis, pendant qu'elle roule : etendue de ses positions (0 attendu ; avant le
         // correctif du 10/10, vitesse x duree d'image vers l'arriere).
+        static Transform pietonCible;
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
         public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
         // [Test] TestPedale=brake|clutch|throttle : de 40 a 60 s (temps de jeu), cette pedale de [Test] TestVoiture enfoncee ici
@@ -2546,6 +2547,55 @@ namespace MWCoop
                 }
                 else if (b != null && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : souleve, vue ici en " + b.position.ToString("F2") + (b.isKinematic ? " (copie)" : ""));
             }
+            if (mode == "pieton")
+            {
+                // Au volant de [Test] TestVoiture, posee a 12 m d'un pieton a plus de 350 m de tous les autres joueurs, puis lancee
+                // sur lui a 30 km/h 6 s plus tard (zone de choc rallumee chez l'hote toutes les 4 s) (retour de Menor, 25/10 : l'invite ne renverse pas les pietons loin de l'hote).
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                Rigidbody b = VehicleSync.Body(car);
+                if (b != null && t > 30f && step == 2)
+                {
+                    GameObject wk = Game.FindAny("HUMANS/Randomizer/Walkers");
+                    float far = 0f;
+                    if (wk != null)
+                        foreach (Transform w in wk.transform)
+                        {
+                            if (!w.gameObject.activeInHierarchy) continue;
+                            float dmin = float.MaxValue;
+                            foreach (Avatar a in PlayerSync.Avatars) if (a.Player != null && a.Player.Level == 1) dmin = Mathf.Min(dmin, (a.Player.State.Feet - w.position).magnitude);
+                            if (dmin > 350f && dmin > far) { far = dmin; pietonCible = w; }
+                        }
+                    step = 3;
+                    if (pietonCible == null) Log.Info("autotest : pieton, aucun pieton a plus de 350 m des autres");
+                    else
+                    {
+                        Transform zc = pietonCible.Find("Pivot/HumanTriggerCrime"); if (zc != null) pietonCible = zc;   // (la racine du pieton n'est pas au sol)
+                        Vector3 dir = pietonCible.forward; dir.y = 0; dir.Normalize();
+                        Vector3 at = pietonCible.position - dir * 12f;
+                        float ground = at.y;
+                        foreach (RaycastHit h in Physics.RaycastAll(at + Vector3.up * 10f, Vector3.down, 30f))
+                            if (h.collider != null && !h.collider.isTrigger && h.collider.attachedRigidbody == null && (ground == at.y || h.point.y > ground)) ground = h.point.y;
+                        b.position = new Vector3(at.x, ground + 0.6f, at.z); b.rotation = Quaternion.LookRotation(dir);
+                        b.transform.position = b.position; b.transform.rotation = b.rotation;
+                        b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero;
+                        Log.Info("autotest : pieton " + pietonCible.name + " vise, a " + far.ToString("F0") + " m des autres joueurs ; voiture posee a 12 m");
+                    }
+                }
+                // (apres le passage : vitesse de la voiture -- s'envole-t-elle quand le pantin apparait ?)
+                if (b != null && step == 3 && t > 36f && t < 45f && Time.frameCount % 3 == 0 && (t > 38.5f || b.velocity.y > 2f || pietonCible == null))
+                    Log.Info("autotest : pieton, voiture " + (b.velocity.magnitude * 3.6f).ToString("F0") + " km/h, montee " + b.velocity.y.ToString("F1") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F1") + " rad/s, haut " + b.position.y.ToString("F1"));
+                if (b != null && step == 3 && pietonCible != null && t > 36f && t < 38.5f)
+                {
+                    Vector3 dir = pietonCible.position - b.position; dir.y = 0;
+                    if (dir.magnitude > 0.5f) b.velocity = dir.normalized * 8.3f + Vector3.up * Mathf.Min(b.velocity.y, 0f);
+                    if (Time.frameCount % 15 == 0)
+                    {
+                        Log.Info("autotest : pieton " + pietonCible.parent.parent.name + " a " + dir.magnitude.ToString("F1") + " m (haut " + (b.position.y - pietonCible.position.y).ToString("F1") + " m), zone de choc ici " + pietonCible.gameObject.activeSelf);
+                    }
+                }
+            }
             if (mode == "accident")
             {
                 // Au volant (mode conduite), la tete du conducteur se detache a 30 s, en roulant.
@@ -2555,8 +2605,31 @@ namespace MWCoop
                 if (t > 15f + o && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
                 if (t > 22f + o && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
                 Rigidbody b = VehicleSync.Body(car);
-                if (b != null && t > choc - 5f && t < choc + 1f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
-                if (t > choc && step == 2) { step = 3; Log.Info("autotest : choc " + Respawn.TestCrash(car)); }
+                // ([Test] ChocReel=<km/h> : vrai choc -- lancee a cette vitesse (montee sur 5 s, sinon la liaison casse deja au depart),
+                // puis un mur pose devant elle 1 s avant ; la liaison de la tete casse ou non d'elle-meme, reglee par HeadForce comme
+                // en partie. Retour de Menor, 25/10 : « on ne meurt pas dans un accident »)
+                int reel = Config.GetInt("Test", "ChocReel", 0);
+                if (reel == 0)
+                {
+                    if (b != null && t > choc - 5f && t < choc + 1f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                    if (t > choc && step == 2) { step = 3; Log.Info("autotest : choc " + Respawn.TestCrash(car)); }
+                }
+                else if (b != null && step >= 2)
+                {
+                    Vector3 f = b.transform.forward; f.y = 0; f.Normalize();
+                    if (t > choc - 7f && t < choc - 1f && step == 2) b.velocity = f * reel / 3.6f * Mathf.Clamp01((t - (choc - 7f)) / 5f) + Vector3.up * Mathf.Min(b.velocity.y, 0f);
+                    if (t > choc - 1f && step == 2)
+                    {
+                        step = 3;
+                        GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        wall.name = "MWCoopEssaiMur";
+                        wall.transform.position = b.position + f * (b.velocity.magnitude * 0.8f + 2.5f) + Vector3.up * 1f;
+                        wall.transform.rotation = Quaternion.LookRotation(f);
+                        wall.transform.localScale = new Vector3(8f, 4f, 1f);
+                        Log.Info("autotest : mur pose devant, voiture a " + (b.velocity.magnitude * 3.6f).ToString("F0") + " km/h, " + Respawn.HeadInfo(car));
+                    }
+                    if (step == 3 && t < choc + 2f && Time.frameCount % 5 == 0) Log.Info("autotest : choc reel, voiture a " + (b.velocity.magnitude * 3.6f).ToString("F0") + " km/h, " + Respawn.HeadInfo(car));
+                }
                 if (t > 30.5f + o && Time.frameCount % 90 == 0 && t < 46f + o) Log.Info("autotest : " + Respawn.State());
                 if (t > 46f + o && step == 3) { step = 4; Log.Info("autotest : remonte " + VehicleSync.TestEnter(car, false)); }
                 if (t > 52f + o && step == 4) { step = 5; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }

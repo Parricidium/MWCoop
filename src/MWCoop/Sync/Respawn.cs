@@ -601,6 +601,25 @@ namespace MWCoop
             return "camera::Death [" + camDeath.ActiveStateName + "]";
         }
 
+        // Essais : liaison de la tete du conducteur de 'car' (limite de casse, HeadForce) et vitesse de la voiture.
+        public static string HeadInfo(string car)
+        {
+            foreach (Head h in heads)
+                if (h.Car.StartsWith(car.Split('(')[0]) && h.Pivot != null)
+                {
+                    var j = h.Pivot.GetComponent<ConfigurableJoint>();
+                    PlayMakerFSM hf = null;
+                    Transform dt = h.Pivot.transform.parent != null ? h.Pivot.transform.parent.Find("DriveTriggerX") : null;
+                    if (dt != null) hf = Game.FsmOn(dt.gameObject, "HeadForce");
+                    Rigidbody cb = j != null ? j.connectedBody : null;
+                    return "tete de " + h.Car + " : " + (j == null ? "liaison CASSEE" : "liaison casse a " + j.breakForce.ToString("G4") + "/" + j.breakTorque.ToString("G4")
+                           + ", reliee a " + (cb != null ? cb.name + (cb.isKinematic ? " (cinematique)" : "") : "rien"))
+                           + ", HeadForce " + (hf == null ? "?" : "[" + hf.ActiveStateName + "]" + (hf.enabled ? "" : " (coupe)"))
+                           + ", pivot " + (h.Pivot.isKinematic ? "cinematique" : "libre") + ", " + (h.Pivot.velocity.magnitude * 3.6f).ToString("F0") + " km/h";
+                }
+            return "pas de tete pour " + car;
+        }
+
         // Accident : la liaison de la tete du conducteur de 'car' casse (comme sous un choc).
         public static string TestCrash(string car)
         {

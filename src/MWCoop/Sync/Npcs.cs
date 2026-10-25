@@ -154,7 +154,7 @@ namespace MWCoop
             nextScan = PlayerSync.InGame ? now + 17f : -1;
             // Avant le releve du monde (16 s) : les automates CarHit rejoues par ce module sont a lui.
             hitAt = PlayerSync.InGame ? now + 9f : -1;
-            anyHeld = anyBlend = false; me = null; hitHooked = 0;
+            anyHeld = anyBlend = false; me = null; hitHooked = 0; walkerHooked = 0;
             watch = null; testStep = 0; testNext = lastShot = 0f; fluHas = false;
         }
 
@@ -640,8 +640,49 @@ namespace MWCoop
             }
         }
 
+        // Pietons (Walkers/<nom>::Randomizer) : le jeu n'allume leur zone de choc (HumanTriggerCrime, automate CarHit) que si
+        // le joueur LOCAL est a moins de 300 m ("Dis to player" -> "Disable HIT"). Chez l'hote, un invite loin de lui
+        // traversait les pietons sans les renverser (chez l'invite, la copie du pieton est muette) -- retour de Menor, 25/10 :
+        // « l'invite ne peut pas tuer les PNJ qui marchent ». Hote : zone rallumee si un joueur est a moins de 300 m.
+        class WalkerNearHook : ModHook
+        {
+            public override string Module { get { return "PNJ"; } }
+            public GameObject Trigger; public Transform Walker;
+            public override void OnEnter()
+            {
+                try
+                {
+                    // ([Test] SansZonePietons=1 : comme avant, pour comparer)
+                    if (Session.Active && Session.IsHost && Trigger != null && Walker != null && !Trigger.activeSelf && GuestNear(Walker.position, 300f)
+                        && Config.GetInt("Test", "SansZonePietons", 0) == 0)
+                    {
+                        Trigger.SetActive(true);
+                        if (walkerNearLogs++ < 5) MWCoop.Log.Info("PNJ : " + Walker.name + " : zone de choc gardee allumee (joueur a moins de 300 m, l'hote plus loin)");
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+        static int walkerNearLogs, walkerHooked;
+
+        static bool GuestNear(Vector3 at, float d)
+        {
+            foreach (Avatar a in PlayerSync.Avatars)
+                if (a.Player != null && a.Player.Level == 1 && (a.Player.State.Feet - at).sqrMagnitude < d * d) return true;
+            return false;
+        }
+
         static void ClaimHits()
         {
+            GameObject wk = Game.Msc ? null : Game.FindAny("HUMANS/Randomizer/Walkers");   // (My Winter Car ; MSC : a verifier par [MSC])
+            if (wk != null)
+                foreach (PlayMakerFSM f in wk.GetComponentsInChildren<PlayMakerFSM>(true))
+                    if (f.FsmName == "Randomizer" && f.Fsm.GetState("Disable HIT") != null)
+                    {
+                        if (Replay.Claim(f, "PNJ")) hitPending.Add(f);
+                        else Log.Warn("PNJ : " + Recon.Path(f.transform) + "::Randomizer deja pris par " + Replay.Owner(f));
+                    }
             foreach (string path in HitRoots)
             {
                 GameObject g = Game.FindAny(path);
@@ -670,6 +711,14 @@ namespace MWCoop
                 if (f == null) { hitPending.RemoveAt(i); continue; }
                 if (!Ready(f)) continue;
                 hitPending.RemoveAt(i);
+                if (f.FsmName == "Randomizer")
+                {
+                    Transform trg = f.transform.Find("Pivot/HumanTriggerCrime");
+                    if (trg == null) { Log.Warn("PNJ : " + Recon.Path(f.transform) + " sans Pivot/HumanTriggerCrime"); continue; }
+                    FsmHooks.Append(f.Fsm.GetState("Disable HIT"), new WalkerNearHook { Trigger = trg.gameObject, Walker = f.transform });
+                    if (walkerHooked++ == 0) Log.Info("PNJ : pietons : zone de choc gardee chez l'hote tant qu'un joueur est a moins de 300 m");
+                    continue;
+                }
                 string key = Recon.Path(f.transform) + "::" + f.FsmName;
                 foreach (string s in HitStates)
                 {
