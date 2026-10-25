@@ -977,7 +977,7 @@ namespace MWCoop
                 for (int i = 0; i < n.Length; i++) rearMeshes[i] = SleepingBags.LoadMesh("MWCoop." + n[i] + ".mwm", 1f);
                 // (bouclee : bombee vers l'avant au milieu des sangles -- l'avatar est plus epais que le joueur du jeu et la cachait,
                 // comme la ceinture avant, BulgedMesh ; ses attaches -- epaule, boucle, bas cote portiere -- ne bougent pas)
-                float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.16f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
+                float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
                 foreach (int k in new[] { 2, 4 }) BulgeRear(rearMeshes[k], bulge, reach);
             }
             catch (System.Exception e) { rearMeshes = null; Log.Warn("ceintures arriere : modele illisible (" + e.Message + "), copie de la ceinture avant"); }
@@ -1041,10 +1041,13 @@ namespace MWCoop
             if (ms == null || src == null) return null;
             var m = new RearModel { Root = new GameObject("MWCoop-CeinturesArriere") };
             m.Root.transform.parent = car;
-            // (repere du modele : celui des maillages de la caisse -- LOD/interior, seat_rear_bench... -- mis droit : meme origine,
-            // 14 cm sous la racine de la SORBET ; axes deja ceux d'Unity, run/ceintures-arr.py)
-            Transform inside = FindUnder(car, "interior", "LOD");
-            m.Root.transform.localPosition = inside != null ? car.InverseTransformPoint(inside.position) : new Vector3(0f, -0.14f, 0f);
+            // (repere du modele : celui de LOD/Seatbelts -- l'objet des ceintures avant, ou Menos a pose les siennes --, mis droit :
+            // (0, -0,09, 0,24) dans la SORBET ; axes deja ceux d'Unity, run/ceintures-arr.py. Avant, a l'origine des maillages de la
+            // caisse, 14 cm plus bas et 24 cm en arriere : boucles a mi-dossier, puis sangles dans le dossier -- JD, 25/10 : « trop
+            // hautes ». [Test] CeinturesArriereY/Z : decalage en plus)
+            Transform sbt = FindUnder(car, "Seatbelts", "LOD");
+            m.Root.transform.localPosition = (sbt != null ? car.InverseTransformPoint(sbt.position) : new Vector3(0f, -0.09f, 0.24f))
+                                           + new Vector3(0f, Config.GetFloat("Test", "CeinturesArriereY", 0f), Config.GetFloat("Test", "CeinturesArriereZ", 0f));
             m.Root.transform.localRotation = Quaternion.identity;
             if (Config.GetInt("Test", "CeinturesArriereEnvers", 0) != 0) foreach (Mesh q in ms) { int[] tr = q.triangles; for (int i = 0; i < tr.Length; i += 3) { int x = tr[i + 1]; tr[i + 1] = tr[i + 2]; tr[i + 2] = x; } q.triangles = tr; }   // (essais : faces retournees)
             Vector3 cs = car.lossyScale;
