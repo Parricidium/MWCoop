@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -92,6 +92,7 @@ namespace MWCoop
 
             // voitures du jeu : celles qui ont une zone de conducteur (Seats)
             State("voitures", "Voitures du jeu", false);
+            Rescan();
             foreach (Transform car in GameCars())
             {
                 try { ExportCar(car, car.name, car.name, "jeu"); } catch (Exception e) { Log.Warn("export des places : " + car.name + " : " + e.Message); }
@@ -110,7 +111,8 @@ namespace MWCoop
                 while (Vaz.CarOf(Session.Active ? Session.LocalId : 0) == null && Time.realtimeSinceStartup < until) { Wait(0.5f); yield return true; }
                 Transform car = Vaz.CarOf(Session.Active ? Session.LocalId : 0);
                 if (car == null) { Log.Warn("export des places : " + m.Name + " pas construite"); continue; }
-                Wait(6f); yield return true;   // (Seats y trouve ses places)
+                Wait(6f); yield return true;
+                Rescan();   // (places de la copie)
                 try { ExportCar(car, "modele-" + m.Folder, m.Name, "addon"); } catch (Exception e) { Log.Warn("export des places : " + m.Name + " : " + e.Message); }
                 Vaz.Release();
                 until = Time.realtimeSinceStartup + 10f;
@@ -214,7 +216,18 @@ namespace MWCoop
             return true;
         }
 
-        // Places calculees aujourd'hui par Seats pour cette voiture (champ prive seats : Index, Head, Yaw, zone, couchette).
+        // Voitures et places recalculees de force : hors partie, VehicleSync et Seats ne cherchent rien (Session.Active)
+        static void Rescan()
+        {
+            foreach (Type t in new[] { typeof(VehicleSync), typeof(Seats) })
+            {
+                MethodInfo m = t.GetMethod("Scan", BindingFlags.NonPublic | BindingFlags.Static, null, Type.EmptyTypes, null);
+                try { if (m != null) m.Invoke(null, null); else Log.Warn("export des places : " + t.Name + ".Scan introuvable"); }
+                catch (Exception e) { Log.Warn("export des places : " + t.Name + ".Scan : " + (e.InnerException ?? e).Message); }
+            }
+        }
+
+        // Places calculees aujourd'hui par Seats pour cette voiture (champ prive seats : Index, Head, Yaw, zone, MaxX, Bed = ridelle, Stand = debout).
         static string SeatsJson(Transform car)
         {
             var sb = new StringBuilder();
@@ -229,7 +242,8 @@ namespace MWCoop
                 if (ct != car) continue;
                 sb.Append(n++ > 0 ? "," : "").Append("{\"n\":").Append(Get<int>(s, t, "Index")).Append(",\"tete\":").Append(V(Get<Vector3>(s, t, "Head")))
                   .Append(",\"cap\":").Append(F(Get<float>(s, t, "Yaw"))).Append(",\"zone\":[").Append(F(Get<float>(s, t, "ZoneX"))).Append(',').Append(F(Get<float>(s, t, "ZoneZ")))
-                  .Append("],\"couchette\":").Append(Get<bool>(s, t, "Bed") ? "true" : "false").Append('}');
+                  .Append("],\"maxx\":").Append(F(Get<float>(s, t, "MaxX"))).Append(",\"ridelle\":").Append(Get<bool>(s, t, "Bed") ? "true" : "false")
+                  .Append(",\"debout\":").Append(Get<bool>(s, t, "Stand") ? "true" : "false").Append('}');
             }
             return sb.ToString();
         }
@@ -271,6 +285,20 @@ namespace MWCoop
                 // maillage (repere du maillage, comme les poses de liaison) avec ses poids
                 using (var bin = new BinaryWriter(File.Create(Path.Combine(dir, "avatar.bin")))) WriteMesh(bin, smr.sharedMesh, Matrix4x4.identity, smr.sharedMesh.boneWeights);
                 sb.Append(",\"maillage\":0,\"matiere\":").Append(MatJson(smr.sharedMaterial));
+                // tout l'arbre de Char (os du maillage et noeuds intermediaires : HeadPivot, racine du squelette...), repere de la racine de
+                // l'avatar (parent -1) ; le maillage est sous l'un d'eux ("maillage" : son indice)
+                var all = new List<Transform>();
+                Transform ch = smr.transform;
+                while (ch.parent != null && ch.parent != a.Root.transform) ch = ch.parent;
+                foreach (Transform t in ch.GetComponentsInChildren<Transform>(true)) all.Add(t);
+                sb.Append(",\"arbre\":[");
+                for (int i = 0; i < all.Count; i++)
+                {
+                    Transform t = all[i];
+                    sb.Append(i > 0 ? "," : "").Append("{\"nom\":").Append(S(t.name)).Append(",\"parent\":").Append(t == ch ? -1 : all.IndexOf(t.parent))
+                      .Append(",\"p\":").Append(V(t.localPosition)).Append(",\"q\":").Append(Q(t.localRotation)).Append(",\"s\":").Append(V(t.localScale)).Append('}');
+                }
+                sb.Append("],\"noeudMaillage\":").Append(all.IndexOf(smr.transform));
                 // poses : assis (clip worker1_sitdown tenu a sa fin), volant voiture / camion (conducteurs de la circulation)
                 sb.Append(",\"poses\":{");
                 int np = 0;

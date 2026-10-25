@@ -30,7 +30,7 @@ namespace MWCoop
     //    boucle detachait celle du conducteur) : le conducteur envoie son etat (Msg.Seat, place 0xFF), les autres voient
     //    une copie de la ceinture bouclee sur son avatar (un peu en avant, comme le passager) et la sangle pendante
     //    (DriverBelt/HandleUpPivot) cachee.
-    public static class Seats
+    public static partial class Seats   // (partie : SeatFiles.cs, places de l'outil de JD)
     {
         class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f; public bool Bed; public float Yaw; public bool Stand; }   // (Stand : place debout, appuye -- cabine du tracteur)   // (Bed : ridelle d'une remorque, on y monte depuis le sol ; Yaw : sens de la place, degres, 0 = l'avant)
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
@@ -75,6 +75,7 @@ namespace MWCoop
         {
             zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
+            SeatFiles.OnLevelLoaded();
             belts.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false; blockedHandle = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
@@ -220,6 +221,7 @@ namespace MWCoop
                     for (int k = 0; k < 3; k++) seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1 + k, Head = new Vector3((k - 1) * GifuBed.x, by, bz), ZoneX = 1.1f, ZoneZ = 1.1f, MaxX = 1.05f });   // (parois de la cabine a +-1,0 m)
                 }
             }
+            FileSeats();   // (places/<jeu>/<voiture>.txt de l'outil des places : remplacent celles calculees ci-dessus)
             if (was != null)
                 foreach (Seat x in seats) if (x.Car == was.Car && x.Index == was.Index) { current = x; break; }
             Log.Info("places passagers : " + seats.Count);
@@ -295,7 +297,7 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             // Liste des voitures changee apres le premier releve (taxi active) : releve tout de suite.
-            if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
+            if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation) || FilesChanged) { nextScan = now + 30f; Scan(); }
             if (!FindPlayer()) return;
             DriverBeltSend(now);
             DriverBeltHeal(now);
@@ -734,6 +736,7 @@ namespace MWCoop
         static float beltHold;
         static void BeltInput()
         {
+            if (SeatFiles.NoBelt(current.Car, current.Index)) return;   // (place « sansceinture » de l'outil des places)
             if (current.Index > 0) { RearBeltInput(); return; }
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             bool aimBuckle = false, aimHandle = false;

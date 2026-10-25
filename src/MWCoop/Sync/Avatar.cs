@@ -718,13 +718,16 @@ namespace MWCoop
             if (inCar || Config.GetInt("Test", "TestPoseConduite", 0) != 0)
             {
                 // Passager : jambes allongees et buste du conducteur, mais pas ses bras (pas de volant).
-                Dictionary<string, Quaternion> pose = DriverPose(carName);   // (passager : la pose du vehicule aussi -- camion assis droit dans la GIFU ; avant, jambes allongees de voiture, a moitie couche)
+                // (place de l'outil des places de JD -- MWCoop\places : sa pose de base, ses os, pas d'ajustement au siege)
+                SeatFiles.Place sf = SeatFiles.For(carName, passenger ? Seats.RemoteSeatIndex(Player.Id) : -1);
+                Dictionary<string, Quaternion> pose = DriverPose(SeatFiles.PoseKey(sf, carName));   // (passager : la pose du vehicule aussi -- camion assis droit dans la GIFU ; avant, jambes allongees de voiture, a moitie couche)
                 if (pose != null)
                     foreach (KeyValuePair<string, Quaternion> kv in pose)
                     {
                         if (passenger && (kv.Key.Contains("collar") || kv.Key.Contains("shoulder") || kv.Key.Contains("arm") || kv.Key.Contains("hand") || kv.Key.Contains("finger"))) continue;
                         Transform b = Bone(kv.Key); if (b != null) b.localRotation = kv.Value;
                     }
+                if (sf != null) sf.Apply(Bone);
                 motoRaise = Vector3.zero;
                 seatFitted = false;
                 bool moto = carName != null && carName.StartsWith("JONNEZ");
@@ -732,8 +735,8 @@ namespace MWCoop
                 else if (passenger)
                 {
                     // Bras poses sur les cuisses.
-                    ArmDown("shoulder_right", "hand_right", 1f, 1f);
-                    ArmDown("shoulder_left", "hand_left", -1f, 1f);
+                    if (sf == null || !sf.ArmRight) ArmDown("shoulder_right", "hand_right", 1f, 1f);
+                    if (sf == null || !sf.ArmLeft) ArmDown("shoulder_left", "hand_left", -1f, 1f);
                     // Se pencher (demande de JD, 10/10) : la touche de penche du jeu (camera tournee), mesuree chez lui
                     // (Gestures) ; buste et tete comme a pied.
                     Gestures.Remote pg = Gestures.Of(Player.Id);
@@ -746,10 +749,10 @@ namespace MWCoop
                             if (b != null) b.rotation = Quaternion.AngleAxis(-sideS * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdS * 0.5f, Root.transform.right) * b.rotation;
                         }
                 }
-                if (!moto) SeatFit(passenger);
+                if (!moto && sf == null) SeatFit(passenger);
                 // Passager : mains posees sur les genoux (JD, 21/10 : « plutot que pendantes »), une fois les jambes placees.
                 // [Test] MainsGenoux=x,y,z : decalage de la main par rapport au genou (de cote vers l'exterieur, haut, avant), m.
-                if (!moto && passenger && Config.GetInt("Coop", "MainsGenoux", 1) != 0) HandsOnKnees();
+                if (!moto && passenger && Config.GetInt("Coop", "MainsGenoux", 1) != 0 && (sf == null || !sf.ArmRight && !sf.ArmLeft)) HandsOnKnees();
                 if (!moto && !passenger && vehicleT != null) PedalLegs(vehicleT);
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
                 if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - motoRaise - Root.transform.position) + EyeOffset;   // (sans la remontee : sinon l'ancrage la defait)
@@ -1824,10 +1827,12 @@ namespace MWCoop
                 bool standing = Seats.RemoteSeatStanding(pi.Id);
                 if (standing) seatCrouch = Mathf.Clamp01(Config.GetFloat("Test", "DeboutPli", 0.5f));
                 pos = pCar.TransformPoint(pHead) - seatQ * (standing ? new Vector3(0f, Config.GetFloat("Test", "DeboutYeux", 0.85f), 0.05f) : eyesRest);
+                SeatFiles.Place sfp = SeatFiles.For(pName, Seats.RemoteSeatIndex(pi.Id));   // (place de l'outil des places : son decalage, pas les reglages par voiture ci-dessous)
+                if (sfp != null) pos += pCar.TransformDirection(sfp.Body);
                 // Couchette de la GIFU : 67 cm seulement sous le toit, la tete (camera) juste dessous ; assis droit, le corps
                 // s'enfoncait de ~22 cm dans la couchette (retour d'un joueur, 09/10). Assis dessus, voute en avant : la tete
                 // reste sous le toit.
-                if (pName != null && pName.StartsWith("GIFU") && Seats.RemoteSeatIndex(pi.Id) >= 1)
+                if (sfp == null && pName != null && pName.StartsWith("GIFU") && Seats.RemoteSeatIndex(pi.Id) >= 1)
                 {
                     pos += pCar.up * Config.GetFloat("Test", "CouchetteLeve", 0.22f) + pCar.forward * Config.GetFloat("Test", "CouchetteAvance", 0.1f);   // (dos contre la paroi, pas dedans)
                     leanOff = new Vector3(0f, 0f, Config.GetFloat("Test", "CouchetteVoute", 0.5f));
@@ -1835,7 +1840,7 @@ namespace MWCoop
                 // Banquette arriere de la CORRIS (Rivett coupe, pavillon tres bas) : yeux 10 cm plus bas (Seats), corps remonte sur l'assise et
                 // voute vers l'avant -- la tete passait par le toit, et baissee seule le bassin s'enfoncait de 15 cm dans la banquette (24/10).
                 // [Test] RivettLeve (m), RivettVoute, RivettPieds (m, pieds devant les hanches).
-                else if (pName != null && pName.StartsWith("CORRIS") && Seats.RemoteSeatIndex(pi.Id) >= 1)
+                else if (sfp == null && pName != null && pName.StartsWith("CORRIS") && Seats.RemoteSeatIndex(pi.Id) >= 1)
                 {
                     pos += pCar.up * Config.GetFloat("Test", "RivettLeve", 0.06f);
                     leanOff = new Vector3(0f, 0f, Config.GetFloat("Test", "RivettVoute", 0.35f));
@@ -1879,6 +1884,8 @@ namespace MWCoop
                     Log.Info("autotest : conducteur " + Player.Name + " penche " + leanSmooth.magnitude.ToString("F2") + " m (ecart " + off.magnitude.ToString("F2") + ", ancien calcul " + (carT != null ? (carT.InverseTransformPoint(seatPos) - seatAnchor).magnitude.ToString("F2") : "?") + ", " + (exact ? "tete envoyee avec la voiture" : "tete de PlayerSync") + ", " + (speed * 3.6f).ToString("F0") + " km/h)");
                 Vector3 anchorWorld = carT != null ? carT.TransformPoint(seatAnchor) : seatPos;
                 pos = anchorWorld - seatRot * eyesRest;
+                SeatFiles.Place sfd = carT != null ? SeatFiles.For(carName, -1) : null;   // (conducteur dans l'outil des places : decalage du corps)
+                if (sfd != null) pos += carT.TransformDirection(sfd.Body);
                 yaw = seatRot.eulerAngles.y;
                 placed = true;
                 Root.transform.position = pos;
