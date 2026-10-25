@@ -5214,7 +5214,8 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
             swprintf_s(b, L"%d / %d", on, kAjoutN);
             Pill(g, RectF(right - 60, y + 7, 60, 22), mode == 2 ? TH(toggleOff) : WithA(kAcc, 0.22f), mode == 0 ? T(L"Tous", L"All") : mode == 2 ? T(L"Aucun", L"None") : b, kInk, 10.5f);
         }
-        if (!pick) Text(g, g_game == GAME_MSC ? T(L"Caméra drone (F8)", L"Drone camera (F8)") : T(L"Drone, sacs de couchage, boutique s21, musée, VAZ-2108", L"Drone, sleeping bags, s21 shop, museum, VAZ-2108"), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        // (resume des ajouts, a jour du 25/10 : sur MSC aussi la boutique, le musee, la VAZ et le cinema ; coupe s'il ne tient pas)
+        if (!pick) Text(g, FitText(g_game == GAME_MSC ? T(L"Drone, sacs, s21, musée, VAZ, cinéma", L"Drone, bags, s21, museum, VAZ, cinema") : T(L"Drone, sacs, s21, musée, VAZ, cinéma, CARDINAL", L"Drone, bags, s21, museum, VAZ, cinema, CARDINAL"), 10.5f, FontStyleRegular, w), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         y += pick ? rh : rh2;
         g.DrawLine(&sp, x, y - 0.5f, right, y - 0.5f);
         if (mode == 1) for (const char *k : kAjoutKeys) row(k, false);

@@ -2051,6 +2051,8 @@ static const wchar_t *const kAr[][2] = {
     { L"everything max", L"كل شيء بأقصى حد" },
     { L"Ice race and CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car.", L"سباق الجليد ومتجر قطع CARDINAL: إضافات صُنعت لـ My Winter Car، غير موجودة في My Summer Car." },
     { L"The KINO TÄHTI cinema too, in the same place as in My Winter Car: by the road, east of the MAATALOUS silos.", L"وسينما KINO TÄHTI أيضاً، في المكان نفسه كما في My Winter Car: بجانب الطريق، شرق صوامع MAATALOUS." },
+    { L"Drone, bags, s21, museum, VAZ, cinema", L"المسيّرة، الأكياس، s21، المتحف، VAZ، السينما" },
+    { L"Drone, bags, s21, museum, VAZ, cinema, CARDINAL", L"المسيّرة، الأكياس، s21، المتحف، VAZ، السينما، CARDINAL" },
     { L"MOD SUPPORT / KNOWN INCOMPATIBILITIES", L"دعم المودّات / حالات عدم التوافق" },
     { L"Remove dents…", L"إزالة الانبعاجات…" },
     { L"Close the game to remove the dents", L"أغلق اللعبة لإزالة الانبعاجات" },
