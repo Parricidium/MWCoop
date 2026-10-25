@@ -1098,6 +1098,10 @@ namespace MWCoop
             Vector3 bshiftG = Vector3.zero, bshiftD = Vector3.zero;
             Vector3[] ashift = new Vector3[2];
             var ribbons = new Mesh[2]; var tongue = new Mesh[2];
+            // (ancrages hauts : sur la plage arriere, derriere le haut du dossier -- dans le repere de Menos ils sont 18 cm plus haut et
+            // 24 cm plus en arriere que sur la SORBET du jeu, le meme ecart que ses boucles ; la sangle montait vers le plafond. JD,
+            // 25/10 : « comme d'origine, repose sur le dossier et va vers le coffre ». [Test] AncreHautY/Z)
+            Vector3 topShift = new Vector3(0f, Config.GetFloat("Test", "AncreHautY", -0.18f), Config.GetFloat("Test", "AncreHautZ", -0.24f));
             if (bench != null && cush != null)
             {
                 float benchTop = float.MinValue, cushBack = float.MaxValue, outer = 0f;
@@ -1146,7 +1150,7 @@ namespace MWCoop
                     Vector3 foot = edge.Count > 0 ? edge[0] : new Vector3(sx * (outer - 0.05f), co.x, co.y);
                     ashift[k] = new Vector3(foot.x - sx * 0.03f - ac.x, co.x + 0.02f - ac.y + lift, co.y + 0.015f - ac.z + fwd);
                     // haut : l'ancrage de la plage arriere
-                    Vector3 anchor = Center(ms[R_Top].vertices, (int)sx);
+                    Vector3 anchor = Center(ms[R_Top].vertices, (int)sx) + topShift;
                     // (lisses : le dossier du jeu a peu de faces, la sangle faisait des dents de scie)
                     Smooth(edge, 3); Smooth(rail2, 3);
                     if (edge.Count > 0) { edge.Add(anchor + new Vector3(0f, -0.02f, 0.03f)); rail2.Add(anchor + new Vector3(-sx * 0.045f, -0.02f, 0.03f)); }
@@ -1163,7 +1167,8 @@ namespace MWCoop
             Vector3 bG = bshiftG, bD = bshiftD;
             float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
             Transform baseT = part("Base", null, rt).transform;
-            part("AncresHaut", ms[R_Top], baseT);
+            Vector3 ts = topShift;
+            part("AncresHaut", Shifted(ms[R_Top], q => q + ts), baseT);
             part("Boucles", Shifted(ms[R_Buckles], q => q + (q.x < 0f ? bG : bD)), baseT);
             for (int k = 0; k < 2; k++)
             {
@@ -1178,7 +1183,10 @@ namespace MWCoop
                 }
                 part("Languette", tongue[k] ?? ms[R_Side + 1 + 4 * k], m.Open[k].transform);
                 m.Closed[k] = part(k == 0 ? "BoucleeG" : "BoucleeD", null, rt);
-                part("SangleHaute", ms[R_Side + 2 + 4 * k], m.Closed[k].transform);
+                // (sangle de l'ancrage haut a l'epaule : son bout cote ancrage suit l'ancrage, celui de l'epaule ne bouge pas)
+                Mesh sh = ms[R_Side + 2 + 4 * k];
+                float shBack = sh.bounds.min.z, shFront = sh.bounds.max.z;
+                part("SangleHaute", Shifted(sh, q => q + ts * Mathf.Clamp01((shFront - q.z) / Mathf.Max(0.01f, shFront - shBack))), m.Closed[k].transform);
                 // bouclee : son bas suit boucle (cote milieu) et ancrage bas (cote portiere), son haut (l'epaule) ne bouge pas
                 Mesh fm = ms[R_Side + 3 + 4 * k];
                 float minY = fm.bounds.min.y, maxY = fm.bounds.max.y, xin = 0.18f, xout = 0.62f;
