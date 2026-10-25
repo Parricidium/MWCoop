@@ -817,6 +817,7 @@ namespace MWCoop
             // ([Test] SondeBoite=1 : etat de la boite de TestVoiture chaque seconde, quel que soit l'essai)
             if (Config.GetInt("Test", "SondeBoite", 0) != 0 && mode != "mscreprise" && t > 20f && Time.realtimeSinceStartup >= repriseProbeAt)
             { repriseProbeAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : boite t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
+            if (mode == "mscposte") { FleetariMsc.Test(mode, t); return; }   // (commande par la poste partagee, Kamixak et Mikol 25/10)
             if (mode == "mscreprise") { MscReprise(t); return; }   // (Satsuma qui roule seule chez le second conducteur, 25/10)
             if (mode == "mscsauve") { SaveBatchMsc.Test(t); return; }   // (sauvegarde en jeu groupee contre une par une, gel de l'hote 24/10)
             if (Config.Get("Test", "Triche", "").Length > 0 && t > Config.GetFloat("Test", "TricheA", 30f) && !tricheDone) { tricheDone = true; Log.Info("autotest : triche " + Config.Get("Test", "Triche", "") + " -> " + (Cheats.Command(Config.Get("Test", "Triche", "")) ?? "ok")); }
@@ -1361,12 +1362,22 @@ namespace MWCoop
                 PlayMakerFSM fsm = go != null ? Game.FsmOn(go, spec.Substring(c + 1).Trim()) : null;
                 if (fsm == null) { Log.Info("autotest : automate " + spec + " introuvable"); continue; }
                 Log.Info("autotest : automate " + spec + " (" + Recon.Path(fsm.transform) + "), etat " + fsm.ActiveStateName);
+                // ([Test] AutomateEveil=1 : objet jamais actif -- automate pas initialise, actions illisibles -- allume le temps de la
+                // lecture, puis eteint dans la meme image : Awake joue, Start non)
+                var woke = new System.Collections.Generic.List<GameObject>();
+                if (Config.GetInt("Test", "AutomateEveil", 0) != 0 && !fsm.gameObject.activeInHierarchy)
+                {
+                    var chain = new System.Collections.Generic.List<Transform>();
+                    for (Transform p = fsm.transform; p != null; p = p.parent) chain.Insert(0, p);
+                    foreach (Transform p in chain) if (!p.gameObject.activeSelf) { p.gameObject.SetActive(true); woke.Add(p.gameObject); }
+                }
                 foreach (FsmState st in fsm.Fsm.States)
                 {
                     var tr = new System.Text.StringBuilder();
                     foreach (FsmTransition x in st.Transitions) tr.Append(' ').Append(x.EventName).Append("->").Append(x.ToState);
                     Log.Info("autotest :   " + Jobs.DumpActions(fsm, st.Name) + " ; transitions" + tr);
                 }
+                for (int i = woke.Count - 1; i >= 0; i--) woke[i].SetActive(false);
                 foreach (FsmTransition gt in fsm.FsmGlobalTransitions) Log.Info("autotest :   globale " + gt.EventName + " -> " + gt.ToState);
                 foreach (NamedVariable v in fsm.FsmVariables.GetAllNamedVariables()) Log.Info("autotest :   var " + v.Name + " = " + v);
                 foreach (FsmEvent ev in fsm.Fsm.Events) Log.Info("autotest :   evenement " + ev.Name + (ev.IsGlobal ? " (global)" : ""));

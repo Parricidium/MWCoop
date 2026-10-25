@@ -146,6 +146,13 @@ namespace MWCoop
         // d'un joueur a l'autre -- ni l'un ni l'autre n'est suivi (impossible de savoir lequel est lequel en face).
         static readonly HashSet<string> dupKeys = new HashSet<string>();
         static int mscKeyLogs, keyLogs;
+        // Colis de la poste (My Summer Car) : nom de sa premiere piece (Parts/<piece>), sinon de son premier enfant -- le meme chez tous.
+        static string PackageId(Transform t)
+        {
+            Transform parts = t.Find("Parts");
+            if (parts != null && parts.childCount > 0) return parts.GetChild(0).name;
+            return t.childCount > 0 ? t.GetChild(0).name : null;
+        }
         // Rang de t parmi les enfants de son parent qui portent le meme nom (0 pour le premier).
         static int SameNameRank(Transform t)
         {
@@ -240,6 +247,9 @@ namespace MWCoop
                 // l'invite ; dipper, grill, notepad, radiateur, garde-boue... jamais synchronises, Vaydon 23/10). Les paires du jeu
                 // (deux haches, deux louches, deux seaux) gardent leur ordre relatif.
                 k = !listed && t.parent == null ? "w:" + path.Replace("(Clone)", "") : "w:" + path + "#" + SameNameRank(t);
+                // (My Summer Car : colis de la poste sortis de STORE/Boxes, tous renommes « amis-auto ky package(xxxxx) » a la racine --
+                // meme cle, seul le premier suivi, Kamixak 25/10 : cle par leur contenu, la premiere piece sous Parts)
+                if (Game.Msc && t.parent == null && (tn.StartsWith("amis-auto ky package") || tn.StartsWith("atk harri package"))) { string pid = PackageId(t); if (pid != null) k = "w:colis:" + pid; }
                 if (Config.GetInt("Test", "JournalCles", 0) != 0 && keyLogs++ < 400) Log.Info("objets : cle " + k + " (rang " + t.GetSiblingIndex() + ")");
                 if (!listed && t.parent == null && Game.Msc && mscKeyLogs++ < 20) Log.Info("objets : objet a la racine " + path + " -> cle " + k);
                 if (!listed && dupKeys.Contains(k)) return null;

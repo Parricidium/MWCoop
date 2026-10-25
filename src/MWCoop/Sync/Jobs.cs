@@ -2029,6 +2029,7 @@ namespace MWCoop
                 case "@fleettravail": FleetariMsc.OnWork(who, r); break;
                 case "@fleetfin": FleetariMsc.OnWorkDone(who, r); break;
                 case "@postcmd": FleetariMsc.OnPost(who, r); break;   // (MSC : commande par la poste payee)
+                case "@postbox": FleetariMsc.OnPostBox(who, r); break;   // (MSC : enveloppe du catalogue postee au magasin)
                 case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;
