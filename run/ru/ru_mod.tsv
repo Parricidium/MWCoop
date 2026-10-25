@@ -543,38 +543,19 @@ Asks the host for the whole world state, as on arrival	Запрашивает у
 Whole world state resent to the guests	Всё состояние мира отправлено гостям заново
 Resync requested from the host	Пересинхронизация запрошена у хоста
 right-click: marker · 	правый клик: маркер · 
-RENTAL JOKKIS	ЙОККИС В АРЕНДУ
-Ice race: one car per player, free, first come first served; given back at the end of the weekend.	Гонка на льду: одна машина на игрока, бесплатно, кто первый; возвращается в конце выходных.
-Rivett no. 14: the game's car, free as well	Rivett № 14: машина игры, тоже бесплатно
-GIVE BACK	ВЕРНУТЬ
-CHOOSE	ВЫБРАТЬ
 yours	ваша
 free	свободна
 taken by 	занята: 
-Yours this week	Ваша на этой неделе
 Free	Свободна
 Taken by 	Занята: 
-GIVE BACK NO. 	ВЕРНУТЬ № 
-CHOOSE NO. 	ВЫБРАТЬ № 
-ALREADY TAKEN	УЖЕ ЗАНЯТА
 Give back no. 	Сначала верните № 
-Up/Down: car  ·  Enter: choose or give back  ·  drag the preview: turn  ·  Esc: close	Вверх/Вниз: машина  ·  Enter: выбрать или вернуть  ·  тяни превью: повернуть  ·  Esc: закрыть
 Preview unavailable	Превью недоступно
-Jokkis no. 	Йоккис № 
  is yours	 ваша
 No. 	№ 
  was just taken	 только что заняли
  given back	 возвращена
-Return of no. 	Возврат № 
-Solo: Jokkis are rented in a multiplayer game	Соло: Йоккис арендуются в сетевой игре
  is already taken	 уже занята
-Rental refused	В аренде отказано
 Request sent to the host…	Запрос отправлен хосту…
-ICE RACE	ГОНКА НА ЛЬДУ
-Ice race: pick a car	Гонка на льду: выбрать машину
-yours: no. 	ваша: № 
-rental Jokkis, free	Йоккис в аренду, бесплатно
-Enter or click: the game's 16 Jokkis, one per player, with a 3D preview	Enter или клик: 16 Йоккис игры, одна на игрока, с 3D-превью
 The host is saving for {0}: short pause...	Хост сохраняет игру для {0}: небольшая пауза...
 Just for you, kept for your next games (also in the launcher: Settings \u203A HUD). The HUD changes right away, around this menu.	Только для тебя, сохраняется для следующих игр (и в лаунчере: Настройки \u203A HUD). HUD меняется сразу, вокруг этого меню.
 CUSTOMISE	НАСТРОЙКА
@@ -676,14 +657,11 @@ Solo: start the game from MWCoop.exe to play with friends	Соло: запуст
  player(s)	 игрок(ов)
 In game, 	В игре
  opens the chat without this menu	 открывает чат без этого меню
-Rental Jokkis, free · one per player · given back after the weekend	Прокатные Jokkis, бесплатно · одна на игрока · возврат после выходных
 What the others see · changed right away for them	Что видят другие · у них меняется сразу
 Just for you · also in the launcher (Settings › HUD) · the HUD changes around this menu	Только для тебя · и в лаунчере (Настройки › HUD) · HUD меняется вокруг меню
 Just for you · kept for your next games · also in the launcher	Только для тебя · сохраняется для следующих игр · и в лаунчере
 Differences between host and guests, census, resync	Расхождения между хостом и гостями, перепись, ресинхронизация
 Steam's invite window (also: Shift+Tab)	Окно приглашений Steam (также: Shift+Tab)
-Your car: no. 	Твоя машина: №
-Rental Jokkis, free	Прокатные Jokkis, бесплатно
 Enter or click: the Ice race tab	Enter или клик: вкладка «Гонка на льду»
 Go to	Перейти
 Bring here	Призвать
@@ -702,14 +680,10 @@ Everything at once; every line stays editable	Всё сразу; каждую с
 MWCOOP MENU	МЕНЮ MWCOOP
 No messages yet.	Сообщений пока нет.
 Send	Отправить
-Enter: choose or give back  ·  Left/Right: model  ·  drag the preview: turn	Enter: выбрать или вернуть  ·  Влево/Вправо: модель  ·  тяни превью: поворот
  requested from the host	 — запрошен возврат у хоста
-In game only: the ice race is prepared in the game.	Только в игре: к гонке на льду готовятся в игре.
 All	Все
  free	 свободно
-Rental is off in this game: launcher, Settings › Co-op › Ice race (beta).	Прокат выключен в этой игре: лаунчер, Настройки › Кооп › Гонка на льду (бета).
 OTHERS	ДРУГИЕ
-Choose no. 	Выбрать №
 Already taken	Уже занята
 THE TEAM	КОМАНДА
 not yet	пока нет
@@ -732,7 +706,6 @@ Centre	По центру
 Left	Слева
 The F10 menu and the small panels (cheats, wallet, chat)	Меню F10 и маленькие панели (читы, кошелёк, чат)
 Left: the game stays visible on the right	Слева: игра остаётся видна справа
-Return no. 	Вернуть № 
  first	.
 Performance	Скорость
 Balanced	Баланс
