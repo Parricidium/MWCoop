@@ -958,13 +958,19 @@ namespace MWCoop
             }
         }
 
-        // Ceintures arriere de la SORBET : modele de Menos (25/10 ; assets/ceintures, run/ceintures-arr.py), dans le repere de la
-        // voiture, avec la matiere de la ceinture avant du jeu : ancrages, boucles et haut des sangles toujours la (option
-        // CeinturesArriere allumee), et a chaque place laterale la ceinture rangee, ou bouclee quand un joueur y est attache
-        // (ici ou chez lui). Les autres voitures gardent la copie en miroir de la ceinture du conducteur. [Test] CeinturesArriereCopie=1 :
-        // la copie aussi sur la SORBET (comme avant).
+        // Ceintures arriere de la SORBET : modele de Menos (25/10 ; assets/ceintures, run/ceintures-arr.py), avec la matiere de la
+        // ceinture avant du jeu, dans le repere de LOD/Seatbelts (celui des ceintures avant, ou Menos a pose les siennes). Recale sur
+        // les sieges du jeu (JD, 25/10 : « la sangle doit suivre le fauteuil, collee a lui, la boucle dans la pliure, des deux cotes
+        // pareil ») : boucles et ancrages bas dans la pliure assise-dossier, bas de la ceinture bouclee avec eux, et la sangle rangee
+        // faite ici, un ruban colle au bord avant du dossier, de la pliure a son sommet puis a l'ancrage de la plage arriere, la
+        // languette en haut. Toujours la avec l'option CeinturesArriere ; a chaque place laterale la ceinture rangee, ou bouclee
+        // quand un joueur y est attache (ici ou chez lui). Les autres voitures gardent la copie en miroir de la ceinture du
+        // conducteur. [Test] CeinturesArriereCopie=1 : la copie aussi sur la SORBET (comme avant).
         class RearModel { public GameObject Root; public GameObject[] Open = new GameObject[2], Closed = new GameObject[2]; public int State = -1; }
         static readonly Dictionary<Transform, RearModel> rearModels = new Dictionary<Transform, RearModel>();
+        static readonly string[] RearNames = { "arr-ancres-haut", "arr-boucles", "arr-ancre-bas-g", "arr-languette-g", "arr-sangle-haut-g", "arr-bouclee-g",
+                                               "arr-ancre-bas-d", "arr-languette-d", "arr-sangle-haut-d", "arr-bouclee-d" };
+        const int R_Top = 0, R_Buckles = 1, R_Side = 2;   // par cote (2 + 4 k) : ancrage bas, languette, sangle haute, bouclee
         static Mesh[] rearMeshes; static bool rearMeshTried;
         static Mesh[] RearMeshes()
         {
@@ -972,17 +978,14 @@ namespace MWCoop
             rearMeshTried = true;
             try
             {
-                rearMeshes = new Mesh[5];
-                string[] n = { "arr-base", "arr-rangee-g", "arr-bouclee-g", "arr-rangee-d", "arr-bouclee-d" };
-                for (int i = 0; i < n.Length; i++) rearMeshes[i] = SleepingBags.LoadMesh("MWCoop." + n[i] + ".mwm", 1f);
-                // (bouclee : bombee vers l'avant au milieu des sangles -- l'avatar est plus epais que le joueur du jeu et la cachait,
-                // comme la ceinture avant, BulgedMesh ; ses attaches -- epaule, boucle, bas cote portiere -- ne bougent pas)
-                float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
-                foreach (int k in new[] { 2, 4 }) BulgeRear(rearMeshes[k], bulge, reach);
+                rearMeshes = new Mesh[RearNames.Length];
+                for (int i = 0; i < RearNames.Length; i++) rearMeshes[i] = SleepingBags.LoadMesh("MWCoop." + RearNames[i] + ".mwm", 1f);
             }
             catch (System.Exception e) { rearMeshes = null; Log.Warn("ceintures arriere : modele illisible (" + e.Message + "), copie de la ceinture avant"); }
             return rearMeshes;
         }
+        // (bouclee : bombee vers l'avant au milieu des sangles -- l'avatar est plus epais que le joueur du jeu et la cachait,
+        // comme la ceinture avant, BulgedMesh ; ses attaches -- epaule, boucle, bas cote portiere -- ne bougent pas)
         static void BulgeRear(Mesh m, float bulge, float reach)
         {
             if (bulge <= 0f) return;
@@ -1034,37 +1037,221 @@ namespace MWCoop
                 m.Open[k].SetActive(!fast); m.Closed[k].SetActive(fast);
             }
         }
+
+        // Sommets d'un maillage de la voiture, dans le repere 'into'.
+        static Vector3[] VertsIn(Transform car, string name, Transform into)
+        {
+            Transform t = FindUnder(car, name, null);
+            MeshFilter mf = t != null ? t.GetComponent<MeshFilter>() : null;
+            if (mf == null || mf.sharedMesh == null || !mf.sharedMesh.isReadable) return null;
+            Vector3[] v = mf.sharedMesh.vertices;
+            for (int i = 0; i < v.Length; i++) v[i] = into.InverseTransformPoint(t.TransformPoint(v[i]));
+            return v;
+        }
+        static Vector3 Center(Vector3[] v, int side)
+        {
+            Vector3 c = Vector3.zero; int n = 0;
+            foreach (Vector3 p in v) if (side == 0 || Mathf.Sign(p.x) == side) { c += p; n++; }
+            return n > 0 ? c / n : Vector3.zero;
+        }
+        static Mesh Shifted(Mesh src, System.Func<Vector3, Vector3> f)
+        {
+            Mesh m = Object.Instantiate(src);
+            Vector3[] v = m.vertices;
+            for (int i = 0; i < v.Length; i++) v[i] = f(v[i]);
+            m.vertices = v; m.RecalculateBounds();
+            return m;
+        }
+
         static RearModel BuildRearModel(Transform car, Belt b)
         {
             Mesh[] ms = RearMeshes();
             MeshRenderer src = b.Fastened != null ? b.Fastened.GetComponent<MeshRenderer>() : null;
             if (ms == null || src == null) return null;
             var m = new RearModel { Root = new GameObject("MWCoop-CeinturesArriere") };
-            m.Root.transform.parent = car;
-            // (repere du modele : celui de LOD/Seatbelts -- l'objet des ceintures avant, ou Menos a pose les siennes --, mis droit :
-            // (0, -0,09, 0,24) dans la SORBET ; axes deja ceux d'Unity, run/ceintures-arr.py. Avant, a l'origine des maillages de la
-            // caisse, 14 cm plus bas et 24 cm en arriere : boucles a mi-dossier, puis sangles dans le dossier -- JD, 25/10 : « trop
-            // hautes ». [Test] CeinturesArriereY/Z : decalage en plus)
+            Transform rt = m.Root.transform;
+            rt.parent = car;
             Transform sbt = FindUnder(car, "Seatbelts", "LOD");
-            m.Root.transform.localPosition = (sbt != null ? car.InverseTransformPoint(sbt.position) : new Vector3(0f, -0.09f, 0.24f))
-                                           + new Vector3(0f, Config.GetFloat("Test", "CeinturesArriereY", 0f), Config.GetFloat("Test", "CeinturesArriereZ", 0f));
-            m.Root.transform.localRotation = Quaternion.identity;
-            if (Config.GetInt("Test", "CeinturesArriereEnvers", 0) != 0) foreach (Mesh q in ms) { int[] tr = q.triangles; for (int i = 0; i < tr.Length; i += 3) { int x = tr[i + 1]; tr[i + 1] = tr[i + 2]; tr[i + 2] = x; } q.triangles = tr; }   // (essais : faces retournees)
+            rt.localPosition = sbt != null ? car.InverseTransformPoint(sbt.position) : new Vector3(0f, -0.09f, 0.24f);
+            rt.localRotation = Quaternion.identity;
             Vector3 cs = car.lossyScale;
-            m.Root.transform.localScale = new Vector3(1f / cs.x, 1f / cs.y, 1f / cs.z);
-            System.Func<string, Mesh, GameObject> part = (name, mesh) =>
+            rt.localScale = new Vector3(1f / cs.x, 1f / cs.y, 1f / cs.z);
+            System.Func<string, Mesh, Transform, GameObject> part = (name, mesh, parent) =>
             {
                 var g = new GameObject(name);
                 g.layer = b.Fastened.layer;
-                g.transform.parent = m.Root.transform;
+                g.transform.parent = parent;
                 g.transform.localPosition = Vector3.zero; g.transform.localRotation = Quaternion.identity; g.transform.localScale = Vector3.one;
-                g.AddComponent<MeshFilter>().sharedMesh = mesh;
-                g.AddComponent<MeshRenderer>().sharedMaterial = src.sharedMaterial;
+                if (mesh != null)
+                {
+                    g.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    g.AddComponent<MeshRenderer>().sharedMaterial = src.sharedMaterial;
+                }
                 return g;
             };
-            part("Base", ms[0]);
-            for (int k = 0; k < 2; k++) { m.Open[k] = part(k == 0 ? "RangeeG" : "RangeeD", ms[1 + 2 * k]); m.Closed[k] = part(k == 0 ? "BoucleeG" : "BoucleeD", ms[2 + 2 * k]); }
-            Log.Info("ceintures arriere : modele de Menos pose sur " + car.name + " (matiere " + (src.sharedMaterial != null ? src.sharedMaterial.name : "?") + ")");
+            // Sieges du jeu dans le repere du modele : dossier (RearSeat/Pivot/seat_rear_bench), assise (LOD/seat_rear_seat).
+            Vector3[] bench = VertsIn(car, "seat_rear_bench", rt), cush = VertsIn(car, "seat_rear_seat", rt);
+            Transform bt = FindUnder(car, "seat_rear_bench", null);
+            int[] benchTri = bench != null && bt != null ? bt.GetComponent<MeshFilter>().sharedMesh.triangles : null;
+            float lift = Config.GetFloat("Test", "CeinturesArriereY", 0f), fwd = Config.GetFloat("Test", "CeinturesArriereZ", 0f);
+            var diag = new System.Text.StringBuilder();
+            Vector3 bshiftG = Vector3.zero, bshiftD = Vector3.zero;
+            Vector3[] ashift = new Vector3[2];
+            var ribbons = new Mesh[2]; var tongue = new Mesh[2];
+            if (bench != null && cush != null)
+            {
+                float benchTop = float.MinValue, cushBack = float.MaxValue, outer = 0f;
+                foreach (Vector3 p in bench) { benchTop = Mathf.Max(benchTop, p.y); outer = Mathf.Max(outer, Mathf.Abs(p.x)); }
+                foreach (Vector3 p in cush) cushBack = Mathf.Min(cushBack, p.z);
+                // pliure en x : haut de l'assise (sa partie arriere) et avant du dossier juste au-dessus
+                System.Func<float, Vector2> crease = xq =>
+                {
+                    float y = float.MinValue, z = float.MinValue;
+                    foreach (Vector3 p in cush) if (Mathf.Abs(p.x - xq) < 0.08f && p.z < cushBack + 0.15f) y = Mathf.Max(y, p.y);
+                    if (y == float.MinValue) y = 0f;
+                    foreach (Vector3 p in bench) if (Mathf.Abs(p.x - xq) < 0.08f && p.y < y + 0.1f) z = Mathf.Max(z, p.z);
+                    if (z == float.MinValue) z = cushBack;
+                    return new Vector2(y, z);
+                };
+                Vector3[] buckles = ms[R_Buckles].vertices;
+                for (int k = 0; k < 2; k++)
+                {
+                    float sx = k == 0 ? -1f : 1f;
+                    // boucle : son bas dans la pliure, son avant 2 cm devant le dossier
+                    float bMinY = float.MaxValue, bMaxZ = float.MinValue, bx = 0f; int bn = 0;
+                    foreach (Vector3 p in buckles) if (Mathf.Sign(p.x) == sx) { bMinY = Mathf.Min(bMinY, p.y); bMaxZ = Mathf.Max(bMaxZ, p.z); bx += p.x; bn++; }
+                    bx = bn > 0 ? bx / bn : sx * 0.18f;
+                    Vector2 cb = crease(bx);
+                    Vector3 bs = new Vector3(0f, cb.x - 0.01f - bMinY + lift, cb.y + 0.02f - bMaxZ + fwd);
+                    if (k == 0) bshiftG = bs; else bshiftD = bs;
+                    // bord avant du dossier, cote portiere, de la pliure a son sommet (un point tous les 3 cm)
+                    var edge = new List<Vector3>();
+                    Vector2 co = crease(sx * (outer - 0.06f));
+                    // (rails de la sangle sur la face avant du dossier, a 5 et 9,5 cm de son bord a cette hauteur : rayons sur ses
+                    // triangles ; le bord est arrondi, le sommet le plus en avant mettait la sangle dans le rembourrage)
+                    float off = Config.GetFloat("Test", "SangleAvance", 0.008f), in0 = Config.GetFloat("Test", "SangleBord", 0.05f);
+                    var rail2 = new List<Vector3>();
+                    for (float y = co.x + 0.02f; y <= benchTop - 0.01f; y += 0.03f)
+                    {
+                        float ox = 0f;
+                        foreach (Vector3 p in bench) if (Mathf.Abs(p.y - y) < 0.05f) ox = Mathf.Max(ox, sx * p.x);
+                        if (ox <= 0f) continue;
+                        float za, zb;
+                        if (!SurfaceZ(bench, benchTri, sx * (ox - in0), y, out za) || !SurfaceZ(bench, benchTri, sx * (ox - in0 - 0.045f), y, out zb)) continue;
+                        edge.Add(new Vector3(sx * (ox - in0), y + lift, za + off + fwd));
+                        rail2.Add(new Vector3(sx * (ox - in0 - 0.045f), y + lift, zb + off + fwd));
+                    }
+                    // ancrage bas : au pied du bord du dossier, dans la pliure
+                    Vector3 ac = Center(ms[R_Side + 4 * k].vertices, 0);
+                    Vector3 foot = edge.Count > 0 ? edge[0] : new Vector3(sx * (outer - 0.05f), co.x, co.y);
+                    ashift[k] = new Vector3(foot.x - sx * 0.03f - ac.x, co.x + 0.02f - ac.y + lift, co.y + 0.015f - ac.z + fwd);
+                    // haut : l'ancrage de la plage arriere
+                    Vector3 anchor = Center(ms[R_Top].vertices, (int)sx);
+                    // (lisses : le dossier du jeu a peu de faces, la sangle faisait des dents de scie)
+                    Smooth(edge, 3); Smooth(rail2, 3);
+                    if (edge.Count > 0) { edge.Add(anchor + new Vector3(0f, -0.02f, 0.03f)); rail2.Add(anchor + new Vector3(-sx * 0.045f, -0.02f, 0.03f)); }
+                    ribbons[k] = Ribbon(edge, rail2, ms[R_Side + 2 + 4 * k]);
+                    // languette : sur le ruban, 7 cm sous le haut du dossier
+                    Vector3 tc = Center(ms[R_Side + 1 + 4 * k].vertices, 0), at = foot;
+                    foreach (Vector3 q in edge) if (q.y <= benchTop - 0.07f) at = q;
+                    tongue[k] = Shifted(ms[R_Side + 1 + 4 * k], q => q + (at + new Vector3(-sx * 0.02f, 0f, 0.012f) - tc));
+                    diag.Append(k == 0 ? " ; gauche" : " ; droite").Append(" pliure (y ").Append(co.x.ToString("F2")).Append(", z ").Append(co.y.ToString("F2"))
+                        .Append("), bord ").Append(edge.Count).Append(" points, boucle ").Append(bs.ToString("F2")).Append(", ancrage bas ").Append(ashift[k].ToString("F2"));
+                }
+            }
+            else Log.Warn("ceintures arriere : sieges de la SORBET illisibles, modele tel quel");
+            Vector3 bG = bshiftG, bD = bshiftD;
+            float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
+            Transform baseT = part("Base", null, rt).transform;
+            part("AncresHaut", ms[R_Top], baseT);
+            part("Boucles", Shifted(ms[R_Buckles], q => q + (q.x < 0f ? bG : bD)), baseT);
+            for (int k = 0; k < 2; k++)
+            {
+                Vector3 a = ashift[k], bk = k == 0 ? bG : bD;
+                part(k == 0 ? "AncreBasG" : "AncreBasD", Shifted(ms[R_Side + 4 * k], q => q + a), baseT);
+                m.Open[k] = part(k == 0 ? "RangeeG" : "RangeeD", null, rt);
+                if (ribbons[k] != null)
+                {
+                    GameObject rg = part("Sangle", ribbons[k], m.Open[k].transform);
+                    if (Config.GetInt("Test", "RubanRouge", 0) != 0) rg.GetComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("Diffuse")) { color = Color.red };   // (essais)
+                    diag.Append(k == 0 ? " ; ruban g " : " ; ruban d ").Append(car.InverseTransformPoint(rt.TransformPoint(ribbons[k].bounds.center)).ToString("F2")).Append(" taille ").Append(ribbons[k].bounds.size.ToString("F2"));
+                }
+                part("Languette", tongue[k] ?? ms[R_Side + 1 + 4 * k], m.Open[k].transform);
+                m.Closed[k] = part(k == 0 ? "BoucleeG" : "BoucleeD", null, rt);
+                part("SangleHaute", ms[R_Side + 2 + 4 * k], m.Closed[k].transform);
+                // bouclee : son bas suit boucle (cote milieu) et ancrage bas (cote portiere), son haut (l'epaule) ne bouge pas
+                Mesh fm = ms[R_Side + 3 + 4 * k];
+                float minY = fm.bounds.min.y, maxY = fm.bounds.max.y, xin = 0.18f, xout = 0.62f;
+                Mesh fast = Shifted(fm, q =>
+                {
+                    float w = 1f - Mathf.Clamp01((q.y - minY) / Mathf.Max(0.01f, maxY - minY));
+                    float tt = Mathf.Clamp01((Mathf.Abs(q.x) - xin) / (xout - xin));
+                    return q + Vector3.Lerp(bk, a, tt) * w;
+                });
+                BulgeRear(fast, bulge, reach);
+                part("Ceinture", fast, m.Closed[k].transform);
+            }
+            Log.Info("ceintures arriere : modele de Menos pose sur " + car.name + " (matiere " + (src.sharedMaterial != null ? src.sharedMaterial.name : "?") + ")" + diag);
+            return m;
+        }
+
+        // Moyenne glissante sur trois points, les bouts gardes, 'passes' fois.
+        static void Smooth(List<Vector3> l, int passes)
+        {
+            for (int p = 0; p < passes; p++)
+            {
+                if (l.Count < 3) return;
+                var c = new List<Vector3>(l);
+                for (int i = 1; i < l.Count - 1; i++) l[i] = (c[i - 1] + c[i] * 2f + c[i + 1]) / 4f;
+            }
+        }
+
+        // Avant de la surface (z le plus grand) du maillage (sommets, triangles) en (x, y) : rayon le long de z.
+        static bool SurfaceZ(Vector3[] v, int[] tri, float x, float y, out float z)
+        {
+            z = float.MinValue;
+            if (tri == null) return false;
+            for (int i = 0; i + 2 < tri.Length; i += 3)
+            {
+                Vector3 a = v[tri[i]], b = v[tri[i + 1]], c = v[tri[i + 2]];
+                float d = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+                if (Mathf.Abs(d) < 1e-9f) continue;
+                float l1 = ((b.y - c.y) * (x - c.x) + (c.x - b.x) * (y - c.y)) / d, l2 = ((c.y - a.y) * (x - c.x) + (a.x - c.x) * (y - c.y)) / d, l3 = 1f - l1 - l2;
+                if (l1 < 0f || l2 < 0f || l3 < 0f) continue;
+                z = Mathf.Max(z, l1 * a.z + l2 * b.z + l3 * c.z);
+            }
+            return z > float.MinValue;
+        }
+
+        // Sangle rangee : ruban de 4,5 cm le long de 'path' (du bas vers le haut), vers l'interieur du siege depuis le bord, visible
+        // des deux faces ; teinte d'un point de la sangle du modele.
+        static Mesh Ribbon(List<Vector3> path, List<Vector3> path2, Mesh strap)
+        {
+            if (path.Count < 2 || path2.Count != path.Count) return null;
+            // (coordonnees de texture de la sangle du modele : sa largeur d'un rail a l'autre, au milieu de sa longueur)
+            Vector2[] su = strap.uv;
+            Vector2 lo = su.Length > 0 ? su[0] : Vector2.zero, hi = lo;
+            foreach (Vector2 q in su) { lo = Vector2.Min(lo, q); hi = Vector2.Max(hi, q); }
+            bool alongU = hi.x - lo.x > hi.y - lo.y;   // (la longueur de la sangle suit u ou v dans la texture)
+            Vector2 mid = (lo + hi) / 2f;
+            Vector2 uvA = alongU ? new Vector2(mid.x, lo.y) : new Vector2(lo.x, mid.y), uvB = alongU ? new Vector2(mid.x, hi.y) : new Vector2(hi.x, mid.y);
+            int n = path.Count;
+            var v = new Vector3[n * 4]; var nr = new Vector3[n * 4]; var u = new Vector2[n * 4];
+            var tri = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                Vector3 a = path[i], c = path2[i];
+                v[2 * i] = a; v[2 * i + 1] = c; v[2 * n + 2 * i] = a; v[2 * n + 2 * i + 1] = c;
+                nr[2 * i] = nr[2 * i + 1] = Vector3.forward; nr[2 * n + 2 * i] = nr[2 * n + 2 * i + 1] = Vector3.back;
+                u[2 * i] = u[2 * n + 2 * i] = uvA; u[2 * i + 1] = u[2 * n + 2 * i + 1] = uvB;
+                if (i == 0) continue;
+                int p0 = 2 * (i - 1), p1 = p0 + 1, q0 = 2 * i, q1 = q0 + 1;
+                tri.AddRange(new[] { p0, q0, p1, p1, q0, q1 });
+                tri.AddRange(new[] { 2 * n + p0, 2 * n + p1, 2 * n + q0, 2 * n + p1, 2 * n + q1, 2 * n + q0 });
+            }
+            var m = new Mesh { name = "MWCoop-SangleArriere" };
+            m.vertices = v; m.normals = nr; m.uv = u; m.triangles = tri.ToArray();
+            m.RecalculateBounds();
             return m;
         }
 
