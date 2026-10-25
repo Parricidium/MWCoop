@@ -2070,6 +2070,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Too big, not sent (2 GB / 3000 files at most): %s", L"كبيرة جداً، لم تُرسل (2 غ.ب / 3000 ملف كحد أقصى): %s" },
     { L"Not sent by the host (too big): %s", L"لم يرسلها المضيف (كبيرة جداً): %s" },
     { L"ACCEPT · %s, %s", L"قبول · %s، %s" },
+    { L"ACCEPT THE FILES", L"قبول الملفات" },
+    { L"%s to receive, %s. Click to accept, Esc to cancel.", L"%s للاستلام، %s. انقر للقبول، Esc للإلغاء." },
     { L"MOD SUPPORT / KNOWN INCOMPATIBILITIES", L"دعم المودّات / حالات عدم التوافق" },
     { L"Remove dents…", L"إزالة الانبعاجات…" },
     { L"Close the game to remove the dents", L"أغلق اللعبة لإزالة الانبعاجات" },

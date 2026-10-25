@@ -2068,6 +2068,8 @@ about %d min	نحو %d د
 Too big, not sent (2 GB / 3000 files at most): %s	كبيرة جداً، لم تُرسل (2 غ.ب / 3000 ملف كحد أقصى): %s
 Not sent by the host (too big): %s	لم يرسلها المضيف (كبيرة جداً): %s
 ACCEPT · %s, %s	قبول · %s، %s
+ACCEPT THE FILES	قبول الملفات
+%s to receive, %s. Click to accept, Esc to cancel.	%s للاستلام، %s. انقر للقبول، Esc للإلغاء.
 MOD SUPPORT / KNOWN INCOMPATIBILITIES	دعم المودّات / حالات عدم التوافق
 Remove dents…	إزالة الانبعاجات…
 Close the game to remove the dents	أغلق اللعبة لإزالة الانبعاجات

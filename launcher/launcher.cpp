@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -6704,6 +6704,7 @@ static void OnButton(int id)
         else if (g_lobby == LB_NONE && FirewallBeforeHosting()) LobbyHost();
         break;
     case B_JOIN:
+        if (g_lateSync && g_sync == SY_ASK) { SyncAccept(); break; }   // (gros envoi : accepte apres avoir vu la taille)
         if (g_lateSync) { LateFail(T(L"Réception des mods de l'hôte annulée", L"Receiving the host's mods cancelled")); break; }
         if (g_lobby != LB_NONE) {
             bool host = g_lobby == LB_HOST;
@@ -6979,6 +6980,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (TutoKey(wp)) return 0;
         if (g_guide && (wp == VK_ESCAPE || wp == VK_RETURN)) { SteamGuideClose(); return 0; }
         if (wp == VK_ESCAPE && g_lobbyOpts) { g_lobbyOpts = false; return 0; }
+        if (wp == VK_ESCAPE && g_lateSync && g_sync == SY_ASK) { LateFail(T(L"Réception des mods de l'hôte annulée", L"Receiving the host's mods cancelled")); return 0; }
         if ((wp == VK_LEFT || wp == VK_RIGHT) && g_tab == TAB_SKIN && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
         break;
     case WM_MOUSEWHEEL:
@@ -7692,6 +7694,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             NoteImgFetch(url);
             g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
         }
+        else if (st == L"accueil-retard-gros") { g_tab = TAB_HOME; g_lateSync = true; g_sync = SY_ASK; g_syncTotal = 365953024; g_syncGot = 0; }   // (invite en retard, gros envoi a accepter)
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; }
         else if (st == L"api") g_tab = TAB_API;   // page API des moddeurs
         // page OUTILS (outils.inc) : editeur pas installe (version publiee factice), installe, a mettre a jour, en telechargement

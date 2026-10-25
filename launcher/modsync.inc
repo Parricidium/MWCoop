@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------- mods de l'hote chez les invites - inclus par launcher.cpp (apres mods.inc)
+// ---------------------------------------------------------------- mods de l'hote chez les invites - inclus par launcher.cpp (apres mods.inc)
 // Demande de JD (07/10) : les invites recoivent les mods MSCLoader de l'hote, d'un seul accord ("tout accepter" : on
 // joue entre amis).
 //  - Hote : les mods de son dossier Mods coches "Envoyer" (onglet MODS ; [Lanceur] ModsPrives : ceux qu'il garde pour
@@ -575,6 +575,7 @@ static std::atomic<uint64_t> g_syncGot(0), g_syncTotal(0);
 static std::atomic<int> g_syncGen(0);
 static std::atomic<DWORD> g_syncLastT(0);
 static bool g_syncAccepted;               // TOUT ACCEPTER dans ce salon
+static bool g_syncLateAuto;               // invite en retard : accepte d'office jusqu'a kSyncAskBytes
 // Gros envoi (JD, 25/10 : les circuits convertis de Voyage, 270 a 350 Mo) : au-dela, l'invite accepte d'abord, en voyant la
 // taille et le temps estime (sauf « Tout accepter de cet hote »). Debit : celui du dernier telechargement ([Lanceur]
 // DebitMods, Ko/s), sinon 0,34 Mo/s par Steam (vu chez un joueur) ou 1 Mo/s par IP.
@@ -636,6 +637,7 @@ static void SyncReset()
     g_syncGotFile.clear();
     g_syncInflight = 0;
     g_syncAccepted = false;
+    g_syncLateAuto = false;
     g_syncAskedKey = 0;
     g_syncGen++;
     g_sync = SY_NONE;
@@ -787,7 +789,7 @@ static DWORD WINAPI SyncCheckThread(void *p)
     // installe MSCLoader et lui prenne les mods » ; retour de Menos : un ami sans les mods entrait quand meme). Seul ce qui
     // n'est que du contenu (CD, images) demande encore TOUT ACCEPTER, sauf ModsAuto.
     // (gros envoi : a accepter, avec la taille et le temps estime -- sauf « Tout accepter de cet hote »)
-    if (!o.mods.empty() && bytes <= kSyncAskBytes) g_syncAccepted = true;
+    if ((!o.mods.empty() || g_syncLateAuto) && bytes <= kSyncAskBytes) g_syncAccepted = true;   // (invite en retard : tout, sauf un gros envoi)
     if (bytes > kSyncAskBytes && !g_syncAccepted && !ModsAuto()) LaunchLog("mods : gros envoi (%llu octets, %s) : a accepter", (unsigned long long)bytes, Narrow(SyncEta(bytes), CP_UTF8).c_str());
     if (need.empty()) SyncFinishLocked();
     else if (g_syncAccepted || ModsAuto()) { g_syncAccepted = true; SyncStartLocked(); }
@@ -1283,6 +1285,7 @@ static void DrawSyncCard(Graphics &g, RectF c, int hot)
         if (s == SY_CHECK) line = T(L"V\u00E9rification\u2026", L"Checking\u2026");
         else if (s == SY_ASK) {
             swprintf_s(b, T(L"%d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"%d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(g_syncTotal).c_str());
+            if (g_syncTotal > kSyncAskBytes) { line = b; line += L" \u00B7 " + SyncEta(g_syncTotal); wcsncpy_s(b, line.c_str(), _TRUNCATE); }
             line = b; col = kInk; btn = T(L"TOUT ACCEPTER", L"ACCEPT ALL");
         } else if (s == SY_GET) {
             uint64_t t = g_syncTotal, got = g_syncGot;
@@ -1397,7 +1400,7 @@ static bool LateBegin(bool steam)
 {
     if (steam && (g_steamUp != 1 || !sapi::nw || !g_sHost)) return false;
     if (steam) SyncReset();   // (IP : deja fait par LobbyJoin -- la liste de l'hote a pu arriver avant ce message)
-    g_syncAccepted = true;   // (il a demande a rejoindre : ses mods et son contenu, sans question)
+    g_syncLateAuto = true;   // (il a demande a rejoindre : ses mods et son contenu sans question, sauf un gros envoi -- JD 25/10 : la taille et le temps avant)
     g_lateSync = true;
     g_lateSteam = steam;
     g_lateT = GetTickCount();
@@ -1416,6 +1419,7 @@ static void LateEnd()
     if (!g_lateSync) return;
     g_lateSync = false;
     g_lateSteam = false;
+    g_syncLateAuto = false;
     EnterCriticalSection(&g_lcs);
     if (g_guestSock != INVALID_SOCKET) shutdown(g_guestSock, SD_BOTH);   // (GuestThread la ferme)
     LeaveCriticalSection(&g_lcs);

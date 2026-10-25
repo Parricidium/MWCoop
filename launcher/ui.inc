@@ -923,7 +923,7 @@ static void DrawHome(Graphics &g)
             GraphicsPath ip; RoundRect(ip, ib, 14);
             SolidBrush ibb(host ? Color(26, 6, 19, 37) : TH(cardSel)); g.FillPath(&ibb, &ip);
             Icon(g, host ? IC_HOMEPLUS : IC_LOGIN, ib.X + 22, ib.Y + 22, 22, acc, 2.0f);
-            const wchar_t *lab = host ? T(L"HÉBERGER", L"HOST") : g_lateSync ? T(L"MODS DE L'HÔTE…", L"HOST'S MODS…") : g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
+            const wchar_t *lab = host ? T(L"HÉBERGER", L"HOST") : g_lateSync ? (g_sync == SY_ASK ? T(L"ACCEPTER L'ENVOI", L"ACCEPT THE FILES") : T(L"MODS DE L'HÔTE…", L"HOST'S MODS…")) : g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
             Title(g, lab, RectF(r.X + 22, r.Y + 74, r.Width - 44, 34), 25, acc);
             std::wstring d;
             if (host) d = g_steamNet ? T(L"Ouvre un salon Steam pour tes amis ; chacun se met prêt, puis tu lances.", L"Opens a Steam lobby for your friends; everyone gets ready, then you start.")
@@ -932,6 +932,8 @@ static void DrawHome(Graphics &g)
                 wchar_t lb[200];
                 uint64_t tot = g_syncTotal, got = g_syncGot;
                 swprintf_s(lb, T(L"L'hôte joue déjà : réception de ses mods (%d %%), puis tu entres en jeu. Clique pour annuler.", L"The host is already playing: receiving their mods (%d %%), then you join. Click to cancel."), tot ? (int)min<uint64_t>(99, got * 100 / tot) : 0);
+                if (g_sync == SY_ASK)   // gros envoi : la taille et le temps avant d'accepter (JD, 25/10)
+                    swprintf_s(lb, T(L"%s à recevoir, %s. Clique pour accepter, Échap pour annuler.", L"%s to receive, %s. Click to accept, Esc to cancel."), SizeText(tot).c_str(), SyncEta(tot).c_str());
                 d = lb;
             }
             else if (g_joinFallback) d = T(L"L'hôte joue déjà : rejoins sa partie directement.", L"The host is already playing: join their game directly.");

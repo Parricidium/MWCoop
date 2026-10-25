@@ -3,3 +3,5 @@ ENV02	about %d min
 ENV03	Too big, not sent (2 GB / 3000 files at most): %s
 ENV04	Not sent by the host (too big): %s
 ENV05	ACCEPT · %s, %s
+ENV06	ACCEPT THE FILES
+ENV07	%s to receive, %s. Click to accept, Esc to cancel.

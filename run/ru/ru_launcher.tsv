@@ -1994,3 +1994,5 @@ about %d min	примерно %d мин
 Too big, not sent (2 GB / 3000 files at most): %s	Слишком большие, не отправлены (не больше 2 ГБ / 3000 файлов): %s
 Not sent by the host (too big): %s	Хост не отправил (слишком большие): %s
 ACCEPT · %s, %s	ПРИНЯТЬ · %s, %s
+ACCEPT THE FILES	ПРИНЯТЬ ФАЙЛЫ
+%s to receive, %s. Click to accept, Esc to cancel.	Получить %s, %s. Нажми, чтобы принять, Esc — отменить.
