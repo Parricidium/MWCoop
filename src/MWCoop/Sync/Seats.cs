@@ -76,7 +76,7 @@ namespace MWCoop
             zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
             SeatFiles.OnLevelLoaded();
-            belts.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false; blockedHandle = null;
+            belts.Clear(); rearModels.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false; blockedHandle = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -924,11 +924,20 @@ namespace MWCoop
                 if (on && r.Index > 0 && r.Belt)
                     foreach (Seat s in seats) if (s.Car == r.Car && s.Index == r.Index && s.CarT != null) add(s.CarT, r.Index);
             foreach (Transform car in want.Keys) BeltOf(car);
+            // (SORBET : ses ceintures arriere rangees sont la meme quand personne n'est assis -- releve de la voiture)
+            if (on) foreach (Seat s in seats) if (s.Index > 0 && s.CarT != null && !belts.ContainsKey(s.CarT) && HasRearModel(s.CarT)) BeltOf(s.CarT);
             foreach (KeyValuePair<Transform, Belt> kv in belts)
             {
                 Belt b = kv.Value;
                 if (b == null) continue;
                 HashSet<int> w; want.TryGetValue(kv.Key, out w);
+                if (HasRearModel(kv.Key))
+                {
+                    foreach (GameObject old in b.Rear.Values) if (old != null) Object.Destroy(old);
+                    b.Rear.Clear();
+                    UpdateRearModel(kv.Key, b, on, w);
+                    continue;
+                }
                 var drop = new List<int>();
                 foreach (KeyValuePair<int, GameObject> r in b.Rear) if (w == null || !w.Contains(r.Key)) drop.Add(r.Key);
                 foreach (int i in drop) { if (b.Rear[i] != null) Object.Destroy(b.Rear[i]); b.Rear.Remove(i); }
@@ -947,6 +956,113 @@ namespace MWCoop
                     b.Rear[i] = g; b.RearPlain[i] = plain;
                 }
             }
+        }
+
+        // Ceintures arriere de la SORBET : modele de Menos (25/10 ; assets/ceintures, run/ceintures-arr.py), dans le repere de la
+        // voiture, avec la matiere de la ceinture avant du jeu : ancrages, boucles et haut des sangles toujours la (option
+        // CeinturesArriere allumee), et a chaque place laterale la ceinture rangee, ou bouclee quand un joueur y est attache
+        // (ici ou chez lui). Les autres voitures gardent la copie en miroir de la ceinture du conducteur. [Test] CeinturesArriereCopie=1 :
+        // la copie aussi sur la SORBET (comme avant).
+        class RearModel { public GameObject Root; public GameObject[] Open = new GameObject[2], Closed = new GameObject[2]; public int State = -1; }
+        static readonly Dictionary<Transform, RearModel> rearModels = new Dictionary<Transform, RearModel>();
+        static Mesh[] rearMeshes; static bool rearMeshTried;
+        static Mesh[] RearMeshes()
+        {
+            if (rearMeshTried) return rearMeshes;
+            rearMeshTried = true;
+            try
+            {
+                rearMeshes = new Mesh[5];
+                string[] n = { "arr-base", "arr-rangee-g", "arr-bouclee-g", "arr-rangee-d", "arr-bouclee-d" };
+                for (int i = 0; i < n.Length; i++) rearMeshes[i] = SleepingBags.LoadMesh("MWCoop." + n[i] + ".mwm", 1f);
+                // (bouclee : bombee vers l'avant au milieu des sangles -- l'avatar est plus epais que le joueur du jeu et la cachait,
+                // comme la ceinture avant, BulgedMesh ; ses attaches -- epaule, boucle, bas cote portiere -- ne bougent pas)
+                float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.16f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
+                foreach (int k in new[] { 2, 4 }) BulgeRear(rearMeshes[k], bulge, reach);
+            }
+            catch (System.Exception e) { rearMeshes = null; Log.Warn("ceintures arriere : modele illisible (" + e.Message + "), copie de la ceinture avant"); }
+            return rearMeshes;
+        }
+        static void BulgeRear(Mesh m, float bulge, float reach)
+        {
+            if (bulge <= 0f) return;
+            Vector3[] v = m.vertices;
+            if (v.Length == 0) return;
+            Vector3 top = v[0], inner = v[0], outer = v[0];
+            float minY = float.MaxValue, maxY = float.MinValue;
+            foreach (Vector3 p in v) { minY = Mathf.Min(minY, p.y); maxY = Mathf.Max(maxY, p.y); if (p.y > top.y) top = p; }
+            float low = minY + 0.2f * (maxY - minY);
+            bool lowSet = false;
+            foreach (Vector3 p in v)
+                if (p.y <= low)
+                {
+                    if (!lowSet) { inner = outer = p; lowSet = true; }
+                    if (Mathf.Abs(p.x) < Mathf.Abs(inner.x)) inner = p;
+                    if (Mathf.Abs(p.x) > Mathf.Abs(outer.x)) outer = p;
+                }
+            for (int i = 0; i < v.Length; i++)
+            {
+                float d = Mathf.Min((v[i] - top).magnitude, Mathf.Min((v[i] - inner).magnitude, (v[i] - outer).magnitude));
+                float w = Mathf.Clamp01(d / reach);
+                v[i].z += bulge * w * w * (3f - 2f * w);   // (en douceur depuis chaque attache)
+            }
+            m.vertices = v;
+            m.RecalculateBounds();
+        }
+
+        static bool HasRearModel(Transform car)
+        {
+            return car != null && car.name.StartsWith("SORBET") && !Game.Msc && Config.GetInt("Test", "CeinturesArriereCopie", 0) == 0 && RearMeshes() != null;
+        }
+        static void UpdateRearModel(Transform car, Belt b, bool on, HashSet<int> belted)
+        {
+            RearModel m; rearModels.TryGetValue(car, out m);
+            if (!on) { if (m != null && m.Root != null && m.Root.activeSelf) m.Root.SetActive(false); return; }
+            if (m == null || m.Root == null) { m = BuildRearModel(car, b); rearModels[car] = m; }
+            if (m == null) return;
+            if (!m.Root.activeSelf) m.Root.SetActive(true);
+            int state = 0;
+            if (belted != null)
+                foreach (int i in belted)
+                    foreach (Seat s in seats)
+                        if (s.CarT == car && s.Index == i && Mathf.Abs(s.Head.x) >= 0.15f) state |= s.Head.x < 0f ? 1 : 2;
+            if (state == m.State) return;
+            m.State = state;
+            for (int k = 0; k < 2; k++)
+            {
+                bool fast = (state & (1 << k)) != 0;
+                m.Open[k].SetActive(!fast); m.Closed[k].SetActive(fast);
+            }
+        }
+        static RearModel BuildRearModel(Transform car, Belt b)
+        {
+            Mesh[] ms = RearMeshes();
+            MeshRenderer src = b.Fastened != null ? b.Fastened.GetComponent<MeshRenderer>() : null;
+            if (ms == null || src == null) return null;
+            var m = new RearModel { Root = new GameObject("MWCoop-CeinturesArriere") };
+            m.Root.transform.parent = car;
+            // (repere du modele : celui des maillages de la caisse -- LOD/interior, seat_rear_bench... -- mis droit : meme origine,
+            // 14 cm sous la racine de la SORBET ; axes deja ceux d'Unity, run/ceintures-arr.py)
+            Transform inside = FindUnder(car, "interior", "LOD");
+            m.Root.transform.localPosition = inside != null ? car.InverseTransformPoint(inside.position) : new Vector3(0f, -0.14f, 0f);
+            m.Root.transform.localRotation = Quaternion.identity;
+            if (Config.GetInt("Test", "CeinturesArriereEnvers", 0) != 0) foreach (Mesh q in ms) { int[] tr = q.triangles; for (int i = 0; i < tr.Length; i += 3) { int x = tr[i + 1]; tr[i + 1] = tr[i + 2]; tr[i + 2] = x; } q.triangles = tr; }   // (essais : faces retournees)
+            Vector3 cs = car.lossyScale;
+            m.Root.transform.localScale = new Vector3(1f / cs.x, 1f / cs.y, 1f / cs.z);
+            System.Func<string, Mesh, GameObject> part = (name, mesh) =>
+            {
+                var g = new GameObject(name);
+                g.layer = b.Fastened.layer;
+                g.transform.parent = m.Root.transform;
+                g.transform.localPosition = Vector3.zero; g.transform.localRotation = Quaternion.identity; g.transform.localScale = Vector3.one;
+                g.AddComponent<MeshFilter>().sharedMesh = mesh;
+                g.AddComponent<MeshRenderer>().sharedMaterial = src.sharedMaterial;
+                return g;
+            };
+            part("Base", ms[0]);
+            for (int k = 0; k < 2; k++) { m.Open[k] = part(k == 0 ? "RangeeG" : "RangeeD", ms[1 + 2 * k]); m.Closed[k] = part(k == 0 ? "BoucleeG" : "BoucleeD", ms[2 + 2 * k]); }
+            Log.Info("ceintures arriere : modele de Menos pose sur " + car.name + " (matiere " + (src.sharedMaterial != null ? src.sharedMaterial.name : "?") + ")");
+            return m;
         }
 
         static void UpdateBelts()
@@ -1359,7 +1475,22 @@ namespace MWCoop
                 SendSeat(current.Car, current.Index, headLocal);
                 UpdateBelts();
                 GameObject g; rb.Rear.TryGetValue(current.Index, out g);
-                return "ceinture arriere " + (beltOn ? "attachee" : "detachee") + " (place " + current.Index + ", decalage " + off.ToString("F2") + (mir ? ", miroir" : "") + ", boucle " + RearBuckle(rb, off, mir).ToString("F2") + ", modele " + (g != null ? "montre" : "absent") + ")";
+                RearModel rm; rearModels.TryGetValue(current.CarT, out rm);
+                string model = HasRearModel(current.CarT) ? (rm != null && rm.Root != null ? "Menos, " + (rm.Root.activeSelf ? "montre" : "cache") + ", etat " + rm.State : "Menos, absent") : g != null ? "montre" : "absent";
+                if (rm != null && rm.Root != null)
+                    foreach (MeshRenderer mr in rm.Root.GetComponentsInChildren<MeshRenderer>(true))
+                        model += " ; " + mr.name + (mr.gameObject.activeInHierarchy ? "" : " (eteint)") + " centre " + current.CarT.InverseTransformPoint(mr.bounds.center).ToString("F2") + " taille " + mr.bounds.size.ToString("F2") + " couche " + mr.gameObject.layer;
+                if (rb.Fastened != null)
+                {
+                    Transform ft = rb.Fastened.transform; MeshFilter mf = ft.GetComponent<MeshFilter>();
+                    var chain = new System.Text.StringBuilder();
+                    for (Transform x = ft; x != null && x != current.CarT; x = x.parent) chain.Append(" <- ").Append(x.name).Append(' ').Append(x.localPosition.ToString("F3")).Append(' ').Append(x.localEulerAngles.ToString("F0")).Append(' ').Append(x.localScale.ToString("F2"));
+                    MeshRenderer fr = ft.GetComponent<MeshRenderer>();
+                    if (fr != null) model += " ; AVANT rendu centre " + current.CarT.InverseTransformPoint(fr.bounds.center).ToString("F3") + " taille " + fr.bounds.size.ToString("F3");
+                    model += " ; AVANT " + Recon.Path(ft) + " : voiture " + current.CarT.InverseTransformPoint(ft.position).ToString("F3") + " rot " + (Quaternion.Inverse(current.CarT.rotation) * ft.rotation).eulerAngles.ToString("F0")
+                           + ", maillage local " + (mf != null && mf.sharedMesh != null ? mf.sharedMesh.bounds.min.ToString("F2") + " .. " + mf.sharedMesh.bounds.max.ToString("F2") : "?") + ", chaine" + chain;
+                }
+                return "ceinture arriere " + (beltOn ? "attachee" : "detachee") + " (place " + current.Index + ", tete x " + current.Head.x.ToString("F2") + ", decalage " + off.ToString("F2") + (mir ? ", miroir" : "") + ", boucle " + RearBuckle(rb, off, mir).ToString("F2") + ", modele " + model + ")";
             }
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             if (b == null) return "pas de ceinture ici";
