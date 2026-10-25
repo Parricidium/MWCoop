@@ -76,7 +76,7 @@ namespace MWCoop
             { "store_shelfs", "shelf_flats" },
             // cinema (25/10) : peinture unie a teinter, asphalte de la route ; pas de neige l'ete
             { "paint_black_matte", "paint 4" },
-            { "mwc_asphalt", "ASPHALT" },
+            { "mwc_asphalt", "PAVEMENT" },          // (asphalte uni ; ASPHALT de MSC est la texture de la route, ligne blanche et bas-cotes de terre : des bandes en travers du parking, JD 25/10)
             { "SNOW", "paint 5" },
         };
         // (et par usage : wood_panel19 de My Summer Car est un bois gris delave -- le perron paraissait blanc au soleil)
