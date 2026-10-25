@@ -93,7 +93,6 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (now < nextCheck) return;
             nextCheck = now + 2f;
-            Probe();
             string dir = Dir, s = "";
             string[] list = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.txt") : new string[0];
             Array.Sort(list, StringComparer.OrdinalIgnoreCase);
@@ -167,7 +166,28 @@ namespace MWCoop
             return ok ? f : null;
         }
 
-        public static void OnLevelLoaded() { stamp = null; nextCheck = 0f; missing.Clear(); }
+        public static void OnLevelLoaded() { stamp = null; nextCheck = 0f; missing.Clear(); levelAt = Time.realtimeSinceStartup; addonAsked = false; }
+
+        // Chaque image, depuis Seats.Update (avant l'animation : les os ont encore la pose finale de l'image d'avant -- lus depuis
+        // la pose de l'avatar, ils etaient parfois a moitie calcules) : relecture des fichiers, sonde, addon d'essai.
+        static float nextProbe, levelAt; static bool addonAsked;
+        public static void Tick()
+        {
+            Check();
+            float now = Time.realtimeSinceStartup;
+            if (now >= nextProbe) { nextProbe = now + 2f; Probe(); }
+            // [Test] PlacesAddon=<dossier> (t16e2...) : l'hote sort cet addon a 15 s (essais des places d'un addon : l'invite s'y assoit
+            // avec Autotest=passager, TestVoiture=MWCoop-VAZ-)
+            string ad = Config.Get("Test", "PlacesAddon", "");
+            if (ad.Length > 0 && !addonAsked && Net.Session.IsHost && now - levelAt > 15f)
+            {
+                addonAsked = true;
+                int id = -1;
+                for (int i = 1; i < VazCar.Models.Length; i++) if (VazCar.Models[i].Folder == ad) id = i;
+                if (ad == "vaz") id = VazCar.ModelVaz;
+                Log.Info("places : addon d'essai " + ad + (id < 0 ? " inconnu" : !VazCar.Has(id) ? " pas installe" : " -> " + Vaz.Request(3, id)));
+            }
+        }
 
         // [Test] PlacesSonde=<voiture> : toutes les 2 s, os des avatars dans cette voiture (repere de la voiture) -- a comparer avec
         // l'outil des places, meme place (tete, mains, genoux, chevilles, bassin)
@@ -227,6 +247,6 @@ namespace MWCoop
         }
         static int fileGen;
         // (fichier change en jeu : places refaites tout de suite)
-        static bool FilesChanged { get { SeatFiles.For((string)null); return fileGen != SeatFiles.Generation; } }
+        static bool FilesChanged { get { SeatFiles.Tick(); return fileGen != SeatFiles.Generation; } }
     }
 }
