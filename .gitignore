@@ -34,3 +34,6 @@ editor/essais/
 # Convertisseur de circuits (mods\Voyage\convertisseur) : sorties de compilation de dotnet
 mods/Voyage/convertisseur/obj/
 mods/Voyage/convertisseur/bin/
+
+# outil prive de JD (placement des joueurs dans les voitures, 25/10) : jamais sur GitHub
+outils-prives/
