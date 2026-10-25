@@ -2062,6 +2062,7 @@ static const wchar_t *const kAr[][2] = {
     { L"%d files received", L"تم استلام %d ملفات" },
     { L"1 file · %s", L"ملف واحد · %s" },
     { L"%d files · %s", L"%d ملفات · %s" },
+    { L"a place on the M map and in /lieu (v3)", L"مكان على خريطة M وفي /lieu (v3)" },
     { L"MOD SUPPORT / KNOWN INCOMPATIBILITIES", L"دعم المودّات / حالات عدم التوافق" },
     { L"Remove dents…", L"إزالة الانبعاجات…" },
     { L"Close the game to remove the dents", L"أغلق اللعبة لإزالة الانبعاجات" },

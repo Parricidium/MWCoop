@@ -49,7 +49,8 @@ static void DrawApiPage(Graphics &g)
         { L"Send · SendTo · SendUnreliable", L"à tous ou à un joueur (64 Ko)", L"to everyone or one player (64 KB)" },
         { L"Listen", L"recevoir sur votre canal (ID du mod)", L"receive on your channel (mod ID)" },
         { L"IsHost · PlayerIds · PlayerName", L"qui héberge, qui joue", L"who hosts, who plays" },
-        { L"PlayerJoined · PlayerLeft", L"arrivées et départs des joueurs", L"players joining and leaving" } };
+        { L"PlayerJoined · PlayerLeft", L"arrivées et départs des joueurs", L"players joining and leaving" },
+        { L"AddMapPlace · RemoveMapPlace", L"un lieu sur la carte M et dans /lieu (v3)", L"a place on the M map and in /lieu (v3)" } };   // (CoopApi v3, 25/10 : l'aerodrome de Voyage)
     UiFont fm(L"Consolas", 13.5f, FontStyleBold);
     StringFormat sfl; sfl.SetLineAlignment(StringAlignmentCenter); sfl.SetFormatFlags(StringFormatFlagsNoWrap);
     float y = c.Y + 108;
@@ -111,7 +112,7 @@ static void DrawApiPage(Graphics &g)
     Glass(w);
     Title(g, T(L"Où la trouver", L"Where to get it"), RectF(w.X + 20, w.Y + 16, 220, 26), 17, kInk);
     {
-        const wchar_t *v = L"API v1 · 0.43+";
+        const wchar_t *v = L"API v3";   // (CoopApi.Version ; v1 depuis 0.43, v3 le 25/10 : lieux de la carte M)
         float pw = PillW(v, 10.5f);
         Pill(g, RectF(w.X + w.Width - 20 - pw, w.Y + 19, pw, 22), WithA(kAcc, 0.18f), v, kAcc, 10.5f);
     }
