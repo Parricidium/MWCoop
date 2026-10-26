@@ -322,11 +322,18 @@ namespace MWCoop
         // [Test] Autotest=mscmontage (MSC, JD et Kristof 24/10 : pieces posees qui retombent) : le joueur [Test] Monteur (0 = hote)
         // fait les montages de [Test] Montages ("point|piece;point|piece", par defaut tableau de bord, compteurs, aile gauche) a 40 s
         // puis toutes les 10 s, comme un clic ; chacun note 5 s apres si la piece tient (les ruptures : « attache rompue »).
-        static int mmStep, mmPush;
+        static int mmStep, mmPush, mmSave; static float mmBoltsAt;
         static void MscMontage(float t)
         {
             string[] list = Config.Get("Test", "Montages", "SATSUMA(557kg, 248)/Dashboard/trigger_dashboard|db:Database/DatabaseMechanics/Dashboard;"
                 + "db:Database/DatabaseMechanics/Dashboard/trigger_meters|db:Database/DatabaseMechanics/DashboardMeters;SATSUMA(557kg, 248)/Body/trigger_fender_left|db:Database/DatabaseBody/Fender_Left").Split(';');
+            // ([Test] MontageSauveA=<s>, chez l'hote : sauvegarde en jeu a cet instant -- montage de l'invite ecrit dans la sauvegarde de
+            // l'hote ? WIGA 26/10 : « les actions de l'invite ne sont pas sauvegardees » ; BoulonsA/BoulonsPas : releve des vis qui
+            // flottent, comme Autotest=mscboulons)
+            float sa = Config.GetFloat("Test", "MontageSauveA", 0f);
+            if (sa > 0f && Net.Session.IsHost && t > sa && mmSave == 0) { mmSave = 1; Game.SaveInPlace(); Log.Info("autotest montage : sauvegarde en jeu faite ici"); }
+            float ba = Config.GetFloat("Test", "BoulonsA", 0f);
+            if (ba > 0f && t > ba && t > mmBoltsAt) { mmBoltsAt = t + Config.GetFloat("Test", "BoulonsPas", 10f); MscBoltsScan(); }
             // ([Test] PousseA=60 : l'invite pousse la voiture 5 s a partir de cet instant, comme Autotest=pousse -- la copie chez l'hote)
             float pa = Config.GetInt("Test", "PousseA", 0);
             if (pa > 0f && !Net.Session.IsHost)
