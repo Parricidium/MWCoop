@@ -8067,6 +8067,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_notesDone = true; g_relState = REL_OK; g_tab = st == L"accueil-notes" ? TAB_HOME : st == L"guide" ? TAB_WIKI : TAB_NOTES;
             if (st == L"guide") g_wikiSel = 1;
         }
+        else if (st == L"notes-fichier" || st == L"accueil-notes-fichier") {   // releases d'essai lues dans le fichier MWCOOP_NOTES (format de GitHub) : mise en page de vraies notes
+            wchar_t nf[MAX_PATH] = L""; GetEnvironmentVariableW(L"MWCOOP_NOTES", nf, MAX_PATH);
+            std::vector<unsigned char> d;
+            if (nf[0] && ReadAll(nf, d)) g_notes = ChannelNotes(ParseReleases(std::string(d.begin(), d.end())));
+            g_notesDone = true; g_relState = REL_OK; g_tab = st == L"notes-fichier" ? TAB_NOTES : TAB_HOME;
+        }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
         else if (st == L"notes-image") {   // une note avec une image (telechargee ici, avant la capture)
             std::wstring url = L"https://raw.githubusercontent.com/" + g_repo + L"/main/docs/img/lanceur-tenue.png";
