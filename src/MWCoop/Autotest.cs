@@ -325,7 +325,7 @@ namespace MWCoop
         static int mmStep, mmPush, mmSave, mmAround; static float mmBoltsAt;
         static int psStep; static float psLogAt;
         static int prStep; static float prLogAt; static Quaternion prLastRot;
-        static int caStep, caBuy; static float caLogAt, caMoney;
+        static int caStep, caBuy, caSacStep; static float caLogAt, caMoney, caSacLog; static string caSac;
         static int bgStep; static float bgLogAt;
         static void MscMontage(float t)
         {
@@ -1262,9 +1262,62 @@ namespace MWCoop
                 float[] buys = cHost ? new[] { Config.GetFloat("Test", "CaisseHote", 150f) } : new[] { Config.GetFloat("Test", "CaisseInvite1", 60f), Config.GetFloat("Test", "CaisseInvite2", 130f) };
                 for (int i = 0; i < buys.Length; i++)
                 {
-                    if (t > buys[i] && caBuy == i * 3) { caBuy++; pt.Value += 5f; caMoney = Game.GlobalFloat("PlayerMoney"); Log.Info("autotest caisse : achat " + (i + 1) + ", panier PriceTotal " + pt.Value + " [" + reg.ActiveStateName + "]"); }
+                    if (t > buys[i] && caBuy == i * 3)
+                    {
+                        caBuy++; caMoney = Game.GlobalFloat("PlayerMoney");
+                        // ([Test] CaisseRayon=1 : le produit est pris au rayon par son automate Buy, comme le clic -- 'Check inventory' ->
+                        // 'Register add' -> 'Remove stock' ; sinon PriceTotal +5 directement)
+                        PlayMakerFSM buy = null;
+                        if (Config.GetInt("Test", "CaisseRayon", 0) != 0)
+                            foreach (Object o in Game.FsmsNamed("Buy")) { var bf = (PlayMakerFSM)o; HutongGames.PlayMaker.FsmString bn = bf != null ? bf.FsmVariables.FindFsmString("Name") : null; if (bn != null && bn.Value == Config.Get("Test", "CaisseProduit", "Sausages")) { buy = bf; break; } }
+                        if (buy != null) Game.SetState(buy, "Check inventory"); else pt.Value += 5f;
+                        Log.Info("autotest caisse : achat " + (i + 1) + (buy != null ? ", pris au rayon (" + buy.ActiveStateName + ")" : "") + ", panier PriceTotal " + pt.Value + " [" + reg.ActiveStateName + "]");
+                    }
+                    if (t > buys[i] + 1f && caBuy == i * 3 + 1 && Config.GetInt("Test", "CaisseRayon", 0) != 0 && t < buys[i] + 1.1f) Log.Info("autotest caisse : achat " + (i + 1) + ", 1 s apres le rayon : PriceTotal " + pt.Value + " Total " + tot.Value + " [" + reg.ActiveStateName + "]");
                     if (t > buys[i] + Config.GetFloat("Test", "CaissePaie", 4f) && caBuy == i * 3 + 1) { caBuy++; Log.Info("autotest caisse : achat " + (i + 1) + ", avant paiement Total " + tot.Value + " PriceTotal " + pt.Value + " [" + reg.ActiveStateName + "], affiche \"" + reg.FsmVariables.FindFsmString("Notification").Value + "\""); Game.SetState(reg, "Check money"); }
                     if (t > buys[i] + Config.GetFloat("Test", "CaissePaie", 4f) + 3f && caBuy == i * 3 + 2) { caBuy++; Log.Info("autotest caisse : achat " + (i + 1) + ", apres : Total " + tot.Value + " [" + reg.ActiveStateName + "], argent " + caMoney.ToString("F2") + " -> " + Game.GlobalFloat("PlayerMoney").ToString("F2")); }
+                }
+                // ([Test] CaisseSac=<s> chez l'invite : il prend en main, par la main du jeu, le sac de courses le plus proche a ce
+                // moment et pivote 15 s ; chacun note toutes les 0,5 s le sac (shoppingbag*) par rapport a la tete de celui qui le tient)
+                float cs = Config.GetFloat("Test", "CaisseSac", 0f);
+                if (cs > 0f)
+                {
+                    if (!cHost && t > cs && caSacStep == 0)
+                    {
+                        caSacStep = 1;
+                        Rigidbody best = null; float bd = 1e9f; Transform cam = PlayerSync.LocalCamera;
+                        foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                            if (r.name.StartsWith("shoppingbag") && cam != null && (r.position - cam.position).sqrMagnitude < bd) { bd = (r.position - cam.position).sqrMagnitude; best = r; }
+                        if (best == null) { best = Props.BodyOf(Props.FindKey("shoppingbag")); if (best != null && cam != null) bd = (best.position - cam.position).sqrMagnitude; }
+                        Log.Info("autotest caisse : sacs vus : " + Props.Ids("shoppingbag") + (best != null ? " ; choisi " + Recon.Path(best.transform) + (best.gameObject.activeInHierarchy ? "" : " (inactif)") + (best.isKinematic ? " (cinematique)" : "") : ""));
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        HutongGames.PlayMaker.FsmGameObject rh = hf != null ? hf.FsmVariables.FindFsmGameObject("RaycastHitObject") : null;
+                        if (best != null && rh != null && cam != null) { best.transform.position = cam.position + cam.forward * 0.6f; rh.Value = best.gameObject; Game.SetState(hf, "State 1"); caSac = best.name; }
+                        Log.Info("autotest caisse : sac " + (best != null ? best.name + " a " + Mathf.Sqrt(bd).ToString("F1") + " m" : "aucun") + " pris par l'invite, main " + (hf != null ? hf.ActiveStateName : "?"));
+                    }
+                    if (!cHost && caSacStep == 1 && t < cs + 15f) { GameObject pl = Game.PlayerGo; if (pl != null) pl.transform.Rotate(0f, 40f * Time.deltaTime, 0f, Space.World); }
+                    if (!cHost && caSacStep == 1 && t > cs + 15f)
+                    {
+                        caSacStep = 2;
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        string before = hf != null ? hf.ActiveStateName : "?";
+                        if (hf != null) Game.SetState(hf, before == "Item picked" ? "Drop item" : "Drop part");
+                        Log.Info("autotest caisse : sac lache par l'invite, main " + before + " -> " + (hf != null ? hf.ActiveStateName : "?"));
+                    }
+                    if (t > caSacLog && t > cs - 5f && t < (cHost ? cs + 170f : cs + 30f))
+                    {
+                        caSacLog = t + 0.5f;
+                        foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                        {
+                            if (!r.name.StartsWith("shopping")) continue;
+                            Transform head = null;
+                            if (!cHost) head = PlayerSync.LocalCamera; else foreach (var kv in Net.Session.Players) if (!kv.Value.Local) head = PlayerSync.HeadOf(kv.Key);
+                            if (head == null || (r.position - head.position).sqrMagnitude > 25f) continue;
+                            Log.Info("autotest caisse : sac " + r.name + " a " + Vector3.Distance(head.position, r.position).ToString("F2") + " m de la tete, v " + r.velocity.magnitude.ToString("F1") + " w " + r.angularVelocity.magnitude.ToString("F1") + (r.isKinematic ? " (cinematique)" : ""));
+                        }
+                    }
                 }
                 if (t > caLogAt && t > 25f) { caLogAt = t + 10f; Log.Info("autotest caisse : caisse [" + reg.ActiveStateName + "] Total " + tot.Value + " PriceTotal " + pt.Value + (reg.enabled ? "" : " (automate coupe)") + (reg.gameObject.activeInHierarchy ? "" : " (eteinte)")); }
                 return;

@@ -135,6 +135,7 @@ namespace MWCoop
             public int SerialWho, Serial, Made;                    // achat en cours : nom des objets crees
             public List<FsmStateAction> Muted; public float MutedUntil, MutedAt;
             public GameObject Hidden;                              // carte du bar cachee le temps d'un service rejoue
+            public float BusySince = -1f;                          // (MSC, Teimo) entree en 'State 2' -- TeimoWatch
             // Restaurant : le serveur (Keijo, Jouni :: Work), l'etat ou il prend la commande, celui ou il la pose.
             public PlayMakerFSM Waiter; public string WaiterStart, PlaceState; public bool WaiterHooked;
             public int ServeWho, ServeSerial, LastStart;            // commande que le serveur sert en ce moment
@@ -515,6 +516,7 @@ namespace MWCoop
                 if (c.Fsm == null || now > c.MutedUntil || (now - c.MutedAt > 0.5f && c.Fsm.gameObject.activeInHierarchy && Idle(c))) UnmuteCounter(c);
             }
             SubtitlesTick(now);
+            if (Game.Msc) TeimoWatch(now);
             if (nextScan > 0) RestoUpdate(now);
             if (spawnSteps.Count > 0 && now >= nextSpawnStep)
             {
@@ -2623,6 +2625,27 @@ namespace MWCoop
             foreach (FsmStateAction a in subMuted) a.Enabled = true;
             Log.Info("magasin : sous-titres de " + (subFsm != null ? subFsm.gameObject.name + " rendus (" + subFsm.ActiveStateName + ")" : "?") + ", GUIsubtitle \"" + (FsmVariables.GlobalVariables.FindFsmString("GUIsubtitle") != null ? FsmVariables.GlobalVariables.FindFsmString("GUIsubtitle").Value : "?") + "\"");
             subMuted.Clear();
+        }
+
+        // My Summer Car, caisse de Teimo : un produit pris au rayon (Buy 'Teimo' -> PURCHASE) mene la caisse en 'State 2', qui joue
+        // l'animation teimo_cash_register de Teimo et n'en sort (vers 'Add fuel' : calcul du total) qu'a la fin de l'animation. Chez
+        // l'invite, Teimo suit celui de l'hote (Npcs) : apres un achat de l'hote, l'animation ne finit plus ici -- caisse figee en
+        // 'State 2', total a 0, paiement sans effet (JD et GG, 26/10 : « l'objet disparaissait de l'etalage, mais il se passait rien
+        // au niveau de la caisse, restait a 0 »). Plus de 3 s en 'State 2' : la caisse passe a 'Add fuel' comme a la fin de l'animation.
+        // ([Test] TeimoGarde=0 : sans)
+        static void TeimoWatch(float now)
+        {
+            if (Config.GetInt("Test", "TeimoGarde", 1) == 0) return;
+            foreach (Counter c in counters.Values)
+            {
+                if (c.Kind != "teimo" || c.Fsm == null) continue;
+                if (c.Fsm.ActiveStateName != "State 2") { c.BusySince = -1f; continue; }
+                if (c.BusySince < 0f) { c.BusySince = now; continue; }
+                if (now - c.BusySince < 3f || c.Fsm.Fsm.GetState("Add fuel") == null) continue;
+                c.BusySince = -1f;
+                Game.SetState(c.Fsm, "Add fuel");
+                Log.Info("magasin : caisse de Teimo restee en 'State 2' (animation de Teimo suivie ailleurs) : total calcule (" + c.Fsm.ActiveStateName + ")");
+            }
         }
 
         static void MuteCounter(Counter c)
