@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|sauvegardes-copies|sauvegardes-toutes|sauvegardes-vraies|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|sauvegardes-copies|sauvegardes-toutes|sauvegardes-vraies|sauvegardes-verif|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -7595,7 +7595,50 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             for (auto &i : is) LaunchLog("es2 :   [%d] %s : %s", i.sev, i.entry < f.e.size() ? f.e[i.entry].tag.c_str() : "-", Narrow(i.what, CP_UTF8).c_str());
             Es2File cut;
             LaunchLog("es2 :   coupe aux 2/3 : %s", Es2Parse(raw.substr(0, raw.size() * 2 / 3), cut) ? "LU (pas normal)" : cut.err.c_str());
-            if (!msc || name.find("defaultES2File") == std::string::npos) continue;
+            if (!msc && (name.find("savefile") != std::string::npos || name.find("carparts") != std::string::npos)) {   // My Winter Car : fautes posees
+                std::map<size_t, std::string> bad;
+                std::map<std::string, size_t> idx;
+                for (size_t i = 0; i < f.e.size(); i++) idx[f.e[i].tag] = i;
+                float nan; uint32_t nu = 0x7FC00000; memcpy(&nan, &nu, 4);
+                std::string what;
+                if (name.find("savefile") != std::string::npos) {
+                    auto it = idx.find("SorbettPos");
+                    if (it != idx.end()) { std::string x = f.bytes.substr(f.e[it->second].data, f.e[it->second].len); Es2PutF32(x, 6, nan); bad[it->second] = x; what += "SorbettPos NaN ; "; }
+                    for (size_t i = 0; i < f.e.size(); i++) {
+                        if (Es2Kind(f, f.e[i]) != ES2_TRANSFORM || f.e[i].tag == "SorbettPos" || f.e[i].tag.find("Transform") != std::string::npos) continue;
+                        float px = Es2F32(f.bytes, f.e[i].data + 6), py = Es2F32(f.bytes, f.e[i].data + 10), pz = Es2F32(f.bytes, f.e[i].data + 14);
+                        if (px == 0 && py == 0 && pz == 0) continue;   // (jamais apparu)
+                        std::string x = f.bytes.substr(f.e[i].data, f.e[i].len); Es2PutF32(x, 10, -120.0f); bad[i] = x; what += f.e[i].tag + " sous la carte ; "; break;
+                    }
+                } else {
+                    for (size_t i = 0; i < f.e.size(); i++) {   // une piece libre (AID 0) : ses vis serrees a 8 (comme une piece demontee mais vissee)
+                        const std::string &tg = f.e[i].tag;
+                        if (Es2Kind(f, f.e[i]) != ES2_INT || tg.size() < 4 || tg.compare(tg.size() - 3, 3, "AID") || Es2I32(f, f.e[i]) != 0) continue;
+                        auto bo = idx.find(tg.substr(0, tg.size() - 3) + "BLT");
+                        std::vector<int> n; std::vector<size_t> at;
+                        if (bo == idx.end() || !Es2Bolts(f, f.e[bo->second], n, &at) || at.empty()) continue;
+                        std::string x = f.bytes.substr(f.e[bo->second].data, f.e[bo->second].len);
+                        for (size_t q : at) x[q] = '8';
+                        bad[bo->second] = x; what += f.e[bo->second].tag + " vissee a 8 (piece libre) ; "; break;
+                    }
+                }
+                Es2File g; std::string broken = Es2Write(f, bad); Es2Parse(broken, g);
+                Es2Ctx c2 = { &kEs2Mwc, 0, false, 0 };
+                std::vector<Es2Issue> is2 = Es2Check(g, c2);
+                LaunchLog("es2 :   fautes posees : %s-> %zu probleme(s)", what.c_str(), is2.size());
+                for (auto &i : is2) LaunchLog("es2 :     [%d] %s : %s", i.sev, i.entry < g.e.size() ? g.e[i.entry].tag.c_str() : "-", Narrow(i.what, CP_UTF8).c_str());
+                Es2File h; std::string fixed = Es2Write(g, Es2Fixes(is2)); bool ok4 = Es2Parse(fixed, h);
+                Es2Ctx c3 = { &kEs2Mwc, 0, false, 0 };
+                int left = 0; for (auto &i : Es2Check(h, c3)) if (i.sev == 2) left++;
+                LaunchLog("es2 :   repare : relu %s, %zu octets (abime %zu), reparables restants %d", ok4 ? "ok" : h.err.c_str(), fixed.size(), broken.size(), left);
+                std::wstring base = name.find("savefile") != std::string::npos ? L"mwc-savefile-" : L"mwc-carparts-";
+                const std::pair<std::wstring, const std::string *> outs[] = { { base + L"abime.txt", &broken }, { base + L"repare.txt", &fixed } };
+                for (auto &x : outs) {
+                    HANDLE o = CreateFileW((outDir + x.first).c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+                    if (o != INVALID_HANDLE_VALUE) { DWORD wr; WriteFile(o, x.second->data(), (DWORD)x.second->size(), &wr, NULL); CloseHandle(o); }
+                }
+                continue;
+            }            if (!msc || name.find("defaultES2File") == std::string::npos) continue;
             std::map<size_t, std::string> bad;
             std::map<std::string, size_t> idx;
             for (size_t i = 0; i < f.e.size(); i++) idx[f.e[i].tag] = i;
@@ -7650,6 +7693,29 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 if (o != INVALID_HANDLE_VALUE) { DWORD wr; WriteFile(o, x.second->data(), (DWORD)x.second->size(), &wr, NULL); CloseHandle(o); }
             }
         }
+        return 0;
+    }
+    // Essai : /testreparer <dossier de jeu factice> <journal> <fichier abime> -- Verifier la sauvegarde puis Reparer, sans fenetre :
+    // une partie d'essai (My Summer Car) avec ce fichier comme defaultES2File.txt ; doit faire la copie « avant la reparation »,
+    // reecrire le fichier (relu sans reste) et le noter.
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/testreparer")) {
+        g_launcherLog = argv[3];
+        g_game = GAME_MSC;
+        g_gameDir = g_modRoot = WithSlash(argv[2]);
+        std::wstring prof = SaveCreate(L"Essai reparation");
+        std::vector<unsigned char> d;
+        if (!ReadAll(argv[4], d)) { LaunchLog("testreparer : %s illisible", Narrow(argv[4], CP_UTF8).c_str()); return 1; }
+        std::wstring sf = SaveDirOf(prof) + L"defaultES2File.txt";
+        HANDLE h = CreateFileW(sf.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (h != INVALID_HANDLE_VALUE) { DWORD wr; WriteFile(h, d.data(), (DWORD)d.size(), &wr, NULL); CloseHandle(h); }
+        SaveCheckRun(prof, L"Essai reparation");
+        LaunchLog("testreparer : avant : %d reparable(s), %d attention", g_chk.fix, g_chk.warn);
+        SaveRepairApply();
+        LaunchLog("testreparer : apres : %d reparable(s), %d attention ; copies : %zu", g_chk.fix, g_chk.warn, SaveCopiesList(prof).size());
+        for (auto &b : SaveCopiesList(prof)) LaunchLog("testreparer :   copie %s", Narrow(b.dir.substr(SaveCopiesDir(prof).size()), CP_UTF8).c_str());
+        std::vector<unsigned char> o;
+        ReadAll(sf, o);
+        LaunchLog("testreparer : fichier %zu octets (avant %zu), %s", o.size(), d.size(), o == d ? "INCHANGE" : "repare");
         return 0;
     }
     // Essai : /gardeinstall <dossier du lanceur> <journal> -- l'installation dans AppData serait-elle bloquee pour ce dossier ?
@@ -7884,6 +7950,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
         else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesFake(); }
+        else if (st == L"sauvegardes-verif") {   // (Verifier la sauvegarde : fichiers du dossier MWCOOP_VERIF -- essais)
+            g_tab = TAB_SAVES; SavesFake(); wchar_t vd[MAX_PATH] = L""; GetEnvironmentVariableW(L"MWCOOP_VERIF", vd, MAX_PATH);
+            SaveCheckRun(L"", g_saves.empty() ? L"" : g_saves[0].name, WithSlash(vd)); g_saveModal = SM_CHECK;
+        }
         else if (st == L"sauvegardes-vraies") { g_tab = TAB_SAVES; SavesScan(); std::wstring cur = SaveCurrentProf(); for (int k = 0; k < (int)g_saves.size(); k++) if (g_saves[k].prof == cur) g_saveSel = k; }   // (les vraies parties de ce lanceur, la partie utilisee choisie : copies de secours)
         else if (st == L"sauvegardes-copies" || st == L"sauvegardes-toutes") {   // (copies de secours factices : au lancement, avant une version, avant une remise, Reworked)
             g_tab = TAB_SAVES; SavesFake();
