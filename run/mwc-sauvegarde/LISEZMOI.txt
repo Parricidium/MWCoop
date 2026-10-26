@@ -28,7 +28,8 @@ FORMAT : le meme que My Summer Car (voir run/msc-sauvegarde/LISEZMOI.txt ; son e
        PAS le milieu du garage de la maison (-16.5, 0.2, 3.0) : fosse, l'objet tombe a y -1,9.
      piece MONTEE (AID > 0, ou cablage Installed = vrai) : le jeu la remet sur son point de montage au chargement
        (SetParent + position locale a zero) -- ne pas la deplacer ; si sa position est NaN, mettre celle de la voiture (CorrisPos).
-     porte-fusibles de la maison (savefile.txt : fuseholder<n>xPos, monte si fuseholder<n>xSlotID > 0) : pareil, le jeu le remet
+     porte-fusibles (savefile.txt : fuseholder<n>xPos ; MONTE si fuseholder<n>xTightness > 0 -- etat « Installed? » de son
+       automate Use ; fuseholder<n>xSlotID = numero d'emplacement dans la boite, de 0 : 1-7 maison, 8-11 appartement) : pareil, le jeu le remet
        dans sa boite (YARD/.../FuseTable) au chargement -- ESSAI 26/10 : deplace a la maison par le lanceur, il est revenu a -12.2, 1.2, 8.8.
    Rotation invalide (NaN, ou quaternion nul) : (0, 0, 0, 1). Echelle NaN ou nulle : (1, 1, 1).
 3. NOMBRES : seuls NaN et +-infini sont des erreurs. De tres grandes valeurs sont normales (JobUOLetterWait = 1e8,
