@@ -128,6 +128,9 @@ static const TutoStep kTuto[] = {
     // 1.15.12 (26/10) : Verifier la sauvegarde (56)
     { L"Vérifier la sauvegarde", L"Une partie qui plante ou des pièces bizarres ? Sur sa fiche, Vérifier la sauvegarde signale ce qui ne va pas et répare ce qui est sûr, après une copie.",
       L"Check the save", L"A game that crashes or odd parts? On its card, Check the save reports what is wrong and repairs what is safe, after a copy.", "1.15.12" },
+    // lanceur-1.15.14 (26/10) : placement des sieges, avec une cle d'acces (57 ; sautee sans cle)
+    { L"Placement des sièges", L"Ta clé d'accès ouvre l'outil des places : exporte d'abord tes voitures depuis une partie où elles sont montées, puis ouvre l'outil. Bouton Exporter de l'outil : le zip à envoyer à JD.",
+      L"Seat placement", L"Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.", "1.15.14" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -144,7 +147,7 @@ static const TutoStep &TutoStepOf(int i)
     if (g_game == GAME_MSC && i == 34) return kTutoMsc34;
     return kTuto[i];
 }
-static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33 || i == 52); }   // (52 : Addons, voitures de My Winter Car)
+static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33 || i == 52) || i == 57 && !AccesPlaces(); }   // (52 : Addons, voitures de My Winter Car ; 57 : seulement avec une cle d'acces)
 
 // Pastille d'un onglet de la page Reglages (meme calcul que DrawSettingsPage : gfx.inc) et champ Chercher un reglage de
 // l'en-tete (DrawSetSearchBox : a gauche des raccourcis API / Journaux / Credits, ui.inc DrawHeader).
@@ -222,10 +225,12 @@ static RectF TutoTarget(int i)
     case 55: return g_saveCopiesR;                           // Copies de secours (carte de droite des Sauvegardes : saves.inc)
     // 1.15.12
     case 56: return g_saveCheckR;                            // Verifier la sauvegarde (carte de droite des Sauvegardes : saves.inc)
+    // 1.15.14
+    case 57: return g_placesCardR;                           // bandeau Placement des sieges (page Outils : outils-places.inc)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

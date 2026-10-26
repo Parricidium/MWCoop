@@ -2085,3 +2085,16 @@ Tools JD entrusts to a few people	Инструменты, которые JD до
 Your MWCoop ID	Твой ID MWCoop
 Paste the key	Вставить ключ
 File…	Файл…
+Seat placement	Размещение сидений
+RESERVED ACCESS	ОГРАНИЧЕННЫЙ ДОСТУП
+Place the seated players, set postures and belts. First export your cars from a save where they are assembled.	Рассади игроков, настрой позы и ремни. Сначала экспортируй свои машины из сохранения, где они собраны.
+Exporting the cars: the game runs in the background (2 to 3 minutes)	Экспорт машин: игра работает в фоне (2–3 минуты)
+Downloading the tool…	Загрузка инструмента…
+Opening the tool…	Открытие инструмента…
+WebView2 is missing (Windows 10 and 11 have it with Edge): the tool cannot open	Нет WebView2 (в Windows 10 и 11 он идёт с Edge): инструмент не сможет открыться
+No cars exported for this game yet: « Export my cars » first (Satsuma: seats fitted; Rivett: assembled)	Для этой игры машины ещё не экспортированы: сначала «Экспортировать мои машины» (Satsuma: сиденья установлены; Rivett: собрана)
+Cars exported on %s · export again after fitting other parts	Машины экспортированы %s · экспортируй снова после установки других деталей
+Open the tool	Открыть инструмент
+Exporting…	Экспорт…
+Export my cars	Экспортировать мои машины
+Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.	Твой ключ доступа открывает инструмент сидений: сначала экспортируй машины из сохранения, где они собраны, затем открой инструмент. Кнопка «Экспорт» в инструменте: zip, который нужно отправить JD.

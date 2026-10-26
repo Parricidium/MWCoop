@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -1076,6 +1076,26 @@ static const WikiBlock kW_Voyage[] = {   // (convertisseur de circuits Assetto C
             L"A converted track is heavy (the Nordschleife: about 350 MB): a guest who doesn't have it yet downloads it on arrival. Early version: a very heavy track can be slow to load; report it on the Discord." },
     { WB_GO, L"Ouvrir les Outils", L"Open Tools", TAB_TOOLS },
 };
+static const WikiBlock kW_Places[] = {   // (outil des places reserve, cle d'acces -- JD 26/10 ; [Addons et Tools])
+    { WB_P, L"L'outil des places sert à placer toi-même les joueurs assis dans chaque voiture : la place, la posture du mannequin os par os, et les ceintures. Il est réservé aux personnes choisies par JD, avec une clé d'accès.",
+            L"The seat tool lets you place the seated players in each car yourself: the seat, the mannequin's posture bone by bone, and the belts. It is reserved for people chosen by JD, with an access key." },
+    { WB_H, L"Avoir l'accès",
+            L"Getting access", 0 },
+    { WB_S, L"Réglages > Lanceur, carte « Accès réservé » : copie ton ID MWCoop et envoie-le à JD.",
+            L"Settings > Launcher, « Reserved access » card: copy your MWCoop ID and send it to JD." },
+    { WB_S, L"Colle la clé qu'il te renvoie (ou dépose son fichier .txt sur la fenêtre) : le bandeau Placement des sièges apparaît dans Outils.",
+            L"Paste the key he sends back (or drop its .txt file on the window): the Seat placement strip appears in Tools." },
+    { WB_H, L"Régler les places",
+            L"Setting the seats", 0 },
+    { WB_S, L"Charge une partie où les voitures sont montées (Satsuma : sièges montés ; Rivett : assemblée), quitte le jeu, puis Outils > Exporter mes voitures. Le jeu tourne 2 à 3 minutes en arrière-plan, dans une copie de ta partie : ta sauvegarde n'est pas touchée.",
+            L"Load a save where the cars are assembled (Satsuma: seats fitted; Rivett: assembled), quit the game, then Tools > Export my cars. The game runs for 2 to 3 minutes in the background, in a copy of your save: your save is not touched." },
+    { WB_S, L"Ouvrir l'outil : il se télécharge la première fois. Choisis une voiture et une place, puis règle-la ; Enregistrer l'applique à ton jeu (relu même en partie).",
+            L"Open the tool: it downloads the first time. Pick a car and a seat, then set it; Save applies it to your game (read again even while playing)." },
+    { WB_S, L"Bouton Exporter de l'outil : un zip avec tes réglages, à envoyer à JD. Il les vérifie avant de les mettre dans MWCoop pour tout le monde.",
+            L"The tool's Export button: a zip with your settings, to send to JD. He checks them before adding them to MWCoop for everyone." },
+    { WB_B, L"L'outil a besoin de WebView2 : Windows 10 et 11 l'ont avec Edge.",
+            L"The tool needs WebView2: Windows 10 and 11 have it with Edge." },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -1115,4 +1135,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WARTG(WG_ALL, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
     WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
     WART(2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)
+    WART(2, L"Le placement des sièges", L"Seat placement", L"Accès réservé : places, postures, ceintures", L"Reserved access: seats, postures, belts", kW_Places),   // (WA_PLACES = 38)
 };

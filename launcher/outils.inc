@@ -36,6 +36,9 @@ static std::wstring ToolLocalVer(const ToolPkg &t)
 // Releases recues (fil des mises a jour, ou des notes sans jeu) : la plus recente qui a le paquet de chaque outil (Nightly
 // seulement pour le canal Nightly, comme le mod).
 static void PlacesSeen(const std::vector<Note> &rel);   // (places.inc)
+static bool AccesPlaces();                              // (places.inc : cle d'acces valide avec le droit « places »)
+static void DrawPlacesCard(Graphics &g, RectF c);       // (outils-places.inc : bandeau Placement des sieges)
+static int g_placesFake;                                // (captures : 1 bandeau montre, 2 export en cours)
 static void ToolsSeen(const std::vector<Note> &rel)
 {
     const Note *ed = NULL, *cv = NULL;
@@ -159,13 +162,13 @@ static void DrawConvArt(Graphics &g, RectF r)
 
 struct ToolText { const wchar_t *titleFr, *titleEn, *pill, *paraFr, *paraEn, *sizeFr, *sizeEn; struct { int ic; const wchar_t *fr, *en; } feats[3]; };
 
-static void DrawToolCard(Graphics &g, ToolPkg &t, RectF c, const ToolText &tx, int idGet)
+static void DrawToolCard(Graphics &g, ToolPkg &t, RectF c, const ToolText &tx, int idGet, float imgH = 214)
 {
     std::wstring local = ToolLocalVer(t), remote;
     EnterCriticalSection(&g_cs); remote = t.remoteVer; LeaveCriticalSection(&g_cs);
     bool installed = !local.empty(), newer = installed && !remote.empty() && CmpVer(remote, local) > 0;
     Glass(c);
-    RectF img(c.X + 24, c.Y + 24, c.Width - 48, 214);
+    RectF img(c.X + 24, c.Y + 24, c.Width - 48, imgH);
     {
         GraphicsPath p; RoundRect(p, img, 16);
         GraphicsState st = g.Save();
@@ -257,6 +260,13 @@ static void DrawToolsPage(Graphics &g)
         { { IC_CHECK, L"Circuits officiels et mods, convertis sur ton PC : rien n'est partagé", L"Official and mod tracks, converted on your PC: nothing is shared" },
           { IC_CHECK, L"Mod Voyage inclus (agence, aérodrome, vol en Cessna) : installé par le convertisseur", L"Voyage mod included (agency, airfield, Cessna flight): installed by the converter" },
           { IC_ALERT, L"My Summer Car et My Winter Car, avec MSCLoader ; en co-op, chacun convertit le même circuit", L"My Summer Car and My Winter Car, with MSCLoader; in co-op, everyone converts the same track" } } };
+    // (cle d'acces de l'outil des places : cartes moins hautes, image reduite, bandeau Placement des sieges dessous)
+    if (g_placesFake || AccesPlaces()) {
+        DrawToolCard(g, g_ed, RectF(kToolEd.X, kToolEd.Y, kToolEd.Width, 520), ed, UI_TOOL_GET, 110);
+        DrawToolCard(g, g_cv, RectF(kToolCv.X, kToolCv.Y, kToolCv.Width, 520), cv, UI_TOOL_CV_GET, 110);
+        DrawPlacesCard(g, RectF(kToolEd.X, kToolEd.Y + 536, kToolCv.X + kToolCv.Width - kToolEd.X, 120));
+        return;
+    }
     DrawToolCard(g, g_ed, kToolEd, ed, UI_TOOL_GET);
     DrawToolCard(g, g_cv, kToolCv, cv, UI_TOOL_CV_GET);
 }

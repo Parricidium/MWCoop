@@ -2193,6 +2193,29 @@ Tools JD entrusts to a few people	أدوات يأتمن JD عليها بعض ا�
 Your MWCoop ID	معرّفك MWCoop
 Paste the key	لصق المفتاح
 File…	ملف…
+Seat placement	وضعيات المقاعد
+RESERVED ACCESS	وصول محجوز
+Place the seated players, set postures and belts. First export your cars from a save where they are assembled.	ضع اللاعبين الجالسين، واضبط الوضعيات والأحزمة. صدّر سياراتك أولاً من حفظ تكون فيه مركّبة.
+Exporting the cars: the game runs in the background (2 to 3 minutes)	تصدير السيارات: اللعبة تعمل في الخلفية (من دقيقتين إلى 3 دقائق)
+Downloading the tool…	جارٍ تنزيل الأداة…
+Opening the tool…	جارٍ فتح الأداة…
+WebView2 is missing (Windows 10 and 11 have it with Edge): the tool cannot open	WebView2 غير موجود (يأتي مع Edge في Windows 10 و11): لن تفتح الأداة
+No cars exported for this game yet: « Export my cars » first (Satsuma: seats fitted; Rivett: assembled)	لم تُصدَّر سيارات لهذه اللعبة بعد: «تصدير سياراتي» أولاً (Satsuma: المقاعد مركّبة؛ Rivett: مجمَّعة)
+Cars exported on %s · export again after fitting other parts	صُدِّرت السيارات في %s · أعد التصدير بعد تركيب قطع أخرى
+Open the tool	فتح الأداة
+Exporting…	جارٍ التصدير…
+Export my cars	تصدير سياراتي
+Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.	مفتاح وصولك يفتح أداة المقاعد: صدّر سياراتك أولاً من حفظ تكون فيه مركّبة، ثم افتح الأداة. زر «تصدير» في الأداة: ملف zip ترسله إلى JD.
+Reserved access: seats, postures, belts	وصول محجوز: المقاعد والوضعيات والأحزمة
+The seat tool lets you place the seated players in each car yourself: the seat, the mannequin's posture bone by bone, and the belts. It is reserved for people chosen by JD, with an access key.	تتيح لك أداة المقاعد أن تضع بنفسك اللاعبين الجالسين في كل سيارة: المقعد، ووضعية الدمية عظمةً عظمة، والأحزمة. وهي محجوزة لأشخاص يختارهم JD، بمفتاح وصول.
+Getting access	الحصول على الوصول
+Settings > Launcher, « Reserved access » card: copy your MWCoop ID and send it to JD.	الإعدادات > المشغّل، بطاقة «وصول محجوز»: انسخ معرّف MWCoop الخاص بك وأرسله إلى JD.
+Paste the key he sends back (or drop its .txt file on the window): the Seat placement strip appears in Tools.	الصق المفتاح الذي يرسله لك (أو أفلت ملفه .txt على النافذة): يظهر شريط «وضعيات المقاعد» في الأدوات.
+Setting the seats	ضبط المقاعد
+Load a save where the cars are assembled (Satsuma: seats fitted; Rivett: assembled), quit the game, then Tools > Export my cars. The game runs for 2 to 3 minutes in the background, in a copy of your save: your save is not touched.	حمّل حفظاً تكون فيه السيارات مركّبة (Satsuma: المقاعد مركّبة؛ Rivett: مجمَّعة)، واخرج من اللعبة، ثم الأدوات > تصدير سياراتي. تعمل اللعبة دقيقتين إلى 3 دقائق في الخلفية، في نسخة من حفظك: حفظك لا يُمَس.
+Open the tool: it downloads the first time. Pick a car and a seat, then set it; Save applies it to your game (read again even while playing).	افتح الأداة: تُنزَّل في المرة الأولى. اختر سيارة ومقعداً، ثم اضبطه؛ زر «حفظ» يطبّقه على لعبتك (يُعاد قراءته حتى أثناء اللعب).
+The tool's Export button: a zip with your settings, to send to JD. He checks them before adding them to MWCoop for everyone.	زر «تصدير» في الأداة: ملف zip بإعداداتك ترسله إلى JD. يتحقق منها قبل إضافتها إلى MWCoop للجميع.
+The tool needs WebView2: Windows 10 and 11 have it with Edge.	تحتاج الأداة إلى WebView2: يأتي مع Edge في Windows 10 و11.
 My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?	لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟
 Different version (you %s, host %s): update	إصدار مختلف (لديك %s، لدى المضيف %s): حدّث
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.

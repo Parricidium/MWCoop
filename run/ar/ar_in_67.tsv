@@ -1,0 +1,23 @@
+SPB01	Seat placement
+SPB02	RESERVED ACCESS
+SPB03	Place the seated players, set postures and belts. First export your cars from a save where they are assembled.
+SPB04	Exporting the cars: the game runs in the background (2 to 3 minutes)
+SPB05	Downloading the tool…
+SPB06	Opening the tool…
+SPB07	WebView2 is missing (Windows 10 and 11 have it with Edge): the tool cannot open
+SPB08	No cars exported for this game yet: « Export my cars » first (Satsuma: seats fitted; Rivett: assembled)
+SPB09	Cars exported on %s · export again after fitting other parts
+SPB10	Open the tool
+SPB11	Exporting…
+SPB12	Export my cars
+SPB13	Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.
+SPB14	Reserved access: seats, postures, belts
+SPB15	The seat tool lets you place the seated players in each car yourself: the seat, the mannequin's posture bone by bone, and the belts. It is reserved for people chosen by JD, with an access key.
+SPB16	Getting access
+SPB17	Settings > Launcher, « Reserved access » card: copy your MWCoop ID and send it to JD.
+SPB18	Paste the key he sends back (or drop its .txt file on the window): the Seat placement strip appears in Tools.
+SPB19	Setting the seats
+SPB20	Load a save where the cars are assembled (Satsuma: seats fitted; Rivett: assembled), quit the game, then Tools > Export my cars. The game runs for 2 to 3 minutes in the background, in a copy of your save: your save is not touched.
+SPB21	Open the tool: it downloads the first time. Pick a car and a seat, then set it; Save applies it to your game (read again even while playing).
+SPB22	The tool's Export button: a zip with your settings, to send to JD. He checks them before adding them to MWCoop for everyone.
+SPB23	The tool needs WebView2: Windows 10 and 11 have it with Edge.

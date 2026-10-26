@@ -4889,6 +4889,7 @@ static std::wstring FitText(const std::wstring &s, float px, int style, float ma
 #include "saves.inc"
 #include "es2.inc"   // (lecture et reecriture des sauvegardes du jeu : Verifier la sauvegarde)
 #include "places.inc"   // (outil des places reserve : ID MWCoop, cle d'acces signee par JD, cles retirees)
+#include "outils-places.inc"   // (page Outils : bandeau Placement des sieges, [Addons et Tools])
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -8060,6 +8061,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"outils-telechargement") { g_cv.busy = true; g_cv.prog = 0.42f; }
             if (st == L"outils-installe" || st == L"outils-maj") g_ed.fakeLocal = L"1.2.0";
             if (st == L"outils-survol") g_uiHot = UI_TOOL_GET;
+            if (st == L"outils-places") g_placesFake = 1;          // (bandeau Placement des sieges, comme avec une cle valide)
+            if (st == L"outils-places-export") g_placesFake = 2;   // (export des voitures en cours)
         }
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)

@@ -1700,6 +1700,7 @@ static bool UiClick(int id)
     if ((id >= UI_LOBBY_PRIV && id < 3400) || (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 600)) { LobbyOptClick(id); return true; }   // (3300-3399 et 10400-10999 : salon.inc)
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
     if (id >= UI_TOOL_GET && id <= UI_TOOL_CV_DIR) { ToolsClick(id); return true; }
+    if (id == UI_PLACES_OPEN || id == UI_PLACES_EXPORT) { PlacesClick(id); return true; }   // (page Outils : placement des sieges, outils-places.inc)
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
     if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)
     if (id >= UI_ALB_OPEN && id < UI_ALB + 4000) { AlbClick(id); return true; }
