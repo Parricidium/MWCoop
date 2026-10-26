@@ -2094,6 +2094,8 @@ static const wchar_t *const kRu[][2] = {
     { L"Exporting…", L"Экспорт…" },
     { L"Export my cars", L"Экспортировать мои машины" },
     { L"Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.", L"Твой ключ доступа открывает инструмент сидений: сначала экспортируй машины из сохранения, где они собраны, затем открой инструмент. Кнопка «Экспорт» в инструменте: zip, который нужно отправить JD." },
+    { L"Copy my ID", L"Копировать мой ID" },
+    { L"Your MWCoop ID: ", L"Твой ID MWCoop: " },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

@@ -2216,6 +2216,8 @@ Load a save where the cars are assembled (Satsuma: seats fitted; Rivett: assembl
 Open the tool: it downloads the first time. Pick a car and a seat, then set it; Save applies it to your game (read again even while playing).	افتح الأداة: تُنزَّل في المرة الأولى. اختر سيارة ومقعداً، ثم اضبطه؛ زر «حفظ» يطبّقه على لعبتك (يُعاد قراءته حتى أثناء اللعب).
 The tool's Export button: a zip with your settings, to send to JD. He checks them before adding them to MWCoop for everyone.	زر «تصدير» في الأداة: ملف zip بإعداداتك ترسله إلى JD. يتحقق منها قبل إضافتها إلى MWCoop للجميع.
 The tool needs WebView2: Windows 10 and 11 have it with Edge.	تحتاج الأداة إلى WebView2: يأتي مع Edge في Windows 10 و11.
+Copy my ID	نسخ معرّفي
+Your MWCoop ID: 	معرّفك MWCoop: 
 My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?	لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟
 Different version (you %s, host %s): update	إصدار مختلف (لديك %s، لدى المضيف %s): حدّث
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.

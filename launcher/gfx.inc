@@ -504,6 +504,17 @@ enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD
        UI_SET_DENS = 13054,          // + k (0 aeree, 1 normale, 2 compacte) : densite
        UI_SET_CLEID = 13060, UI_SET_CLEPASTE, UI_SET_CLEFILE, UI_SET_CLEDEL };   // acces reserve (places.inc) : copier l'ID, coller / ouvrir / retirer la cle
 static std::wstring CleIdText(); static std::wstring CleEtatText(); static bool CleHas();   // (places.inc)
+// Boutons de la ligne « Cle d'acces » : sans cle, coller et fichier ; avec, retirer.
+struct CleBtn { std::wstring t; int id; bool primary; int icon; };
+static std::vector<CleBtn> CleButtons()
+{
+    std::vector<CleBtn> v;   // (copier l'ID : en-tete de la carte, SetCardHeader)
+    if (CleHas()) v.push_back({ T(L"Retirer", L"Remove"), UI_SET_CLEDEL, false, IC_TRASH });
+    else { v.push_back({ T(L"Coller la clé", L"Paste the key"), UI_SET_CLEPASTE, true, -1 }); v.push_back({ T(L"Fichier…", L"File…"), UI_SET_CLEFILE, false, IC_FILE }); }
+    return v;
+}
+static float SetButtonW(const std::wstring &s);
+static float CleButtonsW() { float w = -8; for (const CleBtn &b : CleButtons()) w += SetButtonW(b.t) + 8; return w; }
 static void CleCopyId(); static void ClePaste(); static void CleFile(); static void CleRemove();
 static void LogsOpenFolder();
 static void WikiOpenHost();   // (launcher.cpp : article du guide Heberger une partie)
@@ -542,7 +553,7 @@ static const SetCard kSetCards[] = {
     { SET_HUD, 1, L"Aperçu", L"Preview", NULL, NULL },                                                                                                               // 23
     { SET_HUD, 1, L"Jauges affichées", L"Gauges shown", NULL, NULL },                                                                                                // 24
     { SET_HUD, 1, L"Coop", L"Co-op", L"Aussi avec Vanilla", L"Also with Vanilla" },                                                                                  // 25
-    { SET_LANCEUR, 0, L"Accès réservé", L"Restricted access", L"Outils confiés par JD à quelques personnes", L"Tools JD entrusts to a few people" },               // 26 (places.inc)
+    { SET_LANCEUR, 0, L"Accès réservé", L"Restricted access", L"Ton ID MWCoop", L"Your MWCoop ID", "acces" },   // 26 (places.inc ; sous-titre : l'ID MWCoop lui-meme)
 };
 static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
@@ -698,7 +709,6 @@ static const SetItem kSetItems[] = {
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé, gelé… toi et tes amis", L"Very hungry, exhausted, freezing… you and your friends", 0, 1 },
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé… toi et tes amis", L"Very hungry, exhausted… you and your friends", 0, 2 },   // (pas de froid dans My Summer Car)
     // Acces reserve (outil des places, cle d'acces signee par JD, 26/10) : l'ID a lui envoyer, la cle recue (explication : son etat)
-    { 26, SI_X, "cleid", L"Ton ID MWCoop", L"Your MWCoop ID", NULL, NULL },
     { 26, SI_X, "cle", L"Clé d'accès", L"Access key", NULL, NULL },
 };
 static const int kSetItemN = (int)(sizeof(kSetItems) / sizeof(kSetItems[0]));
@@ -1244,8 +1254,7 @@ static float SetItemH(const SetItem &it, float w)
     if (!strcmp(k, "about")) return 48;
     if (!strcmp(k, "update") || !strcmp(k, "notes")) return SetRowDH();
     if (!strcmp(k, "buy")) return 50;
-    if (!strcmp(k, "cleid")) return SetCtlRowH(T(it.fr, it.en), CleIdText(), w, SetButtonW(T(L"Copier", L"Copy")));
-    if (!strcmp(k, "cle")) return SetRowDH() + 40;   // (nom et etat, boutons dessous)
+    if (!strcmp(k, "cle")) return SetCtlRowH(T(it.fr, it.en), CleEtatText(), w, CleButtonsW());
     if (!strcmp(k, "accent")) return SetCtlRowH(T(it.fr, it.en), T(it.dFr, it.dEn), w, 5 * 30 + 4 * 8);
     if (!strcmp(k, "texte")) return SetCtlRowH(T(it.fr, it.en), L"", w, kSetSliderW);
     if (!strcmp(k, "aurore") || !strcmp(k, "densite") || !strcmp(k, "max") || !strcmp(k, "prive") || !strcmp(k, "net") || !strcmp(k, "canal") || !strcmp(k, "sessions") || !strcmp(k, "start") || !strcmp(k, "ajouts")) {
@@ -1545,19 +1554,12 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             g_setBuy = RectF(x, y + 6, (w - 10) / 2, 38); g_setUninst = RectF(x + (w + 10) / 2, y + 6, (w - 10) / 2, 38);
             UiButton(g, g_setBuy, T(L"Acheter le jeu sur Steam", L"Buy the game on Steam"), UI_SET_BUY, false);
             UiButton(g, g_setUninst, T(L"Désinstaller MWCoop", L"Uninstall MWCoop"), UI_SET_UNINST, false, IC_TRASH);
-        } else if (!strcmp(k, "cleid")) {
-            std::wstring b = T(L"Copier", L"Copy"), lab = T(it.fr, it.en);
-            float bw = SetButtonW(b);
-            SetRowLabel(g, row, lab, CleIdText(), SetLabelMaxW(lab, w, bw));
-            UiButton(g, SetCtlRect(row, lab, bw, 32), b, UI_SET_CLEID, false);
-        } else if (!strcmp(k, "cle")) {   // etat de la cle, puis Coller / Fichier / Retirer
-            SetRowLabel(g, row, T(it.fr, it.en), CleEtatText(), w);
-            std::wstring b1 = T(L"Coller la clé", L"Paste the key"), b2 = T(L"Fichier…", L"File…"), b3 = T(L"Retirer", L"Remove");
-            float w1 = SetButtonW(b1), w2 = SetButtonW(b2), w3 = SetButtonW(b3), by = y + h - 37;
-            bool has = CleHas();
-            UiButton(g, RectF(x, by, w1, 32), b1, UI_SET_CLEPASTE, !has);
-            UiButton(g, RectF(x + w1 + 8, by, w2, 32), b2, UI_SET_CLEFILE, false, IC_FILE);
-            if (has) UiButton(g, RectF(x + w - w3, by, w3, 32), b3, UI_SET_CLEDEL, false, IC_TRASH);
+        } else if (!strcmp(k, "cle")) {   // etat de la cle, boutons a droite (une seule ligne : la carte tient sans defiler -- JD, 26/10)
+            std::wstring lab = T(it.fr, it.en);
+            float bw = CleButtonsW();
+            SetRowLabel(g, row, lab, CleEtatText(), SetLabelMaxW(lab, w, bw));
+            RectF r = SetCtlRect(row, lab, bw, 32);
+            for (const CleBtn &b : CleButtons()) { float bwi = SetButtonW(b.t); UiButton(g, RectF(r.X, r.Y, bwi, 32), b.t, b.id, b.primary, b.icon); r.X += bwi + 8; }
         } else if (!strcmp(k, "logs")) {   // deux boutons : le dossier, le zip
             std::wstring b1 = T(L"Ouvrir le dossier", L"Open the folder"), b2 = T(L"Faire le zip", L"Make the zip");
             float w1 = SetButtonW(b1), w2 = SetButtonW(b2);
@@ -1582,6 +1584,12 @@ static void SetCardHeader(Graphics &g, const SetCard &c, float right, float y, f
 {
     if (!c.hdr) return;
     float cy = y + 26;
+    if (!strcmp(c.hdr, "acces")) {   // acces reserve : copier l'ID MWCoop (affiche en sous-titre)
+        std::wstring s = T(L"Copier mon ID", L"Copy my ID");
+        float bw = SetButtonW(s);
+        UiButton(g, RectF(right - bw, cy - 15, bw, 30), s, UI_SET_CLEID, false);
+        return;
+    }
     if (!strcmp(c.hdr, "goimage")) {   // lien vers l'onglet Image & ray tracing
         std::wstring s = kRtShown ? T(L"Tout l'onglet Image & ray tracing", L"The whole Image & ray tracing tab") : T(L"Tout l'onglet Image", L"The whole Image tab");
         float tw = MeasureW(MeasureG(), s, 12, FontStyleBold) + 22;
@@ -1623,7 +1631,8 @@ static float SetDrawCard(Graphics &g, int ci, float x, float y, float w)
     if (SetDrawn(RectF(x, y, w, 50))) {
         float tw = MeasureW(MeasureG(), T(c.fr, c.en), 16, FontStyleBold);
         Title(g, T(c.fr, c.en), RectF(x + kSetPad, y + 14, inner, 24), 16, kInk);
-        if (sub) Text(g, T(c.sFr, c.sEn), RectF(x + kSetPad, y + 38, inner, 16), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        std::wstring st = c.hdr && !strcmp(c.hdr, "acces") ? T(L"Ton ID MWCoop : ", L"Your MWCoop ID: ") + CleIdText() : sub ? T(c.sFr, c.sEn) : L"";   // (acces reserve : l'ID lui-meme)
+        if (sub) Text(g, st, RectF(x + kSetPad, y + 38, inner, 16), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         SetCardHeader(g, c, x + w - kSetPad, y, inner - tw - 12);
     }
     y += sub ? 60 : 48;

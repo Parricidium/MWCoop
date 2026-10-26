@@ -2218,6 +2218,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Open the tool: it downloads the first time. Pick a car and a seat, then set it; Save applies it to your game (read again even while playing).", L"افتح الأداة: تُنزَّل في المرة الأولى. اختر سيارة ومقعداً، ثم اضبطه؛ زر «حفظ» يطبّقه على لعبتك (يُعاد قراءته حتى أثناء اللعب)." },
     { L"The tool's Export button: a zip with your settings, to send to JD. He checks them before adding them to MWCoop for everyone.", L"زر «تصدير» في الأداة: ملف zip بإعداداتك ترسله إلى JD. يتحقق منها قبل إضافتها إلى MWCoop للجميع." },
     { L"The tool needs WebView2: Windows 10 and 11 have it with Edge.", L"تحتاج الأداة إلى WebView2: يأتي مع Edge في Windows 10 و11." },
+    { L"Copy my ID", L"نسخ معرّفي" },
+    { L"Your MWCoop ID: ", L"معرّفك MWCoop: " },
     { L"My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?", L"لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟" },
     { L"Different version (you %s, host %s): update", L"إصدار مختلف (لديك %s، لدى المضيف %s): حدّث" },
     { L"The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.", L"لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام." },
