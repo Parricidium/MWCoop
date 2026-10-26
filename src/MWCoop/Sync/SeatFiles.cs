@@ -15,6 +15,15 @@ namespace MWCoop
     //   os <n|conducteur> <os> <qx qy qz qw>     (rotation locale ; conducteur : colonne, cou et tete seulement)
     //   corps <n|conducteur> <x y z>             (decalage du corps, repere de la voiture)
     //   pose <n|conducteur> <volant|camion>      (pose de base, sinon celle de la voiture)
+    // Ceinture d'une place (outil des places, JD 26/10 : « Tout me vas », idee de Menos) -- lue ici, dessinee par Seats :
+    //   ceinture <n|conducteur> <sangle|menos|jeu>  (sangle : ruban sur les points ; menos : pieces de son modele aux points ;
+    //                                              jeu : ce que fait le mod sans fichier)
+    //   ancrage <n|conducteur> <haut|bas> <x y z>
+    //   boucle <n|conducteur> <x y z> <rx ry rz>    (aussi le point vise pour s'attacher ; angles d'Euler du jeu, en degres)
+    //   languette <n|conducteur> <x y z> <rx ry rz> (ceinture rangee)
+    //   rangee <n|conducteur> <x y z> ...           (sangle rangee, de l'ancrage bas a l'ancrage haut, sans eux)
+    //   bouclee <n|conducteur> <x y z> ...          (sangle bouclee : ancrage haut, epaule, poitrine, boucle, hanche, ancrage bas)
+    //   largeur <n|conducteur> <m>                  (0,045 sans ligne)
     // Un fichier REMPLACE les places calculees de cette voiture (Seats.FileSeats) ; sans fichier, rien ne change. Un avatar assis a
     // une place du fichier (ou au volant, si le fichier a des lignes conducteur) : pose de base, os du fichier, pas d'ajustement
     // au siege (SeatFit, reglages par voiture), les yeux a la place, puis le decalage (Avatar). Les bras qui tiennent quelque chose
@@ -30,6 +39,7 @@ namespace MWCoop
             public bool NoBelt, Lines;               // (Lines : le fichier dit quelque chose de cette place)
             public readonly Dictionary<string, Quaternion> Bones = new Dictionary<string, Quaternion>();
             public bool ArmRight, ArmLeft;           // (os d'un bras dans le fichier)
+            public Belt Belt;                        // (lignes ceinture ... de cette place ; null sans)
 
             // Os du fichier sur l'avatar (apres sa pose de base, avant les prises et le penche). Conducteur : colonne, cou, tete.
             public void Apply(Func<string, Transform> bone)
@@ -41,6 +51,33 @@ namespace MWCoop
                     if (b != null) b.localRotation = kv.Value;
                     else if (missing.Add(kv.Key)) Log.Warn("places : os " + kv.Key + " absent de l'avatar (ignore)");
                 }
+            }
+        }
+        // Ceinture d'une place du fichier, repere de la voiture. Has* : la ligne y est (sinon a Seats de garder la sienne).
+        public class Belt
+        {
+            public string Kind = "sangle";           // (sangle, menos, jeu)
+            public Vector3 Top, Bottom, Buckle, Tongue;
+            public Quaternion BuckleRot = Quaternion.identity, TongueRot = Quaternion.identity;
+            public bool HasTop, HasBottom, HasBuckle, HasTongue;
+            public readonly List<Vector3> Stowed = new List<Vector3>(), Fastened = new List<Vector3>();
+            public float Width = 0.045f;
+            // Trajets complets (avec les ancrages quand ils y sont) : rangee bas -> haut, bouclee haut -> bas.
+            public List<Vector3> StowedPath()
+            {
+                var l = new List<Vector3>();
+                if (HasBottom) l.Add(Bottom);
+                l.AddRange(Stowed);
+                if (HasTop) l.Add(Top);
+                return l;
+            }
+            public List<Vector3> FastenedPath()
+            {
+                var l = new List<Vector3>();
+                if (HasTop) l.Add(Top);
+                l.AddRange(Fastened);
+                if (HasBottom) l.Add(Bottom);
+                return l;
             }
         }
         public class CarFile { public string Car, File, Hash; public Place Driver = new Place(); public readonly List<Place> Places = new List<Place>(); }
@@ -84,6 +121,15 @@ namespace MWCoop
             return null;
         }
         public static bool NoBelt(string car, int index) { Place p = index >= 0 ? For(car, index) : null; return p != null && p.NoBelt; }
+        // Ceinture du fichier pour une place (rang, -1 : conducteur) : null sans fichier, sans lignes ceinture, ou « ceinture n jeu »
+        // (Seats garde alors la sienne). Le conducteur n'a pas besoin de lignes os / corps / pose pour sa ceinture.
+        public static Belt BeltFor(string car, int index)
+        {
+            CarFile f = For(car);
+            if (f == null) return null;
+            Place p = index < 0 ? f.Driver : f.Places.Find(x => x.N == index);
+            return p != null && p.Belt != null && p.Belt.Kind != "jeu" && !p.NoBelt ? p.Belt : null;
+        }
         // Cle de pose pour Avatar.DriverPose (pose <n> camion / volant) : la voiture sinon.
         public static string PoseKey(Place p, string car) { return p == null || p.Pose == null ? car : p.Pose == "camion" ? "GIFU" : ""; }
 
@@ -107,11 +153,19 @@ namespace MWCoop
                     CarFile f = Read(p);
                     if (f == null || f.Car == null) { Log.Warn("places : " + Path.GetFileName(p) + " illisible (pas de PLACES 1 / voiture)"); continue; }
                     files[f.Car] = f;
-                    Log.Info("places : " + f.Car + " lues dans " + Path.GetFileName(p) + " (" + f.Places.Count + " places" + (f.Driver.Lines ? " + conducteur" : "") + ", empreinte " + f.Hash + ")");
+                    Log.Info("places : " + f.Car + " lues dans " + Path.GetFileName(p) + " (" + f.Places.Count + " places" + (f.Driver.Lines ? " + conducteur" : "") + Belts(f) + ", empreinte " + f.Hash + ")");
                 }
                 catch (Exception e) { Log.Warn("places : " + Path.GetFileName(p) + " : " + e.Message); }
             }
             Generation++;
+        }
+
+        static string Belts(CarFile f)
+        {
+            string s = "";
+            if (f.Driver.Belt != null) s += " conducteur " + f.Driver.Belt.Kind;
+            foreach (Place p in f.Places) if (p.Belt != null) s += " " + p.N + " " + p.Belt.Kind + " (" + p.Belt.Stowed.Count + "/" + p.Belt.Fastened.Count + " points)";
+            return s.Length > 0 ? ", ceintures :" + s : "";
         }
 
         static CarFile Read(string path)
@@ -159,6 +213,39 @@ namespace MWCoop
                             }
                             else if (w[0] == "corps" && w.Length >= 5) t.Body = new Vector3(F(w[2]), F(w[3]), F(w[4]));
                             else if (w[0] == "pose" && w.Length >= 3) t.Pose = w[2] == "camion" ? "camion" : "volant";
+                            break;
+                        }
+                    case "ceinture":
+                    case "ancrage":
+                    case "boucle":
+                    case "languette":
+                    case "rangee":
+                    case "bouclee":
+                    case "largeur":
+                        {
+                            Place t = w.Length > 2 ? (w[1] == "conducteur" ? f.Driver : f.Places.Find(x => x.N.ToString(ci) == w[1])) : null;
+                            if (t == null) break;
+                            Belt b = t.Belt ?? (t.Belt = new Belt());   // (pas de Lines : une ceinture seule ne change pas la pose)
+                            if (w[0] == "ceinture") b.Kind = w[2] == "menos" || w[2] == "jeu" ? w[2] : "sangle";
+                            else if (w[0] == "ancrage" && w.Length >= 6)
+                            {
+                                var v = new Vector3(F(w[3]), F(w[4]), F(w[5]));
+                                if (w[2] == "haut") { b.Top = v; b.HasTop = true; } else if (w[2] == "bas") { b.Bottom = v; b.HasBottom = true; }
+                            }
+                            else if ((w[0] == "boucle" || w[0] == "languette") && w.Length >= 5)
+                            {
+                                var v = new Vector3(F(w[2]), F(w[3]), F(w[4]));
+                                Quaternion q = w.Length >= 8 ? Quaternion.Euler(F(w[5]), F(w[6]), F(w[7])) : Quaternion.identity;
+                                if (w[0] == "boucle") { b.Buckle = v; b.BuckleRot = q; b.HasBuckle = true; }
+                                else { b.Tongue = v; b.TongueRot = q; b.HasTongue = true; }
+                            }
+                            else if (w[0] == "rangee" || w[0] == "bouclee")
+                            {
+                                List<Vector3> l = w[0] == "rangee" ? b.Stowed : b.Fastened;
+                                l.Clear();
+                                for (int i = 2; i + 2 < w.Length; i += 3) l.Add(new Vector3(F(w[i]), F(w[i + 1]), F(w[i + 2])));
+                            }
+                            else if (w[0] == "largeur") b.Width = Mathf.Clamp(F(w[2]), 0.01f, 0.15f);
                             break;
                         }
                 }
