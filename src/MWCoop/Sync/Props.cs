@@ -258,6 +258,16 @@ namespace MWCoop
             return k;
         }
 
+        // Essais (Autotest=mscprise) : cle et ID de sauvegarde d'un corps, ici.
+        public static string TestKeyInfo(Rigidbody rb)
+        {
+            string k; worldKeys.TryGetValue(rb.gameObject, out k);
+            string ids = "";
+            foreach (PlayMakerFSM f in rb.GetComponents<PlayMakerFSM>()) { HutongGames.PlayMaker.FsmString v = f.FsmVariables.FindFsmString("ID"); if (v != null) ids += f.FsmName + ".ID=" + v.Value + "[" + f.ActiveStateName + "] "; }
+            Prop p; bool body = byBody.TryGetValue(rb, out p);
+            return "cle " + (k ?? "-") + ", " + ids + (body ? "suivi" : "pas suivi") + (rb.isKinematic ? ", cinematique" : "");
+        }
+
         // Deux corps vivants sous la meme cle a ce releve : le second n'est pas suivi (sa cle est celle d'un autre, prise
         // au chargement) ; objet apparu en jeu (racine « (Clone) ») : ni l'un ni l'autre, et plus jamais sous cette cle.
         static void Duplicate(string id, Rigidbody rb, Rigidbody first)
