@@ -1848,9 +1848,14 @@ namespace MWCoop
                 // Copie deplacee au pas de physique (FixedUpdate) : interpolee pour le rendu, elle et ses pieces
                 // articulees (banquette, coffre, portieres) -- sans cela, a-coups a 50 Hz chez le passager et
                 // pieces qui tremblent en roulant.
+                // Sur My Summer Car, PAS les corps deja cinematiques sous la voiture (sauf ouvrants) : les vis (BoltPM, 529 corps)
+                // sous les roues et les freins, deplacees par leur parent, restaient en arriere une fois interpolees -- 24 vis de
+                // roues, tambours, disques et triangles decalees de 0,4 a 1,9 m chez l'invite apres 30 m de route, pour de bon
+                // (Markos 26/10 : « no bolts here, and on the brake discs », vis par terre a cote de la voiture).
                 c.InterpWas = new Dictionary<Rigidbody, RigidbodyInterpolation>();
                 foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true))
                 {
+                    if (Game.Msc && rb != c.Body && rb.isKinematic && !CarDoors.IsDoorBody(rb) && Config.GetInt("Test", "VisInterpolees", 0) == 0) continue;
                     c.InterpWas[rb] = rb.interpolation;
                     rb.interpolation = RigidbodyInterpolation.Interpolate;
                 }
