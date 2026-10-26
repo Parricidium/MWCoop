@@ -954,3 +954,13 @@ Bring back my clothes (jacket, coverall, helmet)	Вернуть мою одеж�
 Clothes brought back	Одежда возвращена
  in front of you	 перед тобой
 Museum	Музей
+Cheats are for the host only.	Читы только для хоста.
+Host only.	Только для хоста.
+/setmoney <player> <amount 0 to 1000000>	/setmoney <игрок> <сумма от 0 до 1000000>
+Player not found: 	Игрок не найден: 
+/setmoney <player> <amount>: (host) sets a player's money, yours included	/setmoney <игрок> <сумма>: (хост) задаёт деньги игрока, включая свои
+The host set your money to 	Хост установил твои деньги: 
+Set money	Задать деньги
+Set	Задать
+Allowed for you only (host only) · announced to everyone	Разрешены только тебе (только хост) · объявляются всем
+For the host only.	Только для хоста.

@@ -85,24 +85,28 @@ namespace MWCoop
             new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f), Need = () => Kauppa.Active && Kauppa.KinoOn },
         };
 
-        static bool hostAllows;
+        static bool hostAllows, hostOnly;
         static float nextAnnounce;
 
         // Autorisees ici ? (hote ou solo : son reglage ; invite : celui de l'hote, recu)
         public static bool Allowed { get { return !Session.Active || Session.IsHost ? Config.GetInt("Coop", "Triches", 0) != 0 : hostAllows; } }
+        // Hote seulement (suggestion de Matilda Prime, 26/10 ; JD : « option activable par l'hote, Hote seulement ? Oui / Non ») :
+        // [Coop] TrichesHote=1, l'hote garde les triches, ses invites non (panneau F7 et commandes /). Invite : vrai si c'est la raison.
+        public static bool HostOnly { get { return Session.Active && !Session.IsHost ? hostOnly : Config.GetInt("Coop", "TrichesHote", 0) != 0; } }
 
         public static void Update()
         {
             if (!Session.Active || !Session.IsHost) return;
             if (Time.realtimeSinceStartup < nextAnnounce) return;
             nextAnnounce = Time.realtimeSinceStartup + 10f;
-            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@triches").Bool(Allowed), true);
+            // (aux invites : autorisees pour EUX ; puis la raison si non -- un invite d'une version d'avant ne lit que le premier)
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@triches").Bool(Allowed && !HostOnly).Bool(Allowed && HostOnly), true);
         }
 
-        public static void OnAllowed(bool on)
+        public static void OnAllowed(bool on, bool onlyHost)
         {
-            if (on != hostAllows) Log.Info("triches : " + (on ? "autorisees" : "coupees") + " par l'hote");
-            hostAllows = on;
+            if (on != hostAllows || onlyHost != hostOnly) Log.Info("triches : " + (on ? "autorisees" : onlyHost ? "reservees a l'hote" : "coupees") + " par l'hote");
+            hostAllows = on; hostOnly = onlyHost;
         }
 
         static void Say(string s) { Chat.System(s); }
@@ -112,25 +116,29 @@ namespace MWCoop
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)",
-            "/degivrer [voiture] : vitres dégivrées pour tous (toutes les voitures, ou rivett, sorbet, taxi)" };
+            "/degivrer [voiture] : vitres dégivrées pour tous (toutes les voitures, ou rivett, sorbet, taxi)",
+            "/argentde <joueur> <montant> : (hôte) fixe l'argent d'un joueur, le sien compris" };
         static readonly string[] HelpEn = {
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop, parts",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)",
-            "/defrost [car]: windows defrosted for everyone (all cars, or rivett, sorbet, taxi)" };
+            "/defrost [car]: windows defrosted for everyone (all cars, or rivett, sorbet, taxi)",
+            "/setmoney <player> <amount>: (host) sets a player's money, yours included" };
         // My Summer Car (19/10) : ses lieux (PlacesMsc), l'heure du jeu par pas de 2 h (MAP/SUN/Pivot/SUN::Color), la pluie
         // au lieu de la neige.
         static readonly string[] HelpMscFr = {
             "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye, cinema",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous (par pas de 2 h)", "/pluie oui|non : pluie pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
-            "/voiture <nom> : la voiture vient devant moi (satsuma, hayosiko, ferndale, ruscko, tracteur, camion, moto, remorque)" };
+            "/voiture <nom> : la voiture vient devant moi (satsuma, hayosiko, ferndale, ruscko, tracteur, camion, moto, remorque)",
+            "/argentde <joueur> <montant> : (hôte) fixe l'argent d'un joueur, le sien compris" };
         static readonly string[] HelpMscEn = {
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day (2-hour steps)", "/rain on|off: rain for everyone", "/clothes: my jacket, coverall and helmet in front of me",
-            "/car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)" };
+            "/car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)",
+            "/setmoney <player> <amount>: (host) sets a player's money, yours included" };
 
         // Commandes anglaises -> les noms d'ici. (Meteo : « neige » dans My Winter Car, « pluie » dans My Summer Car.)
         static string Canon(string c)
@@ -144,6 +152,7 @@ namespace MWCoop
                 case "money": case "cash": return "argent";
                 case "heal": return "soin";
                 case "defrost": case "degivre": return "degivrer";
+                case "setmoney": case "argentjoueur": return "argentde";
                 case "free": case "nojail": return "liberer";
                 case "clothes": case "wear": return "vetements";
                 case "car": case "vehicle": return "voiture";
@@ -168,7 +177,7 @@ namespace MWCoop
             if (c == "aide") { foreach (string h in Game.Msc ? Lang.A(HelpMscFr, HelpMscEn) : Lang.A(HelpFr, HelpEn)) Say(h); return null; }
             if (!Allowed)
             {
-                string no = Session.Active && !Session.IsHost ? Lang.T("Triches coupées par l'hôte.", "Cheats are off (host's choice).")
+                string no = Session.Active && !Session.IsHost ? (hostOnly ? Lang.T("Triches réservées à l'hôte.", "Cheats are for the host only.") : Lang.T("Triches coupées par l'hôte.", "Cheats are off (host's choice)."))
                                                               : Lang.T("Triches coupées : lanceur, Options du jeu > Partie et partage > Autoriser les triches.", "Cheats are off: launcher, Game options > Game and sharing > Allow cheats.");
                 Say(no);
                 return no;
@@ -236,6 +245,21 @@ namespace MWCoop
                     if (Game.Msc && Game.GlobalFloat("PlayerMoney") >= 0f) { Game.SetGlobalFloat("PlayerMoney", Game.GlobalFloat("PlayerMoney") + n); return null; }
                     return Lang.T("Porte-monnaie pas prêt.", "Wallet not ready.");
                 }
+                case "argentde":
+                {
+                    // (l'hote fixe le liquide d'un joueur, le sien compris -- suggestion de Matilda Prime, 26/10 : /argentde <joueur> <montant>)
+                    if (Session.Active && !Session.IsHost) return Lang.T("Réservé à l'hôte.", "Host only.");
+                    string[] p = arg.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    int n;
+                    if (p.Length < 2 || !int.TryParse(p[p.Length - 1], out n) || n < 0 || n > 1000000) return Lang.T("/argentde <joueur> <montant de 0 à 1000000>", "/setmoney <player> <amount 0 to 1000000>");
+                    string who = string.Join(" ", p, 0, p.Length - 1);
+                    PlayerInfo pi = Session.Active ? FindPlayer(who) : null;
+                    if (Session.Active && pi == null) return Lang.T("Joueur introuvable : ", "Player not found: ") + who;
+                    if (pi == null || pi.Local) return SetMyMoney(n) ? null : Lang.T("Porte-monnaie pas prêt.", "Wallet not ready.");
+                    Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@argentfixe").U8((byte)pi.Id).I32(n), true);
+                    Log.Info("triches : argent de " + pi.Name + " (#" + pi.Id + ") fixe a " + n + " mk");
+                    return null;
+                }
                 case "soin":
                     foreach (string g in new[] { "PlayerHunger", "PlayerThirst", "PlayerFatigue", "PlayerStress", "PlayerUrine", "PlayerDirtiness", "PlayerBurns", "PlayerAllergy" })
                         if (Game.GlobalFloat(g) >= 0f) Game.SetGlobalFloat(g, 0f);
@@ -284,6 +308,7 @@ namespace MWCoop
             if (a.Length == 0) return;
             string c = Canon(a[0].TrimStart('/').ToLowerInvariant()), arg = a.Length > 1 ? string.Join(" ", a, 1, a.Length - 1) : "";
             if (Session.IsHost && !Allowed) { Log.Warn("triches : " + name + " : " + line + " refusee (coupees ici)"); return; }
+            if (Session.IsHost && HostOnly) { Log.Warn("triches : " + name + " : " + line + " refusee (reservees a l'hote)"); return; }
             bool world = Session.IsHost || Game.Msc;   // (My Summer Car : chacun chez soi, voir WorldHere)
             if (world && c == "heure") { int h; if (int.TryParse(arg, out h) && h >= 0 && h <= 24) SetHour(h); }
             if (world && (c == "neige" || c == "pluie")) { bool? on = OnOff(arg); if (on != null) { if (Game.Msc) SetRainMsc(on.Value); else SetSnow(on.Value); } }
@@ -294,6 +319,21 @@ namespace MWCoop
                 if (Busy() != null) { Hud.Toast(name + Lang.T(" vous appelle : descendez du véhicule.", " calls you: get out of the vehicle.")); return; }
                 Menu.TeleportTo(from.State.Feet, from.State.Yaw, name);
             }
+        }
+
+        // Liquide de ce joueur fixe a n (triche de l'hote) : porte-monnaie partage, ou l'argent du jeu sur My Summer Car.
+        static bool SetMyMoney(int n)
+        {
+            if (Wallet.SetLocal(n)) return true;
+            if (Game.Msc && Game.GlobalFloat("PlayerMoney") >= 0f) { Game.SetGlobalFloat("PlayerMoney", n); Log.Info("argent : fixe a " + n + " mk (triche, argent du jeu)"); return true; }
+            return false;
+        }
+        // @argentfixe : seulement de l'hote, et seulement pour moi.
+        public static void OnSetMoney(int who, int to, int n)
+        {
+            if (to != Session.LocalId || Session.IsHost || Session.Host == null || who != Session.Host.Id) return;
+            if (n < 0 || n > 1000000) return;
+            if (SetMyMoney(n)) Hud.Toast(Lang.T("L'hôte a fixé ton argent à ", "The host set your money to ") + n + " mk");
         }
 
         static bool? OnOff(string s)
@@ -314,6 +354,9 @@ namespace MWCoop
         {
             q = (q ?? "").Trim();
             if (q.Length == 0) return null;
+            // (#numero : le joueur de ce numero -- deux joueurs peuvent porter le meme pseudo)
+            int id; PlayerInfo byId;
+            if (q.StartsWith("#") && int.TryParse(q.Substring(1), out id) && Session.Players.TryGetValue(id, out byId)) return byId;
             PlayerInfo best = null;
             foreach (PlayerInfo pi in Session.Players.Values)
             {
