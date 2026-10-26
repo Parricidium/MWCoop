@@ -538,9 +538,11 @@ static std::wstring SaveBakLabel(const SaveBak &b)
     }
     return l;
 }
-// Copie les fichiers (sans sous-dossiers) de src dans dst. Nombre copie.
+// Copie les fichiers (sans sous-dossiers) de src dans dst. Nombre copie ; g_saveCopyErr : erreur du dernier echec.
+static DWORD g_saveCopyErr;
 static int SaveCopyFiles(const std::wstring &src, const std::wstring &dst)
 {
+    g_saveCopyErr = 0;
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((src + L"*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return 0;
@@ -550,6 +552,7 @@ static int SaveCopyFiles(const std::wstring &src, const std::wstring &dst)
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
         SetFileAttributesW((dst + fd.cFileName).c_str(), FILE_ATTRIBUTE_NORMAL);
         if (CopyFileW((src + fd.cFileName).c_str(), (dst + fd.cFileName).c_str(), FALSE)) n++;
+        else g_saveCopyErr = GetLastError();
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     return n;
@@ -632,9 +635,19 @@ static std::wstring SaveAutoCopy(const std::wstring &prof, const std::wstring &s
         }
     }
     std::wstring dst = root + stamp + (n ? L"-" + std::to_wstring(n + 1) : L"") + suffix + L"\\";
+    int want = 0;   // (fichiers a copier : une copie incomplete -- disque plein, fichier verrouille -- ne compte pas)
+    {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((src + L"*").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) { do if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) want++; while (FindNextFileW(h, &fd)); FindClose(h); }
+    }
     int files = SaveCopyFiles(src, dst);
+    if (files < want) {   // (jamais bloquant : le lancement continue, l'echec est note)
+        LaunchLog("sauvegardes : copie de %s IMPOSSIBLE (%d / %d fichier(s) dans %s, erreur %lu) -- le jeu se lance quand meme", whoS.c_str(), files, want, Narrow(dst, CP_UTF8).c_str(), g_saveCopyErr);
+        SaveCopyDelete(dst);
+        return L"";
+    }
     LaunchLog("sauvegardes : %s copiee dans %s (%d fichier(s))", whoS.c_str(), Narrow(dst, CP_UTF8).c_str(), files);
-    if (!files) { SaveCopyDelete(dst); return L""; }
     if (prune) SaveCopiesPrune(prof);
     return dst;
 }
@@ -644,6 +657,7 @@ static std::wstring SaveAutoCopy(const std::wstring &prof, const std::wstring &s
 static void SaveCopiesBeforeLaunch(int mode)
 {
     if (mode == MODE_GUEST || g_gameDir.empty()) return;
+    try {   // (une copie ratee n'empeche jamais le jeu de partir)
     std::wstring prof = mode == MODE_HOST ? SaveCurrentProf() : L"", root = SaveCopiesDir(prof);
     if (root.empty()) return;
     std::vector<unsigned char> d;
@@ -657,6 +671,7 @@ static void SaveCopiesBeforeLaunch(int mode)
         HANDLE f = CreateFileW((root + L"version.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
         if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, u.data(), (DWORD)u.size(), &w, NULL); CloseHandle(f); }
     }
+    } catch (...) { LaunchLog("sauvegardes : copie avant le lancement IMPOSSIBLE (exception) -- le jeu se lance quand meme"); }
 }
 static void SaveRestore(int i, int k)
 {

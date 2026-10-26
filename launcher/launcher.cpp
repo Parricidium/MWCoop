@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|sauvegardes-copies|sauvegardes-toutes|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|sauvegardes-copies|sauvegardes-toutes|sauvegardes-vraies|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1964,6 +1964,7 @@ enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
 static bool g_steamNet = false;
+static int g_autoLaunch = -1;   // essai /lancer solo|hote : vrai lancement du jeu, fenetre du lanceur cachee
 static bool g_mscOn = true;                          // [Lanceur] MSCLoader : le charger au lancement (onglet MODS, mods.inc)
 static int g_mscOwnPref = -1;                        // [Lanceur] MSCLoaderMWCoop : 1 celui de MWCoop, 0 l'officiel, -1 pas choisi (mods.inc)
 static bool MscOwn();
@@ -6877,6 +6878,13 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     switch (m) {
     case WM_TIMER:
         if (wp == 77) { KillTimer(h, 77); TestLog("test : fin (hote garde ouvert)"); DestroyWindow(h); return 0; }
+        if (wp == 78) {   // essai /lancer : le vrai Launch() une fois la recherche de mise a jour finie
+            if (g_busy) return 0;
+            KillTimer(h, 78);
+            LaunchLog("essai /lancer : lancement %s (jeu %s, mod %d, version %s, sauvegarde %s)", g_autoLaunch == MODE_HOST ? "hote" : "solo", Narrow(g_gameDir, CP_UTF8).c_str(), (int)g_modOk, Narrow(g_localVer, CP_UTF8).c_str(), Narrow(SaveCurrentProf(), CP_UTF8).c_str());
+            Launch(g_autoLaunch);
+            return 0;
+        }
         if (wp == 4) {   // invite : GO recu il y a ~4 s, au tour de son jeu
             KillTimer(h, 4);
             g_goWait = false;
@@ -7176,7 +7184,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         for (const wchar_t *n : vars) if (GetEnvironmentVariableW(n, v, 64)) g_fromSteam = true;
         int ac = 0;
         wchar_t **av = CommandLineToArgvW(GetCommandLineW(), &ac);
-        bool cli = ac >= 2 && av[1][0] == L'/';
+        bool cli = ac >= 2 && av[1][0] == L'/' && _wcsicmp(av[1], L"/lancer");   // (/lancer : essai d'un vrai lancement, avec son journal)
         GamePick();
         for (int i = 1; i < ac; i++) {   // %command% : le chemin de l'exe du jeu en argument (ce jeu-la, pour cette fois)
             int gm = GameOfExe(av[i]);
@@ -7265,6 +7273,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/garder")) g_testHoldMs = (DWORD)_wtoi(argv[i + 1]);
         if (!_wcsicmp(argv[i], L"/lent")) g_testSlowMs = (DWORD)_wtoi(argv[i + 1]);
         if (!_wcsicmp(argv[i], L"/forcer")) g_testForce = true;
+        if (!_wcsicmp(argv[i], L"/lancer")) g_autoLaunch = !_wcsicmp(argv[i + 1], L"hote") ? MODE_HOST : MODE_SOLO;   // (essai : vrai lancement, fenetre cachee)
         if (!_wcsicmp(argv[i], L"/partie")) g_testPartie = argv[i + 1];
         if (!_wcsicmp(argv[i], L"/code")) g_testCode = Narrow(argv[i + 1]);   // (salon prive : code de l'hote ; code envoye par l'invite)
         if (!_wcsicmp(argv[i], L"/public") || !_wcsicmp(argv[i + 1], L"/public")) g_testPublic = true;
@@ -7595,6 +7604,22 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         count("4 versions (10 + 3 avant attendues)");
         SaveBakScan(prof);
         for (const SaveBak &b : g_saveBak) LaunchLog("testcopies :   %s  [%s]", Narrow(SaveBakLabel(b), CP_UTF8).c_str(), Narrow(b.dir.substr(SaveCopiesDir(prof).size()), CP_UTF8).c_str());
+        // echecs (jamais bloquants) : la sauvegarde verrouillee par un autre programme, puis le dossier des copies impossible a creer
+        put("verrou");
+        HANDLE lk = CreateFileW((sd + L"savefile.txt").c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+        SaveCopiesBeforeLaunch(MODE_HOST);
+        if (lk != INVALID_HANDLE_VALUE) CloseHandle(lk);
+        count("fichier verrouille (toujours 13, rien d'incomplet)");
+        g_gameDir = g_modRoot = WithSlash(argv[2]) + L"echec\\";
+        SHCreateDirectoryExW(NULL, (g_modRoot + L"MWCoop").c_str(), NULL);
+        HANDLE blk = CreateFileW((g_modRoot + L"MWCoop\\copies-sauvegardes").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);   // (un fichier a la place du dossier)
+        if (blk != INVALID_HANDLE_VALUE) CloseHandle(blk);
+        std::wstring prof2 = SaveCreate(L"Essai echec");
+        SaveSetCurrent(prof2);
+        sd = SaveDirOf(prof2);
+        put("echec");
+        SaveCopiesBeforeLaunch(MODE_HOST);
+        LaunchLog("testcopies : apres les deux echecs, le lancement continue (fin)");
         return 0;
     }
     // Essai : /testoffre <dossier Mods> <journal> -- l'offre de l'hote faite de ce dossier (ses DLL = les mods envoyes), par
@@ -7773,6 +7798,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
         else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesFake(); }
+        else if (st == L"sauvegardes-vraies") { g_tab = TAB_SAVES; SavesScan(); std::wstring cur = SaveCurrentProf(); for (int k = 0; k < (int)g_saves.size(); k++) if (g_saves[k].prof == cur) g_saveSel = k; }   // (les vraies parties de ce lanceur, la partie utilisee choisie : copies de secours)
         else if (st == L"sauvegardes-copies" || st == L"sauvegardes-toutes") {   // (copies de secours factices : au lancement, avant une version, avant une remise, Reworked)
             g_tab = TAB_SAVES; SavesFake();
             FILETIME now; GetSystemTimeAsFileTime(&now);
@@ -8053,10 +8079,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     RtHiddenMigrate();   // (ray tracing cache : coupe dans les mwcoop.ini des deux jeux, une fois)
     Present();
-    ShowWindow(g_wnd, SW_SHOW);
+    if (g_autoLaunch < 0) ShowWindow(g_wnd, SW_SHOW);   // (essai /lancer : fenetre jamais montree)
+    else SetTimer(g_wnd, 78, 1500, NULL);
     SetTimer(g_wnd, 1, 16, NULL);
-    if (!g_gameDir.empty() && !g_sConnect) TutoAtStartup();   // visite guidee : complete la 1re fois, puis les nouveautes
-    if (!g_sConnect && g_tuto < 0) DiscordAskMaybe();          // invitation au Discord (une fois ; sinon a la fin de la visite)
+    if (!g_gameDir.empty() && !g_sConnect && g_autoLaunch < 0) TutoAtStartup();   // visite guidee : complete la 1re fois, puis les nouveautes
+    if (!g_sConnect && g_tuto < 0 && g_autoLaunch < 0) DiscordAskMaybe();          // invitation au Discord (une fois ; sinon a la fin de la visite)
     FirstReworkedBackup();
     if (!g_gameDir.empty()) StartUpdate();
     else {
