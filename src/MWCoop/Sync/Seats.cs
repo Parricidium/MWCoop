@@ -910,7 +910,8 @@ namespace MWCoop
             if (b == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return;
             Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
             if (view == null) return;
-            Vector3 at = current.CarT.TransformPoint(RearBuckle(b, off, mir));
+            SeatFiles.Belt fb = SeatFiles.BeltFor(current.Car, current.Index);   // (outil des places : boucle du fichier = point vise)
+            Vector3 at = current.CarT.TransformPoint(fb != null && fb.HasBuckle ? fb.Buckle : RearBuckle(b, off, mir));
             Vector3 d = at - view.position;
             bool aim = d.magnitude < 1.3f && Vector3.Angle(view.forward, d) < 16f;
             BlockHandle(aim);
@@ -974,7 +975,7 @@ namespace MWCoop
         // languette en haut. Toujours la avec l'option CeinturesArriere ; a chaque place laterale la ceinture rangee, ou bouclee
         // quand un joueur y est attache (ici ou chez lui). Les autres voitures gardent la copie en miroir de la ceinture du
         // conducteur. [Test] CeinturesArriereCopie=1 : la copie aussi sur la SORBET (comme avant).
-        class RearModel { public GameObject Root; public GameObject[] Open = new GameObject[2], Closed = new GameObject[2]; public int State = -1; }
+        class RearModel { public GameObject Root; public GameObject[] Open = new GameObject[2], Closed = new GameObject[2]; public int State = -1, Gen; }
         static readonly Dictionary<Transform, RearModel> rearModels = new Dictionary<Transform, RearModel>();
         static readonly string[] RearNames = { "arr-ancres-haut", "arr-boucles", "arr-ancre-bas-g", "arr-languette-g", "arr-sangle-haut-g", "arr-bouclee-g",
                                                "arr-ancre-bas-d", "arr-languette-d", "arr-sangle-haut-d", "arr-bouclee-d" };
@@ -1033,8 +1034,10 @@ namespace MWCoop
         // pas de siege separe a mesurer (sa banquette est dans LOD/interior). Toujours : ancrages, boucles et haut des sangles ;
         // rangee : bas de la sangle et languette (celle de droite en miroir, Menos n'en a fait qu'une) ; bouclee : la ceinture.
         // [Test] TaxiCeintY/Z : decalage.
-        static readonly string[] TaxiNames = { "taxi-base", "taxi-sangle-haut-g", "taxi-sangle-bas-g", "taxi-languette-g", "taxi-bouclee-g",
-                                               "taxi-sangle-haut-d", "taxi-sangle-bas-d", "taxi-languette-d", "taxi-bouclee-d" };
+        // (Base en pieces aux memes noms que la SORBET -- AncresHaut, Boucles, AncreBasG/D : l'outil des places les deplace une a une)
+        static readonly string[] TaxiNames = { "taxi-ancres-haut", "taxi-sangle-haut-g", "taxi-sangle-bas-g", "taxi-languette-g", "taxi-bouclee-g",
+                                               "taxi-sangle-haut-d", "taxi-sangle-bas-d", "taxi-languette-d", "taxi-bouclee-d",
+                                               "taxi-boucles", "taxi-ancre-bas-g", "taxi-ancre-bas-d" };
         static Mesh[] taxiMeshes; static bool taxiMeshTried;
         static Mesh[] TaxiMeshes()
         {
@@ -1069,7 +1072,8 @@ namespace MWCoop
                 if (mesh != null) { g.AddComponent<MeshFilter>().sharedMesh = mesh; g.AddComponent<MeshRenderer>().sharedMaterial = src.sharedMaterial; }
                 return g;
             };
-            Transform baseT = part("Base", ms[0], rt).transform;
+            Transform baseT = part("Base", null, rt).transform;
+            part("AncresHaut", ms[0], baseT); part("Boucles", ms[9], baseT); part("AncreBasG", ms[10], baseT); part("AncreBasD", ms[11], baseT);
             float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
             for (int k = 0; k < 2; k++)
             {
@@ -1090,7 +1094,13 @@ namespace MWCoop
         {
             RearModel m; rearModels.TryGetValue(car, out m);
             if (!on) { if (m != null && m.Root != null && m.Root.activeSelf) m.Root.SetActive(false); return; }
-            if (m == null || m.Root == null) { m = car.name.StartsWith("MACHTWAGEN") ? BuildTaxiModel(car, b) : BuildRearModel(car, b); rearModels[car] = m; }
+            if (m != null && m.Root != null && m.Gen != SeatFiles.Generation) { Object.Destroy(m.Root); m = null; }   // (fichier des places relu : refaite)
+            if (m == null || m.Root == null)
+            {
+                m = car.name.StartsWith("MACHTWAGEN") ? BuildTaxiModel(car, b) : BuildRearModel(car, b);
+                if (m != null) { m.Gen = SeatFiles.Generation; FileBelts(car, m); }
+                rearModels[car] = m;
+            }
             if (m == null) return;
             if (!m.Root.activeSelf) m.Root.SetActive(true);
             int state = 0;
@@ -1105,6 +1115,89 @@ namespace MWCoop
                 bool fast = (state & (1 << k)) != 0;
                 m.Open[k].SetActive(!fast); m.Closed[k].SetActive(fast);
             }
+        }
+
+        // Ceintures du fichier des places (outil de [Addons et Tools], 26/10 ; JD : « Tout me vas ») : par cote, celles de la place
+        // arriere de ce cote. Points dans le repere de la voiture (CarT) ; une ligne absente garde la pose calculee. Pieces (ancrages,
+        // boucle, languette) : centre de leurs bornes (cote de la place) mis au point du fichier, rotation en plus autour de lui ;
+        // trajets rangee / bouclee : ruban de 'largeur' a la place de la sangle du modele.
+        static void FileBelts(Transform car, RearModel m)
+        {
+            Transform rt = m.Root.transform, baseT = rt.Find("Base");
+            var diag = new System.Text.StringBuilder();
+            for (int k = 0; k < 2; k++)
+            {
+                float sx = k == 0 ? -1f : 1f;
+                Seat s = null;
+                foreach (Seat q in seats) if (q.CarT == car && q.Index > 0 && Mathf.Abs(q.Head.x) >= 0.15f && Mathf.Sign(q.Head.x) == sx) { s = q; break; }
+                SeatFiles.Belt fb = s != null ? SeatFiles.BeltFor(s.Car, s.Index) : null;
+                if (fb == null) continue;
+                string sd = k == 0 ? "G" : "D";
+                System.Func<Vector3, Vector3> at = v => rt.InverseTransformPoint(car.TransformPoint(v));
+                int moved = 0;
+                if (fb.HasTop && MovePart(baseT, "AncresHaut", sx, at(fb.Top), Quaternion.identity)) moved++;
+                if (fb.HasBottom && MovePart(baseT, "AncreBas" + sd, 0f, at(fb.Bottom), Quaternion.identity)) moved++;
+                if (fb.HasBuckle && MovePart(baseT, "Boucles", sx, at(fb.Buckle), fb.BuckleRot)) moved++;
+                if (fb.HasTongue && MovePart(m.Open[k].transform, "Languette", 0f, at(fb.Tongue), fb.TongueRot)) moved++;
+                // (texture de la sangle : sangle haute du modele, sous la bouclee (SORBET) ou sous Base (taxi))
+                Transform sh = m.Closed[k].transform.Find("SangleHaute") ?? (baseT != null ? baseT.Find("SangleHaute" + sd) : null);
+                Mesh uv = sh != null && sh.GetComponent<MeshFilter>() != null ? sh.GetComponent<MeshFilter>().sharedMesh : null;
+                List<Vector3> st = fb.StowedPath(), fp = fb.FastenedPath();
+                bool rib = false;
+                if (uv != null && st.Count >= 2) rib |= StrapTo(m.Open[k].transform, "Sangle", st.ConvertAll(v => at(v)), fb.Width, uv);
+                if (uv != null && fp.Count >= 2 && StrapTo(m.Closed[k].transform, "Ceinture", fp.ConvertAll(v => at(v)), fb.Width, uv))
+                {
+                    rib = true;
+                    if (sh.parent == m.Closed[k].transform) sh.gameObject.SetActive(false);
+                }
+                // (taxi : sa sangle haute est montree dans les deux etats -- le fichier donne tout le trajet, elle ferait double)
+                if (rib && sh != null && sh.parent == baseT && fb.HasTop) sh.gameObject.SetActive(false);
+                diag.Append(" ; ").Append(sd).Append(" place ").Append(s.Index).Append(" (").Append(fb.Kind).Append(") : ").Append(moved).Append(" pieces, rangee ")
+                    .Append(st.Count).Append(" points, bouclee ").Append(fp.Count).Append(" points");
+            }
+            if (diag.Length > 0) Log.Info("ceintures arriere : fichier des places sur " + car.name + diag);
+        }
+        // Piece 'name' sous 'parent' (sx != 0 : seulement ses sommets de ce cote, les maillages des deux cotes) : centre de ses bornes
+        // en 'to', tournee de 'rot' autour de lui. Copie du maillage (ceux des ressources sont partages).
+        static bool MovePart(Transform parent, string name, float sx, Vector3 to, Quaternion rot)
+        {
+            Transform t = parent != null ? parent.Find(name) : null;
+            MeshFilter mf = t != null ? t.GetComponent<MeshFilter>() : null;
+            if (mf == null || mf.sharedMesh == null) return false;
+            Mesh msh = Object.Instantiate(mf.sharedMesh);
+            Vector3[] v = msh.vertices, nr = msh.normals;
+            Vector3 lo = Vector3.one * float.MaxValue, hi = -lo;
+            for (int i = 0; i < v.Length; i++) if (sx == 0f || Mathf.Sign(v[i].x) == sx) { lo = Vector3.Min(lo, v[i]); hi = Vector3.Max(hi, v[i]); }
+            if (lo.x > hi.x) return false;
+            Vector3 c = (lo + hi) / 2f;
+            for (int i = 0; i < v.Length; i++)
+                if (sx == 0f || Mathf.Sign(v[i].x) == sx) { v[i] = to + rot * (v[i] - c); if (i < nr.Length) nr[i] = rot * nr[i]; }
+            msh.vertices = v; if (nr.Length == v.Length) msh.normals = nr;
+            msh.RecalculateBounds();
+            mf.sharedMesh = msh;
+            return true;
+        }
+        // Ruban le long de 'path' (largeur 'w', a plat face a l'avant de la voiture) a la place du maillage de 'name' sous 'parent'.
+        static bool StrapTo(Transform parent, string name, List<Vector3> path, float w, Mesh uv)
+        {
+            Transform t = parent.Find(name);
+            MeshFilter mf = t != null ? t.GetComponent<MeshFilter>() : null;
+            if (mf == null) return false;
+            var a = new List<Vector3>(); var c = new List<Vector3>();
+            Vector3 prev = Vector3.zero;
+            for (int i = 0; i < path.Count; i++)
+            {
+                Vector3 tg = path[Mathf.Min(i + 1, path.Count - 1)] - path[Mathf.Max(i - 1, 0)];
+                Vector3 side = Vector3.Cross(tg, Vector3.forward);
+                side = side.sqrMagnitude > 1e-8f ? side.normalized : Vector3.right;
+                if (i > 0 && Vector3.Dot(side, prev) < 0f) side = -side;
+                prev = side;
+                a.Add(path[i] - side * (w / 2f)); c.Add(path[i] + side * (w / 2f));
+            }
+            Mesh r = Ribbon(a, c, uv);
+            if (r == null) return false;
+            mf.sharedMesh = r;
+            return true;
         }
 
         // Sommets d'un maillage de la voiture, dans le repere 'into'.
