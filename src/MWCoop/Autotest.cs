@@ -1453,8 +1453,9 @@ namespace MWCoop
         // de la voiture ou l'invite est assis, pendant qu'elle roule : etendue de ses positions (0 attendu ; avant le
         // correctif du 10/10, vitesse x duree d'image vers l'arriere).
         static Transform pietonCible;
-        static bool givreEtat;
+        static bool givreEtat, maillagesDone;
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
+        static bool taxiOut;
         public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
         // [Test] TestPedale=brake|clutch|throttle : de 40 a 60 s (temps de jeu), cette pedale de [Test] TestVoiture enfoncee ici
         // (15 degres, comme l'automate du jeu), apres CarVisuals et avant les avatars -- le pied du conducteur doit la suivre.
@@ -2624,6 +2625,18 @@ namespace MWCoop
                 }
                 else if (b != null && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : souleve, vue ici en " + b.position.ToString("F2") + (b.isKinematic ? " (copie)" : ""));
             }
+            // ([Test] MaillagesDe=<voiture> : a 30 s, ses maillages -- chemin, position et rotation dans la voiture, bornes locales ;
+            // ceintures arriere de la MACHTWAGEN, modele de Menos, 26/10)
+            if (!maillagesDone && t > 30f && Config.Get("Test", "MaillagesDe", "").Length > 0)
+            {
+                maillagesDone = true;
+                Rigidbody vb = VehicleSync.Body(Config.Get("Test", "MaillagesDe", ""));
+                if (vb == null) Log.Info("autotest : maillages, voiture " + Config.Get("Test", "MaillagesDe", "") + " introuvable");
+                else foreach (MeshFilter mf in vb.GetComponentsInChildren<MeshFilter>(true))
+                    if (mf.sharedMesh != null)
+                        Log.Info("autotest : maillage " + Recon.Path(mf.transform) + " pos " + vb.transform.InverseTransformPoint(mf.transform.position).ToString("F3") + " rot " + (Quaternion.Inverse(vb.rotation) * mf.transform.rotation).eulerAngles.ToString("F0")
+                                 + " local " + mf.sharedMesh.bounds.min.ToString("F2") + ".." + mf.sharedMesh.bounds.max.ToString("F2") + (mf.sharedMesh.isReadable ? "" : " (illisible)"));
+            }
             // ([Test] GivreEtat=s : a s secondes, les vitres de toutes les voitures -- triche /degivrer, 25/10)
             if (!givreEtat && Config.GetFloat("Test", "GivreEtat", 0f) > 0f && t > Config.GetFloat("Test", "GivreEtat", 0f)) { givreEtat = true; Log.Info("autotest : givre " + Frost.StateAll()); }
             if (mode == "pieton")
@@ -3671,6 +3684,9 @@ namespace MWCoop
             if (mode == "passager2" && Time.frameCount % 120 == 0 && t > 26f) Log.Info("autotest : place " + Seats.PlaceDans(Config.Get("Test", "TestVoiture", "SORBET")));
             if (mode == "sondeplaces" && t > 30f && !done) { done = true; Log.Info("autotest : places" + Seats.ProbeSeats(Config.Get("Test", "TestVoiture", "GIFU"))); Log.Info("autotest : coupe" + Seats.ProbeGrid(Config.Get("Test", "TestVoiture", "GIFU"))); }
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
+            // [Test] TaxiSorti=1 (tout mode) : taxi JOBS/TAXIJOB/MACHTWAGEN active a 8 s, comme pris pour le service (sinon range,
+            // inactif : les places et ceintures arriere du taxi ne s'essaient pas).
+            if (!taxiOut && t > 8f && Config.GetInt("Test", "TaxiSorti", 0) != 0) { taxiOut = true; GameObject tx = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN"); if (tx != null && !tx.activeSelf) tx.SetActive(true); Log.Info("autotest : taxi " + (tx == null ? "introuvable" : tx.activeInHierarchy ? "sorti" : "inactif")); }
             // [Test] Autotest=ceinture : l'invite s'assoit a l'avant de [Test] TestVoiture, attache sa ceinture a 36 s ;
             // l'hote le regarde (CameraAvatar) et voit la ceinture bouclee (journal + captures).
             if (mode == "ceinture" && !Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "CeinturePlace", 0))); }

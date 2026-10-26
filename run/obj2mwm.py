@@ -22,7 +22,9 @@ def load(path):
             groups.setdefault(cur, []).append(idx)
     return v, vt, vn, groups
 
-def build(v, vt, vn, faces):
+def build(v, vt, vn, faces, xf=None):
+    """xf : (x, y, z) -> repere Unity (defaut : x oppose, l'import d'un .obj) ; il doit etre un miroir (ordre des triangles inverse)."""
+    if xf is None: xf = lambda x, y, z: (-x, y, z)
     key, pos, nrm, uv, tri = {}, [], [], [], []
     for f in faces:
         ids = []
@@ -30,8 +32,8 @@ def build(v, vt, vn, faces):
             k = (a, b, c)
             if k not in key:
                 key[k] = len(pos)
-                x, y, z = v[a]; pos.append((-x, y, z))
-                if c >= 0: nx, ny, nz = vn[c]; nrm.append((-nx, ny, nz))
+                pos.append(xf(*v[a]))
+                if c >= 0: nrm.append(xf(*vn[c]))
                 else: nrm.append(None)
                 uv.append(vt[b] if b >= 0 else (0.0, 0.0))
             ids.append(key[k])

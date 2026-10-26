@@ -309,7 +309,7 @@ namespace MWCoop
                 // tous) : le joueur accroche dessous serait inactif, sans camera ni commandes -- decroche tout de suite.
                 if (pivot == null || current.CarT == null || !current.CarT.gameObject.activeInHierarchy)
                 {
-                    if (current.CarT != null) Log.Info("passager : " + current.Car + " rangee (inactive)");
+                    if (current.CarT != null) Log.Info("passager : " + current.Car + " rangee (inactive : " + Recon.Path(current.CarT) + ")");
                     Leave();
                     return;
                 }
@@ -1015,13 +1015,74 @@ namespace MWCoop
 
         static bool HasRearModel(Transform car)
         {
-            return car != null && car.name.StartsWith("SORBET") && !Game.Msc && Config.GetInt("Test", "CeinturesArriereCopie", 0) == 0 && RearMeshes() != null;
+            if (car == null || Game.Msc || Config.GetInt("Test", "CeinturesArriereCopie", 0) != 0) return false;
+            if (car.name.StartsWith("SORBET")) return RearMeshes() != null;
+            if (car.name.StartsWith("MACHTWAGEN")) return TaxiMeshes() != null;
+            return false;
+        }
+
+        // MACHTWAGEN (taxi) : modele de Menos du 25/10 (run/ceintures-arr.py, taxi-*), pose tel quel dans le repere de la voiture --
+        // pas de siege separe a mesurer (sa banquette est dans LOD/interior). Toujours : ancrages, boucles et haut des sangles ;
+        // rangee : bas de la sangle et languette (celle de droite en miroir, Menos n'en a fait qu'une) ; bouclee : la ceinture.
+        // [Test] TaxiCeintY/Z : decalage.
+        static readonly string[] TaxiNames = { "taxi-base", "taxi-sangle-haut-g", "taxi-sangle-bas-g", "taxi-languette-g", "taxi-bouclee-g",
+                                               "taxi-sangle-haut-d", "taxi-sangle-bas-d", "taxi-languette-d", "taxi-bouclee-d" };
+        static Mesh[] taxiMeshes; static bool taxiMeshTried;
+        static Mesh[] TaxiMeshes()
+        {
+            if (taxiMeshTried) return taxiMeshes;
+            taxiMeshTried = true;
+            try
+            {
+                taxiMeshes = new Mesh[TaxiNames.Length];
+                for (int i = 0; i < TaxiNames.Length; i++) taxiMeshes[i] = SleepingBags.LoadMesh("MWCoop." + TaxiNames[i] + ".mwm", 1f);
+            }
+            catch (System.Exception e) { taxiMeshes = null; Log.Warn("ceintures arriere du taxi : modele illisible (" + e.Message + ")"); }
+            return taxiMeshes;
+        }
+        static RearModel BuildTaxiModel(Transform car, Belt b)
+        {
+            Mesh[] ms = TaxiMeshes();
+            MeshRenderer src = b.Fastened != null ? b.Fastened.GetComponent<MeshRenderer>() : null;
+            if (ms == null || src == null) return null;
+            var m = new RearModel { Root = new GameObject("MWCoop-CeinturesArriere") };
+            Transform rt = m.Root.transform;
+            rt.parent = car;
+            rt.localPosition = new Vector3(0f, Config.GetFloat("Test", "TaxiCeintY", 0f), Config.GetFloat("Test", "TaxiCeintZ", 0f));
+            rt.localRotation = Quaternion.identity;
+            Vector3 cs = car.lossyScale;
+            rt.localScale = new Vector3(1f / cs.x, 1f / cs.y, 1f / cs.z);
+            System.Func<string, Mesh, Transform, GameObject> part = (name, mesh, parent) =>
+            {
+                var g = new GameObject(name);
+                g.layer = b.Fastened.layer;
+                g.transform.parent = parent;
+                g.transform.localPosition = Vector3.zero; g.transform.localRotation = Quaternion.identity; g.transform.localScale = Vector3.one;
+                if (mesh != null) { g.AddComponent<MeshFilter>().sharedMesh = mesh; g.AddComponent<MeshRenderer>().sharedMaterial = src.sharedMaterial; }
+                return g;
+            };
+            Transform baseT = part("Base", ms[0], rt).transform;
+            float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
+            for (int k = 0; k < 2; k++)
+            {
+                int o = 1 + 4 * k;
+                part(k == 0 ? "SangleHauteG" : "SangleHauteD", ms[o], baseT);
+                m.Open[k] = part(k == 0 ? "RangeeG" : "RangeeD", null, rt);
+                part("Sangle", ms[o + 1], m.Open[k].transform);
+                part("Languette", ms[o + 2], m.Open[k].transform);
+                m.Closed[k] = part(k == 0 ? "BoucleeG" : "BoucleeD", null, rt);
+                Mesh fast = Object.Instantiate(ms[o + 3]);
+                BulgeRear(fast, bulge, reach);
+                part("Ceinture", fast, m.Closed[k].transform);
+            }
+            Log.Info("ceintures arriere : modele de Menos pose sur " + car.name + " (taxi, matiere " + (src.sharedMaterial != null ? src.sharedMaterial.name : "?") + ")");
+            return m;
         }
         static void UpdateRearModel(Transform car, Belt b, bool on, HashSet<int> belted)
         {
             RearModel m; rearModels.TryGetValue(car, out m);
             if (!on) { if (m != null && m.Root != null && m.Root.activeSelf) m.Root.SetActive(false); return; }
-            if (m == null || m.Root == null) { m = BuildRearModel(car, b); rearModels[car] = m; }
+            if (m == null || m.Root == null) { m = car.name.StartsWith("MACHTWAGEN") ? BuildTaxiModel(car, b) : BuildRearModel(car, b); rearModels[car] = m; }
             if (m == null) return;
             if (!m.Root.activeSelf) m.Root.SetActive(true);
             int state = 0;
@@ -1521,13 +1582,15 @@ namespace MWCoop
             if (!FindPlayer()) return "pas de joueur";
             if (seats.Count == 0) Scan();
             foreach (Seat s in seats)
-                if (s.Car.StartsWith(car) && s.Index == index && s.CarT != null)
+                if (s.Car.StartsWith(car) && s.Index == index && s.CarT != null && s.CarT.gameObject.activeInHierarchy)
                 {
                     StandIn(s);
                     Sit(s);
                     return "assis dans " + s.Car + " place " + index;
                 }
-            return "aucune place " + index + " sur " + car + " (" + seats.Count + ")";
+            string l = "";
+            foreach (Seat s in seats) if (s.Car.StartsWith(car)) l += " " + s.Index + (s.CarT == null ? ":null" : ":" + Recon.Path(s.CarT) + (s.CarT.gameObject.activeInHierarchy ? "" : "(inactive)"));
+            return "aucune place " + index + " sur " + car + " (" + seats.Count + ") :" + l;
         }
 
         // Essais : comme ENTREE la ou se tient le joueur (zone d'une place).
