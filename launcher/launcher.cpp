@@ -4882,6 +4882,7 @@ static void NetTest()
 #include "media.inc"
 static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (plus bas ; Nouveautes, ui.inc, saves.inc)
 #include "saves.inc"
+#include "es2.inc"   // (lecture et reecriture des sauvegardes du jeu : Verifier la sauvegarde)
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -7574,6 +7575,47 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     // Auto-test de la liste des mods en plusieurs messages
     if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
+    // Essai : /es2 <journal> <fichier>... -- sauvegardes Easy Save 2 : relues, reecrites sans changement (comparees a l'octet),
+    // types des entrees, controles ; puis une copie en memoire avec un NaN (doit etre trouve) et une coupee (doit etre refusee).
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/es2")) {
+        g_launcherLog = argv[2];
+        for (int a = 3; a < argc; a++) {
+            std::vector<unsigned char> d;
+            if (!ReadAll(argv[a], d)) { LaunchLog("es2 : %s illisible", Narrow(argv[a], CP_UTF8).c_str()); continue; }
+            std::string raw(d.begin(), d.end());
+            Es2File f;
+            bool ok = Es2Parse(raw, f);
+            std::map<uint32_t, int> kinds;
+            for (auto &e : f.e) kinds[Es2Kind(f, e)]++;
+            std::string ks;
+            for (auto &k : kinds) { char b[40]; sprintf_s(b, " %08X:%d", k.first, k.second); ks += b; }
+            bool same = Es2Write(f, {}) == raw;
+            std::vector<Es2Issue> is = Es2Check(f);
+            LaunchLog("es2 : %s : %zu octets, %zu entrees, lecture %s, reecriture %s, %zu probleme(s) ; types%s", Narrow(argv[a], CP_UTF8).c_str(), raw.size(), f.e.size(),
+                      ok ? "ok" : f.err.c_str(), same ? "IDENTIQUE" : "DIFFERENTE", is.size(), ks.c_str());
+            for (auto &i : is) LaunchLog("es2 :   %s : %s", f.e[i.entry].tag.c_str(), i.what.c_str());
+            // un NaN dans le premier transform (ou float), puis relu
+            for (size_t k = 0; k < f.e.size(); k++) {
+                uint32_t kd = Es2Kind(f, f.e[k]);
+                if (kd != ES2_TRANSFORM && kd != ES2_FLOAT) continue;
+                std::string nd = f.bytes.substr(f.e[k].data, f.e[k].len);
+                size_t at = 5 + (kd == ES2_TRANSFORM ? 1 : 0);
+                const unsigned char nan[4] = { 0x00, 0x00, 0xC0, 0x7F };
+                for (int b = 0; b < 4; b++) nd[at + b] = (char)nan[b];
+                Es2File g;
+                bool ok2 = Es2Parse(Es2Write(f, { { k, nd } }), g);
+                std::vector<Es2Issue> is2 = Es2Check(g);
+                bool found = false;
+                for (auto &i : is2) if (i.entry == k) found = true;
+                LaunchLog("es2 :   NaN pose dans « %s » : relu %s, trouve %s", f.e[k].tag.c_str(), ok2 ? "ok" : g.err.c_str(), found ? "OUI" : "NON");
+                break;
+            }
+            Es2File c;
+            bool ok3 = Es2Parse(raw.substr(0, raw.size() * 2 / 3), c);
+            LaunchLog("es2 :   fichier coupe aux 2/3 : %s", ok3 ? "LU (pas normal)" : c.err.c_str());
+        }
+        return 0;
+    }
     // Essai : /gardeinstall <dossier du lanceur> <journal> -- l'installation dans AppData serait-elle bloquee pour ce dossier ?
     // (a verifier avant de lancer un lanceur en mode normal sur une instance d'essai ; rien n'est installe ni lance)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/gardeinstall")) {
@@ -7998,7 +8040,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return rc;
     }
+    // Ligne de commande (« /... ») : lue AVANT de liberer argv (26/10 : le test d'installation plus bas lisait argv[1] apres
+    // LocalFree -- memoire liberee, resultat au hasard : la question d'installation s'est affichee chez JD pour des commandes
+    // d'essai). Une commande inconnue de cet exe (exe plus ancien que l'essai) s'arrete la : jamais la fenetre normale, ni
+    // installation, ni mise a jour, ni rien dans les vrais jeux trouves par Steam. Seuls /testsalon et /lancer continuent.
+    bool cmdLine = argc >= 2 && argv[1][0] == L'/';
+    std::string cmdName = cmdLine ? Narrow(argv[1], CP_UTF8) : "";
     LocalFree(argv);
+    if (cmdLine && g_testSalon.empty() && g_autoLaunch < 0) {
+        LaunchLog("commande %s inconnue de ce lanceur : rien n'est fait", cmdName.c_str());
+        GdiplusShutdown(gtok); WSACleanup();
+        return 2;
+    }
 
     // /testsalon : fenetre "message only" (jamais affichee, ni souris ni clavier), dans un dossier de jeu jetable :
     // le lanceur doit etre dans le dossier du jeu (jamais celui de Steam trouve ailleurs). Pas de mise a jour.
@@ -8031,7 +8084,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // jeu est plus recent : il est lance a notre place, avec la meme ligne de commande.
     // Installation dans %LOCALAPPDATA%\MWCoop (install.inc, 19/10) : proposee a la fenetre normale d'un lanceur qui n'y tourne
     // pas ; installe, il passe la main au lanceur installe. Juste apres : l'ancien a la Corbeille, compte rendu.
-    if ((argc < 2 || (argv[1][0] != L'/' && !g_sConnect && !g_fromSteam)) && InstallAtStartup()) { GdiplusShutdown(gtok); WSACleanup(); return 0; }
+    if (!cmdLine && !g_sConnect && !g_fromSteam && InstallAtStartup()) { GdiplusShutdown(gtok); WSACleanup(); return 0; }   // (jamais pour une ligne de commande : /lancer, /testsalon)
     if (!g_afterInstall.empty() && RunningFromHome()) AfterInstall(g_afterInstall);
     if (!g_gameDir.empty() && _wcsicmp(g_gameDir.c_str(), g_dir.c_str()) && !RunningFromHome()) {   // (jamais depuis le lanceur installe)
         std::wstring there = g_gameDir + L"MWCoop.exe";
@@ -8092,8 +8145,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     SetTimer(g_wnd, 1, 16, NULL);
     if (!g_gameDir.empty() && !g_sConnect && g_autoLaunch < 0) TutoAtStartup();   // visite guidee : complete la 1re fois, puis les nouveautes
     if (!g_sConnect && g_tuto < 0 && g_autoLaunch < 0) DiscordAskMaybe();          // invitation au Discord (une fois ; sinon a la fin de la visite)
-    FirstReworkedBackup();
-    if (!g_gameDir.empty()) StartUpdate();
+    if (g_autoLaunch < 0) FirstReworkedBackup();   // (essai /lancer : ni copie avant Reworked, ni recherche de mise a jour -- rien ne s'installe)
+    if (!g_gameDir.empty() && g_autoLaunch < 0) StartUpdate();
     else {
         HANDLE nt = CreateThread(NULL, 0, NotesOnlyThread, NULL, 0, NULL);
         if (nt) CloseHandle(nt);
