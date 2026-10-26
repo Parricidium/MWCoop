@@ -676,6 +676,14 @@ namespace MWCoop
         // Ceinture du passager local bouclee (accident : le passager attache survit au choc qui a tue un conducteur non attache).
         public static bool LocalBelted { get { return current != null && beltOn; } }
 
+        // (essai Autotest=mscceintures : ce que BeltOf retient pour 'car')
+        public static string TestBeltOf(Transform car)
+        {
+            Belt b = BeltOf(car);
+            if (b == null) return "aucune";
+            return "bouclee " + Recon.Path(b.Fastened.transform) + ", rangee " + (b.Open != null ? Recon.Path(b.Open.transform) : "-") + ", sangle conducteur " + (b.DriverOpen != null ? Recon.Path(b.DriverOpen.transform) : "-") + ", boucle " + b.DriverBuckle.ToString("F2");
+        }
+
         static Belt BeltOf(Transform car)
         {
             Belt b;
