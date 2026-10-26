@@ -2107,6 +2107,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Punches between players", L"اللكمات بين اللاعبين" },
     { L"Off by default. The host allows them in Game and sharing (\"Punches between players\"); their guests follow that choice. The game's punch hits a player on foot right in front of you: they step back a little, and on the 5th punch within 20 s they die (then respawn as usual).", L"معطّلة افتراضياً. يسمح بها المضيف في «اللعبة والمشاركة» («اللكمات بين اللاعبين»)؛ ويتبع ضيوفه هذا الاختيار. لكمة اللعبة تصيب لاعباً راجلاً أمامك مباشرة: يتراجع قليلاً، وعند اللكمة الخامسة خلال 20 ث يموت (ثم يعود كالمعتاد)." },
     { L"The 3D model of the Sorbet's rear seat belts (My Winter Car).", L"النموذج ثلاثي الأبعاد لأحزمة الأمان الخلفية في Sorbet ‏(My Winter Car)." },
+    { L"Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)", L"Windows 7: شبكة Steam لم تعد تعمل مع Steam Legacy، استخدم وضع IP ‏(Radmin VPN أو ZeroTier)" },
+    { L"Windows 7: use IP / VPN", L"Windows 7: استخدم IP / VPN" },
     { L"My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?", L"لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟" },
     { L"Different version (you %s, host %s): update", L"إصدار مختلف (لديك %s، لدى المضيف %s): حدّث" },
     { L"The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.", L"لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام." },

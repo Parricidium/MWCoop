@@ -403,6 +403,22 @@ static std::string g_wine;       // version de Wine ("" : Windows)
 static std::string g_wineInfo;   // pour le journal : hote, build, Steam Deck, prefixe
 static bool g_wineSim;           // essai MWCOOP_WINE
 static bool IsWine() { return !g_wine.empty(); }
+// Windows 7 (ou Vista) : Steam Legacy n'atteint plus certains serveurs de Valve (salons et P2P en echec, erreur P2P 4) --
+// le reseau Steam y est deconseille (JD 26/10, etude de [Project & Fesability]). Pas Wine (il annonce la version de son
+// prefixe). Essai : MWCOOP_WIN7=1.
+static bool IsWin7()
+{
+    static int v = -1;
+    if (v < 0) {
+        typedef LONG(WINAPI * RtlGetVersionF)(OSVERSIONINFOW *);
+        OSVERSIONINFOW ov = { sizeof(ov) };
+        if (RtlGetVersionF rgv = (RtlGetVersionF)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion")) rgv(&ov);
+        wchar_t e[4] = L"";
+        v = GetEnvironmentVariableW(L"MWCOOP_WIN7", e, 4) && e[0] == L'1' ? 1 : (ov.dwMajorVersion == 6 && ov.dwMinorVersion <= 1 && !IsWine()) ? 1 : 0;
+    }
+    return v == 1;
+}
+static const wchar_t *Win7SteamText() { return T(L"Windows 7 : le réseau Steam ne marche plus avec Steam Legacy, utilise le mode IP (Radmin VPN ou ZeroTier)", L"Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)"); }
 static void WineDetect()
 {
     typedef const char *(__cdecl *StrFn)();
@@ -6722,6 +6738,8 @@ static void OnButton(int id)
         if (g_steamNet && g_focus == 1) g_focus = -1;
         if (!g_steamNet) SteamDown();
         else if (!wasSteam && GetPrivateProfileIntW(L"Lanceur", L"GuideSteam", 1, g_iniLauncher.c_str()) != 0) SteamGuideOpen();
+        if (g_steamNet && IsWin7()) SetStatus(K_WARN, L"%s", Win7SteamText());
+        else
         SetStatus(K_NORMAL, g_steamNet ? T(L"Partie par Steam : salon et invitations ici", L"Game through Steam: lobby and invites right here")
                                         : T(L"Partie par adresse IP (local, Radmin, Hamachi...)", L"Game through IP address (LAN, Radmin, Hamachi...)"));
         break;
@@ -7125,7 +7143,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // winhttp.dll (UnityDoorstop) et MWCoop son version.dll. Charges par erreur dans le lanceur, ils y restaient
     // verrouilles (une reinstallation de MSCLoader echouait). winhttp et winmm sont charges a la demande (/DELAYLOAD),
     // donc apres ceci.
-    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
+    // (cherchee a l'execution : un Windows 7 sans KB2533623 ne l'a pas, et l'import direct empechait le lanceur de demarrer ;
+    // la, winhttp et winmm de System32 charges d'avance par leur chemin, pour que ceux du jeu ne soient jamais pris)
+    typedef BOOL(WINAPI * SetDefDirsF)(DWORD);
+    if (SetDefDirsF sdd = (SetDefDirsF)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetDefaultDllDirectories")) sdd(LOAD_LIBRARY_SEARCH_SYSTEM32);
+    else {
+        wchar_t sys[MAX_PATH];
+        UINT n = GetSystemDirectoryW(sys, MAX_PATH);
+        if (n && n < MAX_PATH - 16) for (const wchar_t *d : { L"\\winhttp.dll", L"\\winmm.dll" }) LoadLibraryW((std::wstring(sys) + d).c_str());
+    }
     SetDllDirectoryW(L"");
     InitializeCriticalSection(&g_cs);
     InitializeCriticalSection(&g_lcs);

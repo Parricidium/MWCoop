@@ -1993,6 +1993,8 @@ static const wchar_t *const kRu[][2] = {
     { L"ACCEPT THE FILES", L"ПРИНЯТЬ ФАЙЛЫ" },
     { L"%s to receive, %s. Click to accept, Esc to cancel.", L"Получить %s, %s. Нажми, чтобы принять, Esc — отменить." },
     { L"The 3D model of the Sorbet's rear seat belts (My Winter Car).", L"3D-модель задних ремней безопасности Sorbet (My Winter Car)." },
+    { L"Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)", L"Windows 7: сеть Steam больше не работает со Steam Legacy, используй режим IP (Radmin VPN или ZeroTier)" },
+    { L"Windows 7: use IP / VPN", L"Windows 7: выбери IP / VPN" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
