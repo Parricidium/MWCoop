@@ -340,7 +340,11 @@ namespace MWCoop
             Log.Info("sac de couchage " + b.Id + " pris en main (prise du jeu lancee : " + hand.ActiveStateName + ")");
         }
 
-        static readonly HashSet<string> Awake = new HashSet<string> { "State 1", "Conditions?", "Wait click", "Confirm", "State 3" };
+        // Etats du lit copie ou le joueur ne dort pas : My Winter Car (State 1...), puis My Summer Car (repos « Wait player », F : Check in
+        // car, Check sleepy, Wait ; clics : Wait click, Confirm, Check in car 2) -- sans eux, sur MSC le repli etait toujours refuse
+        // (JD et GG, 26/10 : « impossible a refermer »). Endormi : Get positions, Animate, Sleep... jusqu'a State 5.
+        static readonly HashSet<string> Awake = new HashSet<string> { "State 1", "Conditions?", "Wait click", "Confirm", "State 3",
+                                                                       "Wait player", "Check in car", "Check sleepy", "Wait", "Check in car 2" };
         static bool Sleeping(PlayMakerFSM f) { return !Awake.Contains(f.ActiveStateName); }
 
         static void Hint(string s) { try { Hud.Toast(s); } catch { } }
@@ -614,11 +618,27 @@ namespace MWCoop
                                  + ", pivot " + b.Go.transform.InverseTransformPoint(SleepPivot(b).position).ToString("F2") + " rot " + (Quaternion.Inverse(b.Go.transform.rotation) * SleepPivot(b).rotation).eulerAngles.ToString("F0"));
                     }
                 }
-                else if (t > 45f && testStep == 2) { testStep = 3; SetState(b, true, b.Go.transform.position + Vector3.up * 0.25f, b.Go.transform.rotation, true); }
+                else if (t > 45f && testStep == 2)
+                {
+                    // (le joueur, F bref, ne le replie que si le lit le dit eveille)
+                    Log.Info("autotest : sac, lit " + (b.Fsm != null ? b.Fsm.ActiveStateName : "?") + " : repli " + (b.Fsm == null || !Sleeping(b.Fsm) ? "permis" : "REFUSE"));
+                    testStep = 3; SetState(b, true, b.Go.transform.position + Vector3.up * 0.25f, b.Go.transform.rotation, true);
+                }
             }
             if (t > 38f && (testStep == 1 || !host && testStep == 0))
             {
                 testStep = 2; Log.Info("autotest : sacs " + Describe());
+                // (etats du lit copie et leurs transitions : My Summer Car n'a pas les noms de My Winter Car -- repli refuse, JD 26/10)
+                if (bags.Count > 0 && bags[0].Fsm != null)
+                {
+                    var st = new System.Text.StringBuilder();
+                    foreach (HutongGames.PlayMaker.FsmState s in bags[0].Fsm.FsmStates)
+                    {
+                        st.Append(" | ").Append(s.Name);
+                        foreach (HutongGames.PlayMaker.FsmTransition tr in s.Transitions) st.Append(' ').Append(tr.EventName).Append("->").Append(tr.ToState);
+                    }
+                    Log.Info("autotest : sac, etats du lit" + st);
+                }
                 Camera mc = Game.MainCam;
                 if (mc != null) Log.Info("autotest : sacs, camera du joueur " + mc.name + " : couches 0 " + ((mc.cullingMask & 1) != 0) + ", 2 " + ((mc.cullingMask & 4) != 0) + ", 19 " + ((mc.cullingMask & (1 << 19)) != 0));
             }
