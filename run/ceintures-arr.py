@@ -67,7 +67,18 @@ def tout(name, fl, xf=XF, flip=False):
     if flip: tri = [tri[i + k] for i in range(0, len(tri), 3) for k in (0, 2, 1)]
     obj2mwm.write('assets/ceintures/' + name, pos, nrm, uv, tri)
     print(name, len(pos), 'sommets', len(tri) // 3, 'triangles')
-tout('taxi-base.mwm', tfaces(['taxi_seatbelts_parts'], None))
+# (Base en pieces, les memes que la SORBET -- l'outil des places les deplace une a une : ancrages hauts y > 0,8 ; ancrages bas
+# cote portiere |x| > 0,6 ; boucles au milieu)
+def tpart(keep):
+    out = []
+    for f in tg['taxi_seatbelts_parts']:
+        cx = sum(tv[a][0] for (a, b, c) in f) / len(f); cy = sum(tv[a][1] for (a, b, c) in f) / len(f)
+        if keep(cx, cy): out.append(f)
+    return out
+tout('taxi-ancres-haut.mwm', tpart(lambda x, y: y > 0.8))
+tout('taxi-boucles.mwm', tpart(lambda x, y: y <= 0.8 and abs(x) <= 0.6))
+tout('taxi-ancre-bas-g.mwm', tpart(lambda x, y: y <= 0.8 and x < -0.6))
+tout('taxi-ancre-bas-d.mwm', tpart(lambda x, y: y <= 0.8 and x > 0.6))
 for s in 'gd':
     tout('taxi-sangle-haut-%s.mwm' % s, tfaces(['seatbelt', 'seatbelt.001'], s, ymin=TSHOULDER))
     tout('taxi-sangle-bas-%s.mwm' % s, tfaces(['seatbelt', 'seatbelt.001'], s, ymax=TSHOULDER))
