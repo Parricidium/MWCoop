@@ -738,6 +738,11 @@ static void DrawHeader(Graphics &g)
         right -= 54;
         HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_LOGS, IC_FILE);
         right -= 54;
+        // Signaler un bug (demande de JD, 26/10 : a cote des Journaux) : le formulaire du site et le zip des journaux
+        // (launcher.cpp BugReport). Son nom s'affiche dessous au survol.
+        g_btn[B_BUG].r = RectF(right - 44, 22, 44, 44);
+        HeadButton(g, B_BUG, IC_BUG);
+        right -= 54;
         HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_CREDITS, IC_STAR);
         right -= 54;
         // Outils (editeur de carte, 20/10 : « a gauche, un peu a part de l'etoile, separe d'un | ») : outils.inc
@@ -747,12 +752,21 @@ static void DrawHeader(Graphics &g)
         right -= 54;
     }
     g_headRight = right;
+    if (g_btn[B_BUG].hover > 0.05f) {   // (etiquette sous le bouton Signaler un bug)
+        const wchar_t *tl = T(L"Signaler un bug", L"Report a bug");
+        float a = std::min(1.0f, g_btn[B_BUG].hover), tw = MeasureW(MeasureG(), tl, 12.5f, FontStyleBold) + 24;
+        RectF br = g_btn[B_BUG].r, tr(br.X + br.Width / 2 - tw / 2, br.Y + br.Height + 8, tw, 28);
+        GraphicsPath tp; RoundRect(tp, tr, 10);
+        SolidBrush tb(WithA(TH(solid), a)); g.FillPath(&tb, &tp);
+        Pen tpen(WithA(TH(fieldBorder), a), 1.0f); g.DrawPath(&tpen, &tp);
+        Text(g, tl, tr, 12.5f, FontStyleBold, WithA(kInk, a));
+    }
     if (g_state == ST_IDLE) {
         if (g_tab == TAB_SAVES) { UiButton(g, RectF(right - 164, 22, 164, 44), T(L"Nouvelle partie", L"New game"), UI_SAVE_NEW, true, IC_HOMEPLUS); right -= 174; }   // (saves.inc)
         if (g_tab == TAB_CONTENT || g_tab == TAB_MODS) {
             int n = MscModCount();
             std::vector<std::wstring> lab = { std::wstring(T(L"Contenu · ", L"Content · ")) + ContentSummary(), std::wstring(L"Mods · ") + std::to_wstring(n) };
-            float w = 280.0f;
+            float w = 250.0f;   // (280 avant le bouton Signaler un bug, 26/10 : titre « Contenu envoye » coupe)
             RectF r(right - w, 22, w, 44);
             UiSeg(g, r, lab, g_tab == TAB_CONTENT ? 0 : 1, UI_SEG, 13);
             right -= w + 10;
@@ -762,7 +776,10 @@ static void DrawHeader(Graphics &g)
         else if (g_tab == TAB_LOBBY) DrawLobbyHeadControls(g, right);
         else if (g_tab == TAB_GFX || g_tab == TAB_COOP) DrawSetSearchBox(g, right);   // (Chercher un reglage)
     }
-    Title(g, title, RectF(268, 16, right - 280, 34), 26, kInk);
+    // (titre trop long a cote des commandes de la page -- russe, bouton Signaler un bug du 26/10 : plus petit, jusqu'a 20 px)
+    float tpx = 26;
+    while (tpx > 20 && MeasureTitleW(MeasureG(), title, tpx) > right - 282) tpx -= 1;
+    Title(g, title, RectF(268, 16, right - 280, 34), tpx, kInk);
     if (MeasureW(MeasureG(), sub, 13.5f, FontStyleRegular) > right - 282) {   // (trop long a cote des commandes de la page : la premiere phrase seulement)
         size_t dot = sub.find(L". ");
         if (dot != std::wstring::npos) sub.resize(dot + 1);

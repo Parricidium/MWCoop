@@ -97,7 +97,7 @@ enum {
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
        IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK,
-       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM, IC_TOOLS, IC_MAP };
+       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM, IC_TOOLS, IC_MAP, IC_BUG };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -201,6 +201,12 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
                12.89f, 2.86f, 14.22f, 2.27f, 15.64f, 2.01f, 17.09f, 2.1f, 18.47f, 2.53f }, true);
         break;
     case IC_MAP: poly({ 3, 6, 9, 4, 15, 6, 21, 4, 21, 18, 15, 20, 9, 18, 3, 20 }, true); line(9, 4, 9, 18); line(15, 6, 15, 20); break;
+    case IC_BUG:   // insecte : signaler un bug (en-tete)
+        g.DrawEllipse(&pen, cx - 5 * k, cy - 3.5f * k, 10 * k, 12.5f * k); circ(12, 6, 2.4f); line(12, 9, 12, 20.5f);
+        line(7, 11.5f, 3.5f, 10); line(7, 15, 3, 15); line(7.6f, 18.2f, 4.2f, 20.5f);
+        line(17, 11.5f, 20.5f, 10); line(17, 15, 21, 15); line(16.4f, 18.2f, 19.8f, 20.5f);
+        line(10.6f, 4.2f, 9, 2.5f); line(13.4f, 4.2f, 15, 2.5f);
+        break;
     case IC_STAR: poly({ 12, 3.5f, 14.35f, 9.26f, 20.56f, 9.72f, 15.8f, 13.74f, 17.29f, 19.78f, 12, 16.5f, 6.71f, 19.78f, 8.2f, 13.74f, 3.44f, 9.72f, 9.65f, 9.26f }, true); break;
     case IC_HEART: {
         GraphicsPath p;

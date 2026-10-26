@@ -520,6 +520,7 @@ static void LogsOpenFolder();
 static void WikiOpenHost();   // (launcher.cpp : article du guide Heberger une partie)
 static void HudPreview(Graphics &g, RectF box, int style, bool big);   // (onglet HUD : apercu, plus bas)
 static void LogsZip();
+static void BugReport();   // (Signaler un bug : en-tete, article Journaux du Guide)
 static float GfxMaxScroll() { return max(0.0f, g_setContentH - kSetArea.Height); }
 
 enum { SI_GFX, SI_OPT, SI_SEC, SI_BREAK, SI_X };   // reglage du jeu (cle de GfxRows), option du lanceur (cle de g_opts), section, 2e sous-colonne, special (cle = nom)

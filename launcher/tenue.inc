@@ -662,7 +662,7 @@ static bool LookChanged()
     for (int f = 0; f < PF_COUNT && f < (int)g_drPerso.size(); f++) if (f != PF_SHIRT && PersoGet(f) != g_drPerso[f]) return true;
     return false;
 }
-static float PersoTabW(int k) { return PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 13) + 16; }
+static float PersoTabW(int k) { return PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 13) + 4; }   // (10 de chaque cote : +16 avant le bouton Signaler un bug, 26/10)
 static float PersoTabsW() { float w = 0; for (int k = 0; k < PersoTabCount(); k++) w += PersoTabW(k) + (k ? 6 : 0); return w; }
 static RectF PersoTabRect(int k) { float x = g_persoTabRight - PersoTabsW(); for (int j = 0; j < k; j++) x += PersoTabW(j) + 6; return RectF(x, kPersoTabY, PersoTabW(k), kPersoTabH); }
 

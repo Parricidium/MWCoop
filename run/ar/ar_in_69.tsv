@@ -1,0 +1,9 @@
+PLE01	Report a bug
+PLE02	The bug icon at the top right, next to the Logs: it opens the bug report form and puts the logs zip on the Desktop. Drag it into the form, right after the problem.
+PLE03	Form opened, but no logs yet: start the game with MWCoop first
+PLE04	Form opened: drag the logs zip (on the Desktop) into it
+PLE05	Report a bug (the bug icon at the top right): the form and the logs zip. Or Logs > Make the zip, on Discord (#bug-reports).
+PLE06	Report a bug (the bug icon at the top right, next to the Logs): the report form opens and the logs zip lands on your Desktop. Drag it into the form, with what you were doing.
+PLE07	Or: \"Create a zip to send\" (Logs page), then on the Discord (#bug-reports) or on GitHub.
+PLE08	The zip stays under 15 MB, the site's limit: very big logs are cut in the middle.
+PLE09	At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor and the track converter), the Credits (the star), Report a bug (the bug icon), the Logs (the page icon) and the modding API ({ }).

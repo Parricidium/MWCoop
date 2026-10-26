@@ -1963,7 +1963,7 @@ static void UpdateTick()
 enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_ADDONS, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab)
 static int g_tab = TAB_HOME;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -2008,7 +2008,7 @@ static void UpdateButtons()
     g_btn[B_SOLO].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = g_btn[B_LANG].enabled = true;
-    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = true;
+    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = g_btn[B_BUG].enabled = true;
     g_btn[B_BUY].visible = false;
     g_btn[B_LOGS].visible = false;
     bool home = g_tab == TAB_HOME;
@@ -2630,6 +2630,14 @@ static float MeasureW(Graphics &g, const std::wstring &s, float px, int style)
     MeasureStr(g, s.c_str(), -1, &font, PointF(0, 0), &box);
     return box.Width;
 }
+// Largeur d'un titre (police des titres, Title).
+static float MeasureTitleW(Graphics &g, const std::wstring &s, float px)
+{
+    Font &font = *FontOf(TitleFont(), px, FontStyleBold);
+    RectF box;
+    MeasureStr(g, s.c_str(), -1, &font, PointF(0, 0), &box);
+    return box.Width;
+}
 
 
 
@@ -3058,6 +3066,9 @@ static std::wstring DiscordUrlBuild()
 }
 static const std::wstring g_discordUrl = DiscordUrlBuild();
 static const wchar_t *kDiscordUrl = g_discordUrl.c_str();
+// Site de signalement des bugs (MWCoop-Tableau, page depot.html) : bouton de l'en-tete a cote des Journaux. Seul endroit
+// ou est son adresse (un nom de domaine viendra peut-etre : workers.dev est filtre en Russie) ; « ?lang=xx » ajoute au clic.
+static const wchar_t *kBugSiteUrl = L"https://live.myseasonscar.workers.dev/depot.html";
 static const RectF kDiscCard(390, 166, 500, 476), kDiscJoin(430, 486, 420, 54), kDiscLater(430, 552, 420, 44), kDiscClose(836, 182, 40, 40);
 static int g_guideKind;   // 0 guide Steam, 1 invitation au Discord
 static void DiscordAskOpen() { g_guide = true; g_guideKind = 1; g_guideHot = 0; g_focus = -1; }
@@ -6392,13 +6403,13 @@ static uint32_t Crc32(uint32_t crc, const uint8_t *p, size_t n)
 }
 // Contenu d'un journal (le jeu peut l'avoir encore ouvert). Au-dela de 16 Mo (output_log de Unity) : le 1er Mo et les
 // derniers, avec une ligne qui le dit.
-static bool ReadForZip(const std::wstring &path, std::string &out, FILETIME *mt)
+static bool ReadForZip(const std::wstring &path, std::string &out, FILETIME *mt, LONGLONG cap = 16 << 20)
 {
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
     if (f == INVALID_HANDLE_VALUE) return false;
     LARGE_INTEGER size;
     bool ok = GetFileSizeEx(f, &size) && GetFileTime(f, NULL, NULL, mt);
-    const LONGLONG cap = 16 << 20, head = 1 << 20;
+    const LONGLONG head = std::min((LONGLONG)(1 << 20), cap / 4), note = 160;   // (place de la ligne qui dit la coupe)
     auto readAt = [&](LONGLONG at, LONGLONG n) {
         LARGE_INTEGER p; p.QuadPart = at;
         size_t base = out.size();
@@ -6411,10 +6422,11 @@ static bool ReadForZip(const std::wstring &path, std::string &out, FILETIME *mt)
     if (ok && size.QuadPart <= cap) readAt(0, size.QuadPart);
     else if (ok) {
         readAt(0, head);
-        char note[160];
-        sprintf_s(note, "\r\n\r\n[MWCoop : %lld octets coupes ici, le journal faisait %lld octets]\r\n\r\n", size.QuadPart - cap, size.QuadPart);
-        out += note;
-        readAt(size.QuadPart - (cap - head), cap - head);
+        char msg[160];
+        sprintf_s(msg, "\r\n\r\n[MWCoop : %lld octets coupes ici, le journal faisait %lld octets]\r\n\r\n", size.QuadPart - cap + note, size.QuadPart);
+        out += msg;
+        LONGLONG tail = std::max(0LL, cap - head - note);
+        readAt(size.QuadPart - tail, tail);
     }
     CloseHandle(f);
     return ok;
@@ -6429,7 +6441,24 @@ static std::wstring ZipEntryName(const std::wstring &path)
     for (auto &c : rel) if (c == L'\\') c = L'/';
     return rel;
 }
-static bool WriteZip(const std::wstring &zip, const std::vector<std::wstring> &files, int *count)
+// Valeurs a ne pas envoyer dans un zip (cle d'acces personnelle, dernier code de session) : « (retire du zip) ».
+static void ZipMask(std::string &d)
+{
+    for (const char *k : { "CleAcces=", "DernierCode=" }) {
+        size_t at = 0, kl = strlen(k);
+        while ((at = d.find(k, at)) != std::string::npos) {
+            if (at && d[at - 1] != '\n') { at += kl; continue; }
+            size_t v = at + kl, e = d.find_first_of("\r\n", v);
+            if (e == std::string::npos) e = d.size();
+            if (e > v) d.replace(v, e - v, "(retire du zip)");
+            at = v;
+        }
+    }
+}
+// 'budget' (0 : sans) : taille maximale du zip -- chaque journal est coupe au milieu pour tenir dans 'parFichier' et
+// dans ce qui reste, ceux qui ne tiennent plus sont laisses de cote. 'site' : site de signalement (MWCoop-Tableau,
+// relais/src/zip.js), qui ne garde que .txt, .log et .json -- les autres (.ini) y prennent « .txt » au bout du nom.
+static bool WriteZip(const std::wstring &zip, const std::vector<std::wstring> &files, int *count, LONGLONG budget = 0, LONGLONG parFichier = 16 << 20, bool site = false)
 {
     *count = 0;
     std::wstring tmp = zip + L".tmp";
@@ -6441,8 +6470,21 @@ static bool WriteZip(const std::wstring &zip, const std::vector<std::wstring> &f
     auto put = [&](const std::string &b) { DWORD w = 0; ok = ok && WriteFile(f, b.data(), (DWORD)b.size(), &w, NULL) && w == b.size(); off += (uint32_t)b.size(); };
     for (const std::wstring &path : files) {
         FILETIME mt = {}, lt;
-        if (!ReadForZip(path, data, &mt)) continue;
         std::string name = Narrow(ZipEntryName(path), CP_UTF8);
+        if (site) {
+            std::string low = name;
+            for (auto &c : low) c = (char)tolower((unsigned char)c);
+            auto ends = [&](const char *x) { size_t n = strlen(x); return low.size() >= n && !low.compare(low.size() - n, n, x); };
+            if (!ends(".txt") && !ends(".log") && !ends(".json")) name += ".txt";
+        }
+        LONGLONG cap = parFichier;
+        if (budget) {   // (en-tete local 30 + nom, entree du repertoire 46 + nom, fin 22)
+            LONGLONG room = budget - (LONGLONG)off - (LONGLONG)central.size() - 22 - 76 - 2 * (LONGLONG)name.size();
+            if (room < 4096) continue;
+            cap = std::min(cap, room);
+        }
+        if (!ReadForZip(path, data, &mt, cap)) continue;
+        ZipMask(data);
         WORD dd = 0x21, dt = 0;   // (1/1/1980 si la date est illisible)
         FileTimeToLocalFileTime(&mt, &lt);
         FileTimeToDosDateTime(&lt, &dd, &dt);
@@ -6700,7 +6742,17 @@ static void LogsDeleteAll()
     LogsScan();
 }
 
-static void ZipToDesktop(const std::vector<std::wstring> &files, const std::wstring &tag)
+// Limites du site de signalement (MWCoop-Tableau relais/src/dossiers.js et zip.js) : 15 Mo par zip, seuls .txt, .log et
+// .json gardes. Tous les zips des journaux les respectent (le site dit « Journaux > Creer un zip ») : un peu de marge sous
+// 15 Mo, chaque journal coupe au milieu au-dela de 4 Mo (output_log de Unity).
+static const LONGLONG kZipSiteMax = 15LL * 1024 * 1024 - 256 * 1024, kZipSiteFichier = 4LL * 1024 * 1024;
+static bool ZipForSite(const std::wstring &zip, const std::vector<std::wstring> &files, int *count)
+{
+    return WriteZip(zip, files, count, kZipSiteMax, kZipSiteFichier, true);
+}
+// 'base' : debut du nom (MWCoop-journaux-, MWCoop-signalement-) ; 'quiet' : sans message (le bouton Signaler un bug dit
+// le sien). Rend le chemin du zip, vide si rien n'a pu etre ecrit.
+static std::wstring ZipToDesktop(const std::vector<std::wstring> &files, const std::wstring &tag, const wchar_t *base, bool quiet)
 {
     wchar_t desk[MAX_PATH] = L"";
     std::wstring dir;
@@ -6710,17 +6762,34 @@ static void ZipToDesktop(const std::vector<std::wstring> &files, const std::wstr
     SYSTEMTIME st;
     GetLocalTime(&st);
     wchar_t name[80];
-    swprintf_s(name, L"MWCoop-journaux-%04d-%02d-%02d_%02dh%02d.zip", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
-    std::wstring zip = dir + (tag.empty() ? std::wstring(name) : L"MWCoop-journaux-" + tag + L".zip");
+    swprintf_s(name, L"%s%04d-%02d-%02d_%02dh%02d.zip", base, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
+    std::wstring zip = dir + (tag.empty() ? std::wstring(name) : base + tag + L".zip");
     int n = 0;
-    if (dir.empty() || !WriteZip(zip, files, &n)) {
+    if (dir.empty() || !ZipForSite(zip, files, &n)) {
         SetStatus(K_ERR, T(L"Zip impossible (erreur %lu)", L"Could not create the zip (error %lu)"), GetLastError());
-        return;
+        return L"";
     }
-    if (onDesk) SetStatus(K_OK, T(L"Zip sur le Bureau (%d fichiers) : envoie-le", L"Zip on the Desktop (%d files): send it"), n);
+    if (quiet) {}
+    else if (onDesk) SetStatus(K_OK, T(L"Zip sur le Bureau (%d fichiers) : envoie-le", L"Zip on the Desktop (%d files): send it"), n);
     else SetStatus(K_OK, T(L"Zip cr\u00E9\u00E9 (%d fichiers) : envoie-le", L"Zip created (%d files): send it"), n);
     std::wstring arg = L"/select,\"" + zip + L"\"";
     ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
+    return zip;
+}
+static void ZipToDesktop(const std::vector<std::wstring> &files, const std::wstring &tag) { ZipToDesktop(files, tag, L"MWCoop-journaux-", false); }
+
+// Bouton « Signaler un bug » de l'en-tete (a cote des Journaux, demande de JD 26/10) : le formulaire du site
+// (kBugSiteUrl, dans la langue du lanceur) dans le navigateur, et s'il y a des journaux, le zip (comme Journaux > Creer
+// un zip) sur le Bureau, montre dans l'explorateur pour le glisser dans le formulaire.
+static void BugReport()
+{
+    std::wstring url = std::wstring(kBugSiteUrl) + L"?lang=" + LangCode();
+    ShellExecuteW(g_wnd, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    std::vector<std::wstring> files = ZipFiles();
+    LaunchLog("signaler un bug : %s, %d journal(aux)", Narrow(url, CP_UTF8).c_str(), (int)files.size());
+    if (files.empty()) { SetStatus(K_WARN, T(L"Formulaire ouvert, mais aucun journal pour l'instant : lance le jeu avec MWCoop d'abord", L"Form opened, but no logs yet: start the game with MWCoop first")); return; }
+    if (ZipToDesktop(files, L"", L"MWCoop-signalement-", true).empty()) return;
+    SetStatus(K_OK, T(L"Formulaire ouvert : glisses-y le zip des journaux (sur le Bureau)", L"Form opened: drag the logs zip (on the Desktop) into it"));
 }
 
 static void OnButton(int id)
@@ -6772,6 +6841,7 @@ static void OnButton(int id)
     case B_COLOR: CarPickColor(); break;
     case B_LOGDIR: LogsOpenFolder(); break;
     case B_LOGZIP: LogsZip(); break;
+    case B_BUG: BugReport(); break;
     }
 }
 
@@ -7780,6 +7850,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // Essai : /placesessai <journal> <cle-publique.txt> <fichier de cle> <url du manifeste> <dossier de jeu factice> -- outil des
     // places avec une cle publique d'essai : installation depuis le manifeste (serveur local), 2e passage sans rien refaire ;
     // export : copie de la partie en cours dans places-export et lancement.ini (jeu factice, rien n'est lance).
+    // Essai : /testzipsite <journal> <zip> <fichier>... -- zip des journaux aux limites du site de signalement (15 Mo,
+    // .ini -> .ini.txt, journaux coupes a 4 Mo, cle d'acces et code de session retires) ; rien n'est ouvert.
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/testzipsite")) {
+        g_testSalonLog = argv[2];
+        std::vector<std::wstring> files;
+        for (int i = 4; i < argc; i++) files.push_back(argv[i]);
+        int n = 0;
+        bool ok = ZipForSite(argv[3], files, &n);
+        WIN32_FILE_ATTRIBUTE_DATA fa = {};
+        GetFileAttributesExW(argv[3], GetFileExInfoStandard, &fa);
+        TestLog("zip site : ok=%d, %d fichier(s) sur %d, %llu octets (max %lld), adresse %s?lang=%s", (int)ok, n, (int)files.size(),
+                ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow, kZipSiteMax, Narrow(kBugSiteUrl, CP_UTF8).c_str(), Narrow(LangCode()).c_str());
+        return 0;
+    }
     // Essai : /testtuto <journal> <ini d'essai> -- bulles des nouveautes : 1er demarrage avec l'ancienne valeur (TutoVersion =
     // version du mod, 1.15.8), visite passee (Echap), 2e demarrage : plus aucune bulle ; puis meme chose sur l'autre jeu.
     if (argc >= 4 && !_wcsicmp(argv[1], L"/testtuto")) {
@@ -8017,6 +8101,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_tab = TAB_MODS;
                 }
         else if (st == L"menu-ip") g_steamNet = false;
+        else if (st == L"survol-bug" || st == L"journaux-survol-bug") { if (st[0] == L'j') g_tab = TAB_LOGS; g_btn[B_BUG].hover = 1.0f; }   // (en-tete : etiquette du bouton Signaler un bug)
         else if (st == L"rail-defile") { UpdSet(L"1.15.2"); EnterCriticalSection(&g_cs); g_updLanc = L"1.15.1"; LeaveCriticalSection(&g_cs); g_tab = TAB_NOTES; g_notesDone = true; }   // (barre de gauche qui defile : les deux mises a jour proposees, Nouveautes -- en bas -- choisie, donc ramenee dans la vue)
         else if (st == L"steam-refus") SetStatus(K_ERR, L"%s", SteamInitWhy().c_str());   // (raison d'un refus de Steam, telle que ce PC la verrait)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }

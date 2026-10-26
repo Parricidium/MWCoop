@@ -2100,3 +2100,8 @@ Export my cars	Экспортировать мои машины
 Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.	Твой ключ доступа открывает инструмент сидений: сначала экспортируй машины из сохранения, где они собраны, затем открой инструмент. Кнопка «Экспорт» в инструменте: zip, который нужно отправить JD.
 Copy my ID	Копировать мой ID
 Your MWCoop ID: 	Твой ID MWCoop: 
+Report a bug	Сообщить об ошибке
+The bug icon at the top right, next to the Logs: it opens the bug report form and puts the logs zip on the Desktop. Drag it into the form, right after the problem.	Значок жука вверху справа, рядом с «Логами»: он открывает форму сообщения об ошибке и кладёт zip с логами на рабочий стол. Перетащи его в форму сразу после проблемы.
+Form opened, but no logs yet: start the game with MWCoop first	Форма открыта, но логов пока нет: сначала запусти игру с MWCoop
+Form opened: drag the logs zip (on the Desktop) into it	Форма открыта: перетащи в неё zip с логами (на рабочем столе)
+Report a bug (the bug icon at the top right): the form and the logs zip. Or Logs > Make the zip, on Discord (#bug-reports).	«Сообщить об ошибке» (значок жука вверху справа): форма и zip с логами. Или Логи > Создать zip, в Discord (#bug-reports).

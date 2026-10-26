@@ -131,6 +131,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.15.14 (26/10) : placement des sieges, avec une cle d'acces (57 ; sautee sans cle)
     { L"Placement des sièges", L"Ta clé d'accès ouvre l'outil des places : exporte d'abord tes voitures depuis une partie où elles sont montées, puis ouvre l'outil. Bouton Exporter de l'outil : le zip à envoyer à JD.",
       L"Seat placement", L"Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.", "1.15.14" },
+    // lanceur-1.15.16 (26/10) : Signaler un bug, a cote des Journaux (58)
+    { L"Signaler un bug", L"L'insecte en haut à droite, à côté des Journaux : il ouvre le formulaire du site de signalement et met le zip des journaux sur le Bureau. Glisse-le dans le formulaire, juste après le problème.",
+      L"Report a bug", L"The bug icon at the top right, next to the Logs: it opens the bug report form and puts the logs zip on the Desktop. Drag it into the form, right after the problem.", "1.15.16" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -227,6 +230,8 @@ static RectF TutoTarget(int i)
     case 56: return g_saveCheckR;                            // Verifier la sauvegarde (carte de droite des Sauvegardes : saves.inc)
     // 1.15.14
     case 57: return g_placesCardR;                           // bandeau Placement des sieges (page Outils : outils-places.inc)
+    // 1.15.16
+    case 58: return g_btn[B_BUG].r;                          // Signaler un bug (en-tete, a cote des Journaux : ui.inc DrawHeader)
     }
     return RectF(0, 0, 0, 0);
 }

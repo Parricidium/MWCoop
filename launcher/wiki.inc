@@ -442,9 +442,9 @@ static void DrawWikiNews(Graphics &g)
         Text(g, all, r, 12.5f, FontStyleBold, g_uiHot == UI_WIKI_GO + 199 ? kAcc2 : kAcc, StringAlignmentFar);
         HotZone(r, UI_WIKI_GO + 199);
     }
-    // « Un souci ? » en bas : le zip des journaux (icone page de l'en-tete) puis Discord
-    std::wstring help = T(L"Journaux (l'icône page en haut à droite) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
-                          L"Logs (the page icon at the top right) > Make the zip, then post it in #bug-reports on Discord.");
+    // « Un souci ? » en bas : Signaler un bug (insecte de l'en-tete), ou le zip des journaux sur Discord
+    std::wstring help = T(L"Signaler un bug (l'insecte en haut à droite) : le formulaire et le zip des journaux. Ou Journaux > Faire le zip, sur Discord (#bug-reports).",
+                          L"Report a bug (the bug icon at the top right): the form and the logs zip. Or Logs > Make the zip, on Discord (#bug-reports).");
     float hh = WikiTextH(g, help, w - 24, 12, FontStyleRegular);
     RectF h(c.X + 14, 0, c.Width - 28, 10 + 18 + hh + 10 + 36 + 10);
     h.Y = c.Y + c.Height - 14 - h.Height;
@@ -627,7 +627,7 @@ static std::wstring GuideNewChip()
 }
 static float GuideTabW(int k)
 {
-    float w = PillW(GuideTabLabel(k), 13) + 12;   // (14 de chaque cote)
+    float w = PillW(GuideTabLabel(k), 13) + 4;   // (10 de chaque cote : place du bouton Signaler un bug, 26/10)
     if (k == 1) { std::wstring c = GuideNewChip(); if (!c.empty()) w += PillW(c, 9.5f) - 2 + 6; }
     return w;
 }
@@ -654,12 +654,13 @@ static void GuideTabsDraw(Graphics &g)
 }
 static void DrawGuideSearchBox(Graphics &g, float &right)
 {
-    // (124 px depuis le raccourci Outils de l'en-tete, 20/10 : a 164, le titre « Guide » etait coupe)
-    RectF r(right - 124, 22, 124, 44);
+    // (124 px depuis le raccourci Outils de l'en-tete, 20/10 : a 164, le titre « Guide » etait coupe ; 110 depuis le bouton
+    // Signaler un bug, 26/10)
+    RectF r(right - 110, 22, 110, 44);
     GraphicsPath p; RoundRect(p, r, 14);
     SolidBrush fill(TH(field)); g.FillPath(&fill, &p);
     Pen pen(g_wikiFocus ? kAcc : TH(fieldBorder), g_wikiFocus ? 2.0f : 1.2f); g.DrawPath(&pen, &p);
-    RectF tr(r.X + 16, r.Y, r.Width - 16 - 34, r.Height);
+    RectF tr(r.X + 16, r.Y, r.Width - 16 - (g_wikiSearch.empty() ? 10 : 34), r.Height);   // (la croix : seulement avec du texte)
     if (g_wikiSearch.empty() && !g_wikiFocus) Text(g, T(L"Chercher…", L"Search…"), tr, 13.5f, FontStyleBold, TH(placeholder), StringAlignmentNear);
     else {
         Text(g, g_wikiSearch, tr, 13.5f, FontStyleBold, kInk, StringAlignmentNear);
@@ -674,7 +675,7 @@ static void DrawGuideSearchBox(Graphics &g, float &right)
         Icon(g, IC_CLOSE, xr.X + 14, xr.Y + 14, 14, g_uiHot == UI_WIKI_SEARCHX ? kAcc : kGrey, 2.0f);
         HotZone(xr, UI_WIKI_SEARCHX);
     }
-    right -= 134;
+    right -= 120;
 }
 // Commandes des trois onglets du Guide, de droite a gauche : Chercher, puis les pilules.
 static void DrawGuideHead(Graphics &g, float &right)
@@ -733,6 +734,7 @@ static bool WikiClick(int id)
         if (i < art.n && art.b[i].kind == WB_GO) {
             int p = art.b[i].arg;
             if (p == 2000) { GoPage(TAB_CAR); g_addonsTab = true; g_addonSel = -1; g_addonScanT = 0; }   // (onglet Addons de la page Personnage)
+            else if (p == 3000) BugReport();   // (Signaler un bug : formulaire du site et zip des journaux, launcher.cpp)
             else if (p >= 1000) WikiGoArt(p - 1000);   // (autre article du guide)
             else if (PageEnabled(p)) GoPage(p);
         }
