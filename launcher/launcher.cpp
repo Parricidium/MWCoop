@@ -7574,6 +7574,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     // Auto-test de la liste des mods en plusieurs messages
     if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
+    // Essai : /gardeinstall <dossier du lanceur> <journal> -- l'installation dans AppData serait-elle bloquee pour ce dossier ?
+    // (a verifier avant de lancer un lanceur en mode normal sur une instance d'essai ; rien n'est installe ni lance)
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/gardeinstall")) {
+        g_launcherLog = argv[3];
+        const char *why = InstallBlocked(WithSlash(argv[2]));
+        LaunchLog("gardeinstall : %s -> %s", Narrow(argv[2], CP_UTF8).c_str(), why ? (std::string("BLOQUEE : ") + why).c_str() : "PAS bloquee (la question serait posee)");
+        return 0;
+    }
     // Essai : /testcopies <dossier de jeu factice> <journal> -- copies automatiques (saves.inc) sur une partie d'essai de ce
     // dossier : premiere copie, rien de change, 12 changements (10 gardees), puis 4 versions du mod (« avant » de 3 gardees).
     if (argc >= 4 && !_wcsicmp(argv[1], L"/testcopies")) {

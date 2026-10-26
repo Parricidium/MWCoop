@@ -145,15 +145,23 @@ static void DesktopShortcut(const std::wstring &target, const std::wstring &old)
     if (SUCCEEDED(co)) CoUninitialize();
 }
 
+// Jamais d'installation ni de migration : instance d'essai du harnais ([Test] ArrierePlan=1 dans le MWCoop\mwcoop.ini a cote
+// du lanceur -- la question s'etait affichee chez JD pour Joueur4, 21/10, puis acceptee pour Joueur1, 26/10 : la garde lisait
+// « MWCoop\mwcoop.ini » avec un seul \, jamais trouve), ou MWCOOP_SANS_INSTALL=1 (essais). Raison, ou NULL.
+static const char *InstallBlocked(const std::wstring &dir)
+{
+    wchar_t e[4] = L"";
+    if (GetEnvironmentVariableW(L"MWCOOP_SANS_INSTALL", e, 4) && e[0] == L'1') return "MWCOOP_SANS_INSTALL=1";
+    if (GetPrivateProfileIntW(L"Test", L"ArrierePlan", 0, (dir + L"MWCoop\\mwcoop.ini").c_str()) != 0) return "instance d'essai ([Test] ArrierePlan=1)";
+    return NULL;
+}
 // Au demarrage (fenetre normale) : vrai si ce lanceur s'est installe et passe la main (il doit s'arreter).
 // Essais (MWCOOP_ESSAI_INSTALL=1, avec un LOCALAPPDATA et un MWCOOP_BUREAU jetables) : oui sans question, et le lanceur
 // installe n'est pas demarre (verifie ensuite en ligne de commande : /jeu, /miroir).
 static bool InstallAtStartup()
 {
     if (RunningFromHome() || IsWine() || LocalDir().empty()) return false;
-    // (instance d'essai du harnais -- [Test] ArrierePlan=1 dans son MWCoop\mwcoop.ini : jamais proposee ; la question
-    // s'etait affichee chez JD pour une copie du lanceur posee dans MWCoop-Joueur4, 21/10)
-    if (GetPrivateProfileIntW(L"Test", L"ArrierePlan", 0, (g_dir + L"MWCoop\\mwcoop.ini").c_str()) != 0) { LaunchLog("installation dans AppData : pas pour une instance d'essai"); return false; }
+    if (const char *why = InstallBlocked(g_dir)) { LaunchLog("installation dans AppData : jamais ici (%s)", why); return false; }
     wchar_t ess[8] = L"";
     bool test = GetEnvironmentVariableW(L"MWCOOP_ESSAI_INSTALL", ess, 8) && ess[0] == L'1';
     std::wstring home = LocalDir();
