@@ -79,12 +79,15 @@ namespace MWCoop
         static PlayMakerFSM amisList, postBox;
         static bool postHooked, resolved;
         static Transform numbers;
-        static float resolveAt = -1, nextCheck, nextPostLog;
+        static float resolveAt = -1, nextCheck, nextPostLog, orderCheckAt = -1;
+        static bool orderSeen;
+        static int orderNum0;
+        static GameObject orderListing;
         static readonly Dictionary<string, FsmFloat> billTargets = new Dictionary<string, FsmFloat>();
 
         public static void OnLevelLoaded()
         {
-            for (int i = 0; i < lines.Length; i++) lines[i] = null; ringCapped = false; ringNext = 0f;
+            for (int i = 0; i < lines.Length; i++) lines[i] = null; ringCapped = false; ringNext = 0f; orderCheckAt = -1;
             spawners[0] = spawners[1] = null;
             spawnerHooked[0] = spawnerHooked[1] = false;
             amisList = postBox = null; numbers = null;
@@ -104,6 +107,7 @@ namespace MWCoop
             if (!resolved) { if (now < resolveAt) return; Resolve(); }
             if (now >= nextCheck) { nextCheck = now + 1f; Inject(); }
             if (now >= nextPhone) { nextPhone = now + 1f; PhoneStep(now); }
+            if (orderCheckAt > 0 && now >= orderCheckAt) { orderCheckAt = -1; if (!orderSeen) NoOrder(); }
             for (int i = 0; i < lines.Length; i++)
             {
                 Line l = lines[i];
@@ -201,11 +205,44 @@ namespace MWCoop
             switch (h.Kind)
             {
                 case H_Find: StartCall(lines[h.Index]); break;
-                case H_Hangup: EndCall(lines[h.Index], "annonce"); break;
+                case H_Hangup: EndCall(lines[h.Index], "annonce"); ExpectOrder(h.F); break;
                 case H_Hangup2: SendJob(lines[h.Index]); EndCall(lines[h.Index], "offre"); break;
-                case H_Create: SendOrder(h.Index, h.F); break;
+                case H_Create: if (h.Index == 0) orderSeen = true; SendOrder(h.Index, h.F); break;
                 case H_CheckHand: CheckEnvelope(h.F); break;
             }
+        }
+
+        // Annonce appelee jusqu'au bout ('Hangup' : CurrentListing pose, SPAWNITEM au createur, puis 'Create product') sans
+        // commande creee dans la seconde -- fil « Magazine ordering issue » (26/10, 1.15.8) : l'hote en solo comme l'invite
+        // parlaient au vendeur, aucune commande ; pas reproduit avec la sauvegarde de l'hote. Ce qui pouvait l'empecher va au
+        // journal, et la creation est relancee une fois si le compteur du createur n'a pas bouge (pas de doublon possible).
+        static void ExpectOrder(PlayMakerFSM call)
+        {
+            PlayMakerFSM sp = spawners[0];
+            FsmInt num = sp != null ? sp.FsmVariables.FindFsmInt("ObjectNumberInt") : null;
+            FsmGameObject fl = call != null ? call.FsmVariables.FindFsmGameObject("FoundListing") : null;
+            orderNum0 = num != null ? num.Value : -1;
+            orderListing = fl != null ? fl.Value : null;
+            orderSeen = false;
+            orderCheckAt = Time.realtimeSinceStartup + 1f;
+        }
+
+        static void NoOrder()
+        {
+            PlayMakerFSM sp = spawners[0];
+            if (sp == null) { Log.Warn("appels : annonce appelee mais pas de commande creee -- createur absent"); return; }
+            FsmInt num = sp.FsmVariables.FindFsmInt("ObjectNumberInt");
+            FsmGameObject cl = sp.FsmVariables.FindFsmGameObject("CurrentListing");
+            string why = "etat '" + sp.ActiveStateName + "', actif " + sp.gameObject.activeInHierarchy + ", automate " + (sp.enabled ? "en marche" : "arrete")
+                         + (sp.Fsm.Finished ? " (fini)" : "") + ", numero " + (num != null ? num.Value : -1) + " (avant " + orderNum0 + "), annonce "
+                         + (cl != null && cl.Value != null ? cl.Value.name : "aucune") + " / appelee " + (orderListing != null ? orderListing.name : "aucune");
+            if (num != null && num.Value != orderNum0) { Log.Warn("appels : commande creee sans passer par le crochet (pas envoyee aux autres) -- " + why); return; }
+            if (orderListing == null || !sp.gameObject.activeInHierarchy) { Log.Warn("appels : annonce appelee mais pas de commande creee -- " + why); return; }
+            Log.Warn("appels : annonce appelee mais pas de commande creee -- " + why + " ; creation relancee");
+            if (!sp.enabled) sp.enabled = true;
+            if (cl != null) cl.Value = orderListing;
+            sp.SendEvent("SPAWNITEM");
+            Log.Info("appels : relance -> etat '" + sp.ActiveStateName + "', numero " + (num != null ? num.Value : -1) + (orderSeen ? ", commande envoyee" : ", toujours rien"));
         }
 
         // ---------------------------------------------------------------- appel en cours, facture
@@ -808,7 +845,7 @@ namespace MWCoop
 
         static void TestCall(float t)
         {
-            bool host = Session.IsHost;
+            bool host = Session.IsHost, whole = Config.GetInt("Test", "AppelEntier", 0) != 0;
             if (host && t > 40f && step == 0)
             {
                 step = 1;
@@ -827,7 +864,7 @@ namespace MWCoop
                 // Le cadran a demarre et ses crochets sont poses (Inject chaque seconde) : numero compose d'un coup.
                 step = 2;
                 string num = Config.Get("Test", "TestNumero", "08231206");
-                if (num == "annonce") num = FirstAdNumber();
+                if (num.StartsWith("annonce")) { int k; num = FirstAdNumber(int.TryParse(num.Substring(7), out k) ? k : 0); }   // (annonceN : la N-ieme, de 0)
                 testNumber = num;
                 if (num.Length < 2) { Log.Info("autotest : appel, pas de numero"); step = 9; return; }
                 if (testCall.ActiveStateName != "State 1") Game.SetState(testCall, "State 1");
@@ -849,21 +886,28 @@ namespace MWCoop
                 else if (s == "State 3") { Log.Info("autotest : appel, factures impayees : appel force"); Game.SetState(testCall, "Delay"); }
                 else if (s == "Ring" || s == "Add ring") Game.SetState(testCall, "Check type");   // sonneries sautees
                 else if (s == "Call") Game.SetState(testCall, "Hangup 2");                     // voix sautee
-                else if (s == "Telepuhelu" || s == "Kaukopuhelu") Game.SetState(testCall, "Hangup");
+                // ([Test] AppelSansCommande=1 : createur arrete avant 'Hangup' -- SPAWNITEM perdu, la relance doit le rallumer et creer la commande)
+                if ((s == "Telepuhelu" || s == "Kaukopuhelu") && spawners[0] != null && spawners[0].enabled && Config.GetInt("Test", "AppelSansCommande", 0) != 0)
+                { spawners[0].enabled = false; Log.Info("autotest : appel, createur de commandes arrete"); }
+                else if ((s == "Telepuhelu" || s == "Kaukopuhelu") && !whole) Game.SetState(testCall, "Hangup");   // ([Test] AppelEntier=1 : conversation jusqu'au bout)
                 else if (s == "Beep beep") { step = 3; Log.Info("autotest : appel fini (" + (fl != null && fl.Value != null ? fl.Value.name : "?") + ")"); }
-                if (step == 2 && t > 90f) { step = 3; Log.Info("autotest : appel bloque en '" + s + "'"); }
+                if (step == 2 && t > (whole ? 150f : 90f)) { step = 3; Log.Info("autotest : appel bloque en '" + s + "'"); }
             }
             if (host && step == 3 && testActivated && testKeypad != null) { testActivated = false; testKeypad.SetActive(false); }
-            if (t > 100f && !testLogged) { testLogged = true; Log.Info("autotest : appel, " + CallState()); }
+            if (t > (whole ? 160f : 100f) && !testLogged) { testLogged = true; Log.Info("autotest : appel, " + CallState()); }
         }
 
-        static string FirstAdNumber()
+        static string FirstAdNumber(int skip)
         {
             if (numbers == null) return "";
             for (int i = 0; i < numbers.childCount; i++)
             {
                 Transform c = numbers.GetChild(i);
-                if (c.name.Length >= 7 && IsDigits(c.name) && Game.FsmOn(c.gameObject, "Generate") != null) return c.name;
+                if (c.name.Length >= 7 && IsDigits(c.name) && Game.FsmOn(c.gameObject, "Generate") != null && skip-- == 0)
+                {
+                    Log.Info("autotest : appel, annonce " + StrVar(c.gameObject, "Generate", "Name") + " (" + c.name + ")");
+                    return c.name;
+                }
             }
             return "";
         }
