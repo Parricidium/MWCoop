@@ -2050,3 +2050,38 @@ Repair incomplete: %d file(s) not written (see lanceur.log)	Исправлени
 under the map	под картой
 Check the save: reads the game's files and reports what is wrong (unreadable file, invalid numbers, objects under the map or out of the world, parts removed but bolted, a mod version known to damage saves). Repair (game closed) only applies safe fixes, after a \"Before the repair\" copy; every fix is noted in the launcher's log.	Проверить сохранение: читает файлы игры и сообщает о проблемах (нечитаемый файл, неверные числа, предметы под картой или за пределами мира, снятые, но затянутые детали, версия мода, известная тем, что портит сохранения). Исправить (игра закрыта) применяет только безопасные исправления после копии «Перед исправлением»; каждое исправление записывается в журнал лаунчера.
 A game that crashes or odd parts? On its card, Check the save reports what is wrong and repairs what is safe, after a copy.	Игра вылетает или детали ведут себя странно? В её карточке «Проверить сохранение» сообщает о проблемах и исправляет то, что безопасно, после копии.
+Key of 	Ключ 
+ — seat tool	 — инструмент мест
+ (valid until 	 (действует до 
+This is not an MWCoop access key	Это не ключ доступа MWCoop
+Key refused: invalid signature	Ключ отклонён: неверная подпись
+: not for this MWCoop ID	: не для этого ID MWCoop
+: withdrawn	: отозван
+: expired	: истёк
+No key	Ключа нет
+Close the seat tool: a new version is waiting	Закрой инструмент мест: ждёт новая версия
+Seat tool unavailable (%s)	Инструмент мест недоступен (%s)
+The seat tool is already open	Инструмент мест уже открыт
+The seat tool needs Microsoft Edge WebView2 (Windows 10/11): install it if nothing shows	Инструменту мест нужен Microsoft Edge WebView2 (Windows 10/11): установи его, если ничего не отображается
+Seat tool opened	Инструмент мест открыт
+Could not start the seat tool (error %lu)	Не удалось запустить инструмент мест (ошибка %lu)
+Close the game before exporting your cars	Закрой игру перед экспортом машин
+Could not export the cars (%s)	Не удалось экспортировать машины (%s)
+Exporting the cars: the game starts in the background (2 to 3 minutes)…	Экспорт машин: игра запускается в фоне (2–3 минуты)…
+Exporting the cars: %s…	Экспорт машин: %s…
+Cars exported: open the seat tool	Машины экспортированы: открой инструмент мест
+Car export: error (%s), see the logs	Экспорт машин: ошибка (%s), смотри журналы
+The game closed before the car export finished: see the logs	Игра закрылась до конца экспорта машин: смотри журналы
+unavailable	недоступен
+MWCoop ID copied: send it to JD	ID MWCoop скопирован: отправь его JD
+%s: “Seat placement” button on the Tools page	%s: кнопка «Расстановка мест» на странице Инструменты
+Nothing to paste: copy the key you got from JD first	Нечего вставить: сначала скопируй ключ, полученный от JD
+Choose the key file (mwcoop-cle-….txt)	Выбери файл ключа (mwcoop-cle-….txt)
+Remove the access key from this PC? You can put it back later.	Убрать ключ доступа с этого ПК? Потом его можно вернуть.
+Access key	Ключ доступа
+Access key removed	Ключ доступа убран
+Restricted access	Ограниченный доступ
+Tools JD entrusts to a few people	Инструменты, которые JD доверяет немногим
+Your MWCoop ID	Твой ID MWCoop
+Paste the key	Вставить ключ
+File…	Файл…

@@ -35,6 +35,7 @@ static std::wstring ToolLocalVer(const ToolPkg &t)
 
 // Releases recues (fil des mises a jour, ou des notes sans jeu) : la plus recente qui a le paquet de chaque outil (Nightly
 // seulement pour le canal Nightly, comme le mod).
+static void PlacesSeen(const std::vector<Note> &rel);   // (places.inc)
 static void ToolsSeen(const std::vector<Note> &rel)
 {
     const Note *ed = NULL, *cv = NULL;
@@ -47,6 +48,7 @@ static void ToolsSeen(const std::vector<Note> &rel)
     g_ed.remoteVer = ed ? ed->ver : L""; g_ed.remoteUrl = ed ? ed->editor : L"";
     g_cv.remoteVer = cv ? cv->ver : L""; g_cv.remoteUrl = cv ? cv->conv : L"";
     LeaveCriticalSection(&g_cs);
+    PlacesSeen(rel);   // (outil des places : places.inc)
 }
 
 static bool ToolRunning(const ToolPkg &t)

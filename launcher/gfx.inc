@@ -501,7 +501,10 @@ enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD
        UI_SET_FOV = 13020,           // + k : champ de vision (curseur)
        UI_SET_PORTSEG = 13040,       // + k : port (pastilles)
        UI_SET_SESS = 13050,          // + k (0 3, 1 10, 2 30) : sessions gardees
-       UI_SET_DENS = 13054 };        // + k (0 aeree, 1 normale, 2 compacte) : densite
+       UI_SET_DENS = 13054,          // + k (0 aeree, 1 normale, 2 compacte) : densite
+       UI_SET_CLEID = 13060, UI_SET_CLEPASTE, UI_SET_CLEFILE, UI_SET_CLEDEL };   // acces reserve (places.inc) : copier l'ID, coller / ouvrir / retirer la cle
+static std::wstring CleIdText(); static std::wstring CleEtatText(); static bool CleHas();   // (places.inc)
+static void CleCopyId(); static void ClePaste(); static void CleFile(); static void CleRemove();
 static void LogsOpenFolder();
 static void WikiOpenHost();   // (launcher.cpp : article du guide Heberger une partie)
 static void HudPreview(Graphics &g, RectF box, int style, bool big);   // (onglet HUD : apercu, plus bas)
@@ -539,6 +542,7 @@ static const SetCard kSetCards[] = {
     { SET_HUD, 1, L"Aperçu", L"Preview", NULL, NULL },                                                                                                               // 23
     { SET_HUD, 1, L"Jauges affichées", L"Gauges shown", NULL, NULL },                                                                                                // 24
     { SET_HUD, 1, L"Coop", L"Co-op", L"Aussi avec Vanilla", L"Also with Vanilla" },                                                                                  // 25
+    { SET_LANCEUR, 0, L"Accès réservé", L"Restricted access", L"Outils confiés par JD à quelques personnes", L"Tools JD entrusts to a few people" },               // 26 (places.inc)
 };
 static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
@@ -693,6 +697,9 @@ static const SetItem kSetItems[] = {
     { 25, SI_GFX, "Equipe", NULL, NULL, L"Les jauges des autres joueurs, en petit", L"The other players' gauges, small" },
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé, gelé… toi et tes amis", L"Very hungry, exhausted, freezing… you and your friends", 0, 1 },
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé… toi et tes amis", L"Very hungry, exhausted… you and your friends", 0, 2 },   // (pas de froid dans My Summer Car)
+    // Acces reserve (outil des places, cle d'acces signee par JD, 26/10) : l'ID a lui envoyer, la cle recue (explication : son etat)
+    { 26, SI_X, "cleid", L"Ton ID MWCoop", L"Your MWCoop ID", NULL, NULL },
+    { 26, SI_X, "cle", L"Clé d'accès", L"Access key", NULL, NULL },
 };
 static const int kSetItemN = (int)(sizeof(kSetItems) / sizeof(kSetItems[0]));
 
@@ -1237,6 +1244,8 @@ static float SetItemH(const SetItem &it, float w)
     if (!strcmp(k, "about")) return 48;
     if (!strcmp(k, "update") || !strcmp(k, "notes")) return SetRowDH();
     if (!strcmp(k, "buy")) return 50;
+    if (!strcmp(k, "cleid")) return SetCtlRowH(T(it.fr, it.en), CleIdText(), w, SetButtonW(T(L"Copier", L"Copy")));
+    if (!strcmp(k, "cle")) return SetRowDH() + 40;   // (nom et etat, boutons dessous)
     if (!strcmp(k, "accent")) return SetCtlRowH(T(it.fr, it.en), T(it.dFr, it.dEn), w, 5 * 30 + 4 * 8);
     if (!strcmp(k, "texte")) return SetCtlRowH(T(it.fr, it.en), L"", w, kSetSliderW);
     if (!strcmp(k, "aurore") || !strcmp(k, "densite") || !strcmp(k, "max") || !strcmp(k, "prive") || !strcmp(k, "net") || !strcmp(k, "canal") || !strcmp(k, "sessions") || !strcmp(k, "start") || !strcmp(k, "ajouts")) {
@@ -1536,6 +1545,19 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             g_setBuy = RectF(x, y + 6, (w - 10) / 2, 38); g_setUninst = RectF(x + (w + 10) / 2, y + 6, (w - 10) / 2, 38);
             UiButton(g, g_setBuy, T(L"Acheter le jeu sur Steam", L"Buy the game on Steam"), UI_SET_BUY, false);
             UiButton(g, g_setUninst, T(L"Désinstaller MWCoop", L"Uninstall MWCoop"), UI_SET_UNINST, false, IC_TRASH);
+        } else if (!strcmp(k, "cleid")) {
+            std::wstring b = T(L"Copier", L"Copy"), lab = T(it.fr, it.en);
+            float bw = SetButtonW(b);
+            SetRowLabel(g, row, lab, CleIdText(), SetLabelMaxW(lab, w, bw));
+            UiButton(g, SetCtlRect(row, lab, bw, 32), b, UI_SET_CLEID, false);
+        } else if (!strcmp(k, "cle")) {   // etat de la cle, puis Coller / Fichier / Retirer
+            SetRowLabel(g, row, T(it.fr, it.en), CleEtatText(), w);
+            std::wstring b1 = T(L"Coller la clé", L"Paste the key"), b2 = T(L"Fichier…", L"File…"), b3 = T(L"Retirer", L"Remove");
+            float w1 = SetButtonW(b1), w2 = SetButtonW(b2), w3 = SetButtonW(b3), by = y + h - 37;
+            bool has = CleHas();
+            UiButton(g, RectF(x, by, w1, 32), b1, UI_SET_CLEPASTE, !has);
+            UiButton(g, RectF(x + w1 + 8, by, w2, 32), b2, UI_SET_CLEFILE, false, IC_FILE);
+            if (has) UiButton(g, RectF(x + w - w3, by, w3, 32), b3, UI_SET_CLEDEL, false, IC_TRASH);
         } else if (!strcmp(k, "logs")) {   // deux boutons : le dossier, le zip
             std::wstring b1 = T(L"Ouvrir le dossier", L"Open the folder"), b2 = T(L"Faire le zip", L"Make the zip");
             float w1 = SetButtonW(b1), w2 = SetButtonW(b2);
@@ -1985,6 +2007,10 @@ static bool SetClick(int id)
     case UI_SET_API: GoPage(TAB_API); return true;
     case UI_SET_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); return true;
     case UI_SET_LOGDIR: LogsOpenFolder(); return true;
+    case UI_SET_CLEID: CleCopyId(); return true;
+    case UI_SET_CLEPASTE: ClePaste(); return true;
+    case UI_SET_CLEFILE: CleFile(); return true;
+    case UI_SET_CLEDEL: CleRemove(); return true;
     case UI_SET_LOGZIP: LogsZip(); return true;
     case UI_SET_DISCORDASK: {
         bool off = GetPrivateProfileIntW(L"Lanceur", L"DiscordPropose", 0, g_iniLauncher.c_str()) != 0;

@@ -1,0 +1,35 @@
+PLC01	Key of 
+PLC02	 — seat tool
+PLC03	 (valid until 
+PLC04	This is not an MWCoop access key
+PLC05	Key refused: invalid signature
+PLC06	: not for this MWCoop ID
+PLC07	: withdrawn
+PLC08	: expired
+PLC09	No key
+PLC10	Close the seat tool: a new version is waiting
+PLC11	Seat tool unavailable (%s)
+PLC12	The seat tool is already open
+PLC13	The seat tool needs Microsoft Edge WebView2 (Windows 10/11): install it if nothing shows
+PLC14	Seat tool opened
+PLC15	Could not start the seat tool (error %lu)
+PLC16	Close the game before exporting your cars
+PLC17	Could not export the cars (%s)
+PLC18	Exporting the cars: the game starts in the background (2 to 3 minutes)…
+PLC19	Exporting the cars: %s…
+PLC20	Cars exported: open the seat tool
+PLC21	Car export: error (%s), see the logs
+PLC22	The game closed before the car export finished: see the logs
+PLC23	unavailable
+PLC24	MWCoop ID copied: send it to JD
+PLC25	%s: “Seat placement” button on the Tools page
+PLC26	Nothing to paste: copy the key you got from JD first
+PLC27	Choose the key file (mwcoop-cle-….txt)
+PLC28	Remove the access key from this PC? You can put it back later.
+PLC29	Access key
+PLC30	Access key removed
+PLC31	Restricted access
+PLC32	Tools JD entrusts to a few people
+PLC33	Your MWCoop ID
+PLC34	Paste the key
+PLC35	File…

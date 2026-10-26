@@ -2158,6 +2158,41 @@ Repair incomplete: %d file(s) not written (see lanceur.log)	إصلاح غير م
 under the map	تحت الخريطة
 Check the save: reads the game's files and reports what is wrong (unreadable file, invalid numbers, objects under the map or out of the world, parts removed but bolted, a mod version known to damage saves). Repair (game closed) only applies safe fixes, after a \"Before the repair\" copy; every fix is noted in the launcher's log.	فحص الحفظ: يقرأ ملفات اللعبة ويُبلغ عمّا هو خاطئ (ملف غير مقروء، أرقام غير صالحة، أشياء تحت الخريطة أو خارج العالم، قطع مفكوكة لكنها مشدودة، إصدار من التعديل معروف بإتلاف الحفظ). الإصلاح (واللعبة مغلقة) لا يطبّق إلا تصحيحات آمنة بعد نسخة «قبل الإصلاح»؛ ويُسجَّل كل تصحيح في سجل المشغّل.
 A game that crashes or odd parts? On its card, Check the save reports what is wrong and repairs what is safe, after a copy.	لعبة تتعطل أو قطع غريبة؟ في بطاقتها، «فحص الحفظ» يُبلغ عمّا هو خاطئ ويُصلح الآمن منه، بعد نسخة.
+Key of 	مفتاح 
+ — seat tool	 — أداة المقاعد
+ (valid until 	 (صالح حتى 
+This is not an MWCoop access key	هذا ليس مفتاح وصول MWCoop
+Key refused: invalid signature	المفتاح مرفوض: توقيع غير صالح
+: not for this MWCoop ID	: ليس لهذا المعرّف MWCoop
+: withdrawn	: مسحوب
+: expired	: منتهي الصلاحية
+No key	لا يوجد مفتاح
+Close the seat tool: a new version is waiting	أغلق أداة المقاعد: نسخة جديدة بانتظارك
+Seat tool unavailable (%s)	أداة المقاعد غير متاحة (%s)
+The seat tool is already open	أداة المقاعد مفتوحة بالفعل
+The seat tool needs Microsoft Edge WebView2 (Windows 10/11): install it if nothing shows	تحتاج أداة المقاعد إلى Microsoft Edge WebView2 (Windows 10/11): ثبّته إن لم يظهر شيء
+Seat tool opened	تم فتح أداة المقاعد
+Could not start the seat tool (error %lu)	تعذّر تشغيل أداة المقاعد (خطأ %lu)
+Close the game before exporting your cars	أغلق اللعبة قبل تصدير سياراتك
+Could not export the cars (%s)	تعذّر تصدير السيارات (%s)
+Exporting the cars: the game starts in the background (2 to 3 minutes)…	تصدير السيارات: تبدأ اللعبة في الخلفية (من 2 إلى 3 دقائق)…
+Exporting the cars: %s…	تصدير السيارات: %s…
+Cars exported: open the seat tool	تم تصدير السيارات: افتح أداة المقاعد
+Car export: error (%s), see the logs	تصدير السيارات: خطأ (%s)، راجع السجلات
+The game closed before the car export finished: see the logs	أُغلقت اللعبة قبل انتهاء تصدير السيارات: راجع السجلات
+unavailable	غير متاح
+MWCoop ID copied: send it to JD	تم نسخ المعرّف MWCoop: أرسله إلى JD
+%s: “Seat placement” button on the Tools page	%s: زر «وضع المقاعد» في صفحة الأدوات
+Nothing to paste: copy the key you got from JD first	لا شيء للصق: انسخ أولاً المفتاح الذي تلقيته من JD
+Choose the key file (mwcoop-cle-….txt)	اختر ملف المفتاح (mwcoop-cle-….txt)
+Remove the access key from this PC? You can put it back later.	إزالة مفتاح الوصول من هذا الحاسوب؟ يمكنك إعادته لاحقاً.
+Access key	مفتاح الوصول
+Access key removed	تمت إزالة مفتاح الوصول
+Restricted access	وصول مقيّد
+Tools JD entrusts to a few people	أدوات يأتمن JD عليها بعض الأشخاص
+Your MWCoop ID	معرّفك MWCoop
+Paste the key	لصق المفتاح
+File…	ملف…
 My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?	لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟
 Different version (you %s, host %s): update	إصدار مختلف (لديك %s، لدى المضيف %s): حدّث
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.

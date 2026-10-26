@@ -235,6 +235,7 @@ static bool g_joinFallback;                         // invite : pas de salon che
 static std::string g_rejectWhy;                     // invite : raison du refus (sous g_lcs)
 static std::wstring g_testSalon, g_testSalonLog;    // /testsalon hote|invite <journal>
 static std::wstring g_exportDir;                    // /exportcarte <msc|mwc> <dossier> : export de la carte pour l'editeur de carte (editor\)
+static bool g_exportPlaces;                         // /exportplaces <msc|mwc> <dossier> : export des voitures pour l'outil des places (places.inc), avec g_exportDir
 static std::wstring g_testPartie = L"continuer";    // /testsalon : choix de l'hote
 static std::string g_testCode;                       // /testsalon ... /code <X> : code de session (hote : le sien, salon prive ; invite : celui qu'il envoie)
 static bool g_testPublic;                            // /testsalon hote ... /public : salon public (pas de code)
@@ -1251,7 +1252,7 @@ static bool IsWritableDir(const std::wstring &dir)
 // dernieres releases : ignores ici.
 enum { STR_GLOBAL, STR_MWC, STR_MSC, STR_LANCEUR, STR_OUTILS };
 static const wchar_t *kLastGlobal = L"1.15.0";
-struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor, conv; std::string when; bool pre = false; int stream = STR_GLOBAL; };   // when : published_at de GitHub (ISO, tri des Nouveautes) ; pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc) ; conv : convertisseur de circuits (.convertisseur) ; zip : paquet du flux (.zip / .nightly en global)
+struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor, conv, places; std::string when; bool pre = false; int stream = STR_GLOBAL; };   // when : published_at de GitHub (ISO, tri des Nouveautes) ; pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc) ; conv : convertisseur de circuits (.convertisseur) ; zip : paquet du flux (.zip / .nightly en global)
 static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
@@ -1367,6 +1368,9 @@ static std::vector<Note> ParseReleases(const std::string &json)
             // carte : .editeur, a part -- 20/10)
             if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".editeur")) { if (n.editor.empty()) n.editor = Widen(url); continue; }
             if (url.size() > 14 && !_stricmp(url.c_str() + url.size() - 14, ".convertisseur")) { if (n.conv.empty()) n.conv = Widen(url); continue; }   // (convertisseur Voyage, 24/10)
+            // (outil des places, places.inc : manifeste signe outil-places.json ; le paquet .mwcp qu'il nomme est a cote, jamais pris pour le mod)
+            if (url.size() > 18 && !_stricmp(url.c_str() + url.size() - 18, "/outil-places.json")) { if (n.places.empty()) n.places = Widen(url); continue; }
+            if (url.size() > 5 && !_stricmp(url.c_str() + url.size() - 5, ".mwcp")) continue;
             if (!n.zip.empty()) continue;
             if (n.stream != STR_GLOBAL) {   // (flux : son extension seulement, ou la meme suivie de -nightly)
                 if (!ext) continue;
@@ -3792,8 +3796,9 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += "Port=" + std::to_string(port) + "\r\n";
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
-    t += std::string("Profil=") + (!g_exportDir.empty() ? "carte-export" : mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
-    if (!g_exportDir.empty()) t += "ExportCarte=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (editeur de carte : profil a part, jamais les sauvegardes du joueur)
+    t += std::string("Profil=") + (g_exportPlaces ? "places-export" : !g_exportDir.empty() ? "carte-export" : mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
+    if (g_exportPlaces) t += "ExportPlaces=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (outil des places : copie de la partie en cours, SeatExport.cs)
+    else if (!g_exportDir.empty()) t += "ExportCarte=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (editeur de carte : profil a part, jamais les sauvegardes du joueur)
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
     if (mode == MODE_GUEST) t += ContentLaunchLines();
     if (mode != MODE_SOLO && g_lobbyOptGo) { t += LobbyCoopLines(mode == MODE_HOST); g_lobbyOptGo = false; }   // (options choisies dans le salon : salon.inc)
@@ -4034,7 +4039,7 @@ static void Launch(int mode, const char *partie = NULL)
     static const wchar_t *modes[] = { L"solo", L"hote", L"invite" };
     std::wstring args = std::wstring(L"-mwcoop-mode ") + (!g_exportDir.empty() ? L"export" : modes[mode]) + L" -mwcoop-port " + std::to_wstring(port);
     if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
-    if (!g_exportDir.empty()) args += L" -mwcoop-profil carte-export -mwcoop-arriereplan";   // (export de la carte : fenetre hors de l'ecran)
+    if (!g_exportDir.empty()) args += g_exportPlaces ? L" -mwcoop-profil places-export -mwcoop-arriereplan" : L" -mwcoop-profil carte-export -mwcoop-arriereplan";   // (export de la carte : fenetre hors de l'ecran)
     // Ray tracing (MWCoopRT.dll) : Unity doit dessiner sur un seul fil pour que le mod s'insere dans son rendu.
     if (kRtShown && GetPrivateProfileIntW(L"Graphismes", L"RayTracing", 0, ModIni().c_str()) == 1) { args += L" -force-gfx-direct"; LaunchLog("ray tracing demande : -force-gfx-direct"); }
     SteamDown();   // (le lanceur ne passe plus pour le jeu aupres de Steam)
@@ -7072,7 +7077,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (p >= 0 && HitButton(x, y) == p && g_btn[p].enabled) OnButton(p);
         return 0;
     }
-    case WM_DROPFILES: ContentDrop((HDROP)wp); return 0;   // (modsync.inc : pistes .ogg et images deposees, page Contenu envoye)
+    case WM_DROPFILES: if (!CleDrop((HDROP)wp)) ContentDrop((HDROP)wp); return 0;   // (fichier de cle d'acces .txt : places.inc)   // (modsync.inc : pistes .ogg et images deposees, page Contenu envoye)
     case WM_CHAR:
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
@@ -7192,7 +7197,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             int gm = GameOfExe(av[i]);
             if (gm >= 0) { g_fromSteam = true; g_game = gm; }
             if (!_wcsicmp(av[i], L"/msc")) g_game = GAME_MSC;   // (essais : /capture ... /msc)
-            if (!_wcsicmp(av[i], L"/exportcarte") && i + 1 < ac) g_game = !_wcsicmp(av[i + 1], L"msc") ? GAME_MSC : GAME_MWC;
+            if ((!_wcsicmp(av[i], L"/exportcarte") || !_wcsicmp(av[i], L"/exportplaces")) && i + 1 < ac) g_game = !_wcsicmp(av[i + 1], L"msc") ? GAME_MSC : GAME_MWC;
         }
         // Lancer par Steam (Reglages > Jeu) avec l'option de lancement "<MWCoop.exe>" %command% : Steam relance le lanceur au
         // lieu du jeu (retour d'un joueur, 08/10 : "Running" dans Steam, un 2e lanceur, rien ne demarrait). Demande toute
@@ -7296,6 +7301,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         std::vector<Note> rel = ParseReleases(std::string(d.begin(), d.end()));
         std::string o;
         for (const Note &n : rel) o += Narrow(n.ver, CP_UTF8) + (n.pre ? " pre" : "") + (n.zip.empty() ? " sans paquet" : " " + Narrow(n.zip, CP_UTF8)) + "\r\n";
+        PlacesSeen(rel);
+        o += "outil des places : " + (g_placesManUrl.empty() ? std::string("aucun manifeste") : Narrow(g_placesManUrl, CP_UTF8)) + "\r\n";
         {
             const Note *p = PickRelease(rel, ModStream()), *l = PickRelease(rel, STR_LANCEUR);
             std::wstring v = p ? p->ver : L"";
@@ -7355,7 +7362,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // sans fenetre du lanceur : profil a part « carte-export » (nouvelle partie, jamais les sauvegardes du joueur), sans
     // MSCLoader (la carte du jeu seule), jeu hors de l'ecran ; le mod ecrit le cache dans <dossier> puis ferme le jeu. Ici :
     // <dossier>\lanceur.txt (ok=1, ou erreur=...), code 0 si le jeu est parti.
-    if (argc >= 4 && !_wcsicmp(argv[1], L"/exportcarte")) {
+    // /exportplaces <msc|mwc> <dossier> : pareil pour l'outil des places (places.inc, mod : SeatExport.cs), mais dans le profil a
+    // part « places-export » ou la partie en cours est copiee d'abord (ses voitures montees), Partie=continuer, sans MSCLoader.
+    if (argc >= 4 && (!_wcsicmp(argv[1], L"/exportcarte") || !_wcsicmp(argv[1], L"/exportplaces"))) {
+        g_exportPlaces = !_wcsicmp(argv[1], L"/exportplaces");
         g_exportDir = argv[3];
         SHCreateDirectoryExW(NULL, g_exportDir.c_str(), NULL);
         std::string why;
@@ -7371,8 +7381,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             RegisterClassExW(&wc);
             g_wnd = CreateWindowExW(0, wc.lpszClassName, L"MWCoop", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, inst, NULL);
             g_mscOn = false;
-            Launch(MODE_SOLO, "nouvelle");
-            if (g_state != ST_LAUNCH) why = g_status.empty() ? "lancement impossible" : Narrow(g_status, CP_UTF8);
+            if (!g_exportPlaces) Launch(MODE_SOLO, "nouvelle");
+            else if (PlacesExportPrepare(why)) Launch(MODE_SOLO, "continuer");
+            if (why.empty() && g_state != ST_LAUNCH) why = g_status.empty() ? "lancement impossible" : Narrow(g_status, CP_UTF8);
         }
         std::string txt = why.empty() ? "ok=1\r\n" : "erreur=" + why + "\r\n";
         HANDLE f = CreateFileW((WithSlash(g_exportDir) + L"lanceur.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -7764,7 +7775,64 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             LaunchLog("cle : extraction %s %s", Unzip(zf, out + L"x", &why) ? "ok" : "ECHEC", why.c_str());
         }
         return 0;
-    }    // Essai : /gardeinstall <dossier du lanceur> <journal> -- l'installation dans AppData serait-elle bloquee pour ce dossier ?
+    }
+    // Essai : /placesessai <journal> <cle-publique.txt> <fichier de cle> <url du manifeste> <dossier de jeu factice> -- outil des
+    // places avec une cle publique d'essai : installation depuis le manifeste (serveur local), 2e passage sans rien refaire ;
+    // export : copie de la partie en cours dans places-export et lancement.ini (jeu factice, rien n'est lance).
+    if (argc >= 7 && !_wcsicmp(argv[1], L"/placesessai")) {
+        g_launcherLog = argv[2];
+        std::vector<unsigned char> d;
+        std::string pubHex, pub, key;
+        if (ReadAll(argv[3], d)) pubHex.assign(d.begin(), d.end());
+        while (!pubHex.empty() && (pubHex.back() == '\r' || pubHex.back() == '\n')) pubHex.pop_back();
+        cle::UnHex(pubHex, pub);
+        std::vector<std::string> pubs = { pub };
+        if (ReadAll(argv[4], d)) key.assign(d.begin(), d.end());
+        CleInfo c = CleCheck(key, pubs, std::set<std::string>(), L"", 0);
+        LaunchLog("placesessai : cle %s, k %zu octets", c.k.size() == 32 ? "lue" : "ILLISIBLE", c.k.size());
+        for (int pass = 1; pass <= 2; pass++) {
+            std::string why;
+            DWORD t0 = GetTickCount();
+            bool ok = PlacesEnsure(argv[5], pubs, c.k, why, NULL);
+            LaunchLog("placesessai : passage %d : %s %s (%lu ms) ; OutilPlaces.exe %s, version %s", pass, ok ? "ok" : "ECHEC", why.c_str(), GetTickCount() - t0,
+                      FileExists(PlacesExe()) ? "present" : "ABSENT", PlacesLocalVer().c_str());
+        }
+        std::string why;
+        auto stale = [&]() { HANDLE v = CreateFileW((PlacesDir() + L"version.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL); if (v != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(v, "0.9", 3, &w, NULL); CloseHandle(v); } };
+        stale();
+        LaunchLog("placesessai : version locale 0.9, mauvaise cle k : %s (%s) ; outil garde %d", PlacesEnsure(argv[5], pubs, std::string(32, 'x'), why, NULL) ? "ACCEPTE (pas normal)" : "refuse", why.c_str(), (int)FileExists(PlacesExe()));
+        why.clear();
+        std::wstring bad = argv[5]; bad.replace(bad.rfind(L'/') + 1, std::wstring::npos, L"abime/outil-places.json");
+        LaunchLog("placesessai : paquet abime : %s (%s)", PlacesEnsure(bad, pubs, c.k, why, NULL) ? "ACCEPTE (pas normal)" : "refuse", why.c_str());
+        why.clear();
+        std::vector<std::string> other = { std::string(64, '\x01') };
+        LaunchLog("placesessai : autre cle publique : %s (%s)", PlacesEnsure(argv[5], other, c.k, why, NULL) ? "ACCEPTE (pas normal)" : "refuse", why.c_str());
+        why.clear();
+        LaunchLog("placesessai : bonne cle apres tout ca : %s %s, version %s", PlacesEnsure(argv[5], pubs, c.k, why, NULL) ? "ok" : "ECHEC", why.c_str(), PlacesLocalVer().c_str());
+        why.clear();
+        LaunchLog("placesessai : WebView2 %s ; racine %s", WebView2Ok() ? "present" : "ABSENT", Narrow(PlacesRoot(), CP_UTF8).c_str());
+        g_gameDir = g_modRoot = WithSlash(argv[6]);
+        std::wstring prof = SaveCreate(L"Essai places");
+        SaveSetCurrent(prof);
+        std::wstring sd = SaveDirOf(prof);
+        for (const wchar_t *n : { L"defaultES2File.txt", L"items.txt" }) {
+            HANDLE h = CreateFileW((sd + n).c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+            if (h != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(h, "essai", 5, &w, NULL); CloseHandle(h); }
+        }
+        why.clear();
+        bool pok = PlacesExportPrepare(why);
+        WIN32_FIND_DATAW fd;
+        int n = 0;
+        HANDLE h = FindFirstFileW((SaveDirOf(L"places-export") + L"*").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) { do { if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) n++; } while (FindNextFileW(h, &fd)); FindClose(h); }
+        LaunchLog("placesessai : copie de la partie %s %s, %d fichiers dans %s", pok ? "ok" : "ECHEC", why.c_str(), n, Narrow(SaveDirOf(L"places-export"), CP_UTF8).c_str());
+        g_exportPlaces = true;
+        g_exportDir = WithSlash(argv[6]) + L"export-mwc";
+        WriteLaunchFile(MODE_SOLO, L"", 7870, "continuer");
+        if (ReadAll(g_modRoot + L"MWCoop\\lancement.ini", d)) LaunchLog("placesessai : lancement.ini :\n%s", std::string(d.begin(), d.end()).c_str());
+        return 0;
+    }
+    // Essai : /gardeinstall <dossier du lanceur> <journal> -- l'installation dans AppData serait-elle bloquee pour ce dossier ?
     // (a verifier avant de lancer un lanceur en mode normal sur une instance d'essai ; rien n'est installe ni lance)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/gardeinstall")) {
         g_launcherLog = argv[3];
@@ -7926,6 +7994,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"steam-refus") SetStatus(K_ERR, L"%s", SteamInitWhy().c_str());   // (raison d'un refus de Steam, telle que ce PC la verrait)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)
+        else if (st == L"reglages-cle") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-lanceur"); g_setContentH = 2000; g_scroll[g_tab] = 2000; }   // (carte Acces reserve, en bas de la colonne de gauche)
         else if (st == L"reglages-triches") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-coop"); g_gfxVal["Triches"] = 1; g_gfxVal["TrichesHote"] = 1; }   // (carte Regles, triches autorisees)
         else if (!wcsncmp(st.c_str(), L"reglages-", 9)) { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(st); }   // reglages-jeu|image|son|coop|touches|theme|lanceur|recherche
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
