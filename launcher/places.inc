@@ -5,8 +5,10 @@
 #include "cle.inc"
 
 // Cles publiques de JD (X || Y en hexadecimal, 128 caracteres), en liste : une nouvelle paire n'invalide pas les cles faites
-// avec l'ancienne. Ecrites par outils-prives/cles (creer-paire) ; vide tant que JD n'a pas cree sa paire.
-static const char *const kJdPubKeys[] = { NULL };
+// avec l'ancienne. Ecrites par outils-prives/cles (creer-paire) ; la cle privee et sa sauvegarde restent chez JD, hors du depot.
+static const char *const kJdPubKeys[] = {
+    "be292a5edfff54146b959f97796fe2cafbe8e3f1cceae78d366bd6a09d2d81f8ddd022110d6835b8110a30d73390e17eb310d8405962ab2c9c9e27d8ab592857",   // (paire de JD, 26/10)
+    NULL };
 static std::vector<std::string> g_clePubs;   // (decodees ; essais : /cle accepte une cle publique en plus)
 static std::vector<std::string> &ClePubs()
 {

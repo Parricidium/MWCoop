@@ -346,7 +346,10 @@ static void SaveCheckRun(std::wstring prof, std::wstring name, std::wstring dir 
         g_chk.files.push_back(sf);
     }
     std::wstring ver = SavePartieKey(dir, L"version");   // (ecrite par le mod a chaque sauvegarde, depuis mwc-/msc- 1.15.8+)
-    if (r && !ver.empty()) for (const char *const *bv = r->badVer; *bv; bv++) {
+    std::wstring jeu = SavePartieKey(dir, L"jeu");       // (msc | mwc, meme moment : une autre que le jeu choisi -> ses versions ne se comparent pas)
+    bool sameGame = jeu.empty() || !_wcsicmp(jeu.c_str(), g_game == GAME_MSC ? L"msc" : L"mwc");
+    if (!sameGame) LaunchLog("sauvegardes : partie.txt dit jeu=%s, pas le jeu choisi : version non comparee", Narrow(jeu, CP_UTF8).c_str());
+    if (r && !ver.empty() && sameGame) for (const char *const *bv = r->badVer; *bv; bv++) {
         std::wstring b = Widen(*bv);
         size_t dash = b.find(L'-');
         bool hit = b[0] == L'<' ? CmpVer(ver, b.substr(1)) < 0 : dash != std::wstring::npos && CmpVer(ver, b.substr(0, dash)) >= 0 && CmpVer(ver, b.substr(dash + 1)) <= 0;
