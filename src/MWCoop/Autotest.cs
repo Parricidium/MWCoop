@@ -323,6 +323,10 @@ namespace MWCoop
         // fait les montages de [Test] Montages ("point|piece;point|piece", par defaut tableau de bord, compteurs, aile gauche) a 40 s
         // puis toutes les 10 s, comme un clic ; chacun note 5 s apres si la piece tient (les ruptures : « attache rompue »).
         static int mmStep, mmPush, mmSave, mmAround; static float mmBoltsAt;
+        static int psStep; static float psLogAt;
+        static int prStep; static float prLogAt; static Quaternion prLastRot;
+        static int caStep, caBuy, caSacStep; static float caLogAt, caMoney, caSacLog; static string caSac;
+        static int bgStep; static float bgLogAt;
         static void MscMontage(float t)
         {
             string[] list = Config.Get("Test", "Montages", "SATSUMA(557kg, 248)/Dashboard/trigger_dashboard|db:Database/DatabaseMechanics/Dashboard;"
@@ -1144,6 +1148,201 @@ namespace MWCoop
                     if (cb != null && t > rl + 3f && t < rl + 11f) { Vector3 v = cb.transform.forward * 4f; cb.velocity = new Vector3(v.x, cb.velocity.y, v.z); if (boltStep == 1) { boltStep = 2; Log.Info("autotest : mscboulons, la voiture roule"); } }
                     if (t > rl + 16f && boltStep == 2) { boltStep = 3; Log.Info("autotest : mscboulons, sortie -> " + VehicleSync.TestExit("SATSUMA")); }
                 }
+                return;
+            }
+            // ([Test] Autotest=mscpassager, 2 joueurs, Markos 26/10 -- voiture qui tremble et fait du bruit chez le passager) :
+            // l'invite prend le volant de la SATSUMA a PassagerVolant (40 s) et la fait rouler a 5 m/s de PassagerRoule (60 s) a
+            // +30 s ; l'hote s'assoit a la place 0 a PassagerAssis (105 s) et ouvre la portiere droite 3 s apres ; chacun note
+            // toutes les 2 s la vitesse de la voiture, l'angle et l'etat de la portiere droite.
+            if (mode == "mscpassager")
+            {
+                bool psHost = Net.Session.IsHost;
+                Rigidbody cb = VehicleSync.Body("SATSUMA");
+                if (!psHost && t > Config.GetFloat("Test", "PassagerVolant", 40f) && psStep == 0) { psStep = 1; Log.Info("autotest passager : volant -> " + VehicleSync.TestEnter("SATSUMA", true)); }
+                float pr = Config.GetFloat("Test", "PassagerRoule", 60f);
+                if (!psHost && cb != null && !cb.isKinematic && t > pr && t < pr + 30f) { Vector3 v = cb.transform.forward * 5f; cb.velocity = new Vector3(v.x, cb.velocity.y, v.z); }
+                float pa = Config.GetFloat("Test", "PassagerAssis", 105f);
+                if (psHost && t > pa && psStep == 0) { psStep = 1; Log.Info("autotest passager : assis -> " + Seats.TestSit("SATSUMA", 0)); }
+                if (psHost && t > pa + 3f && psStep == 1) { psStep = 2; Log.Info("autotest passager : portiere droite -> " + CarDoors.TestOpen("SATSUMA", true, "door right")); }
+                if (t > 30f && t > psLogAt && cb != null)
+                {
+                    psLogAt = t + 2f;
+                    Transform dr = null; foreach (Transform x in cb.GetComponentsInChildren<Transform>()) if (x.name == "door right(Clone)") { dr = x; break; }
+                    Rigidbody drb = dr != null ? dr.GetComponent<Rigidbody>() : null;
+                    Log.Info("autotest passager : voiture " + cb.velocity.magnitude.ToString("F1") + " m/s" + (cb.isKinematic ? " (copie)" : "") + ", portiere droite " + (dr != null ? "rot locale " + dr.localEulerAngles.ToString("F0") + (drb != null ? (drb.isKinematic ? " cinematique" : " libre") + " v " + drb.angularVelocity.magnitude.ToString("F1") : "") : "introuvable"));
+                }
+                return;
+            }
+            // ([Test] Autotest=mscprise, 2 joueurs -- objets qui partent en vrille quand l'invite les prend, JD 26/10) : l'invite
+            // tient l'objet [Test] PriseObjet (sausages) devant sa camera de 45 a 75 s en tournant sur lui-meme (PriseTour deg/s,
+            // 40) ; chacun note toutes les 0,5 s l'objet par rapport a la tete du joueur qui le tient (avatar chez l'hote) et sa
+            // rotation depuis la note d'avant.
+            if (mode == "mscprise")
+            {
+                string key = Props.FindKey(Config.Get("Test", "PriseObjet", "sausages"));
+                Rigidbody ob = Props.BodyOf(key);
+                if (ob == null)   // (par l'ID de sauvegarde, variable ID de l'automate Use)
+                    foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                    {
+                        PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use");
+                        HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null;
+                        if (iv != null && iv.Value == Config.Get("Test", "PriseObjet", "sausages")) { ob = r; break; }
+                    }
+                if (ob == null && t > 40f && prStep == 0 && t > prLogAt)
+                {
+                    prLogAt = t + 15f;
+                    var sb = new System.Text.StringBuilder();
+                    int k = 0;
+                    foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                        if (r.name.ToLowerInvariant().Contains(Config.Get("Test", "PriseNom", Config.Get("Test", "PriseObjet", "sausages"))) && k++ < 8) sb.Append(" | ").Append(Recon.Path(r.transform)).Append(" @").Append(r.position.ToString("F1")).Append(" ").Append(Props.TestKeyInfo(r));
+                    Log.Info("autotest prise : objet " + key + " introuvable ici ; de ce nom :" + (sb.Length > 0 ? sb.ToString() : " aucun"));
+                }
+                bool tenant = !Net.Session.IsHost;
+                if (tenant && t > 45f && t < 75f && PlayerSync.LocalCamera != null)
+                {
+                    GameObject pl = Game.PlayerGo;
+                    if (pl != null && prStep == 1) pl.transform.Rotate(0f, Config.GetFloat("Test", "PriseTour", 40f) * Time.deltaTime, 0f, Space.World);
+                    // (prise du jeu : l'objet pose devant la camera, puis RaycastHitObject et « State 1 » de la main, comme
+                    // SleepingBags.PickAssist -- la main le garde tant qu'aucun bouton n'est relache)
+                    if (prStep == 0 && ob != null)
+                    {
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        Transform cam = PlayerSync.LocalCamera;
+                        ob.transform.position = cam.position + cam.forward * 0.6f;
+                        HutongGames.PlayMaker.FsmGameObject rh = hf != null ? hf.FsmVariables.FindFsmGameObject("RaycastHitObject") : null;
+                        var sts = new System.Text.StringBuilder();
+                        if (hf != null) foreach (HutongGames.PlayMaker.FsmState fs in hf.FsmStates) sts.Append(fs.Name).Append(", ");
+                        string before = hf != null ? hf.ActiveStateName : "?";
+                        if (rh != null) { rh.Value = ob.gameObject; Game.SetState(hf, "State 1"); }
+                        prStep = 1; Log.Info("autotest prise : " + key + " pris par l'invite, main " + before + " -> " + (hf != null ? hf.ActiveStateName : "introuvable") + (rh == null ? " (pas de RaycastHitObject)" : "") + " ; etats : " + sts);
+                    }
+                }
+                if (tenant && t > 75f && prStep == 1) { prStep = 2; Log.Info("autotest prise : fin du tour"); }
+                if (t > 40f && t < (tenant ? 85f : 200f) && t > prLogAt && ob != null)
+                {
+                    prLogAt = t + 0.5f;
+                    Transform head = null;
+                    if (tenant) head = PlayerSync.LocalCamera;
+                    else foreach (var kv in Net.Session.Players) if (!kv.Value.Local) head = PlayerSync.HeadOf(kv.Key);
+                    float turn = prLastRot.w == 0f && prLastRot.x == 0f ? 0f : Quaternion.Angle(prLastRot, ob.rotation);
+                    prLastRot = ob.rotation;
+                    Log.Info("autotest prise : " + key + (head != null ? " a " + Vector3.Distance(head.position, ob.position).ToString("F2") + " m de la tete, repere tete " + head.InverseTransformPoint(ob.position).ToString("F2") : " (pas de tete)") + ", tourne de " + turn.ToString("F0") + " deg en 0,5 s" + (ob.isKinematic ? " (cinematique)" : " v " + ob.velocity.magnitude.ToString("F1")));
+                }
+                return;
+            }
+            // ([Test] Autotest=msccaisse, 2 joueurs -- invite qui ne peut plus payer chez Teimo, JD et GG 26/10) : les deux au magasin
+            // a 20 s ; l'invite remplit son panier (PriceTotal +5, comme un produit pris en rayon) et paie a CaisseInvite1 (60 s) puis
+            // a CaisseInvite2 (130 s) ; l'hote achete a CaisseHote (150 s, soit ~90 s chez l'invite) ; chacun note la caisse.
+            if (mode == "msccaisse")
+            {
+                PlayMakerFSM reg = Game.FindFsm("STORE/StoreCashRegister/Register", "Data");
+                bool cHost = Net.Session.IsHost;
+                if (t > 20f && caStep == 0)
+                {
+                    caStep = 1;
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; pl.transform.position = new Vector3(-1539.1f, 4.4f, 1190.6f) + (cHost ? Vector3.zero : new Vector3(1f, 0f, 0f)); cc.enabled = true; }
+                    Log.Info("autotest caisse : au magasin, caisse " + (reg != null ? reg.ActiveStateName : "introuvable"));
+                }
+                if (t > 24f && caStep == 1)
+                {
+                    caStep = 2;
+                    foreach (Object o in Game.FsmsNamed("Buy"))
+                    {
+                        var bf = (PlayMakerFSM)o; HutongGames.PlayMaker.FsmString bn = bf != null ? bf.FsmVariables.FindFsmString("Name") : null;
+                        if (bn == null || bn.Value != Config.Get("Test", "CaisseProduit", "Sausages")) continue;
+                        Log.Info("autotest caisse : produit " + bn.Value + " : " + Recon.Path(bf.transform) + " [" + bf.ActiveStateName + "]");
+                        DumpFsms(Recon.Path(bf.transform) + ":Buy;");
+                        break;
+                    }
+                }
+                if (reg == null) return;
+                HutongGames.PlayMaker.FsmFloat pt = reg.FsmVariables.FindFsmFloat("PriceTotal"), tot = reg.FsmVariables.FindFsmFloat("Total");
+                float[] buys = cHost ? new[] { Config.GetFloat("Test", "CaisseHote", 150f) } : new[] { Config.GetFloat("Test", "CaisseInvite1", 60f), Config.GetFloat("Test", "CaisseInvite2", 130f) };
+                for (int i = 0; i < buys.Length; i++)
+                {
+                    if (t > buys[i] && caBuy == i * 3)
+                    {
+                        caBuy++; caMoney = Game.GlobalFloat("PlayerMoney");
+                        // ([Test] CaisseRayon=1 : le produit est pris au rayon par son automate Buy, comme le clic -- 'Check inventory' ->
+                        // 'Register add' -> 'Remove stock' ; sinon PriceTotal +5 directement)
+                        PlayMakerFSM buy = null;
+                        if (Config.GetInt("Test", "CaisseRayon", 0) != 0)
+                            foreach (Object o in Game.FsmsNamed("Buy")) { var bf = (PlayMakerFSM)o; HutongGames.PlayMaker.FsmString bn = bf != null ? bf.FsmVariables.FindFsmString("Name") : null; if (bn != null && bn.Value == Config.Get("Test", "CaisseProduit", "Sausages")) { buy = bf; break; } }
+                        if (buy != null) Game.SetState(buy, "Check inventory"); else pt.Value += 5f;
+                        Log.Info("autotest caisse : achat " + (i + 1) + (buy != null ? ", pris au rayon (" + buy.ActiveStateName + ")" : "") + ", panier PriceTotal " + pt.Value + " [" + reg.ActiveStateName + "]");
+                    }
+                    if (t > buys[i] + 1f && caBuy == i * 3 + 1 && Config.GetInt("Test", "CaisseRayon", 0) != 0 && t < buys[i] + 1.1f) Log.Info("autotest caisse : achat " + (i + 1) + ", 1 s apres le rayon : PriceTotal " + pt.Value + " Total " + tot.Value + " [" + reg.ActiveStateName + "]");
+                    if (t > buys[i] + Config.GetFloat("Test", "CaissePaie", 4f) && caBuy == i * 3 + 1) { caBuy++; Log.Info("autotest caisse : achat " + (i + 1) + ", avant paiement Total " + tot.Value + " PriceTotal " + pt.Value + " [" + reg.ActiveStateName + "], affiche \"" + reg.FsmVariables.FindFsmString("Notification").Value + "\""); Game.SetState(reg, "Check money"); }
+                    if (t > buys[i] + Config.GetFloat("Test", "CaissePaie", 4f) + 3f && caBuy == i * 3 + 2) { caBuy++; Log.Info("autotest caisse : achat " + (i + 1) + ", apres : Total " + tot.Value + " [" + reg.ActiveStateName + "], argent " + caMoney.ToString("F2") + " -> " + Game.GlobalFloat("PlayerMoney").ToString("F2")); }
+                }
+                // ([Test] CaisseSac=<s> chez l'invite : il prend en main, par la main du jeu, le sac de courses le plus proche a ce
+                // moment et pivote 15 s ; chacun note toutes les 0,5 s le sac (shoppingbag*) par rapport a la tete de celui qui le tient)
+                float cs = Config.GetFloat("Test", "CaisseSac", 0f);
+                if (cs > 0f)
+                {
+                    if (!cHost && t > cs && caSacStep == 0)
+                    {
+                        caSacStep = 1;
+                        Rigidbody best = null; float bd = 1e9f; Transform cam = PlayerSync.LocalCamera;
+                        foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                            if (r.name.StartsWith("shoppingbag") && cam != null && (r.position - cam.position).sqrMagnitude < bd) { bd = (r.position - cam.position).sqrMagnitude; best = r; }
+                        if (best == null) { best = Props.BodyOf(Props.FindKey("shoppingbag")); if (best != null && cam != null) bd = (best.position - cam.position).sqrMagnitude; }
+                        Log.Info("autotest caisse : sacs vus : " + Props.Ids("shoppingbag") + (best != null ? " ; choisi " + Recon.Path(best.transform) + (best.gameObject.activeInHierarchy ? "" : " (inactif)") + (best.isKinematic ? " (cinematique)" : "") : ""));
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        HutongGames.PlayMaker.FsmGameObject rh = hf != null ? hf.FsmVariables.FindFsmGameObject("RaycastHitObject") : null;
+                        if (best != null && rh != null && cam != null) { best.transform.position = cam.position + cam.forward * 0.6f; rh.Value = best.gameObject; Game.SetState(hf, "State 1"); caSac = best.name; }
+                        Log.Info("autotest caisse : sac " + (best != null ? best.name + " a " + Mathf.Sqrt(bd).ToString("F1") + " m" : "aucun") + " pris par l'invite, main " + (hf != null ? hf.ActiveStateName : "?"));
+                    }
+                    if (!cHost && caSacStep == 1 && t < cs + 15f) { GameObject pl = Game.PlayerGo; if (pl != null) pl.transform.Rotate(0f, 40f * Time.deltaTime, 0f, Space.World); }
+                    if (!cHost && caSacStep == 1 && t > cs + 15f)
+                    {
+                        caSacStep = 2;
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        string before = hf != null ? hf.ActiveStateName : "?";
+                        if (hf != null) Game.SetState(hf, before == "Item picked" ? "Drop item" : "Drop part");
+                        Log.Info("autotest caisse : sac lache par l'invite, main " + before + " -> " + (hf != null ? hf.ActiveStateName : "?"));
+                    }
+                    if (t > caSacLog && t > cs - 5f && t < (cHost ? cs + 170f : cs + 30f))
+                    {
+                        caSacLog = t + 0.5f;
+                        foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                        {
+                            if (!r.name.StartsWith("shopping")) continue;
+                            Transform head = null;
+                            if (!cHost) head = PlayerSync.LocalCamera; else foreach (var kv in Net.Session.Players) if (!kv.Value.Local) head = PlayerSync.HeadOf(kv.Key);
+                            if (head == null || (r.position - head.position).sqrMagnitude > 25f) continue;
+                            Log.Info("autotest caisse : sac " + r.name + " a " + Vector3.Distance(head.position, r.position).ToString("F2") + " m de la tete, v " + r.velocity.magnitude.ToString("F1") + " w " + r.angularVelocity.magnitude.ToString("F1") + (r.isKinematic ? " (cinematique)" : ""));
+                        }
+                    }
+                }
+                if (t > caLogAt && t > 25f) { caLogAt = t + 10f; Log.Info("autotest caisse : caisse [" + reg.ActiveStateName + "] Total " + tot.Value + " PriceTotal " + pt.Value + (reg.enabled ? "" : " (automate coupe)") + (reg.gameObject.activeInHierarchy ? "" : " (eteinte)")); }
+                return;
+            }
+            // ([Test] Autotest=mscbouge, 2 joueurs -- objets restes a leur place chez l'invite, Ace/WIGA 26/10) : l'hote deplace l'objet
+            // d'ID [Test] BougeObjet (beercase3) de 2 m vers le haut de BougeA (150 s) a +5 s (Props.TestCarry, comme a la main) ;
+            // chacun note toutes les 3 s ou est l'objet de cet ID et sa cle.
+            if (mode == "mscbouge")
+            {
+                Rigidbody ob = null;
+                foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                {
+                    PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use");
+                    HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null;
+                    if (iv != null && iv.Value == Config.Get("Test", "BougeObjet", "beercase3")) { ob = r; break; }
+                }
+                float ba = Config.GetFloat("Test", "BougeA", 150f);
+                if (Net.Session.IsHost && ob != null && t > ba && t < ba + 5f)
+                {
+                    string key = Props.TestKeyOf(ob);
+                    if (key != null) Props.TestCarry(key, t);
+                    if (bgStep == 0) { bgStep = 1; Log.Info("autotest bouge : l'hote deplace " + key); }
+                    ob.transform.position += Vector3.up * 0.4f * Time.deltaTime * 2f;
+                }
+                if (t > bgLogAt && t > 40f) { bgLogAt = t + 3f; Log.Info("autotest bouge : " + (ob != null ? ob.name + " en " + ob.position.ToString("F2") + ", " + Props.TestKeyInfo(ob) : "introuvable")); }
                 return;
             }
             if (mode == "mscposte") { FleetariMsc.Test(mode, t); return; }   // (commande par la poste partagee, Kamixak et Mikol 25/10)
