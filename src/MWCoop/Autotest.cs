@@ -762,7 +762,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -865,6 +865,9 @@ namespace MWCoop
             // ([Test] SondeBoite=1 : etat de la boite de TestVoiture chaque seconde, quel que soit l'essai)
             if (Config.GetInt("Test", "SondeBoite", 0) != 0 && mode != "mscreprise" && t > 20f && Time.realtimeSinceStartup >= repriseProbeAt)
             { repriseProbeAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : boite t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
+            // ([Test] SondeArgent=1 : PlayerMoney toutes les 10 s apres 30 s, quel que soit l'essai -- /argentde de [MWC], 26/10)
+            if (Config.GetInt("Test", "SondeArgent", 0) != 0 && t > 30f && Time.realtimeSinceStartup >= argentProbeAt)
+            { argentProbeAt = Time.realtimeSinceStartup + 10f; Log.Info("autotest : argent t=" + t.ToString("F0") + " PlayerMoney " + Game.GlobalFloat("PlayerMoney").ToString("F0") + ", triches " + (Cheats.Allowed ? "oui" : "non") + (Cheats.HostOnly ? " (hote seul)" : "")); }
             // ([Test] Autotest=trichesonglets : onglets du F7 captures, comme sur MWC ; Autotest=mscvoitures : /voiture pour chaque voiture
             // de l'onglet Voitures de MSC, une toutes les 6 s a partir de 30 s -- resultat et distance au joueur, capture voiture-<nom>)
             if (mode == "trichesonglets") { Cheats.Test(mode, t); return; }
@@ -878,6 +881,34 @@ namespace MWCoop
                     string r = Cheats.Command("/voiture " + cars[i]) ?? "ok";
                     Log.Info("autotest : mscvoitures, " + cars[i] + " -> " + r);
                     Autotest.CaptureSoon("voiture-" + cars[i], 3f);
+                }
+                return;
+            }
+            // ([Test] Autotest=mscceintures : objets ceinture de chaque voiture de MSC a 40 s -- chemin, actif, maillage, automates --
+            // et ce que la ceinture passager de Seats en retient ; outil des places, ceintures, [Addons et Tools] 26/10)
+            if (mode == "mscceintures")
+            {
+                if (t > 40f && step == 0)
+                {
+                    step = 1;
+                    var rx = new System.Text.RegularExpressions.Regex("belt|buckle|fasten|harness|seatbelt", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                    {
+                        if (rb.transform.parent != null || rb.GetComponent("CarDynamics") == null) continue;
+                        int n = 0;
+                        foreach (Transform x in rb.GetComponentsInChildren<Transform>(true))
+                        {
+                            if (!rx.IsMatch(x.name)) continue;
+                            n++;
+                            var sb = new System.Text.StringBuilder(Recon.Path(x));
+                            sb.Append(x.gameObject.activeInHierarchy ? "" : " (inactif)");
+                            MeshFilter mf = x.GetComponent<MeshFilter>();
+                            if (mf != null && mf.sharedMesh != null) sb.Append(" maillage ").Append(mf.sharedMesh.name).Append(mf.sharedMesh.isReadable ? "" : " (illisible)");
+                            foreach (PlayMakerFSM f in x.GetComponents<PlayMakerFSM>()) sb.Append(" [").Append(f.FsmName).Append(":").Append(f.ActiveStateName).Append("]");
+                            Log.Info("autotest : mscceintures, " + sb);
+                        }
+                        Log.Info("autotest : mscceintures, " + rb.name + " : " + n + " objets, ceinture passager " + Seats.TestBeltOf(rb.transform));
+                    }
                 }
                 return;
             }

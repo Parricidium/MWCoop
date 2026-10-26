@@ -1,0 +1,3 @@
+TMS01	اللوحة (F7) أو الدردشة: /tp <لاعب>، /bring <لاعب>، /place <مكان> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema).
+TMS02	/money <المبلغ>، /heal (الجوع، العطش، التعب، التوتر… إلى الصفر)، /free (لم تعد مطلوباً، خروج من السجن)، /clothes (سترتي وبدلتي وخوذتي أمامي)، /car <الاسم> (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer: تأتي أمامي).
+TMS03	للجميع: /time <0-24> (بخطوات ساعتين)، /rain on|off (ينفّذه المضيف، ويتبعه العالم).

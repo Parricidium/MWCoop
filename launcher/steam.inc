@@ -210,6 +210,7 @@ static bool SteamUp()
     if (!sapi::dll) {
         std::wstring p = g_gameDir + L"steam_api64.dll";
         sapi::dll = LoadLibraryExW(p.c_str(), NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);   // (chemin complet ; ses dependances : son dossier, System32)
+        if (!sapi::dll && GetLastError() == ERROR_INVALID_PARAMETER) sapi::dll = LoadLibraryExW(p.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);   // (Windows 7 sans KB2533623 : ces drapeaux n'existent pas)
         if (!sapi::dll) {
             g_steamWhy = T(L"steam_api64.dll introuvable dans le dossier du jeu", L"steam_api64.dll not found in the game folder");
             TestLog("steam : %s introuvable (erreur %lu)", Narrow(p, CP_UTF8).c_str(), GetLastError());

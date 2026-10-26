@@ -180,6 +180,7 @@ static const LobbyOptDef kLobbyOptDefs[] = {
     { "Vocal", 1, false }, { "VocalPortee", 35, false }, { "VolumeVocal", 100, false }, { "GainMicro", 100, false },
     { "VocalActivation", 0, false }, { "VocalSeuil", 12, false }, { "Ronflements", 1, false }, { "Armoire", 1, false, 1 },
     { "VoirVisages", 1, false }, { "CarteMaintenir", 0, false }, { "Marqueurs", 1, false }, { "ModsAuto", 0, false },
+    { "TrichesHote", 0, true },   // (26/10 : a la fin, les indices des autres ne bougent pas ; montree sous Triches)
 };
 static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));
 static bool LobbyOptOn(const LobbyOptDef &d) { return d.only != (g_game == GAME_MSC ? 1 : 2); }

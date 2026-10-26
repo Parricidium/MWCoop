@@ -866,9 +866,10 @@ static void DrawHome(Graphics &g)
         Pen pen(on ? kAcc : TH(choiceBorder), on ? 1.6f : 1.0f); g.DrawPath(&pen, &p);
         Icon(g, steam ? IC_STEAM : IC_WIFI, b.r.X + 28, b.r.Y + 32, 24, on ? kAcc : kInk, 1.8f);
         Text(g, steam ? L"STEAM" : L"IP / VPN", RectF(b.r.X + 54, b.r.Y + 11, 160, 22), 15, FontStyleBold, kInk, StringAlignmentNear);
-        if (steam) { Graphics &mg = MeasureG(); float sw = MeasureW(mg, L"STEAM", 15, FontStyleBold); Text(g, T(L"conseillé", L"recommended"), RectF(b.r.X + 58 + sw, b.r.Y + 13, 120, 20), 11.5f, FontStyleBold, kOk, StringAlignmentNear); }
-        Text(g, steam ? T(L"Invitations, sans port ni pare-feu", L"Invites, no port or firewall") : T(L"Réseau local, Radmin, Hamachi…", L"LAN, Radmin, Hamachi…"),
-             RectF(b.r.X + 54, b.r.Y + 33, b.r.Width - 60, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        bool w7 = steam && IsWin7();   // (Windows 7 : Steam Legacy ne joint plus les serveurs de Valve -- le dire sur la tuile)
+        if (steam && !w7) { Graphics &mg = MeasureG(); float sw = MeasureW(mg, L"STEAM", 15, FontStyleBold); Text(g, T(L"conseillé", L"recommended"), RectF(b.r.X + 58 + sw, b.r.Y + 13, 120, 20), 11.5f, FontStyleBold, kOk, StringAlignmentNear); }
+        Text(g, w7 ? T(L"Windows 7 : prends IP / VPN", L"Windows 7: use IP / VPN") : steam ? T(L"Invitations, sans port ni pare-feu", L"Invites, no port or firewall") : T(L"Réseau local, Radmin, Hamachi…", L"LAN, Radmin, Hamachi…"),
+             RectF(b.r.X + 54, b.r.Y + 33, b.r.Width - 60, 20), 12.5f, w7 ? FontStyleBold : FontStyleRegular, w7 ? kWarn : kGrey, StringAlignmentNear);
     }
     RectF row(net.X + 20, net.Y + 126, net.Width - 40, 44);
     if (!g_steamNet) {
@@ -878,6 +879,12 @@ static void DrawHome(Graphics &g)
         SmallLabel(g, T(L"CODE", L"CODE"), RectF(row.X + row.Width - 142, row.Y, 40, row.Height), kGrey);   // (code de session d'un salon privé, 0.96.4)
         g_fields[2].r = RectF(row.X + row.Width - 100, row.Y, 100, row.Height);
         DrawField(g, 2, L"");
+    } else if (IsWin7()) {   // Windows 7 : a la place de l'option de lancement, pourquoi Steam ne marchera pas (JD 26/10)
+        g_fields[1].r = g_fields[2].r = RectF(0, 0, 0, 0);
+        GraphicsPath p; RoundRect(p, row, 12);
+        SolidBrush fb(WithA(kWarn, 0.12f)); g.FillPath(&fb, &p);
+        Pen pen(WithA(kWarn, 0.6f), 1.0f); g.DrawPath(&pen, &p);
+        Para(g, Win7SteamText(), RectF(row.X + 14, row.Y + 4, row.Width - 28, row.Height - 6), 12, kWarn);
     } else {   // option de lancement Steam : pour qu'une invitation ouvre MWCoop
         g_fields[1].r = g_fields[2].r = RectF(0, 0, 0, 0);
         bool hot = g_uiHot == UI_HOME_STEAMOPT;

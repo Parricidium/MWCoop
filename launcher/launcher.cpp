@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -403,6 +403,22 @@ static std::string g_wine;       // version de Wine ("" : Windows)
 static std::string g_wineInfo;   // pour le journal : hote, build, Steam Deck, prefixe
 static bool g_wineSim;           // essai MWCOOP_WINE
 static bool IsWine() { return !g_wine.empty(); }
+// Windows 7 (ou Vista) : Steam Legacy n'atteint plus certains serveurs de Valve (salons et P2P en echec, erreur P2P 4) --
+// le reseau Steam y est deconseille (JD 26/10, etude de [Project & Fesability]). Pas Wine (il annonce la version de son
+// prefixe). Essai : MWCOOP_WIN7=1.
+static bool IsWin7()
+{
+    static int v = -1;
+    if (v < 0) {
+        typedef LONG(WINAPI * RtlGetVersionF)(OSVERSIONINFOW *);
+        OSVERSIONINFOW ov = { sizeof(ov) };
+        if (RtlGetVersionF rgv = (RtlGetVersionF)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion")) rgv(&ov);
+        wchar_t e[4] = L"";
+        v = GetEnvironmentVariableW(L"MWCOOP_WIN7", e, 4) && e[0] == L'1' ? 1 : (ov.dwMajorVersion == 6 && ov.dwMinorVersion <= 1 && !IsWine()) ? 1 : 0;
+    }
+    return v == 1;
+}
+static const wchar_t *Win7SteamText() { return T(L"Windows 7 : le réseau Steam ne marche plus avec Steam Legacy, utilise le mode IP (Radmin VPN ou ZeroTier)", L"Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)"); }
 static void WineDetect()
 {
     typedef const char *(__cdecl *StrFn)();
@@ -5097,6 +5113,7 @@ static void LobbyRowLabel(const LobbyOptDef &d, const GfxRow *r, std::wstring &l
 {
     static const struct { const char *key; const wchar_t *fr, *en, *sfr, *sen; } kShort[] = {
         { "Triches", L"Triches (F7)", L"Cheats (F7)", NULL, NULL },
+        { "TrichesHote", L"Hôte seulement", L"Host only", NULL, NULL },
         { "Renverser", L"Les voitures renversent les joueurs", L"Cars run players over", L"Amis et PNJ", L"Friends and NPCs" },
         { "PvP", L"Coups de poing entre joueurs", L"Punches between players", NULL, NULL },
         { "VenttiEnjeux", L"Ventti : enjeux pour tout le groupe", L"Ventti: stakes for the whole group", NULL, NULL },
@@ -5250,7 +5267,8 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
     };
     if (which == 0) {
         caption(T(L"RÈGLES", L"RULES"), !host);
-        for (const char *k : { "ArgentDepart", "Triches", "Renverser", "PvP", "CeinturesArriere" }) row(k, false);   // (ceintures arriere : MWC, cachees sur MSC par row)
+        for (const char *k : { "ArgentDepart", "Triches", "TrichesHote", "Renverser", "PvP", "CeinturesArriere" })   // (ceintures arriere : MWC, cachees sur MSC par row)
+            if (strcmp(k, "TrichesHote") || val("Triches") == 1) row(k, false);   // (hote seulement : sous Triches, quand elles sont autorisees)
         if (!host) for (const char *k : { "Difficulte", "VitesseVitres" }) row(k, false);   // (lecture seule ; l'hote les regle dans la carte de droite -- 1.8.9)
         y += 6;
         caption(T(L"JEUX & AJOUTS", L"GAMES & ADDITIONS"), false);
@@ -5307,7 +5325,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
             swprintf_s(ab, L"%d / %d", onA, kAjoutN);
             struct Ro { const wchar_t *lab; std::wstring v; bool on; } ro[6] = {
                 { T(L"Argent départ", L"Start money"), hostVal("ArgentDepart") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("ArgentDepart") == 1 },
-                { T(L"Triches", L"Cheats"), hostVal("Triches") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("Triches") == 1 },
+                { T(L"Triches", L"Cheats"), !hostVal("Triches") ? T(L"Non", L"No") : hostVal("TrichesHote") == 1 ? T(L"Hôte", L"Host") : T(L"Oui", L"Yes"), hostVal("Triches") == 1 },
                 { T(L"Renverser", L"Run over"), hostVal("Renverser") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("Renverser") == 1 },
                 { T(L"Coups de poing", L"Punches"), hostVal("PvP") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("PvP") == 1 },
                 { T(L"Ventti partagé", L"Shared Ventti"), hostVal("VenttiEnjeux") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("VenttiEnjeux") == 1 },
@@ -6722,6 +6740,8 @@ static void OnButton(int id)
         if (g_steamNet && g_focus == 1) g_focus = -1;
         if (!g_steamNet) SteamDown();
         else if (!wasSteam && GetPrivateProfileIntW(L"Lanceur", L"GuideSteam", 1, g_iniLauncher.c_str()) != 0) SteamGuideOpen();
+        if (g_steamNet && IsWin7()) SetStatus(K_WARN, L"%s", Win7SteamText());
+        else
         SetStatus(K_NORMAL, g_steamNet ? T(L"Partie par Steam : salon et invitations ici", L"Game through Steam: lobby and invites right here")
                                         : T(L"Partie par adresse IP (local, Radmin, Hamachi...)", L"Game through IP address (LAN, Radmin, Hamachi...)"));
         break;
@@ -7125,7 +7145,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // winhttp.dll (UnityDoorstop) et MWCoop son version.dll. Charges par erreur dans le lanceur, ils y restaient
     // verrouilles (une reinstallation de MSCLoader echouait). winhttp et winmm sont charges a la demande (/DELAYLOAD),
     // donc apres ceci.
-    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
+    // (cherchee a l'execution : un Windows 7 sans KB2533623 ne l'a pas, et l'import direct empechait le lanceur de demarrer ;
+    // la, winhttp et winmm de System32 charges d'avance par leur chemin, pour que ceux du jeu ne soient jamais pris)
+    typedef BOOL(WINAPI * SetDefDirsF)(DWORD);
+    if (SetDefDirsF sdd = (SetDefDirsF)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetDefaultDllDirectories")) sdd(LOAD_LIBRARY_SEARCH_SYSTEM32);
+    else {
+        wchar_t sys[MAX_PATH];
+        UINT n = GetSystemDirectoryW(sys, MAX_PATH);
+        if (n && n < MAX_PATH - 16) for (const wchar_t *d : { L"\\winhttp.dll", L"\\winmm.dll" }) LoadLibraryW((std::wstring(sys) + d).c_str());
+    }
     SetDllDirectoryW(L"");
     InitializeCriticalSection(&g_cs);
     InitializeCriticalSection(&g_lcs);
@@ -7641,6 +7669,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"steam-refus") SetStatus(K_ERR, L"%s", SteamInitWhy().c_str());   // (raison d'un refus de Steam, telle que ce PC la verrait)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)
+        else if (st == L"reglages-triches") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-coop"); g_gfxVal["Triches"] = 1; g_gfxVal["TrichesHote"] = 1; }   // (carte Regles, triches autorisees)
         else if (!wcsncmp(st.c_str(), L"reglages-", 9)) { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(st); }   // reglages-jeu|image|son|coop|touches|theme|lanceur|recherche
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
         else if (st == L"guide-recherche") { g_tab = TAB_WIKI; g_wikiSearch = L"mods"; g_wikiFocus = true; }   // (champ Chercher de l'en-tete)
@@ -7728,8 +7757,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"graphismes-drone" || st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_setTab = SET_TOUCHES; }   // (camera drone, touches)
         else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_setTab = SET_IMAGE; }         // (ray tracing et ombres)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
-        else if (st == L"salon" || st == L"salon-nouvelle" || st == L"salon-invite" || st == L"salon-invite-hote" || st == L"salon-udp" || st == L"salon-options" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite (salon-invite-hote : ses options de l'hote)
-            bool host = st == L"salon" || st == L"salon-nouvelle" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-mods-voyage" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir";   // (salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods ; salon-public : sans code ; salon-max : 12 joueurs ; salon-moi : mes options ; salon-choisir : ajouts au choix)
+        else if (st == L"salon" || st == L"salon-nouvelle" || st == L"salon-invite" || st == L"salon-invite-hote" || st == L"salon-udp" || st == L"salon-options" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir" || st == L"salon-triches" || st == L"salon-invite-triches" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite (salon-invite-hote : ses options de l'hote)
+            bool host = st == L"salon" || st == L"salon-nouvelle" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-mods-voyage" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir" || st == L"salon-triches";   // (salon-triches / salon-invite-triches : triches pour l'hote seulement ; salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods ; salon-public : sans code ; salon-max : 12 joueurs ; salon-moi : mes options ; salon-choisir : ajouts au choix)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
                         { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38, UDP_OK },
@@ -7746,6 +7775,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"salon-invite-hote") g_lobbyOptTab = 0;
             if (st == L"salon-choisir") { g_lobbyAjoutsPick = true; g_lobbyOpt["AjoutMusee"] = 0; }
             if (!host) { for (auto &d : kLobbyOptDefs) if (d.host) g_hostOpt[d.key] = d.def; g_hostOpt["Triches"] = 1; g_hostOpt["AjoutMusee"] = 0; }
+            if (st == L"salon-triches") { g_lobbyOpt["Triches"] = 1; g_lobbyOpt["TrichesHote"] = 1; }
+            if (st == L"salon-invite-triches") g_hostOpt["TrichesHote"] = 1;
             g_tab = TAB_LOBBY;
             g_lobbySinceGen = g_lobbyGen; g_lobbySinceT = GetTickCount() - 252000;   // (invite : dans ce salon depuis 4 min 12)
             if (st == L"salon-dl") g_peers[2].dl = 45;

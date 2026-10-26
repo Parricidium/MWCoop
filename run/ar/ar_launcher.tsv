@@ -2105,6 +2105,16 @@ A mod missing from this list? Try it: if it adds an object the others can't see,
 Punches between players	اللكمات بين اللاعبين
 Off by default. The host allows them in Game and sharing (\"Punches between players\"); their guests follow that choice. The game's punch hits a player on foot right in front of you: they step back a little, and on the 5th punch within 20 s they die (then respawn as usual).	معطّلة افتراضياً. يسمح بها المضيف في «اللعبة والمشاركة» («اللكمات بين اللاعبين»)؛ ويتبع ضيوفه هذا الاختيار. لكمة اللعبة تصيب لاعباً راجلاً أمامك مباشرة: يتراجع قليلاً، وعند اللكمة الخامسة خلال 20 ث يموت (ثم يعود كالمعتاد).
 The 3D model of the Sorbet's rear seat belts (My Winter Car).	النموذج ثلاثي الأبعاد لأحزمة الأمان الخلفية في Sorbet ‏(My Winter Car).
+Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)	Windows 7: شبكة Steam لم تعد تعمل مع Steam Legacy، استخدم وضع IP ‏(Radmin VPN أو ZeroTier)
+Windows 7: use IP / VPN	Windows 7: استخدم IP / VPN
+Cheats: host only	الغش: المضيف فقط
+Guests lose F7 and the / commands	يفقد الضيوف F7 وأوامر /
+Host only	المضيف فقط
+Host: /setmoney <player> <amount> sets a player's money (their own included).	المضيف: ‎/setmoney <لاعب> <مبلغ> يحدد مال لاعب (بما في ذلك ماله).
+\"Cheats: host only\" (under \"Allow cheats\", in Settings and in the lobby): the host keeps the cheats, their guests lose the F7 panel and the / commands.	«الغش: المضيف فقط» (تحت «السماح بالغش»، في الإعدادات وفي الردهة): يحتفظ المضيف بالغش، ويفقد ضيوفه لوحة F7 وأوامر /.
+Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema).	اللوحة (F7) أو الدردشة: /tp <لاعب>، /bring <لاعب>، /place <مكان> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema).
+/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail), /clothes (my jacket, coverall and helmet in front of me), /car <name> (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer: it comes in front of me).	/money <المبلغ>، /heal (الجوع، العطش، التعب، التوتر… إلى الصفر)، /free (لم تعد مطلوباً، خروج من السجن)، /clothes (سترتي وبدلتي وخوذتي أمامي)، /car <الاسم> (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer: تأتي أمامي).
+For everyone: /time <0-24> (2-hour steps), /rain on|off (done by the host, the world follows).	للجميع: /time <0-24> (بخطوات ساعتين)، /rain on|off (ينفّذه المضيف، ويتبعه العالم).
 My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?	لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟
 Different version (you %s, host %s): update	إصدار مختلف (لديك %s، لدى المضيف %s): حدّث
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.
