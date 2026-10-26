@@ -326,6 +326,7 @@ namespace MWCoop
         static int psStep; static float psLogAt;
         static int prStep; static float prLogAt; static Quaternion prLastRot;
         static int caStep, caBuy; static float caLogAt, caMoney;
+        static int bgStep; static float bgLogAt;
         static void MscMontage(float t)
         {
             string[] list = Config.Get("Test", "Montages", "SATSUMA(557kg, 248)/Dashboard/trigger_dashboard|db:Database/DatabaseMechanics/Dashboard;"
@@ -1266,6 +1267,29 @@ namespace MWCoop
                     if (t > buys[i] + Config.GetFloat("Test", "CaissePaie", 4f) + 3f && caBuy == i * 3 + 2) { caBuy++; Log.Info("autotest caisse : achat " + (i + 1) + ", apres : Total " + tot.Value + " [" + reg.ActiveStateName + "], argent " + caMoney.ToString("F2") + " -> " + Game.GlobalFloat("PlayerMoney").ToString("F2")); }
                 }
                 if (t > caLogAt && t > 25f) { caLogAt = t + 10f; Log.Info("autotest caisse : caisse [" + reg.ActiveStateName + "] Total " + tot.Value + " PriceTotal " + pt.Value + (reg.enabled ? "" : " (automate coupe)") + (reg.gameObject.activeInHierarchy ? "" : " (eteinte)")); }
+                return;
+            }
+            // ([Test] Autotest=mscbouge, 2 joueurs -- objets restes a leur place chez l'invite, Ace/WIGA 26/10) : l'hote deplace l'objet
+            // d'ID [Test] BougeObjet (beercase3) de 2 m vers le haut de BougeA (150 s) a +5 s (Props.TestCarry, comme a la main) ;
+            // chacun note toutes les 3 s ou est l'objet de cet ID et sa cle.
+            if (mode == "mscbouge")
+            {
+                Rigidbody ob = null;
+                foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                {
+                    PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use");
+                    HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null;
+                    if (iv != null && iv.Value == Config.Get("Test", "BougeObjet", "beercase3")) { ob = r; break; }
+                }
+                float ba = Config.GetFloat("Test", "BougeA", 150f);
+                if (Net.Session.IsHost && ob != null && t > ba && t < ba + 5f)
+                {
+                    string key = Props.TestKeyOf(ob);
+                    if (key != null) Props.TestCarry(key, t);
+                    if (bgStep == 0) { bgStep = 1; Log.Info("autotest bouge : l'hote deplace " + key); }
+                    ob.transform.position += Vector3.up * 0.4f * Time.deltaTime * 2f;
+                }
+                if (t > bgLogAt && t > 40f) { bgLogAt = t + 3f; Log.Info("autotest bouge : " + (ob != null ? ob.name + " en " + ob.position.ToString("F2") + ", " + Props.TestKeyInfo(ob) : "introuvable")); }
                 return;
             }
             if (mode == "mscposte") { FleetariMsc.Test(mode, t); return; }   // (commande par la poste partagee, Kamixak et Mikol 25/10)

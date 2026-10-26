@@ -258,6 +258,9 @@ namespace MWCoop
             return k;
         }
 
+        // Essais : cle d'un corps suivi ici (null : pas suivi).
+        public static string TestKeyOf(Rigidbody rb) { Prop p; return byBody.TryGetValue(rb, out p) ? p.Id : null; }
+
         // Essais (Autotest=mscprise) : cle et ID de sauvegarde d'un corps, ici.
         public static string TestKeyInfo(Rigidbody rb)
         {
