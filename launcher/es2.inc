@@ -187,7 +187,14 @@ static std::vector<Es2Issue> Es2Check(const Es2File &f, Es2Ctx &c)
             bool outside = !badP && (c.r ? (p[0] < c.r->xmin || p[0] > c.r->xmax || p[2] < c.r->zmin || p[2] > c.r->zmax || p[1] > c.r->ymax) : (fabsf(p[0]) > 1e5f || fabsf(p[2]) > 1e5f));
             // piece montee de My Winter Car (<ID>AID > 0) : le jeu la remet sur son point de montage -- pas deplacee ; NaN : la voiture
             bool mounted = false;
-            if (c.r && c.r->mwc && e.tag.size() > 3 && !e.tag.compare(e.tag.size() - 3, 3, "POS")) {
+            const float *mountAt = NULL;   // (montee ailleurs que sur la voiture : sa position si NaN)
+            static const float kFuseBox[3] = { -12.2f, 1.2f, 8.8f };
+            if (c.r && c.r->mwc && e.tag.size() > 3 && !e.tag.compare(e.tag.size() - 3, 3, "Pos")) {   // (porte-fusible : <nom>SlotID >= 0 = dans une boite a fusibles -- essai de [MWC] ; NaN : la boite de la maison, le jeu le remet a son emplacement)
+                auto si = idx.find(e.tag.substr(0, e.tag.size() - 3) + "SlotID");
+                if (si != idx.end() && Es2Kind(f, f.e[si->second]) == ES2_INT && Es2I32(f, f.e[si->second]) >= 0) { mounted = true; mountAt = kFuseBox; }   // (emplacements comptes depuis 0 : 1-7 maison, 8-11 appartement)
+            }
+            if (mounted) {}
+            else if (c.r && c.r->mwc && e.tag.size() > 3 && !e.tag.compare(e.tag.size() - 3, 3, "POS")) {
                 auto ai = idx.find(e.tag.substr(0, e.tag.size() - 3) + "AID");
                 mounted = ai != idx.end() && Es2Kind(f, f.e[ai->second]) == ES2_INT && Es2I32(f, f.e[ai->second]) > 0;
             } else if (c.r && !c.r->mwc) {   // (My Summer Car : <piece>Installed vrai -- essai de [MSC] : le jeu la remet sur son point de montage)
@@ -208,7 +215,8 @@ static std::vector<Es2Issue> Es2Check(const Es2File &f, Es2Ctx &c)
                     auto car = mounted && c.r->carTag ? idx.find(c.r->carTag) : idx.end();
                     float cp[3] = { 0, 0, 0 };
                     if (car != idx.end() && f.e[car->second].len >= 47) for (int k = 0; k < 3; k++) cp[k] = Es2F32(b, f.e[car->second].data + 6 + 4 * k);
-                    if (car != idx.end() && !Es2Bad(cp[0]) && !Es2Bad(cp[1]) && !Es2Bad(cp[2])) { x = cp[0]; y = cp[1]; z = cp[2]; }   // (montee : la voiture)
+                    if (mountAt) { x = mountAt[0]; y = mountAt[1]; z = mountAt[2]; }
+                    else if (car != idx.end() && !Es2Bad(cp[0]) && !Es2Bad(cp[1]) && !Es2Bad(cp[2])) { x = cp[0]; y = cp[1]; z = cp[2]; }   // (montee : la voiture)
                     else if (mounted && c.r->carTag) { for (int k = 0; k < c.r->nspots; k++) if (!strcmp(c.r->spots[k].tag, c.r->carTag)) sp = &c.r->spots[k]; x = sp ? sp->x : 0; y = sp ? sp->y : 0; z = sp ? sp->z : 0; }
                     else if (sp) { x = sp->x; y = sp->y; z = sp->z; }
                     else {
