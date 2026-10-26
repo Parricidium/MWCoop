@@ -991,7 +991,26 @@ namespace MWCoop
                     + ", repere voiture " + carRel + ", ecart vis-piece max " + maxD.ToString("F2") + " m, maillage de la piece " + bodyOn + "/" + body + (alone ? " -> VIS SEULES" : "") + (moved ? " -> DECALEES de " + shift.ToString("F2") + " m" : ""));
             }
             Log.Info("autotest : mscboulons, " + groups + " groupes Bolts (" + n + " notes), " + shown + " avec vis visibles, " + far + " loin de leur piece (> 0.6 m), " + lone + " vis seules (piece invisible), " + movedN + " decalees dans la voiture" + (car != null ? ", voiture en " + car.position.ToString("F1") + " " + car.velocity.magnitude.ToString("F1") + " m/s" + (car.isKinematic ? " (copie)" : "") : ""));
+            // (corps BoltPM de chaque vis -- Rigidbody + SphereCollider : cinematiques ? interpoles ? decales de leur pose locale
+            // du premier releve ? Markos 26/10 : boulons couches au sol, un boulon a cote du tambour, vis de roue a 5,3 m)
+            int bn = 0, bKin = 0, bInt = 0, bTrig = 0, bDrift = 0, bLog = 0;
+            foreach (Rigidbody rb in Resources.FindObjectsOfTypeAll<Rigidbody>())
+            {
+                if (rb.name != "BoltPM" || rb.gameObject.hideFlags != HideFlags.None || rb.transform.parent == null) continue;
+                bn++;
+                if (rb.isKinematic) bKin++;
+                if (rb.interpolation != RigidbodyInterpolation.None) bInt++;
+                Collider bc = rb.GetComponent<Collider>(); if (bc != null && bc.isTrigger) bTrig++;
+                Vector3 lp = rb.transform.localPosition, l0;
+                if (!boltLocal.TryGetValue(rb, out l0)) { boltLocal[rb] = lp; l0 = lp; }
+                float d = (lp - l0).magnitude;
+                if (d < 0.05f && rb.isKinematic) continue;
+                bDrift++;
+                if (bLog++ < 12) Log.Info("autotest : mscboulons, corps " + Recon.Path(rb.transform) + (rb.gameObject.activeInHierarchy ? "" : " (inactif)") + " : decale de " + d.ToString("F2") + " m de sa pose locale, " + (rb.isKinematic ? "cinematique" : "LIBRE v " + rb.velocity.magnitude.ToString("F1")) + ", interpolation " + rb.interpolation + ", pose physique a " + Vector3.Distance(rb.position, rb.transform.position).ToString("F2") + " m du transform");
+            }
+            Log.Info("autotest : mscboulons, corps BoltPM : " + bn + ", cinematiques " + bKin + ", interpoles " + bInt + ", colliders declencheurs " + bTrig + ", decales ou libres " + bDrift);
         }
+        static readonly System.Collections.Generic.Dictionary<Rigidbody, Vector3> boltLocal = new System.Collections.Generic.Dictionary<Rigidbody, Vector3>();
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -1295,6 +1314,30 @@ namespace MWCoop
                         HutongGames.PlayMaker.FsmGameObject rh = hf != null ? hf.FsmVariables.FindFsmGameObject("RaycastHitObject") : null;
                         if (best != null && rh != null && cam != null) { best.transform.position = cam.position + cam.forward * 0.6f; rh.Value = best.gameObject; Game.SetState(hf, "State 1"); caSac = best.name; }
                         Log.Info("autotest caisse : sac " + (best != null ? best.name + " a " + Mathf.Sqrt(bd).ToString("F1") + " m" : "aucun") + " pris par l'invite, main " + (hf != null ? hf.ActiveStateName : "?"));
+                    }
+                    // ([Test] CaisseSacHote=<s> chez l'hote : il prend aussi le sac le plus proche, par la main du jeu, pendant que l'invite
+                    // le tient -- deux porteurs, JD et GG 26/10 15:57 ; lache 8 s apres)
+                    float csh = Config.GetFloat("Test", "CaisseSacHote", 0f);
+                    if (cHost && csh > 0f && t > csh && caSacStep == 0)
+                    {
+                        caSacStep = 1;
+                        Transform cam = PlayerSync.LocalCamera; Rigidbody best = null; float bd = 1e9f;
+                        foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                            if (r.name.StartsWith("shopping") && cam != null && (r.position - cam.position).sqrMagnitude < bd) { bd = (r.position - cam.position).sqrMagnitude; best = r; }
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        HutongGames.PlayMaker.FsmGameObject rh = hf != null ? hf.FsmVariables.FindFsmGameObject("RaycastHitObject") : null;
+                        if (best != null && rh != null && cam != null) { rh.Value = best.gameObject; Game.SetState(hf, "State 1"); }
+                        Log.Info("autotest caisse : sac " + (best != null ? best.name + " a " + Mathf.Sqrt(bd).ToString("F1") + " m" : "aucun") + " pris aussi par l'hote, main " + (hf != null ? hf.ActiveStateName : "?"));
+                    }
+                    if (cHost && csh > 0f && t > csh + 8f && caSacStep == 1)
+                    {
+                        caSacStep = 2;
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        string before = hf != null ? hf.ActiveStateName : "?";
+                        if (hf != null) Game.SetState(hf, before == "Item picked" ? "Drop item" : "Drop part");
+                        Log.Info("autotest caisse : sac lache par l'hote, main " + before + " -> " + (hf != null ? hf.ActiveStateName : "?"));
                     }
                     if (!cHost && caSacStep == 1 && t < cs + 15f) { GameObject pl = Game.PlayerGo; if (pl != null) pl.transform.Rotate(0f, 40f * Time.deltaTime, 0f, Space.World); }
                     if (!cHost && caSacStep == 1 && t > cs + 15f)
