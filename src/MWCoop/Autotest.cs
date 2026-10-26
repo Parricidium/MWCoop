@@ -830,6 +830,58 @@ namespace MWCoop
         }
         static readonly System.Collections.Generic.Dictionary<Transform, Vector3> boltRef = new System.Collections.Generic.Dictionary<Transform, Vector3>();
         static int boltStep, boltBreak, wheelTry; static float wheelAt;
+        static void MscSaveTags()
+        {
+            GameObject db = Game.FindAny("Database");
+            int n = 0;
+            if (db != null)
+                foreach (Transform cat in db.transform)
+                    foreach (Transform e in cat)
+                    {
+                        var objs = new System.Collections.Generic.List<string>(); var tags = new System.Collections.Generic.List<string>();
+                        foreach (PlayMakerFSM f in e.GetComponentsInChildren<PlayMakerFSM>(true))
+                        {
+                            foreach (HutongGames.PlayMaker.FsmGameObject g in f.FsmVariables.GameObjectVariables)
+                                if (g.Value != null && !objs.Contains(g.Name + "=" + g.Value.name)) objs.Add(g.Name + "=" + g.Value.name);
+                            foreach (HutongGames.PlayMaker.FsmString s in f.FsmVariables.StringVariables)
+                                if (!string.IsNullOrEmpty(s.Value) && !tags.Contains(s.Name + "=" + s.Value)) tags.Add(s.Name + "=" + s.Value);
+                        }
+                        Log.Info("autotest : sauvetags, " + cat.name + "/" + e.name + " | objets " + string.Join(", ", objs.ToArray()) + " | textes " + string.Join(", ", tags.ToArray()));
+                        n++;
+                    }
+            Log.Info("autotest : sauvetags, " + n + " entrees Database");
+            foreach (Terrain tr in Terrain.activeTerrains)
+            {
+                TerrainData td = tr.terrainData;
+                float[,] h = td.GetHeights(0, 0, td.heightmapWidth, td.heightmapHeight);
+                float lo = float.MaxValue, hi = float.MinValue;
+                foreach (float v in h) { if (v < lo) lo = v; if (v > hi) hi = v; }
+                Vector3 p = tr.transform.position;
+                Log.Info("autotest : sauvetags, terrain " + tr.name + " en " + p.ToString("F1") + " taille " + td.size.ToString("F1") + ", hauteurs " + (p.y + lo * td.size.y).ToString("F1") + " a " + (p.y + hi * td.size.y).ToString("F1"));
+            }
+            // (MSC : pas de Terrain Unity, un sol en maillages -- bornes des colliders de la couche Terrain, et racines qui les portent)
+            Bounds wb = new Bounds(); bool any = false; var roots = new System.Collections.Generic.Dictionary<string, int>();
+            int tl = LayerMask.NameToLayer("Terrain");
+            foreach (Collider col in Object.FindObjectsOfType<Collider>())
+            {
+                if (col.isTrigger || col.gameObject.layer != tl) continue;
+                if (!any) { wb = col.bounds; any = true; } else wb.Encapsulate(col.bounds);
+                string rn = col.transform.root.name; int k; roots.TryGetValue(rn, out k); roots[rn] = k + 1;
+            }
+            var rs = new System.Text.StringBuilder(); foreach (var kv in roots) rs.Append(kv.Key).Append(" x").Append(kv.Value).Append(", ");
+            Log.Info("autotest : sauvetags, sol (couche Terrain " + tl + ") : " + (any ? wb.min.ToString("F0") + " a " + wb.max.ToString("F0") : "aucun") + " | " + rs);
+            foreach (string sp in Config.Get("Test", "SauvePoints", "-14.5,6.5;-16.2,11.4;-16.6,1.4;-6,10;608,-798").Split(';'))
+            {
+                string[] c = sp.Split(','); float x, z;
+                if (c.Length < 2 || !float.TryParse(c[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out x) || !float.TryParse(c[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out z)) continue;
+                // (tout ce que croise un rayon vertical de y=80 a y=-120 : toit, plancher, sol, du haut vers le bas)
+                RaycastHit[] hits = Physics.RaycastAll(new Vector3(x, 80f, z), Vector3.down, 200f);
+                System.Array.Sort(hits, (a, b) => b.point.y.CompareTo(a.point.y));
+                var sb = new System.Text.StringBuilder();
+                foreach (RaycastHit h in hits) { if (h.collider.isTrigger) continue; sb.Append(sb.Length > 0 ? " ; " : "").Append(h.point.y.ToString("F2")).Append(" ").Append(Recon.Path(h.collider.transform)); }
+                Log.Info("autotest : sauvetags, point (" + x + ", " + z + ") : " + (sb.Length > 0 ? sb.ToString() : "rien"));
+            }
+        }
         static void MscBoltsScan()
         {
             Rigidbody car = VehicleSync.Body("SATSUMA");
@@ -961,6 +1013,14 @@ namespace MWCoop
                         Log.Info("autotest : mscceintures, " + rb.name + " : " + n + " objets, ceinture passager " + Seats.TestBeltOf(rb.transform));
                     }
                 }
+                return;
+            }
+            // ([Test] Autotest=mscsauvetags : a 40 s, pour le controle des sauvegardes du lanceur ([Launcher], lot B, 26/10) --
+            // table des entrees Database (nom -> objets et textes de cles de leurs automates : XBolts / XTightness / x(Clone)Installed),
+            // bornes et hauteurs du terrain, sol et toit aux points surs de [Test] SauvePoints (x,z;x,z...))
+            if (mode == "mscsauvetags")
+            {
+                if (t > 40f && step == 0) { step = 1; MscSaveTags(); }
                 return;
             }
             // ([Test] Autotest=mscboulons : ou sont les vis visibles des pieces de la Database (Bolts/BoltPM/boltN) par rapport a la

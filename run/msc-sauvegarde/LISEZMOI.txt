@@ -1,0 +1,55 @@
+Sauvegarde My Summer Car (Easy Save 2) -- regles pour « Verifier la sauvegarde » du lanceur ([MSC], 26/10)
+Releve sur la sauvegarde Satsuma montee et une partie neuve (Voitures-MSCoop), table des pieces relevee en jeu
+(Autotest=mscsauvetags), essais de chargement faits en jeu.
+
+FORMAT (defaultES2File.txt, items.txt ; pas chiffre)
+  entree = '~' (0x7E) + 1 octet longueur du tag + tag (latin1) + int32 longueur du corps + corps
+  le corps finit par l'octet '{' (0x7B) qui ouvre l'entree suivante (compte dans la longueur ; la 1re entree n'en a pas devant)
+  corps simple = 0xFF + int32 hash du type + valeur :
+    9c7c4dad bool (1 octet)    6bd73e6e float (4)    5608a8e2 int (4)    eef1e9fd string (longueur 7 bits + texte)
+    46dc66ec Vector3 (3 float)  314bcf32 Color (4 float)
+    76fa7a09 Transform : 1 octet nombre de champs (4) + position 3 float + rotation 4 float (x,y,z,w) + echelle 3 float
+             + tag Unity (longueur 7 bits + texte : PART, ITEM, TOOL, Untagged, Player)
+  liste 'S' (0x53) : 0x53 0xFF + hash string + 0x00 + int32 nombre + textes ("int(0)".."int(8)" pour les vis)
+  'R' (0x52) : tableaux (StoreInventory, RallyTimes...) -- ne pas toucher
+  es2dump.py : lecteur de reference ; patch.py : modification sur place (meme longueur d'octets)
+
+1. POSITIONS : toute entree Transform (hash 76fa7a09) de defaultES2File.txt et items.txt est un objet du monde,
+   SAUF WeatherPos (nuage de meteo, normalement a x ~ -12000, y = -205). meshsave.txt (toles deformees) : ignorer.
+2. LIMITES : sol du monde (couche Terrain) de (-2917, -26, -2255) a (3108, 79, 3639).
+   Sous la carte : y < -40. Hors du monde : x < -3100 ou x > 3300, z < -2450 ou z > 3850.
+   Points surs (positions d'une partie neuve, sol verifie en jeu) :
+     CarTransform (SATSUMA)      -16.23, -0.28, 11.37   garage de la maison, sol -0.57 (PAS z ~ 1.4 : fosse a -2.3)
+     VanTransform (HAYOSIKO)     608.0, -3.38, -798.0
+     MuscleTransform (FERNDALE)  1554.0, 4.77, 723.58
+     GifuTransform1 (GIFU)       -1527.37, 5.29, 1324.64
+     RusckoTransform (RUSCKO)    -169.93, -3.0, 1040.63
+     TractorTransform (KEKMET)   55.41, -0.98, -86.23   (FlatbedTransform 64.24, -1.31, -80.0)
+     BoatTransform               9.59, -4.52, 149.79
+     JunkCar1..4Transform        907.61, 1.62, -936.36 / 807.36, -1.0, -1115.79 / -1416.79, 4.93, -524.32 / -1472.89, 9.07, -610.92
+     PlayerTransform             -11.19, -0.29, 13.09
+     pieces et objets (PART, ITEM, TOOL, le reste) : sol du garage, x de -15.5 a -13.5, z de 5 a 9, y = -0.27
+       (0,3 m au-dessus du sol ; ecarter de 0,4 m chaque objet replace)
+   Rotation invalide (NaN, ou quaternion nul) : (0, 0, 0, 1).
+   ESSAI : Satsuma a position NaN -> le jeu PLANTE 3,5 s apres le chargement (0xC0000005). Reparation indispensable.
+3. NOMBRES : seuls NaN et +-infini sont des erreurs. De tres grandes valeurs existent dans le jeu d'origine
+   (amortisseurs rallye « Rebound » = 4.46e30) : ne pas y toucher.
+   Remplacements surs : PlayerMoney -> argent= de partie.txt, sinon 0 ; Player* (faim, soif, stress, fatigue, vessie,
+   salete, alcool) -> 0 ; *FuelLevel (VanFuelLevel 24, MuscleFuelLevel 45, GifuFuelLevel 130, TractorFuelLevel 42,
+   BoatFuelLevel 3, MopedFuelLevel 2.3, RusckoFuelLevel 2.3, fuel tank(Clone)FuelLevel 0) ; Wear* -> 50 ;
+   *TireWear -> 50 ; X+Tightness -> somme des crans de XBolts ; tout autre float -> 0.
+4. PIECES (table-pieces-msc.tsv, 214 pieces) : par entree Database X (ex. Hood) :
+     <piece>Installed / <piece>Bolted / <piece>Damaged (bool ; <piece> = hood(Clone), brake master cylinder(xxxxx)...)
+     XBolts (liste "int(n)", n = 0..8 par vis) et XTightness (float = somme des n ; capot 4 vis -> 32)
+   Bolted = toutes les vis a 8. Roues : wheel_<type><n>Bolts / Tightness / Corner ("" = pas montee, sinon FL FR RL RR),
+   pas de Installed. MotorHoistBolts : le palan, pas une piece.
+   Regle « pas montee mais vissee » (Installed=false, ou Corner="" pour une roue, et des vis > 0) :
+     XBolts tout a "int(0)", XTightness = 0, Bolted = false. ESSAI : capot ainsi repare -> se charge, capot libre, vis cachees.
+   (Sans reparation le jeu gere aussi : piece libre, vis cachees ; mais elle se remonte deja vissee.)
+   L'inverse (montee, vis desserrees) est normal en cours de montage : au plus un signalement.
+5. VERSIONS DU MOD A SIGNALER (sauvegarde en jeu MSC) :
+     MSC avant 1.15.0 : en coop, la sauvegarde en jeu rallumait ~40 points de montage du moteur ; l'hote voyait ces pieces
+     demontees et les retirait chez tout le monde, puis la sauvegarde suivante l'ecrivait (Satsuma de Markos, 24/10).
+     MSC 1.15.0 a 1.15.5 : lectures perimees pendant la sauvegarde groupee (vehicules et pieces revenus a la sauvegarde
+     d'avant). Corrige en msc-1.15.6. Proposer la copie « avant » si partie.txt indique une de ces versions.
+6. partie.txt : ecrit aussi sur MSC (SaveStats, code commun) ; la ligne version= ajoutee par [MWC] vaudra pour les deux jeux.
