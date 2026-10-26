@@ -762,7 +762,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -865,6 +865,9 @@ namespace MWCoop
             // ([Test] SondeBoite=1 : etat de la boite de TestVoiture chaque seconde, quel que soit l'essai)
             if (Config.GetInt("Test", "SondeBoite", 0) != 0 && mode != "mscreprise" && t > 20f && Time.realtimeSinceStartup >= repriseProbeAt)
             { repriseProbeAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : boite t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
+            // ([Test] SondeArgent=1 : PlayerMoney toutes les 10 s apres 30 s, quel que soit l'essai -- /argentde de [MWC], 26/10)
+            if (Config.GetInt("Test", "SondeArgent", 0) != 0 && t > 30f && Time.realtimeSinceStartup >= argentProbeAt)
+            { argentProbeAt = Time.realtimeSinceStartup + 10f; Log.Info("autotest : argent t=" + t.ToString("F0") + " PlayerMoney " + Game.GlobalFloat("PlayerMoney").ToString("F0") + ", triches " + (Cheats.Allowed ? "oui" : "non") + (Cheats.HostOnly ? " (hote seul)" : "")); }
             // ([Test] Autotest=trichesonglets : onglets du F7 captures, comme sur MWC ; Autotest=mscvoitures : /voiture pour chaque voiture
             // de l'onglet Voitures de MSC, une toutes les 6 s a partir de 30 s -- resultat et distance au joueur, capture voiture-<nom>)
             if (mode == "trichesonglets") { Cheats.Test(mode, t); return; }
