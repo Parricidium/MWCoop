@@ -779,6 +779,9 @@ static void DrawHeader(Graphics &g)
     // (titre trop long a cote des commandes de la page -- russe, bouton Signaler un bug du 26/10 : plus petit, jusqu'a 20 px)
     float tpx = 26;
     while (tpx > 20 && MeasureTitleW(MeasureG(), title, tpx) > right - 282) tpx -= 1;
+    // Guide, Nouveautes, Credits : la pilule choisie dit deja la page -- titre qui ne tient pas, meme a 20 px (anglais, pastille
+    // d'une nouvelle version sur Nouveautes) : ni titre ni sous-titre, plutot qu'un « G… ».
+    if ((g_tab == TAB_WIKI || g_tab == TAB_NOTES || g_tab == TAB_CREDITS) && g_state == ST_IDLE && MeasureTitleW(MeasureG(), title, tpx) > right - 282) return;
     Title(g, title, RectF(268, 16, right - 280, 34), tpx, kInk);
     if (MeasureW(MeasureG(), sub, 13.5f, FontStyleRegular) > right - 282) {   // (trop long a cote des commandes de la page : la premiere phrase seulement)
         size_t dot = sub.find(L". ");
