@@ -881,6 +881,34 @@ namespace MWCoop
                 }
                 return;
             }
+            // ([Test] Autotest=mscceintures : objets ceinture de chaque voiture de MSC a 40 s -- chemin, actif, maillage, automates --
+            // et ce que la ceinture passager de Seats en retient ; outil des places, ceintures, [Addons et Tools] 26/10)
+            if (mode == "mscceintures")
+            {
+                if (t > 40f && step == 0)
+                {
+                    step = 1;
+                    var rx = new System.Text.RegularExpressions.Regex("belt|buckle|fasten|harness|seatbelt", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                    {
+                        if (rb.transform.parent != null || rb.GetComponent("CarDynamics") == null) continue;
+                        int n = 0;
+                        foreach (Transform x in rb.GetComponentsInChildren<Transform>(true))
+                        {
+                            if (!rx.IsMatch(x.name)) continue;
+                            n++;
+                            var sb = new System.Text.StringBuilder(Recon.Path(x));
+                            sb.Append(x.gameObject.activeInHierarchy ? "" : " (inactif)");
+                            MeshFilter mf = x.GetComponent<MeshFilter>();
+                            if (mf != null && mf.sharedMesh != null) sb.Append(" maillage ").Append(mf.sharedMesh.name).Append(mf.sharedMesh.isReadable ? "" : " (illisible)");
+                            foreach (PlayMakerFSM f in x.GetComponents<PlayMakerFSM>()) sb.Append(" [").Append(f.FsmName).Append(":").Append(f.ActiveStateName).Append("]");
+                            Log.Info("autotest : mscceintures, " + sb);
+                        }
+                        Log.Info("autotest : mscceintures, " + rb.name + " : " + n + " objets, ceinture passager " + Seats.TestBeltOf(rb.transform));
+                    }
+                }
+                return;
+            }
             if (mode == "mscposte") { FleetariMsc.Test(mode, t); return; }   // (commande par la poste partagee, Kamixak et Mikol 25/10)
             if (mode == "mscreprise") { MscReprise(t); return; }   // (Satsuma qui roule seule chez le second conducteur, 25/10)
             if (mode == "mscsauve") { SaveBatchMsc.Test(t); return; }   // (sauvegarde en jeu groupee contre une par une, gel de l'hote 24/10)
