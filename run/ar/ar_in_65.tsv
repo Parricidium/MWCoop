@@ -1,0 +1,28 @@
+VRF01	%d fitted part(s) not fully bolted (normal while assembling)
+VRF02	) — restore a backup copy
+VRF03	, put in the garage (the car was moved)
+VRF04	: moved to %.1f, %.1f, %.1f
+VRF05	: not fitted but bolted, bolts reset to zero
+VRF06	: OK
+VRF07	: unreadable (
+VRF08	\"%s\" repaired: %d fix(es), copy from before kept
+VRF09	\"%s\": %d repairable, %d to watch, %d unreadable file(s).
+VRF10	\"%s\": nothing to report.
+VRF11	Before the repair of %s
+VRF12	Check the save
+VRF13	invalid number, reset to %g
+VRF14	invalid number, reset to zero
+VRF15	invalid position (NaN)
+VRF16	invalid rotation, reset upright
+VRF17	invalid scale, reset to 1
+VRF18	Last save made with %s%s, a version that could damage saves. If the game has a problem: Backup copies, the \"Before\" copy of a newer version.
+VRF19	Nothing to check: empty game
+VRF20	Nothing to repair here.
+VRF21	out of the world
+VRF22	Repair (%d)
+VRF23	Repair \"%s\"?\n\n%d safe fix(es): invalid numbers, lost objects put back in the garage or their spot, parts removed but bolted. A copy of the game is made first (\"Before the repair\").
+VRF24	Repair cancelled: could not copy the game
+VRF25	Repair incomplete: %d file(s) not written (see lanceur.log)
+VRF26	under the map
+VRF27	Check the save: reads the game's files and reports what is wrong (unreadable file, invalid numbers, objects under the map or out of the world, parts removed but bolted, a mod version known to damage saves). Repair (game closed) only applies safe fixes, after a \"Before the repair\" copy; every fix is noted in the launcher's log.
+VRF28	A game that crashes or odd parts? On its card, Check the save reports what is wrong and repairs what is safe, after a copy.

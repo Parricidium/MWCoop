@@ -20,7 +20,10 @@ static DWORD g_savesScanT;
 static bool g_savesFake;   // captures : liste factice (SavesFake), pas de releve
 static int g_saveEdit = -1; static std::wstring g_saveEditText;   // renommage dans la liste de l'onglet
 static int g_saveDelArm = -1; static DWORD g_saveDelT;
-enum { SM_NONE, SM_PICK, SM_NEWGAME, SM_RESTART, SM_NAME, SM_COPIES };      // fenetre par-dessus le lanceur
+enum { SM_NONE, SM_PICK, SM_NEWGAME, SM_RESTART, SM_NAME, SM_COPIES, SM_CHECK };
+static void SaveCheckOpen(int i);                       // (es2.inc : Verifier la sauvegarde)
+static void SaveRepair();
+static void DrawSaveCheck(Graphics &g, RectF c, float y);      // fenetre par-dessus le lanceur
 static int g_saveModal = SM_NONE;
 static bool g_saveNameForGame;                                     // nom demande pour « Nouvelle partie » (salon) : appliquee ensuite
 static std::wstring g_saveNameText;
@@ -29,6 +32,7 @@ enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAV
        UI_SAVE_DUP, UI_SAVE_EXPORT, UI_SAVE_RESTART, UI_SAVE_DEL,   // onglet, carte de droite : sur la partie choisie (g_saveSel)
        UI_SAVE_IMPORT,       // fenetre du nom : « Depuis un zip… » (la sauvegarde d'un ami, Exporter (zip))
        UI_SAVE_COPIES,       // carte de droite : « Toutes les copies » (fenetre SM_COPIES)
+       UI_SAVE_CHECK, UI_SAVE_REPAIR, UI_SAVE_CHECKCOPIES,   // « Verifier la sauvegarde » (fenetre SM_CHECK : es2.inc), Reparer, Copies de secours
        UI_SAVE_RESTORE = 9050,   // + k : copie de secours k de la partie choisie (9050-9089)
        UI_SAVE = 9100,       // + ligne * 8 + partie (onglet)
        UI_SAVE_PICK = 9700,  // + ligne (fenetre : liste)
@@ -36,6 +40,7 @@ enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAV
 enum { SP_USE, SP_RENAME, SP_DIR, SP_DEL, SP_OK, SP_CANCEL, SP_SEL };
 static int g_saveSel = -1;   // onglet : partie choisie (detail a droite) ; -1 : celle en cours
 static RectF g_saveCopiesR;  // section « Copies de secours » de la carte de droite (bulle du tuto)
+static RectF g_saveCheckR;   // bouton « Verifier la sauvegarde » (bulle du tuto)
 
 static std::wstring SaveProfRoot()
 {
@@ -432,7 +437,7 @@ static std::wstring SaveSizeText(unsigned long long b)
 //    des sauvegardes cassees par des versions boguees, seule une copie d'avant rend ce qui est perdu ;
 //  - MWCoop\copie-avant-reworked\<date>\<principale | partie-N> (SavesBackupNightly, avant le premier passage en Reworked).
 // Relues toutes les 3 s pour la partie choisie.
-enum { BAK_AUTO, BAK_VERSION, BAK_REMISE, BAK_REWORKED };
+enum { BAK_AUTO, BAK_VERSION, BAK_REMISE, BAK_REWORKED, BAK_REPAIR };
 struct SaveBak { std::wstring dir, ver; int kind = BAK_AUTO, seq = 1; FILETIME when = {}, made = {}; unsigned long long bytes = 0; };   // seq : -n du nom (deux copies dans la meme minute)
 static std::vector<SaveBak> g_saveBak;
 static std::wstring g_saveBakFor = L"?";
@@ -486,6 +491,7 @@ static std::vector<SaveBak> SaveCopiesList(const std::wstring &prof)
         if (wcslen(fd.cFileName) > 17 && fd.cFileName[16] == L'-') b.seq = max(1, _wtoi(fd.cFileName + 17));   // (AAAA-MM-JJ_HHhMM-n)
         const wchar_t *av = wcsstr(fd.cFileName, L"_avant-");
         if (av && !wcscmp(av, L"_avant-remise")) b.kind = BAK_REMISE;
+        else if (av && !wcscmp(av, L"_avant-reparation")) b.kind = BAK_REPAIR;
         else if (av) { b.kind = BAK_VERSION; b.ver = av + 7; }
         out.push_back(b);
     } while (FindNextFileW(h, &fd));
@@ -533,6 +539,7 @@ static std::wstring SaveBakLabel(const SaveBak &b)
     switch (b.kind) {
     case BAK_VERSION: swprintf_s(l, T(L"Avant %s", L"Before %s"), b.ver.c_str()); break;
     case BAK_REMISE: swprintf_s(l, T(L"Avant la remise du %s", L"Before the restore of %s"), SaveBakShort(ft).c_str()); break;
+    case BAK_REPAIR: swprintf_s(l, T(L"Avant la réparation du %s", L"Before the repair of %s"), SaveBakShort(ft).c_str()); break;
     case BAK_REWORKED: swprintf_s(l, T(L"Avant Reworked (%s)", L"Before Reworked (%s)"), SaveBakShort(ft).c_str()); break;
     default: swprintf_s(l, T(L"Avant la partie du %s", L"Before the game of %s"), SaveBakShort(ft).c_str()); break;
     }
@@ -952,7 +959,9 @@ static void DrawSaves(Graphics &g)
         }
         // en bas : utiliser (si ce n'est pas la partie en cours), puis les quatre actions
         float ay = c.Y + c.Height - 16 - 36 * 2 - 8, bw = (w - 8) / 2;
-        if (s.prof != cur) UiButton(g, RectF(x, ay - 8 - 44, w, 44), T(L"Utiliser pour héberger", L"Use for hosting"), base + SP_USE, true, IC_CHECK);
+        g_saveCheckR = RectF(x, ay - 44, w, 36);
+        UiButton(g, g_saveCheckR, T(L"Vérifier la sauvegarde", L"Check the save"), UI_SAVE_CHECK, false, IC_CHECK, s.has, 11);   // (lot B : es2.inc)
+        if (s.prof != cur) UiButton(g, RectF(x, ay - 44 - 8 - 44, w, 44), T(L"Utiliser pour héberger", L"Use for hosting"), base + SP_USE, true, IC_CHECK);
         UiButton(g, RectF(x, ay, bw, 36), T(L"Dupliquer", L"Duplicate"), UI_SAVE_DUP, false, -1, true, 11);
         UiButton(g, RectF(x + bw + 8, ay, bw, 36), T(L"Exporter (zip)", L"Export (zip)"), UI_SAVE_EXPORT, false, -1, s.has, 11);
         UiButton(g, RectF(x, ay + 44, bw, 36), T(L"Recommencer", L"Restart"), UI_SAVE_RESTART, false, -1, s.has, 11);
@@ -970,18 +979,19 @@ static void DrawSaveModal(Graphics &g)
     int rows = list ? (int)g_saves.size() + (g_saveModal == SM_PICK ? 1 : 0) : 0;
     if (rows > 7) rows = 7;
     int crows = min(14, (int)g_saveBak.size());
-    float h = g_saveModal == SM_NAME ? 250 : g_saveModal == SM_NEWGAME ? 300 : g_saveModal == SM_COPIES ? 130 + max(1, crows) * 46 : 150 + rows * 62;
+    float h = g_saveModal == SM_NAME ? 250 : g_saveModal == SM_NEWGAME ? 300 : g_saveModal == SM_CHECK ? 560 : g_saveModal == SM_COPIES ? 130 + max(1, crows) * 46 : 150 + rows * 62;
     RectF c(640 - 290, 400 - h / 2, 580, h);
     {   // (fond plein : le verre laissait voir la page dessous)
         GraphicsPath bp; RoundRect(bp, c, 20);
         SolidBrush bb(g_dark ? Color(255, 18, 26, 42) : Color(255, 244, 247, 251)); g.FillPath(&bb, &bp);
         Pen bpn(g_dark ? Color(90, 255, 255, 255) : Color(60, 0, 0, 0), 1.0f); g.DrawPath(&bpn, &bp);
     }
-    const wchar_t *title = g_saveModal == SM_COPIES ? T(L"Copies de secours", L"Backup copies") : g_saveModal == SM_PICK ? T(L"Sauvegarde de la partie", L"Game save") : g_saveModal == SM_NEWGAME ? T(L"Nouvelle partie", L"New game")
+    const wchar_t *title = g_saveModal == SM_CHECK ? T(L"Vérifier la sauvegarde", L"Check the save") : g_saveModal == SM_COPIES ? T(L"Copies de secours", L"Backup copies") : g_saveModal == SM_PICK ? T(L"Sauvegarde de la partie", L"Game save") : g_saveModal == SM_NEWGAME ? T(L"Nouvelle partie", L"New game")
                          : g_saveModal == SM_RESTART ? T(L"Recommencer une sauvegarde", L"Restart a save") : T(L"Nom de la sauvegarde", L"Save name");
     Title(g, title, RectF(c.X + 24, c.Y + 18, c.Width - 100, 30), 19, kInk);
     UiButton(g, RectF(c.X + c.Width - 24 - 40, c.Y + 16, 40, 36), L"", UI_SAVE_MCLOSE, false, IC_CLOSE);
     float y = c.Y + 62;
+    if (g_saveModal == SM_CHECK) { DrawSaveCheck(g, c, y); return; }
     if (g_saveModal == SM_COPIES) {   // toutes les copies de la partie choisie (14 au plus : 10 au lancement, « avant » 3 versions, Reworked)
         int sel = SaveSelIndex();
         wchar_t sub[300] = L"";
@@ -1084,6 +1094,9 @@ static void SaveClick(int id)
     if (id == UI_SAVE_EXPORT) { SaveExport(sel); return; }
     if (id == UI_SAVE_DEL) { SaveDelete(sel); if (sel >= (int)g_saves.size()) g_saveSel = -1; return; }
     if (id == UI_SAVE_RESTART) { if (sel >= 0 && SaveGuard()) { g_saveModal = SM_RESTART; SavePickRow(sel); g_saveModal = SM_NONE; } return; }   // (meme confirmation que la fenetre)
+    if (id == UI_SAVE_CHECK) { SaveCheckOpen(sel); return; }
+    if (id == UI_SAVE_REPAIR) { SaveRepair(); return; }
+    if (id == UI_SAVE_CHECKCOPIES) { if (sel >= 0) { SaveBakScan(g_saves[sel].prof); g_saveModal = SM_COPIES; } return; }
     if (id == UI_SAVE_COPIES) { if (sel >= 0) { SaveBakScan(g_saves[sel].prof); g_saveModal = SM_COPIES; } return; }
     if (id >= UI_SAVE_RESTORE && id < UI_SAVE_RESTORE + 40) { bool m = g_saveModal == SM_COPIES; SaveRestore(sel, id - UI_SAVE_RESTORE); if (m) g_saveModal = SM_NONE; return; }
     if (id >= UI_SAVE && id < UI_SAVE_PICK) {

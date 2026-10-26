@@ -2022,3 +2022,31 @@ Before every launch, the launcher copies the game about to be loaded, and before
 Backup copies: before every game launch (solo or hosting), the launcher copies the game about to be loaded, unless nothing changed since the last copy. At the first launch of a new mod version, an extra \"Before msc-1.15.8\" (or mwc-) copy. The last 10 are kept, plus the \"Before\" copies of the last 3 versions.	Резервные копии: перед каждым запуском игры (один или как хост) лаунчер копирует игру, которая будет загружена, если с последней копии что-то изменилось. При первом запуске новой версии мода — ещё одна копия «Перед msc-1.15.8» (или mwc-). Хранятся последние 10, плюс копии «Перед» трёх последних версий.
 Restore (game closed) puts a copy back in place of the save; the save from before is copied first (\"Before the restore\"). All copies: the button under the last three. They are in MWCoop\\copies-sauvegardes in the game folder.	Восстановить (игра закрыта) возвращает копию вместо сохранения; прежнее сохранение сначала копируется («Перед возвратом копии»). Все копии: кнопка под последними тремя. Они лежат в MWCoop\\copies-sauvegardes в папке игры.
 Then Use for hosting, Rename, Duplicate, Export (zip), Restart (erased and started from scratch); Delete sends it to the Windows Recycle Bin (recoverable).	Затем: Использовать для хостинга, Переименовать, Дублировать, Экспорт (zip), Начать заново (стирается и начинается с нуля); Удалить отправляет её в корзину Windows (можно вернуть).
+%d fitted part(s) not fully bolted (normal while assembling)	%d установленн. детал. затянут(ы) не полностью (нормально при сборке)
+) — restore a backup copy	) — верни резервную копию
+, put in the garage (the car was moved)	, положена в гараж (машина была перемещена)
+: moved to %.1f, %.1f, %.1f	: перемещено в %.1f, %.1f, %.1f
+: not fitted but bolted, bolts reset to zero	: не установлена, но затянута, болты обнулены
+: OK	: OK
+: unreadable (	: не читается (
+\"%s\" repaired: %d fix(es), copy from before kept	«%s» исправлено: %d исправл., копия «до» сохранена
+\"%s\": %d repairable, %d to watch, %d unreadable file(s).	«%s»: исправимо %d, обратить внимание %d, нечитаемых файлов %d.
+\"%s\": nothing to report.	«%s»: замечаний нет.
+Before the repair of %s	Перед исправлением %s
+Check the save	Проверить сохранение
+invalid number, reset to %g	неверное число, сброшено на %g
+invalid number, reset to zero	неверное число, сброшено на ноль
+invalid position (NaN)	неверная позиция (NaN)
+invalid rotation, reset upright	неверный поворот, выровнено
+invalid scale, reset to 1	неверный масштаб, сброшен на 1
+Last save made with %s%s, a version that could damage saves. If the game has a problem: Backup copies, the \"Before\" copy of a newer version.	Последнее сохранение сделано с %s%s — версией, которая могла повредить сохранения. Если с игрой что-то не так: Резервные копии, копия «Перед» более новой версией.
+Nothing to check: empty game	Нечего проверять: пустая игра
+Nothing to repair here.	Здесь нечего исправлять.
+out of the world	за пределами мира
+Repair (%d)	Исправить (%d)
+Repair \"%s\"?\n\n%d safe fix(es): invalid numbers, lost objects put back in the garage or their spot, parts removed but bolted. A copy of the game is made first (\"Before the repair\").	Исправить «%s»?\n\n%d безопасн. исправл.: неверные числа, потерянные предметы возвращаются в гараж или на своё место, снятые, но затянутые детали. Сначала делается копия игры («Перед исправлением»).
+Repair cancelled: could not copy the game	Исправление отменено: не удалось скопировать игру
+Repair incomplete: %d file(s) not written (see lanceur.log)	Исправление неполное: не записано файлов: %d (см. lanceur.log)
+under the map	под картой
+Check the save: reads the game's files and reports what is wrong (unreadable file, invalid numbers, objects under the map or out of the world, parts removed but bolted, a mod version known to damage saves). Repair (game closed) only applies safe fixes, after a \"Before the repair\" copy; every fix is noted in the launcher's log.	Проверить сохранение: читает файлы игры и сообщает о проблемах (нечитаемый файл, неверные числа, предметы под картой или за пределами мира, снятые, но затянутые детали, версия мода, известная тем, что портит сохранения). Исправить (игра закрыта) применяет только безопасные исправления после копии «Перед исправлением»; каждое исправление записывается в журнал лаунчера.
+A game that crashes or odd parts? On its card, Check the save reports what is wrong and repairs what is safe, after a copy.	Игра вылетает или детали ведут себя странно? В её карточке «Проверить сохранение» сообщает о проблемах и исправляет то, что безопасно, после копии.

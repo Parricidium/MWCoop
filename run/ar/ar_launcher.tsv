@@ -2130,6 +2130,34 @@ Before every launch, the launcher copies the game about to be loaded, and before
 Backup copies: before every game launch (solo or hosting), the launcher copies the game about to be loaded, unless nothing changed since the last copy. At the first launch of a new mod version, an extra \"Before msc-1.15.8\" (or mwc-) copy. The last 10 are kept, plus the \"Before\" copies of the last 3 versions.	النسخ الاحتياطية: قبل كل تشغيل للعبة (منفرداً أو كمضيف)، ينسخ المشغّل اللعبة التي ستُحمَّل، ما لم يتغير شيء منذ آخر نسخة. عند أول تشغيل لإصدار جديد من التعديل، نسخة إضافية «قبل msc-1.15.8» (أو mwc-). تُحفظ آخر 10 نسخ، ونسخ «قبل» لآخر 3 إصدارات.
 Restore (game closed) puts a copy back in place of the save; the save from before is copied first (\"Before the restore\"). All copies: the button under the last three. They are in MWCoop\\copies-sauvegardes in the game folder.	استعادة (واللعبة مغلقة) تعيد نسخة مكان الحفظ؛ يُنسخ الحفظ السابق أولاً («قبل الاستعادة»). كل النسخ: الزر تحت آخر ثلاث. وهي في MWCoop\\copies-sauvegardes داخل مجلد اللعبة.
 Then Use for hosting, Rename, Duplicate, Export (zip), Restart (erased and started from scratch); Delete sends it to the Windows Recycle Bin (recoverable).	ثم: استخدام للاستضافة، إعادة التسمية، تكرار، تصدير (zip)، البدء من جديد (تُمحى وتبدأ من الصفر)؛ الحذف يرسلها إلى سلة محذوفات Windows (قابلة للاسترجاع).
+%d fitted part(s) not fully bolted (normal while assembling)	%d قطعة مركّبة غير مشدودة بالكامل (طبيعي أثناء التركيب)
+) — restore a backup copy	) — استعد نسخة احتياطية
+, put in the garage (the car was moved)	، وُضعت في المرآب (نُقلت السيارة)
+: moved to %.1f, %.1f, %.1f	: نُقل إلى %.1f، %.1f، %.1f
+: not fitted but bolted, bolts reset to zero	: غير مركّبة لكنها مشدودة، أُعيدت البراغي إلى الصفر
+: OK	: سليم
+: unreadable (	: غير مقروء (
+\"%s\" repaired: %d fix(es), copy from before kept	«%s» أُصلحت: %d تصحيح، والنسخة السابقة محفوظة
+\"%s\": %d repairable, %d to watch, %d unreadable file(s).	«%s»: %d قابل للإصلاح، %d للمراقبة، %d ملف غير مقروء.
+\"%s\": nothing to report.	«%s»: لا شيء يُذكر.
+Before the repair of %s	قبل الإصلاح في %s
+Check the save	فحص الحفظ
+invalid number, reset to %g	رقم غير صالح، أُعيد إلى %g
+invalid number, reset to zero	رقم غير صالح، أُعيد إلى الصفر
+invalid position (NaN)	موضع غير صالح (NaN)
+invalid rotation, reset upright	دوران غير صالح، أُعيد مستقيماً
+invalid scale, reset to 1	مقياس غير صالح، أُعيد إلى 1
+Last save made with %s%s, a version that could damage saves. If the game has a problem: Backup copies, the \"Before\" copy of a newer version.	آخر حفظ تم بالإصدار %s%s، وهو إصدار قد يُتلف الحفظ. إذا كانت في اللعبة مشكلة: النسخ الاحتياطية، نسخة «قبل» إصدار أحدث.
+Nothing to check: empty game	لا شيء للفحص: لعبة فارغة
+Nothing to repair here.	لا شيء لإصلاحه هنا.
+out of the world	خارج العالم
+Repair (%d)	إصلاح (%d)
+Repair \"%s\"?\n\n%d safe fix(es): invalid numbers, lost objects put back in the garage or their spot, parts removed but bolted. A copy of the game is made first (\"Before the repair\").	إصلاح «%s»؟\n\n%d تصحيح آمن: أرقام غير صالحة، أشياء ضائعة تُعاد إلى المرآب أو إلى مكانها، قطع مفكوكة لكنها مشدودة. تُصنع نسخة من اللعبة أولاً («قبل الإصلاح»).
+Repair cancelled: could not copy the game	أُلغي الإصلاح: تعذّر نسخ اللعبة
+Repair incomplete: %d file(s) not written (see lanceur.log)	إصلاح غير مكتمل: %d ملف لم يُكتب (راجع lanceur.log)
+under the map	تحت الخريطة
+Check the save: reads the game's files and reports what is wrong (unreadable file, invalid numbers, objects under the map or out of the world, parts removed but bolted, a mod version known to damage saves). Repair (game closed) only applies safe fixes, after a \"Before the repair\" copy; every fix is noted in the launcher's log.	فحص الحفظ: يقرأ ملفات اللعبة ويُبلغ عمّا هو خاطئ (ملف غير مقروء، أرقام غير صالحة، أشياء تحت الخريطة أو خارج العالم، قطع مفكوكة لكنها مشدودة، إصدار من التعديل معروف بإتلاف الحفظ). الإصلاح (واللعبة مغلقة) لا يطبّق إلا تصحيحات آمنة بعد نسخة «قبل الإصلاح»؛ ويُسجَّل كل تصحيح في سجل المشغّل.
+A game that crashes or odd parts? On its card, Check the save reports what is wrong and repairs what is safe, after a copy.	لعبة تتعطل أو قطع غريبة؟ في بطاقتها، «فحص الحفظ» يُبلغ عمّا هو خاطئ ويُصلح الآمن منه، بعد نسخة.
 My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?	لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟
 Different version (you %s, host %s): update	إصدار مختلف (لديك %s، لدى المضيف %s): حدّث
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.

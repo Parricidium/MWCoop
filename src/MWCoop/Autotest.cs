@@ -762,7 +762,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt, argentProbeAt; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -998,6 +998,24 @@ namespace MWCoop
             // ([Test] SondeArgent=1 : PlayerMoney toutes les 10 s apres 30 s, quel que soit l'essai -- /argentde de [MWC], 26/10)
             if (Config.GetInt("Test", "SondeArgent", 0) != 0 && t > 30f && Time.realtimeSinceStartup >= argentProbeAt)
             { argentProbeAt = Time.realtimeSinceStartup + 10f; Log.Info("autotest : argent t=" + t.ToString("F0") + " PlayerMoney " + Game.GlobalFloat("PlayerMoney").ToString("F0") + ", triches " + (Cheats.Allowed ? "oui" : "non") + (Cheats.HostOnly ? " (hote seul)" : "")); }
+            // ([Test] SondeObjets=nom;nom... : a 45 s, chemin, etat et position monde de chaque objet de ce nom -- essais de chargement
+            // des sauvegardes reparees par le lanceur, lot B 26/10)
+            if (Config.Get("Test", "SondeObjets", "").Length > 0 && t > 45f && !objProbeDone)
+            {
+                objProbeDone = true;
+                foreach (string on in Config.Get("Test", "SondeObjets", "").Split(';'))
+                {
+                    int k = 0;
+                    foreach (Transform x in Resources.FindObjectsOfTypeAll<Transform>())
+                    {
+                        if (x.name != on.Trim() || x.gameObject.hideFlags != HideFlags.None) continue;
+                        k++;
+                        Rigidbody rb = x.GetComponent<Rigidbody>();
+                        Log.Info("autotest : objet " + Recon.Path(x) + (x.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + x.position.ToString("F2") + (rb != null ? (rb.isKinematic ? " (cinematique)" : "") + " v " + rb.velocity.magnitude.ToString("F2") : ""));
+                    }
+                    if (k == 0) Log.Info("autotest : objet " + on.Trim() + " introuvable");
+                }
+            }
             // ([Test] Autotest=trichesonglets : onglets du F7 captures, comme sur MWC ; Autotest=mscvoitures : /voiture pour chaque voiture
             // de l'onglet Voitures de MSC, une toutes les 6 s a partir de 30 s -- resultat et distance au joueur, capture voiture-<nom>)
             if (mode == "trichesonglets") { Cheats.Test(mode, t); return; }
