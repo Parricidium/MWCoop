@@ -172,6 +172,16 @@ namespace MWCoop
             return true;
         }
 
+        // Triche de l'hote (/argentde) : liquide fixe a 'amount' -- ni revenu partage ni depense (lastCash suit).
+        public static bool SetLocal(int amount)
+        {
+            if (!Ready || amount < 0) return false;
+            cash.Value = amount; lastCash = amount;
+            Store();
+            Log.Info("argent : fixe a " + amount + " mk (triche de l'hote)");
+            return true;
+        }
+
         // Etat du corps de l'invite, garde comme son porte-monnaie (etat-joueur.ini, une ligne par monde) : la
         // sauvegarde recue a chaque connexion est celle de l'hote, et ces globales y sont les SIENNES -- l'invite
         // reprenait sinon la faim, la soif, la fatigue, l'ivresse... de l'hote a chaque session. Les cles de vehicules,

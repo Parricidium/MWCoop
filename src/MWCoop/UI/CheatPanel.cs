@@ -55,6 +55,25 @@ namespace MWCoop
         static readonly string[][] CarsMsc = { new[] { "satsuma", "Satsuma" }, new[] { "hayosiko", "Hayosiko" }, new[] { "ferndale", "Ferndale" }, new[] { "ruscko", "Ruscko" },
             new[] { "tracteur", "Kekmet" }, new[] { "camion", "Gifu" }, new[] { "moto", "Jonnez" }, new[] { "remorque", "Flatbed" }, new[] { "bateau", "Boat" } };
 
+        // Argent fixe par l'hote (/argentde, suggestion de Matilda Prime, 26/10) : montant tape par joueur (-1 : moi).
+        static readonly Dictionary<int, string> moneyText = new Dictionary<int, string>();
+        static bool HostHere { get { return !Session.Active || Session.IsHost; } }
+        static void MoneyRow(Rect r, int id, string name, bool ok)
+        {
+            string s;
+            if (!moneyText.TryGetValue(id, out s)) s = "";
+            float bw = P(78), lw = P(120);
+            Style.Text(new Rect(r.x, r.y, lw, r.height), Lang.T("Fixer l'argent", "Set money"), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+            string ns = GUI.TextField(new Rect(r.x + lw, r.y + P(2), r.width - lw - bw - P(6), r.height - P(4)), s, 7, Style.Field(13));
+            var digits = new System.Text.StringBuilder();
+            foreach (char c in ns) if (c >= '0' && c <= '9') digits.Append(c);
+            moneyText[id] = digits.ToString();
+            int n;
+            bool valid = int.TryParse(moneyText[id], out n) && n <= 1000000;
+            if (Kit.Button(new Rect(r.xMax - bw, r.y, bw, r.height), Lang.T("Fixer", "Set"), 0, false, ok && valid, null, 12))
+                Do("/argentde #" + (id < 0 ? Session.LocalId : id) + " " + n, name + Lang.T(" : ", ": ") + n + " mk");
+        }
+
         static string TabName(int t)
         {
             switch (t)
@@ -82,17 +101,18 @@ namespace MWCoop
             tabs.Add(T_Places); tabs.Add(T_Me); tabs.Add(T_Cars); tabs.Add(T_World);
             if (!tabs.Contains(Tab)) Tab = Session.Active ? T_Players : T_Places;
             string state = ok ? (Session.Active && !Session.IsHost ? Lang.T("Autoris\u00E9es par l'h\u00F4te \u00B7 chaque triche est annonc\u00E9e \u00E0 tous", "Allowed by the host \u00B7 every cheat is announced to everyone")
+                                                                    : Cheats.HostOnly && Session.Active ? Lang.T("Autoris\u00E9es pour toi seul (h\u00F4te seulement) \u00B7 annonc\u00E9es \u00E0 tous", "Allowed for you only (host only) \u00B7 announced to everyone")
                                                                     : Lang.T("Autoris\u00E9es \u00B7 chaque triche est annonc\u00E9e \u00E0 tous", "Allowed \u00B7 every cheat is announced to everyone"))
-                              : (Session.Active && !Session.IsHost ? Lang.T("Coup\u00E9es par l'h\u00F4te.", "Turned off by the host.")
+                              : (Session.Active && !Session.IsHost ? (Cheats.HostOnly ? Lang.T("R\u00E9serv\u00E9es \u00E0 l'h\u00F4te.", "For the host only.") : Lang.T("Coup\u00E9es par l'h\u00F4te.", "Turned off by the host."))
                                                                     : Lang.T("Coup\u00E9es : lanceur, Options du jeu > Partie et partage > Autoriser les triches.", "Off: launcher, Game options > Game and sharing > Allow cheats."));
             float stH = Style.Height(state, 12, iw, false) + P(4);
             // hauteur du contenu : le plus grand des onglets
             float body = 0f;
             foreach (int t in tabs)
             {
-                float bt = t == T_Players ? Mathf.Max(1, players.Count) * rowH
+                float bt = t == T_Players ? Mathf.Max(1, players.Count) * (rowH + (HostHere ? bh + gap : 0f))
                          : t == T_Places ? placeRows * (bh + gap)
-                         : t == T_Me ? 3 * (bh + gap)
+                         : t == T_Me ? (HostHere ? 4 : 3) * (bh + gap)
                          : t == T_Cars ? carRows * (bh + gap) + (Game.Msc ? 0f : P(10) + bh + gap)
                          : 2 * (bh + gap);
                 body = Mathf.Max(body, bt);
@@ -126,6 +146,7 @@ namespace MWCoop
                         if (Kit.Button(new Rect(ix + iw - 2 * bw - gap, cy + (rowH - P(28)) / 2, bw, P(28)), Lang.T("Aller", "Go to"), 1, false, ok && inGame, null, 12)) Do("/tp " + pi.Name, Lang.T("T\u00E9l\u00E9port\u00E9 vers ", "Teleported to ") + pi.Name);
                         if (Kit.Button(new Rect(ix + iw - bw, cy + (rowH - P(28)) / 2, bw, P(28)), Lang.T("Amener", "Bring"), 0, false, ok && inGame, null, 12)) Do("/amener " + pi.Name, pi.Name + Lang.T(" arrive", " is coming"));
                         cy += rowH;
+                        if (HostHere) { MoneyRow(new Rect(ix + av + P(8), cy, iw - av - P(8), bh), pi.Id, pi.Name, ok && inGame); cy += bh + gap; }
                     }
                     break;
                 case T_Places:
@@ -147,6 +168,8 @@ namespace MWCoop
                     if (Kit.Button(new Rect(ix + hw2 + gap, cy, hw2, bh), "+10 000 mk", 0, false, ok, null, 12)) Do("/argent 10000", "+10 000 mk");
                     cy += bh + gap;
                     if (Kit.Button(new Rect(ix, cy, iw, bh), Lang.T("Ramener mes v\u00EAtements (veste, combinaison, casque)", "Bring back my clothes (jacket, coverall, helmet)"), 0, false, ok, null, 12)) Do("/vetements", Lang.T("V\u00EAtements ramen\u00E9s", "Clothes brought back"));
+                    cy += bh + gap;
+                    if (HostHere) MoneyRow(new Rect(ix, cy, iw, bh), -1, Session.Me != null ? Session.Me.Name : "moi", ok);
                     break;
                 case T_Cars:
                     for (int i = 0; i < carList.Length; i++)
