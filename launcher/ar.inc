@@ -2106,7 +2106,7 @@ static const wchar_t *const kAr[][2] = {
     { L"A mod missing from this list? Try it: if it adds an object the others can't see, say so on Discord (suggestions channel) with its Nexus link.", L"مودّ غير موجود في هذه القائمة؟ جرّبه: إن أضاف غرضاً لا يراه الآخرون، فأخبرنا على Discord (قناة الاقتراحات) مع رابطه على Nexus." },
     { L"Punches between players", L"اللكمات بين اللاعبين" },
     { L"Off by default. The host allows them in Game and sharing (\"Punches between players\"); their guests follow that choice. The game's punch hits a player on foot right in front of you: they step back a little, and on the 5th punch within 20 s they die (then respawn as usual).", L"معطّلة افتراضياً. يسمح بها المضيف في «اللعبة والمشاركة» («اللكمات بين اللاعبين»)؛ ويتبع ضيوفه هذا الاختيار. لكمة اللعبة تصيب لاعباً راجلاً أمامك مباشرة: يتراجع قليلاً، وعند اللكمة الخامسة خلال 20 ث يموت (ثم يعود كالمعتاد)." },
-    { L"The 3D model of the Sorbet's rear seat belts (My Winter Car).", L"النموذج ثلاثي الأبعاد لأحزمة الأمان الخلفية في Sorbet ‏(My Winter Car)." },
+    { L"The 3D model of the rear seat belts of the Sorbet and the Machtwagen (My Winter Car).", L"النموذج ثلاثي الأبعاد لأحزمة الأمان الخلفية في Sorbet وMachtwagen ‏(My Winter Car)." },
     { L"Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)", L"Windows 7: شبكة Steam لم تعد تعمل مع Steam Legacy، استخدم وضع IP ‏(Radmin VPN أو ZeroTier)" },
     { L"Windows 7: use IP / VPN", L"Windows 7: استخدم IP / VPN" },
     { L"Cheats: host only", L"الغش: المضيف فقط" },

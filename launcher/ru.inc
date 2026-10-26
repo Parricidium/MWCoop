@@ -1992,7 +1992,7 @@ static const wchar_t *const kRu[][2] = {
     { L"ACCEPT · %s, %s", L"ПРИНЯТЬ · %s, %s" },
     { L"ACCEPT THE FILES", L"ПРИНЯТЬ ФАЙЛЫ" },
     { L"%s to receive, %s. Click to accept, Esc to cancel.", L"Получить %s, %s. Нажми, чтобы принять, Esc — отменить." },
-    { L"The 3D model of the Sorbet's rear seat belts (My Winter Car).", L"3D-модель задних ремней безопасности Sorbet (My Winter Car)." },
+    { L"The 3D model of the rear seat belts of the Sorbet and the Machtwagen (My Winter Car).", L"3D-модель задних ремней безопасности Sorbet и Machtwagen (My Winter Car)." },
     { L"Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)", L"Windows 7: сеть Steam больше не работает со Steam Legacy, используй режим IP (Radmin VPN или ZeroTier)" },
     { L"Windows 7: use IP / VPN", L"Windows 7: выбери IP / VPN" },
     { L"Cheats: host only", L"Читы: только хост" },
