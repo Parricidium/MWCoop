@@ -171,14 +171,17 @@ namespace MWCoop
             int idx = cars.Count;
             string file = "voiture-" + idx;
             var mats = new List<Material>(); var matIdx = new Dictionary<Material, int>();
-            var objs = new StringBuilder();
-            int nObj = 0, unreadable = 0;
+            var objs = new StringBuilder(); var beltObjs = new StringBuilder();
+            int nObj = 0, nBelt = 0, unreadable = 0;
             Matrix4x4 toCar = car.worldToLocalMatrix;
             using (var bin = new BinaryWriter(File.Create(Path.Combine(dir, file + ".bin"))))
             {
+                // (ceintures a part, meme eteintes -- bouclees, copies du mod : l'outil les montre a la place qu'on regle)
                 foreach (MeshRenderer r in car.GetComponentsInChildren<MeshRenderer>(true))
                 {
-                    if (!r.enabled || !Shown(r.transform, car)) continue;
+                    Transform belt = BeltRoot(r.transform, car);
+                    bool shown = r.enabled && Shown(r.transform, car);
+                    if (!shown && belt == null) continue;
                     MeshFilter mf = r.GetComponent<MeshFilter>();
                     Mesh m = mf != null ? mf.sharedMesh : null;
                     if (m == null) continue;
@@ -191,10 +194,16 @@ namespace MWCoop
                         if (mt != null && !matIdx.TryGetValue(mt, out k)) { k = mats.Count; matIdx[mt] = k; mats.Add(mt); }
                         mi.Add(k);
                     }
-                    objs.Append(nObj++ > 0 ? "," : "").Append("{\"nom\":").Append(S(Recon.Path(r.transform).Substring(Recon.Path(car).Length))).Append(",\"bin\":").Append(at).Append(",\"mats\":[").Append(string.Join(",", mi.ConvertAll(x => x.ToString()).ToArray())).Append("]}");
+                    StringBuilder to = belt != null ? beltObjs : objs;
+                    to.Append((belt != null ? nBelt++ : nObj++) > 0 ? "," : "").Append("{\"nom\":").Append(S(Recon.Path(r.transform).Substring(Recon.Path(car).Length))).Append(",\"bin\":").Append(at).Append(",\"mats\":[").Append(string.Join(",", mi.ConvertAll(x => x.ToString()).ToArray())).Append("]");
+                    if (belt != null) to.Append(",\"vu\":").Append(shown && r.gameObject.activeInHierarchy ? "true" : "false").Append(",\"mod\":").Append(belt.name.StartsWith("MWCoop") ? "true" : "false");
+                    to.Append('}');
                 }
             }
-            var sb = new StringBuilder("{\"cle\":" + S(key) + ",\"nom\":" + S(name) + ",\"sorte\":" + S(kind) + ",\"objets\":[" + objs + "],\"matieres\":[");
+            var sb = new StringBuilder("{\"cle\":" + S(key) + ",\"nom\":" + S(name) + ",\"sorte\":" + S(kind) + ",\"objets\":[" + objs + "],\"ceintures\":[" + beltObjs + "]");
+            string att = BeltAnchors(car);
+            if (att != null) sb.Append(",\"attaches\":").Append(att);
+            sb.Append(",\"matieres\":[");
             for (int i = 0; i < mats.Count; i++) sb.Append(i > 0 ? "," : "").Append(MatJson(mats[i]));
             sb.Append(']');
             Transform head = FindDeep(car, "DriverHeadPivot");
@@ -205,7 +214,7 @@ namespace MWCoop
             sb.Append(",\"places\":[").Append(SeatsJson(car)).Append("]}");
             File.WriteAllText(Path.Combine(dir, file + ".json"), sb.ToString(), Encoding.UTF8);
             cars.Add(new CarEntry { Key = key, Name = name, Kind = kind, File = file + ".json" });
-            Log.Info("export des places : " + name + " (" + key + ") : " + nObj + " objets, " + mats.Count + " matieres" + (unreadable > 0 ? ", " + unreadable + " illisibles" : "") + (head != null ? "" : ", PAS de pivot de tete"));
+            Log.Info("export des places : " + name + " (" + key + ") : " + nObj + " objets, " + nBelt + " de ceintures" + (att != null ? " (attaches)" : "") + ", " + mats.Count + " matieres" + (unreadable > 0 ? ", " + unreadable + " illisibles" : "") + (head != null ? "" : ", PAS de pivot de tete"));
         }
 
         // allume jusqu'a la voiture, sauf un « LOD » eteint par la distance (voiture garee loin du joueur)
@@ -216,7 +225,8 @@ namespace MWCoop
             return true;
         }
 
-        // Voitures et places recalculees de force : hors partie, VehicleSync et Seats ne cherchent rien (Session.Active)
+        // Voitures et places recalculees de force : hors partie, VehicleSync et Seats ne cherchent rien (Session.Active). Puis les
+        // ceintures arriere du mod (modeles de Menos : SORBET, MACHTWAGEN), posees par Seats.UpdateRearBelts comme en partie.
         static void Rescan()
         {
             foreach (Type t in new[] { typeof(VehicleSync), typeof(Seats) })
@@ -225,6 +235,35 @@ namespace MWCoop
                 try { if (m != null) m.Invoke(null, null); else Log.Warn("export des places : " + t.Name + ".Scan introuvable"); }
                 catch (Exception e) { Log.Warn("export des places : " + t.Name + ".Scan : " + (e.InnerException ?? e).Message); }
             }
+            MethodInfo rb = typeof(Seats).GetMethod("UpdateRearBelts", BindingFlags.NonPublic | BindingFlags.Static, null, Type.EmptyTypes, null);
+            try { if (rb != null) rb.Invoke(null, null); else Log.Warn("export des places : Seats.UpdateRearBelts introuvable"); }
+            catch (Exception e) { Log.Warn("export des places : ceintures arriere : " + (e.InnerException ?? e).Message); }
+        }
+
+        // Objet de ceinture : sous Seatbelts (du jeu ; « seatbelts » sur la HAYOSIKO de MSC), PassengerBelt, DriverBelt, ou une
+        // ceinture du mod (MWCoop-Ceinture...).
+        static readonly string[] BeltNames = { "Seatbelts", "PassengerBelt", "DriverBelt", "MWCoop-Ceinture" };
+        static Transform BeltRoot(Transform t, Transform car)
+        {
+            Transform found = null;
+            for (Transform p = t; p != null && p != car; p = p.parent)
+                foreach (string n in BeltNames)
+                    if (p.name.StartsWith(n, StringComparison.OrdinalIgnoreCase)) found = p;
+            return found;
+        }
+
+        // Attaches calculees par Seats (BeltOf : champ prive belts) -- boucle, haut, plancher de la ceinture du conducteur, boucle cote
+        // passager (en miroir), bout de la languette -- repere de la voiture ; null sans ceinture.
+        static string BeltAnchors(Transform car)
+        {
+            MethodInfo of = typeof(Seats).GetMethod("BeltOf", BindingFlags.NonPublic | BindingFlags.Static);
+            object b = null;
+            try { b = of != null ? of.Invoke(null, new object[] { car }) : null; }
+            catch (Exception e) { Log.Warn("export des places : ceinture de " + car.name + " : " + (e.InnerException ?? e).Message); }
+            if (b == null) return null;
+            Type t = b.GetType();
+            return "{\"boucle\":" + V(Get<Vector3>(b, t, "DriverBuckle")) + ",\"bouclePassager\":" + V(Get<Vector3>(b, t, "Buckle")) + ",\"haut\":" + V(Get<Vector3>(b, t, "Top"))
+                 + ",\"plancher\":" + V(Get<Vector3>(b, t, "Floor")) + ",\"languette\":" + V(Get<Vector3>(b, t, "MeshBuckle")) + ",\"calcule\":" + (Get<bool>(b, t, "Anchors") ? "true" : "false") + "}";
         }
 
         // Places calculees aujourd'hui par Seats pour cette voiture (champ prive seats : Index, Head, Yaw, zone, MaxX, Bed = ridelle, Stand = debout).
