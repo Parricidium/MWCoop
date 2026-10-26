@@ -1,0 +1,215 @@
+categorie	entree_database	piece (tag+Installed/Bolted/Damaged)	tag_vis (liste int(n))	tag_serrage (float)	autres_champs
+DatabaseBody	Fender_Left	fender left(Clone)	Fender_LeftBolts	Fender_LeftTightness	
+DatabaseBody	Fender_Right	fender right(Clone)	Fender_RightBolts	Fender_RightTightness	
+DatabaseBody	Door_Left	door left(Clone)	Door_LeftBolts	Door_LeftTightness	
+DatabaseBody	Door_Right	door right(Clone)	Door_RightBolts	Door_RightTightness	
+DatabaseBody	Bootlid	bootlid(Clone)	BootlidBolts	BootlidTightness	
+DatabaseBody	Hood	hood(Clone)	HoodBolts	HoodTightness	
+DatabaseBody	Bumper_Rear	bumper rear(Clone)	Bumper_RearBolts	Bumper_RearTightness	
+DatabaseBody	Bumper_Front	bumper front(Clone)	Bumper_FrontBolts	Bumper_FrontTightness	
+DatabaseBody	Grille	grille(Clone)	GrilleBolts	GrilleTightness	
+DatabaseBody	Shock_FL	strut fl(xxxxx)	Shock_FLBolts	Shock_FLTightness	
+DatabaseBody	Shock_FR	strut fr(xxxxx)	Shock_FRBolts	Shock_FRTightness	
+DatabaseBody	Shock_RL	shock absorber(rlxxx)	Shock_RLBolts	Shock_RLTightness	
+DatabaseBody	Shock_RR	shock absorber(rrxxx)	Shock_RRBolts	Shock_RRTightness	
+DatabaseBody	Coilspring_RL	coil spring(rlxxx)			
+DatabaseBody	Coilspring_RR	coil spring(rrxxx)			
+DatabaseBody	Trailarm_RL	trail arm rl(xxxxx)	Trailarm_RLBolts	Trailarm_RLTightness	
+DatabaseBody	Trailarm_RR	trail arm rr(xxxxx)	Trailarm_RRBolts	Trailarm_RRTightness	
+DatabaseBody	Discbrake_FL	discbrake(flxxx)	Discbrake_FLBolts	Discbrake_FLTightness	
+DatabaseBody	Discbrake_FR	discbrake(frxxx)	Discbrake_FRBolts	Discbrake_FRTightness	
+DatabaseBody	Drumbrake_RL	drumbrake rl(xxxxx)	Drumbrake_RLBolts	Drumbrake_RLTightness	
+DatabaseBody	Drumbrake_RR	drumbrake rr(xxxxx)	Drumbrake_RRBolts	Drumbrake_RRTightness	
+DatabaseBody	Halfshaft_FR	halfshaft_fr	Halfshaft_FRBolts	Halfshaft_FRTightness	
+DatabaseBody	Halfshaft_FL	halfshaft_fl	Halfshaft_FLBolts	Halfshaft_FLTightness	
+DatabaseBody	Spindle_FL	spindle fl(xxxxx)	Spindle_FLBolts	Spindle_FLTightness	
+DatabaseBody	Spindle_FR	spindle fr(xxxxx)	Spindle_FRBolts	Spindle_FRTightness	
+DatabaseBody	SteeringRod_FR	steering rod fr(xxxxx)	SteeringRod_FRBolts	SteeringRod_FRTightness	Alignment
+DatabaseBody	SteeringRod_FL	steering rod fl(xxxxx)	SteeringRod_FLBolts	SteeringRod_FLTightness	Alignment
+DatabaseBody	Wishbone_FL	IK_wishbone_fl	Wishbone_FLBolts	Wishbone_FLTightness	
+DatabaseBody	Wishbone_FR	IK_wishbone_fr	Wishbone_FRBolts	Wishbone_FRTightness	
+DatabaseBody	Subframe	sub frame(xxxxx)	SubframeBolts	SubframeTightness	
+DatabaseBody	Subwoofer_panel	subwoofer panel(Clone)			
+DatabaseBody	Stock_back_panel	back panel(Clone)			
+DatabaseBody	Seat_Driver	seat driver(Clone)	Seat_DriverBolts	Seat_DriverTightness	
+DatabaseBody	Seat_Passenger	seat passenger(Clone)	Seat_PassengerBolts	Seat_PassengerTightness	
+DatabaseBody	Seat_Rear	seat rear(Clone)	Seat_RearBolts	Seat_RearTightness	
+DatabaseBody	Hubcap1	hubcap1			ID
+DatabaseBody	Hubcap2	hubcap2			ID
+DatabaseBody	Hubcap3	hubcap3			ID
+DatabaseBody	Hubcap4	hubcap4			ID
+DatabaseBody	FurDices	fur dices(xxxxx)			
+DatabaseBody	Coilspring_Long_RL	long coil spring(rlxxx)			
+DatabaseBody	Coilspring_Long_RR	long coil spring(rrxxx)			
+DatabaseBody	Mudflap_FL	mudflap fl(xxxxx)			
+DatabaseBody	Mudflap_FR	mudflap fr(xxxxx)			
+DatabaseBody	Mudflap_RL	mudflap rl(xxxxx)			
+DatabaseBody	Mudflap_RR	mudflap rr(xxxxx)			
+DatabaseMechanics	Dashboard	dashboard(Clone)	DashboardBolts	DashboardTightness	
+DatabaseMechanics	DashboardMeters	dashboard meters(Clone)	DashboardMetersBolts	DashboardMetersTightness	
+DatabaseMechanics	GaugeRPM	rpm gauge(Clone)	GaugeRPMBolts	GaugeRPMTightness	
+DatabaseMechanics	GaugeClock	clock gauge(Clone)			
+DatabaseMechanics	HeadlightLeft1	headlight left(Clone)	HeadlightLeft1Bolts	HeadlightLeft1Tightness	
+DatabaseMechanics	HeadlightRight1	headlight right(Clone)	HeadlightRight1Bolts	HeadlightRight1Tightness	
+DatabaseMechanics	RearLightLeft	rearlight(leftx)			
+DatabaseMechanics	RearLightRight	rearlight(right)			
+DatabaseMechanics	GearLinkage	gear linkage(xxxxx)	GearLinkageBolts	GearLinkageTightness	
+DatabaseMechanics	GearStick	gear stick(xxxxx)	GearStickBolts	GearStickTightness	
+DatabaseMechanics	ClutchLining	clutch lining(xxxxx)	ClutchLiningBolts	ClutchLiningTightness	
+DatabaseMechanics	ClutchMasterCylinder	clutch master cylinder(xxxxx)	ClutchMasterCylinderBolts	ClutchMasterCylinderTightness	FluidLevel
+DatabaseMechanics	BrakeMasterCylinder	brake master cylinder(xxxxx)	BrakeMasterCylinderBolts	BrakeMasterCylinderTightness	FluidLevelF;FluidLevelR
+DatabaseMechanics	BrakeLining	brake lining(xxxxx)	BrakeLiningBolts	BrakeLiningTightness	
+DatabaseMechanics	Handbrake	handbrake(xxxxx)	HandbrakeBolts	HandbrakeTightness	
+DatabaseMechanics	ExhaustPipe	exhaust pipe(Clone)	ExhaustPipeBolts	ExhaustPipeTightness	
+DatabaseMechanics	ExhaustMuffler	exhaust muffler(Clone)	ExhaustMufflerBolts	ExhaustMufflerTightness	
+DatabaseMechanics	FuelStrainer	fuel strainer(xxxxx)	FuelStrainerBolts	FuelStrainerTightness	
+DatabaseMechanics	FuelTank	fuel tank(Clone)	FuelTankBolts	FuelTankTightness	FuelLevel
+DatabaseMechanics	FuelTankPipe	fuel tank pipe(xxxxx)			
+DatabaseMechanics	Radiator	radiator(xxxxx)	RadiatorBolts	RadiatorTightness	Water
+DatabaseMechanics	RadiatorHose1	radiator hose1(xxxxx)	RadiatorHose1Bolts	RadiatorHose1Tightness	
+DatabaseMechanics	RadiatorHose2	radiator hose2(Clone)	RadiatorHose2Bolts	RadiatorHose2Tightness	
+DatabaseMechanics	RadiatorHose3	radiator hose3(xxxxx)	RadiatorHose3Bolts	RadiatorHose3Tightness	
+DatabaseMechanics	SteeringColumn	steering column(xxxxx)	SteeringColumnBolts	SteeringColumnTightness	
+DatabaseMechanics	SteeringRack	steering rack(xxxxx)	SteeringRackBolts	SteeringRackTightness	
+DatabaseMechanics	SteeringWheel	stock steering wheel(Clone)	SteeringWheelBolts	SteeringWheelTightness	
+DatabaseMechanics	Electrics	electrics(Clone)	ElectricsBolts	ElectricsTightness	
+DatabaseMechanics	Radio	radio(Clone)			
+DatabaseMotor	Block	block(Clone)	BlockBolts	BlockTightness	Hoist
+DatabaseMotor	Oilpan	oilpan(Clone)	OilpanBolts	OilpanTightness	OilContamination;OilGrade;OilLevel
+DatabaseMotor	Headgasket	head gasket(Clone)			
+DatabaseMotor	Piston1	piston1(Clone)	Piston1Bolts	Piston1Tightness	
+DatabaseMotor	Piston2	piston2(Clone)	Piston2Bolts	Piston2Tightness	
+DatabaseMotor	Piston3	piston3(Clone)	Piston3Bolts	Piston3Tightness	
+DatabaseMotor	Piston4	piston4(Clone)	Piston4Bolts	Piston4Tightness	
+DatabaseMotor	Crankshaft	crankshaft(Clone)			
+DatabaseMotor	RockerShaft	rocker shaft(Clone)	RockerShaftBolts	RockerShaftTightness	Cyl1Exhaust;Cyl1Intake;Cyl2Exhaust;Cyl2Intake;Cyl3Exhaust;Cyl3Intake;Cyl4Exhaust;Cyl4Intake
+DatabaseMotor	Alternator	alternator(Clone)	AlternatorBolts	AlternatorTightness	
+DatabaseMotor	Gearbox	gearbox(Clone)	GearboxBolts	GearboxTightness	
+DatabaseMotor	Waterpump	water pump(Clone)	WaterpumpBolts	WaterpumpTightness	
+DatabaseMotor	ClutchPressureplate	clutch pressure plate(Clone)			
+DatabaseMotor	ClutchCoverplate	clutch cover plate(Clone)	ClutchCoverplateBolts	ClutchCoverplateTightness	Flywheel
+DatabaseMotor	ClutchPlate	clutch disc(Clone)			
+DatabaseMotor	CrankBearing1	main bearing1(Clone)	CrankBearing1Bolts	CrankBearing1Tightness	
+DatabaseMotor	CrankBearing2	main bearing2(Clone)	CrankBearing2Bolts	CrankBearing2Tightness	
+DatabaseMotor	CrankBearing3	main bearing3(Clone)	CrankBearing3Bolts	CrankBearing3Tightness	
+DatabaseMotor	Carburator	carburator(Clone)	CarburatorBolts	CarburatorTightness	Dirt;IdleAdjust
+DatabaseMotor	Airfilter	airfilter(Clone)	AirfilterBolts	AirfilterTightness	
+DatabaseMotor	Drivegear	drive gear(Clone)	DrivegearBolts	DrivegearTightness	
+DatabaseMotor	Cylinderhead	cylinder head(Clone)	CylinderheadBolts	CylinderheadTightness	
+DatabaseMotor	Distributor	distributor(Clone)	DistributorBolts	DistributorTightness	Angle
+DatabaseMotor	Engineplate	engine plate(Clone)			
+DatabaseMotor	Fuelpump	fuel pump(Clone)	FuelpumpBolts	FuelpumpTightness	
+DatabaseMotor	FuelLine	fuel line(xxxxx)	FuelLineBolts	FuelLineTightness	
+DatabaseMotor	Flywheel	flywheel(Clone)	FlywheelBolts	FlywheelTightness	
+DatabaseMotor	Timingchain	timing chain(Clone)			
+DatabaseMotor	Camshaft	camshaft(Clone)	CamshaftBolts	CamshaftTightness	
+DatabaseMotor	CamshaftGear	camshaft gear(Clone)	CamshaftGearBolts	CamshaftGearTightness	Angle
+DatabaseMotor	Valvecover	rocker cover(Clone)	ValvecoverBolts	ValvecoverTightness	
+DatabaseMotor	Starter	starter(Clone)	StarterBolts	StarterTightness	
+DatabaseMotor	Timingcover	timing cover(Clone)	TimingcoverBolts	TimingcoverTightness	
+DatabaseMotor	Crankwheel	crankshaft pulley(Clone)	CrankwheelBolts	CrankwheelTightness	
+DatabaseMotor	WaterpumpPulley	water pump pulley(Clone)	WaterpumpPulleyBolts	WaterpumpPulleyTightness	
+DatabaseMotor	Headers	headers(Clone)	HeadersBolts	HeadersTightness	
+DatabaseMotor	InspectionCover	inspection cover(Clone)			
+DatabaseOrders	Flares_FL	fender flare fl(Clone)			Purchased
+DatabaseOrders	Flares_FR	fender flare fr(Clone)			Purchased
+DatabaseOrders	Flares_RL	fender flare rf(Clone)			Purchased
+DatabaseOrders	Flares_RR	fender flare rr(Clone)			Purchased
+DatabaseOrders	Flares_spoiler	fender flare spoiler(Clone)			Purchased
+DatabaseOrders	SideskirtLeft	side skirt left(Clone)			Purchased
+DatabaseOrders	SideskirtRight	side skirt right(Clone)			Purchased
+DatabaseOrders	Front_spoiler	front spoiler(Clone)			Purchased
+DatabaseOrders	Rear_spoiler	rear spoiler(Clone)			Purchased
+DatabaseOrders	Rear_spoiler2	rear spoiler2(Clone)			Purchased
+DatabaseOrders	Window_Grille	window grille(Clone)			Purchased
+DatabaseOrders	Subwoofer_Left	subwoofer left(Clone)			Purchased
+DatabaseOrders	Subwoofer_Right	subwoofer right(Clone)			Purchased
+DatabaseOrders	Amplifier	amplifier(Clone)			Purchased
+DatabaseOrders	CD_player	cd player(Clone)			Purchased
+DatabaseOrders	Wheel_cover_zebra	wheel cover zebra(Clone)			Purchased
+DatabaseOrders	Wheel_cover_leopard	wheel cover leopard(Clone)			Purchased
+DatabaseOrders	Wheel_cover_plush	wheel cover plush(Clone)			Purchased
+DatabaseOrders	Seat_cover_zebra	seat cover zebra(Clone)			Purchased
+DatabaseOrders	Seat_cover_leopard	seat cover leopard(Clone)			Purchased
+DatabaseOrders	Seat_cover_plush	seat cover plush(Clone)			Purchased
+DatabaseOrders	Dash_cover_zebra	dash cover zebra(Clone)			Purchased
+DatabaseOrders	Dash_cover_leopard	dash cover leopard(Clone)			Purchased
+DatabaseOrders	Dash_cover_plush	dash cover plush(Clone)			Purchased
+DatabaseOrders	ExtraGauges	extra gauges(Clone)			Purchased
+DatabaseOrders	Windows black wrap	windows black wrap(Clone)			Purchased
+DatabaseOrders	Fuel Mixture Gauge	fuel mixture gauge(Clone)			Purchased
+DatabaseOrders	Steel Headers	steel headers(Clone)			Purchased
+DatabaseOrders	Twin Carburators	twin carburators(Clone)			IdleAdjust;Purchased
+DatabaseOrders	Racing Muffler	racing muffler(Clone)			Purchased
+DatabaseOrders	Racing Exhaust	racing exhaust(Clone)			Purchased
+DatabaseOrders	Racing Radiator	racing radiator(Clone)			Purchased;Water
+DatabaseOrders	Bucket Seat Driver	bucket seat driver(Clone)			Purchased
+DatabaseOrders	Bucket Seat Passenger	bucket seat passenger(Clone)			Purchased
+DatabaseOrders	Racing Harness	racing harness(Clone)			Purchased
+DatabaseOrders	Tachometer	tachometer(Clone)			AttachPos;Purchased;RPMSetting
+DatabaseOrders	Fiberglass Hood	fiberglass hood(Clone)			Purchased
+DatabaseOrders	Racing Carburators	racing carburators(Clone)			IdleAdjust1;IdleAdjust2;IdleAdjust3;IdleAdjust4;Purchased
+DatabaseOrders	N2O Bottle Holder	n2o bottle holder(Clone)			Purchased
+DatabaseOrders	N2O Injectors	n2o injectors(Clone)			Purchased
+DatabaseOrders	N2O Button Panel	n2o button panel(Clone)			Purchased
+DatabaseOrders	N2O Bottle	n2o bottle(Clone)			Fluid;Purchased;Setting
+DatabaseOrders	Shock Rally FL	strut fl rally(xxxxx)		Shock Rally FLTightness	Purchased;SettingBump;SettingRebound
+DatabaseOrders	Shock Rally FR	strut fr rally(xxxxx)		Shock Rally FRTightness	Purchased;SettingBump;SettingRebound
+DatabaseOrders	Shock Rally RL	shock absorber rally(rlxxx)			Purchased;SettingBump;SettingRebound
+DatabaseOrders	Shock Rally RR	shock absorber rally(rrxxx)			Purchased;SettingBump;SettingRebound
+DatabaseOrders	Coilspring Rally RL	coil spring rally(rlxxx)			Purchased
+DatabaseOrders	Coilspring Rally RR	coil spring rally(rrxxx)			Purchased
+DatabaseOrders	Racing Flywheel	racing flywheel(Clone)			Purchased
+DatabaseOrders	Marker Light Left	marker light left(xxxxx)			Purchased
+DatabaseOrders	Marker Light Right	marker light right(xxxxx)			Purchased
+DatabaseOrders	SportWheel	sport steering wheel(Clone)			Purchased
+DatabaseOrders	Rally Wheel	rally steering wheel(Clone)			Purchased
+DatabaseOrders	AntennaLeft	antenna(leftx)			Purchased
+DatabaseOrders	AntennaRight	antenna(right)			Purchased
+DatabaseOrders	ExhaustDualTip	exhaust dual tip(Clone)			Purchased
+DatabaseOrders	GrilleGT	grille gt(Clone)			
+DatabaseOrders	Xmas Lights	xmas lights(xxxxx)			
+DatabaseOrders	Radar Buster	radar buster(Clone)			
+DatabaseOrders	CenterConsoleGT	center console gt(xxxxx)			
+DatabaseOrders	SteeringWheelGT	gt steering wheel(Clone)			
+DatabaseOrders	ValvecoverGT	rocker cover gt(Clone)			
+DatabaseOrders	Helmet	helmet(itemx)			Color;Painted
+DatabaseOrders	Turbo	turbo(xxxxx)			
+DatabaseOrders	Extinguisher Holder	fire extinguisher holder(Clone)	Extinguisher HolderBolts	Extinguisher HolderTightness	Purchased
+DatabaseOrders	Roll Cage	roll cage(xxxxx)			
+DatabaseOrders	WarningTriangle	warning triangle(Clone)			
+DatabaseOrders	Seat_cover_suomi	seat cover suomi(Clone)			Purchased
+DatabaseOrders	Dash_cover_suomi	dash cover suomi(Clone)			Purchased
+DatabaseOrders	Wheel_cover_suomi	wheel cover suomi(Clone)			Purchased
+DatabaseWiring	WiringBatteryPlus	battery_terminal_plus(xxxxx)	WiringBatteryPlusBolts	WiringBatteryPlusTightness	
+DatabaseWiring	WiringBatteryMinus	battery_terminal_minus(xxxxx)	WiringBatteryMinusBolts	WiringBatteryMinusTightness	
+DatabaseWiring	WiringGround1	wiring_ground(xxxxx)			
+DatabaseWiring	WiringBatteryHarness	wiring_battery_harness(xxxxx)			
+DatabaseWiring	WiringAlternator	wiring_alternator(xxxxx)			
+DatabaseWiring	WiringStarter	wiring_starter(xxxxx)	WiringStarterBolts	WiringStarterTightness	
+DatabaseWiring	WiringCoil	wiring_coil(xxxxx)			
+DatabaseWiring	WiringRegulator	wiring_regulator(xxxxx)			
+DatabaseWiring	WiringIgnition	wiring_ignition(xxxxx)			
+DatabaseWiring	WiringSwitchLights	wiring_switch_light(xxxxx)			
+DatabaseWiring	WiringHeadlightsConnector	wiring_harness_headlights(xxxxx)			
+DatabaseWiring	WiringHeadlightLeft	wiring_headlights_left(xxxxx)			
+DatabaseWiring	WiringHeadlightRight	wiring_headlights_right(xxxxx)			
+DatabaseWiring	WiringRearlightLeft	wiring_rearlights_left(xxxxx)			
+DatabaseWiring	WiringRearlightRight	wiring_rearlights_right(xxxxx)			
+DatabaseWiring	WiringFueltank	wiring_fueltank(xxxxx)			
+DatabaseWiring	WiringDash1	wiring_dash1(xxxxx)			
+DatabaseWiring	WiringDash2	wiring_dash2(xxxxx)			
+DatabaseWiring	WiringRadio	wiring_radio(xxxxx)			
+DatabaseWiring	WiringAmplifierPower	wiring_amp_power(xxxxx)			
+DatabaseWiring	WiringAmplifierAudio	wiring_amp_audio(xxxxx)			
+DatabaseWiring	WiringSubwooferLeft	wiring_subwoofer_left(xxxxx)			
+DatabaseWiring	WiringSubwooferRight	wiring_subwoofer_right(xxxxx)			
+DatabaseWiring	WiringGaugeAFR	wiring_gauge_afr(xxxxx)			
+DatabaseWiring	WiringGaugeExtra	wiring_gauge_extra(xxxxx)			
+DatabaseWiring	WiringRadiatorfan	wiring_radiatorfan(xxxxx)			
+DatabaseWiring	WiringMarkerLeft	wiring_marker_left(xxxxx)			
+DatabaseWiring	WiringMarkerRight	wiring_marker_right(xxxxx)			
+DatabaseComputer	Case	case(Clone)			Purchased
+DatabaseComputer	Monitor	monitor(Clone)			Purchased
+DatabaseComputer	Peripherals	peripherals(Clone)			Purchased
+DatabaseComputer	Speakers	speakers(Clone)			Purchased
