@@ -1585,7 +1585,7 @@ namespace MWCoop
         static Transform pietonCible;
         static bool givreEtat, maillagesDone;
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
-        static bool taxiOut;
+        static bool taxiOut; static int lastAround;
         public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
         // [Test] TestPedale=brake|clutch|throttle : de 40 a 60 s (temps de jeu), cette pedale de [Test] TestVoiture enfoncee ici
         // (15 degres, comme l'automate du jeu), apres CarVisuals et avant les avatars -- le pied du conducteur doit la suivre.
@@ -1664,6 +1664,56 @@ namespace MWCoop
             if (Game.LevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
+            // ([Test] Autotest=positions, PositionsDe=<nom>;<nom>... : ou sont ces objets a 20 s puis a 40 s, et leur vitesse -- points
+            // surs de « Verifier la sauvegarde » du lanceur, 26/10 : objet ou voiture remis la par la reparation, pose ou tombe ?)
+            if (mode == "positions" && ((t > 20f && step == 0) || (t > 40f && step == 1)))
+            {
+                step++;
+                foreach (string n in Config.Get("Test", "PositionsDe", "").Split(';'))
+                {
+                    if (n.Trim().Length == 0) continue;
+                    GameObject g = Game.FindAny(n.Trim());
+                    if (g == null) foreach (Transform x in Resources.FindObjectsOfTypeAll<Transform>()) if (x.name == n.Trim() && x.hideFlags == HideFlags.None) { g = x.gameObject; break; }
+                    Rigidbody rb = g != null ? g.GetComponent<Rigidbody>() : null;
+                    Log.Info("autotest : position " + n.Trim() + (g == null ? " introuvable" : " " + g.transform.position.ToString("F2") + (rb != null ? " vitesse " + rb.velocity.magnitude.ToString("F2") : "") + (g.activeInHierarchy ? "" : " (inactif)")));
+                }
+            }
+            // ([Test] PositionsAutour=x,y,z;... : les corps a moins de 2 m de ces points, aux memes instants -- les objets de la
+            // sauvegarde n'ont pas le nom de leur tag, sledgehammer(item1) est un « sledgehammer(itemx) »)
+            if (mode == "positions" && step > 0 && step != lastAround)
+            {
+                lastAround = step;
+                foreach (string ps in Config.Get("Test", "PositionsAutour", "").Split(';'))
+                {
+                    string[] c = ps.Split(',');
+                    if (c.Length != 3) continue;
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    var at = new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci));
+                    var sb = new System.Text.StringBuilder();
+                    foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                        if ((rb.position - at).magnitude < 2f) sb.Append(" | ").Append(rb.name).Append(' ').Append(rb.position.ToString("F2")).Append(" v ").Append(rb.velocity.magnitude.ToString("F2"));
+                    Log.Info("autotest : autour de " + at.ToString("F1") + sb);
+                }
+            }
+            // ([Test] Autotest=chercheautomate, AutomateTexte=<texte> : automates de l'objet <texte> ou dont une variable texte contient <texte> -- par ex.
+            // l'identifiant d'une piece de la sauvegarde, VIN2091 ; les deux premiers vides comme Automate)
+            if (mode == "chercheautomate" && t > 40f && step == 0)
+            {
+                step = 1;
+                string q = Config.Get("Test", "AutomateTexte", "");
+                var found = new System.Collections.Generic.List<string>();
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                {
+                    if (f == null || f.FsmVariables == null || q.Length == 0) continue;
+                    if (f.gameObject.name == q) { found.Add(Recon.Path(f.transform) + ":" + f.FsmName + " (objet)"); continue; }
+                    foreach (FsmString v in f.FsmVariables.StringVariables)
+                        if (v != null && v.Value != null && v.Value.Contains(q)) { found.Add(Recon.Path(f.transform) + ":" + f.FsmName + " (" + v.Name + "=" + v.Value + ")"); break; }
+                }
+                Log.Info("autotest : chercheautomate " + q + " : " + found.Count + " -- " + string.Join(" | ", found.ToArray()));
+                var specs = new System.Collections.Generic.List<string>();
+                foreach (string s in found) { if (specs.Count >= 2) break; specs.Add(s.Substring(0, s.IndexOf(" ("))); }
+                DumpFsms(string.Join(";", specs.ToArray()));
+            }
             if (Game.Msc)   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC ; vidage d'automates : les deux jeux)
             {
                 if (mode == "automate" && t > 40f && step == 0) { step = 1; DumpFsms(Config.Get("Test", "Automate", "")); }

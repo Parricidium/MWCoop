@@ -91,6 +91,7 @@ namespace MWCoop
             bool any = false; Bounds b = new Bounds();
             foreach (Collider c in ground.GetComponentsInChildren<Collider>(true)) { if (c.isTrigger) continue; if (!any) { b = c.bounds; any = true; } else b.Encapsulate(c.bounds); }
             if (!any) return;
+            Log.Info("carte : sol du jeu de " + b.min.ToString("F0") + " a " + b.max.ToString("F0"));   // (bornes du monde : « Verifier la sauvegarde » du lanceur, 26/10)
             Size = Mathf.Ceil(Mathf.Max(b.size.x, b.size.z) * 1.02f);
             MinX = b.center.x - Size / 2f; MinZ = b.center.z - Size / 2f;
             root = new GameObject("MWCoop-Carte");
