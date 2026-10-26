@@ -7780,6 +7780,32 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // Essai : /placesessai <journal> <cle-publique.txt> <fichier de cle> <url du manifeste> <dossier de jeu factice> -- outil des
     // places avec une cle publique d'essai : installation depuis le manifeste (serveur local), 2e passage sans rien refaire ;
     // export : copie de la partie en cours dans places-export et lancement.ini (jeu factice, rien n'est lance).
+    // Essai : /testtuto <journal> <ini d'essai> -- bulles des nouveautes : 1er demarrage avec l'ancienne valeur (TutoVersion =
+    // version du mod, 1.15.8), visite passee (Echap), 2e demarrage : plus aucune bulle ; puis meme chose sur l'autre jeu.
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/testtuto")) {
+        g_launcherLog = argv[2];
+        g_iniLauncher = argv[3];
+        if (g_localVer.empty()) g_localVer = L"1.15.8";
+        WritePrivateProfileStringW(L"Lanceur", L"TutoVu", L"1", g_iniLauncher.c_str());
+        WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", L"1.15.8", g_iniLauncher.c_str());
+        WritePrivateProfileStringW(L"Lanceur", L"DiscordPropose", L"1", g_iniLauncher.c_str());
+        auto pass = [&](const char *what) {
+            g_state = ST_IDLE; g_tuto = -1;
+            TutoAtStartup();
+            std::string ids;
+            for (int i : g_tutoList) ids += " " + std::to_string(i) + "(" + kTuto[i].since + ")";
+            int n = TutoActive() ? (int)g_tutoList.size() : 0;
+            if (TutoActive()) TutoGo((int)g_tutoList.size());   // (Echap : visite passee)
+            wchar_t v[32] = L"";
+            GetPrivateProfileStringW(L"Lanceur", L"TutoVersion", L"", v, 32, g_iniLauncher.c_str());
+            LaunchLog("testtuto : %s : %d bulle(s)%s ; TutoVersion ensuite %s (lanceur %s)", what, n, n ? ids.c_str() : "", Narrow(v).c_str(), Narrow(LauncherVer()).c_str());
+        };
+        pass("1er demarrage");
+        pass("2e demarrage");
+        g_game = g_game == GAME_MSC ? GAME_MWC : GAME_MSC; g_localVer = L"1.15.7";   // (l'autre jeu, autre version du mod)
+        pass("autre jeu");
+        return 0;
+    }
     if (argc >= 7 && !_wcsicmp(argv[1], L"/placesessai")) {
         g_launcherLog = argv[2];
         std::vector<unsigned char> d;

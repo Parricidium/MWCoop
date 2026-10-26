@@ -245,6 +245,10 @@ static int VerCmp(const char *a, const char *b)
     for (int i = 0; i < 3; i++) if (x[i] != y[i]) return x[i] < y[i] ? -1 : 1;
     return 0;
 }
+// Version notee « vue jusqu'a » : celle du LANCEUR (les since des bulles depuis 1.15.0 : 1.15.11, 1.15.12...), la meme
+// sur My Winter Car et My Summer Car. Avant : MWCoopersion.txt, le mod (1.15.8...), toujours plus vieux que les since
+// du lanceur depuis les flux separes -- ces bulles revenaient a chaque lancement (JD, 26/10, Copies de secours).
+static std::wstring TutoSeenVer() { std::wstring v = LauncherVer(); return v.empty() ? Widen(MyVersionRaw()) : v; }
 static int TutoCur() { return g_tuto >= 0 && g_tuto < (int)g_tutoList.size() ? g_tutoList[g_tuto] : 0; }
 
 static void TutoGo(int i)
@@ -254,7 +258,7 @@ static void TutoGo(int i)
         g_tuto = -1;
         g_tab = g_tutoTabWas >= 0 ? g_tutoTabWas : TAB_HOME;
         WritePrivateProfileStringW(L"Lanceur", L"TutoVu", L"1", g_iniLauncher.c_str());
-        WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersionRaw()).c_str(), g_iniLauncher.c_str());
+        WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", TutoSeenVer().c_str(), g_iniLauncher.c_str());
         DiscordAskMaybe();   // (premier lancement : l'invitation au Discord vient apres la visite)
         return;
     }
@@ -275,7 +279,7 @@ static void TutoStart(bool all)
     for (int i = 0; i < kTutoN; i++) if (!TutoSkip(i) && (all || VerCmp(kTuto[i].since, seen) > 0)) g_tutoList.push_back(i);
     if (!all && !g_tutoList.empty() && g_tutoList[0] == 0) g_tutoList.erase(g_tutoList.begin());   // (bienvenue : visite complete seulement)
     g_tutoAll = all;
-    if (g_tutoList.empty()) { WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersionRaw()).c_str(), g_iniLauncher.c_str()); return; }
+    if (g_tutoList.empty()) { WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", TutoSeenVer().c_str(), g_iniLauncher.c_str()); return; }
     g_tutoTabWas = g_tab == TAB_COOP || PageSnap(g_tab) ? TAB_HOME : g_tab;
     g_lobbyOpts = false;
     g_focus = -1;
