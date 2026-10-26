@@ -1,0 +1,5 @@
+TRH01	Cheats: host only
+TRH02	Guests lose F7 and the / commands
+TRH03	Host only
+TRH04	Host: /setmoney <player> <amount> sets a player's money (their own included).
+TRH05	\"Cheats: host only\" (under \"Allow cheats\", in Settings and in the lobby): the host keeps the cheats, their guests lose the F7 panel and the / commands.

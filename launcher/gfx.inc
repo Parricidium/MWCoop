@@ -227,6 +227,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "CeinturesArriere", L"Ceintures des places arrière (hôte)", L"Rear seat belts (host)", 1, {}, {}, {}, 0, 8, "Coop" },
         { "Armoire", L"Armoire : changer de tenue", L"Wardrobe: change outfit", 1, {}, {}, {}, 0, 8, "Coop" },
         { "Triches", L"Autoriser les triches (hôte)", L"Allow cheats (host)", 0, {}, {}, {}, 0, 8, "Coop" },
+        // (Matilda Prime, 26/10 : triches pour l'hote seulement) -- [Coop] TrichesHote, lu par le mod de l'hote (f03a910)
+        { "TrichesHote", L"Triches : hôte seulement", L"Cheats: host only", 0, {}, {}, {}, 0, 8, "Coop" },
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion de квазарик, 13/10 : « tuer les autres a coups de poing, option de l'hote ») -- Sync/Pvp.cs
         { "PvP", L"Coups de poing entre joueurs (hôte)", L"Punches between players (host)", 0, {}, {}, {}, 0, 8, "Coop" },
@@ -581,6 +583,7 @@ static const SetItem kSetItems[] = {
     { 9, SI_SEC, NULL, L"Règles", L"Rules", NULL, NULL },
     { 9, SI_GFX, "ArgentDepart", NULL, NULL, L"Chaque invité démarre avec le pécule du jeu", L"Every guest starts with the game's nest egg" },
     { 9, SI_GFX, "Triches", L"Autoriser les triches (F7)", L"Allow cheats (F7)", NULL, NULL },
+    { 9, SI_GFX, "TrichesHote", L"Triches : hôte seulement", L"Cheats: host only", L"Les invités n'ont plus F7 ni les commandes /", L"Guests lose F7 and the / commands" },   // (cachee si triches coupees : SetItemOn)
     { 9, SI_GFX, "Renverser", L"Les voitures renversent les joueurs", L"Cars run players over", L"Amis et PNJ", L"Friends and NPCs" },
     { 9, SI_GFX, "PvP", L"Coups de poing entre joueurs", L"Punches between players", NULL, NULL },
     { 9, SI_GFX, "Difficulte", L"Difficulté de départ", L"Start difficulty", L"Nouvelle partie : argent et carburant · Vanilla = le jeu tel quel", L"New game: money and fuel · Vanilla = the game as is" },
@@ -848,6 +851,7 @@ static bool SetItemOn(const SetItem &it)
     if (it.only == (g_game == GAME_MSC ? 1 : 2)) return false;
     if (it.only == 3) return !kRtShown;
     if (!kRtShown && (IsRtKey(it.key) || it.card == kRtCard)) return false;   // (carte Ray tracing entiere, son pied compris)
+    if (it.key && !strcmp(it.key, "TrichesHote") && GfxGet("Triches") <= 0) return false;   // (sous-reglage : seulement triches autorisees)
     return it.kind != SI_GFX || SetGfxIdx(it.key) >= 0;
 }
 static bool SetDrawn(RectF r) { return r.Y + r.Height > g_setTop && r.Y < g_setBottom; }

@@ -1999,3 +1999,8 @@ ACCEPT THE FILES	ПРИНЯТЬ ФАЙЛЫ
 The 3D model of the Sorbet's rear seat belts (My Winter Car).	3D-модель задних ремней безопасности Sorbet (My Winter Car).
 Windows 7: the Steam network no longer works with Steam Legacy, use IP mode (Radmin VPN or ZeroTier)	Windows 7: сеть Steam больше не работает со Steam Legacy, используй режим IP (Radmin VPN или ZeroTier)
 Windows 7: use IP / VPN	Windows 7: выбери IP / VPN
+Cheats: host only	Читы: только хост
+Guests lose F7 and the / commands	Гости теряют F7 и команды /
+Host only	Только хост
+Host: /setmoney <player> <amount> sets a player's money (their own included).	Хост: /setmoney <игрок> <сумма> задаёт деньги игрока (и свои тоже).
+\"Cheats: host only\" (under \"Allow cheats\", in Settings and in the lobby): the host keeps the cheats, their guests lose the F7 panel and the / commands.	«Читы: только хост» (под «Разрешить читы», в Настройках и в лобби): читы остаются у хоста, гости теряют панель F7 и команды /.
