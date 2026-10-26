@@ -957,6 +957,7 @@ namespace MWCoop
             { "/setmoney <player> <amount>: (host) sets a player's money, yours included", "/setmoney <игрок> <сумма>: (хост) задаёт деньги игрока, включая свои" },
             { "The host set your money to ", "Хост установил твои деньги: " },
             { "Set money", "Задать деньги" },
+            { "amount (mk)", "сумма (mk)" },
             { "Set", "Задать" },
             { "Allowed for you only (host only) · announced to everyone", "Разрешены только тебе (только хост) · объявляются всем" },
             { "For the host only.", "Только для хоста." },

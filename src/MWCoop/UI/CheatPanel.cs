@@ -64,7 +64,14 @@ namespace MWCoop
             if (!moneyText.TryGetValue(id, out s)) s = "";
             float bw = P(78), lw = P(120);
             Style.Text(new Rect(r.x, r.y, lw, r.height), Lang.T("Fixer l'argent", "Set money"), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
-            string ns = GUI.TextField(new Rect(r.x + lw, r.y + P(2), r.width - lw - bw - P(6), r.height - P(4)), s, 7, Style.Field(13));
+            // (fond du champ dessine ici, comme le tchat : le style seul est transparent ; vide : « montant » en gris)
+            Rect rf = new Rect(r.x + lw, r.y + P(2), r.width - lw - bw - P(6), r.height - P(4));
+            string cn = "mwcoop-argent-" + id;
+            bool focused = GUI.GetNameOfFocusedControl() == cn;
+            if (Event.current.type == EventType.Repaint) Style.FieldBack(rf, focused);
+            if (s.Length == 0 && !focused) Style.Text(new Rect(rf.x + P(12), rf.y, rf.width - P(12), rf.height), Lang.T("montant (mk)", "amount (mk)"), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+            GUI.SetNextControlName(cn);
+            string ns = GUI.TextField(rf, s, 7, Style.Field(13));
             var digits = new System.Text.StringBuilder();
             foreach (char c in ns) if (c >= '0' && c <= '9') digits.Append(c);
             moneyText[id] = digits.ToString();
