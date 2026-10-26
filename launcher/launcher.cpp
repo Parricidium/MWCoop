@@ -7575,44 +7575,80 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     // Auto-test de la liste des mods en plusieurs messages
     if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
-    // Essai : /es2 <journal> <fichier>... -- sauvegardes Easy Save 2 : relues, reecrites sans changement (comparees a l'octet),
-    // types des entrees, controles ; puis une copie en memoire avec un NaN (doit etre trouve) et une coupee (doit etre refusee).
+    // Essai : /es2 <journal> <fichier>... -- sauvegardes Easy Save 2 (nom en msc-... : regles de My Summer Car) : relues,
+    // reecrites sans changement (comparees a l'octet), controlees ; sur une msc-defaultES2File : trois fautes posees (Satsuma en
+    // NaN, piece demontee mais vissee, objet sous la carte), trouvees, reparees, relues ; fichiers msc-abime.txt et msc-repare.txt
+    // a cote du journal (essais de chargement en jeu). Et le fichier coupe aux 2/3 (doit etre refuse).
     if (argc >= 4 && !_wcsicmp(argv[1], L"/es2")) {
         g_launcherLog = argv[2];
+        std::wstring outDir = DirOf(argv[2]);
         for (int a = 3; a < argc; a++) {
             std::vector<unsigned char> d;
             if (!ReadAll(argv[a], d)) { LaunchLog("es2 : %s illisible", Narrow(argv[a], CP_UTF8).c_str()); continue; }
-            std::string raw(d.begin(), d.end());
+            std::string raw(d.begin(), d.end()), name = Narrow(argv[a], CP_UTF8);
+            bool msc = name.find("msc-") != std::string::npos;
             Es2File f;
             bool ok = Es2Parse(raw, f);
-            std::map<uint32_t, int> kinds;
-            for (auto &e : f.e) kinds[Es2Kind(f, e)]++;
-            std::string ks;
-            for (auto &k : kinds) { char b[40]; sprintf_s(b, " %08X:%d", k.first, k.second); ks += b; }
-            bool same = Es2Write(f, {}) == raw;
-            std::vector<Es2Issue> is = Es2Check(f);
-            LaunchLog("es2 : %s : %zu octets, %zu entrees, lecture %s, reecriture %s, %zu probleme(s) ; types%s", Narrow(argv[a], CP_UTF8).c_str(), raw.size(), f.e.size(),
-                      ok ? "ok" : f.err.c_str(), same ? "IDENTIQUE" : "DIFFERENTE", is.size(), ks.c_str());
-            for (auto &i : is) LaunchLog("es2 :   %s : %s", f.e[i.entry].tag.c_str(), i.what.c_str());
-            // un NaN dans le premier transform (ou float), puis relu
-            for (size_t k = 0; k < f.e.size(); k++) {
-                uint32_t kd = Es2Kind(f, f.e[k]);
-                if (kd != ES2_TRANSFORM && kd != ES2_FLOAT) continue;
-                std::string nd = f.bytes.substr(f.e[k].data, f.e[k].len);
-                size_t at = 5 + (kd == ES2_TRANSFORM ? 1 : 0);
-                const unsigned char nan[4] = { 0x00, 0x00, 0xC0, 0x7F };
-                for (int b = 0; b < 4; b++) nd[at + b] = (char)nan[b];
-                Es2File g;
-                bool ok2 = Es2Parse(Es2Write(f, { { k, nd } }), g);
-                std::vector<Es2Issue> is2 = Es2Check(g);
-                bool found = false;
-                for (auto &i : is2) if (i.entry == k) found = true;
-                LaunchLog("es2 :   NaN pose dans « %s » : relu %s, trouve %s", f.e[k].tag.c_str(), ok2 ? "ok" : g.err.c_str(), found ? "OUI" : "NON");
-                break;
+            Es2Ctx c = { Es2RulesFor(msc ? GAME_MSC : GAME_MWC), 0, false, 0 };
+            std::vector<Es2Issue> is = Es2Check(f, c);
+            LaunchLog("es2 : %s : %zu entrees, lecture %s, reecriture %s, %zu probleme(s)", name.c_str(), f.e.size(), ok ? "ok" : f.err.c_str(), Es2Write(f, {}) == raw ? "IDENTIQUE" : "DIFFERENTE", is.size());
+            for (auto &i : is) LaunchLog("es2 :   [%d] %s : %s", i.sev, i.entry < f.e.size() ? f.e[i.entry].tag.c_str() : "-", Narrow(i.what, CP_UTF8).c_str());
+            Es2File cut;
+            LaunchLog("es2 :   coupe aux 2/3 : %s", Es2Parse(raw.substr(0, raw.size() * 2 / 3), cut) ? "LU (pas normal)" : cut.err.c_str());
+            if (!msc || name.find("defaultES2File") == std::string::npos) continue;
+            std::map<size_t, std::string> bad;
+            std::map<std::string, size_t> idx;
+            for (size_t i = 0; i < f.e.size(); i++) idx[f.e[i].tag] = i;
+            auto put = [&](const char *tag, size_t at, float v) {
+                auto it = idx.find(tag);
+                if (it == idx.end()) return false;
+                std::string x = bad.count(it->second) ? bad[it->second] : f.bytes.substr(f.e[it->second].data, f.e[it->second].len);
+                Es2PutF32(x, at, v);
+                bad[it->second] = x;
+                return true;
+            };
+            float nan; uint32_t nu = 0x7FC00000; memcpy(&nan, &nu, 4);
+            bool f1 = put("CarTransform", 6, nan);
+            std::string part;
+            for (int k = 0; k < kEs2Msc.nparts && part.empty(); k++) {   // une piece montee et vissee : demontee, vis gardees
+                auto in = idx.find(std::string(kEs2Msc.parts[k].piece) + "Installed"), bo = idx.find(kEs2Msc.parts[k].bolts);
+                std::vector<int> n;
+                if (in == idx.end() || bo == idx.end() || !f.bytes[f.e[in->second].data + 5] || !Es2Bolts(f, f.e[bo->second], n)) continue;
+                int s = 0; for (int v : n) s += v;
+                if (s <= 0) continue;
+                std::string x = f.bytes.substr(f.e[in->second].data, f.e[in->second].len);
+                x[5] = 0;
+                bad[in->second] = x;
+                part = kEs2Msc.parts[k].piece;
             }
-            Es2File c;
-            bool ok3 = Es2Parse(raw.substr(0, raw.size() * 2 / 3), c);
-            LaunchLog("es2 :   fichier coupe aux 2/3 : %s", ok3 ? "LU (pas normal)" : c.err.c_str());
+            std::string under;
+            for (size_t i = 0; i < f.e.size() && under.empty(); i++) {   // un objet (pas un vehicule ni le joueur) sous la carte
+                if (Es2Kind(f, f.e[i]) != ES2_TRANSFORM || f.e[i].tag.find("Transform") != std::string::npos || f.e[i].tag == "WeatherPos") continue;
+                std::string x = f.bytes.substr(f.e[i].data, f.e[i].len);
+                Es2PutF32(x, 10, -120.0f);
+                bad[i] = x;
+                under = f.e[i].tag;
+            }
+            Es2File g;
+            std::string broken = Es2Write(f, bad);
+            Es2Parse(broken, g);
+            Es2Ctx c2 = { &kEs2Msc, 0, false, 0 };
+            std::vector<Es2Issue> is2 = Es2Check(g, c2);
+            LaunchLog("es2 :   fautes posees : Satsuma NaN %d, piece demontee vissee « %s », sous la carte « %s » -> %zu probleme(s)", (int)f1, part.c_str(), under.c_str(), is2.size());
+            for (auto &i : is2) LaunchLog("es2 :     [%d] %s : %s", i.sev, i.entry < g.e.size() ? g.e[i.entry].tag.c_str() : "-", Narrow(i.what, CP_UTF8).c_str());
+            Es2File h;
+            std::string fixed = Es2Write(g, Es2Fixes(is2));
+            bool ok4 = Es2Parse(fixed, h);
+            Es2Ctx c3 = { &kEs2Msc, 0, false, 0 };
+            std::vector<Es2Issue> is3 = Es2Check(h, c3);
+            int left = 0;
+            for (auto &i : is3) if (i.sev == 2) left++;
+            LaunchLog("es2 :   repare : relu %s, %zu octets (abime %zu), reparables restants %d", ok4 ? "ok" : h.err.c_str(), fixed.size(), broken.size(), left);
+            const std::pair<const wchar_t *, const std::string *> outs[] = { { L"msc-abime.txt", &broken }, { L"msc-repare.txt", &fixed } };
+            for (auto &x : outs) {
+                HANDLE o = CreateFileW((outDir + x.first).c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+                if (o != INVALID_HANDLE_VALUE) { DWORD wr; WriteFile(o, x.second->data(), (DWORD)x.second->size(), &wr, NULL); CloseHandle(o); }
+            }
         }
         return 0;
     }
