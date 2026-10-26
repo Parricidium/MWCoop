@@ -1,0 +1,56 @@
+Sauvegarde My Winter Car (Easy Save 2) -- regles pour « Verifier la sauvegarde » du lanceur ([MWC], 26/10)
+Releve sur les parties des instances d'essai (MWCoop-Joueur1..4) et la copie de JD du 02/10, automates du jeu lus en jeu
+(Autotest=chercheautomate, AutomateTexte=VIN2091 / VINP_SteeringRack / WiringBatteryStarter ; Autotest=mwcsauvetags),
+essais de chargement faits en jeu (Autotest=positions, PositionsDe / PositionsAutour).
+
+FORMAT : le meme que My Summer Car (voir run/msc-sauvegarde/LISEZMOI.txt ; son es2dump.py lit aussi ceux de MWC).
+  Fichiers : savefile.txt (monde, joueur, voitures, objets), carparts.txt (pieces de la CORRIS, cablage), items2.txt
+  (objets achetes : compteurs et quelques transforms). meshsave.txt (toles deformees) : ignorer. Rien n'est chiffre.
+  es2set.py (ici) : modification sur place, dont NaN (pos:nan,nan,nan) et les listes de vis (blt:n, longueur changee).
+
+1. POSITIONS : toute entree Transform (hash 76fa7a09) de savefile.txt, carparts.txt et items2.txt est un objet du
+   monde, en coordonnees MONDE (une piece montee porte la position de la voiture). Pas d'exception connue hors du monde.
+   (0, 0, 0) avec rotation (0, 0, 0, 1) = objet jamais apparu (Kela2LetterPos...) : normal, ne pas toucher.
+2. LIMITES : sol du jeu (MAP/MESH/TERRAIN_OBJ) de (-2972, -26, -2284) a (3144, 79, 3677) (releve en jeu).
+   Sous la carte : y < -40. Hors du monde : x < -3100 ou x > 3300, z < -2450 ou z > 3850, ou y > 500.
+   ESSAI : SORBET a position NaN -> le jeu PLANTE juste apres le chargement (Crash! dans output_log). Reparation indispensable.
+   Points surs (positions d'une partie neuve, jour 0 ; essai : reposees telles quelles au chargement) :
+     SorbettPos (SORBET)          -1283.7, 0.8, 1100.2    parking de l'appartement
+     CorrisPos (CORRIS)           1935.5, 4.4, -422.4     (ou parking de l'appartement -1278.7, 1.5, 1100.2 : essai, posee)
+     BachglotzTransform           1552.9, 4.8, 723.7      garage de Fleetari
+     GifuTransform1 (GIFU)        -1527.4, 5.3, 1324.6
+     TractorTransform (KEKMET)    55.4, -1.0, -86.2       (FlatbedTransform 64.2, -1.3, -80.0 ; WoodCutter 64.6, -0.5, -87.2)
+     MopedTransform (JONNEZ)      -19.7, -0.4, 6.1        garage de la maison des parents
+     PlayerTransform              -1285.5, 0.4, 1076.4    appartement
+     pieces et objets (PART, ITEM, TOOL, le reste) : maison des parents, point de depart (-6.2, 1.0, 6.6), ecarter de 0,4 m
+       chaque objet replace (essai : marteau et hache poses au sol a y -0,53, immobiles).
+       PAS le milieu du garage de la maison (-16.5, 0.2, 3.0) : fosse, l'objet tombe a y -1,9.
+     piece MONTEE (AID > 0, ou cablage Installed = vrai) : le jeu la remet sur son point de montage au chargement
+       (SetParent + position locale a zero) -- ne pas la deplacer ; si sa position est NaN, mettre celle de la voiture (CorrisPos).
+   Rotation invalide (NaN, ou quaternion nul) : (0, 0, 0, 1). Echelle NaN ou nulle : (1, 1, 1).
+3. NOMBRES : seuls NaN et +-infini sont des erreurs. De tres grandes valeurs sont normales (JobUOLetterWait = 1e8,
+   PlayerSoberingRate = 1.2e6, PlayerLeaderboardID2 = 6.7e6) : ne pas y toucher.
+   Remplacements surs : PlayerMoney -> argent= de partie.txt, sinon 0 ; PlayerMoneyBank -> banque= de partie.txt, sinon 0 ;
+   PlayerStress / Urine / Thirst / Hunger / Fatigue / Drunk / Dirtiness, HangoverLeft / HangoverStrenght -> 0 ;
+   PlayerWeight -> 83 ; carburant (partie neuve) : SorbettFuelLevel 19.3, BachglotzFuelLevel 37, GifuFuelLevel 130,
+   TractorFuelLevel 42, MopedFuelLevel 2.3, tout autre *FuelLevel / *FuelOil / JerryCan*Level -> 0 ;
+   FuelPriceGasoline 4.33, FuelPriceDiesel 3.37, FuelPriceFuelOil 2.64 ; <ID>WEA (usure) -> 50 ;
+   <ID>TGH -> somme des crans de <ID>BLT ; tout autre float -> 0.
+4. PIECES (carparts.txt ; table-pieces-mwc.tsv : celles qu'avaient les parties relevees -- la regle vaut pour toutes) :
+   piece de la CORRIS, identifiant <ID> (VIN2091, VIN405C1, EXTCLAMP0...) :
+     <ID>AID  int    = numero d'assemblage : > 0 -> le jeu la MONTE au chargement (Status : IntCompare AssemblyID > 0),
+                       0 -> piece libre. Le jeu met 1 au montage. (Il n'y a PAS de booleen « Installed » sauve.)
+     <ID>BLT  liste  = vis, "int(n)" par vis (crans)
+     <ID>TGH  float  = serrage ; le jeu la dit vissee si TGH >= 1 (FloatCompare 1) ; maximum 8 par vis (crics : 32 = 4 vis)
+     <ID>POS  transform ; <ID>WEA float usure ; autres selon la piece : RAT, TLS, TRS (cremaillere), VLV (soupapes),
+     RGB / CC / PT / PTT / MT (peinture, matiere), DAT. Ne pas y toucher.
+   cablage (WiringBatteryStarter, WiringBlockGround...) : <nom> bool = monte ; <nom>BLT / <nom>TGH si le fil a des vis.
+   Regle « pas montee mais vissee » (AID = 0, ou cablage <nom> = faux ; et TGH > 0 ou une vis > int(0)) :
+     <ID>BLT tout a "int(0)", <ID>TGH = 0. (Sans reparation : la piece se charge libre mais garde son serrage -- remontee,
+     elle serait vissee d'un coup.)
+   L'inverse (montee, vis desserrees) est normal en cours de montage : au plus un signalement.
+   Autres entiers de carparts.txt sans suffixe (BRAKEBIAS0, FANBELT0, OILFILTR0...) : compteurs du jeu, ne pas toucher.
+5. VERSIONS DU MOD A SIGNALER (My Winter Car) : aucune version connue pour ecrire une sauvegarde abimee.
+   Pour information seulement : 0.97.3 a 0.97.5 (amortissement des pneus NaN : voitures volantes) et 1.7.4 a 1.8.11
+   (Rivett qui s'envole apres la reprise par un invite) ont pu laisser une voiture hors du monde -- la regle 2 la ramene.
+   partie.txt sans ligne version= : sauvegarde faite avant mwc-1.15.8 (version= et jeu= ajoutes par SaveStats, 26/10).

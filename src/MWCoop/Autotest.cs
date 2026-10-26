@@ -830,6 +830,33 @@ namespace MWCoop
         }
         static readonly System.Collections.Generic.Dictionary<Transform, Vector3> boltRef = new System.Collections.Generic.Dictionary<Transform, Vector3>();
         static int boltStep, boltBreak, wheelTry; static float wheelAt;
+        // Automates qui sauvent dans carparts.txt / items2.txt / savefile.txt : leurs variables texte « UT... » (tags de la
+        // sauvegarde, construits a l'Init) et ce qui decide du montage (ID, InstallPoint, AssemblyID, Installed). Une ligne par automate.
+        static void MwcSaveTags()
+        {
+            var sb = new System.Text.StringBuilder("chemin\tautomate\tID\tpoint_de_montage\tAssemblyID\tInstalled\ttags (variable=tag)\n");
+            int n = 0;
+            foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+            {
+                if (f == null || f.hideFlags != HideFlags.None || f.FsmVariables == null) continue;
+                var tags = new System.Text.StringBuilder();
+                foreach (FsmString v in f.FsmVariables.StringVariables)
+                    if (v != null && v.Name.StartsWith("UT") && !string.IsNullOrEmpty(v.Value)) tags.Append(v.Name).Append('=').Append(v.Value).Append(' ');
+                if (tags.Length == 0) continue;
+                FsmString id = f.FsmVariables.FindFsmString("ID");
+                FsmGameObject ip = f.FsmVariables.FindFsmGameObject("InstallPoint");
+                FsmInt aid = f.FsmVariables.FindFsmInt("AssemblyID");
+                FsmBool inst = f.FsmVariables.FindFsmBool("Installed");
+                sb.Append(Recon.Path(f.transform)).Append('\t').Append(f.FsmName).Append('\t').Append(id != null ? id.Value : "")
+                  .Append('\t').Append(ip != null && ip.Value != null ? ip.Value.name : "").Append('\t').Append(aid != null ? aid.Value.ToString() : "")
+                  .Append('\t').Append(inst != null ? inst.Value.ToString() : "").Append('\t').Append(tags.ToString().Trim()).Append('\n');
+                n++;
+            }
+            string path = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "mwc-sauvetags.tsv");
+            System.IO.File.WriteAllText(path, sb.ToString());
+            Log.Info("autotest : mwcsauvetags, " + n + " automates -> " + path);
+        }
+
         static void MscSaveTags()
         {
             GameObject db = Game.FindAny("Database");
@@ -1755,6 +1782,9 @@ namespace MWCoop
                     Log.Info("autotest : autour de " + at.ToString("F1") + sb);
                 }
             }
+            // ([Test] Autotest=mwcsauvetags : a 40 s, table des pieces de la sauvegarde pour « Verifier la sauvegarde » du lanceur
+            // (lot B, 26/10) -- dumps/mwc-sauvetags.tsv)
+            if (mode == "mwcsauvetags" && t > 40f && step == 0) { step = 1; MwcSaveTags(); }
             // ([Test] Autotest=chercheautomate, AutomateTexte=<texte> : automates de l'objet <texte> ou dont une variable texte contient <texte> -- par ex.
             // l'identifiant d'une piece de la sauvegarde, VIN2091 ; les deux premiers vides comme Automate)
             if (mode == "chercheautomate" && t > 40f && step == 0)
