@@ -287,26 +287,30 @@ struct OfferJob { std::wstring dir, game, modDir, paint; bool msc; std::string v
 // Une unite de l'offre : un dossier (ou une DLL) qui part en entier ou pas du tout (JD, 25/10). prio : ordre de passage
 // sous les plafonds -- 0 les DLL, 1 References et MSCLoader_*, 2 les dossiers des mods (Assets hors destinations\, reglages),
 // 3 le contenu du jeu, 4 les circuits convertis (Assets\<X>\destinations\<circuit>) ; a prio egale, les plus petits d'abord.
-struct OfferUnit { std::string name, cat; int prio = 0; std::vector<SyncFile> files; uint64_t bytes = 0; };
+struct OfferUnit { std::string name, cat, skipEx; int prio = 0, skipped = 0; std::vector<SyncFile> files; uint64_t bytes = 0; };   // skipped : fichiers refuses (chemin de plus de 200 caracteres, illisible), skipEx le premier
 // Fichiers de base + rel (rel vide ou "\X\Y") dans u, chemins prefix + "X\Y\<fichier>" ; skip : un sous-dossier de rel lui-meme
 // laisse de cote (destinations\ : chaque circuit est sa propre unite).
-static void OfferCollect(const std::wstring &base, const std::wstring &rel, const std::string &prefix, OfferUnit &u, const wchar_t *skip = NULL)
+static bool OfferCollect(const std::wstring &base, const std::wstring &rel, const std::string &prefix, OfferUnit &u, const wchar_t *skip = NULL)
 {
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((base + rel + L"\\*").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) return false;
     do {
         std::wstring n = fd.cFileName;
         if (n == L"." || n == L"..") continue;
         std::wstring r = rel + L"\\" + n;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { if (!skip || _wcsicmp(n.c_str(), skip)) OfferCollect(base, r, prefix, u); continue; }
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {   // (un sous-dossier qu'on ne peut pas ouvrir -- chemin de plus de 260 caracteres -- est compte aussi)
+            if ((!skip || _wcsicmp(n.c_str(), skip)) && !OfferCollect(base, r, prefix, u) && !u.skipped++) u.skipEx = prefix + Narrow(r.substr(1), CP_UTF8) + "\\";
+            continue;
+        }
         SyncFile f;
         f.path = prefix + Narrow(r.substr(1), CP_UTF8);   // (sans le \ de tete)
-        if (!SyncPathOk(f.path) || !FileFnvCached(base + r, &f.hash, &f.size)) continue;
+        if (!SyncPathOk(f.path) || !FileFnvCached(base + r, &f.hash, &f.size)) { if (!u.skipped++) u.skipEx = f.path; continue; }
         u.bytes += f.size;
         u.files.push_back(f);
     } while (FindNextFileW(h, &fd));
     FindClose(h);
+    return true;
 }
 // Messages de la liste : le premier (M_MODS, ce qui tient dans 60 Ko, plus la marque 0xC5 si la suite existe), puis la
 // suite (M_MODSX). o.key : empreinte du premier ; o.files : la liste entiere, dans l'ordre.
@@ -375,6 +379,7 @@ static DWORD WINAPI OfferThread(void *p)
             SyncFile f;
             f.path = "Mods\\" + Narrow(m.first, CP_UTF8);
             if (SyncPathOk(f.path) && FileFnvCached(job->dir + m.first, &f.hash, &f.size)) { u.files.push_back(f); u.bytes += f.size; }
+            else { u.skipped++; u.skipEx = f.path; }
             assets(m.second);
             OfferCollect(d, L"\\Config\\Mod Settings\\" + m.second, "Mods\\", unit(Narrow(m.second, CP_UTF8) + " (settings)", 2));
         }
@@ -414,7 +419,7 @@ static DWORD WINAPI OfferThread(void *p)
             SyncFile f;
             f.path = Narrow(rel, CP_UTF8);
             std::wstring src = !job->paint.empty() && IsCarPng(rel) ? job->paint : ContentBase(i, job->game, job->modDir) + rel;
-            if (!SyncPathOk(f.path) || !FileFnvCached(src, &f.hash, &f.size)) continue;
+            if (!SyncPathOk(f.path) || !FileFnvCached(src, &f.hash, &f.size)) { if (!u.skipped++) u.skipEx = f.path; continue; }
             u.bytes += f.size;
             u.files.push_back(f);
         }
@@ -424,6 +429,8 @@ static DWORD WINAPI OfferThread(void *p)
     // dossiers des mods du plus petit au plus gros, le contenu du jeu, les circuits convertis en dernier.
     std::stable_sort(units.begin(), units.end(), [](const OfferUnit &a, const OfferUnit &b) { return a.prio != b.prio ? a.prio < b.prio : a.bytes < b.bytes; });
     for (OfferUnit &u : units) {
+        if (u.skipped)   // (jamais en silence : Denisman 25/10, « mwcoop won't read all the files »)
+            LaunchLog("mods : %s : %d fichier(s) ou dossier(s) pas envoye(s) (chemin trop long ou illisible), par ex. %s", u.name.c_str(), u.skipped, u.skipEx.c_str());
         if (u.files.empty()) continue;
         if (o.files.size() + u.files.size() > 3000 || total + u.bytes > (2ull << 30)) {
             o.dropped.push_back(u.name);
@@ -433,7 +440,8 @@ static DWORD WINAPI OfferThread(void *p)
         for (auto &f : u.files) o.files.push_back(f);
         total += u.bytes;
         if (!u.cat.empty()) o.cats.push_back(u.cat);
-    }    std::string blob;
+    }
+    std::string blob;
     std::vector<std::string> extra;
     OfferSplit(o, blob, extra);
     EnterCriticalSection(&g_lcs);
