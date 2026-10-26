@@ -828,6 +828,57 @@ namespace MWCoop
                 Log.Info("autotest : reprise t=" + t.ToString("F0") + " " + VehicleSync.DriveProbe(car));
             }
         }
+        static readonly System.Collections.Generic.Dictionary<Transform, Vector3> boltRef = new System.Collections.Generic.Dictionary<Transform, Vector3>();
+        static int boltStep, boltBreak, wheelTry; static float wheelAt;
+        static void MscBoltsScan()
+        {
+            Rigidbody car = VehicleSync.Body("SATSUMA");
+            int n = 0, far = 0, shown = 0, lone = 0, groups = 0, movedN = 0;
+            bool verbose = Config.GetInt("Test", "BoulonsTout", 0) != 0;   // (sinon : seulement les groupes suspects)
+            foreach (Transform bs in Resources.FindObjectsOfTypeAll<Transform>())
+            {
+                if (bs.name != "Bolts" || bs.parent == null || bs.gameObject.hideFlags != HideFlags.None) continue;
+                Transform part = bs.parent;
+                groups++;
+                int vis = 0, all = 0; float maxD = 0f;
+                foreach (Renderer r in bs.GetComponentsInChildren<Renderer>(true))
+                {
+                    all++;
+                    if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
+                    vis++;
+                    maxD = Mathf.Max(maxD, Vector3.Distance(r.transform.position, part.position));
+                }
+                // (maillage de la piece elle-meme, hors vis : eteint alors que des vis se voient = vis qui flottent seules)
+                int body = 0, bodyOn = 0;
+                foreach (Renderer r in part.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (r.transform.IsChildOf(bs)) continue;
+                    body++;
+                    if (r.enabled && r.gameObject.activeInHierarchy) bodyOn++;
+                }
+                bool alone = vis > 0 && body > 0 && bodyOn == 0;
+                // (decalage dans le repere de la voiture depuis le premier releve : piece restee en arriere avec ses vis)
+                bool moved = false; float shift = 0f;
+                if (car != null && vis > 0 && bs.IsChildOf(car.transform))
+                {
+                    Vector3 rel = car.transform.InverseTransformPoint(bs.position), r0;
+                    if (!boltRef.TryGetValue(bs, out r0)) boltRef[bs] = rel;
+                    else { shift = (rel - r0).magnitude; moved = shift > 0.3f; }
+                }
+                if (moved) movedN++;
+                if (alone) lone++;
+                if (!verbose && !alone && !moved && !(vis > 0 && car != null && !bs.IsChildOf(car.transform))) continue;
+                n++;
+                if (vis > 0) shown++;
+                string carRel = car != null ? car.transform.InverseTransformPoint(bs.position).ToString("F2") : "-";
+                bool under = car != null && bs.IsChildOf(car.transform);
+                if (vis > 0 && maxD > 0.6f) far++;
+                Log.Info("autotest : mscboulons, " + Recon.Path(bs) + (bs.gameObject.activeInHierarchy ? "" : " (inactif)") + " vis " + vis + "/" + all
+                    + ", piece " + part.name + (part.gameObject.activeInHierarchy ? "" : " (inactive)") + (under ? " SOUS la voiture" : " hors voiture")
+                    + ", repere voiture " + carRel + ", ecart vis-piece max " + maxD.ToString("F2") + " m, maillage de la piece " + bodyOn + "/" + body + (alone ? " -> VIS SEULES" : "") + (moved ? " -> DECALEES de " + shift.ToString("F2") + " m" : ""));
+            }
+            Log.Info("autotest : mscboulons, " + groups + " groupes Bolts (" + n + " notes), " + shown + " avec vis visibles, " + far + " loin de leur piece (> 0.6 m), " + lone + " vis seules (piece invisible), " + movedN + " decalees dans la voiture" + (car != null ? ", voiture en " + car.position.ToString("F1") + " " + car.velocity.magnitude.ToString("F1") + " m/s" + (car.isKinematic ? " (copie)" : "") : ""));
+        }
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -909,6 +960,54 @@ namespace MWCoop
                         }
                         Log.Info("autotest : mscceintures, " + rb.name + " : " + n + " objets, ceinture passager " + Seats.TestBeltOf(rb.transform));
                     }
+                }
+                return;
+            }
+            // ([Test] Autotest=mscboulons : ou sont les vis visibles des pieces de la Database (Bolts/BoltPM/boltN) par rapport a la
+            // SATSUMA et a leur piece -- boulons qui flottent a cote de la voiture, Markos/Yunus/WIGA 25/10 ; a BoulonsA s (45),
+            // puis toutes les BoulonsPas s (0 : une fois))
+            if (mode == "mscboulons")
+            {
+                float at = Config.GetFloat("Test", "BoulonsA", 45f), pas = Config.GetFloat("Test", "BoulonsPas", 0f);
+                if (t > at && (step == 0 || pas > 0f && t > repriseProbeAt)) { step = 1; repriseProbeAt = t + pas; MscBoltsScan(); }
+                // ([Test] BoulonsRoule=<s>, chez l'hote : il prend le volant de la SATSUMA a ce moment, la fait rouler a 4 m/s de s+3
+                // a s+11 (copie chez l'invite), puis la lache et sort a s+16)
+                // ([Test] BoulonsCasse=<s> : a ce moment, les attaches des pieces de BoulonsPieces (portiere droite et capot de la
+                // SATSUMA par defaut) cedent comme dans un choc (breakForce a 1) -- chez celui qui a la cle)
+                float bc = Config.GetFloat("Test", "BoulonsCasse", 0f);
+                if (bc > 0f && t > bc && boltBreak == 0)
+                {
+                    boltBreak = 1;
+                    Rigidbody cb = VehicleSync.Body("SATSUMA");
+                    foreach (string pn in Config.Get("Test", "BoulonsPieces", "door right(Clone),hood(Clone)").Split(','))
+                    {
+                        Transform pt = null;
+                        if (cb != null) foreach (Transform x in cb.GetComponentsInChildren<Transform>()) if (x.name == pn.Trim()) { pt = x; break; }
+                        if (pt == null) { Log.Info("autotest : mscboulons, casse : " + pn + " introuvable"); continue; }
+                        int k = 0;
+                        Rigidbody pb = pt.GetComponent<Rigidbody>();
+                        foreach (Joint j in cb.GetComponentsInChildren<Joint>())
+                            if (j.transform == pt || pb != null && j.connectedBody == pb) { j.breakForce = 1f; j.breakTorque = 1f; k++; Rigidbody jb = j.GetComponent<Rigidbody>(); if (jb != null) { jb.isKinematic = false; jb.WakeUp(); jb.AddForce(Vector3.up * 5f, ForceMode.VelocityChange); } cb.WakeUp(); Log.Info("autotest : mscboulons, casse : " + j.GetType().Name + " sur " + j.name + " -> " + (j.connectedBody != null ? j.connectedBody.name : "monde")); }
+                        Log.Info("autotest : mscboulons, casse : " + Recon.Path(pt) + ", " + k + " attache(s) a 1 N");
+                    }
+                }
+                // ([Test] BoulonsRoue=<s> : a ce moment, l'automate Use de la roue avant gauche de la SATSUMA est mis en « Chance »
+                // (tirage de la chute) BoulonsRoueFois fois (1), une par seconde ; son etat et la roue notes 0,5 s apres chaque essai)
+                float rw = Config.GetFloat("Test", "BoulonsRoue", 0f);
+                if (rw > 0f && t > rw + wheelTry && wheelTry < Config.GetInt("Test", "BoulonsRoueFois", 1))
+                {
+                    PlayMakerFSM wu = Game.FindFsm("SATSUMA(557kg, 248)/FL/AckerFL/wheelFL/TireFL/OFFSET/pivot_wheel_standard/wheel_regula", "Use");
+                    if (wu == null) { Log.Info("autotest : mscboulons, roue : automate Use introuvable"); wheelTry = 99; }
+                    else if (wheelAt == 0f) { wheelAt = t; float wt = Config.GetFloat("Test", "BoulonsRoueSerrage", -1f); if (wt >= 0f) wu.FsmVariables.GetFsmFloat("Tightness").Value = wt; Game.SetState(wu, "Chance"); Log.Info("autotest : mscboulons, roue : Chance (Tightness " + wu.FsmVariables.GetFsmFloat("Tightness").Value + ")"); }
+                    else if (t > wheelAt + 0.5f) { Log.Info("autotest : mscboulons, roue : apres -> [" + wu.ActiveStateName + "], Tightness " + wu.FsmVariables.GetFsmFloat("Tightness").Value + ", sous " + (wu.transform.parent != null ? wu.transform.parent.name : "rien")); wheelAt = 0f; wheelTry++; }
+                }
+                float rl = Config.GetFloat("Test", "BoulonsRoule", 0f);
+                if (rl > 0f && Net.Session.IsHost)
+                {
+                    Rigidbody cb = VehicleSync.Body("SATSUMA");
+                    if (t > rl && boltStep == 0) { boltStep = 1; Log.Info("autotest : mscboulons, volant -> " + VehicleSync.TestEnter("SATSUMA", true)); }
+                    if (cb != null && t > rl + 3f && t < rl + 11f) { Vector3 v = cb.transform.forward * 4f; cb.velocity = new Vector3(v.x, cb.velocity.y, v.z); if (boltStep == 1) { boltStep = 2; Log.Info("autotest : mscboulons, la voiture roule"); } }
+                    if (t > rl + 16f && boltStep == 2) { boltStep = 3; Log.Info("autotest : mscboulons, sortie -> " + VehicleSync.TestExit("SATSUMA")); }
                 }
                 return;
             }

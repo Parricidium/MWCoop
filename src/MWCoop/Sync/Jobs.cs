@@ -656,7 +656,10 @@ namespace MWCoop
                    // (« Save game » -> « Load game » : SetRotation de FL ; « Initialize » : Wheel.physicMaterial vide 11 s) donc suivie ici --
                    // rejouee chez l'autre, roue sans matiere et pivot de roue tourne en pleine conduite : sursauts de la voiture, pieces
                    // pas encore vissees arrachees au montage (aile de WIGA, 25/10 : 161 rejeux de roues en une partie).
-                   || f.FsmName == "Data" && f.Fsm != null && f.Fsm.GetState("Terrain Compare") != null && f.Fsm.GetState("Tire disable") != null;
+                   || f.FsmName == "Data" && f.Fsm != null && f.Fsm.GetState("Terrain Compare") != null && f.Fsm.GetState("Tire disable") != null
+                   // (meme famille : wheel_regula::Use des roues -- « Bolts ON 2 -BREAK-> Chance » tire au sort la chute de la roue ; rejoue,
+                   // l'autre tirait aussi : Parts.WheelChanceHook laisse le tirage a celui qui mene la voiture, Yunus et Markos 25/10)
+                   || f.FsmName == "Use" && f.Fsm != null && f.Fsm.GetState("Chance") != null && f.Fsm.GetState("Break off") != null && f.Fsm.GetState("Bolts ON 2") != null;
         }
 
         static bool IgnitionLike(PlayMakerFSM f)
