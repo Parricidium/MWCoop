@@ -4883,6 +4883,7 @@ static void NetTest()
 static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (plus bas ; Nouveautes, ui.inc, saves.inc)
 #include "saves.inc"
 #include "es2.inc"   // (lecture et reecriture des sauvegardes du jeu : Verifier la sauvegarde)
+#include "places.inc"   // (outil des places reserve : ID MWCoop, cle d'acces signee par JD, cles retirees)
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -7718,7 +7719,52 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         LaunchLog("testreparer : fichier %zu octets (avant %zu), %s", o.size(), d.size(), o == d ? "INCHANGE" : "repare");
         return 0;
     }
-    // Essai : /gardeinstall <dossier du lanceur> <journal> -- l'installation dans AppData serait-elle bloquee pour ce dossier ?
+    // Essai : /cle <journal> <cle-publique.txt> <fichier de cle> <outil-places.json> <.mwcp> <dossier d'extraction> -- avec une
+    // cle publique d'essai (jamais la liste du lanceur) : ID MWCoop de ce PC, etats de la cle (pas pour cet ID / pour l'ID de la
+    // cle / par SteamID / retiree / signature trafiquee), manifeste signe, sha256, dechiffrement et extraction du paquet.
+    if (argc >= 8 && !_wcsicmp(argv[1], L"/cle")) {
+        g_launcherLog = argv[2];
+        std::vector<unsigned char> d;
+        std::string pubHex, pub, key, json, pkg;
+        if (ReadAll(argv[3], d)) pubHex.assign(d.begin(), d.end());
+        while (!pubHex.empty() && (pubHex.back() == '\r' || pubHex.back() == '\n')) pubHex.pop_back();
+        cle::UnHex(pubHex, pub);
+        std::vector<std::string> pubs = { pub };
+        if (ReadAll(argv[4], d)) key.assign(d.begin(), d.end());
+        if (ReadAll(argv[5], d)) json.assign(d.begin(), d.end());
+        if (ReadAll(argv[6], d)) pkg.assign(d.begin(), d.end());
+        std::wstring id = MwcoopId(), id2 = MwcoopId();
+        LaunchLog("cle : ID MWCoop %s (relu %s, %zu caracteres)", Narrow(id, CP_UTF8).c_str(), id == id2 ? "identique" : "DIFFERENT", id.size());
+        const char *st[] = { "aucune", "VALIDE", "format", "signature", "autre ID", "retiree", "expiree" };
+        std::set<std::string> none;
+        CleInfo c1 = CleCheck(key, pubs, none, id, 0);
+        LaunchLog("cle : avec l'ID de ce PC : %s (%s)", st[c1.st], Narrow(CleEtat(c1), CP_UTF8).c_str());
+        CleInfo c2 = CleCheck(key, pubs, none, L"MWC-AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-F", 0);
+        LaunchLog("cle : avec l'ID de la cle : %s, droit places %d, serie %s", st[c2.st], (int)CleDroit(c2, "places"), c2.serie.c_str());
+        LaunchLog("cle : par SteamID 76561198000000001 : %s", st[CleCheck(key, pubs, none, id, 76561198000000001ull).st]);
+        std::set<std::string> ret = { c2.serie };
+        LaunchLog("cle : serie retiree : %s", st[CleCheck(key, pubs, ret, L"MWC-AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-F", 0).st]);
+        std::string bad = key; size_t dot = bad.find('.', 6); if (dot != std::string::npos && dot > 20) bad[dot - 10] = bad[dot - 10] == 'A' ? 'B' : 'A';
+        LaunchLog("cle : cle trafiquee : %s", st[CleCheck(bad, pubs, none, L"MWC-AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-F", 0).st]);
+        LaunchLog("cle : sans cle publique de JD dans le lanceur : %s", st[CleCheck(key, ClePubs(), none, L"MWC-AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-F", 0).st]);
+        PlacesMan m;
+        bool mok = PlacesManifest(json, pubs, m);
+        LaunchLog("cle : manifeste %s : version %s, asset %s, sha256 %s", mok ? "signe ok" : "REFUSE", m.version.c_str(), m.asset.c_str(), cle::Hex(cle::Sha256(pkg)) == m.sha256 ? "conforme" : "DIFFERENT");
+        std::string zip;
+        bool dok = PlacesDecrypt(pkg, c2.k, zip);
+        std::string pkg2 = pkg; if (pkg2.size() > 40) pkg2[40] ^= 1;
+        std::string z2;
+        LaunchLog("cle : dechiffrement %s (%zu octets) ; paquet abime : %s", dok ? "ok" : "ECHEC", zip.size(), PlacesDecrypt(pkg2, c2.k, z2) ? "ACCEPTE (pas normal)" : "refuse");
+        if (dok) {
+            std::wstring out = WithSlash(argv[7]), zf = out + L"outil.zip";
+            SHCreateDirectoryExW(NULL, out.c_str(), NULL);
+            HANDLE h = CreateFileW(zf.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+            if (h != INVALID_HANDLE_VALUE) { DWORD wr; WriteFile(h, zip.data(), (DWORD)zip.size(), &wr, NULL); CloseHandle(h); }
+            std::string why;
+            LaunchLog("cle : extraction %s %s", Unzip(zf, out + L"x", &why) ? "ok" : "ECHEC", why.c_str());
+        }
+        return 0;
+    }    // Essai : /gardeinstall <dossier du lanceur> <journal> -- l'installation dans AppData serait-elle bloquee pour ce dossier ?
     // (a verifier avant de lancer un lanceur en mode normal sur une instance d'essai ; rien n'est installe ni lance)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/gardeinstall")) {
         g_launcherLog = argv[3];
