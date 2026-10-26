@@ -77,6 +77,7 @@ namespace MWCoop
             public bool RestSet; public Quaternion RestRot; public Vector3 RestPos;   // pose fermee (repere du parent)
             public float TestOffset;   // essais : degres ajoutes a l'angle envoye
             public bool Held;          // fermee sur la copie d'une voiture conduite ailleurs : figee sur la caisse (Hold)
+            public bool HeldOpen;      // ouverte sur cette copie : figee a son angle (HoldOpen)
             public FsmBool PlugOn;     // prise du chauffage : 'On' du jeu (branchee), l'etat vrai (l'automate ne reste qu'1 s dans "Heater on")
         }
 
@@ -378,9 +379,49 @@ namespace MWCoop
         // Posee a sa pose fermee EXACTE (position comprise) : Snap garde la charniere ou elle est, et une charniere qui avait
         // glisse de quelques centimetres pendant que la copie roulait figeait le hayon enfonce dans la caisse (retour de JD,
         // 07/10, hayon de la SORBET chez l'invite).
+        // Ouverte et copie (My Summer Car surtout, passager : la copie est posee a chaque image, une teleportation pour la
+        // physique) : corps libre sur sa charniere, elle battait contre la caisse -- portiere droite cabossee chaque seconde,
+        // bruit et secousses chez le passager (Markos, 26/10, video : « The car shakes a lot, and sometimes it even makes a
+        // noise »). Figee elle aussi, cinematique, a son angle : celui de qui la manie ailleurs (TargetAngle, tournee autour
+        // de sa charniere), ou le sien si c'est nous. Rendue des qu'on la ferme ou que la voiture redevient locale.
+        // [Test] PortiereOuverteLibre=1 : ancien comportement.
+        static void HoldOpen(Door d)
+        {
+            bool hold = d.RestSet && d.State != DoorState.Closed && !d.Closing && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform)
+                        && Config.GetInt("Test", "PortiereOuverteLibre", 0) == 0;
+            if (hold != d.HeldOpen)
+            {
+                if (hold)
+                {
+                    if (d.Body.isKinematic) return;   // (deja figee par le jeu)
+                    d.Body.velocity = Vector3.zero; d.Body.angularVelocity = Vector3.zero;
+                    d.Body.isKinematic = true;
+                    d.HeldOpen = true;
+                    if (holdLogs++ < 20) Log.Info("portieres : " + d.Key + " ouverte (" + Angle(d).ToString("F0") + " deg), figee sur la copie de la voiture");
+                }
+                else
+                {
+                    d.HeldOpen = false;
+                    d.Body.isKinematic = false;
+                    d.Body.WakeUp();
+                }
+                return;
+            }
+            if (!d.HeldOpen || d.Mine || d.LastRemote <= 0f) return;
+            // (angle de l'autre : rotation autour de l'axe de la charniere, l'attache restant a sa place sous la caisse)
+            float a = Mathf.MoveTowardsAngle(Angle(d), d.TargetAngle, ServoMax * Time.deltaTime);
+            Quaternion r = d.RestRot * Quaternion.AngleAxis(a, d.Hinge.axis);
+            Vector3 anchorRest = d.RestPos + d.RestRot * Vector3.Scale(d.Hinge.anchor, d.Body.transform.localScale);
+            Transform b = d.Body.transform;
+            b.localRotation = r;
+            b.localPosition = anchorRest - r * Vector3.Scale(d.Hinge.anchor, b.localScale);
+        }
+
         static void Hold(Door d)
         {
-            if (d.Body == null || d.Hinge == null) { d.Held = false; return; }
+            if (d.Body == null || d.Hinge == null) { d.Held = false; d.HeldOpen = false; return; }
+            HoldOpen(d);
+            if (d.HeldOpen) return;
             bool hold = d.RestSet && d.State != DoorState.Open && !d.Closing && !d.Mine && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform);
             if (hold == d.Held) return;
             if (hold)
