@@ -189,9 +189,9 @@ static std::vector<Es2Issue> Es2Check(const Es2File &f, Es2Ctx &c)
             bool mounted = false;
             const float *mountAt = NULL;   // (montee ailleurs que sur la voiture : sa position si NaN)
             static const float kFuseBox[3] = { -12.2f, 1.2f, 8.8f };
-            if (c.r && c.r->mwc && e.tag.size() > 3 && !e.tag.compare(e.tag.size() - 3, 3, "Pos")) {   // (porte-fusible : <nom>SlotID >= 0 = dans une boite a fusibles -- essai de [MWC] ; NaN : la boite de la maison, le jeu le remet a son emplacement)
-                auto si = idx.find(e.tag.substr(0, e.tag.size() - 3) + "SlotID");
-                if (si != idx.end() && Es2Kind(f, f.e[si->second]) == ES2_INT && Es2I32(f, f.e[si->second]) >= 0) { mounted = true; mountAt = kFuseBox; }   // (emplacements comptes depuis 0 : 1-7 maison, 8-11 appartement)
+            if (c.r && c.r->mwc && e.tag.size() > 3 && !e.tag.compare(e.tag.size() - 3, 3, "Pos")) {   // (porte-fusible : <nom>Tightness > 0 = monte -- automate Use du jeu, lu par [MWC] ; SlotID n'est que l'emplacement ; NaN : la boite de la maison, le jeu le remet a son emplacement)
+                auto si = idx.find(e.tag.substr(0, e.tag.size() - 3) + "Tightness");
+                if (si != idx.end() && Es2Kind(f, f.e[si->second]) == ES2_FLOAT && Es2F32(b, f.e[si->second].data + 5) > 0) { mounted = true; mountAt = kFuseBox; }
             }
             if (mounted) {}
             else if (c.r && c.r->mwc && e.tag.size() > 3 && !e.tag.compare(e.tag.size() - 3, 3, "POS")) {
