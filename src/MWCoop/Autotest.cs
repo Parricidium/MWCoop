@@ -322,11 +322,36 @@ namespace MWCoop
         // [Test] Autotest=mscmontage (MSC, JD et Kristof 24/10 : pieces posees qui retombent) : le joueur [Test] Monteur (0 = hote)
         // fait les montages de [Test] Montages ("point|piece;point|piece", par defaut tableau de bord, compteurs, aile gauche) a 40 s
         // puis toutes les 10 s, comme un clic ; chacun note 5 s apres si la piece tient (les ruptures : « attache rompue »).
-        static int mmStep, mmPush;
+        static int mmStep, mmPush, mmSave, mmAround; static float mmBoltsAt;
         static void MscMontage(float t)
         {
             string[] list = Config.Get("Test", "Montages", "SATSUMA(557kg, 248)/Dashboard/trigger_dashboard|db:Database/DatabaseMechanics/Dashboard;"
                 + "db:Database/DatabaseMechanics/Dashboard/trigger_meters|db:Database/DatabaseMechanics/DashboardMeters;SATSUMA(557kg, 248)/Body/trigger_fender_left|db:Database/DatabaseBody/Fender_Left").Split(';');
+            // ([Test] MontageSauveA=<s>, chez l'hote : sauvegarde en jeu a cet instant -- montage de l'invite ecrit dans la sauvegarde de
+            // l'hote ? WIGA 26/10 : « les actions de l'invite ne sont pas sauvegardees » ; BoulonsA/BoulonsPas : releve des vis qui
+            // flottent, comme Autotest=mscboulons)
+            float sa = Config.GetFloat("Test", "MontageSauveA", 0f);
+            if (sa > 0f && Net.Session.IsHost && t > sa && mmSave == 0) { mmSave = 1; Game.SaveInPlace(); Log.Info("autotest montage : sauvegarde en jeu faite ici"); }
+            float ba = Config.GetFloat("Test", "BoulonsA", 0f);
+            if (ba > 0f && t > ba && t > mmBoltsAt)
+            {
+                mmBoltsAt = t + Config.GetFloat("Test", "BoulonsPas", 10f); MscBoltsScan();
+                // (et l'etat Installed des automates Data des pieces de la liste -- ce que la sauvegarde ecrit -- et le point qui les tient)
+                var sb = new System.Text.StringBuilder();
+                foreach (string m in list)
+                {
+                    string[] mp = m.Split('|'); if (mp.Length < 2 || !mp[1].Trim().StartsWith("db:")) continue;
+                    string dp = mp[1].Trim().Substring(3);
+                    PlayMakerFSM df = Game.FindFsm(dp, "Data");
+                    HutongGames.PlayMaker.FsmBool ib = df != null ? df.FsmVariables.FindFsmBool("Installed") : null;
+                    sb.Append(" | ").Append(dp.Substring(dp.LastIndexOf('/') + 1)).Append(" Installed=").Append(ib != null ? ib.Value.ToString() : "?")
+                      .Append(df != null ? " [" + df.ActiveStateName + "]" : "").Append(", point ").Append(Parts.MscTestHolds(mp[0].Trim())).Append(", ").Append(Parts.MscTestPartState(mp[1].Trim()));
+                }
+                Log.Info("autotest montage : etat" + sb);
+            }
+            // ([Test] MontageEtatAutour=1 : l'etat ci-dessus aussi juste avant et 3 s apres la sauvegarde de l'hote)
+            if (sa > 0f && Net.Session.IsHost && Config.GetInt("Test", "MontageEtatAutour", 1) != 0 && (mmSave == 0 && t > sa - 0.5f || mmSave == 1 && t > sa + 3f) && mmAround < (mmSave == 0 ? 1 : 2))
+            { mmAround = mmSave == 0 ? 1 : 2; mmBoltsAt = 0f; Log.Info("autotest montage : etat releve " + (mmSave == 0 ? "AVANT" : "APRES") + " la sauvegarde"); }
             // ([Test] PousseA=60 : l'invite pousse la voiture 5 s a partir de cet instant, comme Autotest=pousse -- la copie chez l'hote)
             float pa = Config.GetInt("Test", "PousseA", 0);
             if (pa > 0f && !Net.Session.IsHost)
@@ -353,7 +378,12 @@ namespace MWCoop
                 mmStep++;
                 if (Net.Session.LocalId == Config.GetInt("Test", "Monteur", 0)) Log.Info("autotest montage : " + Parts.MscTestClick(pp[0].Trim(), pp[1].Trim()));
             }
-            else if (mmStep % 2 == 1 && t > at + 5f) { mmStep++; Log.Info("autotest montage : " + pp[0].Trim() + " " + Parts.MscTestHolds(pp[0].Trim())); }
+            else if (mmStep % 2 == 1 && t > at + 5f)
+            {
+                mmStep++; Log.Info("autotest montage : " + pp[0].Trim() + " " + Parts.MscTestHolds(pp[0].Trim()));
+                // ([Test] MontageVisser=1 : le monteur serre ensuite toutes les vis de la piece au cran 8, comme un joueur)
+                if (Config.GetInt("Test", "MontageVisser", 0) != 0 && Net.Session.LocalId == Config.GetInt("Test", "Monteur", 0)) Log.Info("autotest montage : " + Parts.MscTestTighten(pp[1].Trim(), 8));
+            }
         }
 
         static int pmStep; static float pmLog;
