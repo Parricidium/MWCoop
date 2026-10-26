@@ -84,8 +84,45 @@ namespace MWCoop
             }
         }
 
+        // Roues de la SATSUMA (.../pivot_wheel_standard/wheel_regula::Use) : au-dessus de 33 km/h avec des ecrous pas serres a fond
+        // (« Bolts ON 2 »), « Chance » tire au sort (SendRandomEvent) la chute de la roue -- « Break off » : ecrous remis a zero,
+        // Removal Detach. Chacun tirait de son cote, sur sa copie aussi : roue tombee chez un seul joueur, ecrous a zero chez lui
+        // (journaux de Yunus et Markos, 25/10 : « Bolts ON 2 -BREAK-> Chance » sur les 4 roues, rejoue chez l'autre ; boulons qui
+        // flottent a cote de la voiture en roulant). Seul celui qui mene la voiture tire ; ailleurs « Chance » repart en « Wait »
+        // sans tirer, et une vraie chute arrive par le demontage de la roue chez lui.
+        static readonly HashSet<PlayMakerFSM> wheelHooked = new HashSet<PlayMakerFSM>();
+        static readonly List<FsmStateAction> wheelCut = new List<FsmStateAction>();
+        static int wheelLogs;
+        class WheelChanceHook : ModHook
+        {
+            public override string Module { get { return "pieces (roues)"; } }
+            public PlayMakerFSM F;
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (Session.Active && !VehicleSync.SimAuthority(F.transform))
+                    {
+                        foreach (FsmStateAction a in State.Actions) if (a != this && a.Enabled) { a.Enabled = false; wheelCut.Add(a); }
+                        if (wheelLogs++ < 10) global::MWCoop.Log.Info("roue " + Recon.Path(F.transform) + " : chute tiree au sort chez celui qui mene la voiture, pas ici");
+                        Fsm.Event(FsmEvent.Finished);
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+        static void MscWheelHook(PlayMakerFSM f)
+        {
+            if (wheelHooked.Contains(f) || f.Fsm == null || f.Fsm.GetState("Bolts ON 2") == null || f.Fsm.GetState("Break off") == null) return;
+            FsmState s = f.Fsm.GetState("Chance");
+            if (s == null || !s.IsInitialized || !Inject(s, new WheelChanceHook { F = f })) return;
+            wheelHooked.Add(f);
+        }
+
         static void MscReset()
         {
+            wheelHooked.Clear(); wheelCut.Clear();
             mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear(); keptJoints.Clear();
         }
 
@@ -266,6 +303,7 @@ namespace MWCoop
                 if (f == null || f.hideFlags != HideFlags.None) continue;
                 string n = f.FsmName;
                 if (n == "Assembly" || n == "Removal" || n == "Screw") MscConsider(f);
+                else if (n == "Use" && f.gameObject.activeInHierarchy) MscWheelHook(f);
             }
             if (mscPoints.Count != before || screws.Count != beforeBolts || mscRemovals.Count != beforeRem)
                 Log.Info("pieces (MSC) : " + mscPoints.Count + " points de montage, " + mscRemovals.Count + " pieces demontables, " + screws.Count + " vis ("
@@ -534,6 +572,7 @@ namespace MWCoop
         // Demontage d'une piece « echange » fait ici : la nouvelle piece libre ({Part} de 'Removal') recoit une cle commune.
         static void MscTick()
         {
+            if (wheelCut.Count > 0) { foreach (FsmStateAction a in wheelCut) a.Enabled = true; wheelCut.Clear(); }
             if (testClick != null) MscTestClickTick();
             MscCheckKept(Time.realtimeSinceStartup);
             if (mscOut.Count == 0) return;
