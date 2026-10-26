@@ -165,6 +165,18 @@ try {
         Zip $cvStage $cvPack
         $assets += @($edPack, $cvPack)
         $hashFiles += @($edPack, $cvPack)
+        # Outil des places, pour les personnes choisies par JD (spec de la cle, 26/10) : paquet CHIFFRE outil-places-<ver>.mwcp et son
+        # manifeste signe outil-places.json, faits sur le PC de JD (outils-prives/places/paquet.ps1, puis chiffrer-outil de
+        # outils-prives/cles) ; joints s'ils sont la (le lanceur ne lit que la derniere release outils-). Jamais l'outil en clair.
+        $opDir = "$root\outils-prives\places\paquet"
+        $opMan = "$opDir\outil-places.json"
+        $opPack = Get-ChildItem "$opDir\outil-places-*.mwcp" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($opPack -and (Test-Path $opMan)) {
+            $assets += @($opPack.FullName, $opMan)
+            $hashFiles += @($opPack.FullName)
+            Write-Host "outil des places joint : $($opPack.Name) + outil-places.json"
+        }
+        else { Write-Host "outil des places : pas de paquet chiffre ni de manifeste dans $opDir (non joint)" }
     }
     # Empreintes SHA-256 publiees a cote des paquets : chacun peut verifier ses fichiers (et les chercher sur VirusTotal)
     # quand un antivirus a apprentissage automatique s'inquiete d'un exe non signe.

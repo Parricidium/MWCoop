@@ -12,8 +12,9 @@ using UnityEngine;
 namespace MWCoop
 {
     // Export pour l'outil des places de JD (25/10, idee de Menor : placer soi-meme les joueurs assis dans chaque voiture et
-    // regler leur posture os par os ; outil prive, outils-prives/places). [Test] ExportPlaces=<dossier> : une fois GAME pose
-    // (ExportPlacesDelai, 25 s), le mod ecrit dans <dossier> :
+    // regler leur posture os par os ; outil prive, outils-prives/places). ExportPlaces=<dossier> -- ligne de lancement du lanceur
+    // ([Lancement] de lancement.ini, profil places-export, jeu hors de l'ecran : personnes choisies par JD, cle d'acces 26/10), ou
+    // [Test] ExportPlaces : une fois GAME pose (ExportPlacesDelai, 25 s), le mod ecrit dans <dossier> :
     //  - avatar.json + avatar.bin : le corps des avatars (copie d'un marcheur du jeu, squelette « fat ») : maillage avec ses
     //    poids, os (nom, parent, pose de liaison), poses (assis = worker1_sitdown tenu, volant voiture / camion = conducteurs
     //    de la circulation), texture ;
@@ -34,7 +35,7 @@ namespace MWCoop
             {
                 if (on == null)
                 {
-                    dir = Config.Get("Test", "ExportPlaces", "");
+                    dir = Config.Get("Coop", "ExportPlaces", Config.Get("Test", "ExportPlaces", ""));   // (lancement.ini passe devant [Coop])
                     on = dir.Length > 0;
                     if (on.Value) Log.Info("export des places demande : " + dir);
                 }
