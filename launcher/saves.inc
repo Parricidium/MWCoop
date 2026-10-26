@@ -40,6 +40,7 @@ enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAV
 enum { SP_USE, SP_RENAME, SP_DIR, SP_DEL, SP_OK, SP_CANCEL, SP_SEL };
 static int g_saveSel = -1;   // onglet : partie choisie (detail a droite) ; -1 : celle en cours
 static RectF g_saveCopiesR;  // section « Copies de secours » de la carte de droite (bulle du tuto)
+static RectF g_saveCheckR;   // bouton « Verifier la sauvegarde » (bulle du tuto)
 
 static std::wstring SaveProfRoot()
 {
@@ -958,7 +959,8 @@ static void DrawSaves(Graphics &g)
         }
         // en bas : utiliser (si ce n'est pas la partie en cours), puis les quatre actions
         float ay = c.Y + c.Height - 16 - 36 * 2 - 8, bw = (w - 8) / 2;
-        UiButton(g, RectF(x, ay - 44, w, 36), T(L"Vérifier la sauvegarde", L"Check the save"), UI_SAVE_CHECK, false, IC_CHECK, s.has, 11);   // (lot B : es2.inc)
+        g_saveCheckR = RectF(x, ay - 44, w, 36);
+        UiButton(g, g_saveCheckR, T(L"Vérifier la sauvegarde", L"Check the save"), UI_SAVE_CHECK, false, IC_CHECK, s.has, 11);   // (lot B : es2.inc)
         if (s.prof != cur) UiButton(g, RectF(x, ay - 44 - 8 - 44, w, 44), T(L"Utiliser pour héberger", L"Use for hosting"), base + SP_USE, true, IC_CHECK);
         UiButton(g, RectF(x, ay, bw, 36), T(L"Dupliquer", L"Duplicate"), UI_SAVE_DUP, false, -1, true, 11);
         UiButton(g, RectF(x + bw + 8, ay, bw, 36), T(L"Exporter (zip)", L"Export (zip)"), UI_SAVE_EXPORT, false, -1, s.has, 11);

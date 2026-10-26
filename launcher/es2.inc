@@ -402,8 +402,8 @@ static void DrawSaveCheck(Graphics &g, RectF c, float y)
     wchar_t sum[200];
     if (!g_chk.fix && !g_chk.warn && !g_chk.broken) swprintf_s(sum, T(L"« %s » : rien à signaler.", L"\"%s\": nothing to report."), g_chk.name.c_str());
     else swprintf_s(sum, T(L"« %s » : %d réparable(s), %d à surveiller, %d fichier(s) illisible(s).", L"\"%s\": %d repairable, %d to watch, %d unreadable file(s)."), g_chk.name.c_str(), g_chk.fix, g_chk.warn, g_chk.broken);
-    Text(g, sum, RectF(x, y, w, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-    y += 30;
+    Para(g, sum, RectF(x, y, w, 40), 13.5f, kInk);   // (deux lignes : le russe est plus long)
+    y += sum[0] && MeasureW(MeasureG(), sum, 13.5f, FontStyleRegular) > w ? 46 : 28;
     int rows = 0;
     const int maxRows = 13;
     auto row = [&](Color col, const std::wstring &t) {
@@ -412,7 +412,7 @@ static void DrawSaveCheck(Graphics &g, RectF c, float y)
         Text(g, FitText(t, 12, FontStyleRegular, w - 18), RectF(x + 16, y, w - 16, 22), 12, FontStyleRegular, kInk, StringAlignmentNear);
         y += 24;
     };
-    if (!g_chk.verWarn.empty()) { Para(g, g_chk.verWarn, RectF(x, y, w, 38), 12, kWarn); y += 44; }
+    if (!g_chk.verWarn.empty()) { Para(g, g_chk.verWarn, RectF(x, y, w, 56), 12, kWarn); y += 62; }   // (trois lignes)
     int more = 0;
     for (auto &sf : g_chk.files) {
         if (!sf.present) continue;
