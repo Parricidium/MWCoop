@@ -2115,6 +2115,21 @@ Host: /setmoney <player> <amount> sets a player's money (their own included).	ا
 Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema).	اللوحة (F7) أو الدردشة: /tp <لاعب>، /bring <لاعب>، /place <مكان> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema).
 /money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail), /clothes (my jacket, coverall and helmet in front of me), /car <name> (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer: it comes in front of me).	/money <المبلغ>، /heal (الجوع، العطش، التعب، التوتر… إلى الصفر)، /free (لم تعد مطلوباً، خروج من السجن)، /clothes (سترتي وبدلتي وخوذتي أمامي)، /car <الاسم> (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer: تأتي أمامي).
 For everyone: /time <0-24> (2-hour steps), /rain on|off (done by the host, the world follows).	للجميع: /time <0-24> (بخطوات ساعتين)، /rain on|off (ينفّذه المضيف، ويتبعه العالم).
+Before %s	قبل %s
+Before the restore of %s	قبل الاستعادة في %s
+Before Reworked (%s)	قبل Reworked ‏(%s)
+Before the game of %s	قبل لعبة %s
+Put the copy \"%s\" back into \"%s\"?\n\nThe current save of this game is replaced. It is copied first (\"Before the restore\"), so you can go back if needed.	إعادة النسخة «%s» إلى «%s»؟\n\nسيُستبدل الحفظ الحالي لهذه اللعبة. يُنسخ أولاً («قبل الاستعادة») لتتمكن من التراجع عند الحاجة.
+\"%s\": copy \"%s\" restored (%d files)	«%s»: استُعيدت النسخة «%s» (%d ملفات)
+No copy yet: one is made at every game launch.	لا توجد نسخة بعد: تُصنع واحدة عند كل تشغيل للعبة.
+At every game launch and before an update.	عند كل تشغيل للعبة وقبل أي تحديث.
+All copies (%d)	كل النسخ (%d)
+Backup copies	النسخ الاحتياطية
+Of \"%s\". Restoring a copy replaces the current save, which is copied just before.	للعبة «%s». استعادة نسخة تستبدل الحفظ الحالي، الذي يُنسخ قبلها مباشرة.
+Before every launch, the launcher copies the game about to be loaded, and before a new mod version. The last 10 stay here: Restore in one click.	قبل كل تشغيل، ينسخ المشغّل اللعبة التي ستُحمَّل، وقبل إصدار جديد من التعديل. آخر 10 نسخ هنا: استعادة بنقرة واحدة.
+Backup copies: before every game launch (solo or hosting), the launcher copies the game about to be loaded, unless nothing changed since the last copy. At the first launch of a new mod version, an extra \"Before msc-1.15.8\" (or mwc-) copy. The last 10 are kept, plus the \"Before\" copies of the last 3 versions.	النسخ الاحتياطية: قبل كل تشغيل للعبة (منفرداً أو كمضيف)، ينسخ المشغّل اللعبة التي ستُحمَّل، ما لم يتغير شيء منذ آخر نسخة. عند أول تشغيل لإصدار جديد من التعديل، نسخة إضافية «قبل msc-1.15.8» (أو mwc-). تُحفظ آخر 10 نسخ، ونسخ «قبل» لآخر 3 إصدارات.
+Restore (game closed) puts a copy back in place of the save; the save from before is copied first (\"Before the restore\"). All copies: the button under the last three. They are in MWCoop\\copies-sauvegardes in the game folder.	استعادة (واللعبة مغلقة) تعيد نسخة مكان الحفظ؛ يُنسخ الحفظ السابق أولاً («قبل الاستعادة»). كل النسخ: الزر تحت آخر ثلاث. وهي في MWCoop\\copies-sauvegardes داخل مجلد اللعبة.
+Then Use for hosting, Rename, Duplicate, Export (zip), Restart (erased and started from scratch); Delete sends it to the Windows Recycle Bin (recoverable).	ثم: استخدام للاستضافة، إعادة التسمية، تكرار، تصدير (zip)، البدء من جديد (تُمحى وتبدأ من الصفر)؛ الحذف يرسلها إلى سلة محذوفات Windows (قابلة للاسترجاع).
 My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?	لا تزال My Winter Car مفتوحة، في القائمة الرئيسية (تم الخروج من اللعبة).\n\nإغلاقها لتتمكن من التشغيل من جديد من المشغّل؟
 Different version (you %s, host %s): update	إصدار مختلف (لديك %s، لدى المضيف %s): حدّث
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.

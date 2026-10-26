@@ -20,7 +20,7 @@ static DWORD g_savesScanT;
 static bool g_savesFake;   // captures : liste factice (SavesFake), pas de releve
 static int g_saveEdit = -1; static std::wstring g_saveEditText;   // renommage dans la liste de l'onglet
 static int g_saveDelArm = -1; static DWORD g_saveDelT;
-enum { SM_NONE, SM_PICK, SM_NEWGAME, SM_RESTART, SM_NAME };      // fenetre par-dessus le lanceur
+enum { SM_NONE, SM_PICK, SM_NEWGAME, SM_RESTART, SM_NAME, SM_COPIES };      // fenetre par-dessus le lanceur
 static int g_saveModal = SM_NONE;
 static bool g_saveNameForGame;                                     // nom demande pour « Nouvelle partie » (salon) : appliquee ensuite
 static std::wstring g_saveNameText;
@@ -28,12 +28,14 @@ static const int kSaveNameMax = 32;
 enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAVE_MOK, UI_SAVE_MRESTART, UI_SAVE_MFRESH, UI_SAVE_LOBBY,
        UI_SAVE_DUP, UI_SAVE_EXPORT, UI_SAVE_RESTART, UI_SAVE_DEL,   // onglet, carte de droite : sur la partie choisie (g_saveSel)
        UI_SAVE_IMPORT,       // fenetre du nom : « Depuis un zip… » (la sauvegarde d'un ami, Exporter (zip))
-       UI_SAVE_RESTORE = 9050,   // + k : copie de secours k de la partie choisie (9050-9059)
+       UI_SAVE_COPIES,       // carte de droite : « Toutes les copies » (fenetre SM_COPIES)
+       UI_SAVE_RESTORE = 9050,   // + k : copie de secours k de la partie choisie (9050-9089)
        UI_SAVE = 9100,       // + ligne * 8 + partie (onglet)
        UI_SAVE_PICK = 9700,  // + ligne (fenetre : liste)
        UI_SAVE_END = 9900 };
 enum { SP_USE, SP_RENAME, SP_DIR, SP_DEL, SP_OK, SP_CANCEL, SP_SEL };
 static int g_saveSel = -1;   // onglet : partie choisie (detail a droite) ; -1 : celle en cours
+static RectF g_saveCopiesR;  // section « Copies de secours » de la carte de droite (bulle du tuto)
 
 static std::wstring SaveProfRoot()
 {
@@ -423,40 +425,118 @@ static std::wstring SaveSizeText(unsigned long long b)
     return t;
 }
 
-// Copies de secours d'une partie : MWCoop\copie-avant-reworked\<date>\<principale | partie-N> (SavesBackupNightly, faites
-// avant le premier passage en Reworked). Relues toutes les 3 s pour la partie choisie.
-struct SaveBak { std::wstring dir; FILETIME when = {}; unsigned long long bytes = 0; };
+// Copies de secours d'une partie, plus recentes d'abord :
+//  - MWCoop\copies-sauvegardes\<principale | partie-N>\<AAAA-MM-JJ_HHhMM>[-n][_avant-<msc|mwc>-<version> | _avant-remise] :
+//    faites par le lanceur juste avant chaque lancement (SaveCopiesBeforeLaunch : hote ou solo), au premier lancement apres un
+//    changement de version du mod (« avant msc-1.15.8 »), et avant de remettre une copie (« avant la remise ») -- JD, 26/10 :
+//    des sauvegardes cassees par des versions boguees, seule une copie d'avant rend ce qui est perdu ;
+//  - MWCoop\copie-avant-reworked\<date>\<principale | partie-N> (SavesBackupNightly, avant le premier passage en Reworked).
+// Relues toutes les 3 s pour la partie choisie.
+enum { BAK_AUTO, BAK_VERSION, BAK_REMISE, BAK_REWORKED };
+struct SaveBak { std::wstring dir, ver; int kind = BAK_AUTO, seq = 1; FILETIME when = {}, made = {}; unsigned long long bytes = 0; };   // seq : -n du nom (deux copies dans la meme minute)
 static std::vector<SaveBak> g_saveBak;
 static std::wstring g_saveBakFor = L"?";
 static DWORD g_saveBakT;
+static std::wstring SaveMwRoot() { std::wstring r = SaveProfRoot(); return r.size() >= 8 ? r.substr(0, r.size() - 8) : L""; }   // (sans "profils\")
+static std::wstring SaveCopiesDir(const std::wstring &prof) { std::wstring r = SaveMwRoot(); return r.empty() ? L"" : r + L"copies-sauvegardes\\" + (prof.empty() ? L"principale" : prof) + L"\\"; }
+// Date d'un dossier de copie (AAAA-MM-JJ_HHhMM, ou AAAA-MM-JJ_HHMM pour copie-avant-reworked), heure locale -> FILETIME.
+static bool SaveBakTime(const wchar_t *name, FILETIME &ft)
+{
+    int y = 0, mo = 0, d = 0, hh = 0, mm = 0;
+    if (swscanf_s(name, L"%4d-%2d-%2d_%2dh%2d", &y, &mo, &d, &hh, &mm) != 5 && swscanf_s(name, L"%4d-%2d-%2d_%2d%2d", &y, &mo, &d, &hh, &mm) != 5) return false;
+    SYSTEMTIME st = {}; st.wYear = (WORD)y; st.wMonth = (WORD)mo; st.wDay = (WORD)d; st.wHour = (WORD)hh; st.wMinute = (WORD)mm;
+    FILETIME lft;
+    return SystemTimeToFileTime(&st, &lft) && LocalFileTimeToFileTime(&lft, &ft);
+}
+// Fichiers (a plat) d'une copie : taille ; faux si vide.
+static bool SaveBakFiles(SaveBak &b)
+{
+    WIN32_FIND_DATAW f2;
+    HANDLE h2 = FindFirstFileW((b.dir + L"*").c_str(), &f2);
+    if (h2 == INVALID_HANDLE_VALUE) return false;
+    bool any = false;
+    do {
+        if (f2.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        any = true;
+        b.bytes += ((unsigned long long)f2.nFileSizeHigh << 32) | f2.nFileSizeLow;
+    } while (FindNextFileW(h2, &f2));
+    FindClose(h2);
+    return any;
+}
+// Ordre des copies : la minute du nom, puis son numero -n (pas la date de creation du dossier : NTFS la reprend d'un dossier
+// efface puis recree sous le meme nom).
+static bool SaveBakNewer(const SaveBak &a, const SaveBak &b)
+{
+    const FILETIME &x = a.when.dwLowDateTime || a.when.dwHighDateTime ? a.when : a.made, &y = b.when.dwLowDateTime || b.when.dwHighDateTime ? b.when : b.made;
+    int c = CompareFileTime(&x, &y);
+    return c != 0 ? c > 0 : a.seq > b.seq;
+}
+// Copies de copies-sauvegardes\<partie> (sans les fichiers), plus recentes d'abord.
+static std::vector<SaveBak> SaveCopiesList(const std::wstring &prof)
+{
+    std::vector<SaveBak> out;
+    std::wstring root = SaveCopiesDir(prof);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = root.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW((root + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return out;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || fd.cFileName[0] == L'.') continue;
+        SaveBak b; b.dir = root + fd.cFileName + L"\\"; b.made = fd.ftCreationTime;
+        SaveBakTime(fd.cFileName, b.when);
+        if (wcslen(fd.cFileName) > 17 && fd.cFileName[16] == L'-') b.seq = max(1, _wtoi(fd.cFileName + 17));   // (AAAA-MM-JJ_HHhMM-n)
+        const wchar_t *av = wcsstr(fd.cFileName, L"_avant-");
+        if (av && !wcscmp(av, L"_avant-remise")) b.kind = BAK_REMISE;
+        else if (av) { b.kind = BAK_VERSION; b.ver = av + 7; }
+        out.push_back(b);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(out.begin(), out.end(), SaveBakNewer);
+    return out;
+}
 static void SaveBakScan(const std::wstring &prof)
 {
     g_saveBakFor = prof; g_saveBakT = GetTickCount();
     g_saveBak.clear();
-    std::wstring root = SaveProfRoot();
-    if (root.size() < 8) return;
-    root = root.substr(0, root.size() - 8) + L"copie-avant-reworked\\";
+    for (SaveBak b : SaveCopiesList(prof)) if (SaveBakFiles(b)) g_saveBak.push_back(b);
+    std::wstring root = SaveMwRoot();
+    if (root.empty()) return;
+    root += L"copie-avant-reworked\\";
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((root + L"*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
-        SaveBak b; b.dir = root + fd.cFileName + L"\\" + (prof.empty() ? L"principale" : prof) + L"\\";
-        WIN32_FIND_DATAW f2;
-        HANDLE h2 = FindFirstFileW((b.dir + L"*").c_str(), &f2);
-        if (h2 == INVALID_HANDLE_VALUE) continue;
-        bool any = false;
-        do {
-            if (f2.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-            any = true;
-            b.bytes += ((unsigned long long)f2.nFileSizeHigh << 32) | f2.nFileSizeLow;
-            if (CompareFileTime(&f2.ftLastWriteTime, &b.when) > 0) b.when = f2.ftLastWriteTime;
-        } while (FindNextFileW(h2, &f2));
-        FindClose(h2);
-        if (any) g_saveBak.push_back(b);
+        SaveBak b; b.kind = BAK_REWORKED; b.dir = root + fd.cFileName + L"\\" + (prof.empty() ? L"principale" : prof) + L"\\";
+        SaveBakTime(fd.cFileName, b.when);
+        b.made = fd.ftCreationTime;
+        if (SaveBakFiles(b)) g_saveBak.push_back(b);
     } while (FindNextFileW(h, &fd));
     FindClose(h);
-    std::sort(g_saveBak.begin(), g_saveBak.end(), [](const SaveBak &a, const SaveBak &b) { return CompareFileTime(&a.when, &b.when) > 0; });
+    std::stable_sort(g_saveBak.begin(), g_saveBak.end(), SaveBakNewer);
+}
+// « 26/10 21:05 » (EN : « 10/26 21:05 »), l'annee si ce n'est pas celle-ci.
+static std::wstring SaveBakShort(const FILETIME &ft)
+{
+    FILETIME lt; SYSTEMTIME t, now;
+    FileTimeToLocalFileTime(&ft, &lt); FileTimeToSystemTime(&lt, &t); GetLocalTime(&now);
+    wchar_t b[40];
+    if (g_fr || g_ru || g_ar) swprintf_s(b, L"%02d/%02d", t.wDay, t.wMonth); else swprintf_s(b, L"%02d/%02d", t.wMonth, t.wDay);
+    if (t.wYear != now.wYear) { wchar_t yb[8]; swprintf_s(yb, L"/%04d", t.wYear); wcscat_s(b, yb); }
+    wchar_t hm[12]; swprintf_s(hm, L" %02d:%02d", t.wHour, t.wMinute); wcscat_s(b, hm);
+    return b;
+}
+// Etiquette : « Avant la partie du 26/10 21:05 », « Avant msc-1.15.8 », « Avant la remise du 26/10 21:10 », « Avant Reworked (15/10 …) ».
+static std::wstring SaveBakLabel(const SaveBak &b)
+{
+    const FILETIME &ft = b.when.dwLowDateTime || b.when.dwHighDateTime ? b.when : b.made;
+    wchar_t l[160];
+    switch (b.kind) {
+    case BAK_VERSION: swprintf_s(l, T(L"Avant %s", L"Before %s"), b.ver.c_str()); break;
+    case BAK_REMISE: swprintf_s(l, T(L"Avant la remise du %s", L"Before the restore of %s"), SaveBakShort(ft).c_str()); break;
+    case BAK_REWORKED: swprintf_s(l, T(L"Avant Reworked (%s)", L"Before Reworked (%s)"), SaveBakShort(ft).c_str()); break;
+    default: swprintf_s(l, T(L"Avant la partie du %s", L"Before the game of %s"), SaveBakShort(ft).c_str()); break;
+    }
+    return l;
 }
 // Copie les fichiers (sans sous-dossiers) de src dans dst. Nombre copie.
 static int SaveCopyFiles(const std::wstring &src, const std::wstring &dst)
@@ -474,19 +554,127 @@ static int SaveCopyFiles(const std::wstring &src, const std::wstring &dst)
     FindClose(h);
     return n;
 }
+// ---- copies automatiques (JD, 26/10 ; [Project & Fesability], lot A)
+// Fichier le plus recent d'un dossier (nom, date, taille) : « rien n'a change » si c'est le meme que dans la derniere copie.
+static bool SaveNewest(const std::wstring &dir, std::wstring &name, FILETIME &ft, unsigned long long &size)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    bool any = false;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        if (!any || CompareFileTime(&fd.ftLastWriteTime, &ft) > 0) { name = fd.cFileName; ft = fd.ftLastWriteTime; size = ((unsigned long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow; }
+        any = true;
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return any;
+}
+// Efface une copie : ses fichiers un par un, puis le dossier s'il est vide -- JAMAIS de suppression recursive (les dossiers de
+// MWCoop peuvent tenir des jonctions vers le vrai jeu). Un dossier qui est un point d'analyse (jonction) n'est pas touche.
+static bool SaveCopyDelete(const std::wstring &dir)
+{
+    DWORD a = GetFileAttributesW(dir.substr(0, dir.size() - 1).c_str());
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY) || (a & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) continue;
+            SetFileAttributesW((dir + fd.cFileName).c_str(), FILE_ATTRIBUTE_NORMAL);
+            DeleteFileW((dir + fd.cFileName).c_str());
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    return RemoveDirectoryW(dir.substr(0, dir.size() - 1).c_str()) != 0;
+}
+// Garde les 10 dernieres copies (au lancement et avant une remise) et les copies « avant <version> » des 3 dernieres versions.
+static void SaveCopiesPrune(const std::wstring &prof)
+{
+    std::vector<SaveBak> all = SaveCopiesList(prof);   // (plus recentes d'abord)
+    std::vector<std::wstring> vers;
+    int kept = 0, gone = 0;
+    for (const SaveBak &b : all) {
+        bool keep;
+        if (b.kind == BAK_VERSION) {
+            if (std::find(vers.begin(), vers.end(), b.ver) == vers.end()) vers.push_back(b.ver);
+            keep = std::find(vers.begin(), vers.end(), b.ver) - vers.begin() < 3;
+        } else keep = kept++ < 10;
+        if (!keep && SaveCopyDelete(b.dir)) gone++;
+    }
+    if (gone) LaunchLog("sauvegardes : %d copie(s) ancienne(s) de %s effacee(s)", gone, prof.empty() ? "principale" : Narrow(prof, CP_UTF8).c_str());
+}
+// Copie la partie dans copies-sauvegardes\<partie>\<date><suffixe>. force faux : rien si le fichier le plus recent est le meme
+// que dans la derniere copie. Dossier de la copie, ou "" (rien a copier, rien de change, echec).
+static std::wstring SaveAutoCopy(const std::wstring &prof, const std::wstring &suffix, bool force, bool prune = true)
+{
+    std::wstring src = SaveDirOf(prof), root = SaveCopiesDir(prof);
+    std::wstring nn; FILETIME nt = {}; unsigned long long ns = 0;
+    if (src.empty() || root.empty() || !SaveNewest(src, nn, nt, ns)) return L"";
+    std::string whoS = prof.empty() ? "principale" : Narrow(prof, CP_UTF8);
+    if (!force) {
+        std::vector<SaveBak> all = SaveCopiesList(prof);
+        std::wstring ln; FILETIME lt = {}; unsigned long long ls = 0;
+        if (!all.empty() && SaveNewest(all[0].dir, ln, lt, ls) && !_wcsicmp(ln.c_str(), nn.c_str()) && CompareFileTime(&lt, &nt) == 0 && ls == ns) {
+            LaunchLog("sauvegardes : %s pas copiee (rien n'a change depuis la derniere copie)", whoS.c_str());
+            return L"";
+        }
+    }
+    SYSTEMTIME t; GetLocalTime(&t);
+    wchar_t stamp[32]; swprintf_s(stamp, L"%04d-%02d-%02d_%02dh%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute);
+    int n = 0;   // (deux copies dans la meme minute : -2, -3... toujours apres la plus haute, jamais un nom libere)
+    {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((root + stamp + L"*").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do n = max(n, wcslen(fd.cFileName) > 17 && fd.cFileName[16] == L'-' ? _wtoi(fd.cFileName + 17) : 1); while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+    }
+    std::wstring dst = root + stamp + (n ? L"-" + std::to_wstring(n + 1) : L"") + suffix + L"\\";
+    int files = SaveCopyFiles(src, dst);
+    LaunchLog("sauvegardes : %s copiee dans %s (%d fichier(s))", whoS.c_str(), Narrow(dst, CP_UTF8).c_str(), files);
+    if (!files) { SaveCopyDelete(dst); return L""; }
+    if (prune) SaveCopiesPrune(prof);
+    return dst;
+}
+// Juste avant de lancer le jeu (hote : la sauvegarde utilisee ; solo : la principale ; invite : rien, il recoit celle de
+// l'hote) : une copie, et une copie « avant <version> » au premier lancement apres un changement de version du mod (la
+// version vue la derniere fois est dans copies-sauvegardes\<partie>\version.txt).
+static void SaveCopiesBeforeLaunch(int mode)
+{
+    if (mode == MODE_GUEST || g_gameDir.empty()) return;
+    std::wstring prof = mode == MODE_HOST ? SaveCurrentProf() : L"", root = SaveCopiesDir(prof);
+    if (root.empty()) return;
+    std::vector<unsigned char> d;
+    std::wstring last = ReadAll(root + L"version.txt", d) ? Trim(Widen(std::string(d.begin(), d.end()), CP_UTF8)) : L"";
+    std::wstring cur = g_localVer;
+    if (!last.empty() && !cur.empty() && last != cur) SaveAutoCopy(prof, std::wstring(L"_avant-") + (g_game == GAME_MSC ? L"msc-" : L"mwc-") + cur, true);
+    else SaveAutoCopy(prof, L"", false);
+    if (!cur.empty() && cur != last) {
+        SHCreateDirectoryExW(NULL, root.c_str(), NULL);
+        std::string u = Narrow(cur, CP_UTF8);
+        HANDLE f = CreateFileW((root + L"version.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, u.data(), (DWORD)u.size(), &w, NULL); CloseHandle(f); }
+    }
+}
 static void SaveRestore(int i, int k)
 {
     if (i < 0 || i >= (int)g_saves.size() || k < 0 || k >= (int)g_saveBak.size() || !SaveGuard()) return;
     const SaveSlot s = g_saves[i];
     const SaveBak b = g_saveBak[k];
-    wchar_t q[600];
-    swprintf_s(q, T(L"Remettre la copie du %s dans « %s » ?\n\nLa sauvegarde actuelle de cette partie est remplacée (ses fichiers sont écrasés).",
-                    L"Put the copy from %s back into \"%s\"?\n\nThe current save of this game is replaced (its files are overwritten)."), SaveDateText(b.when).c_str(), s.name.c_str());
+    std::wstring lab = SaveBakLabel(b);
+    wchar_t q[700];
+    swprintf_s(q, T(L"Remettre la copie « %s » dans « %s » ?\n\nLa sauvegarde actuelle de cette partie est remplacée. Elle est d'abord copiée (« Avant la remise »), pour revenir en arrière si besoin.",
+                    L"Put the copy \"%s\" back into \"%s\"?\n\nThe current save of this game is replaced. It is copied first (\"Before the restore\"), so you can go back if needed."), lab.c_str(), s.name.c_str());
     if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
+    if (s.has) SaveAutoCopy(s.prof, L"_avant-remise", true, false);   // (l'etat d'avant, au cas ou ; tri apres : la copie remise ne doit pas partir)
     int n = SaveCopyFiles(b.dir, SaveDirOf(s.prof));
-    TestLog("sauvegardes : copie %s remise dans %s (%d fichiers)", Narrow(b.dir, CP_UTF8).c_str(), s.prof.empty() ? "principale" : Narrow(s.prof, CP_UTF8).c_str(), n);
-    if (n) SetStatus(K_OK, T(L"« %s » : copie du %s remise (%d fichiers)", L"\"%s\": copy from %s restored (%d files)"), s.name.c_str(), SaveDateText(b.when).c_str(), n);
+    SaveCopiesPrune(s.prof);
+    LaunchLog("sauvegardes : copie %s remise dans %s (%d fichiers)", Narrow(b.dir, CP_UTF8).c_str(), s.prof.empty() ? "principale" : Narrow(s.prof, CP_UTF8).c_str(), n);
+    if (n) SetStatus(K_OK, T(L"« %s » : copie « %s » remise (%d fichiers)", L"\"%s\": copy \"%s\" restored (%d files)"), s.name.c_str(), lab.c_str(), n);
     else SetStatus(K_ERR, T(L"Copie impossible à remettre", L"Could not restore the copy"));
+    g_saveBakFor = L"?";   // (relue : la copie « avant la remise » apparait)
     SavesScan();
 }
 // Dupliquer : une nouvelle partie-N avec les fichiers de la partie choisie.
@@ -690,7 +878,7 @@ static void DrawSaves(Graphics &g)
         RectF c = kSaveR;
         if (sel < 0) { Text(g, T(L"Aucune partie", L"No game"), RectF(c.X, c.Y + 60, c.Width, 30), 15, FontStyleBold, kGrey); return; }
         const SaveSlot &s = g_saves[sel];
-        if (g_saveBakFor != s.prof || GetTickCount() - g_saveBakT > 3000) SaveBakScan(s.prof);
+        if (!g_savesFake && (g_saveBakFor != s.prof || GetTickCount() - g_saveBakT > 3000)) SaveBakScan(s.prof);   // (captures : copies factices)
         int base = UI_SAVE + sel * 8;
         float x = c.X + 18, w = c.Width - 36, y = c.Y + 14;
         if (g_saveEdit == sel) {   // renommage : champ, Entree / Echap, Garder / Annuler
@@ -734,17 +922,18 @@ static void DrawSaves(Graphics &g)
             y += 96;
         }
         {   // copies de secours
+            g_saveCopiesR = RectF(x - 6, y - 4, w + 12, 4 + 42 + 3 * 36 + 22);   // (bulle du tuto)
             SaveSection(g, x, y, w, T(L"COPIES DE SECOURS", L"BACKUP COPIES"));
-            Text(g, g_saveBak.empty() ? T(L"Aucune copie pour cette partie.", L"No copy for this game.") : T(L"Faites avant le premier passage en Reworked.", L"Made before the first switch to Reworked."),
+            Text(g, g_saveBak.empty() ? T(L"Aucune copie : une est faite à chaque lancement du jeu.", L"No copy yet: one is made at every game launch.") : T(L"À chaque lancement du jeu et avant une mise à jour.", L"At every game launch and before an update."),
                  RectF(x, y + 18, w, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
             float by = y + 42;
             for (int k = 0; k < (int)g_saveBak.size() && k < 3; k++) {
                 const SaveBak &b = g_saveBak[k];
-                Text(g, SaveDateText(b.when) + L" · " + SaveSizeText(b.bytes), RectF(x, by, w - 110, 30), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+                Text(g, FitText(SaveBakLabel(b), 12.5f, FontStyleBold, w - 112), RectF(x, by, w - 110, 30), 12.5f, FontStyleBold, b.kind == BAK_AUTO ? kInk : kAcc, StringAlignmentNear);   // (la taille : dans « Toutes les copies »)
                 UiButton(g, RectF(x + w - 100, by, 100, 30), T(L"Restaurer", L"Restore"), UI_SAVE_RESTORE + k, false, -1, s.prof == g_saveBakFor, 10);
                 by += 36;
             }
-            if (g_saveBak.size() > 3) { wchar_t more[48]; swprintf_s(more, T(L"+ %d autres", L"+ %d more"), (int)g_saveBak.size() - 3); Text(g, more, RectF(x, by, w, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear); }
+            if (g_saveBak.size() > 3) { wchar_t more[64]; swprintf_s(more, T(L"Toutes les copies (%d)", L"All copies (%d)"), (int)g_saveBak.size()); UiButton(g, RectF(x, by, 180, 26), more, UI_SAVE_COPIES, false, -1, true, 10); }
         }
         // en bas : utiliser (si ce n'est pas la partie en cours), puis les quatre actions
         float ay = c.Y + c.Height - 16 - 36 * 2 - 8, bw = (w - 8) / 2;
@@ -765,18 +954,39 @@ static void DrawSaveModal(Graphics &g)
     bool list = g_saveModal == SM_PICK || g_saveModal == SM_RESTART;
     int rows = list ? (int)g_saves.size() + (g_saveModal == SM_PICK ? 1 : 0) : 0;
     if (rows > 7) rows = 7;
-    float h = g_saveModal == SM_NAME ? 250 : g_saveModal == SM_NEWGAME ? 300 : 150 + rows * 62;
+    int crows = min(14, (int)g_saveBak.size());
+    float h = g_saveModal == SM_NAME ? 250 : g_saveModal == SM_NEWGAME ? 300 : g_saveModal == SM_COPIES ? 130 + max(1, crows) * 46 : 150 + rows * 62;
     RectF c(640 - 290, 400 - h / 2, 580, h);
     {   // (fond plein : le verre laissait voir la page dessous)
         GraphicsPath bp; RoundRect(bp, c, 20);
         SolidBrush bb(g_dark ? Color(255, 18, 26, 42) : Color(255, 244, 247, 251)); g.FillPath(&bb, &bp);
         Pen bpn(g_dark ? Color(90, 255, 255, 255) : Color(60, 0, 0, 0), 1.0f); g.DrawPath(&bpn, &bp);
     }
-    const wchar_t *title = g_saveModal == SM_PICK ? T(L"Sauvegarde de la partie", L"Game save") : g_saveModal == SM_NEWGAME ? T(L"Nouvelle partie", L"New game")
+    const wchar_t *title = g_saveModal == SM_COPIES ? T(L"Copies de secours", L"Backup copies") : g_saveModal == SM_PICK ? T(L"Sauvegarde de la partie", L"Game save") : g_saveModal == SM_NEWGAME ? T(L"Nouvelle partie", L"New game")
                          : g_saveModal == SM_RESTART ? T(L"Recommencer une sauvegarde", L"Restart a save") : T(L"Nom de la sauvegarde", L"Save name");
     Title(g, title, RectF(c.X + 24, c.Y + 18, c.Width - 100, 30), 19, kInk);
     UiButton(g, RectF(c.X + c.Width - 24 - 40, c.Y + 16, 40, 36), L"", UI_SAVE_MCLOSE, false, IC_CLOSE);
     float y = c.Y + 62;
+    if (g_saveModal == SM_COPIES) {   // toutes les copies de la partie choisie (14 au plus : 10 au lancement, « avant » 3 versions, Reworked)
+        int sel = SaveSelIndex();
+        wchar_t sub[300] = L"";
+        if (sel >= 0) swprintf_s(sub, T(L"De « %s ». Remettre une copie remplace la sauvegarde actuelle, copiée juste avant.", L"Of \"%s\". Restoring a copy replaces the current save, which is copied just before."), g_saves[sel].name.c_str());
+        Para(g, sub,
+             RectF(c.X + 24, y, c.Width - 48, 36), 12.5f, kGrey);
+        y += 42;
+        if (g_saveBak.empty()) Text(g, T(L"Aucune copie pour cette partie.", L"No copy for this game."), RectF(c.X + 24, y, c.Width - 48, 30), 13, FontStyleBold, kGrey, StringAlignmentNear);
+        for (int k = 0; k < crows; k++) {
+            const SaveBak &b = g_saveBak[k];
+            RectF r(c.X + 24, y + k * 46, c.Width - 48, 40);
+            GraphicsPath p; RoundRect(p, r, 10);
+            SolidBrush bb(TH(card)); g.FillPath(&bb, &p);
+            Pen pn(b.kind == BAK_AUTO ? TH(choiceBorder) : WithA(kAcc, 0.5f), 1.0f); g.DrawPath(&pn, &p);
+            Text(g, FitText(SaveBakLabel(b), 13, FontStyleBold, r.Width - 230), RectF(r.X + 14, r.Y, r.Width - 230, r.Height), 13, FontStyleBold, b.kind == BAK_AUTO ? kInk : kAcc, StringAlignmentNear);
+            Text(g, SaveSizeText(b.bytes), RectF(r.X, r.Y, r.Width - 128, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+            UiButton(g, RectF(r.X + r.Width - 112, r.Y + 5, 104, 30), T(L"Restaurer", L"Restore"), UI_SAVE_RESTORE + k, false, -1, true, 10);
+        }
+        return;
+    }
     if (g_saveModal == SM_NEWGAME) {
         struct { const wchar_t *t, *s; int id, icon; } opt[2] = {
             { T(L"Nouvelle sauvegarde", L"New save"), T(L"Une partie neuve dans une sauvegarde à part : tes autres parties ne sont pas touchées.", L"A fresh game in a separate save: your other games are not touched."), UI_SAVE_MFRESH, IC_HOMEPLUS },
@@ -859,7 +1069,8 @@ static void SaveClick(int id)
     if (id == UI_SAVE_EXPORT) { SaveExport(sel); return; }
     if (id == UI_SAVE_DEL) { SaveDelete(sel); if (sel >= (int)g_saves.size()) g_saveSel = -1; return; }
     if (id == UI_SAVE_RESTART) { if (sel >= 0 && SaveGuard()) { g_saveModal = SM_RESTART; SavePickRow(sel); g_saveModal = SM_NONE; } return; }   // (meme confirmation que la fenetre)
-    if (id >= UI_SAVE_RESTORE && id < UI_SAVE_RESTORE + 10) { SaveRestore(sel, id - UI_SAVE_RESTORE); return; }
+    if (id == UI_SAVE_COPIES) { if (sel >= 0) { SaveBakScan(g_saves[sel].prof); g_saveModal = SM_COPIES; } return; }
+    if (id >= UI_SAVE_RESTORE && id < UI_SAVE_RESTORE + 40) { bool m = g_saveModal == SM_COPIES; SaveRestore(sel, id - UI_SAVE_RESTORE); if (m) g_saveModal = SM_NONE; return; }
     if (id >= UI_SAVE && id < UI_SAVE_PICK) {
         int i = (id - UI_SAVE) / 8, part = (id - UI_SAVE) % 8;
         if (i < 0 || i >= (int)g_saves.size()) return;

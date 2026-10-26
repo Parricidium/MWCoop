@@ -1,0 +1,15 @@
+CPS01	Before %s
+CPS02	Before the restore of %s
+CPS03	Before Reworked (%s)
+CPS04	Before the game of %s
+CPS05	Put the copy \"%s\" back into \"%s\"?\n\nThe current save of this game is replaced. It is copied first (\"Before the restore\"), so you can go back if needed.
+CPS06	\"%s\": copy \"%s\" restored (%d files)
+CPS07	No copy yet: one is made at every game launch.
+CPS08	At every game launch and before an update.
+CPS09	All copies (%d)
+CPS10	Backup copies
+CPS11	Of \"%s\". Restoring a copy replaces the current save, which is copied just before.
+CPS12	Before every launch, the launcher copies the game about to be loaded, and before a new mod version. The last 10 stay here: Restore in one click.
+CPS13	Backup copies: before every game launch (solo or hosting), the launcher copies the game about to be loaded, unless nothing changed since the last copy. At the first launch of a new mod version, an extra \"Before msc-1.15.8\" (or mwc-) copy. The last 10 are kept, plus the \"Before\" copies of the last 3 versions.
+CPS14	Restore (game closed) puts a copy back in place of the save; the save from before is copied first (\"Before the restore\"). All copies: the button under the last three. They are in MWCoop\\copies-sauvegardes in the game folder.
+CPS15	Then Use for hosting, Rename, Duplicate, Export (zip), Restart (erased and started from scratch); Delete sends it to the Windows Recycle Bin (recoverable).

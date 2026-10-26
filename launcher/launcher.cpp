@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|sauvegardes-copies|sauvegardes-toutes|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1665,6 +1665,7 @@ static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
     return msc;
 }
 static std::wstring SavesBackupNightly();   // (saves.inc)
+static void SaveCopiesBeforeLaunch(int mode);   // (saves.inc : copie de la partie avant le lancement)
 static void ToolsSeen(const std::vector<Note> &rel);   // (outils.inc : derniere version de l'editeur de carte)
 static void LoaderEnsure(const std::wstring &dir, const char *where);   // (chargeur version.dll du lanceur, plus bas)
 
@@ -4001,6 +4002,7 @@ static void Launch(int mode, const char *partie = NULL)
         TestLog("lancement.ini : ecriture impossible");
         return;
     }
+    if (g_exportDir.empty()) SaveCopiesBeforeLaunch(mode);   // (copie de la partie qui va etre chargee : saves.inc)
     int syncKind = mode == MODE_GUEST ? SyncLaunchKind() : 0;   // mods de l'hote : 1 sans MSCLoader, 2 avec ses mods
     g_syncKeep = false;
     if (!g_testSalon.empty()) {   // mode d'essai : le lancement.ini dans le journal, et JAMAIS le jeu
@@ -4877,8 +4879,8 @@ static void NetTest()
 #include "outils.inc"
 #include "gfx.inc"
 #include "media.inc"
+static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (plus bas ; Nouveautes, ui.inc, saves.inc)
 #include "saves.inc"
-static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (plus bas ; Nouveautes, ui.inc)
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -7563,6 +7565,38 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     // Auto-test de la liste des mods en plusieurs messages
     if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
+    // Essai : /testcopies <dossier de jeu factice> <journal> -- copies automatiques (saves.inc) sur une partie d'essai de ce
+    // dossier : premiere copie, rien de change, 12 changements (10 gardees), puis 4 versions du mod (« avant » de 3 gardees).
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/testcopies")) {
+        g_launcherLog = argv[3];
+        g_gameDir = g_modRoot = WithSlash(argv[2]);
+        std::wstring prof = SaveCreate(L"Essai copies");
+        SaveSetCurrent(prof);
+        std::wstring sd = SaveDirOf(prof);
+        int step = 0;
+        auto put = [&](const char *txt) {   // (la sauvegarde change : contenu et date, une minute de plus a chaque fois)
+            std::wstring f = sd + L"savefile.txt";
+            HANDLE h = CreateFileW(f.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+            if (h == INVALID_HANDLE_VALUE) return;
+            DWORD wr; WriteFile(h, txt, (DWORD)strlen(txt), &wr, NULL);
+            FILETIME ft; GetSystemTimeAsFileTime(&ft);
+            ULARGE_INTEGER u; u.LowPart = ft.dwLowDateTime; u.HighPart = ft.dwHighDateTime; u.QuadPart += (unsigned long long)(++step) * 600000000ULL;
+            ft.dwLowDateTime = u.LowPart; ft.dwHighDateTime = u.HighPart;
+            SetFileTime(h, NULL, NULL, &ft);
+            CloseHandle(h);
+        };
+        auto count = [&](const char *what) { LaunchLog("testcopies : %s -> %d copie(s)", what, (int)SaveCopiesList(prof).size()); };
+        g_localVer = L"1.15.7";
+        put("partie 0"); SaveCopiesBeforeLaunch(MODE_HOST); count("premier lancement (1 attendue)");
+        SaveCopiesBeforeLaunch(MODE_HOST); count("rien de change (toujours 1)");
+        for (int i = 1; i <= 12; i++) { char b[32]; sprintf_s(b, "partie %d", i); put(b); SaveCopiesBeforeLaunch(MODE_HOST); Sleep(20); }
+        count("12 changements (10 attendues)");
+        for (const wchar_t *v : { L"1.15.8", L"1.15.9", L"1.15.10", L"1.15.11" }) { g_localVer = v; put(Narrow(v).c_str()); SaveCopiesBeforeLaunch(MODE_HOST); Sleep(20); }
+        count("4 versions (10 + 3 avant attendues)");
+        SaveBakScan(prof);
+        for (const SaveBak &b : g_saveBak) LaunchLog("testcopies :   %s  [%s]", Narrow(SaveBakLabel(b), CP_UTF8).c_str(), Narrow(b.dir.substr(SaveCopiesDir(prof).size()), CP_UTF8).c_str());
+        return 0;
+    }
     // Essai : /testoffre <dossier Mods> <journal> -- l'offre de l'hote faite de ce dossier (ses DLL = les mods envoyes), par
     // unites sous les plafonds, puis relue comme un invite (dossiers pas envoyes compris). Journal : celui du lanceur.
     if (argc >= 4 && !_wcsicmp(argv[1], L"/testoffre")) {
@@ -7738,7 +7772,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
-        else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesFake(); }   // (saves.inc : parties factices ; fenetres : -nouvelle, -choix, -nom, -recommencer)
+        else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesFake(); }
+        else if (st == L"sauvegardes-copies" || st == L"sauvegardes-toutes") {   // (copies de secours factices : au lancement, avant une version, avant une remise, Reworked)
+            g_tab = TAB_SAVES; SavesFake();
+            FILETIME now; GetSystemTimeAsFileTime(&now);
+            auto ago = [&](int minutes) { ULARGE_INTEGER u; u.LowPart = now.dwLowDateTime; u.HighPart = now.dwHighDateTime; u.QuadPart -= (unsigned long long)minutes * 600000000ULL; FILETIME f; f.dwLowDateTime = u.LowPart; f.dwHighDateTime = u.HighPart; return f; };
+            g_saveBak.clear();
+            const int at[] = { 35, 140, 1500, 1620, 2900, 4400, 5800, 7300, 8600, 10100 };
+            for (int k = 0; k < 10; k++) { SaveBak b; b.when = b.made = ago(at[k]); b.bytes = 153 * 1024 + k * 900; g_saveBak.push_back(b); }
+            SaveBak v; v.kind = BAK_VERSION; v.ver = L"mwc-1.15.7"; v.when = v.made = ago(90); v.bytes = 152 * 1024; g_saveBak.insert(g_saveBak.begin() + 1, v);
+            SaveBak r; r.kind = BAK_REMISE; r.when = r.made = ago(20); r.bytes = 153 * 1024; g_saveBak.insert(g_saveBak.begin(), r);
+            SaveBak w; w.kind = BAK_REWORKED; w.when = w.made = ago(15000); w.bytes = 120 * 1024; g_saveBak.push_back(w);
+            g_saveBakFor = L"";   // (pas relues : g_savesFake)
+            if (st == L"sauvegardes-toutes") g_saveModal = SM_COPIES;
+        }   // (saves.inc : parties factices ; fenetres : -nouvelle, -choix, -nom, -recommencer)
         else if (st == L"sauvegardes-nouvelle") { g_tab = TAB_SAVES; SaveOpenNewGame(); }
         else if (st == L"sauvegardes-choix") { g_tab = TAB_SAVES; SaveOpenPick(); }
         else if (st == L"sauvegardes-recommencer") { g_tab = TAB_SAVES; SavesScan(); g_saveModal = SM_RESTART; }
