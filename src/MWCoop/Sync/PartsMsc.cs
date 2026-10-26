@@ -550,6 +550,38 @@ namespace MWCoop
             }
         }
 
+        // Essais (Autotest=mscmontage, [Test] MontageVisser=1) : serre ici, comme le joueur (envoye aux autres), toutes les vis de la
+        // piece 'partKey' jusqu'au cran 'target'.
+        public static string MscTestTighten(string partKey, int target)
+        {
+            int n = 0, ok = 0;
+            foreach (Bolt b in bolts)
+            {
+                if (b.F == null || !b.F.gameObject.activeInHierarchy || MscPartKey(b.F.FsmVariables.GetFsmGameObject("PartAssembled").Value) != partKey) continue;
+                n++;
+                FsmInt st = b.F.FsmVariables.GetFsmInt("Stage");
+                for (int guard = 0; st.Value < target && guard < 10; guard++) b.F.SendEvent("TIGHTEN");
+                if (st.Value >= target) ok++;
+            }
+            return n + " vis de " + partKey + ", " + ok + " au cran " + target;
+        }
+        // Essais : attaches de la piece (limite de casse) et crans de ses vis, ici.
+        public static string MscTestPartState(string partKey)
+        {
+            GameObject part = MscFindPart(partKey);
+            if (part == null) return "piece introuvable";
+            var sb = new System.Text.StringBuilder();
+            foreach (Joint j in part.GetComponents<Joint>()) sb.Append(sb.Length > 0 ? "," : "").Append(j.GetType().Name).Append(" ").Append(float.IsInfinity(j.breakForce) ? "inf" : j.breakForce.ToString("F0"));
+            if (sb.Length == 0) sb.Append("sans attache");
+            sb.Append(part.GetComponent<Rigidbody>() != null && part.GetComponent<Rigidbody>().isKinematic ? " (cinematique)" : "").Append(", vis");
+            foreach (Bolt b in bolts)
+                if (b.F != null && MscPartKey(b.F.FsmVariables.GetFsmGameObject("PartAssembled").Value) == partKey) sb.Append(" ").Append(b.F.FsmVariables.GetFsmInt("Stage").Value);
+            PlayMakerFSM bc = Game.FsmOn(part, "BoltCheck");
+            FsmFloat tg = bc != null ? bc.FsmVariables.FindFsmFloat("Tightness") : null;
+            if (tg != null) sb.Append(", serrage ").Append(tg.Value.ToString("F0")).Append(" [").Append(bc.ActiveStateName).Append("]");
+            return sb.ToString();
+        }
+
         public static string MscTestHolds(string pointKey)
         {
             MscPoint p;
