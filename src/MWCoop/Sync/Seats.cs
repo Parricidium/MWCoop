@@ -684,6 +684,7 @@ namespace MWCoop
             return "bouclee " + Recon.Path(b.Fastened.transform) + ", rangee " + (b.Open != null ? Recon.Path(b.Open.transform) : "-") + ", sangle conducteur " + (b.DriverOpen != null ? Recon.Path(b.DriverOpen.transform) : "-") + ", boucle " + b.DriverBuckle.ToString("F2");
         }
 
+        // (appelee par reflexion depuis SeatExport -- ne pas renommer sans prevenir [Addons et Tools])
         static Belt BeltOf(Transform car)
         {
             Belt b;
@@ -923,6 +924,7 @@ namespace MWCoop
             SendSeat(current.Car, current.Index, headLocal);
         }
 
+        // (appelee par reflexion depuis SeatExport -- ne pas renommer sans prevenir [Addons et Tools])
         static void UpdateRearBelts()
         {
             var want = new Dictionary<Transform, HashSet<int>>();
