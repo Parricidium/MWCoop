@@ -199,6 +199,7 @@ namespace MWCoop
             new Mod("camera drone", DroneCam.Update),
             new Mod("ray tracing", RayTracing.Update),
             new Mod("kupla", Kupla.Update),   // (27/10 : optimisation, seulement si [Coop] KuplaRendu=1 -- Active)
+            new Mod("compteur d'images", Kupla.CounterUpdate),   // (27/10 : seulement si [Coop] KuplaCompteur=1 -- Active)
             new Mod("boissons", Drinks.Update),
             new Mod("rayons", Stock.Update),
             new Mod("PNJ", Npcs.Update),
@@ -446,7 +447,7 @@ namespace MWCoop
             "gestes", "outils en main", "cuisine", "maison", "evenements", "monde (automates)", "partie chez l'invite",
             "courses",   // (22/10 : voitures IA et resultats du rallye de MSC -- racine RALLY, Races.Rp)
             "rallye (MSC)", "rallye avec sa voiture (MSC)", "dragsters (MSC)",
-            "kupla",   // (27/10 : optimisation, les deux jeux)
+            "kupla", "compteur d'images",   // (27/10 : optimisation, les deux jeux)
             "monde",   // (heure et meteo : World.FindMsc / SendMsc)
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
@@ -486,7 +487,7 @@ namespace MWCoop
                 if (active == null)
                 {
                     var l = new System.Collections.Generic.List<Mod>();
-                    foreach (Mod m in mods) if ((!Game.Msc || MscModules.Contains(m.Name)) && (m.Name != "kupla" || Kupla.On)) l.Add(m);
+                    foreach (Mod m in mods) if ((!Game.Msc || MscModules.Contains(m.Name)) && (m.Name != "kupla" || Kupla.On) && (m.Name != "compteur d'images" || Kupla.Counter)) l.Add(m);
                     active = l.ToArray();
                 }
                 return active;
@@ -500,7 +501,7 @@ namespace MWCoop
             {
                 if (DroneCam.Active) DroneCam.Draw();   // (drone : viseur seul, rien d'autre du mod sur la photo)
                 else if (Kauppa.Viewfinder) Kauppa.DrawViewfinder();   // (camescope : son viseur seul)
-                else { NewHud.Draw(); Hud.Draw(); Kauppa.DrawKameraHint(); }
+                else { NewHud.Draw(); Hud.Draw(); Kauppa.DrawKameraHint(); if (Kupla.Counter) Kupla.DrawCounter(); }
                 WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); RacePanel.Draw(); MapPanel.Draw(); Respawn.Draw(); Kauppa.DrawMontage(); Kauppa.DrawKinoJako();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
