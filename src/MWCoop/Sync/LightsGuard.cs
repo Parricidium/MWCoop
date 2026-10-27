@@ -249,7 +249,7 @@ namespace MWCoop
                     FsmEvent ev = null; FsmString bn = null;
                     var d = a as HutongGames.PlayMaker.Actions.GetButtonDown; if (d != null && action == "GetButtonDown") { ev = d.sendEvent; bn = d.buttonName; }
                     var u = a as HutongGames.PlayMaker.Actions.GetButtonUp; if (u != null && action == "GetButtonUp") { ev = u.sendEvent; bn = u.buttonName; }
-                    if (ev == null || bn == null || bn.Value != "HighBeam") continue;
+                    if (ev == null || bn == null || bn.Value != Config.Get("Test", "PharesTouche", "HighBeam")) continue;   // (My Winter Car : LightsDrive, HiBeamToggle...)
                     sb.Append(Recon.Path(f.transform).Split('/')[0]).Append(':').Append(f.ActiveStateName).Append("-").Append(ev.Name).Append(' ');
                     f.SendEvent(ev.Name);
                     break;

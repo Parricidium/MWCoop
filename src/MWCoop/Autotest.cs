@@ -2678,6 +2678,7 @@ namespace MWCoop
             }
             if (mode == "conduite") Conduite(t);
             if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
+            if (mode == "mscphares") { LightsGuard.TestKey(mode, t); return; }   // (touche des phares, Jobs commun : [Test] PharesTouche=LightsDrive sur MWC, 27/10)
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
