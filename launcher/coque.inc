@@ -462,7 +462,7 @@ static bool ShellClick(int id)   // (UiClick)
 
 // ---- l'image entiere de la nouvelle interface : coque en DIP, colonne de page en coordonnees de la carte, puis les
 // couches par-dessus (bulles de la visite, guides, fenetre de choix, palette, notifications)
-static void RenderToNew(Bitmap &target)
+static void RenderToNew(Bitmap &target, const RECT *clip)
 {
     SoftThemeApply();
     g_skinBudget = g_wnd ? 6 : 100000;
@@ -476,7 +476,8 @@ static void RenderToNew(Bitmap &target)
     LARGE_INTEGER pm; QueryPerformanceCounter(&pm);
     for (int pass = 0; pass < 2; pass++) {
         Graphics g(&target);
-        g.Clear(g_soft.bg);
+        if (clip) g.SetClip(Rect(clip->left, clip->top, clip->right - clip->left, clip->bottom - clip->top));   // (rendu partiel : GDI+ ne rasterise que la-dedans ; les zones cliquables sont quand meme toutes reposees)
+        { SolidBrush bgb(g_soft.bg); g.FillRectangle(&bgb, 0, 0, w, h); }   // (Clear ignorerait le clip)
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(g_textHint);
         g.SetInterpolationMode(InterpolationModeHighQualityBilinear);   // (bicubique : plusieurs fois plus cher, pour rien a l'ecran)
@@ -485,7 +486,7 @@ static void RenderToNew(Bitmap &target)
         // la colonne de page (coordonnees de la carte), limitee a la zone de page
         {
             GraphicsState st = g.Save();
-            g.SetClip(RectF(g_shPage.X * d, g_shPage.Y * d, g_shPage.Width * d, g_shPage.Height * d));
+            g.SetClip(RectF(g_shPage.X * d, g_shPage.Y * d, g_shPage.Width * d, g_shPage.Height * d), CombineModeIntersect);
             g.TranslateTransform((float)g_offX, (float)g_offY);
             g.ScaleTransform(g_scale, g_scale);
             g.TranslateTransform(kM, kM);

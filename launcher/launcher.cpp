@@ -6962,7 +6962,7 @@ static void Tick()
     if (!active && g_aurore == 0) every = front ? 30 : 60;   // (Reglages > Theme > Aurore et neige : Off = fond fige, rien ne bouge : 2 images/s suffisent)
     if (g_newUi) {   // (fenetre.inc : rien ne bouge = rien a dessiner ; un battement toutes les 2 s en attendant que les composants s'invalident eux-memes, L1)
         bool hoverAnim = false;
-        for (int i = 0; i < B_COUNT; i++) if (g_btn[i].hover > 0.002f && g_btn[i].hover < 0.998f) hoverAnim = true;
+        for (int i = 0; i < B_COUNT; i++) if (g_btn[i].hover > 0.002f && g_btn[i].hover < 0.998f) { hoverAnim = true; InvalidateCard(g_btn[i].r, 30); }   // (fondu de survol : sa zone seulement)
         static std::wstring lastStatus; static int lastKind = -1; static float lastProg = -1;
         EnterCriticalSection(&g_cs);
         bool changed = g_status != lastStatus || g_statusKind != lastKind;
@@ -6972,14 +6972,22 @@ static void Tick()
         else if (changed && lastKind != K_NORMAL && !lastStatus.empty()) SoftNotify(lastStatus, lastKind == K_OK ? SC_OK : lastKind == K_WARN ? SC_WARN : SC_BAD);
         float prog = g_progress;
         if (prog != lastProg) { lastProg = prog; changed = true; }
-        bool anim = active || hoverAnim || changed || g_lobby != LB_NONE || g_state != ST_IDLE || g_busy || g_guide || g_tuto >= 0;
-        if (g_softAnimating || g_softPageT || g_softThemeT) { every = 1; InvalidateAll(); }   // (soft.inc : 60 images/s seulement pendant une animation)
+        if (g_skinDrag) InvalidateCard(kSkinCard, 8);   // (apercu 3D que l'on tourne : sa carte seulement)
+        if (g_carDrag) InvalidateCard(kCarCard, 8);
+        bool anim = g_alpha < 1 || changed || g_lobby == LB_CONNECTING || (g_state != ST_IDLE && g_state != ST_RUNNING) || g_busy || g_guide || g_tuto >= 0;   // (plus « actif », ni le salon, ni les survols : chaque composant invalide sa zone, le salon passe par la signature)
+        if (hoverAnim || active) every = 1;
+        if (g_softAnimating || g_softPageT || g_softThemeT) { every = 1; if (g_softPageT || g_softThemeT) InvalidateAll(); }   // (soft.inc : 60 images/s pendant une animation ; les composants invalident leur zone, les transitions l'image entiere)
         g_softAnimating = false;
         {   // (L6 : 0 image/s au repos -- ce que les fils de fond changent sans statut : notes, versions, catalogue, journaux, salon, pages)
             static size_t lastSig; size_t sig = 0;
             auto mix = [&](size_t v) { sig = sig * 1315423911u + v + 1; };
             mix((size_t)g_notesDone); mix((size_t)g_relState.load()); mix((size_t)(bool)g_busy); mix((size_t)g_lobby); mix((size_t)(g_crashT != 0)); mix(g_addonList.size());
-            mix(UpdAvail().size()); mix(LancAvail().size()); mix(g_localVer.size()); mix((size_t)g_state); mix((size_t)g_tab); mix((size_t)(g_uiHot + 2)); mix((size_t)(g_hot + 2)); mix((size_t)(g_focus + 2));
+            mix(UpdAvail().size()); mix(LancAvail().size()); mix(g_localVer.size()); mix((size_t)g_state); mix((size_t)g_tab); mix((size_t)(g_focus + 2));
+            {   // survol des zones et des boutons : seulement l'ancienne et la nouvelle zone, pas l'image entiere
+                static int lastUiHot = -1, lastHot = -1;
+                if (g_uiHot != lastUiHot) { for (const HotRect &z : g_zones) if (z.id == lastUiHot || z.id == g_uiHot) InvalidateCard(z.r, 30); lastUiHot = g_uiHot; if (g_uiHot < 0 && lastUiHot < 0) {} }
+                if (g_hot != lastHot) { if (lastHot >= 0 && lastHot < B_COUNT) InvalidateCard(g_btn[lastHot].r, 30); if (g_hot >= 0 && g_hot < B_COUNT) InvalidateCard(g_btn[g_hot].r, 30); lastHot = g_hot; }
+            }
             mix((size_t)(g_railScroll * 4)); mix((size_t)(g_scroll[g_tab] * 4)); mix((size_t)g_setTab); mix((size_t)g_wikiSel); mix((size_t)(g_tuto + 2)); mix((size_t)g_guide); mix((size_t)g_palOpen); mix((size_t)g_bugState);
             mix((size_t)g_mscHot + 2); mix((size_t)g_logRowHot + 2); mix((size_t)g_carHot + 2); mix((size_t)g_lobbyHot + 2); mix((size_t)g_skinHot + 2); mix((size_t)g_contentHot + 2); mix((size_t)g_srvHot + 2);
             EnterCriticalSection(&g_lcs); mix(g_peers.size()); LeaveCriticalSection(&g_lcs);

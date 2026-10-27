@@ -94,6 +94,10 @@ static bool g_softAnimating;   // une animation en cours a cette image (Tick : i
 static int SoftDur(int ms) { return AnimReduced() ? 1 : ms; }
 // Valeur animee vers 'target' pour la cle : la premiere fois, directement a la cible (rien n'est anime au demarrage) ; un
 // changement de cible repart de la valeur courante (interruptible).
+static RectF g_softAnimR; static bool g_softAnimROk;   // (zone du composant en cours : ses animations n'invalident qu'elle)
+static void SoftAnimAt(RectF r) { g_softAnimR = r; g_softAnimROk = true; }
+static void SoftAnimEnd() { g_softAnimROk = false; }
+static void SoftAnimDirty() { if (g_softAnimROk) InvalidateSoft(g_softAnimR, 30); else InvalidateAll(); }
 static float AnimTo(long long key, float target, int dur = kSoftTUi, int curve = SE_MOVE)
 {
     DWORD now = GetTickCount();
@@ -103,7 +107,7 @@ static float AnimTo(long long key, float target, int dur = kSoftTUi, int curve =
     float t = a.dur <= 1 ? 1.0f : min(1.0f, (now - a.t0) / (float)a.dur);
     float cur = a.from + (a.to - a.from) * SoftEase(t, a.curve);
     if (target != a.to) { a.from = cur; a.to = target; a.t0 = now; a.dur = SoftDur(dur); a.curve = curve; t = 0; cur = a.from; }
-    if (t < 1) { g_softAnimating = true; InvalidateAll(); }
+    if (t < 1) { g_softAnimating = true; SoftAnimDirty(); }
     return cur;
 }
 static float AnimGet(long long key, float def) { auto it = g_softAnims.find(key); if (it == g_softAnims.end()) return def; return AnimTo(key, it->second.to); }
@@ -118,7 +122,7 @@ static float SoftPress(int id)   // 1 pendant l'appui, puis retour en 140 ms
     DWORD el = GetTickCount() - g_softPressT;
     int d = SoftDur(kSoftTPress);
     if (el >= (DWORD)d * 2) return 0;
-    g_softAnimating = true; InvalidateAll();
+    g_softAnimating = true; SoftAnimDirty();
     return el < (DWORD)d ? 1.0f : 1.0f - SoftEase((el - d) / (float)d, SE_OUT);
 }
 
@@ -198,14 +202,15 @@ static void SoftRaised(Graphics &g, RectF r, float rad, int off, int blur, float
     // sur des degrades aussi doux, identique a l'oeil ; le centre uni est un remplissage (SoftDraw9). 21 ombres : 44 ms -> 3,5 ms par
     // image (JD 27/10, « le launcher lag »).
     int pad = SoftBlurPad(blur);
-    InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeNearestNeighbor);
-    PixelOffsetMode pm = g.GetPixelOffsetMode(); g.SetPixelOffsetMode(PixelOffsetModeHalf);
+    GraphicsState st = g.Save();
+    g.SetInterpolationMode(InterpolationModeNearestNeighbor); g.SetPixelOffsetMode(PixelOffsetModeHalf);
+    { GraphicsPath keep; RoundRect(keep, RectF(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2), max(1.0f, rad - 1)); g.SetClip(&keep, CombineModeExclude); }   // (rien sous la forme : la moitie des pixels d'ombre etaient recouverts)
     Color sd = WithA(g_soft.shD, strength), sl = WithA(g_soft.shL, g_softDark ? strength * 0.9f : strength);
     SoftShadowSlice &a = SoftShadowFor((int)rad, blur, sd);
     SoftDraw9(g, a.b, a.cs, RectF(r.X + off - pad, r.Y + off - pad, r.Width + 2 * pad, r.Height + 2 * pad), sd);
     SoftShadowSlice &l = SoftShadowFor((int)rad, blur, sl);
     SoftDraw9(g, l.b, l.cs, RectF(r.X - off - pad, r.Y - off - pad, r.Width + 2 * pad, r.Height + 2 * pad), sl);
-    g.SetInterpolationMode(im); g.SetPixelOffsetMode(pm);
+    g.Restore(st);
 }
 // Creux (ombres interieures) : bitmap par (taille, rayon, decalage, flou, theme), clippe a la forme.
 static std::map<std::wstring, Bitmap *> g_softInsets;
@@ -237,6 +242,12 @@ static void SoftBlink(DWORD ms, int slot)
     if (slot < 0 || slot >= 8) slot = 0;
     if (last[slot] != k) { last[slot] = k; InvalidateAll(); }
 }
+static void SoftBlinkAt(RectF r, DWORD ms, int slot)   // (idem, mais seulement la zone du composant)
+{
+    static DWORD last[8]; DWORD k = GetTickCount() / (ms ? ms : 1);
+    if (slot < 0 || slot >= 8) slot = 0;
+    if (last[slot] != k) { last[slot] = k; InvalidateSoft(r, 8); }
+}
 static void SoftShape(Graphics &g, RectF r, float rad, Color fill) { GraphicsPath p; RoundRect(p, r, rad); SolidBrush b(fill); g.FillPath(&b, &p); }
 
 // ---- composants
@@ -250,7 +261,7 @@ static void SoftCardTitle(Graphics &g, RectF card, const std::wstring &title, co
 static void SoftButton(Graphics &g, RectF r, const std::wstring &s, int id, bool primary = false, int icon = -1, bool enabled = true, float rad = kSoftRCtl)
 {
     bool hot = enabled && g_uiHot == id;
-    float press = enabled ? SoftPress(id) : 0;
+    SoftAnimAt(r); float press = enabled ? SoftPress(id) : 0; SoftAnimEnd();
     float a = enabled ? 1.0f : 0.45f;
     RectF rr = r;
     if (press > 0) { float k = 1 - 0.03f * press; rr = RectF(r.X + r.Width * (1 - k) / 2, r.Y + r.Height * (1 - k) / 2, r.Width * k, r.Height * k); }
@@ -271,7 +282,7 @@ static void SoftButton(Graphics &g, RectF r, const std::wstring &s, int id, bool
 // Interrupteur 52 x 30 : creux, pastille qui glisse (220 ms), fond accent quand actif.
 static void SoftToggleDraw(Graphics &g, RectF r, bool on, bool hot, long long key, bool enabled)
 {
-    float t = AnimTo(key, on ? 1.0f : 0.0f, kSoftTUi, SE_MOVE);
+    SoftAnimAt(r); float t = AnimTo(key, on ? 1.0f : 0.0f, kSoftTUi, SE_MOVE); SoftAnimEnd();
     Color fill = Color((BYTE)255, (BYTE)(g_soft.bgIn.GetR() + (g_soft.acc.GetR() - g_soft.bgIn.GetR()) * t), (BYTE)(g_soft.bgIn.GetG() + (g_soft.acc.GetG() - g_soft.bgIn.GetG()) * t), (BYTE)(g_soft.bgIn.GetB() + (g_soft.acc.GetB() - g_soft.bgIn.GetB()) * t));
     SoftShape(g, r, r.Height / 2, WithA(fill, enabled ? 1.0f : 0.5f));
     if (t < 0.5f) { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, r.Height / 2, 3, 6); g.Restore(st); }
@@ -318,7 +329,7 @@ static void SoftSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labs,
     float x = r.X + 5, tx = x, tw = w.empty() ? 0 : w[0] + extra;
     std::vector<float> xs;
     for (size_t i = 0; i < labs.size(); i++) { xs.push_back(x); if ((int)i == sel) { tx = x; tw = w[i] + extra; } x += w[i] + extra + gap; }
-    float cx = AnimTo(AK(AKH_SEG, id0), tx, kSoftTUi, SE_MOVE), cw = AnimTo(AK(AKH_SEG, id0 + 1000), tw, kSoftTUi, SE_MOVE);
+    SoftAnimAt(r); float cx = AnimTo(AK(AKH_SEG, id0), tx, kSoftTUi, SE_MOVE), cw = AnimTo(AK(AKH_SEG, id0 + 1000), tw, kSoftTUi, SE_MOVE); SoftAnimEnd();
     RectF th(cx, r.Y + 5, cw, r.Height - 10);
     SoftRaised(g, th, 10, 3, 8, enabled ? 0.8f : 0.4f);
     SoftShape(g, th, 10, WithA(g_soft.acc, enabled ? 1.0f : 0.5f));
@@ -340,7 +351,7 @@ static void SoftField(Graphics &g, RectF r, const std::wstring &text, const std:
     std::wstring s = text.empty() ? placeholder : text;
     Text(g, s, RectF(x, r.Y, r.Width - (x - r.X) - 12, r.Height), 14, text.empty() ? FontStyleRegular : FontStyleBold, text.empty() ? g_soft.faint : g_soft.ink, StringAlignmentNear);
     if (focus && (GetTickCount() / 500) % 2 == 0) { float cx = x + (text.empty() ? 0 : MeasureW(MeasureG(), text, 14, FontStyleBold)) + 1; Pen cp(g_soft.ink, 1.5f); g.DrawLine(&cp, cx, r.Y + 12, cx, r.Y + r.Height - 12); }
-    if (focus) SoftBlink(500, 0);   // (clignotement : 2 images par seconde)
+    if (focus) SoftBlinkAt(r, 500, 0);   // (clignotement : 2 images par seconde, la zone du champ)
 }
 enum { SC_OK, SC_WARN, SC_BAD, SC_ACC };   // puces : toujours avec un texte
 static float SoftChipW(const std::wstring &s) { return MeasureW(MeasureG(), s, 12, FontStyleBold) + 26; }   // (+6 : le cyrillique se mesure un peu court -- police de repli au dessin)
@@ -359,7 +370,7 @@ static void SoftProgress(Graphics &g, RectF r, float frac)   // creux + barre ac
 {
     SoftShape(g, r, r.Height / 2, g_soft.bgIn);
     { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, r.Height / 2, 2, 5); g.Restore(st); }
-    if (frac < 0) { float t = (GetTickCount() % 1400) / 1400.0f, w = r.Width * 0.3f, x = r.X + (r.Width + w) * t - w; GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftShape(g, RectF(x, r.Y, w, r.Height), r.Height / 2, g_soft.acc); g.Restore(st); SoftBlink(80, 2); return; }
+    if (frac < 0) { float t = (GetTickCount() % 1400) / 1400.0f, w = r.Width * 0.3f, x = r.X + (r.Width + w) * t - w; GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftShape(g, RectF(x, r.Y, w, r.Height), r.Height / 2, g_soft.acc); g.Restore(st); SoftBlinkAt(r, 80, 2); return; }
     float w = r.Width * min(max(frac, 0.0f), 1.0f);
     if (w > 0) SoftShape(g, RectF(r.X, r.Y, max(w, r.Height), r.Height), r.Height / 2, g_soft.acc);
 }
@@ -410,7 +421,7 @@ static void SoftSkeleton(Graphics &g, RectF r, float rad = 10)   // chargement (
 {
     float t = (GetTickCount() % 1600) / 1600.0f, a = 0.5f + 0.3f * sinf(t * 6.2832f);
     SoftShape(g, r, rad, WithA(g_soft.bgIn, a));
-    SoftBlink(120, 1);
+    SoftBlinkAt(r, 120, 1);
 }
 static void SoftTooltip(Graphics &g, RectF anchor, const std::wstring &s)   // sous l'element, centree
 {
@@ -461,75 +472,107 @@ static void SoftDrawToasts(Graphics &g, float areaW = kCardW, float areaH = kCar
         Text(g, t.text, RectF(rs.X + 40, rs.Y, rs.Width - 52, rs.Height), 13.5f, FontStyleBold, WithA(g_soft.ink, a), StringAlignmentNear);
         y -= h + 10;
     }
-    SoftBlink(40, 5);
+    SoftBlinkAt(RectF(areaW * 0.3f, areaH - 340, areaW * 0.7f, 340), 40, 5);
 }
 
-// ---- changement de page (sens = position dans la barre) et cercle du theme : composes dans PresentNew sur la carte rendue
-static Bitmap *g_softPageOld;   // la zone de page de l'image precedente, au moment du changement
+// ---- changement de page (sens = position dans la barre) et cercle du theme : composes en GDI dans PresentNew, depuis deux
+// images en cache (DIB) : l'ancienne (la fenetre au moment du changement) et la nouvelle (rendue une seule fois, a la premiere
+// image de la transition). Par image : un BitBlt et un AlphaBlend (msimg32 charge depuis System32), jamais de rendu GDI+ --
+// en 4K, le GDI+ composait en 450 ms par image (JD 27/10, « pas fluide »).
+struct SoftDib { HDC dc = NULL; HBITMAP bmp = NULL; int w = 0, h = 0; };
+static SoftDib g_trOld, g_trNew; static bool g_trNewOk;
 static int g_softPageDir;       // +1 : la nouvelle page est plus bas dans la barre (elle monte en apparaissant), -1 : plus haut
 static DWORD g_softPageT;       // debut du changement (0 : aucun)
-static Bitmap *g_softThemeOld;  // l'image entiere avant le changement de theme
 static DWORD g_softThemeT; static PointF g_softThemeC;
 static int SoftNavIndex(int tab);   // (ui.inc : place de la page dans la barre, -1 si absente)
+static bool SoftTransitionActive() { return g_softPageT != 0 || g_softThemeT != 0; }
+static void SoftDibFree(SoftDib &d) { if (d.dc) DeleteDC(d.dc); if (d.bmp) DeleteObject(d.bmp); d = SoftDib(); }
+static bool SoftDibCapture(SoftDib &d)   // (copie de la fenetre telle qu'elle est a l'ecran : g_memDC)
+{
+    if (!g_memDC || g_winW < 1 || g_winH < 1) return false;
+    if (!d.dc || d.w != g_winW || d.h != g_winH) {
+        SoftDibFree(d);
+        BITMAPINFO bi = {}; bi.bmiHeader.biSize = sizeof(bi.bmiHeader); bi.bmiHeader.biWidth = g_winW; bi.bmiHeader.biHeight = -g_winH; bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32;
+        void *bits = NULL;
+        d.dc = CreateCompatibleDC(NULL); d.bmp = CreateDIBSection(d.dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+        if (!d.dc || !d.bmp) { SoftDibFree(d); return false; }
+        SelectObject(d.dc, d.bmp); d.w = g_winW; d.h = g_winH;
+    }
+    return BitBlt(d.dc, 0, 0, g_winW, g_winH, g_memDC, 0, 0, SRCCOPY) != 0;
+}
+typedef BOOL(WINAPI *SoftAlphaBlendF)(HDC, int, int, int, int, HDC, int, int, int, int, BLENDFUNCTION);
+static SoftAlphaBlendF SoftAlphaBlend()
+{
+    static SoftAlphaBlendF f; static bool tried;
+    if (!tried) { tried = true; wchar_t sys[MAX_PATH] = L""; GetSystemDirectoryW(sys, MAX_PATH); if (HMODULE h = LoadLibraryW((std::wstring(sys) + L"\\msimg32.dll").c_str())) f = (SoftAlphaBlendF)GetProcAddress(h, "AlphaBlend"); }
+    return f;
+}
+static void SoftTransitionEnd()
+{
+    if (g_trNewOk && g_memDC) { BitBlt(g_memDC, 0, 0, g_winW, g_winH, g_trNew.dc, 0, 0, SRCCOPY); HDC dc = GetDC(g_wnd); BitBlt(dc, 0, 0, g_winW, g_winH, g_memDC, 0, 0, SRCCOPY); ReleaseDC(g_wnd, dc); }
+    g_softPageT = 0; g_softThemeT = 0; g_trNewOk = false;
+    SoftDibFree(g_trOld); SoftDibFree(g_trNew);
+}
 static void SoftPageChange(int from, int to)
 {
-    if (!g_newUi || !g_cardBmp || from == to || AnimReduced()) return;
+    if (!g_newUi || !g_memDC || from == to || AnimReduced()) return;
+    if (SoftTransitionActive()) SoftTransitionEnd();
     int a = SoftNavIndex(from), b = SoftNavIndex(to);
     g_softPageDir = a < 0 || b < 0 ? 1 : b > a ? 1 : b < a ? -1 : 0;
-    delete g_softPageOld;
-    g_softPageOld = g_cardBmp->Clone(0, 0, (INT)g_cardBmp->GetWidth(), (INT)g_cardBmp->GetHeight(), PixelFormat32bppPARGB);
-    g_softPageT = GetTickCount();
+    if (!SoftDibCapture(g_trOld)) return;
+    g_softPageT = GetTickCount(); g_trNewOk = false;
     InvalidateAll();
 }
 static void SoftThemeCircle(PointF from)   // (bouton Theme : la nouvelle image decoupee par un cercle qui grandit, 420 ms)
 {
-    if (!g_newUi || !g_cardBmp || AnimReduced()) return;
-    delete g_softThemeOld;
-    g_softThemeOld = g_cardBmp->Clone(0, 0, (INT)g_cardBmp->GetWidth(), (INT)g_cardBmp->GetHeight(), PixelFormat32bppPARGB);
-    g_softThemeT = GetTickCount(); g_softThemeC = from;
+    if (!g_newUi || !g_memDC || AnimReduced()) return;
+    if (SoftTransitionActive()) SoftTransitionEnd();
+    if (!SoftDibCapture(g_trOld)) return;
+    g_softThemeT = GetTickCount(); g_softThemeC = from; g_trNewOk = false;
     InvalidateAll();
 }
-// Apres RenderTo dans PresentNew : 'card' est l'image courante (nouvelle page / nouveau theme), composee avec l'ancienne.
-static void SoftCompose(Bitmap &card)
+// Apres la premiere image complete de la transition (PresentNew) : la nouvelle image est gardee.
+static void SoftTransitionCaptureNew() { if (SoftTransitionActive() && !g_trNewOk) g_trNewOk = SoftDibCapture(g_trNew); }
+// Une image de transition, composee sur g_memDC puis copiee a l'ecran. false : pas encore de nouvelle image (il faut la rendre).
+static bool SoftTransitionFrame()
 {
+    if (!SoftTransitionActive() || !g_trNewOk || !g_memDC) return false;
     DWORD now = GetTickCount();
-    if (g_softThemeT) {   // (pendant la bascule du theme, aucune autre transition)
+    int w = g_winW, h = g_winH;
+    if (g_softThemeT) {
         int dur = SoftDur(420);
         float t = min(1.0f, (now - g_softThemeT) / (float)dur), e = SoftEase(t, SE_OUT);
-        if (t >= 1 || !g_softThemeOld) { g_softThemeT = 0; delete g_softThemeOld; g_softThemeOld = NULL; g_softPageT = 0; return; }
-        Bitmap cur(card.GetWidth(), card.GetHeight(), PixelFormat32bppPARGB);
-        { Graphics gc(&cur); gc.DrawImage(&card, 0, 0, (INT)card.GetWidth(), (INT)card.GetHeight()); }
-        Graphics g(&card);
-        g.SetCompositingMode(CompositingModeSourceCopy);
-        g.DrawImage(g_softThemeOld, 0, 0, (INT)card.GetWidth(), (INT)card.GetHeight());
+        if (t >= 1) { SoftTransitionEnd(); return true; }
         float cx = g_offX + (g_softThemeC.X + kM) * g_scale, cy = g_offY + (g_softThemeC.Y + kM) * g_scale;
-        float farR = sqrtf(max(cx, card.GetWidth() - cx) * max(cx, card.GetWidth() - cx) + max(cy, card.GetHeight() - cy) * max(cy, card.GetHeight() - cy)) * e;
-        GraphicsPath p; p.AddEllipse(cx - farR, cy - farR, 2 * farR, 2 * farR);
-        g.SetClip(&p);
-        g.DrawImage(&cur, 0, 0, (INT)card.GetWidth(), (INT)card.GetHeight());
-        InvalidateAll();
-        return;
+        float farR = sqrtf(max(cx, w - cx) * max(cx, w - cx) + max(cy, h - cy) * max(cy, h - cy)) * e;
+        BitBlt(g_memDC, 0, 0, w, h, g_trOld.dc, 0, 0, SRCCOPY);
+        int sv = SaveDC(g_memDC);
+        HRGN rg = CreateEllipticRgn((int)(cx - farR), (int)(cy - farR), (int)(cx + farR) + 1, (int)(cy + farR) + 1);
+        SelectClipRgn(g_memDC, rg);
+        BitBlt(g_memDC, 0, 0, w, h, g_trNew.dc, 0, 0, SRCCOPY);
+        RestoreDC(g_memDC, sv); DeleteObject(rg);
+    } else {
+        int din = SoftDur(kSoftTPage), dout = SoftDur(170);
+        float t = min(1.0f, (now - g_softPageT) / (float)din);
+        if (t >= 1) { SoftTransitionEnd(); return true; }
+        float ein = SoftEase(t, SE_OUT), eout = SoftEase(min(1.0f, (now - g_softPageT) / (float)dout), SE_MOVE);
+        int px = (int)(g_offX + (264 + kM) * g_scale), py = (int)(g_offY + kM * g_scale), pw = (int)(g_pageW * g_scale + 0.5f), ph = (int)(744 * g_scale + 0.5f);   // (la colonne de page : titre, commandes et page)
+        int dyo = (int)(-14 * g_softPageDir * g_scale * eout), dyi = (int)(22 * g_softPageDir * g_scale * (1 - ein));
+        int sv = SaveDC(g_memDC);
+        IntersectClipRect(g_memDC, px, py, px + pw, py + ph);
+        BitBlt(g_memDC, 0, 0, w, h, g_trOld.dc, 0, 0, SRCCOPY);   // (le reste de la fenetre : l'ancienne image, identique)
+        {   // (fond uni derriere, l'ancienne page glisse, la nouvelle arrive en fondu)
+            Color bg = WinBg(); HBRUSH hb = CreateSolidBrush(RGB(bg.GetR(), bg.GetG(), bg.GetB())); RECT pr = { px, py, px + pw, py + ph }; FillRect(g_memDC, &pr, hb); DeleteObject(hb);
+            BitBlt(g_memDC, px, py + dyo, pw, ph, g_trOld.dc, px, py, SRCCOPY);
+            SoftAlphaBlendF ab = SoftAlphaBlend();
+            bool fade = (long long)pw * ph <= 4000000;   // (au-dela de 4 Mpx -- fenetre 4K agrandie -- le fondu coute 19 ms par image : glissement seul, pour rester a 60 images/s)
+            BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(255 * ein), 0 };
+            if (!fade || !ab || !ab(g_memDC, px, py + dyi, pw, ph, g_trNew.dc, px, py, pw, ph, bf)) BitBlt(g_memDC, px, py + dyi, pw, ph, g_trNew.dc, px, py, SRCCOPY);
+        }
+        RestoreDC(g_memDC, sv);
     }
-    if (!g_softPageT) return;
-    int din = SoftDur(kSoftTPage), dout = SoftDur(170);
-    float t = min(1.0f, (now - g_softPageT) / (float)din);
-    if (t >= 1 || !g_softPageOld) { g_softPageT = 0; delete g_softPageOld; g_softPageOld = NULL; return; }
-    float ein = SoftEase(t, SE_OUT), eout = SoftEase(min(1.0f, (now - g_softPageT) / (float)dout), SE_MOVE);
-    RectF page(g_offX + (264 + kM) * g_scale, g_offY + (0 + kM) * g_scale, g_pageW * g_scale, 744 * g_scale);   // (la colonne de page : titre, commandes et page)
-    Bitmap cur(card.GetWidth(), card.GetHeight(), PixelFormat32bppPARGB);
-    { Graphics gc(&cur); gc.DrawImage(&card, 0, 0, (INT)card.GetWidth(), (INT)card.GetHeight()); }
-    Graphics g(&card);
-    g.SetClip(page);
-    SolidBrush bg(WinBg()); g.FillRectangle(&bg, page);   // (fond uni derriere les deux pages)
-    ColorMatrix mo = { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 - eout, 0, 0, 0, 0, 0, 1 };
-    ImageAttributes ao; ao.SetColorMatrix(&mo);
-    float dyo = -14 * g_softPageDir * g_scale * eout;
-    g.DrawImage(g_softPageOld, RectF(0, dyo, (float)card.GetWidth(), (float)card.GetHeight()), 0, 0, (float)card.GetWidth(), (float)card.GetHeight(), UnitPixel, &ao);
-    ColorMatrix mi = { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, ein, 0, 0, 0, 0, 0, 1 };
-    ImageAttributes ai; ai.SetColorMatrix(&mi);
-    float dyi = 22 * g_softPageDir * g_scale * (1 - ein);
-    g.DrawImage(&cur, RectF(0, dyi, (float)card.GetWidth(), (float)card.GetHeight()), 0, 0, (float)card.GetWidth(), (float)card.GetHeight(), UnitPixel, &ai);
-    InvalidateAll();
+    HDC dc = GetDC(g_wnd); BitBlt(dc, 0, 0, w, h, g_memDC, 0, 0, SRCCOPY); ReleaseDC(g_wnd, dc);
+    return true;
 }
 
 // ---- planche d'essai : tous les composants, dans le theme et l'accent demandes (/capture <png> composants [/theme ...] [/msc])
@@ -624,13 +667,13 @@ static void SoftSelfTest()
     LARGE_INTEGER f, a, z; QueryPerformanceFrequency(&f);
     int from = g_tab; g_tab = TAB_HOME; InvalidateAll(); PresentNew();
     SoftPageChange(TAB_HOME, TAB_WIKI); g_tab = TAB_WIKI;
-    double worst = 0; int frames = 0;
-    while (g_softPageT) { InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z); double ms = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart; if (ms > worst) worst = ms; frames++; Sleep(16); }
-    LaunchLog("testsoft : changement de page Accueil -> Guide (sens %+d) : %d images composees, la plus longue %.1f ms", g_softPageDir, frames, worst);
+    double worst = 0; int frames = 0; std::wstring times;
+    while (g_softPageT) { InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z); double ms = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart; if (ms > worst) worst = ms; frames++; { wchar_t b[16]; swprintf_s(b, L"%.0f ", ms); times += b; } Sleep(16); }
+    LaunchLog("testsoft : changement de page Accueil -> Guide (sens %+d) : %d images composees, la plus longue %.1f ms (chacune : %s)", g_softPageDir, frames, worst, Narrow(times, CP_UTF8).c_str());
     SoftThemeCircle(PointF(1150, 44)); SoftModeSet(g_softDark ? 0 : 1);
-    worst = 0; frames = 0;
-    while (g_softThemeT) { InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z); double ms = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart; if (ms > worst) worst = ms; frames++; Sleep(16); }
-    LaunchLog("testsoft : cercle du theme : %d images, la plus longue %.1f ms, theme maintenant %s", frames, worst, g_softDark ? "sombre" : "clair");
+    worst = 0; frames = 0; times.clear();
+    while (g_softThemeT) { InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z); double ms = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart; if (ms > worst) worst = ms; frames++; { wchar_t b[16]; swprintf_s(b, L"%.0f ", ms); times += b; } Sleep(16); }
+    LaunchLog("testsoft : cercle du theme : %d images, la plus longue %.1f ms (chacune : %s), theme maintenant %s", frames, worst, Narrow(times, CP_UTF8).c_str(), g_softDark ? "sombre" : "clair");
     SoftModeSet(2); g_tab = from;
     SoftNotify(L"essai", SC_OK);
     LaunchLog("testsoft : notification posee (%d), animations reduites : %s", (int)g_softToasts.size(), AnimReduced() ? "oui" : "non");

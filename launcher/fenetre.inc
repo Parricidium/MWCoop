@@ -26,8 +26,9 @@ static DWORD g_uiFlagT;              // filet : quand effacer NouvelleEnCours
 static Bitmap *g_cardBmp;            // nouvelle : la carte rendue (PARGB), composee sur le fond uni de g_memDC
 static const int kWinMinW = 960, kWinMinH = 600;
 static void RenderTo(Bitmap &target, float scale);   // (launcher.cpp)
-static void SoftCompose(Bitmap &card);                // (soft.inc : changement de page, cercle du theme)
-static void RenderToNew(Bitmap &target);              // (coque.inc : la fenetre entiere)
+static void RenderToNew(Bitmap &target, const RECT *clip = NULL);   // (coque.inc : la fenetre entiere, ou seulement le rectangle sale)
+static bool SoftTransitionActive();   // (soft.inc : changement de page ou cercle du theme en cours -> image entiere)
+static bool SoftTransitionFrame(); static void SoftTransitionCaptureNew();   // (soft.inc : composition GDI depuis les deux images en cache)
 static float g_shW, g_shH;                            // (coque.inc)
 static bool g_palOpen;
 static void SoftThemeApply();                         // (soft.inc : jetons du theme et de l'accent)
@@ -39,6 +40,22 @@ static void InvalidateAll() { g_dirtyAll = true; }
 static void InvalidatePx(const RECT &r)
 {
     if (IsRectEmpty(&g_dirtyPx)) g_dirtyPx = r; else UnionRect(&g_dirtyPx, &g_dirtyPx, &r);
+}
+// Rectangle sale a partir d'une zone en coordonnees de la carte (colonne de page), ou en DIP pendant le dessin de la coque
+// (g_zoneDip) ; 'grow' : marge en pixels pour les ombres. Ancienne interface : l'image entiere, comme avant.
+static RECT CardToPx(RectF r, float grow)
+{
+    float x0 = g_offX + (r.X + kM) * g_scale - grow, y0 = g_offY + (r.Y + kM) * g_scale - grow;
+    float x1 = g_offX + (r.X + r.Width + kM) * g_scale + grow, y1 = g_offY + (r.Y + r.Height + kM) * g_scale + grow;
+    RECT o = { (LONG)floorf(x0), (LONG)floorf(y0), (LONG)ceilf(x1), (LONG)ceilf(y1) };
+    return o;
+}
+static void InvalidateCard(RectF r, float grow = 24) { if (!g_newUi) { InvalidateAll(); return; } InvalidatePx(CardToPx(r, grow)); }
+static void InvalidateSoft(RectF r, float grow = 24)
+{
+    if (!g_newUi) { InvalidateAll(); return; }
+    if (g_zoneDip) { float d = g_dpiScale; RECT o = { (LONG)floorf(r.X * d - grow), (LONG)floorf(r.Y * d - grow), (LONG)ceilf((r.X + r.Width) * d + grow), (LONG)ceilf((r.Y + r.Height) * d + grow) }; InvalidatePx(o); }
+    else InvalidatePx(CardToPx(r, grow));
 }
 static void InvalidateCard(RectF r)   // zone en coordonnees de la carte
 {
@@ -281,25 +298,32 @@ static void PresentNew()
     if (!g_dirtyAll && IsRectEmpty(&g_dirtyPx)) return;
     LARGE_INTEGER pm; QueryPerformanceCounter(&pm);
     int cw = g_winW, ch = g_winH;   // (L2 : l'image = la fenetre entiere, coque comprise -- coque.inc RenderToNew)
-    if (!g_cardBmp || (int)g_cardBmp->GetWidth() != cw || (int)g_cardBmp->GetHeight() != ch) { delete g_cardBmp; g_cardBmp = new Bitmap(cw, ch, PixelFormat32bppPARGB); }
-    RenderToNew(*g_cardBmp);
+    if (!g_cardBmp || (int)g_cardBmp->GetWidth() != cw || (int)g_cardBmp->GetHeight() != ch) { delete g_cardBmp; g_cardBmp = new Bitmap(cw, ch, PixelFormat32bppPARGB); g_dirtyAll = true; }
+    if (SoftTransitionActive()) { if (SoftTransitionFrame()) { g_dirtyAll = false; SetRectEmpty(&g_dirtyPx); return; } g_dirtyAll = true; }   // (transition : composee depuis les caches ; la premiere image est rendue en entier et gardee)
+    RECT full = { 0, 0, cw, ch };
+    RECT r = g_dirtyAll ? full : g_dirtyPx;
+    IntersectRect(&r, &r, &full);
+    if (IsRectEmpty(&r)) { g_dirtyAll = false; SetRectEmpty(&g_dirtyPx); return; }
+    bool partial = !g_dirtyAll;   // (rectangle sale seulement : survol, appui, curseur -- le reste de l'image est deja la)
+    RenderToNew(*g_cardBmp, partial ? &r : NULL);
     QueryPerformanceCounter(&pm);
-    SoftCompose(*g_cardBmp);   // (soft.inc : transitions)
     ProfilMark(4, pm);
     {
         Bitmap win(g_winW, g_winH, g_winW * 4, PixelFormat32bppPARGB, (BYTE *)g_bits);
         Graphics g(&win);
         g.SetCompositingMode(CompositingModeSourceCopy);
         g.SetInterpolationMode(InterpolationModeNearestNeighbor);
-        g.DrawImage(g_cardBmp, 0, 0, cw, ch);
+        g.SetPixelOffsetMode(PixelOffsetModeNone);
+        if (partial) g.DrawImage(g_cardBmp, Rect(r.left, r.top, r.right - r.left, r.bottom - r.top), r.left, r.top, r.right - r.left, r.bottom - r.top, UnitPixel);
+        else g.DrawImage(g_cardBmp, 0, 0, cw, ch);
     }
     GdiFlush();
     ProfilMark(5, pm);
-    RECT r = g_dirtyAll ? RECT{ 0, 0, g_winW, g_winH } : g_dirtyPx;
     HDC dc = GetDC(g_wnd);
     BitBlt(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, g_memDC, r.left, r.top, SRCCOPY);
     ReleaseDC(g_wnd, dc);
     ProfilMark(6, pm);
+    SoftTransitionCaptureNew();   // (soft.inc : la nouvelle image de la transition, gardee)
     g_dirtyAll = false; SetRectEmpty(&g_dirtyPx);
 }
 // Filet de securite : drapeau pose avant la premiere image, efface 5 s apres (Tick).
@@ -448,17 +472,23 @@ static void WinSelfTest()
     WritePrivateProfileStringW(L"Lanceur", L"Fenetre", L"-30000,-30000,1200,700,0", g_iniLauncher.c_str());
     LaunchLog("testfenetre : memoire hors ecran -> %s", WinRectRead(r, maxed) ? "ACCEPTEE (ERREUR)" : "refusee, centree (ok)");
     WritePrivateProfileStringW(L"Lanceur", L"Fenetre", NULL, g_iniLauncher.c_str());
+    int tw = 1600, th = 900;
+    { wchar_t v[32] = L""; GetEnvironmentVariableW(L"MWCOOP_TEST_TAILLE", v, 32); int a2 = 0, b2 = 0; if (swscanf_s(v, L"%dx%d", &a2, &b2) == 2 && a2 >= 800 && b2 >= 500) { tw = a2; th = b2; } }   // (mesure a une autre taille : 4K = 3840x2160)
+    SetWindowPos(g_wnd, NULL, 0, 0, tw, th, SWP_NOZORDER | SWP_NOACTIVATE); WinLayout();
+    { RECT c; GetClientRect(g_wnd, &c); LaunchLog("testfenetre : mesures en %ld x %ld (echelle %.2f)", c.right, c.bottom, g_scale); }
     LARGE_INTEGER f, a, z; QueryPerformanceFrequency(&f);
     InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);
     double t1 = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
     QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);   // (rien de change : rien a faire)
     double t2 = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
-    LaunchLog("testfenetre : image complete %.1f ms (1600 x 900), image sans changement %.2f ms", t1, t2);
+    LaunchLog("testfenetre : image complete %.1f ms (%d x %d), image sans changement %.2f ms", t1, tw, th, t2);
     g_profilOn = true;
     for (int i = 0; i < 4; i++) { g_profAcc[i] = 0; g_profN[i] = 0; }
     InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);   // (a chaud : caches des ombres, creux et polices remplis)
     double t3 = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
     LaunchLog("testfenetre : image complete a chaud %.1f ms : page %.1f, coque %.1f, couches %.1f, palette/toasts %.1f, composition %.1f, copie %.1f, BitBlt %.1f", t3, g_profilMs[0], g_profilMs[1], g_profilMs[2], g_profilMs[3], g_profilMs[4], g_profilMs[5], g_profilMs[6]);
+    { RECT pr = { tw / 4, th / 4, tw / 4 + 300, th / 4 + 60 }; InvalidatePx(pr); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z); }
+    LaunchLog("testfenetre : image partielle (survol, 300 x 60) %.1f ms", (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
     LaunchLog("testfenetre : dans cette image : texte %d appels %.1f ms, ombres %d appels %.1f ms, creux %d appels %.1f ms, icones %d appels %.1f ms", g_profN[0], g_profAcc[0], g_profN[1], g_profAcc[1], g_profN[2], g_profAcc[2], g_profN[3], g_profAcc[3]);
     g_tab = TAB_WIKI; InvalidateAll(); PresentNew(); InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);
     LaunchLog("testfenetre : image complete a chaud, Guide : %.1f ms (page %.1f, coque %.1f)", (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart, g_profilMs[0], g_profilMs[1]);

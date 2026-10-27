@@ -876,7 +876,7 @@ static float SigDrawTextArea(Graphics &g, RectF &r, float x, float y, float w, s
     SoftFieldBox(g, r, focus);
     SigText(g, shown, RectF(x + 16, y + 12, w - 32, h - 20), 14, text.empty() && !focus ? FontStyleRegular : FontStyleBold, text.empty() && !focus ? g_soft.faint : g_soft.ink);
     SigHot(r, id, clip);
-    if (focus) SoftBlink(500, 0);
+    if (focus) SoftBlinkAt(r, 500, 0);
     return h;
 }
 static float SigDrawDetail(Graphics &g, float x, float y, float w, const RectF &clip)
@@ -1062,7 +1062,7 @@ static void DrawSigPage(Graphics &g)
     g_sigContentH = h + 2 * pad;
     if (g_sigBusy && g_sigView != SV_SEND && g_sigView != SV_LOADING) {   // (une operation en cours : un fil discret en bas de la carte)
         SigLock(); float fr = g_sigFrac; SigUnlock();
-        SoftProgress(g, RectF(card.X + 24, card.Y + card.Height - 12, card.Width - 48, 6), fr); SoftBlink(250, 4);
+        SoftProgress(g, RectF(card.X + 24, card.Y + card.Height - 12, card.Width - 48, 6), fr); SoftBlinkAt(RectF(card.X, card.Y + card.Height - 24, card.Width, 24), 250, 4);
     }
 }
 static float SigMaxScroll() { return max(0.0f, g_sigContentH - 656); }
