@@ -63,7 +63,12 @@ namespace MWCoop
                     // (piece « echange » : pas de joint, 'Mouse off' -REMOVE-> y est le decrochage {Detach} du joueur d'ici, pas une casse)
                     if (!applying && Replay.Depth == 0)
                     {
-                        bool breakoff = prev != null && prev.Name == "Mouse off" && F.FsmVariables.FindFsmGameObject("SpawnPart") == null;
+                        // (piece « echange » : son 'Mouse off' -REMOVE-> est aussi le decrochage {Detach} du joueur d'ici -- sauf si son attache vient de
+                        // rompre (PartWatch, 1 s) : alors c'est une casse, comme les autres -- reservoir arrache sur la copie et « demonte » chez l'hote,
+                        // chaos S3 27/10)
+                        PartWatch pw = F.GetComponent<PartWatch>();
+                        bool jointBroke = pw != null && Time.realtimeSinceStartup - pw.LastBreak < 1f;
+                        bool breakoff = prev != null && prev.Name == "Mouse off" && (F.FsmVariables.FindFsmGameObject("SpawnPart") == null || jointBroke);
                         if (breakoff && MscKeepOnCopy(F)) { Finish(); return; }
                         MscLocalRemove(F, breakoff);
                     }
@@ -592,7 +597,8 @@ namespace MWCoop
                 what[next] = Recon.Path(c.collider.transform) + (o == null ? " (fixe)" : o.isKinematic ? " (cinematique)" : "") + " " + (c.relativeVelocity.magnitude * 3.6f).ToString("F0") + " km/h";
                 at[next] = Time.realtimeSinceStartup; next = (next + 1) % what.Length;
             }
-            void OnJointBreak(float force) { try { OnPartJointBreak(this, force); } catch (System.Exception e) { Replay.HookError(e); } }
+            public float LastBreak = -100f;
+            void OnJointBreak(float force) { LastBreak = Time.realtimeSinceStartup; try { OnPartJointBreak(this, force); } catch (System.Exception e) { Replay.HookError(e); } }
             public string Recent(float within)
             {
                 var sb = new System.Text.StringBuilder();

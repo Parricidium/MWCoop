@@ -182,6 +182,14 @@ namespace MWCoop
         static void ApplyCd(Cd c, string cd, int idx, float t, bool playing)
         {
             AudioSource a = c.A;
+            // My Summer Car : les boutons du lecteur de la SATSUMA restent a chacun (Jobs.MscSkip, 22/10) -- l'hote ne sait donc pas qu'un invite
+            // a mis un disque, et son « arrete » coupait chaque seconde le lecteur de l'invite : le CD ne marchait jamais chez lui (dossier #6,
+            // 27/10). Lecteur de l'hote arrete : celui de l'invite lui est rendu (enchainement local) ; il ne suit l'hote que quand l'hote joue.
+            if (Game.Msc && !playing)
+            {
+                if (c.Muted) { c.Muted = false; c.Upd.enabled = true; c.Last = null; Log.Info("radio : lecteur " + c.Name + " rendu a ce joueur (celui de l'hote est arrete)"); }
+                return;
+            }
             if (!c.Muted) { c.Muted = true; if (c.Upd.enabled) c.Upd.enabled = false; Log.Info("radio : lecteur " + c.Name + " mene par l'hote (enchainement local coupe)"); }
             FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD"); if (cv != null && cd.Length > 0) cv.Value = cd;
             FsmInt iv = c.Upd.FsmVariables.FindFsmInt("Index"); if (iv != null && idx >= 0) iv.Value = idx;
