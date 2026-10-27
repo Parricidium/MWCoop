@@ -1429,9 +1429,11 @@ static float SigDrawForm(Graphics &g, float x, float y, float w, const RectF &cl
         } else if (f.type == "case") {
             RectF r(x, y, w, 44);
             bool on = f.on;
-            SoftToggle(g, RectF(x, y + 7, 52, 30), on, id0 + 9, true); SigHot(r, id0 + 9, clip);
             std::wstring t = lab;
             float th = SigTextH(t, w - 70, 13.5f, FontStyleBold);
+            // zone cliquable : l'interrupteur et son libelle seulement, pas toute la ligne ([Directives] 27/10 : le dossier #12 de JD parti
+            // anonyme par un clic involontaire sur le texte)
+            SoftToggle(g, RectF(x, y + 7, 52, 30), on, id0 + 9, true); SigHot(RectF(x, y, min(w, 64 + MeasureW(MeasureG(), t, 13.5f, FontStyleBold) + 12), max(44.0f, th + 12)), id0 + 9, clip);
             SigText(g, t, RectF(x + 64, y + (th > 24 ? 4 : 12), w - 70, th + 4), 13.5f, FontStyleBold, bad ? g_soft.bad : g_soft.ink);
             y += max(44.0f, th + 12);
             if (!f.aide.empty()) y += SigPara(g, ST(f.aide.c_str()), x + 64, y, w - 70, 12, g_soft.muted) + 4;
