@@ -134,6 +134,10 @@ static void WinDwm(HWND h)   // coins arrondis (Win11), ombre (DWM actif) ; rien
 // Liseré de Windows 11 (DWMWA_BORDER_COLOR) a la couleur du fond du theme, et cadre en mode sombre quand le theme l'est
 // (JD 27/10 : « le launcher a un contour blanc ») ; reapplique a chaque changement de theme (soft.inc SoftThemeApply).
 static int g_ncHandled;   // (essai : messages non client traites ici)
+static int g_blitAllN;    // (essai : copies completes du cache a l'ecran)
+// Toute l'image recopiee du cache a l'ecran, tout de suite : si Windows a peint quelque chose par-dessus la zone cliente
+// (cadre inactif, bords), c'est efface sans attendre un rendu (JD 27/10 : le lisere disparaissait la ou la souris passait).
+static void WinBlitAll() { if (!g_wnd || !g_memDC || g_winW < 1) return; HDC dc = GetDC(g_wnd); BitBlt(dc, 0, 0, g_winW, g_winH, g_memDC, 0, 0, SRCCOPY); ReleaseDC(g_wnd, dc); g_blitAllN++; }
 static HWND g_dwmBorderH;   // (derniere fenetre a laquelle la bordure a ete appliquee ; WinDwmBorderReset force une nouvelle application)
 static void WinDwmBorderReset() { g_dwmBorderH = NULL; }
 static void WinDwmBorder(HWND h, bool dark, COLORREF bg)
@@ -279,9 +283,9 @@ static bool WinProcNew(HWND h, UINT m, WPARAM wp, LPARAM lp, LRESULT &res)
     // Activation / desactivation (boite modale, perte du focus) : rien a dessiner par Windows -- tout est zone cliente --, sinon
     // DefWindowProc peint le cadre « inactif » (lisere clair) par-dessus l'image, jusqu'a l'image entiere suivante (JD 27/10 :
     // « je l'ai eu lors de cette notification et apres il est reste 10 s »). La bordure DWM est reappliquee et l'image redessinee.
-    case WM_NCACTIVATE: g_ncHandled++; WinDwmBorderReset(); InvalidateAll(); res = TRUE; return true;
+    case WM_NCACTIVATE: g_ncHandled++; WinDwmBorderReset(); WinBlitAll(); InvalidateAll(); res = TRUE; return true;
     case WM_NCPAINT: g_ncHandled++; res = 0; return true;
-    case WM_ACTIVATE: g_ncHandled++; WinDwmBorderReset(); InvalidateAll(); return false;   // (le reste du traitement d'avant continue)
+    case WM_ACTIVATE: g_ncHandled++; WinDwmBorderReset(); WinBlitAll(); InvalidateAll(); return false;   // (le reste du traitement d'avant continue)
     case WM_GETMINMAXINFO: {
         MINMAXINFO *mi = (MINMAXINFO *)lp;
         mi->ptMinTrackSize.x = (LONG)(kWinMinW * g_dpiScale); mi->ptMinTrackSize.y = (LONG)(kWinMinH * g_dpiScale);
@@ -544,8 +548,11 @@ static void WinAnimTest()
         LRESULT r3 = SendMessageW(g_wnd, WM_NCACTIVATE, TRUE, 0);
         SendMessageW(g_wnd, WM_ACTIVATE, WA_ACTIVE, 0);
         WinAnimCheck("fenetre reactivee");
-        bool ok = g_ncHandled - before == 5 && r1 == TRUE && r3 == TRUE && r2 == 0;
+        LRESULT er = SendMessageW(g_wnd, WM_ERASEBKGND, 0, 0);
+        bool brush = GetClassLongPtrW(g_wnd, GCLP_HBRBACKGROUND) == 0;
+        bool ok = g_ncHandled - before == 5 && r1 == TRUE && r3 == TRUE && r2 == 0 && er == 1 && brush && g_blitAllN >= 4;
         if (!ok) g_animTestFails++;
+        LaunchLog("testanim : fond : WM_ERASEBKGND -> %d (1 attendu), pinceau de classe %s, copies completes du cache a l'activation : %d", (int)er, brush ? "nul (ok)" : "PRESENT (erreur)", g_blitAllN);
         LaunchLog("testanim : messages non client (NCACTIVATE, NCPAINT, ACTIVATE) : %d traites ici sans DefWindowProc, retours %d/%d/%d : %s", g_ncHandled - before, (int)r1, (int)r2, (int)r3, ok ? "OK" : "ECHEC");
     }
     g_animTestNoLive = false;
