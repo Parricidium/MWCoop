@@ -119,7 +119,7 @@ static const bool kRtShown = false;
 // article du Guide (WG_KUPLA) et sa bulle (60) -- a allumer avec la version du mod qui apporte Kupla P1, KUPLA_SINCE remis alors
 // a la version de ce lanceur. kKuplaBullesShown : l'option « Bulles co-op » du Salon ([Coop] KuplaBulles), seulement avec P2.
 // /kupla (captures, essais) montre les deux.
-static const bool kKuplaShown = false, kKuplaBullesShown = false;
+static const bool kKuplaShown = true, kKuplaBullesShown = false;   // (27/10 : Kupla P1 dans le mod -- mwc-1.15.10 / msc-1.15.13 ; les bulles, P2, abandonnees)
 #define KUPLA_SINCE "1.15.19"
 static bool g_kuplaForce;
 static bool KuplaShown() { return kKuplaShown || g_kuplaForce; }
