@@ -1484,7 +1484,7 @@ static void DrawCreditsPage(Graphics &g)
               L"MWCoop also grows thanks to you and to the creators who share their work. Everyone who gives something to the mod is credited here."),
          RectF(c.X + 28, c.Y + 58, c.Width - 56, 40), 13, kGrey);
     RectF seg(c.X + 24, c.Y + 106, 700, 40);
-    UiSeg(g, seg, { T(L"Modèles 3D", L"3D Models"), L"Images", T(L"Remerciements", L"Special Thanks"), L"" }, g_credTab, UI_CRED_TAB, 13);
+    UiSeg(g, seg, { T(L"Modèles 3D", L"3D Models"), T(L"Images", L"Images"), T(L"Remerciements", L"Special Thanks"), L"" }, g_credTab, UI_CRED_TAB, 13);
     {   // Supporters : halo et contour arc-en-ciel qui tournent (comme l'etoile RGB de l'en-tete), coeur dessine apres le mot
         float w = (seg.Width - 6) / 4;
         RectF s(seg.X + 3 + 3 * w, seg.Y + 3, w, seg.Height - 6);

@@ -1167,9 +1167,9 @@ Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the 
 On Linux: put the Steam launch option from the GUIDE (Linux and Steam Deck) and start MWCoop from Steam	على Linux: ضع خيار تشغيل Steam من الدليل (Linux وSteam Deck) وشغّل MWCoop من Steam
 MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% in the game's Steam launch options (GUIDE: Linux and Steam Deck)	لم يُحمَّل MWCoop: على Linux، ضع WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% في خيارات تشغيل اللعبة في Steam (الدليل: Linux وSteam Deck)
 \n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.	\n\nعلى Linux، تبقى نسخ التشغيل (مع روابط إلى اللعبة): احذفها يدويًا دون اتباع الروابط.
-Supporters	الداعمون
-Supporter	داعم
-For making a donation.	لتقديمه تبرعًا.
+as is	الداعمون
+old PC	داعم
+60 fps	لتقديمه تبرعًا.
 Players' VAZ-2108 (F10)	سيارات VAZ-2108 للاعبين (F10)
 Drone, sleeping bags, s21 shop, museum, VAZ-2108	الطائرة المسيّرة، أكياس النوم، متجر s21، المتحف، VAZ-2108
 The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).	سيارات VAZ-2108 للاعبين (F10)، عن نموذج \"VAZ-2108 Rally\" من matthew0451 على Sketchfab: sketchfab.com/matthew0451، ترخيص CC BY-NC 4.0. مخففة، بدون الطلاء الأصلي (لكل لاعب لون ورقم).
@@ -2319,6 +2319,139 @@ Level: Mild (mirrors every 2nd frame, scenery up to 3000 m), Moderate (every 3rd
 These settings count when the game starts, never during play.	يُعتمد هذه الإعدادات عند بدء اللعبة، لا أثناء اللعب أبدًا.
 Kupla: moderate level from the next game	Kupla: المستوى المتوسط بدءًا من اللعبة القادمة
 Kupla: heavy level from the next game	Kupla: المستوى القوي بدءًا من اللعبة القادمة
+60° = the game	60° = كما في اللعبة
+A zip to post on the Discord	ملف zip لنشره على Discord
+Accent colour	لون التمييز
+Allow cheats (F7)	السماح بالغش (F7)
+Also the wheel	والعجلة أيضًا
+Animated background behind the pages	خلفية متحركة خلف الصفحات
+Applied at the next game start · in game: F10.	يُطبَّق عند تشغيل اللعبة التالي · داخل اللعبة: F10.
+Applied at the next game start.	يُطبَّق عند تشغيل اللعبة التالي.
+Applied right away, even in game.	يُطبَّق فورًا، حتى داخل اللعبة.
+At launcher start, from GitHub	عند تشغيل المشغّل، من GitHub
+Aurora and snow	الشفق والثلج
+Before everyone, sometimes broken	قبل الجميع، وأحيانًا معطّلة
+Buttons, active tab, pills	الأزرار، التبويب النشط، الشارات
+Buy the game, uninstall MWCoop	شراء اللعبة، إزالة MWCoop
+Card transparency	شفافية البطاقات
+Cars run players over	السيارات تدهس اللاعبين
+Change	تغيير
+Checks the port, the firewall and Steam.	يتحقق من المنفذ وجدار الحماية وSteam.
+Click a key, then press the new one · Esc: cancel · Del: default	انقر على مفتاح ثم اضغط الجديد · Esc: إلغاء · Del: الافتراضي
+Close the launcher during the game	إغلاق المشغّل أثناء اللعبة
+Comfort & in-game display	الراحة والعرض داخل اللعبة
+Customize	تخصيص
+DXR 1.1 GPU · in development	بطاقة DXR 1.1 · قيد التطوير
+Default lobby	الردهة الافتراضية
+Default network	الشبكة الافتراضية
+Density	الكثافة
+Detailed logs for the zip	سجلات مفصّلة لملف zip
+Display	العرض
+Display distance	مسافة العرض
+Every guest starts with the game's nest egg	كل ضيف يبدأ بمدخرات اللعبة الأولية
+Faces, paints, posters	الوجوه والطلاءات والملصقات
+Faster	أسرع
+Follow Windows	اتباع Windows
+For the launcher and the in-game F10 menu; the game's own texts follow its language	للمشغّل وقائمة F10 داخل اللعبة؛ نصوص اللعبة نفسها تتبع لغتها
+Friends and NPCs	الأصدقاء والشخصيات غير اللاعبة
+Frosted glass	زجاج مصنفر
+Full = costly	كاملة = مكلفة
+Full = more video memory	كاملة = ذاكرة فيديو أكثر
+Game start	تشغيل اللعبة
+Give money to the player you look at	إعطاء المال للاعب الذي تنظر إليه
+Hold the key	إبقاء المفتاح مضغوطًا
+Host or guest	مضيف أو ضيف
+If the host allows them	إن سمح بها المضيف
+In the launch copy, never in your folder	في نسخة التشغيل، وليس في مجلدك أبدًا
+Lamp coronas	هالات المصابيح
+Launcher help bubbles	فقاعات مساعدة المشغّل
+Launcher theme	سمة المشغّل
+Light & shadows	الإضاءة والظلال
+Live preview	معاينة مباشرة
+Logs of the previous games	سجلات الألعاب السابقة
+MSCLoader provided by MWCoop	MSCLoader المقدَّم من MWCoop
+MWCoop menu	قائمة MWCoop
+MWCoop's GitHub repository: code, releases, issues	مستودع MWCoop على GitHub: الشيفرة، الإصدارات، المشكلات
+Map (M)	الخريطة (M)
+Mods and content, without asking again	المودات والمحتوى، دون السؤال مجددًا
+My content sent	محتواي المُرسَل
+My microphone (for the others)	ميكروفوني (للآخرين)
+Network & launch	الشبكة والتشغيل
+None = vanilla game	لا شيء = اللعبة الأصلية
+Offer the Discord	اقتراح Discord
+On foot, in vehicles	سيرًا، وفي المركبات
+On my side	من جهتي
+Only if MWCoop doesn't load from the launcher	فقط إن لم يُحمَّل MWCoop من المشغّل
+Otherwise it stays open: players, ping, kicks	وإلا يبقى مفتوحًا: اللاعبون، البنغ، الطرد
+Photo mode (F8)	وضع التصوير (F8)
+Players at most	الحد الأقصى للاعبين
+Players, sync, options	اللاعبون، المزامنة، الخيارات
+Port (IP / VPN)	المنفذ (IP / VPN)
+Preset	إعداد مسبق
+Private: session code required	خاصة: يلزم رمز الجلسة
+Proximity voice, hold the key	الصوت حسب القرب، أبقِ المفتاح مضغوطًا
+Release notes	ملاحظات الإصدار
+Repair MWCoop	إصلاح MWCoop
+Rewrites the launch copy and the loader	يعيد كتابة نسخة التشغيل والمحمّل
+Sessions kept	الجلسات المحفوظة
+Sets everything at once · every line stays editable · Vanilla = the game as is	يضبط كل شيء دفعة واحدة · كل سطر يبقى قابلًا للتعديل · Vanilla = اللعبة كما هي
+Shared marker	علامة مشتركة
+So that PLAY opens MWCoop (optional)	ليفتح زر PLAY برنامج MWCoop (اختياري)
+Space between rows and cards	المسافة بين الصفوف والبطاقات
+Start the game through Steam	تشغيل اللعبة عبر Steam
+Steam: friends; IP / VPN: port to open	Steam: الأصدقاء؛ IP / VPN: منفذ يجب فتحه
+Stored in the album	تُحفظ في الألبوم
+Taken when the lobby opens · a change there only applies to that lobby	يُؤخذ عند فتح الردهة · والتغيير هناك يسري على تلك الردهة فقط
+Tap: place · hold: remove	نقرة: وضع · ضغط مطوّل: إزالة
+Test builds (nightly)	إصدارات تجريبية (nightly)
+Text size	حجم النص
+The invitation after the guided tour	الدعوة بعد الجولة الإرشادية
+The keys apply to all your games.	تسري المفاتيح على كل ألعابك.
+The launch copy protects your folder; \"game folder\" if MWCoop doesn't load from the copy	تحمي نسخة التشغيل مجلدك؛ «مجلد اللعبة» إن لم يُحمَّل MWCoop من النسخة
+The little explanations on the first visit	الشروحات الصغيرة عند الزيارة الأولى
+Tilt and zoom	الإمالة والتكبير
+Troubleshooting	استكشاف الأخطاء
+UDP and TCP; to forward on the router	UDP وTCP؛ يجب توجيهه على جهاز التوجيه
+Update automatically	التحديث تلقائيًا
+Version & updates	الإصدار والتحديثات
+What you hear	ما تسمعه
+When I host	عندما أستضيف
+Who hears you, and how loud	من يسمعك، وبأي علوّ
+Windows' light or dark theme	سمة Windows الفاتحة أو الداكنة
+Zoom in	تكبير
+Frame	الإطار
+Games & additions	الألعاب والإضافات
+Move	التنقّل
+Rules	القواعد
+See	الرؤية
+Sharing & display	المشاركة والعرض
+With the others	مع الآخرين
+Lasting, for all your games · \"Game\" = the game's own value	دائمة لكل ألعابك · «اللعبة» = قيمة اللعبة نفسها
+Light, shadows, ray tracing · in game: F10	الإضاءة والظلال وتتبّع الأشعة · داخل اللعبة: F10
+Proximity voice: who hears you, how loud	الصوت حسب القرب: من يسمعك وبأي علوّ
+What you offer when hosting, and what you want on your side	ما تقدّمه عند الاستضافة، وما تريده من جهتك
+MWCoop keys · the game's own: in the game (Options > Controls)	مفاتيح MWCoop · مفاتيح اللعبة: داخل اللعبة (Options > Controls)
+Theme, accent colour, aurora and snow, glass, density, text	السمة، لون التمييز، الشفق والثلج، الزجاج، الكثافة، النص
+Launcher: language, version, game folder, updates, logs	المشغّل: اللغة، الإصدار، مجلد اللعبة، التحديثات، السجلات
+Northern night	ليل شمالي
+Daylight	ضوء النهار
+Green aurora	شفق أخضر
+Garage	المرآب
+Light, snow in the sun	فاتحة، ثلج تحت الشمس
+Strong contrast, mint accent	تباين قوي، تمييز نعناعي
+Wood, amber, oil lamp	خشب وكهرمان ومصباح زيت
+Press	ضغطة
+Window	النافذة
+shadows, HDR	ظلال، HDR
+Open Discord	فتح Discord
+Supporters	الداعمون
+Mic	الميكروفون
+Ventti: stakes for the whole group	فينتي: الرهانات باسم المجموعة كلها
+Car CD player	مشغّل الأقراص في السيارات
+My CORRIS paint	طلاء CORRIS الخاصة بي
+In front of the garage	أمام المرآب
+Total size	الحجم الإجمالي
+Above 100 MB, guests take longer to arrive.	فوق 100 ميغابايت يتأخر وصول الضيوف.
 Host's game: 	لعبة المضيف: 
 New save, or restart one	حفظ جديد، أو إعادة بدء حفظ
 Main game	اللعبة الرئيسية
@@ -2778,7 +2911,6 @@ THE MOD, PROFILES, LOGS	التعديل، الملفات الشخصية، الس�
 YOUR MODS (MSCLOADER)	تعديلاتك (MSCLOADER)
 OFFICIAL MSCLOADER (OPTIONAL)	MSCLOADER الرسمي (اختياري)
 GAME DATA	بيانات اللعبة
-Change	تغيير
 The game the launcher found, and its folder	اللعبة التي وجدها المشغّل، ومجلدها
 To pick another one (Settings > Game too)	لاختيار أخرى (أيضًا الإعدادات > اللعبة)
 Separate copy of the game (default)	نسخة منفصلة من اللعبة (افتراضي)
