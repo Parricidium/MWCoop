@@ -52,6 +52,22 @@ Pistes non traitées (pas des bugs) : pas de régulation de débit sur le canal 
 d'un coup : sous 512 kbit/s un gros transfert renvoie beaucoup) ; un invité déjà en jeu qui se reconnecte reçoit de
 nouveau la sauvegarde (1,5 Mo) et fait figer l'hôte 6,7 s pour l'écrire.
 
+## S3 en conduite (après le correctif « copie figée » de [MSC], main 83e8f48) — MWC, 27/10 après-midi
+
+[MSC] a trouvé sur MSC (S3 avec l'hôte AU VOLANT) qu'après 1,5 s de silence la copie redevenait physique à sa dernière
+vitesse : 8 pièces arrachées chez l'invité, réservoir « démonté » renvoyé à l'hôte. Correctif commun (VehicleSync) : copie
+figée à sa dernière pose tant que le joueur est là et moins de Timeout + 10 s, moteur et sons au repos, relâchée à l'arrêt.
+Rejoué sur MWC (relais sur 7875, 7873 étant pris par le relais de [MSC]) :
+
+| Cas | Commande (essai.ps1) | Résultat |
+|---|---|---|
+| L'hôte conduit le KEKMET en rond, coupures h2g 5 / 14 / 16 s | `-Mode conduite -Extra1 'PousseFin=210','PousseVirage=0.3' -Extra2 'EntreeA=9999','PousseDebut=9999','PousseFin=9999' -Relais '... --script "60:coupure:5:h2g,90:coupure:14:h2g,130:coupure:16:h2g"'` | **PASS** : « copie figée » à chaque coupure, 0 pièce perdue ; à 16 s « relâchée à l'arrêt (joueur parti) », reprise 3 s après la reconnexion sans recalage « garée » |
+| L'invité conduit, coupures g2h 5 / 14 s puis 16 s dans les deux sens | `-Extra1 'EntreeA=9999',... -Extra2 'PousseFin=210','PousseVirage=0.25' -Relais '... --script "70:coupure:5:g2h,100:coupure:14:g2h,140:coupure:16"'` | **PASS** : copie figée chez l'hôte 4 fois, relâchée à l'arrêt au départ, l'invité revient (#2) et reprend le volant ; 0 pièce perdue des deux côtés, 0 « propulsée », 0 recalage |
+| Remorque attelée (`Autotest=attelage`, FLATBED au KEKMET), coupures h2g 5 puis 16 s | `-Mode attelage -Relais '... --script "40:coupure:5:h2g,46:coupure:16:h2g"'` | **PASS** : tracteur et remorque figés ensemble (4,5 m d'écart gardé), repartis ensemble, attelage repris (« attelé comme chez #0 ») |
+
+Piège d'essai : les sauvegardes en jeu de l'hôte (arrivée d'un invité, `Autotest=sauver`) réécrivent la sauvegarde de test
+de Joueur1 ; après des essais qui retournent le tracteur, la remettre (copie d'avant les essais) avant `attelage`.
+
 ## Tour de [MSC]
 
 Mêmes scénarios sur les instances MSC (Voitures-MSCoop / MSCoop2, hôte sur 7887) : `--cible 127.0.0.1:7887`,
