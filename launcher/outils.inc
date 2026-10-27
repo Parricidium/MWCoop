@@ -21,7 +21,9 @@ struct ToolPkg {
 static ToolPkg g_ed = { L"editeur", L"EditeurCarte.exe" }, g_cv = { L"voyage", L"ConvertisseurVoyage.exe" };
 static Bitmap *g_edPreview;             // apercu de la carte (ressource 10 : outils-editeur.jpg)
 static Bitmap *LoadPngRes(int id);      // (launcher.cpp)
-static const RectF kToolEd(264, 88, 492, 656), kToolCv(772, 88, 492, 656);
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kToolEd(264, 88, 492, 656), kToolCv(772, 88, 492, 656);
+static void ToolsLayout() { float x = g_pageR.X, w = g_pageR.Width, gap = 16, half = (w - gap) / 2; kToolEd = RectF(x, 88, half, 656); kToolCv = RectF(x + half + gap, 88, half, 656); }
 
 static std::wstring ToolDir(const ToolPkg &t) { std::wstring l = LocalDir(); return l.empty() ? L"" : l + t.dir + L"\\"; }
 static std::wstring ToolExe(const ToolPkg &t) { std::wstring d = ToolDir(t); return d.empty() ? L"" : d + t.exe; }
@@ -244,6 +246,7 @@ static void DrawToolCard(Graphics &g, ToolPkg &t, RectF c, const ToolText &tx, i
 
 static void DrawToolsPage(Graphics &g)
 {
+    ToolsLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     static const ToolText ed = {
         L"Éditeur de carte", L"Map editor", L"BETA",
         L"Un programme à part pour modifier la carte de My Summer Car ou de My Winter Car : routes, objets du jeu, modèles 3D, végétation, relief.",

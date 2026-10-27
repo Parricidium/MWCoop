@@ -311,8 +311,10 @@ static bool VhsChar(wchar_t c)
 
 // ---- page MEDIA (maquette du 17/10) : onglets VHS / Album dans l'en-tete (ui.inc DrawHeader), carte de gauche (liste ou
 // grille) et carte de droite (la cassette ou la photo choisie) a y 88 comme les autres pages.
-static const RectF kMediaCard(264, 88, 624, 656), kMediaView(900, 88, 364, 656);
-static const RectF kVhsList(282, 170, 588, 488);   // (marges de 18 ; sous le titre et la ligne d'aide, au-dessus de la bande de la cassette choisie)
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kMediaCard(264, 88, 624, 656), kMediaView(900, 88, 364, 656);
+static RectF kVhsList(282, 170, 588, 488);
+static void MediaLayout();   // (plus bas, avec kAlbGrid)   // (marges de 18 ; sous le titre et la ligne d'aide, au-dessus de la bande de la cassette choisie)
 static float g_mediaTabRight = 1264;               // bord droit des onglets (ui.inc DrawHeader)
 static const float kVhsRowH = 66;                  // (ligne de 60 : cassette de 40 et 10 de marge, puis 6 d'ecart)
 static float VhsMaxScroll() { return max(0.0f, (float)g_vhs.size() * kVhsRowH - kVhsList.Height); }
@@ -542,6 +544,7 @@ static bool VhsIsPerso(const VhsTape &t) { for (auto &f : t.films) if (!f.compar
 // Onglet VHS : a gauche « Mes cassettes · N » (liste, Importer une video, bande de la cassette choisie) ; a droite l'apercu.
 static void DrawVhs(Graphics &g)
 {
+    MediaLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     if (GetTickCount() - g_vhsScanT > 2000) VhsScan();
     RectF c = kMediaCard, v = kMediaView;
     Glass(c);
@@ -742,7 +745,8 @@ static int g_albView;                 // 0 recentes, 1 par partie (jour), 2 favo
 static std::set<std::wstring> g_albFav; static bool g_albFavLoaded;
 static DWORD g_albSlideT;             // (g_albSlide : plus haut, VhsChar) dernier changement de photo
 static const DWORD kAlbSlideMs = 4000;
-static const RectF kAlbGrid(282, 170, 588, 514);   // (marges de 18 ; sous le titre et la ligne d'aide, au-dessus de la rangee du bas)
+static RectF kAlbGrid(282, 170, 588, 514);
+static void MediaLayout() { float x = g_pageR.X, w = g_pageR.Width, rw = 364, gap = 12, left = w - rw - gap; kMediaCard = RectF(x, 88, left, 656); kMediaView = RectF(x + left + gap, 88, rw, 656); kVhsList = RectF(x + 18, 170, left - 36, 488); kAlbGrid = RectF(x + 18, 170, left - 36, 514); }   // (marges de 18 ; sous le titre et la ligne d'aide, au-dessus de la rangee du bas)
 static const float kAlbCellW = 198, kAlbCellH = 115, kAlbDayH = 28;   // pas de la grille (case de 190 x 107 : 16/9, ecart de 8) ; en-tete d'un jour
 
 static std::wstring AlbDir()
@@ -889,6 +893,7 @@ static void AlbSlideNext(const std::vector<AlbCell> &cells)
 
 static void DrawAlbum(Graphics &g)
 {
+    MediaLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     if (GetTickCount() - g_albScanT > 3000) AlbScan();
     RectF c = kMediaCard, v = kMediaView;
     Glass(c);

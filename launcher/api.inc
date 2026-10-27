@@ -6,7 +6,9 @@ static const wchar_t *kApiDocUrl = L"https://github.com/Parricidium/MWCoop/blob/
 static const wchar_t *kApiSrcUrl = L"https://github.com/Parricidium/MWCoop/blob/main/src/MWCoop/CoopApi.cs";
 static int g_apiEx;            // exemple montre : 0 par reflexion, 1 reference directe
 static DWORD g_apiCopiedT;     // "Copie !" pendant 2 s
-static const RectF kApiMain(264, 88, 600, 656), kApiWhere(880, 88, 384, 300), kApiTips(880, 404, 384, 340);
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kApiMain(264, 88, 600, 656), kApiWhere(880, 88, 384, 300), kApiTips(880, 404, 384, 340);
+static void ApiLayout() { float x = g_pageR.X, w = g_pageR.Width, rw = 384, gap = 16, left = w - rw - gap; kApiMain = RectF(x, 88, left, 656); kApiWhere = RectF(x + left + gap, 88, rw, 300); kApiTips = RectF(x + left + gap, 404, rw, 340); }
 
 static const wchar_t *ApiExample(int k)
 {
@@ -37,6 +39,7 @@ static std::wstring ApiDllPath() { return g_gameDir.empty() ? L"" : g_modRoot + 
 
 static void DrawApiPage(Graphics &g)
 {
+    ApiLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     // ---- gauche : ce qu'elle fait, exemple
     RectF c = kApiMain;
     Glass(c);

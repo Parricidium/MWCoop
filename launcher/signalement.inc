@@ -22,7 +22,7 @@
 #include <functional>
 
 static const wchar_t *kBugHost = L"live.myseasonscar.workers.dev";
-static const float kBugBandH = 56;                      // bande d'en-tete du panneau (dans kMain)
+static const float kBugBandH = 56;                      // bande d'en-tete du panneau (dans g_pageR)
 static HWND g_bugWnd;                                   // la popup qui porte le moteur
 static ICoreWebView2Environment *g_bugEnv;
 static ICoreWebView2Controller *g_bugCtl;
@@ -43,7 +43,7 @@ static bool TutoActive();                               // (tuto.inc)
 static int PageBack();                                  // (ui.inc)
 static std::vector<std::wstring> ZipFiles();            // (launcher.cpp)
 static std::wstring ZipToDesktop(const std::vector<std::wstring> &files, const std::wstring &tag, const wchar_t *base, bool quiet);
-static RectF BugWebR() { return RectF(kMain.X, kMain.Y + kBugBandH + 6, kMain.Width, kMain.Height - kBugBandH - 6); }
+static RectF BugWebR() { return RectF(g_pageR.X, g_pageR.Y + kBugBandH + 6, g_pageR.Width, g_pageR.Height - kBugBandH - 6); }
 
 // Les trois conditions du panneau. Essais : MWCOOP_WIN7=1 (IsWin7), MWCOOP_WINE=<version> (IsWine), MWCOOP_SANS_WEBVIEW=1.
 static bool BugPanelPossible()
@@ -363,7 +363,7 @@ static void DrawLock(Graphics &g, float cx, float cy, float s, Color c)
 }
 static void DrawBugPage(Graphics &g)
 {
-    RectF band(kMain.X, kMain.Y, kMain.Width, kBugBandH);
+    RectF band(g_pageR.X, g_pageR.Y, g_pageR.Width, kBugBandH);
     Glass(band, 18);
     float cy = band.Y + band.Height / 2;
     // le cadenas et le domaine (contre le hameconnage : toujours visibles, dessines par le lanceur, pas par la page)

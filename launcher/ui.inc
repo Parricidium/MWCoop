@@ -1124,10 +1124,13 @@ static std::vector<std::wstring> NoteBullets(const Note &n, int maxN)
 // ---- page NOUVEAUTES : versions a gauche, detail a droite (texte, images)
 static int g_noteSel;
 static float g_noteListScroll;
-static const RectF kNotesList(264, 88, 280, 656), kNotesBody(560, 88, 704, 656);
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kNotesList(264, 88, 280, 656), kNotesBody(560, 88, 704, 656);
+static void NotesLayout() { float x = g_pageR.X, w = g_pageR.Width, lw = 280, gap = 16; kNotesList = RectF(x, 88, lw, 656); kNotesBody = RectF(x + lw + gap, 88, w - lw - gap, 656); }
 static RectF NotesArea() { return RectF(kNotesBody.X + 28, kNotesBody.Y + 92, kNotesBody.Width - 46, kNotesBody.Height - 108); }
 static void DrawNotesPage(Graphics &g)
 {
+    NotesLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     Glass(kNotesList);
     Glass(kNotesBody);
     std::vector<Note> notes;
@@ -1309,7 +1312,7 @@ static void DrawLogHead(Graphics &g, const LogGroup &gr, RectF r, int hotPart)
 
 static void DrawLogsPage(Graphics &g)
 {
-    RectF c = kMain;
+    RectF c = g_pageR;
     Glass(c);
     Title(g, T(L"Les journaux du jeu et du mod", L"The game's and the mod's logs"), RectF(c.X + 24, c.Y + 20, 500, 26), 17, kInk);
     g_btn[B_LOGZIP].r = RectF(c.X + c.Width - 24 - 232, c.Y + 22, 232, 44);
@@ -1481,7 +1484,7 @@ static void CreditCard(Graphics &g, const Credit &k, float y, float x, float w)
 
 static void DrawCreditsPage(Graphics &g)
 {
-    RectF c(kMain.X, kMain.Y, kMain.Width, kMain.Height);
+    RectF c(g_pageR.X, g_pageR.Y, g_pageR.Width, g_pageR.Height);
     Glass(c);
     Title(g, T(L"Merci !", L"Thank you!"), RectF(c.X + 28, c.Y + 22, 400, 30), 22, kInk);
     Para(g, T(L"MWCoop grandit aussi grâce à vous et aux créateurs qui partagent leur travail. Chaque personne qui donne quelque chose au mod est créditée ici.",

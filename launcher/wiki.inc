@@ -35,7 +35,9 @@ static int WikiKeysShown() { int n = 0; for (int i = 0; i < kWikiKeysN; i++) if 
 // Trois colonnes (maquette du 17/10, validee par JD) : sommaire 240, article, Nouveautes + « Un souci ? » 272, marges de 12.
 // En-tete : pilules Guide / Nouveautes / Credits (Nouveautes et Credits = pages TAB_NOTES et TAB_CREDITS, ui.inc) et le
 // champ Chercher (filtre les articles ; taper depuis un autre onglet ramene au Guide).
-static const RectF kWikiList(264, 88, 240, 656), kWikiBody(516, 88, 464, 656), kWikiNews(992, 88, 272, 656);
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kWikiList(264, 88, 240, 656), kWikiBody(516, 88, 464, 656), kWikiNews(992, 88, 272, 656);
+static void WikiLayout() { float x = g_pageR.X, w = g_pageR.Width, lw = 240, rw = 272, gap = 12; kWikiList = RectF(x, 88, lw, 656); kWikiNews = RectF(x + w - rw, 88, rw, 656); kWikiBody = RectF(x + lw + gap, 88, w - lw - rw - 2 * gap, 656); }
 static int g_wikiSel;
 static int g_wikiShown = -1;                  // article cadre dans le sommaire (autre article : on le remet en vue)
 static std::set<int> g_wikiFold;              // sections pliees : article * 1000 + bloc
@@ -489,6 +491,7 @@ static void DrawWikiNews(Graphics &g)
 // ---- article (maquette .art) : puces categorie + temps de lecture, titre, sous-titre, blocs, puis precedent / suivant
 static void DrawWikiPage(Graphics &g)
 {
+    WikiLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     Glass(kWikiList);
     Glass(kWikiBody);
     DrawWikiNews(g);

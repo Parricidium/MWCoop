@@ -565,8 +565,10 @@ static void SavePickRow(int i)
 }
 
 // ---- onglet (maquette du 17/10 : deux cartes -- la liste des parties a gauche, le detail de la partie choisie a droite)
-static const RectF kSaveL(264, 88, 596, 656), kSaveR(872, 88, 392, 656);
-static const RectF kSaveList(282, 140, 560, 512);   // (lignes de la liste, puis la ligne « Nouvelle partie »)
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kSaveL(264, 88, 596, 656), kSaveR(872, 88, 392, 656);
+static RectF kSaveList(282, 140, 560, 512);   // (lignes de la liste, puis la ligne « Nouvelle partie »)
+static void SavesLayout() { float x = g_pageR.X, w = g_pageR.Width, rw = 392, gap = 12, left = w - rw - gap; kSaveL = RectF(x, 88, left, 656); kSaveR = RectF(x + left + gap, 88, rw, 656); kSaveList = RectF(x + 18, 140, left - 36, 512); }
 static const float kSaveRowH = 82;                  // (ligne de 74 + 8 d'espace)
 static float SavesMaxScroll() { return max(0.0f, ((float)g_saves.size() + 1) * kSaveRowH - 8 - kSaveList.Height); }
 static int SaveSelIndex()
@@ -978,6 +980,7 @@ static void SaveNameField(Graphics &g, RectF fr, const std::wstring &txt)
 
 static void DrawSaves(Graphics &g)
 {
+    SavesLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     if (GetTickCount() - g_savesScanT > 3000 && g_saveEdit < 0) SavesScan();
     Glass(kSaveL); Glass(kSaveR);
     // en-tete : « Nouvelle partie » a droite du titre (avant les boutons de l'en-tete, ui.inc)

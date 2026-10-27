@@ -160,7 +160,9 @@ static void AfterGameModCheck()
 }
 
 // ---- dessin et clics (partie en cours : a gauche la partie, a droite les joueurs)
-static const RectF kSrvCard(620, 88, 644, 656), kSrvList(640, 148, 604, 500);
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kSrvCard(620, 88, 644, 656), kSrvList(640, 148, 604, 500);
+static void SrvLayout() { float x = g_pageR.X, w = g_pageR.Width, lw = 356; kSrvCard = RectF(x + lw, 88, w - lw, 656); kSrvList = RectF(x + lw + 20, 148, w - lw - 40, 500); }
 static const float kSrvRowH = 86;
 static RectF SrvBtn(RectF r, int k) { return k == 0 ? RectF(r.X + r.Width - 16 - 112 - 10 - 132, r.Y + (r.Height - 38) / 2, 132, 38) : RectF(r.X + r.Width - 16 - 112, r.Y + (r.Height - 38) / 2, 112, 38); }
 static RectF SrvRow(int i) { return RectF(kSrvList.X, kSrvList.Y + i * kSrvRowH, kSrvList.Width, kSrvRowH - 8); }
@@ -191,6 +193,7 @@ static bool SrvClick(float x, float y)
 
 static void DrawServer(Graphics &g)
 {
+    SrvLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     SkinsCheck();
     RectF lc(264, 88, 340, 656);
     Glass(lc);

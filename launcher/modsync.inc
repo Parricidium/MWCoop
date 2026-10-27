@@ -1537,7 +1537,9 @@ static DWORD g_contentScanT;
 // (g_contentHot : uikit.inc)
 static std::vector<int> g_drContent;                 // a l'ouverture de la page (ANNULER)
 static std::map<std::wstring, std::pair<std::wstring, Bitmap *>> g_contentThumb;   // fichier -> (cle taille|date, image)
-static const RectF kContentL(264, 88, 388, 656), kContentR(664, 88, 600, 656);
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kContentL(264, 88, 388, 656), kContentR(664, 88, 600, 656);
+static void ContentLayout() { float x = g_pageR.X, w = g_pageR.Width, lw = 388, gap = 12; kContentL = RectF(x, 88, lw, 656); kContentR = RectF(x + lw + gap, 88, w - lw - gap, 656); }
 static const float kContentRowH = 60, kContentRowStep = 68;
 // Groupes de la carte de gauche : categories de kContent (indices), icone, sous-titre ; *Msc : sur My Summer Car (NULL : le
 // meme). Une categorie absente du jeu choisi (ContentInGame) n'est ni montree, ni comptee, ni envoyee.
@@ -2051,6 +2053,7 @@ static void DrawContentDetail(Graphics &g, RectF c, float &y)
 // Page CONTENU : « Ce qui part » a gauche, le detail a droite, ANNULER / VALIDER.
 static void DrawContent(Graphics &g)
 {
+    ContentLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     g_contentZones.clear();
     if (GetTickCount() - g_contentScanT > 2000) ContentScan();
     Glass(kContentL); Glass(kContentR);

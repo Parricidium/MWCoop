@@ -508,8 +508,9 @@ static void MscTick()
 
 // ---- dessin (page MODS, dans kMain ; maquette du 17/10 : « Mes mods » a gauche, « Recus de l'hote » et « Bon a savoir » a droite)
 static int MscModCount() { return g_mscInstalled ? (int)g_msc.size() : 0; }
-static const RectF kMscL(264, 88, 658, 656), kMscRecvCard(934, 88, 330, 280), kMscInfoCard(934, 380, 330, 364);
-static const RectF kMscList(282, 234, 622, 418),          // lignes des mods (liste)
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kMscL(264, 88, 658, 656), kMscRecvCard(934, 88, 330, 280), kMscInfoCard(934, 380, 330, 364);
+static RectF kMscList(282, 234, 622, 418),          // lignes des mods (liste)
                    kMscPageList(288, 170, 952, 540),      // options d'un mod (page)
                    kMscToggle(854, 104, 50, 28),          // Mods actives (g_mscOn)
                    kMscAuto(1196, 288, 50, 28),           // Accepter les fichiers de l'hote (ModsAuto)
@@ -526,6 +527,14 @@ static const float kMscColVer = 588, kMscColSend = 710, kMscColOn = 842, kMscCol
 static void DrawToggle(Graphics &g, RectF r, bool on, bool hot) { UiToggle(g, r, on, hot); }
 static std::wstring SizeText(uint64_t b);   // (modsync.inc)
 
+static void MscLayout()
+{
+    float x = g_pageR.X, w = g_pageR.Width, rw = 330, gap = 12, left = w - rw - gap;
+    kMscL = RectF(x, 88, left, 656); kMscRecvCard = RectF(x + left + gap, 88, rw, 280); kMscInfoCard = RectF(x + left + gap, 380, rw, 364);
+    kMscList = RectF(x + 18, 234, left - 36, 418); kMscPageList = RectF(x + 24, 170, w - 48, 540);   // (la page d'un mod : toute la largeur)
+    kMscToggle = RectF(x + left - 68, 104, 50, 28); kMscAuto = RectF(kMscRecvCard.X + rw - 68, 288, 50, 28); kMscBack = RectF(x + w - 264, 108, 240, 30);
+    kMscClearRecv = RectF(kMscRecvCard.X + 18, 316, rw - 36, 36); kMscCompat = RectF(kMscInfoCard.X + 18, 704, rw - 36, 24);
+}
 static const RectF &MscListRect() { return g_mscPage >= 0 && g_mscPage < (int)g_msc.size() ? kMscPageList : kMscList; }
 static float MscMaxScroll()
 {
@@ -798,6 +807,7 @@ static void DrawModsPage(Graphics &g)
 
 static void DrawMods(Graphics &g)
 {
+    MscLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     g_mscZones.clear();
     if (g_mscFake && g_mscInstalled && g_mscPage < 0) {   // (captures : un mod deconseille en plus, pour la puce « Non pris en charge »)
         bool has = false;

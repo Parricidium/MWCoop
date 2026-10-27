@@ -27,7 +27,9 @@ static DWORD g_skinCheckT;
 static int g_skinBudget = 1000;                             // portraits a charger pendant cette image
 static bool g_skinAnnounce;                                 // salon : annoncer l'apparence sans attendre
 // Page PERSONNAGE (maquette du 17/10) : onglets en haut (y 92), carte Apercu a gauche, carte des parties a droite.
-static const RectF kSkinCard(264, 88, 390, 656), kSkinPanel(666, 88, 598, 656);   // (cartes a y 88 comme les autres pages, maquette du 17/10)
+// (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kSkinCard(264, 88, 390, 656), kSkinPanel(666, 88, 598, 656);   // (cartes a y 88 comme les autres pages, maquette du 17/10)
+static void SkinsLayout() { float x = g_pageR.X, w = g_pageR.Width, lw = 390, gap = 12; kSkinCard = RectF(x, 88, lw, 656); kSkinPanel = RectF(x + lw + gap, 88, w - lw - gap, 656); }
 static const RectF kSkinView(280, 150, 358, 484);   // (sous la ligne Apercu / Pied Portrait Volant ; dessous : la legende sur 2 lignes et les boutons)
 static float g_persoZoom = 1;                       // molette dans la vue (0,6..2)
 static const float kPersoTabY = 26, kPersoTabH = 36;   // onglets Tenue / Visage / Voiture dans l'en-tete, a gauche des boutons ronds
@@ -1005,6 +1007,7 @@ static void DrawPersoCallout(Graphics &g, RectF nr)
 
 static void DrawSkins(Graphics &g)
 {
+    SkinsLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     SkinsCheck();
     const Opt *ap = SkinOpt();
     if (!ap) return;
