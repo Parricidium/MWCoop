@@ -23,6 +23,8 @@ namespace MWCoop
     //    du colis est donc le meme pour tous). L'annonce est retrouvee par son nom d'origine (ListRand03 : variable
     //    Name de Generate), pas par son numero de telephone, tire au hasard chez chacun. Catalogue : rejoue par la
     //    boite aux lettres (INBOX) -- l'enveloppe disparait aussi chez les autres, pas de 2e envoi possible.
+    //    Numeros entrelaces entre joueurs (SendOrder) ; le createur ne doit jamais depasser la limite de boucle de
+    //    PlayMaker au chargement (Arm) -- fil « Magazine ordering issue », 26-27/10.
     //  - Boite aux lettres de la station (Post Box/OrderTrigger) : l'enveloppe du catalogue qu'un AUTRE joueur a
     //    deplacee en dernier (sa copie suit ses messages) n'est jamais postee ici ; seul celui qui la lache la poste.
     //    La lettre de Kela (envelope(kela1)) n'est pas concernee : chaque joueur a la sienne (Expenses local), non
@@ -98,6 +100,35 @@ namespace MWCoop
             nextPhone = 0; nextPhoneSend = 0; phoneSig = ""; farStep = 0; farLog = 0;
             // Avant le releve du monde (16 s apres le chargement) : les createurs de commandes sont a nous.
             resolveAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
+            // Avant la premiere image (les automates demarrent a leur Start) : limite de boucle relevee, voir Arm.
+            if (Config.GetInt("Test", "CommandeSansLimite", 0) == 0)   // ([Test] CommandeSansLimite=1 : comme avant le 27/10, le createur doit mourir au chargement)
+                foreach (string p in SpawnerPaths) { try { GameObject g = Game.FindAny(p); if (g != null) Arm(Game.FsmOn(g, "Spawn")); } catch (System.Exception e) { Log.Warn("appels : limite de boucle de " + p + " : " + e.Message); } }
+        }
+
+        // Limite de PlayMaker (un automate qui entre plus de 1000 fois dans le meme etat en une image est arrete, « Loop count
+        // exceeded maximum » dans output_log.txt) relevee pour les createurs de commandes : au chargement, 'Load ID' -> 'Add ID'
+        // reprend les commandes sauvegardees en bouclant de 1 au compteur, et le compteur depassait 1000 des la premiere commande
+        // d'un invite (tranches de 1000 par joueur jusqu'au 27/10) : createur mort chez tous a la partie suivante -- annonce
+        // appelee, aucune commande, et les commandes au-dela de 1000 jamais reprises (Donskoy, 26-27/10). Les parties deja
+        // passees a 1000 en ont besoin pour toujours.
+        const int LoopLimit = 1000000;
+        static void Arm(PlayMakerFSM sp)
+        {
+            if (sp == null || sp.Fsm == null) return;
+            if (sp.Fsm.MaxLoopCountOverride < LoopLimit) sp.Fsm.MaxLoopCountOverride = LoopLimit;
+        }
+
+        // Createur mort (arrete et fini : boucle du chargement au-dela de la limite, version d'avant le 27/10 ou limite relevee
+        // trop tard) : rallume -- il repart de 'Load ID' (RestartOnEnable), reprend les commandes sauvegardees et revient a 'Idle'
+        // dans la meme image. Vrai : il l'etait.
+        static bool Revive(PlayMakerFSM sp, string why)
+        {
+            if (sp == null || (sp.enabled && !sp.Fsm.Finished)) return false;
+            Arm(sp);
+            FsmInt num = sp.FsmVariables.FindFsmInt("ObjectNumberInt");
+            sp.enabled = true;
+            Log.Warn("appels : createur " + sp.gameObject.name + " arrete (" + why + ") : rallume -> etat '" + sp.ActiveStateName + "', numero " + (num != null ? num.Value : -1));
+            return true;
         }
 
         public static void Update()
@@ -134,6 +165,15 @@ namespace MWCoop
                 GameObject g = Game.FindAny(SpawnerPaths[s]);
                 spawners[s] = g != null ? Game.FsmOn(g, "Spawn") : null;
                 spawnerHooked[s] = !Own(spawners[s]);
+                if (spawners[s] != null) { Arm(spawners[s]); Revive(spawners[s], "au chargement"); }
+            }
+            // ([Test] CommandeNumero=N : compteur des commandes d'annonces monte a N -- la prochaine commande, sauvegardee
+            // (AppelSauve=1), fait boucler le createur N fois au chargement suivant)
+            int forced = Config.GetInt("Test", "CommandeNumero", 0);
+            if (forced > 0 && spawners[0] != null)
+            {
+                FsmInt fn = spawners[0].FsmVariables.FindFsmInt("ObjectNumberInt");
+                if (fn != null && fn.Value < forced) { fn.Value = forced; Log.Info("autotest : compteur des commandes d'annonces force a " + forced); }
             }
             GameObject al = Game.FindAny(AmisListPath);
             amisList = al != null ? Game.FsmOn(al, "Data") : null;
@@ -143,9 +183,16 @@ namespace MWCoop
             postBox = pb != null ? Game.FsmOn(pb, "Open") : null;
             postHooked = !Own(postBox);
             sb.Append(", commandes ").Append(spawners[0] != null ? "YP" : "-").Append('/').Append(spawners[1] != null ? "AMIS" : "-")
+              .Append(" (numeros ").Append(Counter(spawners[0])).Append('/').Append(Counter(spawners[1])).Append(')')
               .Append(", catalogue ").Append(amisList != null).Append(", annonces ").Append(numbers != null ? numbers.childCount : 0)
               .Append(", boite aux lettres ").Append(postBox != null);
             Log.Info(sb.ToString());
+        }
+
+        static int Counter(PlayMakerFSM sp)
+        {
+            FsmInt n = sp != null ? sp.FsmVariables.FindFsmInt("ObjectNumberInt") : null;
+            return n != null ? n.Value : -1;
         }
 
         // Vrai : l'automate est a nous (a accrocher) ; faux : absent ou deja pris par un autre module.
@@ -239,7 +286,7 @@ namespace MWCoop
             if (num != null && num.Value != orderNum0) { Log.Warn("appels : commande creee sans passer par le crochet (pas envoyee aux autres) -- " + why); return; }
             if (orderListing == null || !sp.gameObject.activeInHierarchy) { Log.Warn("appels : annonce appelee mais pas de commande creee -- " + why); return; }
             Log.Warn("appels : annonce appelee mais pas de commande creee -- " + why + " ; creation relancee");
-            if (!sp.enabled) sp.enabled = true;
+            Revive(sp, "annonce appelee");
             if (cl != null) cl.Value = orderListing;
             sp.SendEvent("SPAWNITEM");
             Log.Info("appels : relance -> etat '" + sp.ActiveStateName + "', numero " + (num != null ? num.Value : -1) + (orderSeen ? ", commande envoyee" : ", toujours rien"));
@@ -414,21 +461,30 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- commandes
         // Commande creee ici ('Create product' du createur, avant la creation) : numero a venir, annonce, liste.
-        // Numero (ObjectNumberInt : nom de la commande, donc du colis chez Props) pris dans la tranche de CE joueur : rang + 1000 x
-        // son numero de joueur (l'hote, 0 : les numeros du jeu tels quels). Deux commandes croisees a moins d'une latence
-        // prenaient le meme numero chez les deux (chacun cree la sienne tout de suite, sans passer par l'hote : lui donner le
-        // numero aurait retarde la creation du jeu), colis en collision (relecture du 15/10). La tranche est reprise a chaque
-        // commande d'ici (rang = numero modulo 1000 : la commande d'un autre, recue, laisse le compteur dans SA tranche).
-        const int NumberStride = 1000;
+        // Numero (ObjectNumberInt + 1 : nom de la commande, donc du colis chez Props) : chacun cree la sienne tout de suite, sans
+        // passer par l'hote (lui donner le numero aurait retarde la creation du jeu) ; deux commandes croisees a moins d'une
+        // latence prenaient le meme numero chez les deux, colis en collision (relecture du 15/10). Les numeros sont donc
+        // entrelaces : le joueur n prend le premier numero >= compteur dont le reste modulo 16 (joueurs au plus) vaut n. Jusqu'au
+        // 27/10 c'etait une tranche de 1000 par joueur (rang + 1000 x n) : le compteur passait 1000 des le premier colis d'un
+        // invite et le createur mourait au chargement suivant (voir Arm). Une commande recue laisse le compteur a son numero
+        // (meme nom) puis le remonte s'il etait plus haut : un numero d'ici ne doit jamais resservir.
+        const int NumberSlots = 16;
+        static int OwnNumber(int from)
+        {
+            int v = from < 0 ? 0 : from;
+            while ((v + 1) % NumberSlots != Session.LocalId % NumberSlots) v++;
+            return v;
+        }
+
         static void SendOrder(int s, PlayMakerFSM f)
         {
             FsmGameObject cl = f.FsmVariables.FindFsmGameObject("CurrentListing");
             GameObject listing = cl != null ? cl.Value : null;
             FsmInt num = f.FsmVariables.FindFsmInt("ObjectNumberInt");
-            if (num != null && Session.LocalId > 0 && num.Value >= 0)
+            if (num != null)
             {
-                int own = num.Value % NumberStride + NumberStride * Session.LocalId;
-                if (own != num.Value) { Log.Info("appels : commande n" + (num.Value + 1) + " prise au numero " + (own + 1) + " (tranche du joueur #" + Session.LocalId + ")"); num.Value = own; }
+                int own = OwnNumber(num.Value);
+                if (own != num.Value) { Log.Info("appels : commande n" + (num.Value + 1) + " prise au numero " + (own + 1) + " (joueur #" + Session.LocalId + ")"); num.Value = own; }
             }
             int n = num != null ? num.Value : -1;
             string key = s == 0 && listing != null ? ListingKey(listing) : "";
@@ -449,14 +505,12 @@ namespace MWCoop
             List<object> items = ReadList(r);
             PlayMakerFSM sp = s < 2 ? spawners[s] : null;
             if (sp == null) { Log.Warn("appels de #" + who + " : createur de commandes " + s + " absent ici"); return; }
-            // Meme numero que chez l'expediteur : meme nom de commande, donc de colis (Props). (Numero dans la tranche de
-            // l'expediteur, voir SendOrder : un compteur d'ici plus haut dans la MEME tranche serait une vraie collision.)
+            // Meme numero que chez l'expediteur : meme nom de commande, donc de colis (Props). Le compteur d'ici, s'il etait plus
+            // haut, est remis ensuite (voir SendOrder). Createur mort : rallume d'abord, sinon SPAWNITEM se perd.
+            Revive(sp, "commande de #" + who);
             FsmInt num = sp.FsmVariables.FindFsmInt("ObjectNumberInt");
-            if (num != null && n >= 0)
-            {
-                if (num.Value > n && num.Value / NumberStride == n / NumberStride) Log.Warn("appels de #" + who + " : commande n" + (n + 1) + " mais deja " + num.Value + " ici (deux commandes croisees)");
-                num.Value = n;
-            }
+            int keep = num != null ? num.Value : -1, after = -1;
+            if (num != null && n >= 0) num.Value = n;
             string what;
             Replay.Depth++;
             try
@@ -480,9 +534,18 @@ namespace MWCoop
                     what = "catalogue";
                 }
             }
-            finally { Replay.Depth--; }
+            finally
+            {
+                Replay.Depth--;
+                after = num != null ? num.Value : -1;
+                if (num != null && after < keep) { Log.Info("appels de #" + who + " : compteur remonte de " + after + " a " + keep); num.Value = keep; }
+            }
             WorldFsms.SoonScan();
-            Log.Info("appels de #" + who + " : commande " + what + " n" + (n + 1) + " creee ici aussi (" + (items != null ? items.Count : 0) + " lignes : " + Summary(items) + ")");
+            // (annonce : 'Create product' a tourne dans la meme image, le compteur a avance d'un ; catalogue : la chaine INBOX
+            // du bon de commande passe par des attentes, pas verifiee ici)
+            bool made = s != 0 || num == null || n < 0 || after == n + 1;
+            if (!made) Log.Warn("appels de #" + who + " : commande " + what + " n" + (n + 1) + " PAS creee ici (createur " + sp.ActiveStateName + ", " + (sp.enabled ? "en marche" : "arrete") + ", numero " + after + ")");
+            else Log.Info("appels de #" + who + " : commande " + what + " n" + (n + 1) + " creee ici aussi (" + (items != null ? items.Count : 0) + " lignes : " + Summary(items) + ")");
         }
 
         static System.Collections.ArrayList ListOf(GameObject go, string reference)
@@ -857,7 +920,8 @@ namespace MWCoop
 
         static void TestCall(float t)
         {
-            bool host = Session.IsHost, whole = Config.GetInt("Test", "AppelEntier", 0) != 0;
+            // (celui qui appelle : l'hote, ou l'invite avec [Test] AppelInvite=1)
+            bool host = Config.GetInt("Test", "AppelInvite", 0) != 0 ? !Session.IsHost : Session.IsHost, whole = Config.GetInt("Test", "AppelEntier", 0) != 0;
             if (host && t > 40f && step == 0)
             {
                 step = 1;
@@ -902,7 +966,12 @@ namespace MWCoop
                 if ((s == "Telepuhelu" || s == "Kaukopuhelu") && spawners[0] != null && spawners[0].enabled && Config.GetInt("Test", "AppelSansCommande", 0) != 0)
                 { spawners[0].enabled = false; Log.Info("autotest : appel, createur de commandes arrete"); }
                 else if ((s == "Telepuhelu" || s == "Kaukopuhelu") && !whole) Game.SetState(testCall, "Hangup");   // ([Test] AppelEntier=1 : conversation jusqu'au bout)
-                else if (s == "Beep beep") { step = 3; Log.Info("autotest : appel fini (" + (fl != null && fl.Value != null ? fl.Value.name : "?") + ")"); }
+                else if (s == "Beep beep")
+                {
+                    step = 3; Log.Info("autotest : appel fini (" + (fl != null && fl.Value != null ? fl.Value.name : "?") + "), numeros " + Counter(spawners[0]) + "/" + Counter(spawners[1]));
+                    // ([Test] AppelSauve=1 : sauvegarde en jeu juste apres -- le compteur et la commande ecrits, pour le chargement suivant)
+                    if (Config.GetInt("Test", "AppelSauve", 0) != 0) { Game.SaveInPlace(); Log.Info("autotest : appel, sauvegarde en jeu"); }
+                }
                 if (step == 2 && t > (whole ? 150f : 90f)) { step = 3; Log.Info("autotest : appel bloque en '" + s + "'"); }
             }
             if (host && step == 3 && testActivated && testKeypad != null) { testActivated = false; testKeypad.SetActive(false); }
