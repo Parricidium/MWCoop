@@ -671,10 +671,11 @@ static const WikiBlock kW_Addons[] = {   // (1.5.1, JD : comment installer une v
             L"Open the add-ons", 2000 },
     { WB_H, L"Mods : les modules du mod co-op", L"Mods: the modules of the co-op mod", 0, WG_KUPLA },   // (27/10 : Kupla, cache avant sa sortie)
     { WB_B, L"Addons s'ouvre sur deux cartes : Voitures (cette page) et Mods. Les Mods sont livrés avec le mod co-op lui-même, comme la VAZ : rien à télécharger.", L"Add-ons opens on two cards: Cars (this page) and Mods. Mods come with the co-op mod itself, like the VAZ: nothing to download." },
-    { WB_B, L"Kupla (bêta) : l'optimisation co-op, sur My Winter Car et My Summer Car. La case « Rendu (pour moi) » allège l'affichage chez toi seulement (distance d'affichage, ombres, rétroviseurs) ; éteinte, rien ne change.",
-            L"Kupla (beta): the co-op optimization, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only (view distance, shadows, mirrors); off, nothing changes." },
-    { WB_B, L"Bulles co-op : c'est l'hôte qui décide, dans les options du Salon ; ses invités suivent.", L"Co-op bubbles: the host decides, in the Lobby options; their guests follow." },
-    { WB_TIP, L"Les deux réglages comptent au lancement de la partie, jamais en cours de jeu.", L"Both settings count when the game starts, never during play." },
+    { WB_B, L"Kupla (bêta) : l'optimisation pour les PC modestes, sur My Winter Car et My Summer Car. La case « Rendu (pour moi) » allège l'affichage chez toi seulement : rétroviseurs rendus moins souvent, petits objets du décor cachés plus tôt, décor coupé plus loin. Jamais les joueurs, les voitures, les objets tenus ni le trafic ; tes réglages Graphismes restent les maîtres. Éteinte, rien ne change.",
+            L"Kupla (beta): the optimization for modest PCs, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only: mirrors rendered less often, small scenery objects hidden sooner, scenery cut further away. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, nothing changes." },
+    { WB_B, L"Niveau : Léger (rétros 1 image sur 2, décor jusqu'à 3000 m), Moyen (1 sur 3, 2000 m) ou Fort (1 sur 4, 1200 m). « Afficher les images par seconde » : un petit compteur en haut à droite, même Kupla éteint, pour comparer.",
+            L"Level: Mild (mirrors every 2nd frame, scenery up to 3000 m), Moderate (every 3rd, 2000 m) or Heavy (every 4th, 1200 m). \"Show frames per second\": a small counter at the top right, even with Kupla off, to compare." },
+    { WB_TIP, L"Ces réglages comptent au lancement de la partie, jamais en cours de jeu.", L"These settings count when the game starts, never during play." },
 };
 static const WikiBlock kW_Vaz[] = {
     { WB_P, L"Chaque joueur peut avoir sa VAZ-2108 de rallye, gratuite : F10 > onglet VAZ-2108. Seize couleurs, une par joueur ; la couleur donne aussi le numéro peint sur les portières.",

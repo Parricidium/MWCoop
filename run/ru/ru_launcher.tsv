@@ -2155,3 +2155,18 @@ The site's form, inside the launcher · your logs in one click	Форма сай
 Report bugs in the browser	Сообщать об ошибках в браузере
 Rather than in the launcher's panel · the logs zip goes to the Desktop	Вместо панели лаунчера · zip журналов попадает на рабочий стол
 The bug icon at the top right, next to the Logs: the site's form opens inside the launcher (otherwise in your browser). \"Create the logs zip\", then drag the zip into the form.	Значок жука вверху справа, рядом с Журналами: форма сайта открывается внутри лаунчера (иначе в браузере). «Создать zip журналов», потом перетащи zip в форму.
+Frames-per-second counter shown from the next game	Счётчик кадров в секунду показывается со следующей игры
+Frames-per-second counter hidden	Счётчик кадров в секунду скрыт
+Lightens the game for modest PCs: mirrors rendered less often, small scenery objects hidden sooner, scenery cut further away. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, the game stays exactly as before. Applied when the game starts.	Облегчает игру для скромных ПК: зеркала рисуются реже, мелкие объекты декораций скрываются раньше, декорации обрезаются дальше. Никогда не трогает игроков, машины, предметы в руках и трафик; твои настройки графики остаются главными. Выключено — игра остаётся точно такой же, как раньше. Применяется при запуске игры.
+Level	Уровень
+Mirrors every 2nd frame · small objects up to 400 × their size · scenery up to 3000 m	Зеркала каждый 2-й кадр · мелкие объекты до 400 × их размера · декорации до 3000 м
+Mirrors every 3rd frame · small objects up to 250 × their size · scenery up to 2000 m	Зеркала каждый 3-й кадр · мелкие объекты до 250 × их размера · декорации до 2000 м
+Mirrors every 4th frame · small objects up to 150 × their size · scenery up to 1200 m	Зеркала каждый 4-й кадр · мелкие объекты до 150 × их размера · декорации до 1200 м
+Show frames per second	Показывать кадры в секунду
+Small counter at the top right, even with Kupla off	Маленький счётчик вверху справа, даже при выключенном Kupla
+Mild	Лёгкий
+Moderate	Средний
+Heavy	Сильный
+Kupla: mild level from the next game	Kupla: лёгкий уровень со следующей игры
+Kupla: moderate level from the next game	Kupla: средний уровень со следующей игры
+Kupla: heavy level from the next game	Kupla: сильный уровень со следующей игры

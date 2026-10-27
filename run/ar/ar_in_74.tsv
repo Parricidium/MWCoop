@@ -1,0 +1,18 @@
+KUP23	Kupla: mild level from the next game
+KUP27	Frames-per-second counter shown from the next game
+KUP28	Frames-per-second counter hidden
+KUP29	Lightens the game for modest PCs: mirrors rendered less often, small scenery objects hidden sooner, scenery cut further away. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, the game stays exactly as before. Applied when the game starts.
+KUP30	Level
+KUP31	Mild
+KUP32	Moderate
+KUP33	Heavy
+KUP34	Mirrors every 2nd frame · small objects up to 400 × their size · scenery up to 3000 m
+KUP35	Mirrors every 3rd frame · small objects up to 250 × their size · scenery up to 2000 m
+KUP36	Mirrors every 4th frame · small objects up to 150 × their size · scenery up to 1200 m
+KUP37	Show frames per second
+KUP38	Small counter at the top right, even with Kupla off
+KUP39	Kupla (beta): the optimization for modest PCs, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only: mirrors rendered less often, small scenery objects hidden sooner, scenery cut further away. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, nothing changes.
+KUP40	Level: Mild (mirrors every 2nd frame, scenery up to 3000 m), Moderate (every 3rd, 2000 m) or Heavy (every 4th, 1200 m). \"Show frames per second\": a small counter at the top right, even with Kupla off, to compare.
+KUP41	These settings count when the game starts, never during play.
+KUP42	Kupla: moderate level from the next game
+KUP43	Kupla: heavy level from the next game

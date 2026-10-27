@@ -1692,6 +1692,8 @@ static bool UiClick(int id)
     case UI_ADDONS_MODS: g_kuplaNewSession = false; return true;   // (les modules sont deja dessous ; NEW lu)
     case UI_ADDONS_HOME: g_addonsPage = 0; g_addonSel = -1; return true;
     case UI_KUPLA_RENDU: KuplaRenduToggle(); return true;
+    case UI_KUPLA_NIVEAU: case UI_KUPLA_NIVEAU + 1: case UI_KUPLA_NIVEAU + 2: if (KuplaRenduGet()) KuplaNiveauSet(id - UI_KUPLA_NIVEAU + 1); return true;   // (grise quand Kupla est eteint)
+    case UI_KUPLA_COMPTEUR: KuplaCompteurToggle(); return true;
     case UI_BUG_ZIP: case UI_BUG_BROWSER: case UI_BUG_CLOSE: return BugClick(id);   // (signalement.inc : la bande du panneau)
     case UI_SET_SIGNALNAV: {   // (Reglages > Lanceur > Depannage : Signaler un bug dans le navigateur)
         bool on = GetPrivateProfileIntW(L"Lanceur", L"SignalerNavigateur", 0, g_iniLauncher.c_str()) != 0;

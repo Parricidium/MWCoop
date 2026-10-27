@@ -2301,6 +2301,24 @@ The bug icon at the top right, next to the Logs: the site's form opens inside th
 Report a bug (the bug icon at the top right, next to the Logs): the site's form opens inside the launcher (Windows 10 and later). \"Create the logs zip\" button at the top of the panel: the zip lands on your Desktop, drag it into the form with what you were doing.	الإبلاغ عن خطأ (أيقونة الحشرة في أعلى اليمين، بجانب السجلات): يفتح نموذج الموقع داخل المشغّل (Windows 10 فما فوق). زر \"إنشاء zip السجلات\" أعلى اللوحة: يصل الملف إلى سطح المكتب، اسحبه إلى النموذج مع ما كنت تفعله.
 On Windows 7, on Linux or without the WebView2 engine: the form opens in your browser and the zip lands straight on the Desktop. Settings > Launcher > Troubleshooting: \"Report bugs in the browser\" for those who prefer it.	على Windows 7 أو Linux أو بدون محرك WebView2: يفتح النموذج في متصفحك ويصل الملف مباشرة إلى سطح المكتب. الإعدادات > المشغّل > استكشاف الأخطاء: \"الإبلاغ عن الأخطاء في المتصفح\" لمن يفضّل ذلك.
 The panel only shows the report site and the Discord sign-in (the padlock and the domain stay visible at the top); any other link opens in your browser.	لا تعرض اللوحة سوى موقع الإبلاغ وتسجيل الدخول عبر Discord (يبقى القفل والنطاق ظاهرين في الأعلى)؛ وأي رابط آخر يُفتح في متصفحك.
+Kupla: mild level from the next game	Kupla: المستوى الخفيف بدءًا من اللعبة القادمة
+Frames-per-second counter shown from the next game	يظهر عداد الإطارات في الثانية بدءًا من اللعبة القادمة
+Frames-per-second counter hidden	عداد الإطارات في الثانية مخفي
+Lightens the game for modest PCs: mirrors rendered less often, small scenery objects hidden sooner, scenery cut further away. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, the game stays exactly as before. Applied when the game starts.	يخفف اللعبة للأجهزة المتواضعة: تُرسم المرايا بتواتر أقل، وتُخفى أشياء الديكور الصغيرة أبكر، ويُقطع الديكور أبعد. لا يمس أبدًا اللاعبين ولا السيارات ولا الأشياء المحمولة ولا حركة المرور؛ وتبقى إعدادات الرسوميات لديك هي الأساس. عند إيقافه تبقى اللعبة تمامًا كما كانت. يُطبَّق عند بدء اللعبة.
+Level	المستوى
+Mild	خفيف
+Moderate	متوسط
+Heavy	قوي
+Mirrors every 2nd frame · small objects up to 400 × their size · scenery up to 3000 m	المرايا كل إطار ثانٍ · الأشياء الصغيرة حتى 400 × حجمها · الديكور حتى 3000 م
+Mirrors every 3rd frame · small objects up to 250 × their size · scenery up to 2000 m	المرايا كل إطار ثالث · الأشياء الصغيرة حتى 250 × حجمها · الديكور حتى 2000 م
+Mirrors every 4th frame · small objects up to 150 × their size · scenery up to 1200 m	المرايا كل إطار رابع · الأشياء الصغيرة حتى 150 × حجمها · الديكور حتى 1200 م
+Show frames per second	إظهار الإطارات في الثانية
+Small counter at the top right, even with Kupla off	عداد صغير في أعلى اليمين، حتى مع إيقاف Kupla
+Kupla (beta): the optimization for modest PCs, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only: mirrors rendered less often, small scenery objects hidden sooner, scenery cut further away. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, nothing changes.	Kupla (تجريبي): تحسين للأجهزة المتواضعة، على My Winter Car وMy Summer Car. خانة \"العرض (لي)\" تخفف العرض عندك فقط: تُرسم المرايا بتواتر أقل، وتُخفى أشياء الديكور الصغيرة أبكر، ويُقطع الديكور أبعد. لا يمس أبدًا اللاعبين ولا السيارات ولا الأشياء المحمولة ولا حركة المرور؛ وتبقى إعدادات الرسوميات لديك هي الأساس. عند إيقافها لا شيء يتغير.
+Level: Mild (mirrors every 2nd frame, scenery up to 3000 m), Moderate (every 3rd, 2000 m) or Heavy (every 4th, 1200 m). \"Show frames per second\": a small counter at the top right, even with Kupla off, to compare.	المستوى: خفيف (المرايا كل إطار ثانٍ، الديكور حتى 3000 م)، متوسط (كل ثالث، 2000 م) أو قوي (كل رابع، 1200 م). \"إظهار الإطارات في الثانية\": عداد صغير في أعلى اليمين، حتى مع إيقاف Kupla، للمقارنة.
+These settings count when the game starts, never during play.	يُعتمد هذه الإعدادات عند بدء اللعبة، لا أثناء اللعب أبدًا.
+Kupla: moderate level from the next game	Kupla: المستوى المتوسط بدءًا من اللعبة القادمة
+Kupla: heavy level from the next game	Kupla: المستوى القوي بدءًا من اللعبة القادمة
 Host's game: 	لعبة المضيف: 
 New save, or restart one	حفظ جديد، أو إعادة بدء حفظ
 Main game	اللعبة الرئيسية
