@@ -151,5 +151,6 @@ namespace MWCoop.Net
         Event = 53,       // evenement du monde decide par l'hote : objets allumes, valeurs reglees (Events)
         Talk = 54,        // vocal de proximite : paquet de voix compresse par Steam (Voice) ; l'hote relaie
         Knob = 52,        // commande tenue d'un vehicule (starter, frein a main) : valeur de celui qui la tient (Knobs)
+        Loading = 55,     // hote -> invites : il va charger un niveau, son silence est a tolerer N s (U8) (Session.AnnounceLoading)
     }
 }

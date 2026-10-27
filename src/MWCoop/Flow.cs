@@ -119,7 +119,7 @@ namespace MWCoop
             // Le bouton n'est actif que si une sauvegarde existait a l'ouverture du menu.
             GameObject cont = Game.FindAny("Interface/Buttons/ButtonContinue");
             if (step == 0) { Log.Info("menu : continuer"); cont.SetActive(true); step = 1; return; }
-            if (step == 1) { Game.SetState(Game.FsmOn(cont, "SetSize"), "Reset globals 2"); step = 9; }
+            if (step == 1) { Session.AnnounceLoading(); Game.SetState(Game.FsmOn(cont, "SetSize"), "Reset globals 2"); step = 9; }   // (chargement de GAME : les invites tolerent le silence)
         }
 
         static void NewGame()
@@ -143,6 +143,7 @@ namespace MWCoop
                 // ButtonBegin : State 2 -> Delete save -> Generate ID -> State 3 -> Load (Intro).
                 GameObject begin = Game.FindAny("Licence/Buttons/ButtonBegin");
                 if (!begin.activeInHierarchy) begin.SetActive(true);
+                Session.AnnounceLoading();   // (chargement de l'intro puis de GAME : les invites tolerent le silence)
                 Game.SetState(Game.FsmOn(begin, "SetSize"), "State 2");
                 step = 9;
             }

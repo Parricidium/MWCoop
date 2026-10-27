@@ -37,3 +37,6 @@ mods/Voyage/convertisseur/bin/
 
 # outil prive de JD (placement des joueurs dans les voitures, 25/10) : jamais sur GitHub
 outils-prives/
+
+# Journaux des essais (relais chaos, vidages)
+dumps/

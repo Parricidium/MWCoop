@@ -20,6 +20,7 @@ namespace MWCoop.Net
         public float LastHeard, LastPingSent, Rtt = 0.1f;
         public float GraceUntil;      // silence tolere jusque-la (pair en plein chargement, hote qui sauvegarde) : pas de "delai depasse" avant GraceUntil + Timeout
         internal uint Token;          // jeton de session de l'invite (T_CONNECT) : 0 pour une version sans jeton
+        internal uint Instance;       // identifiant de son processus (T_CONNECT) : 0 pour une version sans
         internal ushort sendSeq, recvSeq;
         internal readonly Dictionary<ushort, Pending> unacked = new Dictionary<ushort, Pending>();
         internal readonly Queue<byte[]> waiting = new Queue<byte[]>();
@@ -58,6 +59,11 @@ namespace MWCoop.Net
         // hasard a la creation du transport (jamais 0 : 0 = version sans jeton, ancien comportement).
         static readonly Random rng = new Random();
         readonly uint token = (uint)rng.Next(1, int.MaxValue);
+        // Identifiant d'instance (essais chaos, 27/10) : fixe pour tout le processus. En IP, un invite qui se reconnecte
+        // (hote muet > 15 s : chargement du niveau, coupure) repart d'un port ephemere neuf, donc d'une autre adresse :
+        // pour l'hote c'etait un 2e pair, et l'ancien restait 15 s (avatar fantome, sauvegarde envoyee deux fois, ses PNJ
+        // a lui). Meme instance a une autre adresse : l'ancien pair est remplace tout de suite.
+        static readonly uint instance = (uint)rng.Next(1, int.MaxValue);
         // Pairs exclus ou refuses (relecture du 15/10, 3.1) : adresse -> fin de l'exclusion et motif ; un T_CONNECT pendant
         // ce temps recoit un T_REJECT au lieu d'etre accepte puis re-exclu en boucle (BYE perdu, invite qui reessaie a 3 s).
         class Ban { public float Until; public string Reason; }
@@ -106,12 +112,13 @@ namespace MWCoop.Net
             return p;
         }
 
-        // T_CONNECT : version reseau (I32) puis jeton de session (U32) ; un hote d'avant ne lit que la version.
+        // T_CONNECT : version reseau (I32), jeton de session (U32), instance (U32) ; un hote d'avant ne lit que ce qu'il connait.
         byte[] ConnectPacket()
         {
-            var body = new byte[8];
+            var body = new byte[12];
             Buffer.BlockCopy(BitConverter.GetBytes(NetVersion), 0, body, 0, 4);
             Buffer.BlockCopy(BitConverter.GetBytes(token), 0, body, 4, 4);
+            Buffer.BlockCopy(BitConverter.GetBytes(instance), 0, body, 8, 4);
             return Build(T_CONNECT, body);
         }
 
@@ -331,9 +338,11 @@ namespace MWCoop.Net
                 }
                 // Meme adresse, autre jeton : l'invite a recree son transport (numeros a zero) -- l'ancien pair est
                 // remplace par un neuf, pour que son Hello (seq 0) soit pris (relecture du 15/10, #2).
-                uint tok = n >= 11 ? BitConverter.ToUInt32(buf, 7) : 0;
+                uint tok = n >= 11 ? BitConverter.ToUInt32(buf, 7) : 0, inst = n >= 15 ? BitConverter.ToUInt32(buf, 11) : 0;
                 if (p != null && tok != p.Token) { DropPeer(p, "pair remplace", false); p = null; }
-                if (p == null) { p = AddPeer(ep); p.Id = nextId++; p.Token = tok; }
+                // Meme processus a une autre adresse (reconnexion en IP, port ephemere neuf) : l'ancien pair part tout de suite.
+                if (inst != 0) foreach (Peer q in Peers.ToArray()) if (q != p && q.Instance == inst) DropPeer(q, "pair remplace (nouvelle adresse)");
+                if (p == null) { p = AddPeer(ep); p.Id = nextId++; p.Token = tok; p.Instance = inst; }
                 p.LastHeard = Now;
                 SendRaw(p, Build(T_ACCEPT, BitConverter.GetBytes(p.Id)));
                 if (!p.Accepted) { p.Accepted = true; if (OnConnected != null) OnConnected(p); }
