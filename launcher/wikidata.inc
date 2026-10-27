@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES, WA_INTERFACE };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -577,6 +577,15 @@ static const WikiBlock kW_Av[] = {
     { WB_S, L"Sur l'alerte MWCoop : Actions > Autoriser (ou Restaurer).", L"On the MWCoop alert: Actions > Allow (or Restore)." },
     { WB_S, L"Gérer les paramètres > Exclusions : ajoute le dossier du jeu.", L"Manage settings > Exclusions: add the game folder." },
     { WB_WARN, L"Autre antivirus (Avast, Norton, Bitdefender…) : même principe, dans son historique / sa quarantaine et ses exclusions.", L"Other antivirus (Avast, Norton, Bitdefender…): same idea, in its history / quarantine and exclusions." },
+};
+static const WikiBlock kW_Interface[] = {   // (refonte Soft UI, fenetre.inc : les deux interfaces, changer a tout moment)
+    { WB_P, L"Le lanceur a deux interfaces : l'ancienne (fenêtre fixe, thèmes Aurore, Garage, Été) et la nouvelle « Soft UI » (fenêtre libre, agrandir, plein écran, clair ou sombre, animations). Tu choisis au premier lancement, et tu peux changer à tout moment.",
+            L"The launcher has two interfaces: the old one (fixed window, Aurora, Garage, Summer themes) and the new \"Soft UI\" one (free window, maximize, full screen, light or dark, animations). You choose at the first start, and you can switch any time." },
+    { WB_H, L"Changer d'interface", L"Switch interface" },
+    { WB_S, L"Réglages > Lanceur > Fenêtre du lanceur > Interface : Ancienne ou Nouvelle. Le lanceur redémarre aussitôt ; tes réglages sont gardés.", L"Settings > Launcher > Launcher window > Interface: Old or New. The launcher restarts right away; your settings are kept." },
+    { WB_S, L"Nouvelle interface : F11 pour le plein écran, Agrandir à côté de Réduire, bords et coins pour redimensionner ; la taille est retenue (« Se souvenir de la taille de la fenêtre »).", L"New interface: F11 for full screen, Maximize next to Minimize, edges and corners to resize; the size is remembered (\"Remember the window size\")." },
+    { WB_TIP, L"Si la nouvelle interface ne démarre pas, l'ancienne revient toute seule au lancement suivant : Signaler un bug (l'insecte) envoie les journaux.", L"If the new interface fails to start, the old one comes back by itself at the next start: Report a bug (the bug icon) sends the logs." },
+    { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
 };
 static const WikiBlock kW_Logs[] = {
     { WB_P, L"Un souci ? Le zip des journaux contient tout ce qu'il faut pour comprendre : journaux du mod et du lanceur, réglages, MSCLoader.",
@@ -1148,4 +1157,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
     WART(2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)
     WART(2, L"Le placement des sièges", L"Seat placement", L"Accès réservé : places, postures, ceintures", L"Reserved access: seats, postures, belts", kW_Places),   // (WA_PLACES = 38)
+    WART(3, L"Ancienne ou nouvelle interface", L"Old or new interface", L"Changer à tout moment", L"Switch any time", kW_Interface),   // (refonte Soft UI : fenetre.inc)
 };

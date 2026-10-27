@@ -19,7 +19,7 @@ enum { WF_FOLDER, WF_FOOTER, WF_START, WF_NET, WF_LOBBY, WF_MSC, WF_SHARE, WF_AC
 
 static const int kWikiCats = (int)(sizeof(kWikiCat) / sizeof(kWikiCat[0]));
 static const int kWikiArts = (int)(sizeof(kWikiArt) / sizeof(kWikiArt[0]));
-static_assert(sizeof(kWikiArt) / sizeof(kWikiArt[0]) == WA_PLACES + 1, "kWikiArt et WA_* : un article par valeur, dans l'ordre");   // (WA_VAZ manquait : liens decales)
+static_assert(sizeof(kWikiArt) / sizeof(kWikiArt[0]) == WA_INTERFACE + 1, "kWikiArt et WA_* : un article par valeur, dans l'ordre");   // (WA_VAZ manquait : liens decales)
 // Article, bloc ou touche du jeu choisi. Un bloc est cache par son propre jeu, par celui du WB_H de sa section, ou s'il mene
 // (WB_GO) a un article cache.
 static bool WikiArtShown(int a) { return a >= 0 && a < kWikiArts && WikiGame(kWikiArt[a].game); }

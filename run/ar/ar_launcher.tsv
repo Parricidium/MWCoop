@@ -2374,6 +2374,23 @@ Reduced animations	حركات مخفّفة
 No motion; also follows the Windows setting	بلا حركة؛ ويتبع أيضًا إعداد Windows
 Old	القديمة
 New	الجديدة
+Which interface for the launcher?	أي واجهة للمشغّل؟
+The launcher has a new interface. Pick the one you prefer: you can switch any time in Settings > Launcher > Launcher window.	للمشغّل واجهة جديدة. اختر ما تفضّله: يمكنك التبديل في أي وقت من الإعدادات > المشغّل > نافذة المشغّل.
+The one you know	التي تعرفها
+Aurora, Garage, Summer themes, accent colour	سمات الشفق والمرأب والصيف، لون التمييز
+Fixed-size window	نافذة ثابتة الحجم
+Free window: maximize, full screen	نافذة حرة: تكبير، ملء الشاشة
+Roomier, animations, light or dark	أرحب، حركات، فاتحة أو داكنة
+Ctrl+K search, status bar	بحث Ctrl+K، شريط الحالة
+Previous themes missing for now	السمات السابقة غير متوفرة حاليًا
+ (in test)	 (تجريبية)
+Old or new interface	الواجهة القديمة أو الجديدة
+Switch any time	التبديل في أي وقت
+The launcher has two interfaces: the old one (fixed window, Aurora, Garage, Summer themes) and the new \"Soft UI\" one (free window, maximize, full screen, light or dark, animations). You choose at the first start, and you can switch any time.	للمشغّل واجهتان: القديمة (نافذة ثابتة، سمات الشفق والمرأب والصيف) والجديدة \"Soft UI\" (نافذة حرة، تكبير، ملء الشاشة، فاتحة أو داكنة، حركات). تختار عند التشغيل الأول، ويمكنك التبديل في أي وقت.
+Switch interface	تبديل الواجهة
+Settings > Launcher > Launcher window > Interface: Old or New. The launcher restarts right away; your settings are kept.	الإعدادات > المشغّل > نافذة المشغّل > الواجهة: القديمة أو الجديدة. يُعاد تشغيل المشغّل فورًا؛ وتبقى إعداداتك محفوظة.
+New interface: F11 for full screen, Maximize next to Minimize, edges and corners to resize; the size is remembered (\"Remember the window size\").	الواجهة الجديدة: F11 لملء الشاشة، زر التكبير بجانب التصغير، الحواف والزوايا لتغيير الحجم؛ ويُحفظ الحجم (\"تذكّر حجم النافذة\").
+If the new interface fails to start, the old one comes back by itself at the next start: Report a bug (the bug icon) sends the logs.	إن لم تنجح الواجهة الجديدة في التشغيل، تعود القديمة من تلقاء نفسها عند التشغيل التالي: «الإبلاغ عن خلل» (أيقونة الحشرة) يرسل السجلات.
 Different version (you %s, host %s)	نسخة مختلفة (لديك %s، لدى المضيف %s)
 The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n
 ⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?	⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟

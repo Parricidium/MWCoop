@@ -298,7 +298,10 @@ static void UiNewFlagStart() { if (g_newUi) { WritePrivateProfileStringW(L"Lance
 static void UiNewFlagTick() { if (g_uiFlagT && GetTickCount() >= g_uiFlagT) { g_uiFlagT = 0; WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", NULL, g_iniLauncher.c_str()); } }
 
 // ---- fenetre de choix au premier lancement (g_guideKind 2) : apercu des deux interfaces, Essayer / Garder
-static const RectF kUiChoiceCard(290, 136, 700, 528), kUiTry(330, 592, 304, 50), kUiKeep(646, 592, 304, 50), kUiClose(926, 152, 44, 44);
+// (JD, 27/10 : « au 1er lancement, demander le choix du launcher en expliquant les + et les - de chacune » ; la nouvelle
+// presélectionnée a sa sortie -- kUiNewDefault, et la mention « en test » partira alors ; en developpement, l'ancienne)
+static const bool kUiNewDefault = false;
+static const RectF kUiChoiceCard(290, 120, 700, 560), kUiTry(330, 608, 304, 50), kUiKeep(646, 608, 304, 50), kUiClose(926, 136, 44, 44);
 static bool UiChoiceDue() { return !g_newUi && !GetPrivateProfileIntW(L"Lanceur", L"InterfaceChoisie", 0, g_iniLauncher.c_str()); }
 static void UiChoiceOpen() { g_guide = true; g_guideKind = 2; g_guideHot = 0; g_focus = -1; }
 static int UiChoiceHit(float x, float y)
@@ -350,25 +353,42 @@ static void DrawUiChoice(Graphics &g)
     RectF c = kUiChoiceCard;
     GlassLive(g, c, 24);
     Icon(g, IC_SPARK, c.X + 56, c.Y + 45, 32, kAcc);
-    Title(g, T(L"Nouvelle interface du lanceur", L"New launcher interface"), RectF(c.X + 82, c.Y + 28, 560, 34), 24, kInk);
+    Title(g, T(L"Quelle interface pour le lanceur ?", L"Which interface for the launcher?"), RectF(c.X + 82, c.Y + 28, 560, 34), 24, kInk);
     {   // fermer (= garder l'ancienne pour l'instant)
         RectF r = kUiClose;
         GraphicsPath p; RoundRect(p, r, 14);
         SolidBrush b(g_guideHot == 4 ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
         Icon(g, IC_CLOSE, r.X + 22, r.Y + 22, 18, kInk);
     }
-    Para(g, T(L"Le lanceur a une nouvelle interface : fenêtre libre (agrandir, plein écran), thème « Soft UI » clair ou sombre, disposition plus aérée, animations. Les mêmes pages, les mêmes boutons, les mêmes réglages. Tu peux changer d'avis à tout moment dans Réglages > Lanceur > Fenêtre du lanceur.",
-              L"The launcher has a new interface: free window (maximize, full screen), light or dark \"Soft UI\" theme, roomier layout, animations. Same pages, same buttons, same settings. You can change your mind any time in Settings > Launcher > Launcher window."),
-         RectF(c.X + 40, c.Y + 84, c.Width - 80, 70), 13.5f, kInk);
-    float pw = (c.Width - 80 - 24) / 2, py = c.Y + 170, ph = 230;
-    DrawUiPreview(g, RectF(c.X + 40, py, pw, ph), false);
-    DrawUiPreview(g, RectF(c.X + 40 + pw + 24, py, pw, ph), true);
-    Text(g, T(L"Ancienne", L"Current"), RectF(c.X + 40, py + ph + 10, pw, 22), 13, FontStyleBold, kGrey, StringAlignmentCenter);
-    Text(g, T(L"Nouvelle (en test)", L"New (in test)"), RectF(c.X + 40 + pw + 24, py + ph + 10, pw, 22), 13, FontStyleBold, kAcc, StringAlignmentCenter);
-    Para(g, T(L"La nouvelle interface est en test : si quelque chose cloche, l'ancienne revient toute seule au lancement suivant.",
-              L"The new interface is in test: if something goes wrong, the old one comes back by itself at the next start."),
-         RectF(c.X + 40, py + ph + 36, c.Width - 80, 34), 12, kGrey);
-    {
+    Para(g, T(L"Le lanceur a une nouvelle interface. Choisis celle que tu préfères : tu pourras changer à tout moment dans Réglages > Lanceur > Fenêtre du lanceur.",
+              L"The launcher has a new interface. Pick the one you prefer: you can switch any time in Settings > Launcher > Launcher window."),
+         RectF(c.X + 40, c.Y + 82, c.Width - 80, 44), 13.5f, kInk);
+    float pw = (c.Width - 80 - 24) / 2, py = c.Y + 134, ph = 150;
+    // chaque interface : apercu, nom, ses + et ses -
+    struct Col { bool soft; const wchar_t *name; std::vector<std::wstring> plus, minus; };
+    Col cols[2] = {
+        { false, T(L"Ancienne", L"Current"),
+          { T(L"Celle que tu connais", L"The one you know"), T(L"Thèmes Aurore, Garage, Été, couleur d'accent", L"Aurora, Garage, Summer themes, accent colour") },
+          { T(L"Fenêtre de taille fixe", L"Fixed-size window") } },
+        { true, T(L"Nouvelle", L"New"),
+          { T(L"Fenêtre libre : agrandir, plein écran", L"Free window: maximize, full screen"), T(L"Plus aérée, animations, clair ou sombre", L"Roomier, animations, light or dark"), T(L"Recherche Ctrl+K, barre d'état", L"Ctrl+K search, status bar") },
+          { T(L"Thèmes d'avant absents pour l'instant", L"Previous themes missing for now") } },
+    };
+    for (int k = 0; k < 2; k++) {
+        float x = c.X + 40 + k * (pw + 24);
+        DrawUiPreview(g, RectF(x, py, pw, ph), cols[k].soft);
+        std::wstring nm = cols[k].name;
+        if (cols[k].soft && !kUiNewDefault) nm += T(L" (en test)", L" (in test)");
+        Text(g, nm, RectF(x, py + ph + 8, pw, 22), 14, FontStyleBold, cols[k].soft ? kAcc : kInk, StringAlignmentNear);
+        float y = py + ph + 36;
+        for (auto &l : cols[k].plus) { Text(g, L"+", RectF(x, y, 16, 20), 13.5f, FontStyleBold, Color(255, 95, 211, 154), StringAlignmentNear); Text(g, l, RectF(x + 18, y, pw - 18, 20), 12.5f, FontStyleRegular, kInk, StringAlignmentNear); y += 21; }
+        for (auto &l : cols[k].minus) { Text(g, L"\u2212", RectF(x, y, 16, 20), 13.5f, FontStyleBold, kWarn, StringAlignmentNear); Text(g, l, RectF(x + 18, y, pw - 18, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear); y += 21; }
+    }
+    if (!kUiNewDefault)
+        Para(g, T(L"La nouvelle interface est en test : si quelque chose cloche, l'ancienne revient toute seule au lancement suivant.",
+                  L"The new interface is in test: if something goes wrong, the old one comes back by itself at the next start."),
+             RectF(c.X + 40, c.Y + 432, c.Width - 80, 34), 12, kGrey);
+    {   // (la nouvelle preselectionnee = bouton principal ; a sa sortie, kUiNewDefault)
         RectF r = kUiTry; GraphicsPath p; RoundRect(p, r, 16);
         SolidBrush b(g_guideHot == 1 ? kAcc2 : kAcc); g.FillPath(&b, &p);
         Text(g, T(L"Essayer la nouvelle interface", L"Try the new interface"), r, 14, FontStyleBold, kOnAcc);

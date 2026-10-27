@@ -15,3 +15,20 @@ UI14	Reduced animations
 UI15	No motion; also follows the Windows setting
 UI16	Old
 UI17	New
+UI18	Which interface for the launcher?
+UI19	The launcher has a new interface. Pick the one you prefer: you can switch any time in Settings > Launcher > Launcher window.
+UI20	The one you know
+UI21	Aurora, Garage, Summer themes, accent colour
+UI22	Fixed-size window
+UI23	Free window: maximize, full screen
+UI24	Roomier, animations, light or dark
+UI25	Ctrl+K search, status bar
+UI26	Previous themes missing for now
+UI27	 (in test)
+UI28	Old or new interface
+UI29	Switch any time
+UI30	The launcher has two interfaces: the old one (fixed window, Aurora, Garage, Summer themes) and the new \"Soft UI\" one (free window, maximize, full screen, light or dark, animations). You choose at the first start, and you can switch any time.
+UI31	Switch interface
+UI32	Settings > Launcher > Launcher window > Interface: Old or New. The launcher restarts right away; your settings are kept.
+UI33	New interface: F11 for full screen, Maximize next to Minimize, edges and corners to resize; the size is remembered (\"Remember the window size\").
+UI34	If the new interface fails to start, the old one comes back by itself at the next start: Report a bug (the bug icon) sends the logs.
