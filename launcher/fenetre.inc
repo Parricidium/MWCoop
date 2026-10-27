@@ -75,10 +75,13 @@ static bool AnimReduced()   // Reglages > Fenetre du lanceur, ou Windows « affi
 }
 static void AnimReducedSet(bool on) { WritePrivateProfileStringW(L"Lanceur", L"AnimationsReduites", on ? L"1" : NULL, g_iniLauncher.c_str()); }
 static bool WinMemoryOn() { return GetPrivateProfileIntW(L"Lanceur", L"FenetreMemoire", 1, g_iniLauncher.c_str()) != 0; }
+// Sortie de la refonte (lanceur-1.16.0, GO de JD 27/10) : la nouvelle interface par defaut pour qui n'a rien choisi ; le choix au
+// premier lancement reste (la nouvelle preselectionnee), et Reglages > Lanceur > Fenetre du lanceur a tout moment.
+static const bool kUiNewDefault = true;
 static void UiNewRead()
 {
     wchar_t v[16] = L"";
-    GetPrivateProfileStringW(L"Lanceur", L"Interface", L"ancienne", v, 16, g_iniLauncher.c_str());
+    GetPrivateProfileStringW(L"Lanceur", L"Interface", kUiNewDefault ? L"nouvelle" : L"ancienne", v, 16, g_iniLauncher.c_str());
     g_newUi = !_wcsicmp(v, L"nouvelle");
     if (g_newUi && GetPrivateProfileIntW(L"Lanceur", L"NouvelleEnCours", 0, g_iniLauncher.c_str())) {   // filet : elle a plante la derniere fois
         // (JD 27/10 : la bascule MWC <-> MSC relance le lanceur ; le drapeau est maintenant efface aux sorties propres, et un seul
@@ -377,11 +380,11 @@ static void UiNewFlagClear() { g_uiFlagT = 0; if (g_newUi) WritePrivateProfileSt
 static void UiNewFlagTick() { if (g_uiFlagT && GetTickCount() >= g_uiFlagT) { g_uiFlagT = 0; WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", NULL, g_iniLauncher.c_str()); WritePrivateProfileStringW(L"Lanceur", L"NouvelleEchecs", NULL, g_iniLauncher.c_str()); } }   // (demarrage reussi : plus d'echec compte)
 
 // ---- fenetre de choix au premier lancement (g_guideKind 2) : apercu des deux interfaces, Essayer / Garder
-// (JD, 27/10 : « au 1er lancement, demander le choix du launcher en expliquant les + et les - de chacune » ; la nouvelle
-// presélectionnée a sa sortie -- kUiNewDefault, et la mention « en test » partira alors ; en developpement, l'ancienne)
-static const bool kUiNewDefault = false;
+// (JD, 27/10 : « au 1er lancement, demander le choix du launcher en expliquant les + et les - de chacune » ; depuis la sortie
+// -- kUiNewDefault, plus haut -- la fenetre s'ouvre dans la nouvelle interface, qui est preselectionnee ; « Garder l'ancienne »
+// y bascule et relance)
 static const RectF kUiChoiceCard(290, 120, 700, 560), kUiTry(330, 608, 304, 50), kUiKeep(646, 608, 304, 50), kUiClose(926, 136, 44, 44);
-static bool UiChoiceDue() { return !g_newUi && !GetPrivateProfileIntW(L"Lanceur", L"InterfaceChoisie", 0, g_iniLauncher.c_str()); }
+static bool UiChoiceDue() { return !GetPrivateProfileIntW(L"Lanceur", L"InterfaceChoisie", 0, g_iniLauncher.c_str()); }
 static void UiChoiceOpen() { g_guide = true; g_guideKind = 2; g_guideHot = 0; g_focus = -1; }
 static int UiChoiceHit(float x, float y)
 {
@@ -392,8 +395,10 @@ static int UiChoiceHit(float x, float y)
 }
 static void UiChoiceClick(int h)
 {
-    if (h == 1) { g_guide = false; UiNewSet(true); return; }
-    if (h == 2 || h == 4 || h < 0) { g_guide = false; g_guideHot = 0; WritePrivateProfileStringW(L"Lanceur", L"InterfaceChoisie", L"1", g_iniLauncher.c_str()); LaunchLog("interface : ancienne gardee (fenetre de choix)"); }
+    // (celle qui tourne deja : on note le choix sans relancer ; l'autre : UiNewSet ecrit et relance)
+    if (h == 1) { g_guide = false; g_guideHot = 0; if (g_newUi) { WritePrivateProfileStringW(L"Lanceur", L"InterfaceChoisie", L"1", g_iniLauncher.c_str()); LaunchLog("interface : nouvelle gardee (fenetre de choix)"); InvalidateAll(); } else UiNewSet(true); return; }
+    if (h == 2) { g_guide = false; g_guideHot = 0; if (!g_newUi) { WritePrivateProfileStringW(L"Lanceur", L"InterfaceChoisie", L"1", g_iniLauncher.c_str()); LaunchLog("interface : ancienne gardee (fenetre de choix)"); } else UiNewSet(false); return; }
+    if (h == 4 || h < 0) { g_guide = false; g_guideHot = 0; WritePrivateProfileStringW(L"Lanceur", L"InterfaceChoisie", L"1", g_iniLauncher.c_str()); LaunchLog("interface : fenetre de choix fermee, %s gardee", g_newUi ? "nouvelle" : "ancienne"); InvalidateAll(); }
 }
 // Apercu miniature : l'ancienne (carte sombre, verre, aurore) et la nouvelle (Soft UI : fond uni, cartes en relief).
 static void DrawUiPreview(Graphics &g, RectF r, bool soft)
@@ -446,7 +451,7 @@ static void DrawUiChoice(Graphics &g)
     // chaque interface : apercu, nom, ses + et ses -
     struct Col { bool soft; const wchar_t *name; std::vector<std::wstring> plus, minus; };
     Col cols[2] = {
-        { false, T(L"Ancienne", L"Current"),
+        { false, T(L"Ancienne", L"Previous"),
           { T(L"Celle que tu connais", L"The one you know"), T(L"Thèmes Aurore, Garage, Été, couleur d'accent", L"Aurora, Garage, Summer themes, accent colour") },
           { T(L"Fenêtre de taille fixe", L"Fixed-size window") } },
         { true, T(L"Nouvelle", L"New"),
@@ -470,13 +475,13 @@ static void DrawUiChoice(Graphics &g)
     {   // (la nouvelle preselectionnee = bouton principal ; a sa sortie, kUiNewDefault)
         RectF r = kUiTry; GraphicsPath p; RoundRect(p, r, 16);
         SolidBrush b(g_guideHot == 1 ? kAcc2 : kAcc); g.FillPath(&b, &p);
-        Text(g, T(L"Essayer la nouvelle interface", L"Try the new interface"), r, 14, FontStyleBold, kOnAcc);
+        Text(g, g_newUi ? T(L"Garder la nouvelle interface", L"Keep the new interface") : T(L"Essayer la nouvelle interface", L"Try the new interface"), r, 14, FontStyleBold, kOnAcc);
     }
     {
         RectF r = kUiKeep; GraphicsPath p; RoundRect(p, r, 16);
         SolidBrush b(g_guideHot == 2 ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
         Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p);
-        Text(g, T(L"Garder l'ancienne", L"Keep the current one"), r, 14, FontStyleBold, kInk);
+        Text(g, g_newUi ? T(L"Revenir à l'ancienne", L"Back to the previous one") : T(L"Garder l'ancienne", L"Keep the previous one"), r, 14, FontStyleBold, kInk);
     }
 }
 

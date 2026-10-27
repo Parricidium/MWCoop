@@ -132,14 +132,17 @@ static const TutoStep kTuto[] = {
     { L"Placement des sièges", L"Ta clé d'accès ouvre l'outil des places : exporte d'abord tes voitures depuis une partie où elles sont montées, puis ouvre l'outil. Bouton Exporter de l'outil : le zip à envoyer à JD.",
       L"Seat placement", L"Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.", "1.15.14" },
     // lanceur-1.15.16 (26/10) : Signaler un bug, a cote des Journaux (58)
-    { L"Signaler un bug", L"L'insecte en haut à droite, à côté des Journaux : le formulaire du site s'ouvre dans le lanceur (sinon dans ton navigateur). « Créer le zip des journaux », puis glisse le zip dans le formulaire.",
-      L"Report a bug", L"The bug icon at the top right, next to the Logs: the site's form opens inside the launcher (otherwise in your browser). \"Create the logs zip\", then drag the zip into the form.", "1.15.16" },
+    { L"Signaler un bug", L"L'insecte en haut à droite, à côté des Journaux : tes dossiers et le formulaire, ici dans le lanceur. Connexion par un code (une fois), puis Nouveau dossier : les journaux de la partie se cochent sur place.",
+      L"Report a bug", L"The bug icon at the top right, next to the Logs: your reports and the form, right here in the launcher. Sign in with a code (once), then New report: the game session's logs are ticked right there.", "1.15.16" },
     // lanceur-1.15.17 (27/10) : Importer une sauvegarde, en-tete des Sauvegardes (59)
     { L"Importer une sauvegarde", L"Une sauvegarde téléchargée ou reçue (.zip, .rar, .7z) : elle devient une partie de ta liste, vérifiée tout de suite. Utiliser pour héberger, et tes invités la reçoivent.",
       L"Import a save", L"A save downloaded or received (.zip, .rar, .7z): it becomes a game in your list, checked right away. Use for hosting, and your guests receive it.", "1.15.17" },
     // Kupla (27/10, cachee tant que kKuplaShown est faux : TutoSkip) : Addons s'ouvre sur Voitures / Mods (60)
     { L"Addons : Voitures et Mods", L"Addons s'ouvre maintenant sur deux cartes : Voitures, les voitures addons comme avant, et Mods, les modules du mod co-op. Le premier : Kupla, l'optimisation co-op (bêta).",
       L"Add-ons: Cars and Mods", L"Add-ons now opens on two cards: Cars, the add-on cars as before, and Mods, the modules of the co-op mod. The first one: Kupla, the co-op optimization (beta).", KUPLA_SINCE },
+    // lanceur-1.16.0 (27/10) : la nouvelle interface, par defaut (61 ; bulle au centre)
+    { L"Nouvelle interface", L"Fenêtre libre (agrandir, F11 plein écran), clair ou sombre, couleur selon le jeu, Ctrl+K pour chercher une page ou un réglage, barre d'état en bas. L'ancienne reste là : Réglages > Lanceur > Fenêtre du lanceur.",
+      L"New interface", L"Free window (maximize, F11 full screen), light or dark, colour by game, Ctrl+K to search a page or a setting, status bar at the bottom. The previous one is still there: Settings > Launcher > Launcher window.", "1.16.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };

@@ -561,7 +561,7 @@ static const SetCard kSetCards[] = {
     { SET_HUD, 1, L"Jauges affichées", L"Gauges shown", NULL, NULL },                                                                                                // 24
     { SET_HUD, 1, L"Coop", L"Co-op", L"Aussi avec Vanilla", L"Also with Vanilla" },                                                                                  // 25
     { SET_LANCEUR, 0, L"Accès réservé", L"Restricted access", L"Ton ID MWCoop", L"Your MWCoop ID", "acces" },   // 26 (places.inc ; sous-titre : l'ID MWCoop lui-meme)
-    { SET_LANCEUR, 1, L"Fenêtre du lanceur", L"Launcher window", L"Nouvelle interface (en test), taille, animations", L"New interface (in test), size, animations" },   // 27 (refonte Soft UI : fenetre.inc)
+    { SET_LANCEUR, 1, L"Fenêtre du lanceur", L"Launcher window", L"Nouvelle ou ancienne interface, taille, animations", L"New or previous interface, size, animations" },   // 27 (refonte Soft UI : fenetre.inc)
 };
 static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
@@ -720,7 +720,7 @@ static const SetItem kSetItems[] = {
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé… toi et tes amis", L"Very hungry, exhausted… you and your friends", 0, 2 },   // (pas de froid dans My Summer Car)
     // Acces reserve (outil des places, cle d'acces signee par JD, 26/10) : l'ID a lui envoyer, la cle recue (explication : son etat)
     { 26, SI_X, "cle", L"Clé d'accès", L"Access key", NULL, NULL },
-    { 27, SI_X, "interface", L"Interface", L"Interface", L"Ancienne, ou la nouvelle (Soft UI, en test) · le lanceur redémarre", L"Old, or the new one (Soft UI, in test) · the launcher restarts" },
+    { 27, SI_X, "interface", L"Interface", L"Interface", L"La nouvelle (Soft UI), ou l'ancienne · le lanceur redémarre", L"The new one (Soft UI), or the previous one · the launcher restarts" },
     { 27, SI_X, "fenmemoire", L"Se souvenir de la taille de la fenêtre", L"Remember the window size", L"Nouvelle interface : place et taille reprises au démarrage", L"New interface: position and size restored at start" },
     { 27, SI_X, "animreduites", L"Animations réduites", L"Reduced animations", L"Sans mouvement ; suivi aussi du réglage de Windows", L"No motion; also follows the Windows setting" },
     { 27, SI_X, "themenouv", L"Thème", L"Theme", L"Clair, Sombre, ou Auto : celui de Windows", L"Light, Dark, or Auto: the Windows one" },
