@@ -94,6 +94,10 @@ namespace MWCoop
         static bool NotOurs(Watch x, float v)
         {
             if (x.Var != null && x.Var.Name == "Dirt" && v < x.Last && !VehicleSync.RemotelyDriven(x.Fsm.transform)) return false;
+            // (liquides qu'on verse ou qu'on vidange -- huile, eau, liquide de frein, essence -- sur une voiture garee : vidange faite ici,
+            // un geste, comme le plein ; moteur coupe, rien ne les consomme -- regle d'avant. Retour de [MWC] 27/10 : la vidange du
+            // radiateur d'une voiture garee par un invite etait annulee.)
+            if (Fill(x) && !VehicleSync.RemotelyDriven(x.Fsm.transform)) return false;
             // (reglages a la main -- jeu aux soupapes, calage -- : des gestes, pas une consommation ; regle d'avant)
             if (x.List != null || x.Rot != null) return VehicleSync.RemotelyDriven(x.Fsm.transform);
             return Driven(x.Fsm.transform);
@@ -312,7 +316,7 @@ namespace MWCoop
                     // Consommation d'ici sur une valeur qui n'est pas a nous (voiture garee : autorite a l'hote ; menee par un autre) :
                     // remise a la derniere valeur recue. Avant, elle restait plus basse ici jusqu'au prochain changement chez l'autre
                     // (batterie a 110,6 chez l'invite, 119,2 chez l'hote, essai 27/10). Pas un remplissage en cours d'envoi.
-                    if (notOurs && x.HasAuth && !x.Septic && x.Var != null && x.Pending <= 0.02f && (v < x.Auth || !Fill(x)) && Mathf.Abs(v - x.Auth) > 0.005f + 0.001f * Mathf.Abs(v))
+                    if (notOurs && x.HasAuth && !x.Septic && x.Var != null && x.Pending <= 0.02f && !Fill(x) && Mathf.Abs(v - x.Auth) > 0.005f + 0.001f * Mathf.Abs(v))
                     { SetVal(x, x.Auth); x.Last = Val(x); continue; }
                     if (now >= x.NextSend) x.Last = v;   // derive locale ignoree
                     continue;

@@ -1045,7 +1045,7 @@ namespace MWCoop
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
         static float etatAt, frNext;
         static int radioStep, radioLog, dmStep, dmKey;
-        static float dmLog; static bool dmTuyau;
+        static float dmLog; static bool dmTuyau, liqDone; static int liqLog;
         static string EtatArray(GameObject go)
         {
             PlayMakerArrayListProxy best = null;
@@ -2514,6 +2514,15 @@ namespace MWCoop
                 }
                 LightsGuard.TestKey(mode, t);
                 if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
+                // (Autotest=liquide aussi sur MSC : LiquideCle / LiquideDelta a LiquideA s ; SuivreLiquide releve a SuivreA=t,t,...)
+                if (mode == "liquide" && !liqDone && Config.Get("Test", "LiquideCle", "").Length > 0 && t > Config.GetFloat("Test", "LiquideA", 40f))
+                { liqDone = true; Log.Info("autotest : liquide " + Fluids.TestBump(Config.Get("Test", "LiquideCle", ""), Config.GetFloat("Test", "LiquideDelta", 10f))); }
+                if (mode == "liquide" && Config.Get("Test", "SuivreLiquide", "").Length > 0)
+                {
+                    string[] la = Config.Get("Test", "SuivreA", "35,45,60").Split(',');
+                    if (liqLog < la.Length && t > float.Parse(la[liqLog], System.Globalization.CultureInfo.InvariantCulture))
+                    { liqLog++; Log.Info("autotest : liquide t=" + t.ToString("F0") + " " + Fluids.TestState(Config.Get("Test", "SuivreLiquide", ""))); }
+                }
                 // ([Test] Autotest=articulations, ArticVoiture=GIFU(750/450psi), ArticA=40 : chaque articulation sous la voiture ou reliee a elle)
                 if (mode == "articulations" && step == 0 && Config.GetInt("Test", "ArticTuyau", 0) != 0 && t > 35f && !dmTuyau)
                 {
