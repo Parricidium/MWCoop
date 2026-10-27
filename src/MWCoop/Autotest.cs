@@ -2640,6 +2640,7 @@ namespace MWCoop
                 if (cf != null && t > 46f && step == 2) { step = 3; Game.SetState(cf, "Move up"); Log.Info("autotest : debout"); }
             }
             if (mode == "conduite") Conduite(t);
+            if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
