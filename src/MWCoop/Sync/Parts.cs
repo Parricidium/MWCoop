@@ -497,6 +497,7 @@ namespace MWCoop
         static void Digest(float now)
         {
             if (!Session.Active || !Session.IsHost || Session.RemoteCount == 0 || now < nextDigest || now - loadedAt < 30f) return;
+            if (Config.GetInt("Test", "Controle10s", 1) == 0) return;   // (essais : l'empreinte des 2 s seule, Autotest=mscperte)
             nextDigest = now + 10f;
             if (Game.Msc) { MscDigest(now); return; }
             NetWriter w = null; int n = 0, total = 0, totalB = 0, big = 0;

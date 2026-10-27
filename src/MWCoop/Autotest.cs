@@ -1011,6 +1011,111 @@ namespace MWCoop
             Log.Info("autotest : mscboulons, corps BoltPM : " + bn + ", cinematiques " + bKin + ", interpoles " + bInt + ", colliders declencheurs " + bTrig + ", decales ou libres " + bDrift);
         }
         static readonly System.Collections.Generic.Dictionary<Rigidbody, Vector3> boltLocal = new System.Collections.Generic.Dictionary<Rigidbody, Vector3>();
+
+        // ([Test] Autotest=mscetat, passe Satsuma du 27/10 : l'etat de la SATSUMA tel que CE joueur le voit, une ligne par cle, triees --
+        // dumps\etat-satsuma.txt ; a EtatA s (60), puis toutes les EtatPas s (0 : une fois). Compare hors jeu entre l'hote et l'invite
+        // (scratchpad etat-diff.py) : ce qui diverge apres un chargement, un montage, une casse, un reglage. Seulement ce que le jeu
+        // sauvegarde ou qui tient dans le temps : entrees Database (booleens, flottants, entiers de 'Data'), serrage et crans de chaque
+        // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
+        static float etatAt;
+        static string EtatArray(GameObject go)
+        {
+            PlayMakerArrayListProxy best = null;
+            foreach (PlayMakerArrayListProxy px in go.GetComponents<PlayMakerArrayListProxy>()) if (best == null || string.IsNullOrEmpty(px.referenceName)) best = px;
+            if (best == null || best._arrayList == null) return "-";
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < best._arrayList.Count; i++) sb.Append(i > 0 ? "," : "").Append(best._arrayList[i] != null ? best._arrayList[i].ToString() : "null");
+            return sb.ToString();
+        }
+        static void EtatVars(System.Text.StringBuilder sb, PlayMakerFSM f, bool strings)
+        {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (HutongGames.PlayMaker.FsmBool b in f.FsmVariables.BoolVariables) sb.Append(' ').Append(b.Name).Append('=').Append(b.Value ? "1" : "0");
+            foreach (HutongGames.PlayMaker.FsmInt i in f.FsmVariables.IntVariables) sb.Append(' ').Append(i.Name).Append('=').Append(i.Value);
+            foreach (HutongGames.PlayMaker.FsmFloat v in f.FsmVariables.FloatVariables) if (v.Name != "Time") sb.Append(' ').Append(v.Name).Append('=').Append(v.Value.ToString("F3", ci));
+            if (strings) foreach (HutongGames.PlayMaker.FsmString s in f.FsmVariables.StringVariables) if (!s.Name.StartsWith("UniqueTag") && !string.IsNullOrEmpty(s.Value)) sb.Append(' ').Append(s.Name).Append('=').Append(s.Value.Replace(' ', '_'));
+            foreach (HutongGames.PlayMaker.FsmColor c in f.FsmVariables.ColorVariables) sb.Append(' ').Append(c.Name).Append('=').Append(c.Value.r.ToString("F2", ci)).Append('/').Append(c.Value.g.ToString("F2", ci)).Append('/').Append(c.Value.b.ToString("F2", ci));
+        }
+        static void MscEtat()
+        {
+            var lines = new System.Collections.Generic.Dictionary<string, string>();
+            GameObject db = Game.FindAny("Database");
+            if (db != null)
+                foreach (Transform cat in db.transform)
+                    foreach (Transform e in cat)
+                    {
+                        PlayMakerFSM d = Game.FsmOn(e.gameObject, "Data");
+                        if (d == null) continue;
+                        var sb = new System.Text.StringBuilder();
+                        EtatVars(sb, d, false);
+                        lines["db:" + cat.name + "/" + e.name] = sb.ToString();
+                    }
+            foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+            {
+                if (f == null || f.gameObject.hideFlags != HideFlags.None || !f.gameObject.activeInHierarchy) continue;
+                string n = f.FsmName, g = f.gameObject.name;
+                var sb = new System.Text.StringBuilder();
+                if (n == "BoltCheck" && f.FsmVariables.FindFsmFloat("Tightness") != null)
+                {
+                    HutongGames.PlayMaker.FsmGameObject tp = f.FsmVariables.FindFsmGameObject("db_ThisPart");
+                    string key = tp != null && tp.Value != null && tp.Value.transform.parent != null ? tp.Value.transform.parent.name + "/" + tp.Value.name : Recon.Path(f.transform);
+                    sb.Append(" Tightness=").Append(f.FsmVariables.FindFsmFloat("Tightness").Value.ToString("F0")).Append(" crans=").Append(EtatArray(f.gameObject));
+                    lines["bc:" + key] = sb.ToString();
+                }
+                else if (n == "Use" && f.FsmVariables.FindFsmFloat("TireHealth") != null && f.FsmVariables.FindFsmString("ID") != null)
+                {
+                    EtatVars(sb, f, true);
+                    sb.Append(" crans=").Append(EtatArray(f.gameObject));
+                    lines["roue:" + f.FsmVariables.FindFsmString("ID").Value] = sb.ToString();
+                }
+                else if (n == "Paint" && f.FsmVariables.FindFsmInt("PaintType") != null)
+                {
+                    HutongGames.PlayMaker.FsmString part = f.FsmVariables.FindFsmString("Part");
+                    EtatVars(sb, f, false);
+                    lines["peinture:" + (part != null && part.Value.Length > 0 ? part.Value : g)] = sb.ToString();
+                }
+                else if (n == "Data" && (g == "MechanicalWear" || g == "Windshield" || g == "Odometer") && f.transform.root.name.StartsWith("SATSUMA") || n == "Data" && g == "Odometer" && f.transform.root.name == "CARPARTS")
+                {
+                    EtatVars(sb, f, false);
+                    lines["sim:" + g] = sb.ToString();
+                }
+                else if (n == "Inspect" && g == "InspectionProcess") { EtatVars(sb, f, false); lines["ct:" + g] = sb.ToString(); }
+            }
+            var keys = new System.Collections.Generic.List<string>(lines.Keys);
+            keys.Sort(string.CompareOrdinal);
+            var outp = new System.Text.StringBuilder();
+            outp.Append("# etat-satsuma ").Append(System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Append(" joueur #").Append(Net.Session.LocalId).Append(Net.Session.IsHost ? " (hote)" : " (invite)").Append(" t=").Append(Time.timeSinceLevelLoad.ToString("F0")).Append(" lignes=").Append(keys.Count).Append('\n');
+            foreach (string k in keys) outp.Append(k.Replace(' ', '_')).Append(lines[k]).Append('\n');   // (cle sans espace : un seul mot pour etat-diff.py)
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            string file = System.IO.Path.Combine(dir, "etat-satsuma.txt");
+            try { System.IO.Directory.CreateDirectory(dir); System.IO.File.WriteAllText(file, outp.ToString()); Log.Info("autotest : mscetat, " + keys.Count + " lignes -> " + file); }
+            catch (System.Exception e) { Log.Warn("autotest : mscetat : " + e.Message); }
+        }
+        static string MscTestSettings()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (string[] s in new[] { new[] { "Database/DatabaseMotor/CamshaftGear", "Angle", "123" }, new[] { "Database/DatabaseBody/SteeringRod_FL", "Alignment", "2.5" }, new[] { "Database/DatabaseMechanics/Gears", "FinalGear", "3.9" } })
+            {
+                GameObject g = Game.FindAny(s[0]);
+                PlayMakerFSM d = g != null ? Game.FsmOn(g, "Data") : null;
+                HutongGames.PlayMaker.FsmFloat v = d != null ? d.FsmVariables.FindFsmFloat(s[1]) : null;
+                if (v != null) { v.Value = float.Parse(s[2], System.Globalization.CultureInfo.InvariantCulture); sb.Append(s[0].Substring(s[0].LastIndexOf('/') + 1)).Append('.').Append(s[1]).Append('=').Append(s[2]).Append(" ; "); }
+                else sb.Append(s[0]).Append(" introuvable ; ");
+            }
+            bool tire = false;
+            foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+            {
+                if (f == null || f.FsmName != "Use" || !f.gameObject.activeInHierarchy) continue;
+                HutongGames.PlayMaker.FsmString id = f.FsmVariables.FindFsmString("ID"); HutongGames.PlayMaker.FsmFloat th = f.FsmVariables.FindFsmFloat("TireHealth");
+                if (id == null || th == null || id.Value != "wheel_steel1") continue;
+                th.Value = 42f; tire = true; break;
+            }
+            sb.Append(tire ? "wheel_steel1 TireHealth=42 ; " : "wheel_steel1 introuvable ; ");
+            Rigidbody cb = VehicleSync.Body("SATSUMA");
+            Transform fl = cb != null ? cb.transform.Find("FL") : null;
+            if (fl != null) { fl.localRotation = Quaternion.Euler(0f, 5f, 3f); sb.Append("coin FL tordu (0, 5, 3)"); } else sb.Append("coin FL introuvable");
+            return sb.ToString();
+        }
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -1119,6 +1224,30 @@ namespace MWCoop
             if (mode == "mscsauvetags")
             {
                 if (t > 40f && step == 0) { step = 1; MscSaveTags(); }
+                return;
+            }
+            if (mode == "mscetat")
+            {
+                float at = Config.GetFloat("Test", "EtatA", 60f), pas = Config.GetFloat("Test", "EtatPas", 0f);
+                if (t > at && (step == 0 || pas > 0f && t > etatAt)) { step = 1; etatAt = t + pas; MscEtat(); }
+                return;
+            }
+            // ([Test] Autotest=mscmoteur, 2 joueurs, lot A de la passe Satsuma 27/10 : l'hote casse le moteur a MoteurA s (70) comme RedLining
+            // le ferait -- MecaMsc.TestDamage -- puis chacun ecrit son etat a EtatA s (90) ; etat-diff.py doit donner 0 ecart)
+            if (mode == "mscmoteur")
+            {
+                float ma = Config.GetFloat("Test", "MoteurA", 70f), at = Config.GetFloat("Test", "EtatA", 90f);
+                if (t > ma && step == 0) { step = 1; Log.Info("autotest : mscmoteur, " + (Net.Session.IsHost ? MecaMsc.TestDamage() : "invite : attente de la casse de l'hote")); }
+                if (t > at && step == 1) { step = 2; MscEtat(); }
+                return;
+            }
+            // ([Test] Autotest=mscreglages, 2 joueurs, lots B et C de la passe Satsuma 27/10, avec [Test] ReglagesPartout=1 chez l'hote : a MoteurA s
+            // l'hote pose calage 123, parallelisme FL 2,5, pont 3,9, pneu wheel_steel1 a 42, et tord le coin FL (0, 5, 3) ; etat a EtatA s)
+            if (mode == "mscreglages")
+            {
+                float ma = Config.GetFloat("Test", "MoteurA", 70f), at = Config.GetFloat("Test", "EtatA", 90f);
+                if (t > ma && step == 0) { step = 1; Log.Info("autotest : mscreglages, " + (Net.Session.IsHost ? MscTestSettings() : "invite : attente des reglages de l'hote")); }
+                if (t > at && step == 1) { step = 2; MscEtat(); }
                 return;
             }
             // ([Test] Autotest=mscboulons : ou sont les vis visibles des pieces de la Database (Bolts/BoltPM/boltN) par rapport a la
@@ -1398,6 +1527,14 @@ namespace MWCoop
             if (mode == "portemagasin") { PorteMagasin(t); return; }
             if (mode == "mscmontage") { MscMontage(t); return; }
             if (mode == "mscremonte") { Parts.TestRemount(t); return; }   // (aile arrachee au montage chez l'hote, WIGA 25/10)
+            // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
+            // (envoye), remontee a 50 s (message NON envoye) ; l'empreinte des 2 s doit la faire remonter chez l'invite en 6 s au plus ; etat a EtatA s)
+            if (mode == "mscperte")
+            {
+                Parts.TestRemount(t - Config.GetFloat("Test", "PerteDecalage", 0f));   // (decalage : l'invite doit etre en jeu avant le demontage des 40 s)
+                if (t > Config.GetFloat("Test", "EtatA", 75f) && step == 0) { step = 1; MscEtat(); }
+                return;
+            }
             if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
             if (mode == "mscdrag") { DragMsc.Test(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10)
             if (mode == "msctrophee") { RallyMsc.Test(t); return; }   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)

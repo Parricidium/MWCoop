@@ -698,7 +698,10 @@ namespace MWCoop
                 }
                 foreach (Transform t in rb.GetComponentsInChildren<Transform>(true))
                 {
-                    if (!t.name.Contains("DamagePivot")) continue;
+                    // (My Summer Car, passe Satsuma 27/10 : pas de *DamagePivot* -- SuspDamage/Calculations tord les coins SATSUMA/FL, FR, RL, RR
+                    // eux-memes (SetRotation Y/Z au choc, -2..2 a la reparation) ; suivis comme les pivots, meme message)
+                    bool corner = Game.Msc && t.parent == rb.transform && rb.name.StartsWith("SATSUMA") && (t.name == "FL" || t.name == "FR" || t.name == "RL" || t.name == "RR");
+                    if (!t.name.Contains("DamagePivot") && !corner) continue;
                     string key = Rank(seen, "b" + VehicleSync.RelPath(rb.transform, t));
                     Bend o = null;
                     if (old != null) foreach (Bend x in old.Bends) if (x.Key == key && x.T == t) { o = x; break; }

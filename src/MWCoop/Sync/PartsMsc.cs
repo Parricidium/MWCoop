@@ -124,6 +124,7 @@ namespace MWCoop
         {
             wheelHooked.Clear(); wheelCut.Clear();
             mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear(); keptJoints.Clear();
+            mscDb.Clear(); mscDbByHash = null; nextPrint = lastListAsk = lastListSent = 0f; printMiss = 0; mscLostOnce = false;
         }
 
         // ---------------------------------------------------------------- cles
@@ -306,8 +307,11 @@ namespace MWCoop
                 else if (n == "Use" && f.gameObject.activeInHierarchy) MscWheelHook(f);
             }
             if (mscPoints.Count != before || screws.Count != beforeBolts || mscRemovals.Count != beforeRem)
+            {
                 Log.Info("pieces (MSC) : " + mscPoints.Count + " points de montage, " + mscRemovals.Count + " pieces demontables, " + screws.Count + " vis ("
                          + waiting.Count + " automates en attente de leur activation)");
+                if (mscPoints.Count != before) MscDbScan();   // (points « echange » rattaches a leur entree Database)
+            }
         }
 
         static void MscCheckWaiting()
@@ -326,6 +330,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- montage, demontage
+        static bool mscLostOnce;
         static void MscLocalInstall(MscPoint p)
         {
             GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("Part").Value;
@@ -334,8 +339,161 @@ namespace MWCoop
             Touch(H(p.Key));
             Log.Info("montage : " + id + " sur " + p.Key);
             VehicleSync.CalmAfterPart(p.Fsm.transform);
-            Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
             mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
+            // ([Test] PerteMontage=1 : le premier montage d'ici n'est pas envoye -- message perdu -- pour voir l'empreinte le rattraper, Autotest=mscperte)
+            if (Config.GetInt("Test", "PerteMontage", 0) != 0 && !mscLostOnce) { mscLostOnce = true; Log.Warn("montage : " + id + " sur " + p.Key + " : message NON envoye (essai de perte)"); return; }
+            Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
+        }
+
+        // ---------------------------------------------------------------- empreinte (lot D, JD 27/10 : « controle par empreinte toutes les 2 s, liste complete si ecart »)
+        // Toutes les 2 s l'hote envoie deux empreintes (FNV des cles triees) : Installed de chaque entree Database (pieces a pivot, pieces
+        // « echange », fils : 226) et cran de chaque vis active. L'invite calcule les siennes a la reception ; deux ecarts de suite (4 s), sans
+        // geste local dans les 3 s (montage encore en route), et il demande la liste (@piecesliste) : l'hote renvoie tout de suite le controle
+        // complet -- points et vis comme a 10 s, plus les Installed de la Database pour les pieces « echange » et les fils, que le controle des
+        // points ne couvrait pas (une liste par 2 s au plus). Le controle des 10 s reste en secours.
+        class MscDbEntry { public string Key; public uint Hash; public FsmBool Installed; public PlayMakerFSM Data; public bool Wire; public MscPoint Swap; public PlayMakerFSM Bolt; public PlayMakerArrayListProxy Crans; public bool BoltLooked; }
+        static readonly List<MscDbEntry> mscDb = new List<MscDbEntry>();
+        static Dictionary<uint, MscDbEntry> mscDbByHash;
+        static float nextPrint, lastListAsk, lastListSent; static int printMiss, printLogs;
+        static void MscDbScan()
+        {
+            GameObject db = Game.FindAny("Database");
+            if (db == null) return;
+            mscDb.Clear(); mscDbByHash = new Dictionary<uint, MscDbEntry>();
+            foreach (Transform cat in db.transform)
+                foreach (Transform e in cat)
+                {
+                    PlayMakerFSM d = Game.FsmOn(e.gameObject, "Data");
+                    FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+                    if (inst == null) continue;
+                    var en = new MscDbEntry { Key = cat.name + "/" + e.name, Installed = inst, Data = d, Wire = cat.name == "DatabaseWiring" };
+                    en.Hash = H(en.Key);
+                    mscDb.Add(en); mscDbByHash[en.Hash] = en;
+                }
+            mscDb.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+            // (piece « echange » : son point, sans {Parent}, porte l'entree Database en db_ThisPart)
+            foreach (MscPoint p in mscPoints.Values)
+            {
+                if (!p.Swap || p.Fsm == null) continue;
+                FsmGameObject tp = p.Fsm.FsmVariables.FindFsmGameObject("db_ThisPart");
+                if (tp == null || tp.Value == null) continue;
+                foreach (MscDbEntry en in mscDb) if (en.Data != null && en.Data.gameObject == tp.Value) { en.Swap = p; break; }
+            }
+        }
+        static void MscPrints(out uint hi, out uint hb, out int ni, out int nb)
+        {
+            hi = 2166136261u; ni = 0;
+            foreach (MscDbEntry en in mscDb)
+            {
+                if (en.Installed == null) continue;
+                hi ^= en.Hash; hi *= 16777619u; hi ^= en.Installed.Value ? 1u : 0u; hi *= 16777619u; ni++;
+            }
+            // Vis : par le BoltCheck de la piece de chaque entree (Tightness et tableau des crans, ceux que le jeu sauve) -- pas par les automates
+            // 'Screw' accroches ici, dont le nombre depend de l'avancement du releve de chaque cote (fausse alerte a l'arrivee, 27/10 08:32).
+            hb = 2166136261u; nb = 0;
+            foreach (MscDbEntry en in mscDb)
+            {
+                if (!en.BoltLooked || en.Bolt == null && en.Crans == null)
+                {
+                    en.BoltLooked = true;
+                    FsmGameObject tp = en.Data != null ? en.Data.FsmVariables.FindFsmGameObject("ThisPart") : null;
+                    GameObject part = tp != null ? tp.Value : null;
+                    en.Bolt = part != null ? Game.FsmOn(part, "BoltCheck") : null;
+                    en.Crans = null;
+                    if (part != null) foreach (PlayMakerArrayListProxy px in part.GetComponents<PlayMakerArrayListProxy>()) if (en.Crans == null || string.IsNullOrEmpty(px.referenceName)) en.Crans = px;
+                }
+                if (en.Bolt == null) continue;
+                FsmFloat tg = en.Bolt.FsmVariables.FindFsmFloat("Tightness");
+                hb ^= en.Hash; hb *= 16777619u;
+                hb ^= (uint)Mathf.RoundToInt(tg != null ? tg.Value : -1f); hb *= 16777619u;
+                if (en.Crans != null && en.Crans._arrayList != null)
+                    for (int i = 0; i < en.Crans._arrayList.Count; i++) { object o = en.Crans._arrayList[i]; hb ^= (uint)(o is int ? (int)o : o is float ? (int)(float)o : 0); hb *= 16777619u; }
+                nb++;
+            }
+        }
+        static bool TouchedWithin(float now, float within) { foreach (KeyValuePair<uint, float> kv in touched) if (now - kv.Value < within) return true; return false; }
+        static void MscPrintTick(float now)
+        {
+            if (!Session.IsHost || !Session.Active || Session.RemoteCount == 0 || now < nextPrint || now - loadedAt < 30f) return;
+            nextPrint = now + 2f;
+            if (mscDb.Count == 0) MscDbScan();
+            uint hi, hb; int ni, nb;
+            MscPrints(out hi, out hb, out ni, out nb);
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@empreinte").I32((int)hi).I32((int)hb).U16(ni).U16(nb), false);
+        }
+        public static void OnPrint(int who, NetReader r)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (Session.IsHost || !PlayerSync.InGame || now - loadedAt < 30f) return;
+            uint hi = (uint)r.I32(), hb = (uint)r.I32(); int ni = r.U16(), nb = r.U16();
+            if (mscDb.Count == 0) MscDbScan();
+            uint mi, mb; int ci, cb;
+            MscPrints(out mi, out mb, out ci, out cb);
+            if (mi == hi && mb == hb) { printMiss = 0; return; }
+            if (TouchedWithin(now, 3f)) return;   // (geste encore en route ici : pas un ecart)
+            printMiss++;
+            if (printMiss < 2 || now - lastListAsk < 4f) return;
+            lastListAsk = now; printMiss = 0;
+            Session.SendToHost(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@piecesliste"), true);
+            if (printLogs++ < 30 || printLogs % 20 == 0)
+                Log.Info("pieces (MSC) : empreinte differente de l'hote (" + (mi != hi ? "pieces montees " + ci + " ici / " + ni + " chez lui" : "") + (mi != hi && mb != hb ? ", " : "") + (mb != hb ? "vis " + cb + " / " + nb : "") + ") : liste complete demandee");
+        }
+        public static void OnListAsk(int who, NetReader r)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (!Session.IsHost || now - lastListSent < 2f) return;
+            lastListSent = now;
+            MscDigest(now);
+            MscDigestDb();
+            Log.Info("pieces (MSC) : liste complete renvoyee a la demande de #" + who);
+        }
+        // Controle, genre 2 : Installed des entrees Database des pieces « echange » et des fils (le reste passe par les points et les vis).
+        static void MscDigestDb()
+        {
+            if (mscDb.Count == 0) MscDbScan();
+            NetWriter w = null; int n = 0;
+            foreach (MscDbEntry en in mscDb)
+            {
+                if (en.Installed == null || en.Swap == null && !en.Wire) continue;
+                if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(2); n = 0; }
+                w.I32((int)en.Hash).U8(en.Installed.Value ? (byte)1 : (byte)0); n++;
+                if (n >= 120) { Session.SendAll(w, true); w = null; }
+            }
+            if (w != null) Session.SendAll(w, true);
+        }
+        static void MscOnDigestDb(int who, NetReader r, float now)
+        {
+            if (mscDb.Count == 0) MscDbScan();
+            int fixedN = 0, unknown = 0;
+            while (r.More)
+            {
+                uint h = (uint)r.I32(); bool inst = r.U8() != 0;
+                MscDbEntry en;
+                if (mscDbByHash == null || !mscDbByHash.TryGetValue(h, out en) || en.Installed == null) { unknown++; continue; }
+                if (en.Installed.Value == inst || Recent(h, now)) continue;
+                Touch(h);
+                if (en.Wire)
+                {
+                    if (inst) { if (WiringMsc.ApplyByDb(en.Data.gameObject, who)) fixedN++; }
+                    else Log.Warn("pieces (MSC) : fil " + en.Key + " branche ici, pas chez l'hote : laisse (debranchement = vis et piece)");
+                    continue;
+                }
+                MscPoint p = en.Swap;
+                if (p == null || p.Fsm == null) continue;
+                applying = true; Replay.Depth++;
+                try
+                {
+                    if (inst) { MscSwapInstall(p, null, "db:" + Recon.Path(en.Data.transform), p.Key, who); fixedN++; }
+                    else
+                    {
+                        FsmGameObject tp = en.Data.FsmVariables.FindFsmGameObject("ThisPart");
+                        PlayMakerFSM rem = tp != null && tp.Value != null ? Game.FsmOn(tp.Value, "Removal") : null;
+                        if (rem != null) { rem.enabled = true; Game.SetState(rem, "Remove part"); fixedN++; Log.Info("piece " + en.Key + " demontee ici au controle de l'hote (echange)"); }
+                    }
+                }
+                finally { applying = false; Replay.Depth--; }
+            }
+            if (fixedN > 0 || unknown > 0) Log.Info("pieces (MSC) : controle de l'hote (Database) : " + fixedN + " corrigee(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
         }
 
         // Attache (FixedJoint) d'une piece disparue ici alors que la voiture est menee par un autre : 'Mouse off' (HasComponent)
@@ -607,6 +765,7 @@ namespace MWCoop
             if (wheelCut.Count > 0) { foreach (FsmStateAction a in wheelCut) a.Enabled = true; wheelCut.Clear(); }
             if (testClick != null) MscTestClickTick();
             MscCheckKept(Time.realtimeSinceStartup);
+            MscPrintTick(Time.realtimeSinceStartup);
             if (mscOut.Count == 0) return;
             foreach (MscOut o in mscOut)
             {
@@ -708,6 +867,11 @@ namespace MWCoop
                     if (rem == null) { Log.Warn("piece " + id + " sans Removal ici"); return; }
                     FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
                     if (trig != null && trig.Value != null && trig.Value.activeSelf) { Log.Info("piece " + id + " deja demontee"); return; }
+                    // Casse (flags 1) : d'abord 'Break off' comme chez celui qui mene (BoltCheck, ou 'Use' d'une roue) -- Bolted=false, crans a
+                    // zero, Tightness 0, Detach. Avant : 'Remove part' seul, la piece par terre ici mais encore « serree » (audit Satsuma 27/10).
+                    if ((flags & 1) != 0)
+                        foreach (PlayMakerFSM bf in part.GetComponents<PlayMakerFSM>())
+                            if ((bf.FsmName == "BoltCheck" || bf.FsmName == "Use") && bf.Fsm != null && bf.Fsm.GetState("Break off") != null) Game.SetState(bf, "Break off");
                     rem.enabled = true;
                     Game.SetState(rem, "Remove part");
                     // (echange : la nouvelle piece libre d'ici prend la cle de celle de l'autre et suit sa chute)
@@ -874,6 +1038,7 @@ namespace MWCoop
                     Session.SendToHost(w, true);
                 }
             }
+            else if (kind == 2) MscOnDigestDb(who, r, now);
             else
             {
                 while (r.More)

@@ -216,6 +216,7 @@ namespace MWCoop
             new Mod("cablage", WiringGuard.Update),
             new Mod("capots du pack", PackHoods.Update),
             new Mod("fils", WiringMsc.Update),   // (MSC : bornes electriques de la SATSUMA)
+            new Mod("mecanique (MSC)", MecaMsc.Update),   // (MSC, 27/10 : casses du moteur chez celui qui mene seulement, Damaged partage)
             new Mod("luge de Teimo", TeimoSled.Update),
             new Mod("graphismes", Gfx.Update),
             new Mod("rallye", Rally.Update),
@@ -406,6 +407,8 @@ namespace MWCoop
                                     LightsGuard.OnLevelLoaded, PackHoods.OnLevelLoaded, MapPacks.OnLevelLoaded,   // (19/10 soir : phares et capots du pack rallye)
                                     Fires.OnLevelLoaded,   // (20/10 : cheminees, poeles, grill -- bois, allumage, braises)
                                     WiringMsc.OnLevelLoaded,   // (20/10 : fils de la SATSUMA)
+                                    MecaMsc.OnLevelLoaded,   // (27/10 : casses et Damaged de la SATSUMA)
+                                    WindowCranks.OnLevelLoaded,   // (27/10 : vitres de la SATSUMA)
                                     Difficulty.OnLevelLoaded, Sleepers.OnLevelLoaded,
                                     Radio.OnLevelLoaded,   // (22/10 : radio et lecteur CD partages)
                                     Voices.OnLevelLoaded, Particles.OnLevelLoaded, Sauna.OnLevelLoaded, NearDoors.OnLevelLoaded, CarHits.OnLevelLoaded,
@@ -463,6 +466,8 @@ namespace MWCoop
             // 19/10 soir (retour de Vaydon, 1.1.2 : portes de la maison, du garage et exterieures pas synchronisees)
             "interactions", "portes poussees",
             "fils",   // (20/10, Reinmansed : fils de la SATSUMA branches par l'invite, invisibles chez l'hote -- WiringMsc)
+            "mecanique (MSC)",   // (27/10, passe Satsuma : automates de casse chez celui qui mene seulement, Damaged et usure centrale partages -- MecaMsc)
+            "vitres",   // (27/10 : manivelles des portieres de la SATSUMA -- 'Knob' a Windows=.../Glass, generique ; la copie passager est sur les noms de MWC et ne fait rien ici)
             "feux",   // (20/10, joueurs : « le bois ne prend pas » -- cheminees, poeles et grill de MSC : memes automates WoodTrigger / SetFire que MWC)
             "phares", "capots du pack", "cablage", "porte-buches",   // (24/10 : faisceau tenu par un autre, Markos -- WiringGuard)
               // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)

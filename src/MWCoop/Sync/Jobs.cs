@@ -110,7 +110,8 @@ namespace MWCoop
         }
         const int K_PLAIN = 0, K_LOGTRIGGER = 1, K_FEEDLOG = 2, K_IGNITION = 3;
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach",
-                                                                             "Latch", "Assemble" };   // loquet du capot ; branchements du cablage
+                                                                             "Latch", "Assemble",   // loquet du capot ; branchements du cablage
+                                                                             "UseNew" };   // (MSC : cle de contact de la SATSUMA, 27/10)
 
         // Commande de vehicule sans sauvegarde : automate d'interaction, pas la logique de conduite.
         static bool IsControl(PlayMakerFSM f)
@@ -627,10 +628,12 @@ namespace MWCoop
         // JD et GG, 06/10 soir). Maintenant seules les positions de la cle partent ("ACC on", "Motor starting",
         // "Shut off", "Motor OFF"), et seulement si l'enchainement est parti d'un clic d'ici ; elles sont posees
         // telles quelles chez les autres, et ce que leur automate fait ensuite tout seul n'est pas renvoye.
-        static readonly HashSet<string> IgnitionStates = new HashSet<string> { "ACC on", "Motor starting", "Shut off", "Motor OFF" };
+        // (« ACC on 2 », MSC : contact deja mis, cle tournee a nouveau -- meme effet qu'« ACC on » ; oubliee jusqu'au 27/10)
+        static readonly HashSet<string> IgnitionStates = new HashSet<string> { "ACC on", "ACC on 2", "Motor starting", "Shut off", "Motor OFF" };
         // Positions ou la cle est deja (memes effets) : rien a refaire.
         static readonly Dictionary<string, string[]> IgnitionAlready = new Dictionary<string, string[]> {
             { "ACC on", new[] { "ACC on", "Wait2", "Wait START" } },
+            { "ACC on 2", new[] { "ACC on", "ACC on 2" } },
             { "Shut off", new[] { "Shut off", "Wait2", "Wait START" } },
             { "Motor OFF", new[] { "Motor OFF", "Wait1", "Wait ACC" } },
             { "Motor starting", new[] { "Motor starting" } } };
@@ -664,7 +667,9 @@ namespace MWCoop
 
         static bool IgnitionLike(PlayMakerFSM f)
         {
-            if (f.FsmName != "Use") return false;
+            // (My Summer Car : la cle de la SATSUMA est l'automate 'UseNew' (Dashboard/Steering/steering_column2/IgnitionSatsuma) -- jamais
+            // reconnue jusqu'au 27/10 : le contact (ACC, tableau de bord, jauges) restait a celui qui tournait la cle)
+            if (f.FsmName != "Use" && !(Game.Msc && f.FsmName == "UseNew")) return false;
             Fsm m = f.Fsm;
             if (Game.Msc) return IgnitionLikeMsc(m);
             return m.GetState("Motor starting") != null && m.GetState("State 1") != null && m.GetState("ACC on") != null
@@ -691,7 +696,7 @@ namespace MWCoop
             // l'automate dans « Wait button », qui ecrit GUIinteraction = STARTER a chaque image tant que la souris est dessus ;
             // au repos il doit etre dans « Wait player », qui efface le texte et attend la souris)
             bool rest = cur == "Wait button" || cur == "Wait player";
-            bool already = state == "ACC on" ? acc != null && acc.Value && rest
+            bool already = state == "ACC on" || state == "ACC on 2" ? acc != null && acc.Value && rest
                          : state == "Motor OFF" ? acc != null && !acc.Value && (on == null || !on.Value) && rest
                          : state == "Shut off" ? rest || cur == "Shut off"
                          : cur == state;
@@ -701,7 +706,7 @@ namespace MWCoop
             try
             {
                 Game.SetState(j.F, state);
-                if (state == "ACC on" && j.F.ActiveStateName == "ACC on") Game.SetState(j.F, "Wait player");
+                if ((state == "ACC on" || state == "ACC on 2") && j.F.ActiveStateName == state) Game.SetState(j.F, "Wait player");
                 else if (j.F.ActiveStateName == "Wait button") Game.SetState(j.F, "Wait player");
             }
             finally { applying = false; Replay.Depth--; }
@@ -2030,6 +2035,8 @@ namespace MWCoop
                 case "@trophee": RallyMsc.OnTrophy(who, r); break;   // (MSC : trophee du podium du rallye cree chez le gagnant)
                 case "@capot": PackHoods.OnMessage(who, r); break;   // (capot d'une voiture du pack rallye de JD)
                 case "@fils": WiringMsc.OnMessage(who, r); break;   // (MSC : borne electrique de la SATSUMA branchee)
+                case "@abime": MecaMsc.OnMessage(who, r); break;   // (MSC : piece de la SATSUMA abimee ou reparee -- Database Damaged)
+                case "@abimes": MecaMsc.OnDigest(who, r); break;   // (MSC : controle des Damaged par l'hote, 10 s)
                 case "@pompe": PumpsMsc.OnMessage(who, r); break;   // (MSC : pistolet et afficheurs d'une pompe)
                 case "@tract": TractsMsc.OnMessage(who, r); break;   // (MSC : boite aux lettres servie, tracts de Teimo)
                 case "@fleetmsc": FleetariMsc.OnPurchase(who, r); break;   // (MSC : achat chez Fleetari)
@@ -2063,6 +2070,8 @@ namespace MWCoop
                 case "@vapeur": Sauna.OnRemote(who, r); break;
                 case "@pieces": Parts.OnDigest(who, r); break;   // (controle periodique des pieces de l'hote, 23/10)
                 case "@piecesdemande": Parts.OnDigestAsk(who, r); break;
+                case "@empreinte": Parts.OnPrint(who, r); break;   // (MSC, 27/10 : empreinte des pieces et des vis de l'hote, 2 s)
+                case "@piecesliste": Parts.OnListAsk(who, r); break;   // (MSC : un invite dont l'empreinte differe demande la liste)
                 case "@son": CopySounds.OnMessage(who, r); break;
                 case "@emitk": Particles.OnDefs(who, r); break;
                 case "@sonk": CopySounds.OnDefs(who, r); break;

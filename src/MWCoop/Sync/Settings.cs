@@ -26,7 +26,9 @@ namespace MWCoop
         static readonly string[][] MscTable = {
             new[] { "DatabaseMotor/Carburator", "IdleAdjust" },
             new[] { "DatabaseOrders/Twin Carburators", "IdleAdjust" },
-            new[] { "DatabaseOrders/Racing Carburators", "Adjust1", "Adjust2", "Adjust3", "Adjust4" },
+            // (carbus de course : les 4 vis, puis les valeurs derivees que la chaine ADJUST du jeu recalcule de facon cumulative -- recopiees
+            // telles quelles apres les vis, sans ADJUST (Derived), pour que l'invite ait exactement celles de l'hote ; JD 27/10)
+            new[] { "DatabaseOrders/Racing Carburators", "Adjust1", "Adjust2", "Adjust3", "Adjust4", "AdjustAverage", "AdjustMax", "AdjustMin", "DifferenceMax", "DifferenceMin" },
             new[] { "DatabaseMotor/RockerShaft", "cyl1intake", "cyl1exhaust", "cyl2intake", "cyl2exhaust", "cyl3intake", "cyl3exhaust", "cyl4intake", "cyl4exhaust" },
             new[] { "DatabaseMotor/Distributor", "SparkAngle" },
             new[] { "DatabaseOrders/N2O Bottle", "Setting" },
@@ -35,8 +37,40 @@ namespace MWCoop
             new[] { "DatabaseOrders/Shock Rally RL", "SettingBump", "SettingRebound" },
             new[] { "DatabaseOrders/Shock Rally RR", "SettingBump", "SettingRebound" },
             new[] { "DatabaseOrders/Tachometer", "RPMSetting" },
+            // (passe Satsuma 27/10) calage de la distribution : angle du pignon d'arbre a cames, TIRE AU SORT par le jeu a chaque chargement
+            // tant que le pignon n'est pas monte ('Rand angle') -- different chez chacun, moteur regle chez l'un qui cogne chez l'autre ;
+            // parallelisme : tirage de meme (-6..6 a chaque chargement) puis la vis de la biellette ; rapport de pont (travaux Fleetari).
+            // Rien ne change a chaud pour ces trois-la sans geste du joueur : c'est l'instantane de l'hote (arrivant) qui les aligne.
+            new[] { "DatabaseMotor/CamshaftGear", "Angle" },
+            new[] { "DatabaseBody/SteeringRod_FL", "Alignment" },
+            new[] { "DatabaseBody/SteeringRod_FR", "Alignment" },
+            new[] { "DatabaseMechanics/Gears", "FinalGear" },
         };
 
+        // Arrivant (passe Satsuma 27/10) : l'hote lui envoie toutes les valeurs 20 s apres son entree en jeu (ses automates releves a 12 s).
+        // Avant, rien : les reglages venaient de la sauvegarde recue, sauf ceux que le jeu retire au sort au chargement (voir MscTable).
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
+        public static void ScheduleSnapshot(Peer p) { snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
+        static void SendSnapshots(float now)
+        {
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (now < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value;
+                snapshots.RemoveAt(i);
+                if (!p.Accepted || !Session.T.Peers.Contains(p)) continue;
+                int n = 0;
+                foreach (Watch w in watches)
+                {
+                    if (w.Fsm == null || float.IsNaN(w.Var.Value) || float.IsInfinity(w.Var.Value)) continue;
+                    Session.T.SendReliable(p, new NetWriter(Msg.Setting).U8(Session.LocalId).Str(w.Id).Str(w.Fsm.FsmName).Str(w.Var.Name).F32(w.Var.Value).ToArray());
+                    n++;
+                }
+                Log.Info("reglages : instantane de " + n + " valeurs envoye a " + p);
+            }
+        }
+
+        static bool Derived(string name) { return name == "AdjustAverage" || name == "AdjustMax" || name == "AdjustMin" || name == "DifferenceMax" || name == "DifferenceMin"; }
         static void ScanMsc()
         {
             if (watches.Count > 0) return;   // (objets fixes : un releve suffit)
@@ -51,7 +85,18 @@ namespace MWCoop
                     if (v != null) watches.Add(new Watch { Id = "p:Database/" + row[0], Fsm = f, Var = v, Last = v.Value, Part = f.FsmVariables.FindFsmGameObject("ThisPart") });
                 }
             }
-            Log.Info("reglages (MSC) : " + watches.Count + " suivis");
+            // Valeurs derivees (carbus de course : AdjustAverage, AdjustMax/Min, DifferenceMax/Min -> Mixture.AirRatio) : le jeu ne les
+            // recalcule qu'a un reglage (ADJUST) ; pas sauvees, elles restaient a zero chez l'hote et calculees chez l'invite (qui recoit ADJUST
+            // avec l'instantane) -- JD 27/10 : « chaque variable les memes pour tout le monde ». Recalcul une fois au releve, chez chacun.
+            int adj = 0;
+            var done = new HashSet<PlayMakerFSM>();
+            foreach (Watch w in watches)
+            {
+                if (w.Fsm == null || done.Contains(w.Fsm)) continue;
+                done.Add(w.Fsm);
+                foreach (FsmTransition t in w.Fsm.Fsm.GlobalTransitions) if (t.EventName == "ADJUST") { w.Fsm.SendEvent("ADJUST"); adj++; break; }
+            }
+            Log.Info("reglages (MSC) : " + watches.Count + " suivis" + (adj > 0 ? ", " + adj + " recalcul(s) ADJUST" : ""));
         }
         static readonly List<Watch> watches = new List<Watch>();
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
@@ -64,7 +109,8 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            watches.Clear(); seen.Clear(); noPart.Clear(); player = null;
+            watches.Clear(); seen.Clear(); noPart.Clear(); player = null; snapshots.Clear();
+            if (Config.GetInt("Test", "ReglagesPartout", 0) != 0) anyRange = true;   // (essais : sans la regle des 4 m)
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1;
         }
 
@@ -103,6 +149,7 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = now + 20f; if (Game.Msc) ScanMsc(); else Scan(); }
+            if (snapshots.Count > 0 && Session.IsHost) SendSnapshots(now);
             if (now < nextPoll) return;
             nextPoll = now + 0.5f;
             if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
@@ -124,13 +171,15 @@ namespace MWCoop
             string id = r.Str(), fsm = r.Str(), name = r.Str();
             float value = r.F32();
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Setting).U8(who).Str(id).Str(fsm).Str(name).F32(value), true, who);
+            if (Game.Msc && watches.Count == 0 && PlayerSync.InGame) ScanMsc();   // (recu avant le releve des 12 s : « introuvable ici » a tort, 27/10)
             foreach (Watch w in watches)
             {
                 if (w.Id != id || w.Fsm == null || w.Fsm.FsmName != fsm || w.Var.Name != name) continue;
                 w.Var.Value = value;
                 w.Last = value;
-                foreach (FsmTransition t in w.Fsm.Fsm.GlobalTransitions)
-                    if (t.EventName == "ADJUST") { w.Fsm.SendEvent("ADJUST"); break; }
+                if (!Derived(name))
+                    foreach (FsmTransition t in w.Fsm.Fsm.GlobalTransitions)
+                        if (t.EventName == "ADJUST") { w.Fsm.SendEvent("ADJUST"); break; }
                 // Cremaillere montee (etat Bolted) : ADJUSTMENT borne la valeur et la passe a la voiture, qui tourne la roue (ToeFL/FR).
                 if (name.StartsWith("Tierod")) w.Fsm.SendEvent("ADJUSTMENT");
                 Log.Info("reglage " + id + " " + fsm + "." + name + " = " + value + " (joueur #" + who + ")");

@@ -2332,7 +2332,7 @@ namespace MWCoop
             {
                 c.KeyLooked = true;
                 foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
-                    if (f.FsmName == "Use" && f.Fsm.GetState("Motor starting") != null && f.Fsm.GetState("Shut off") != null) { c.KeyFsm = f; break; }
+                    if ((f.FsmName == "Use" || f.FsmName == "UseNew") && f.Fsm.GetState("Motor starting") != null && f.Fsm.GetState("Shut off") != null) { c.KeyFsm = f; break; }   // ('UseNew' : cle de la SATSUMA, MSC)
             }
             float now = Time.realtimeSinceStartup;
             bool cranking = c.KeyFsm != null && c.KeyFsm.ActiveStateName == "Motor starting";
@@ -2683,9 +2683,11 @@ namespace MWCoop
             if (c.Dt != null) { c.Dt.enabled = true; c.Dt.rpm = hotRpm; }
             PlayMakerFSM key = null;
             foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
-                if (f.FsmName == "Use" && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState("Motor starting") != null) { key = f; break; }
+                if ((f.FsmName == "Use" || f.FsmName == "UseNew") && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState("Motor starting") != null) { key = f; break; }   // ('UseNew' : cle de la SATSUMA, MSC)
             string ks = key != null ? key.ActiveStateName : "?";
             if (key != null && (ks == "Wait1" || ks == "Wait ACC" || ks == "Motor OFF")) Game.SetState(key, "ACC on");
+            // (SATSUMA : au repos en « Wait player » / « Wait button » ; « ACC on » met le contact et se repose dans « Wait player », comme Jobs)
+            else if (key != null && key.FsmName == "UseNew" && (ks == "Wait player" || ks == "Wait button")) { Game.SetState(key, "ACC on"); if (key.ActiveStateName == "ACC on") Game.SetState(key, "Wait player"); }
             // Demarreur sans passage de lui-meme a "Running" au regime (KEKMET : "ACC" n'ecoute que la cle) : mis en marche.
             PlayMakerFSM sf = c.Starter;
             if (sf != null && c.RunState != "Running" && sf.ActiveStateName != c.RunState && sf.Fsm.GetState("Start engine") != null)

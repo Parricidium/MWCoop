@@ -180,7 +180,13 @@ namespace MWCoop
                     // (charge des batteries, 'Data'.Charge : le chargeur du garage la remplit chez celui ou il tourne -- les autres
                     // voyaient la batterie vide ou pleine, retour d'un joueur, 09/10)
                     bool battery = v.Name == "Charge" && f.FsmName == "Data";
-                    if (!Names.Contains(v.Name) && !septic && !battery) continue;
+                    // (My Summer Car, passe Satsuma 27/10 : usure centrale CarSimulation/MechanicalWear::Data -- WearAlternator, WearPiston1..4,
+                    // WearGearbox..., CarbChamberLevel -- comptee par Oil chez celui qui mene ; jamais suivie, ses noms ne sont pas « Wear »)
+                    bool wearSim = Game.Msc && f.FsmName == "Data" && t.name == "MechanicalWear" && (v.Name.StartsWith("Wear") || v.Name == "CarbChamberLevel");
+                    // (et l'usure des pneus de la SATSUMA, wheel_regula::Use.TireHealth -- cle = ID de la roue, wheel_steel1... ; comptee par
+                    // Condition chez celui qui mene, tiree au sort a l'achat)
+                    bool tire = Game.Msc && f.FsmName == "Use" && v.Name == "TireHealth";
+                    if (!Names.Contains(v.Name) && !septic && !battery && !wearSim && !tire) continue;
                     if (septic && f.FsmName == "Waste") gifu = f.transform.root.GetComponent<Rigidbody>();
                     Add(new Watch { Key = owner + ":" + f.FsmName + "." + v.Name, Fsm = f, Var = v, Last = v.Value, Septic = septic });
                 }

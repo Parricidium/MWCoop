@@ -383,11 +383,13 @@ namespace MWCoop
         // physique) : corps libre sur sa charniere, elle battait contre la caisse -- portiere droite cabossee chaque seconde,
         // bruit et secousses chez le passager (Markos, 26/10, video : « The car shakes a lot, and sometimes it even makes a
         // noise »). Figee elle aussi, cinematique, a son angle : celui de qui la manie ailleurs (TargetAngle, tournee autour
-        // de sa charniere), ou le sien si c'est nous. Rendue des qu'on la ferme ou que la voiture redevient locale.
+        // de sa charniere). Pas la notre (Mine : ouverte par le joueur d'ici, passager) -- figee cinematique a l'angle du moment, le
+        // couple du jeu ne l'ouvrirait plus (elle resterait fermee a l'ecran) : elle reste physique comme avant (27/10). Rendue des
+        // qu'on la ferme ou que la voiture redevient locale.
         // [Test] PortiereOuverteLibre=1 : ancien comportement.
         static void HoldOpen(Door d)
         {
-            bool hold = d.RestSet && d.State != DoorState.Closed && !d.Closing && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform)
+            bool hold = d.RestSet && d.State != DoorState.Closed && !d.Closing && !d.Mine && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform)
                         && Config.GetInt("Test", "PortiereOuverteLibre", 0) == 0;
             if (hold != d.HeldOpen)
             {

@@ -73,12 +73,31 @@ namespace MWCoop
                 if (Time.frameCount > relight[i].Value) { if (relight[i].Key != null) relight[i].Key.SetActive(false); relight.RemoveAt(i); }
         }
 
+        // Controle de l'hote (PartsMsc, empreinte 2 s, 27/10) : fil Installed chez l'hote et pas ici -- sa borne (db_ThisPart) est posee en 'Finish assembly'.
+        public static bool ApplyByDb(GameObject dbEntry, int who)
+        {
+            if (bornes.Count == 0) Scan();
+            foreach (KeyValuePair<string, PlayMakerFSM> kv in bornes)
+            {
+                HutongGames.PlayMaker.FsmGameObject tp = kv.Value != null ? kv.Value.FsmVariables.FindFsmGameObject("db_ThisPart") : null;
+                if (tp == null || tp.Value != dbEntry) continue;
+                Apply(kv.Key, kv.Value, who, "controle de l'hote");
+                return true;
+            }
+            Log.Warn("fils : " + dbEntry.name + " branche chez l'hote, borne introuvable ici");
+            return false;
+        }
+
         public static void OnMessage(int who, NetReader r)
         {
             string key = r.Str();
             PlayMakerFSM f;
             if (!bornes.TryGetValue(key, out f) || f == null) { Scan(); bornes.TryGetValue(key, out f); }
             if (f == null) { Log.Warn("fils : " + key + " branche par #" + who + ", borne introuvable ici"); return; }
+            Apply(key, f, who, "");
+        }
+        static void Apply(string key, PlayMakerFSM f, int who, string how)
+        {
             if (f.ActiveStateName == "Finish assembly") { Log.Info("fils : " + key + " branche par #" + who + " : deja fait ici"); return; }
             GameObject go = f.gameObject;
             bool wasOff = !go.activeSelf;
@@ -91,7 +110,7 @@ namespace MWCoop
             catch (System.Exception e) { Log.Warn("fils : " + key + " : " + e.Message); }
             finally { applying = false; Replay.Depth--; }
             if (wasOff) relight.Add(new KeyValuePair<GameObject, int>(go, Time.frameCount + 2));
-            Log.Info("fils : " + key + " branche par #" + who + (wasOff ? " (borne allumee le temps du rejeu)" : ""));
+            Log.Info("fils : " + key + " branche par #" + who + (how.Length > 0 ? " (" + how + ")" : "") + (wasOff ? " (borne allumee le temps du rejeu)" : ""));
         }
     }
 }

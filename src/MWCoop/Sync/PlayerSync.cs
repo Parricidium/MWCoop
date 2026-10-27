@@ -284,6 +284,7 @@ namespace MWCoop
             if (!Session.IsHost || p == null) return 0;
             int k = 0;
             Interactions.ScheduleSnapshot(p); k++;   // portes, interrupteurs, robinets... : booleens des automates suivis (12 s)
+            Settings.ScheduleSnapshot(p); k++;       // reglages des pieces : carbu, allumage, calage, parallelisme... (passe Satsuma 27/10 ; 20 s)
             Fluids.ScheduleSnapshot(p); k++;         // niveaux de tous les liquides (20 s)
             Consume.ScheduleSnapshot(p); k++;        // articles manges, bus, jetes ; contenu des boites (20 s)
             ItemFsms.ScheduleSnapshot(p); k++;       // objets portables : lampes, lanterne, chargeur... (relecture du 15/10, ecart n2 ; 20 s)
