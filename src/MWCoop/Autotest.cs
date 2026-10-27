@@ -2265,6 +2265,40 @@ namespace MWCoop
             Log.Info("autotest : textes '" + word + "' : " + n);
         }
 
+        // [Test] Espion=chemin:automate;chemin:automate (MSC, tout mode) : chaque changement d'etat de ces automates (et de l'objet
+        // allume / eteint) au journal, avec le temps de jeu -- pour suivre un enchainement au chargement.
+        static System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, PlayMakerFSM>> spies;
+        static readonly System.Collections.Generic.Dictionary<PlayMakerFSM, string> spyLast = new System.Collections.Generic.Dictionary<PlayMakerFSM, string>();
+        static float spyFind;
+        static void Spy(float t)
+        {
+            string spec = Config.Get("Test", "Espion", "");
+            if (spec.Length == 0) return;
+            if ((spies == null || spies.Count < spec.Split(';').Length) && Time.realtimeSinceStartup >= spyFind)
+            {
+                spyFind = Time.realtimeSinceStartup + 0.5f;
+                spies = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, PlayMakerFSM>>();
+                foreach (string sp in spec.Split(';'))
+                {
+                    int c = sp.LastIndexOf(':'); if (c <= 0) continue;
+                    GameObject go = Game.FindAny(sp.Substring(0, c));
+                    PlayMakerFSM f = go != null ? Game.FsmOn(go, sp.Substring(c + 1)) : null;
+                    if (f != null) spies.Add(new System.Collections.Generic.KeyValuePair<string, PlayMakerFSM>(sp, f));
+                }
+            }
+            if (spies == null) return;
+            foreach (var kv in spies)
+            {
+                PlayMakerFSM f = kv.Value;
+                if (f == null) continue;
+                string st = (f.gameObject.activeInHierarchy ? "" : "(eteint) ") + (f.enabled ? "" : "(coupe) ") + f.ActiveStateName;
+                string last;
+                if (spyLast.TryGetValue(f, out last) && last == st) continue;
+                spyLast[f] = st;
+                Log.Info("autotest : espion t=" + t.ToString("F2") + " " + kv.Key + " -> " + st);
+            }
+        }
+
         static void DumpFsms(string specs)
         {
             foreach (string spec in specs.Split(specs.Contains(";") ? ';' : ','))   // (« ; » quand un chemin contient une virgule : SATSUMA(557kg, 248))
@@ -2475,6 +2509,9 @@ namespace MWCoop
                     if (!MWCoop.Net.Session.IsHost && t > 55f && step == 1) { step = 2; Props.TestHold(Props.FindKey("wiring mess"), null); Log.Info("autotest : cablage, faisceau lache"); }
                     if (MWCoop.Net.Session.IsHost && t > 35f && t < 75f && t >= holdLog) { holdLog = t + 3f; FsmGameObject wt = FsmVariables.GlobalVariables.FindFsmGameObject("WiringTool"); Log.Info("autotest : cablage, WiringTool ici = " + (wt != null && wt.Value != null ? wt.Value.name : "null")); }
                 }
+                LightsGuard.TestKey(mode, t);
+                Spy(t);
+                if (LightsGuard.KeyReleve) { LightsGuard.KeyReleve = false; MscEtat(); }   // (mscphares : etat de la Satsuma a chaque releve, pour etat-diff.py)
                 MscTest(mode, t); return;
             }
             if (Config.Get("Test", "Triche", "").Length > 0 && t > Config.GetFloat("Test", "TricheA", 30f) && !tricheDone) { tricheDone = true; foreach (string tc in Config.Get("Test", "Triche", "").Split(';')) if (tc.Trim().Length > 0) Log.Info("autotest : triche " + tc.Trim() + " -> " + (Cheats.Command(tc.Trim()) ?? "ok")); if (Config.GetInt("Test", "TricheCapture", 0) != 0) CaptureSoon("triche", 4f); }   // (« ; » : plusieurs a la suite ; TricheCapture=1 : capture 4 s apres)

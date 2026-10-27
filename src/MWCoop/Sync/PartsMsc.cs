@@ -811,9 +811,16 @@ namespace MWCoop
 
         static bool MscHolds(PlayMakerFSM point, GameObject part)
         {
-            if (point.gameObject.activeSelf) return false;   // (declencheur eteint par 'End' : piece montee)
             FsmGameObject p = point.FsmVariables.FindFsmGameObject("Part");
-            return p != null && p.Value == part;
+            if (p == null || p.Value != part || part == null) return false;
+            if (!point.gameObject.activeSelf) return true;   // (declencheur eteint par 'End' : piece montee)
+            // 'End' eteint parfois un GROUPE de declencheurs et pas le declencheur lui-meme (SATSUMA/MiscParts/Triggers Exhaust Pipes :
+            // tuyau d'echappement, silencieux) : la piece y etait toujours « pas montee », des deux cotes, et le controle ne voyait
+            // jamais qu'elle manquait chez l'invite (essai feux 27/10 : echappement demonte chez l'invite arrive pendant que l'hote
+            // etait au volant, jamais remonte, empreinte differente toutes les 4 s). Montee aussi : enfant direct de son pivot ({Parent},
+            // SetParent de 'Assemble 2').
+            FsmGameObject pv = point.FsmVariables.FindFsmGameObject("Parent");
+            return pv != null && pv.Value != null && part.transform.parent == pv.Value.transform;
         }
 
         static void MscOnMessage(Peer from, NetReader r)
