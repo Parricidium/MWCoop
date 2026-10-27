@@ -48,6 +48,7 @@ static void SoftThemeApply()
     if (g_softMode < 0) g_softMode = SoftModeRead();
     g_softDark = g_softMode == 1 || (g_softMode == 2 && (g_newUi ? SoftWindowsDark() : g_dark));   // (captures : le theme demande)
     g_soft = g_softDark ? kSoftDark : kSoftLight;
+    if (g_wnd && g_newUi) WinDwmBorder(g_wnd, g_softDark, RGB(g_soft.bg.GetR(), g_soft.bg.GetG(), g_soft.bg.GetB()));   // (fenetre.inc : lisere de Windows 11 a la couleur du fond, cadre sombre)
     bool msc = g_game == GAME_MSC;
     if (msc) {   // orange ete ; texte sur l'accent toujours fonce
         g_soft.acc = g_softDark ? Color(255, 0xF0, 0xA0, 0x4B) : Color(255, 0xE0, 0x89, 0x2B);
@@ -97,9 +98,10 @@ static int SoftDur(int ms) { return AnimReduced() ? 1 : ms; }
 static RectF g_softAnimR; static bool g_softAnimROk;   // (zone du composant en cours : ses animations n'invalident qu'elle)
 static void SoftAnimAt(RectF r) { g_softAnimR = r; g_softAnimROk = true; }
 static void SoftAnimEnd() { g_softAnimROk = false; }
+static bool SoftAnimatingTake() { bool a = g_softAnimating; g_softAnimating = false; return a; }   // (essai WinAnimTest : comme le Tick)
 // Element anime en continu (apercu 3D qui tourne, etoile RGB, points de chargement) : sa zone est redessinee a la prochaine
 // image, a 60 images/s, tant qu'il est dessine (JD 27/10 : « on dirait que ca capture la rotation toutes les X secondes »).
-static void SoftLive(RectF r) { if (!g_newUi) return; InvalidateSoft(r, 6); g_softAnimating = true; }
+static void SoftLive(RectF r) { if (!g_newUi || g_animTestNoLive) return; InvalidateSoft(r, 6); g_softAnimating = true; }
 static void SoftAnimDirty() { if (g_softAnimROk) InvalidateSoft(g_softAnimR, 30); else InvalidateAll(); }
 static float AnimTo(long long key, float target, int dur = kSoftTUi, int curve = SE_MOVE)
 {
@@ -113,6 +115,7 @@ static float AnimTo(long long key, float target, int dur = kSoftTUi, int curve =
     if (t < 1) { g_softAnimating = true; SoftAnimDirty(); }
     return cur;
 }
+static float SoftAnimPeek(long long key) { auto it = g_softAnims.find(key); if (it == g_softAnims.end()) return -1; DWORD now = GetTickCount(); SoftAnim &a = it->second; float t = a.dur <= 1 ? 1.0f : min(1.0f, (now - a.t0) / (float)a.dur); return a.from + (a.to - a.from) * SoftEase(t, a.curve); }   // (essai : valeur courante sans rien declencher)
 static float AnimGet(long long key, float def) { auto it = g_softAnims.find(key); if (it == g_softAnims.end()) return def; return AnimTo(key, it->second.to); }
 static long long AK(int kind, int id) { return ((long long)kind << 32) | (unsigned)id; }   // (cle : famille, id)
 enum { AKH_HOVER = 1, AKH_PRESS, AKH_TOGGLE, AKH_SEG, AKH_TAB, AKH_PAGE, AKH_THEME, AKH_TOAST, AKH_MISC };
@@ -471,6 +474,7 @@ static float SoftModalFrame(Graphics &g, bool open, int key)
 // ---- notifications (en bas a droite de la carte, 2,6 s, sans voler le focus) ; le texte reste aussi dans la barre d'etat
 struct SoftToast { std::wstring text; int kind; DWORD t0; int id; };
 static std::vector<SoftToast> g_softToasts; static int g_softToastN;
+static void SoftToastsClear() { g_softToasts.clear(); }
 static void SoftNotify(const std::wstring &text, int kind = SC_OK)
 {
     g_softToasts.push_back({ text, kind, GetTickCount(), ++g_softToastN });

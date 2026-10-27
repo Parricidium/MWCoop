@@ -131,6 +131,22 @@ static void WinDwm(HWND h)   // coins arrondis (Win11), ombre (DWM actif) ; rien
     }
     FreeLibrary(dwm);
 }
+// Liseré de Windows 11 (DWMWA_BORDER_COLOR) a la couleur du fond du theme, et cadre en mode sombre quand le theme l'est
+// (JD 27/10 : « le launcher a un contour blanc ») ; reapplique a chaque changement de theme (soft.inc SoftThemeApply).
+static void WinDwmBorder(HWND h, bool dark, COLORREF bg)
+{
+    static bool lastDark; static COLORREF lastBg = 0xFFFFFFFF; static HWND lastH;
+    if (!h || IsWine() || (h == lastH && dark == lastDark && bg == lastBg)) return;
+    lastH = h; lastDark = dark; lastBg = bg;
+    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    if (!dwm) return;
+    typedef HRESULT(WINAPI * SetF)(HWND, DWORD, LPCVOID, DWORD);
+    if (SetF sa = (SetF)GetProcAddress(dwm, "DwmSetWindowAttribute")) {
+        BOOL d = dark ? TRUE : FALSE; sa(h, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &d, sizeof(d));
+        COLORREF c = bg; sa(h, 34 /* DWMWA_BORDER_COLOR (Win11) */, &c, sizeof(c));
+    }
+    FreeLibrary(dwm);
+}
 // ---- taille et place
 static RECT WinWorkArea(HWND h)
 {
@@ -300,7 +316,7 @@ static void ProfilMark(int i, LARGE_INTEGER &prev) { if (!g_profilOn) return; LA
 static void PresentNew()
 {
     if (!g_wnd || !g_memDC) return;
-    if (!g_dirtyAll && IsRectEmpty(&g_dirtyPx)) return;
+    if (!g_dirtyAll && IsRectEmpty(&g_dirtyPx) && !SoftTransitionActive()) return;   // (une transition en cours avance a chaque appel, meme sans zone sale)
     LARGE_INTEGER pm; QueryPerformanceCounter(&pm);
     int cw = g_winW, ch = g_winH;   // (L2 : l'image = la fenetre entiere, coque comprise -- coque.inc RenderToNew)
     if (!g_cardBmp || (int)g_cardBmp->GetWidth() != cw || (int)g_cardBmp->GetHeight() != ch) { delete g_cardBmp; g_cardBmp = new Bitmap(cw, ch, PixelFormat32bppPARGB); g_dirtyAll = true; }
@@ -313,14 +329,15 @@ static void PresentNew()
             g.DrawImage(g_cardBmp, 0, 0, cw, ch);
             GdiFlush();
         }
-        if (SoftTransitionFrame()) { g_dirtyAll = false; SetRectEmpty(&g_dirtyPx); return; }
-        g_dirtyAll = true;
+        if (SoftTransitionFrame() && SoftTransitionActive()) { g_dirtyAll = false; SetRectEmpty(&g_dirtyPx); return; }
+        g_dirtyAll = true;   // (premiere image de la transition, ou sa fin : l'image entiere, tout de suite -- JD 27/10 : la coque en cache restait a l'ecran, indicateur de la barre fige a mi-chemin)
     }
     RECT full = { 0, 0, cw, ch };
     RECT r = g_dirtyAll ? full : g_dirtyPx;
     IntersectRect(&r, &r, &full);
     if (IsRectEmpty(&r)) { g_dirtyAll = false; SetRectEmpty(&g_dirtyPx); return; }
     bool partial = !g_dirtyAll;   // (rectangle sale seulement : survol, appui, curseur -- le reste de l'image est deja la)
+    g_dirtyAll = false; SetRectEmpty(&g_dirtyPx);   // (vide AVANT le rendu : ce que les composants invalident pendant le dessin -- animation qui continue, curseur, bulle -- vaut pour la prochaine image ; vide apres, c'etait perdu : indicateur de la barre fige a mi-chemin, JD 27/10)
     RenderToNew(*g_cardBmp, partial ? &r : NULL);
     QueryPerformanceCounter(&pm);
     ProfilMark(4, pm);
@@ -340,7 +357,6 @@ static void PresentNew()
     ReleaseDC(g_wnd, dc);
     ProfilMark(6, pm);
     SoftTransitionCaptureNew();   // (soft.inc : la nouvelle image de la transition, gardee)
-    g_dirtyAll = false; SetRectEmpty(&g_dirtyPx);
 }
 // Filet de securite : drapeau pose avant la premiere image, efface 5 s apres (Tick).
 static void UiNewFlagStart() { if (g_newUi) { WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", L"1", g_iniLauncher.c_str()); g_uiFlagT = GetTickCount() + 5000; } }
@@ -454,6 +470,66 @@ static void DrawUiChoice(Graphics &g)
 // ---- essai cache : /testfenetre <journal> -- la nouvelle fenetre jamais montree : disposition a plusieurs tailles, taille
 // minimale, zones du cadre (WM_NCHITTEST), plein ecran, memoire de la taille, une image rendue (temps).
 static bool g_winTest;
+static bool UiClick(int id); static int SoftNavIndex(int tab); static void SoftPressNote(int id); static void SoftToastsClear(); static void SoftThemeCircle(PointF from); static void SoftModeSet(int mode); static bool SoftAnimatingTake();
+// Preuve de la correction des animations (JD 27/10, indicateur de la barre fige a mi-chemin) : on simule un clic (ligne de la
+// barre, onglet de Reglages, segment du theme, interrupteur), on laisse tourner images et transitions comme le Tick le ferait
+// (une image tant qu'une zone est sale, qu'une animation ou une transition est en cours), puis l'image AFFICHEE doit etre
+// identique au pixel pres a un rendu complet de l'etat final. Sinon : ECHEC, avec la zone qui differe.
+static int g_animTestFails; static bool g_animTestNoLive, g_animTestTrace; static float SoftAnimPeek(long long key); static long long AK(int kind, int id);   // (pendant l'essai : les zones vivantes -- etoile RGB -- n'invalident pas, sinon rien ne se stabilise)
+static bool EncoderClsid(const wchar_t *fmt, CLSID *out);   // (launcher.cpp)
+static void WinAnimCheck(const char *what)
+{
+    int n = 0;
+    for (; n < 240; n++) {
+        bool anim = SoftAnimatingTake();
+        bool need = g_dirtyAll || !IsRectEmpty(&g_dirtyPx) || SoftTransitionActive() || anim;
+        if (!need) break;
+        if (SoftTransitionActive()) InvalidateAll();   // (comme le Tick)
+        if (g_animTestTrace && n < 40) LaunchLog("testanim :   image %d : entiere %d, sale (%ld,%ld)-(%ld,%ld), transition %d, anim %d, indicateur %.1f", n, (int)g_dirtyAll, g_dirtyPx.left, g_dirtyPx.top, g_dirtyPx.right, g_dirtyPx.bottom, (int)SoftTransitionActive(), (int)anim, SoftAnimPeek(AK(5 /* AKH_TAB */, 2)));
+        PresentNew();
+        Sleep(16);
+    }
+    std::vector<BYTE> shown((const BYTE *)g_bits, (const BYTE *)g_bits + (size_t)g_winW * g_winH * 4);
+    SoftAnimatingTake();
+    InvalidateAll(); PresentNew();
+    const BYTE *full = (const BYTE *)g_bits;
+    size_t bad = 0; int x0 = g_winW, y0 = g_winH, x1 = -1, y1 = -1;
+    for (int y = 0; y < g_winH; y++) for (int x = 0; x < g_winW; x++) {
+        size_t i = ((size_t)y * g_winW + x) * 4;
+        if (abs((int)shown[i] - full[i]) > 2 || abs((int)shown[i + 1] - full[i + 1]) > 2 || abs((int)shown[i + 2] - full[i + 2]) > 2) { bad++; /* (tolerance 2 par canal : bruit d'anti-crenelage d'un rendu partiel, invisible) */ if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (bad > 4) {   // (jusqu'a 4 pixels : un pixel de bord de clip anti-crenele, invisible)
+        g_animTestFails++; LaunchLog("testanim : %s : %d images, ECHEC : %zu pixels differents dans (%d,%d)-(%d,%d)", what, n, bad, x0, y0, x1, y1);
+        if (g_animTestFails <= 2 && !g_launcherLog.empty()) {   // (les deux images du premier echec, a cote du journal)
+            CLSID png; if (EncoderClsid(L"image/png", &png)) {
+                Bitmap a((INT)g_winW, (INT)g_winH, g_winW * 4, PixelFormat32bppPARGB, shown.data()); a.Save((g_launcherLog + L".anim" + std::to_wstring(g_animTestFails) + L"-affiche.png").c_str(), &png, NULL);
+                Bitmap c((INT)g_winW, (INT)g_winH, g_winW * 4, PixelFormat32bppPARGB, (BYTE *)g_bits); c.Save((g_launcherLog + L".anim" + std::to_wstring(g_animTestFails) + L"-complet.png").c_str(), &png, NULL);
+            }
+        }
+    }
+    else LaunchLog("testanim : %s : %d images, OK (image affichee == rendu complet%s)", what, n, bad ? ", a un pixel de bord pres" : "");
+}
+static void WinAnimTest()
+{
+    g_animTestFails = 0; g_animTestNoLive = true; SoftToastsClear();
+    InvalidateAll(); PresentNew();
+    for (int t = 0; t < TAB_COUNT; t++) {   // la barre de gauche : chaque ligne (l'indicateur glisse, la page change)
+        if (SoftNavIndex(t) < 0 || t == g_tab || t == TAB_ADDONS || t == TAB_ALBUM) continue;   // (Album : vignettes chargees en arriere-plan, image jamais stable)
+        SoftPressNote(UI_NAV + t); UiClick(UI_NAV + t); InvalidateAll();
+        char what[64]; sprintf_s(what, "barre, page %d", t); g_animTestTrace = false; WinAnimCheck(what); g_animTestTrace = false;
+    }
+    UiClick(UI_NAV + TAB_COOP); InvalidateAll(); WinAnimCheck("barre, Reglages");
+    for (int t = 0; t < 8; t++) { SoftPressNote(2900 + t); UiClick(2900 + t); InvalidateAll(); char what[64]; sprintf_s(what, "Reglages, onglet %d", t); WinAnimCheck(what); }   // (gfx.inc UI_SET_TAB)
+    UiClick(2900 + 7); InvalidateAll(); WinAnimCheck("Reglages, onglet Lanceur");
+    for (int k = 0; k < 3; k++) { SoftPressNote(UI_SET_THEMENOUV + k); UiClick(UI_SET_THEMENOUV + k); InvalidateAll(); char what[64]; sprintf_s(what, "segment du theme %d", k); WinAnimCheck(what); }
+    SoftPressNote(UI_SET_FENMEM); UiClick(UI_SET_FENMEM); InvalidateAll(); WinAnimCheck("interrupteur memoire de la fenetre (1)");
+    SoftPressNote(UI_SET_FENMEM); UiClick(UI_SET_FENMEM); InvalidateAll(); WinAnimCheck("interrupteur memoire de la fenetre (2)");
+    SoftThemeCircle(PointF(1150, 44)); SoftModeSet(g_dark ? 0 : 1); InvalidateAll(); WinAnimCheck("cercle du theme");
+    SoftThemeCircle(PointF(1150, 44)); SoftModeSet(g_dark ? 0 : 1); InvalidateAll(); WinAnimCheck("cercle du theme (retour)");
+    UiClick(UI_NAV + TAB_HOME); InvalidateAll(); WinAnimCheck("barre, retour Accueil");
+    g_animTestNoLive = false;
+    LaunchLog("testanim : fin, %d echec(s)", g_animTestFails);
+}
 static void WinSelfTest()
 {
     auto ht = [&](int x, int y) {   // (pixels de la fenetre -> code HT)
@@ -513,5 +589,6 @@ static void WinSelfTest()
     LaunchLog("testfenetre : image complete a chaud, Reglages : %.1f ms (page %.1f, coque %.1f)", (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart, g_profilMs[0], g_profilMs[1]);
     g_tab = TAB_HOME; g_profilOn = false;
     SoftSelfTest();   // (soft.inc : courbes, animations, transitions, cache des ombres)
+    WinAnimTest();    // (chaque animation : l'image affichee a la fin == un rendu complet, au pixel pres)
     LaunchLog("testfenetre : NouvelleEnCours=%d avant l'effacement (filet), fin", GetPrivateProfileIntW(L"Lanceur", L"NouvelleEnCours", 0, g_iniLauncher.c_str()));
 }
