@@ -375,6 +375,7 @@ static std::string Narrow(const std::wstring &w, UINT cp = CP_ACP)
     return s;
 }
 static bool ShellOpen(const std::wstring &target);   // (ouverture d'une adresse ou d'un dossier, avec replis -- defini avant WndProc)
+static int g_shellTest, g_shellTestCalls, g_shellOpenDepth, g_shellOpenDepthMax;   // (essais : bouchon de ShellExecute et code rendu, appels, profondeur de ShellOpen -- fenetre.inc)
 static bool FileExists(const std::wstring &p) { DWORD a = GetFileAttributesW(p.c_str()); return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY); }
 static std::wstring DirOf(const std::wstring &p) { size_t k = p.find_last_of(L"\\/"); return k == std::wstring::npos ? L"" : p.substr(0, k + 1); }
 static bool ReadAll(const std::wstring &p, std::vector<unsigned char> &out)
@@ -7041,18 +7042,34 @@ static void TypeChar(wchar_t ch)
 // Ouvre une adresse https, un fichier ou un dossier avec le programme associe, avec deux replis (JD 27/10, Zen Browser en
 // navigateur par defaut : « quand je clique ici rien ne se passe ») : explorer.exe "<cible>", puis, pour une adresse, le
 // navigateur par defaut lu dans les associations (AssocQueryString https). Le resultat est journalise ; false si rien n'a marche.
+// Ouverture d'une adresse ou d'un dossier, avec replis (JD 27/10, Zen Browser : ShellExecute « open », sinon explorer.exe, sinon
+// le navigateur par defaut des associations https). JAMAIS reentrante : le 27/10 au soir une version se rappelait elle-meme
+// (debordement de pile 0xC00000FD, le lanceur se fermait sur « Ouvrir la page »). Essais (fenetre.inc) : g_shellTest remplace
+// ShellExecute par un bouchon qui fait perdre puis reprendre le focus a la fenetre et rend le code demande (31 : echec, 33 : ok).
+static INT_PTR ShellExec(const wchar_t *verb, const wchar_t *file, const wchar_t *args)
+{
+    if (g_shellTest) {
+        g_shellTestCalls++;
+        SendMessageW(g_wnd, WM_NCACTIVATE, FALSE, 0); SendMessageW(g_wnd, WM_ACTIVATE, WA_INACTIVE, 0);
+        SendMessageW(g_wnd, WM_NCACTIVATE, TRUE, 0); SendMessageW(g_wnd, WM_ACTIVATE, WA_ACTIVE, 0);
+        return g_shellTest;
+    }
+    return (INT_PTR)ShellExecuteW(g_wnd, verb, file, args, NULL, SW_SHOWNORMAL);
+}
 static bool ShellOpen(const std::wstring &target)
 {
-    INT_PTR r1 = (INT_PTR)ShellOpen(target.c_str());
+    if (g_shellOpenDepth) { LaunchLog("ouvrir : appel reentrant ignore (%s)", Narrow(target, CP_UTF8).c_str()); return false; }
+    struct Depth { Depth() { g_shellOpenDepth++; if (g_shellOpenDepth > g_shellOpenDepthMax) g_shellOpenDepthMax = g_shellOpenDepth; } ~Depth() { g_shellOpenDepth--; } } depth;
+    INT_PTR r1 = ShellExec(L"open", target.c_str(), NULL);
     if (r1 > 32) return true;
     wchar_t win[MAX_PATH] = L""; GetWindowsDirectoryW(win, MAX_PATH);
     std::wstring q = L"\"" + target + L"\"";
-    INT_PTR r2 = (INT_PTR)ShellExecuteW(g_wnd, NULL, (std::wstring(win) + L"\\explorer.exe").c_str(), q.c_str(), NULL, SW_SHOWNORMAL);
+    INT_PTR r2 = ShellExec(NULL, (std::wstring(win) + L"\\explorer.exe").c_str(), q.c_str());
     if (r2 > 32) { LaunchLog("ouvrir : %s par explorer.exe (ShellExecute : %d)", Narrow(target, CP_UTF8).c_str(), (int)r1); return true; }
     INT_PTR r3 = 0;
     if (!_wcsnicmp(target.c_str(), L"http", 4)) {
         wchar_t exe[MAX_PATH] = L""; DWORD n = MAX_PATH;
-        if (SUCCEEDED(AssocQueryStringW((ASSOCF)0, ASSOCSTR_EXECUTABLE, L"https", L"open", exe, &n)) && exe[0]) r3 = (INT_PTR)ShellExecuteW(g_wnd, NULL, exe, target.c_str(), NULL, SW_SHOWNORMAL);
+        if (SUCCEEDED(AssocQueryStringW((ASSOCF)0, ASSOCSTR_EXECUTABLE, L"https", L"open", exe, &n)) && exe[0]) r3 = ShellExec(NULL, exe, target.c_str());
         if (r3 > 32) { LaunchLog("ouvrir : %s par le navigateur par defaut %s (ShellExecute : %d, explorer.exe : %d)", Narrow(target, CP_UTF8).c_str(), Narrow(exe, CP_UTF8).c_str(), (int)r1, (int)r2); return true; }
     }
     LaunchLog("ouvrir : ECHEC %s (ShellExecute : %d, explorer.exe : %d, navigateur : %d)", Narrow(target, CP_UTF8).c_str(), (int)r1, (int)r2, (int)r3);

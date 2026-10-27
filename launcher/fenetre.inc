@@ -555,6 +555,29 @@ static void WinAnimTest()
         LaunchLog("testanim : fond : WM_ERASEBKGND -> %d (1 attendu), pinceau de classe %s, copies completes du cache a l'activation : %d", (int)er, brush ? "nul (ok)" : "PRESENT (erreur)", g_blitAllN);
         LaunchLog("testanim : messages non client (NCACTIVATE, NCPAINT, ACTIVATE) : %d traites ici sans DefWindowProc, retours %d/%d/%d : %s", g_ncHandled - before, (int)r1, (int)r2, (int)r3, ok ? "OK" : "ECHEC");
     }
+    {   // ShellOpen (JD 27/10 soir : « Ouvrir la page » fermait le lanceur -- ShellOpen se rappelait elle-meme, debordement de pile) :
+        // bouchon a la place de ShellExecute, qui fait perdre et reprendre le focus a chaque appel ; les 3 replis en echec, puis un succes ;
+        // la fonction ne doit jamais se rappeler (profondeur 1) et l'image doit etre entiere apres.
+        g_shellTest = 31; g_shellTestCalls = 0; g_shellOpenDepthMax = 0;
+        bool r1 = ShellOpen(L"https://exemple.invalide/essai-lanceur");
+        WinAnimCheck("ShellOpen, 3 replis en echec, focus perdu a chaque appel");
+        g_shellTest = 33; bool r2 = ShellOpen(L"https://exemple.invalide/essai-lanceur");
+        WinAnimCheck("ShellOpen, succes, focus perdu");
+        g_shellTest = 0;
+        bool ok = !r1 && r2 && g_shellTestCalls == 4 && g_shellOpenDepthMax == 1;
+        if (!ok) g_animTestFails++;
+        LaunchLog("testanim : ShellOpen : echec puis succes %d/%d, %d appels (4 attendus), profondeur maximale %d (1 attendue) : %s", (int)!r1, (int)r2, g_shellTestCalls, g_shellOpenDepthMax, ok ? "OK" : "ECHEC");
+    }
+    {   // perte de focus reelle : une seconde fenetre cachee de ce fil prend l'activation (jamais affichee), puis la rend
+        HWND other = CreateWindowExW(0, L"STATIC", L"essai-focus", WS_OVERLAPPED, 0, 0, 16, 16, NULL, NULL, GetModuleHandleW(NULL), NULL);
+        int before = g_ncHandled, blits = g_blitAllN;
+        SetActiveWindow(other); WinAnimCheck("fenetre desactivee (autre fenetre active)");
+        SetActiveWindow(g_wnd); WinAnimCheck("fenetre reactivee (retour de l'autre fenetre)");
+        if (other) DestroyWindow(other);
+        bool ok = other && g_ncHandled - before >= 2 && GetActiveWindow() == g_wnd;
+        if (!ok) g_animTestFails++;
+        LaunchLog("testanim : perte de focus reelle (SetActiveWindow) : %d messages d'activation recus (2 au moins), %d copies du cache, fenetre active au retour : %s : %s", g_ncHandled - before, g_blitAllN - blits, GetActiveWindow() == g_wnd ? "oui" : "NON", ok ? "OK" : "ECHEC");
+    }
     // Parcours automatique : sur chaque page, chaque zone cliquable enregistree qui ne change qu'un etat d'affichage (onglets,
     // groupes de la barre, segments, pastilles et interrupteurs des Reglages, onglets des Credits et des medias, taille du texte).
     // Laissees de cote : les actions (jeu, navigateur, reseau, fichiers, suppressions, relance) et les listes.
