@@ -660,6 +660,13 @@ namespace MWCoop
 
         static bool Runs(Phone p) { return p.Go != null && p.Go.activeInHierarchy && p.Ring != null && p.Ring.enabled; }
 
+        // Combine decroche chez l'hote (cadran de cette ligne actif) : le jeu eteint la logique des appels entrants pendant son
+        // appel. Ce n'est pas une logique qui ne tourne plus : un invite pres du telephone la faisait tourner chez lui pendant
+        // tout l'appel de l'hote, et un appel entrant (Simo, farces) arrivait chez lui seul -- fil « Issue with phone » de
+        // Donskoy, 26/10 : « le magazine Simo appelle tout seul, chez un des joueurs ». (lignes : appartement, parents, dans
+        // le meme ordre que LogicPaths)
+        static bool InUse(int i) { return i < lines.Length && lines[i] != null && lines[i].F != null && lines[i].F.gameObject.activeInHierarchy; }
+
         static float NearestGuest(Vector3 pos, out string name)
         {
             float best = float.MaxValue;
@@ -697,11 +704,11 @@ namespace MWCoop
                         if (p.Jokes != null) p.Jokes.enabled = true;
                         Log.Info("appels : logique du telephone " + p.Name + " arretee chez l'hote alors que son objet est allume : rallumee");
                     }
-                    bool runs = Runs(p);
+                    bool runs = Runs(p) || InUse(i);
                     if (runs != p.LastRuns)
                     {
                         p.LastRuns = runs;
-                        Log.Info("appels : logique du telephone " + p.Name + (runs ? " tourne de nouveau" : " ne tourne plus (objet " + (p.Go.activeInHierarchy ? "allume" : "eteint") + ")") + " chez l'hote");
+                        Log.Info("appels : logique du telephone " + p.Name + (runs ? (Runs(p) ? " tourne de nouveau" : " eteinte par le jeu, combine decroche (elle reste a l'hote)") : " ne tourne plus (objet " + (p.Go.activeInHierarchy ? "allume" : "eteint") + ")") + " chez l'hote");
                     }
                     if (!runs && Session.RemoteCount > 0 && now >= p.WarnAt)
                     {
@@ -718,7 +725,7 @@ namespace MWCoop
                     var w = new NetWriter(Msg.Call).U8(Session.LocalId).U8(K_Phone);
                     int n = 0; foreach (Phone p in phones) if (p != null) n++;
                     w.U8(n);
-                    for (int i = 0; i < phones.Length; i++) if (phones[i] != null) w.U8(i).Bool(Runs(phones[i])).Str(phones[i].Ring != null ? phones[i].Ring.ActiveStateName ?? "" : "");
+                    for (int i = 0; i < phones.Length; i++) if (phones[i] != null) w.U8(i).Bool(Runs(phones[i]) || InUse(i)).Str(phones[i].Ring != null ? phones[i].Ring.ActiveStateName ?? "" : "");
                     Session.SendAll(w, true);
                 }
                 return;
@@ -824,6 +831,11 @@ namespace MWCoop
             if (p == null || p.Ring == null) { if (farStep == 0 && t > 28f) { farStep = 9; Log.Info("autotest : appel-loin, telephone " + line + " absent"); } return; }
             GameObject logic = p.Go.transform.parent != null ? p.Go.transform.parent.gameObject : p.Go;
             if (Session.IsHost && farStep == 0 && t > 30f) { farStep = 1; p.Ring.enabled = false; Log.Info("autotest : appel-loin, l'hote arrete son automate 'Ring'"); }
+            // ([Test] AppelLoinCombine=1 : de 34 a 50 s le cadran de l'hote est actif, comme un combine decroche -- la logique eteinte
+            // a 36 s doit rester a l'hote jusqu'a 50 s, puis passer a l'invite)
+            bool handset = Config.GetInt("Test", "AppelLoinCombine", 0) != 0 && line < lines.Length && lines[line] != null && lines[line].F != null;
+            if (Session.IsHost && handset && t > 34f && t < 50f && !lines[line].F.gameObject.activeSelf) { lines[line].F.gameObject.SetActive(true); Log.Info("autotest : appel-loin, combine de l'hote decroche"); }
+            if (Session.IsHost && handset && t > 50f && lines[line].F.gameObject.activeSelf && farStep < 3) { lines[line].F.gameObject.SetActive(false); Log.Info("autotest : appel-loin, combine de l'hote raccroche"); }
             if (Session.IsHost && farStep == 1 && t > 36f) { farStep = 2; logic.SetActive(false); Log.Info("autotest : appel-loin, l'hote eteint " + Recon.Path(logic.transform)); }
             if (!Session.IsHost && farStep == 0 && t > 44f)
             {
