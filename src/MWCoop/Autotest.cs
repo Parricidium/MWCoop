@@ -3195,6 +3195,31 @@ namespace MWCoop
             // [Test] Autotest=kupla : a 30 s puis 60 s, l'etat de Kupla (eteint : la preuve qu'aucun module ni rappel ne tourne -- la ligne perf
             // ne doit pas non plus contenir « kupla ») ; au volant de [Test] TestVoiture a 20 s si TestVoiture est donnee (retroviseurs).
                 if (mode == "kuplamesure") KuplaMeasure(t);
+            // [Test] Autotest=kupladispers (Kupla P2, mesure du cout chez l'hote) : chaque joueur va a [Test] KuplaLieu (lieu des triches) a
+            // 30 s et y reste ; la ligne perf de l'hote (JournalPerf) dit ce que coutent des joueurs disperses. Vide : reste ou il est.
+            if (mode == "kupladispers" && t > 30f && step == 0)
+            {
+                step = 1; string lieu = Config.Get("Test", "KuplaLieu", "");
+                Cheats.Place kp = lieu.Length > 0 ? Cheats.FindPlace(lieu) : null;
+                if (kp != null) Cheats.GoPlace(kp);
+                Log.Info("autotest : kupladispers : " + (kp != null ? "a " + kp.Fr : lieu.Length > 0 ? "lieu inconnu " + lieu : "reste sur place") + " ; " + Kupla.Describe());
+            }
+            if (mode == "kupladispers" && t > 30f && t >= kdLogAt)
+            {   // (toutes les 30 s : ce qui est actif -- automates par racine, rendus, corps eveilles -- pour voir ce qui coute avec des joueurs disperses)
+                kdLogAt = t + 30f;
+                var byRoot = new System.Collections.Generic.Dictionary<string, int>(); int nf = 0;
+                foreach (Object o in Game.AllFsms())
+                {
+                    var f = o as PlayMakerFSM; if (f == null || !f.enabled || !f.gameObject.activeInHierarchy) continue;
+                    nf++; string rn = Game.RootName(f.transform); int c; byRoot.TryGetValue(rn, out c); byRoot[rn] = c + 1;
+                }
+                var ks = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, int>>(byRoot); ks.Sort((x, y) => y.Value.CompareTo(x.Value));
+                int nr = 0; foreach (Renderer r in Object.FindObjectsOfType<Renderer>()) if (r.enabled) nr++;
+                int nb = 0, na = 0; foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>()) { nb++; if (!rb.isKinematic && !rb.IsSleeping()) na++; }
+                var sb = new System.Text.StringBuilder("autotest : kupladispers, actifs : automates " + nf + ", rendus " + nr + ", corps eveilles " + na + " / " + nb + " ; racines :");
+                for (int i = 0; i < ks.Count && i < 14; i++) sb.Append(' ').Append(ks[i].Key).Append(' ').Append(ks[i].Value);
+                Log.Info(sb.ToString());
+            }
             if (mode == "kupla")
             {
                 string car = Config.Get("Test", "TestVoiture", "");
@@ -4988,6 +5013,7 @@ namespace MWCoop
         // maison,ville,port,voiture : lieux des triches, /lieu ; « voiture » = retour a la maison puis au volant de [Test]
         // TestVoiture). Chaque lieu : 40 s, dont 12 s de mise en place puis 28 s de mesure (moyenne, pire image, images/s).
         // Meme partie, memes [Graphismes], KuplaRendu=0 puis 1 : la difference est l'effet de Kupla.
+        static float kdLogAt;
         static string[] kmPlaces; static int kmIndex = -1, kmTries; static float kmStart, kmSum, kmWorst, kmTryAt; static int kmFrames;
         static void KuplaMeasure(float t)
         {
