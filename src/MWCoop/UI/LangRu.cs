@@ -961,6 +961,9 @@ namespace MWCoop
             { "Set", "Задать" },
             { "Allowed for you only (host only) · announced to everyone", "Разрешены только тебе (только хост) · объявляются всем" },
             { "For the host only.", "Только для хоста." },
+            { "fps", "к/с" },
+            { "level ", "уровень " },
+            { "off", "выкл." },
         };
     }
 }
