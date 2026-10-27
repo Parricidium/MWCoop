@@ -523,6 +523,7 @@ static void WikiOpenHost();   // (launcher.cpp : article du guide Heberger une p
 static void HudPreview(Graphics &g, RectF box, int style, bool big);   // (onglet HUD : apercu, plus bas)
 static void LogsZip();
 static void BugReport();   // (Signaler un bug : en-tete, article Journaux du Guide)
+static bool BugPanelPossible();   // (signalement.inc : la ligne « dans le navigateur » n'a de sens qu'avec le panneau)
 static float GfxMaxScroll() { return max(0.0f, g_setContentH - kSetArea.Height); }
 
 enum { SI_GFX, SI_OPT, SI_SEC, SI_BREAK, SI_X };   // reglage du jeu (cle de GfxRows), option du lanceur (cle de g_opts), section, 2e sous-colonne, special (cle = nom)
@@ -688,6 +689,7 @@ static const SetItem kSetItems[] = {
     { 20, SI_X, "compat", L"Retirer les modes de compatibilité", L"Remove compatibility modes", L"Windows en ajoute après un plantage : MWCoop ne se charge plus", L"Windows adds some after a crash: MWCoop stops loading" },
     { 20, SI_X, "debug", L"Mode débogage", L"Debug mode", L"Journaux détaillés pour le zip", L"Detailed logs for the zip" },
     { 20, SI_X, "discordask", L"Proposer le Discord", L"Offer the Discord", L"L'invitation après la visite guidée", L"The invitation after the guided tour" },
+    { 20, SI_X, "signalnav", L"Signaler un bug dans le navigateur", L"Report bugs in the browser", L"Plutôt que dans le panneau du lanceur · le zip des journaux va sur le Bureau", L"Rather than in the launcher's panel · the logs zip goes to the Desktop" },
     { 20, SI_X, "repair", L"Réparer MWCoop", L"Repair MWCoop", L"Réécrit la copie de lancement et le chargeur", L"Rewrites the launch copy and the loader" },
     // (ex-boutons de l'en-tete, maquette du 17/10 : la page API des moddeurs, le depot GitHub)
     { 20, SI_X, "api", L"API pour les moddeurs", L"API for modders", L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example" },
@@ -872,6 +874,7 @@ static bool SetItemOn(const SetItem &it)
     if (it.only == 3) return !kRtShown;
     if (!kRtShown && (IsRtKey(it.key) || it.card == kRtCard)) return false;   // (carte Ray tracing entiere, son pied compris)
     if (it.key && !strcmp(it.key, "TrichesHote") && GfxGet("Triches") <= 0) return false;   // (sous-reglage : seulement triches autorisees)
+    if (it.key && !strcmp(it.key, "signalnav") && !BugPanelPossible()) return false;   // (sans le panneau -- Win7, Wine, moteur absent -- c'est deja le navigateur)
     return it.kind != SI_GFX || SetGfxIdx(it.key) >= 0;
 }
 static bool SetDrawn(RectF r) { return r.Y + r.Height > g_setTop && r.Y < g_setBottom; }
@@ -1574,6 +1577,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
         else if (!strcmp(k, "compat")) { SetToggleRow(g, it, row, CompatAuto(), UI_SET_COMPAT); g_setCompatRow = row; }
         else if (!strcmp(k, "debug")) SetToggleRow(g, it, row, g_debug, UI_LOG_DEBUG);
         else if (!strcmp(k, "discordask")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"DiscordPropose", 0, g_iniLauncher.c_str()) == 0, UI_SET_DISCORDASK);
+        else if (!strcmp(k, "signalnav")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"SignalerNavigateur", 0, g_iniLauncher.c_str()) != 0, UI_SET_SIGNALNAV);   // (signalement.inc)
         else if (!strcmp(k, "repair")) SetButtonRow(g, it, row, T(L"Réparer", L"Repair"), UI_SET_REPAIR, false, !g_gameDir.empty() && g_lobby == LB_NONE && !g_busy);
         else if (!strcmp(k, "api")) { SetButtonRow(g, it, row, T(L"Ouvrir", L"Open"), UI_SET_API); g_setApiRow = row; }
         else if (!strcmp(k, "github")) SetButtonRow(g, it, row, L"GitHub", UI_SET_GITHUB);
@@ -1950,6 +1954,7 @@ static void SetTabDefaults(int tab)
             else if (!strcmp(k, "nightly")) WritePrivateProfileStringW(L"Lanceur", L"Nightly", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "sessions")) WritePrivateProfileStringW(L"Lanceur", L"Sessions", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "discordask")) WritePrivateProfileStringW(L"Lanceur", L"DiscordPropose", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "signalnav")) WritePrivateProfileStringW(L"Lanceur", L"SignalerNavigateur", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "compat")) WritePrivateProfileStringW(L"Lanceur", L"RetirerCompat", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "debug")) { g_debug = false; WritePrivateProfileStringW(L"Lanceur", L"Debug", NULL, g_iniLauncher.c_str()); }
             else if (!strcmp(k, "start")) WritePrivateProfileStringW(L"Lanceur", L"SansCopie", NULL, g_iniLauncher.c_str());

@@ -2142,3 +2142,16 @@ Co-op bubbles (Kupla, beta)	Кооп-пузыри (Kupla, бета)
 The world stays alive around every player	Мир остаётся живым вокруг каждого игрока
 Add-ons: Cars and Mods	Дополнения: машины и моды
 Add-ons now opens on two cards: Cars, the add-on cars as before, and Mods, the modules of the co-op mod. The first one: Kupla, the co-op optimization (beta).	«Дополнения» теперь открываются двумя карточками: «Машины» — машины-дополнения, как раньше, и «Моды» — модули кооп-мода. Первый из них: Kupla, оптимизация кооператива (бета).
+The form could not open inside the launcher (error 0x%08lX): \"Open in the browser\", at the top.	Форма не открылась внутри лаунчера (ошибка 0x%08lX): «Открыть в браузере», вверху.
+Report panel unavailable: open the form in the browser	Панель сообщений недоступна: открой форму в браузере
+Report a bug: the site's form, right here · \"Create the logs zip\" at the top, then drag the zip into it	Сообщить об ошибке: форма сайта прямо здесь · «Создать zip журналов» вверху, потом перетащи zip в форму
+Logs zip created (%d files): drag it into the form	Zip журналов создан (%d файлов): перетащи его в форму
+Create the logs zip	Создать zip журналов
+Open in the browser	Открыть в браузере
+The bug report site's form shows here.	Здесь показывается форма сайта сообщений об ошибках.
+Loading the form…	Загрузка формы…
+Form opened in the browser	Форма открыта в браузере
+The site's form, inside the launcher · your logs in one click	Форма сайта внутри лаунчера · твои журналы в один клик
+Report bugs in the browser	Сообщать об ошибках в браузере
+Rather than in the launcher's panel · the logs zip goes to the Desktop	Вместо панели лаунчера · zip журналов попадает на рабочий стол
+The bug icon at the top right, next to the Logs: the site's form opens inside the launcher (otherwise in your browser). \"Create the logs zip\", then drag the zip into the form.	Значок жука вверху справа, рядом с Журналами: форма сайта открывается внутри лаунчера (иначе в браузере). «Создать zip журналов», потом перетащи zip в форму.

@@ -585,11 +585,14 @@ static const WikiBlock kW_Logs[] = {
     { WB_H, L"Envoyer un bon rapport", L"Send a good report" },
     { WB_S, L"MWCoop ne se charge pas ? Active d'abord le mode débogage (page Journaux : l'icône page en haut à droite, ou Réglages > Lanceur > Dépannage).", L"MWCoop doesn't load? Turn on debug mode first (Logs page: the page icon at the top right, or Settings > Launcher > Troubleshooting)." },
     { WB_S, L"Lance la partie où le problème arrive, puis ferme le jeu.", L"Start the game where the problem happens, then close it." },
-    { WB_S, L"Signaler un bug (l'insecte en haut à droite, à côté des Journaux) : le formulaire du site s'ouvre et le zip des journaux arrive sur ton Bureau. Glisse-le dans le formulaire, avec ce que tu faisais.",
-            L"Report a bug (the bug icon at the top right, next to the Logs): the report form opens and the logs zip lands on your Desktop. Drag it into the form, with what you were doing." },
+    { WB_S, L"Signaler un bug (l'insecte en haut à droite, à côté des Journaux) : le formulaire du site s'ouvre dans le lanceur (Windows 10 et plus). Bouton « Créer le zip des journaux » en haut du panneau : le zip arrive sur ton Bureau, glisse-le dans le formulaire avec ce que tu faisais.",
+            L"Report a bug (the bug icon at the top right, next to the Logs): the site's form opens inside the launcher (Windows 10 and later). \"Create the logs zip\" button at the top of the panel: the zip lands on your Desktop, drag it into the form with what you were doing." },
+    { WB_S, L"Sous Windows 7, sous Linux ou sans le moteur WebView2 : le formulaire s'ouvre dans ton navigateur et le zip arrive directement sur le Bureau. Réglages > Lanceur > Dépannage : « Signaler un bug dans le navigateur » pour qui préfère.",
+            L"On Windows 7, on Linux or without the WebView2 engine: the form opens in your browser and the zip lands straight on the Desktop. Settings > Launcher > Troubleshooting: \"Report bugs in the browser\" for those who prefer it." },
     { WB_S, L"Ou bien : « Créer un zip à envoyer » (page Journaux), puis sur le Discord (#bug-reports) ou sur GitHub.", L"Or: \"Create a zip to send\" (Logs page), then on the Discord (#bug-reports) or on GitHub." },
     { WB_TIP, L"Même sans journal du jeu, le zip contient le journal du lanceur : envoie-le quand même.", L"Even with no game log, the zip has the launcher's log: send it anyway." },
     { WB_TIP, L"Le zip tient sous 15 Mo, la limite du site : les très gros journaux y sont coupés au milieu.", L"The zip stays under 15 MB, the site's limit: very big logs are cut in the middle." },
+    { WB_TIP, L"Le panneau n'affiche que le site de signalement et la connexion Discord (le cadenas et le domaine restent visibles en haut) ; tout autre lien s'ouvre dans ton navigateur.", L"The panel only shows the report site and the Discord sign-in (the padlock and the domain stay visible at the top); any other link opens in your browser." },
     { WB_GO, L"Signaler un bug", L"Report a bug", 3000 },   // (bouton Signaler un bug de l'en-tete : wiki.inc WikiClick)
     { WB_GO, L"Ouvrir les Journaux", L"Open Logs", TAB_LOGS },
 };

@@ -2285,6 +2285,22 @@ Add-ons opens on two cards: Cars (this page) and Mods. Mods come with the co-op 
 Kupla (beta): the co-op optimization, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only (view distance, shadows, mirrors); off, nothing changes.	Kupla (تجريبي): تحسين اللعب الجماعي، على My Winter Car وMy Summer Car. خانة \"العرض (لي)\" تخفف العرض عندك فقط (مسافة العرض، الظلال، المرايا)؛ عند إيقافها لا شيء يتغير.
 Co-op bubbles: the host decides, in the Lobby options; their guests follow.	فقاعات اللعب الجماعي: المضيف يقرر، في خيارات الردهة؛ ويتبعه ضيوفه.
 Both settings count when the game starts, never during play.	يُعتمد الإعدادان عند بدء اللعبة، لا أثناء اللعب أبدًا.
+The form could not open inside the launcher (error 0x%08lX): \"Open in the browser\", at the top.	تعذّر فتح النموذج داخل المشغّل (خطأ 0x%08lX): \"فتح في المتصفح\"، في الأعلى.
+Report panel unavailable: open the form in the browser	لوحة الإبلاغ غير متاحة: افتح النموذج في المتصفح
+Report a bug: the site's form, right here · \"Create the logs zip\" at the top, then drag the zip into it	الإبلاغ عن خطأ: نموذج الموقع هنا مباشرة · \"إنشاء zip السجلات\" في الأعلى، ثم اسحب الملف إلى النموذج
+Logs zip created (%d files): drag it into the form	تم إنشاء zip السجلات (%d ملفًا): اسحبه إلى النموذج
+Create the logs zip	إنشاء zip السجلات
+Open in the browser	فتح في المتصفح
+The bug report site's form shows here.	يظهر هنا نموذج موقع الإبلاغ عن الأخطاء.
+Loading the form…	جارٍ تحميل النموذج…
+Form opened in the browser	فُتح النموذج في المتصفح
+The site's form, inside the launcher · your logs in one click	نموذج الموقع داخل المشغّل · سجلاتك بنقرة واحدة
+Report bugs in the browser	الإبلاغ عن الأخطاء في المتصفح
+Rather than in the launcher's panel · the logs zip goes to the Desktop	بدلًا من لوحة المشغّل · يذهب zip السجلات إلى سطح المكتب
+The bug icon at the top right, next to the Logs: the site's form opens inside the launcher (otherwise in your browser). \"Create the logs zip\", then drag the zip into the form.	أيقونة الحشرة في أعلى اليمين، بجانب السجلات: يفتح نموذج الموقع داخل المشغّل (وإلا في متصفحك). \"إنشاء zip السجلات\"، ثم اسحب الملف إلى النموذج.
+Report a bug (the bug icon at the top right, next to the Logs): the site's form opens inside the launcher (Windows 10 and later). \"Create the logs zip\" button at the top of the panel: the zip lands on your Desktop, drag it into the form with what you were doing.	الإبلاغ عن خطأ (أيقونة الحشرة في أعلى اليمين، بجانب السجلات): يفتح نموذج الموقع داخل المشغّل (Windows 10 فما فوق). زر \"إنشاء zip السجلات\" أعلى اللوحة: يصل الملف إلى سطح المكتب، اسحبه إلى النموذج مع ما كنت تفعله.
+On Windows 7, on Linux or without the WebView2 engine: the form opens in your browser and the zip lands straight on the Desktop. Settings > Launcher > Troubleshooting: \"Report bugs in the browser\" for those who prefer it.	على Windows 7 أو Linux أو بدون محرك WebView2: يفتح النموذج في متصفحك ويصل الملف مباشرة إلى سطح المكتب. الإعدادات > المشغّل > استكشاف الأخطاء: \"الإبلاغ عن الأخطاء في المتصفح\" لمن يفضّل ذلك.
+The panel only shows the report site and the Discord sign-in (the padlock and the domain stay visible at the top); any other link opens in your browser.	لا تعرض اللوحة سوى موقع الإبلاغ وتسجيل الدخول عبر Discord (يبقى القفل والنطاق ظاهرين في الأعلى)؛ وأي رابط آخر يُفتح في متصفحك.
 Host's game: 	لعبة المضيف: 
 New save, or restart one	حفظ جديد، أو إعادة بدء حفظ
 Main game	اللعبة الرئيسية

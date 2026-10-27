@@ -1,0 +1,17 @@
+SIG01	The form could not open inside the launcher (error 0x%08lX): \"Open in the browser\", at the top.
+SIG02	Report panel unavailable: open the form in the browser
+SIG03	Report a bug: the site's form, right here · \"Create the logs zip\" at the top, then drag the zip into it
+SIG04	No logs yet: start the game with MWCoop first
+SIG05	Logs zip created (%d files): drag it into the form
+SIG06	Create the logs zip
+SIG07	Open in the browser
+SIG08	The bug report site's form shows here.
+SIG09	Loading the form…
+SIG10	Form opened in the browser
+SIG11	The site's form, inside the launcher · your logs in one click
+SIG12	Report bugs in the browser
+SIG13	Rather than in the launcher's panel · the logs zip goes to the Desktop
+SIG14	The bug icon at the top right, next to the Logs: the site's form opens inside the launcher (otherwise in your browser). \"Create the logs zip\", then drag the zip into the form.
+SIG15	Report a bug (the bug icon at the top right, next to the Logs): the site's form opens inside the launcher (Windows 10 and later). \"Create the logs zip\" button at the top of the panel: the zip lands on your Desktop, drag it into the form with what you were doing.
+SIG16	On Windows 7, on Linux or without the WebView2 engine: the form opens in your browser and the zip lands straight on the Desktop. Settings > Launcher > Troubleshooting: \"Report bugs in the browser\" for those who prefer it.
+SIG17	The panel only shows the report site and the Discord sign-in (the padlock and the domain stay visible at the top); any other link opens in your browser.

@@ -334,7 +334,7 @@ static bool AddonsOn(); static void AddonsGo(); static void AddonsLeave();   // 
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE || NavHidden(p)) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM || p == TAB_TOOLS;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM || p == TAB_TOOLS || p == TAB_BUG;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -716,6 +716,7 @@ static void DrawHeader(Graphics &g)
     case TAB_VHS: case TAB_ALBUM:
         if (g_game == GAME_MSC) { title = T(L"Album", L"Album"); sub = T(L"Les photos prises au drone.", L"The photos taken with the drone."); break; }   // (pas de VHS sur MSC)
         title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
+    case TAB_BUG: title = T(L"Signaler un bug", L"Report a bug"); sub = T(L"Le formulaire du site, dans le lanceur · tes journaux en un clic", L"The site's form, inside the launcher · your logs in one click"); break;   // (signalement.inc)
     case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Tes parties MWCoop, à part de la sauvegarde solo du jeu. L'hôte choisit laquelle lancer ; les invités la reçoivent.", L"Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it."); break;
     }
     // commandes de droite : fermer, reduire, theme, langue | API moddeurs, Journaux, Credits (retour de JD, 18/10 : comme
@@ -1599,6 +1600,7 @@ static void DrawUI(Graphics &g)
     case TAB_VHS: DrawVhs(g); break;
     case TAB_ALBUM: DrawAlbum(g); break;
     case TAB_SAVES: DrawSaves(g); break;
+    case TAB_BUG: DrawBugPage(g); break;   // (signalement.inc : la bande ; le site, dans sa popup par-dessus)
     default: DrawHome(g); break;
     }
     DrawHeader(g);
@@ -1690,6 +1692,12 @@ static bool UiClick(int id)
     case UI_ADDONS_MODS: g_kuplaNewSession = false; return true;   // (les modules sont deja dessous ; NEW lu)
     case UI_ADDONS_HOME: g_addonsPage = 0; g_addonSel = -1; return true;
     case UI_KUPLA_RENDU: KuplaRenduToggle(); return true;
+    case UI_BUG_ZIP: case UI_BUG_BROWSER: case UI_BUG_CLOSE: return BugClick(id);   // (signalement.inc : la bande du panneau)
+    case UI_SET_SIGNALNAV: {   // (Reglages > Lanceur > Depannage : Signaler un bug dans le navigateur)
+        bool on = GetPrivateProfileIntW(L"Lanceur", L"SignalerNavigateur", 0, g_iniLauncher.c_str()) != 0;
+        WritePrivateProfileStringW(L"Lanceur", L"SignalerNavigateur", on ? NULL : L"1", g_iniLauncher.c_str());
+        return true;
+    }
     case UI_ADDON_DIR: AddonsOpenDir(); return true;
     case UI_ADDON_UNINST: AddonUninstall(); return true;
     case UI_ADDON_UPD: if (const Addon *a = AddonCur()) AddonDownload(a->key); return true;

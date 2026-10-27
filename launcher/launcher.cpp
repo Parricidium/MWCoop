@@ -1968,7 +1968,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_ADDONS, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab)
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
@@ -4910,6 +4910,7 @@ static std::wstring FitText(const std::wstring &s, float px, int style, float ma
 #include "es2.inc"   // (lecture et reecriture des sauvegardes du jeu : Verifier la sauvegarde)
 #include "places.inc"   // (outil des places reserve : ID MWCoop, cle d'acces signee par JD, cles retirees)
 #include "outils-places.inc"   // (page Outils : bandeau Placement des sieges, [Addons et Tools])
+#include "signalement.inc"   // (Signaler un bug : le site de signalement dans le lanceur, moteur WebView2 ; sinon BugReport)
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -6794,6 +6795,7 @@ static void ZipToDesktop(const std::vector<std::wstring> &files, const std::wstr
 // un zip) sur le Bureau, montre dans l'explorateur pour le glisser dans le formulaire.
 static void BugReport()
 {
+    if (g_state == ST_IDLE && BugPanelWanted()) { LaunchLog("signaler un bug : panneau integre"); BugOpen(); return; }   // (partie en cours : le navigateur, la page du serveur reste)   // (27/10 : Windows 10+, pas Wine, moteur WebView2 present, pas de reglage « dans le navigateur »)
     std::wstring url = std::wstring(kBugSiteUrl) + L"?lang=" + LangCode();
     ShellExecuteW(g_wnd, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
     std::vector<std::wstring> files = ZipFiles();
@@ -6870,6 +6872,7 @@ static void Tick()
     LobbySoundsTick();
     SteamTick();
     MscTick();
+    BugPanelSync(); BugTestTick();   // (signalement.inc : la popup du site suit la fenetre, ou se cache)
     if (g_debug && (g_state == ST_LAUNCH || g_state == ST_RUNNING) && g_launchT) {   // (DLL du jeu a 5 et 15 s ; 30 s : RunTick)
         static DWORD doneFor, step;
         if (doneFor != g_launchT) { doneFor = g_launchT; step = 0; }
@@ -6967,6 +6970,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     switch (m) {
     case WM_TIMER:
         if (wp == 77) { KillTimer(h, 77); TestLog("test : fin (hote garde ouvert)"); DestroyWindow(h); return 0; }
+        if (wp == 79) { KillTimer(h, 79); LaunchLog("testsignal : delai depasse (etat %d)", g_bugState); g_bugTestDone = 1; g_bugTestEndT = 0; return 0; }   // (essai /testsignal panneau)
         if (wp == 78) {   // essai /lancer : le vrai Launch() une fois la recherche de mise a jour finie
             if (g_busy) return 0;
             KillTimer(h, 78);
@@ -7207,8 +7211,10 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
+    case WM_WINDOWPOSCHANGED: BugPanelSync(); break;   // (signalement.inc : la popup du site suit la fenetre)
     case WM_CLOSE: LobbyClose(); g_state = ST_CLOSING; return 0;
     case WM_DESTROY:
+        BugPanelClose();
         LobbyClose();
         SteamDown();
         PostQuitMessage(0);
@@ -7876,6 +7882,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow, kZipSiteMax, Narrow(kBugSiteUrl, CP_UTF8).c_str(), Narrow(LangCode()).c_str());
         return 0;
     }
+    // Essai : /testsignal <journal> <mode> -- Signaler un bug dans le lanceur (signalement.inc) : win7 / wine / absent (la
+    // decision seulement : navigateur), panneau (le vrai moteur WebView2 sur une fenetre jamais montree : page chargee, puis
+    // une navigation hors liste, refusee ; fin au bout de 30 s au plus). Jamais de navigateur ni de fenetre pendant l'essai.
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/testsignal")) {
+        g_launcherLog = argv[2];
+        std::wstring mode = argv[3];
+        if (mode == L"win7") SetEnvironmentVariableW(L"MWCOOP_WIN7", L"1");
+        else if (mode == L"wine") { g_wine = "9.0"; g_wineSim = true; }
+        else if (mode == L"absent") SetEnvironmentVariableW(L"MWCOOP_SANS_WEBVIEW", L"1");
+        if (mode != L"panneau") { LaunchLog("testsignal : mode %s -> %s", Narrow(mode, CP_UTF8).c_str(), BugPanelWanted() ? "PANNEAU" : "navigateur"); return 0; }
+        g_bugTest = true;
+    }
     // Essai : /testimport <dossier de jeu factice> <journal> <msc|mwc> <archive>... -- Importer une sauvegarde : chaque archive
     // dans une partie-N du jeu factice (refus : mauvais jeu, pas de sauvegarde, format illisible), puis la verification.
     if (argc >= 5 && !_wcsicmp(argv[1], L"/testimport")) {
@@ -8134,6 +8152,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 }
         else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"survol-bug" || st == L"journaux-survol-bug") { if (st[0] == L'j') g_tab = TAB_LOGS; g_btn[B_BUG].hover = 1.0f; }   // (en-tete : etiquette du bouton Signaler un bug)
+        else if (st == L"signaler" || st == L"signaler-survol-zip" || st == L"signaler-echec") {   // (signalement.inc : la bande et un faux panneau, jamais de fenetre)
+            g_tab = TAB_BUG; g_bugCapture = true; g_bugPossible = 1;
+            if (st == L"signaler-survol-zip") g_uiHot = UI_BUG_ZIP;
+            if (st == L"signaler-echec") BugFail(E_FAIL, "capture");
+        }
         else if (st == L"rail-defile") { UpdSet(L"1.15.2"); EnterCriticalSection(&g_cs); g_updLanc = L"1.15.1"; LeaveCriticalSection(&g_cs); g_tab = TAB_NOTES; g_notesDone = true; }   // (barre de gauche qui defile : les deux mises a jour proposees, Nouveautes -- en bas -- choisie, donc ramenee dans la vue)
         else if (st == L"steam-refus") SetStatus(K_ERR, L"%s", SteamInitWhy().c_str());   // (raison d'un refus de Steam, telle que ce PC la verrait)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
@@ -8425,7 +8448,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     bool cmdLine = argc >= 2 && argv[1][0] == L'/';
     std::string cmdName = cmdLine ? Narrow(argv[1], CP_UTF8) : "";
     LocalFree(argv);
-    if (cmdLine && g_testSalon.empty() && g_autoLaunch < 0) {
+    if (cmdLine && g_testSalon.empty() && g_autoLaunch < 0 && !g_bugTest) {   // (/testsignal panneau continue aussi : signalement.inc)
         LaunchLog("commande %s inconnue de ce lanceur : rien n'est fait", cmdName.c_str());
         GdiplusShutdown(gtok); WSACleanup();
         return 2;
@@ -8518,6 +8541,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     RtHiddenMigrate();   // (ray tracing cache : coupe dans les mwcoop.ini des deux jeux, une fois)
     Present();
+    if (g_bugTest) {   // (essai /testsignal panneau : fenetre jamais montree, le moteur WebView2 seul ; rien d'autre ne demarre)
+        SetTimer(g_wnd, 1, 16, NULL);
+        SetTimer(g_wnd, 79, 30000, NULL);
+        BugOpen();
+    } else {
     if (g_autoLaunch < 0) ShowWindow(g_wnd, SW_SHOW);   // (essai /lancer : fenetre jamais montree)
     else SetTimer(g_wnd, 78, 1500, NULL);
     SetTimer(g_wnd, 1, 16, NULL);
@@ -8531,6 +8559,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     }
     TenuesStart();   // (tenues offertes : une fois, a part des mises a jour)
     CompatCleanAll("demarrage");
+    }
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }

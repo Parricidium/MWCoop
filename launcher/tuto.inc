@@ -132,8 +132,8 @@ static const TutoStep kTuto[] = {
     { L"Placement des sièges", L"Ta clé d'accès ouvre l'outil des places : exporte d'abord tes voitures depuis une partie où elles sont montées, puis ouvre l'outil. Bouton Exporter de l'outil : le zip à envoyer à JD.",
       L"Seat placement", L"Your access key opens the seat tool: first export your cars from a save where they are assembled, then open the tool. The tool's Export button: the zip to send to JD.", "1.15.14" },
     // lanceur-1.15.16 (26/10) : Signaler un bug, a cote des Journaux (58)
-    { L"Signaler un bug", L"L'insecte en haut à droite, à côté des Journaux : il ouvre le formulaire du site de signalement et met le zip des journaux sur le Bureau. Glisse-le dans le formulaire, juste après le problème.",
-      L"Report a bug", L"The bug icon at the top right, next to the Logs: it opens the bug report form and puts the logs zip on the Desktop. Drag it into the form, right after the problem.", "1.15.16" },
+    { L"Signaler un bug", L"L'insecte en haut à droite, à côté des Journaux : le formulaire du site s'ouvre dans le lanceur (sinon dans ton navigateur). « Créer le zip des journaux », puis glisse le zip dans le formulaire.",
+      L"Report a bug", L"The bug icon at the top right, next to the Logs: the site's form opens inside the launcher (otherwise in your browser). \"Create the logs zip\", then drag the zip into the form.", "1.15.16" },
     // lanceur-1.15.17 (27/10) : Importer une sauvegarde, en-tete des Sauvegardes (59)
     { L"Importer une sauvegarde", L"Une sauvegarde téléchargée ou reçue (.zip, .rar, .7z) : elle devient une partie de ta liste, vérifiée tout de suite. Utiliser pour héberger, et tes invités la reçoivent.",
       L"Import a save", L"A save downloaded or received (.zip, .rar, .7z): it becomes a game in your list, checked right away. Use for hosting, and your guests receive it.", "1.15.17" },
