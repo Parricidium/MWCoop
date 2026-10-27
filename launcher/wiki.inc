@@ -8,8 +8,8 @@ enum { WB_H, WB_P, WB_B, WB_S, WB_TIP, WB_WARN, WB_FIG, WB_GO };
 // Jeu (demande de JD, 19/10 : sur My Summer Car, le guide ne parle que de MSC) : 0 = les deux jeux, WG_MWC = seulement My Winter
 // Car, WG_MSC = seulement My Summer Car. Sur un article (WARTG), une touche (kWikiKeys) ou un bloc ; un WB_H marque emporte
 // toute sa section (jusqu'au WB_H suivant). Un texte adapte = le bloc WG_MWC d'origine suivi de sa version WG_MSC.
-enum { WG_ALL, WG_MWC, WG_MSC };
-static bool WikiGame(int game) { return game == WG_ALL || game == (g_game == GAME_MSC ? WG_MSC : WG_MWC); }
+enum { WG_ALL, WG_MWC, WG_MSC, WG_KUPLA };   // (WG_KUPLA : les deux jeux, seulement quand Kupla se montre -- KuplaShown, launcher.cpp)
+static bool WikiGame(int game) { return game == WG_ALL || (game == WG_KUPLA ? KuplaShown() : game == (g_game == GAME_MSC ? WG_MSC : WG_MWC)); }
 struct WikiBlock { int kind; const wchar_t *fr, *en; int arg; int game; };   // arg : figure (WB_FIG), page (WB_GO) ; game : WG_*
 struct WikiArticle { int cat; const wchar_t *tFr, *tEn, *sFr, *sEn; const WikiBlock *b; int n; int game; };
 struct WikiCat { int icon; const wchar_t *fr, *en; };

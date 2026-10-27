@@ -2263,6 +2263,28 @@ Not in My Summer Car	غير موجود في My Summer Car
 Something wrong? Report a bug (the bug icon at the top right): the form and the logs zip.	هل هناك خطأ؟ الإبلاغ عن خلل (أيقونة الحشرة أعلى اليمين): النموذج وملف zip للسجلات.
 Since 1.14: the OSUUSKAUPPA s21 shop and its video corner (camcorder, VCR, TV, editing), the Museum of Corsica, sleeping bags, helmets and the KARTTURI 2000 on MSC's stages, in the same place as in MWC (Peräjärvi).	منذ 1.14: متجر OSUUSKAUPPA s21 وركن الفيديو (كاميرا الفيديو، جهاز الفيديو، التلفاز، المونتاج)، متحف كورسيكا، أكياس النوم، الخوذ وKARTTURI 2000 على مراحل MSC، في المكان نفسه كما في MWC (بيرايارفي).
 The KINO TÄHTI cinema too, in the same place as in MWC: by the road, east of the MAATALOUS silos.	وسينما KINO TÄHTI أيضاً، في المكان نفسه كما في MWC: بجانب الطريق، شرق صوامع MAATALOUS.
+Kupla: lighter rendering from the next game	Kupla: عرض أخف بدءًا من اللعبة القادمة
+Kupla: normal rendering from the next game	Kupla: عرض عادي بدءًا من اللعبة القادمة
+Extension cars, and the modules shipped with the co-op mod.	سيارات إضافية، والوحدات المرفقة مع مود اللعب الجماعي.
+Cars	السيارات
+The add-on cars and the VAZ-2108 (%d): download, update, liveries.	السيارات الإضافية وVAZ-2108 (%d): تنزيل، تحديث، طلاءات.
+Modules of the co-op mod	وحدات مود اللعب الجماعي
+MODULES OF THE CO-OP MOD	وحدات مود اللعب الجماعي
+Co-op optimization · MWC and MSC	تحسين اللعب الجماعي · MWC وMSC
+Lightens the game: view distance, shadows, mirrors. Off, the game stays exactly as before. Applied when the game starts.	يخفف اللعبة: مسافة العرض، الظلال، المرايا. عند إيقافه تبقى اللعبة تمامًا كما كانت. يُطبَّق عند بدء اللعبة.
+Rendering (for me)	العرض (لي)
+More frames per second on your side; nothing changes for the others.	إطارات أكثر في الثانية عندك؛ لا شيء يتغير عند الآخرين.
+Co-op bubbles: set by the host in the Lobby	فقاعات اللعب الجماعي: يضبطها المضيف في الردهة
+Co-op bubbles (Kupla)	فقاعات اللعب الجماعي (Kupla)
+Co-op bubbles (Kupla, beta)	فقاعات اللعب الجماعي (Kupla، تجريبي)
+The world stays alive around every player	يبقى العالم حيًا حول كل لاعب
+Add-ons: Cars and Mods	الإضافات: السيارات والتعديلات
+Add-ons now opens on two cards: Cars, the add-on cars as before, and Mods, the modules of the co-op mod. The first one: Kupla, the co-op optimization (beta).	تفتح الإضافات الآن على بطاقتين: السيارات، أي السيارات الإضافية كما من قبل، والتعديلات، أي وحدات مود اللعب الجماعي. أولها: Kupla، تحسين اللعب الجماعي (تجريبي).
+Mods: the modules of the co-op mod	التعديلات: وحدات مود اللعب الجماعي
+Add-ons opens on two cards: Cars (this page) and Mods. Mods come with the co-op mod itself, like the VAZ: nothing to download.	تفتح الإضافات على بطاقتين: السيارات (هذه الصفحة) والتعديلات. تأتي التعديلات مع مود اللعب الجماعي نفسه، مثل VAZ: لا شيء للتنزيل.
+Kupla (beta): the co-op optimization, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only (view distance, shadows, mirrors); off, nothing changes.	Kupla (تجريبي): تحسين اللعب الجماعي، على My Winter Car وMy Summer Car. خانة \"العرض (لي)\" تخفف العرض عندك فقط (مسافة العرض، الظلال، المرايا)؛ عند إيقافها لا شيء يتغير.
+Co-op bubbles: the host decides, in the Lobby options; their guests follow.	فقاعات اللعب الجماعي: المضيف يقرر، في خيارات الردهة؛ ويتبعه ضيوفه.
+Both settings count when the game starts, never during play.	يُعتمد الإعدادان عند بدء اللعبة، لا أثناء اللعب أبدًا.
 Host's game: 	لعبة المضيف: 
 New save, or restart one	حفظ جديد، أو إعادة بدء حفظ
 Main game	اللعبة الرئيسية

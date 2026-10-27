@@ -464,6 +464,7 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
         if (n > 0) { std::wstring s = std::to_wstring(n); float w = PillW(s, 10.5f); Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), TH(cardSel), s, kInk, 10.5f); }
     } else if (page == TAB_ADDONS && en && !on) {   // (voitures du catalogue : NEW pas encore vue, UPDATE pour une installee)
         bool nw, up; AddonsBadges(nw, up);
+        nw = nw || KuplaNew();   // (Kupla pas encore vu : modules.inc)
         if (up) { const wchar_t *s = L"UPDATE"; float w = PillW(s, 9) - 6; Pill(g, RectF(rx - w, r.Y + (r.Height - 18) / 2, w, 18), kWarn, s, Color(255, 255, 255, 255), 9); rx -= w + 4; }   // (etroites : les deux a cote du nom)
         if (nw) { const wchar_t *s = L"NEW"; float w = PillW(s, 9) - 6; Pill(g, RectF(rx - w, r.Y + (r.Height - 18) / 2, w, 18), kAcc, s, kOnAcc, 9); }
     } else if (page == TAB_NOTES && NotesUnseen() && !on) {
@@ -1685,6 +1686,10 @@ static bool UiClick(int id)
     case UI_CAR_EVOUSE: if (const Addon *a = AddonCur()) AddonLiveryUse(*a, !AddonLiveryOn(*a)); return true;
     case UI_CAR_EVODEL: AddonRemove(); return true;
     case UI_ADDON_BACK: g_addonSel = -1; return true;
+    case UI_ADDONS_CARS: g_addonsPage = 1; g_addonSel = -1; g_scroll[TAB_CAR] = 0; return true;   // (modules.inc : accueil -> les voitures)
+    case UI_ADDONS_MODS: g_kuplaNewSession = false; return true;   // (les modules sont deja dessous ; NEW lu)
+    case UI_ADDONS_HOME: g_addonsPage = 0; g_addonSel = -1; return true;
+    case UI_KUPLA_RENDU: KuplaRenduToggle(); return true;
     case UI_ADDON_DIR: AddonsOpenDir(); return true;
     case UI_ADDON_UNINST: AddonUninstall(); return true;
     case UI_ADDON_UPD: if (const Addon *a = AddonCur()) AddonDownload(a->key); return true;

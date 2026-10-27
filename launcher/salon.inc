@@ -181,9 +181,10 @@ static const LobbyOptDef kLobbyOptDefs[] = {
     { "VocalActivation", 0, false }, { "VocalSeuil", 12, false }, { "Ronflements", 1, false }, { "Armoire", 1, false, 1 },
     { "VoirVisages", 1, false }, { "CarteMaintenir", 0, false }, { "Marqueurs", 1, false }, { "ModsAuto", 0, false },
     { "TrichesHote", 0, true },   // (26/10 : a la fin, les indices des autres ne bougent pas ; montree sous Triches)
+    { "KuplaBulles", 0, true },   // (27/10, Kupla P2 de [Addons et Tools] : cachee tant que kKuplaBullesShown est faux -- LobbyOptOn)
 };
 static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));
-static bool LobbyOptOn(const LobbyOptDef &d) { return d.only != (g_game == GAME_MSC ? 1 : 2); }
+static bool LobbyOptOn(const LobbyOptDef &d) { return d.only != (g_game == GAME_MSC ? 1 : 2) && (strcmp(d.key, "KuplaBulles") || KuplaBullesShown()); }
 static std::map<std::string, int> g_lobbyOpt;       // mes choix pour CE salon (hote : options de la partie et les miennes ; invite : les miennes)
 static std::map<std::string, int> g_hostOpt;        // invite : options de la partie recues de l'hote (sous g_lcs)
 static int g_lobbyOptTab = -1;                      // carte des options du salon : 0 la partie (de l'hote), 1 les miennes ; -1 : selon le role

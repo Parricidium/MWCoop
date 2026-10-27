@@ -710,7 +710,7 @@ static bool PersoPageMouseDown(float x, float y)
     if (t < 0) return false;
     if (t < HT_TAB + 4) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
         int k = t - HT_TAB;
-        if (k == 2 || k == 3) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); g_addonsTab = k == 3; if (k == 3) { g_addonSel = -1; g_addonScanT = 0; } }
+        if (k == 2 || k == 3) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); g_addonsTab = k == 3; if (k == 3) { g_addonSel = -1; g_addonScanT = 0; g_addonsPage = 0; } }
         else { g_tab = TAB_SKIN; g_persoTab = k; g_skinIdleT = GetTickCount(); for (auto &p : g_tilePage) p = -1; }
         g_skinRowHot = -1; g_carHot = -1;
         return true;

@@ -229,6 +229,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "Triches", L"Autoriser les triches (hôte)", L"Allow cheats (host)", 0, {}, {}, {}, 0, 8, "Coop" },
         // (Matilda Prime, 26/10 : triches pour l'hote seulement) -- [Coop] TrichesHote, lu par le mod de l'hote (f03a910)
         { "TrichesHote", L"Triches : hôte seulement", L"Cheats: host only", 0, {}, {}, {}, 0, 8, "Coop" },
+        // (27/10, Kupla P2 : decidee par l'hote, option du Salon seulement -- pas de ligne dans kSetItems)
+        { "KuplaBulles", L"Bulles co-op (Kupla)", L"Co-op bubbles (Kupla)", 0, {}, {}, {}, 0, 8, "Coop" },
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion de квазарик, 13/10 : « tuer les autres a coups de poing, option de l'hote ») -- Sync/Pvp.cs
         { "PvP", L"Coups de poing entre joueurs (hôte)", L"Punches between players (host)", 0, {}, {}, {}, 0, 8, "Coop" },

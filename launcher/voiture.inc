@@ -751,6 +751,9 @@ static std::vector<Addon> g_addonList;
 static ULONGLONG g_addonScanT;
 static int g_addonSel = -1;          // carte ouverte (-1 : la liste)
 static bool g_addonsTab;             // onglet Addons (g_tab == TAB_CAR)
+static int g_addonsPage;             // 0 : accueil Voitures / Mods (modules.inc, seulement si KuplaShown) ; 1 : les voitures
+static void DrawAddonsHome(Graphics &g);   // (modules.inc)
+static bool AddonsHome() { return KuplaShown() && g_addonsPage == 0; }
 static std::map<std::wstring, Bitmap *> g_addonPics;
 static Bitmap *g_addonThumb;
 static std::wstring g_addonThumbOf;
@@ -911,7 +914,7 @@ static void AddonSeenMark()
 static void AddonsGo()
 {
     if (g_tab != TAB_CAR) GoPage(TAB_CAR);
-    g_addonsTab = true; g_addonSel = -1; g_addonScanT = 0;
+    g_addonsTab = true; g_addonSel = -1; g_addonScanT = 0; g_addonsPage = 0;   // (accueil Voitures / Mods ; sans Kupla : les voitures)
     ULONGLONG now = GetTickCount64();
     if (now >= g_addonCatGoT) { g_addonCatGoT = now + 5 * 60 * 1000; AddonCatRefresh(); }
 }
@@ -1295,7 +1298,7 @@ static RectF AddonCardRect(int i)   // (sans le defilement)
 }
 static float AddonsMaxScroll()
 {
-    if (!g_addonsTab || g_addonSel >= 0 || g_addonList.empty()) return 0.0f;
+    if (!g_addonsTab || g_addonSel >= 0 || g_addonList.empty() || AddonsHome()) return 0.0f;
     int n = (int)min(g_addonList.size(), (size_t)20);
     float total = AddonsView() == 1 ? n * kAddonRowH : ((n + 2) / 3) * 290.0f;
     return max(0.0f, total - AddonsArea().Height);
@@ -1304,7 +1307,9 @@ static void DrawAddonList(Graphics &g)
 {
     RectF area(kCarCard.X, kCarCard.Y, kCarPanel.X + kCarPanel.Width - kCarCard.X, kCarCard.Height);
     Glass(area);
-    Title(g, T(L"Addons", L"Add-ons"), RectF(area.X + 24, area.Y + 20, 400, 30), 22, kInk);
+    float hx = 0;   // (accueil Voitures / Mods : un retour devant le titre)
+    if (KuplaShown()) { UiButton(g, RectF(area.X + 20, area.Y + 16, 40, 40), L"", UI_ADDONS_HOME, false, IC_CHEVL); hx = 50; }
+    Title(g, KuplaShown() ? T(L"Voitures", L"Cars") : T(L"Addons", L"Add-ons"), RectF(area.X + 24 + hx, area.Y + 20, 400 - hx, 30), 22, kInk);
     AddonSeenMark();
     Para(g, T(L"Voitures en extension : télécharge-les ici, elles se mettent à jour d'un clic. En partie, on les prend au F10 (onglet Voitures).",
               L"Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab)."),
@@ -1485,6 +1490,7 @@ static void DrawAddonView(Graphics &g, const Addon &a)
 }
 static void DrawAddons(Graphics &g)
 {
+    if (AddonsHome()) { DrawAddonsHome(g); return; }
     AddonsScan();
     if (const Addon *a = AddonCur()) DrawAddonView(g, *a);
     else DrawAddonList(g);

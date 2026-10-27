@@ -114,6 +114,16 @@ static const GameDef &GM() { return kGames[g_game]; }
 // lancement -force-gfx-direct et sa mention dans les titres coupes ; ses cles des mwcoop.ini remises a 0 une fois
 // (RtHiddenMigrate, gfx.inc). true pour le rallumer ; MWCoopRT.dll reste dans les paquets.
 static const bool kRtShown = false;
+// Kupla, l'optimisation co-op de [Addons et Tools] (decision de JD du 27/10, spec MWCoop-spec-kupla-modules.md) : rien ne se voit
+// avant sa sortie dans le mod. kKuplaShown : l'accueil Voitures / Mods de la page Addons et la carte Kupla (modules.inc), son
+// article du Guide (WG_KUPLA) et sa bulle (60) -- a allumer avec la version du mod qui apporte Kupla P1, KUPLA_SINCE remis alors
+// a la version de ce lanceur. kKuplaBullesShown : l'option « Bulles co-op » du Salon ([Coop] KuplaBulles), seulement avec P2.
+// /kupla (captures, essais) montre les deux.
+static const bool kKuplaShown = false, kKuplaBullesShown = false;
+#define KUPLA_SINCE "1.15.19"
+static bool g_kuplaForce;
+static bool KuplaShown() { return kKuplaShown || g_kuplaForce; }
+static bool KuplaBullesShown() { return kKuplaBullesShown || g_kuplaForce; }
 // Nom du mod affiche : « MSCoop » sur My Summer Car (retour de Vaydon, 19/10 : « It should be MSCOOP »), « MWCoop » sinon. Les
 // noms de fichiers et de dossiers (MWCoop.dll, dossier MWCoop, %LOCALAPPDATA%\MWCoop) ne changent pas.
 static const wchar_t *ProductName() { return g_game == GAME_MSC ? L"MSCoop" : L"MWCoop"; }
@@ -2990,6 +3000,7 @@ static float NotesMaxScroll() { return max(0.0f, g_notesH - NotesArea().Height);
 #include "journaux.inc"
 
 #include "voiture.inc"
+#include "modules.inc"   // (page Addons : accueil Voitures / Mods, Kupla)
 
 #include "tenue.inc"
 
@@ -5142,6 +5153,7 @@ static void LobbyRowLabel(const LobbyOptDef &d, const GfxRow *r, std::wstring &l
         { "Difficulte", L"Difficulté de départ", L"Start difficulty", L"Nouvelle partie : argent et carburant", L"New game: money and fuel" },
         { "VitesseVitres", L"Vitesse des vitres", L"Window speed", NULL, NULL },
         { "CarteMaintenir", L"Carte (M)", L"Map (M)", NULL, NULL },
+        { "KuplaBulles", L"Bulles co-op (Kupla, bêta)", L"Co-op bubbles (Kupla, beta)", L"Le monde reste vivant autour de chaque joueur", L"The world stays alive around every player" },
     };
     sub.clear();
     for (auto &s : kShort) if (!strcmp(s.key, d.key)) { lab = T(s.fr, s.en); if (s.sfr) sub = T(s.sfr, s.sen); return; }
@@ -5292,7 +5304,8 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         if (!host) for (const char *k : { "Difficulte", "VitesseVitres" }) row(k, false);   // (lecture seule ; l'hote les regle dans la carte de droite -- 1.8.9)
         y += 6;
         caption(T(L"JEUX & AJOUTS", L"GAMES & ADDITIONS"), false);
-        row("VenttiEnjeux", false);   // (Jokkis a louer retirees le 18/10, du mod le 24/10 : la VAZ et les voitures addons les remplacent)
+        row("VenttiEnjeux", false);
+        row("KuplaBulles", false);   // (Kupla P2 : cachee par LobbyOptOn tant que kKuplaBullesShown est faux)   // (Jokkis a louer retirees le 18/10, du mod le 24/10 : la VAZ et les voitures addons les remplacent)
         // ajouts MWCoop : Tous / Choisir / Aucun (SansAjouts et les quatre AjoutX)
         int on = 0;
         for (const char *k : kAjoutKeys) on += val(k) == 1;
@@ -7266,6 +7279,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             int gm = GameOfExe(av[i]);
             if (gm >= 0) { g_fromSteam = true; g_game = gm; }
             if (!_wcsicmp(av[i], L"/msc")) g_game = GAME_MSC;   // (essais : /capture ... /msc)
+            if (!_wcsicmp(av[i], L"/kupla")) g_kuplaForce = true;   // (essais : accueil Voitures / Mods et Kupla montres avant leur sortie)
             if ((!_wcsicmp(av[i], L"/exportcarte") || !_wcsicmp(av[i], L"/exportplaces")) && i + 1 < ac) g_game = !_wcsicmp(av[i + 1], L"msc") ? GAME_MSC : GAME_MWC;
         }
         // Lancer par Steam (Reglages > Jeu) avec l'option de lancement "<MWCoop.exe>" %command% : Steam relance le lanceur au
@@ -8135,8 +8149,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (g_albView == 2) { for (size_t i = 0; i < g_alb.size() && i < 2; i++) g_albFav.insert(g_alb[i].name); if (!g_alb.empty()) g_albSel = 0; }
         }
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
-        else if (st == L"addons" || st == L"addons-dl") {   // onglet Addons (liste des voitures en extension ; catalogue lu tout de suite)
-            g_tab = TAB_CAR; g_addonsTab = true;
+        else if (st == L"addons" || st == L"addons-dl" || st == L"addons-voitures") {   // onglet Addons (avec /kupla : l'accueil Voitures / Mods ; addons-voitures : les voitures, retour compris) ; catalogue lu tout de suite
+            g_tab = TAB_CAR; g_addonsTab = true; g_addonsPage = st == L"addons" ? 0 : 1;
             g_addonCatT = g_addonCatGoT = ~0ull;
             AddonCatThread(NULL);
             if (st == L"addons-dl") {   // (telechargement en cours de la premiere voiture du catalogue pas installee)

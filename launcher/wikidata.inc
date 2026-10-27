@@ -666,6 +666,12 @@ static const WikiBlock kW_Addons[] = {   // (1.5.1, JD : comment installer une v
             L"The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery." },
     { WB_GO, L"Ouvrir les addons",
             L"Open the add-ons", 2000 },
+    { WB_H, L"Mods : les modules du mod co-op", L"Mods: the modules of the co-op mod", 0, WG_KUPLA },   // (27/10 : Kupla, cache avant sa sortie)
+    { WB_B, L"Addons s'ouvre sur deux cartes : Voitures (cette page) et Mods. Les Mods sont livrés avec le mod co-op lui-même, comme la VAZ : rien à télécharger.", L"Add-ons opens on two cards: Cars (this page) and Mods. Mods come with the co-op mod itself, like the VAZ: nothing to download." },
+    { WB_B, L"Kupla (bêta) : l'optimisation co-op, sur My Winter Car et My Summer Car. La case « Rendu (pour moi) » allège l'affichage chez toi seulement (distance d'affichage, ombres, rétroviseurs) ; éteinte, rien ne change.",
+            L"Kupla (beta): the co-op optimization, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only (view distance, shadows, mirrors); off, nothing changes." },
+    { WB_B, L"Bulles co-op : c'est l'hôte qui décide, dans les options du Salon ; ses invités suivent.", L"Co-op bubbles: the host decides, in the Lobby options; their guests follow." },
+    { WB_TIP, L"Les deux réglages comptent au lancement de la partie, jamais en cours de jeu.", L"Both settings count when the game starts, never during play." },
 };
 static const WikiBlock kW_Vaz[] = {
     { WB_P, L"Chaque joueur peut avoir sa VAZ-2108 de rallye, gratuite : F10 > onglet VAZ-2108. Seize couleurs, une par joueur ; la couleur donne aussi le numéro peint sur les portières.",

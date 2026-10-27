@@ -137,6 +137,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.15.17 (27/10) : Importer une sauvegarde, en-tete des Sauvegardes (59)
     { L"Importer une sauvegarde", L"Une sauvegarde téléchargée ou reçue (.zip, .rar, .7z) : elle devient une partie de ta liste, vérifiée tout de suite. Utiliser pour héberger, et tes invités la reçoivent.",
       L"Import a save", L"A save downloaded or received (.zip, .rar, .7z): it becomes a game in your list, checked right away. Use for hosting, and your guests receive it.", "1.15.17" },
+    // Kupla (27/10, cachee tant que kKuplaShown est faux : TutoSkip) : Addons s'ouvre sur Voitures / Mods (60)
+    { L"Addons : Voitures et Mods", L"Addons s'ouvre maintenant sur deux cartes : Voitures, les voitures addons comme avant, et Mods, les modules du mod co-op. Le premier : Kupla, l'optimisation co-op (bêta).",
+      L"Add-ons: Cars and Mods", L"Add-ons now opens on two cards: Cars, the add-on cars as before, and Mods, the modules of the co-op mod. The first one: Kupla, the co-op optimization (beta).", KUPLA_SINCE },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -153,7 +156,7 @@ static const TutoStep &TutoStepOf(int i)
     if (g_game == GAME_MSC && i == 34) return kTutoMsc34;
     return kTuto[i];
 }
-static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33 || i == 52) || i == 57 && !AccesPlaces(); }   // (52 : Addons, voitures de My Winter Car ; 57 : seulement avec une cle d'acces)
+static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33 || i == 52) || i == 57 && !AccesPlaces() || i == 60 && !KuplaShown(); }   // (60 : Kupla, cache avant sa sortie)   // (52 : Addons, voitures de My Winter Car ; 57 : seulement avec une cle d'acces)
 
 // Pastille d'un onglet de la page Reglages (meme calcul que DrawSettingsPage : gfx.inc) et champ Chercher un reglage de
 // l'en-tete (DrawSetSearchBox : a gauche des raccourcis API / Journaux / Credits, ui.inc DrawHeader).
@@ -237,6 +240,7 @@ static RectF TutoTarget(int i)
     case 58: return g_btn[B_BUG].r;                          // Signaler un bug (en-tete, a cote des Journaux : ui.inc DrawHeader)
     // 1.15.17
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
+    case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     }
     return RectF(0, 0, 0, 0);
 }
