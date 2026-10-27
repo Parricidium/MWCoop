@@ -664,7 +664,7 @@ static bool MscClick(float x, float y)
         else SetStatus(K_NORMAL, MscOfficialInstalled() ? T(L"MSCLoader officiel : celui installé dans le jeu", L"Official MSCLoader: the one installed in the game")
                                                          : T(L"MSCLoader officiel : pas installé dans le jeu (INSTALLER MSCLOADER)", L"Official MSCLoader: not installed in the game (INSTALL MSCLOADER)"));
     }
-    else if (h == 1004) ShellExecuteW(g_wnd, L"open", g_mscDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    else if (h == 1004) ShellOpen(g_mscDir.c_str());
     else if (h == 1009) MscOpenCompat();
     else if (h == 1010) {   // tout envoyer : chaque mod actif (les sauteurs de menu ne partent jamais)
         int n = 0;

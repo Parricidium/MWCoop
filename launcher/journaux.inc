@@ -384,7 +384,7 @@ static bool LogsMouseDown(float x, float y)
             g_scroll[TAB_LOGS] = min(g_scroll[TAB_LOGS], LogsMaxScroll());
         } else if (part == 1) {
             std::wstring d = !gr.dir.empty() ? gr.dir : (!gr.items.empty() ? g_logList[gr.items[0]].path : L"");
-            if (!gr.dir.empty()) ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
+            if (!gr.dir.empty()) ShellOpen(d.c_str());
             else if (!d.empty()) { std::wstring arg = L"/select,\"" + d + L"\""; ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL); }
         } else if (part == 2) LogsGroupZip(w.group);
         else if (part == 3) {
@@ -401,7 +401,7 @@ static bool LogsMouseDown(float x, float y)
     if (part == 1) {
         std::wstring arg = L"/select,\"" + path + L"\"";
         ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
-    } else if ((INT_PTR)ShellExecuteW(g_wnd, L"open", path.c_str(), NULL, NULL, SW_SHOWNORMAL) <= 32) {
+    } else if ((INT_PTR)ShellOpen(path.c_str()) <= 32) {
         std::wstring arg = L"\"" + path + L"\"";   // (.log sans programme associe)
         ShellExecuteW(g_wnd, L"open", L"notepad.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
     }

@@ -280,6 +280,6 @@ static void ToolsClick(int id)
     switch (id >= UI_TOOL_CV_GET ? id - UI_TOOL_CV_GET : id - UI_TOOL_GET) {
     case 0: ToolDownload(t); break;
     case 1: ToolLaunch(t); break;
-    case 2: if (!ToolDir(t).empty()) ShellExecuteW(g_wnd, L"open", ToolDir(t).c_str(), NULL, NULL, SW_SHOWNORMAL); break;
+    case 2: if (!ToolDir(t).empty()) ShellOpen(ToolDir(t).c_str()); break;
     }
 }

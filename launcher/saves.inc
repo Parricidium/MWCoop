@@ -301,7 +301,7 @@ static void SaveOpenDir(int i)
     if (i < 0 || i >= (int)g_saves.size()) return;
     std::wstring d = SaveDirOf(g_saves[i].prof);
     SHCreateDirectoryExW(NULL, d.c_str(), NULL);
-    ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    ShellOpen(d.c_str());
 }
 static std::wstring SaveCleanName(std::wstring s)
 {

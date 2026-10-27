@@ -166,13 +166,13 @@ static void DrawApiPage(Graphics &g)
 static void ApiClick(int id)
 {
     switch (id) {
-    case UI_API_DOC: ShellExecuteW(g_wnd, L"open", kApiDocUrl, NULL, NULL, SW_SHOWNORMAL); break;
-    case UI_API_SRC: ShellExecuteW(g_wnd, L"open", kApiSrcUrl, NULL, NULL, SW_SHOWNORMAL); break;
+    case UI_API_DOC: ShellOpen(kApiDocUrl); break;
+    case UI_API_SRC: ShellOpen(kApiSrcUrl); break;
     case UI_API_DIR: {
         std::wstring dll = ApiDllPath();
         if (dll.empty()) break;
         if (FileExists(dll)) { std::wstring a = L"/select,\"" + dll + L"\""; ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL); }
-        else ShellExecuteW(g_wnd, L"open", g_gameDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        else ShellOpen(g_gameDir.c_str());
         break;
     }
     case UI_API_COPY: {

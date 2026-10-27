@@ -374,6 +374,7 @@ static std::string Narrow(const std::wstring &w, UINT cp = CP_ACP)
     WideCharToMultiByte(cp, 0, w.c_str(), (int)w.size(), &s[0], n, NULL, NULL);
     return s;
 }
+static bool ShellOpen(const std::wstring &target);   // (ouverture d'une adresse ou d'un dossier, avec replis -- defini avant WndProc)
 static bool FileExists(const std::wstring &p) { DWORD a = GetFileAttributesW(p.c_str()); return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY); }
 static std::wstring DirOf(const std::wstring &p) { size_t k = p.find_last_of(L"\\/"); return k == std::wstring::npos ? L"" : p.substr(0, k + 1); }
 static bool ReadAll(const std::wstring &p, std::vector<unsigned char> &out)
@@ -3169,7 +3170,7 @@ static void SteamGuideClick(float x, float y)
     int h = SteamGuideHit(x, y);
     if (g_guideKind == 2) { UiChoiceClick(h); return; }   // (fenetre.inc)
     if (g_guideKind == 1) {   // invitation au Discord
-        if (h == 1) ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL);
+        if (h == 1) ShellOpen(kDiscordUrl);
         if (h == 1 || h == 2 || h == 4 || h < 0) SteamGuideClose();
         return;
     }
@@ -4119,9 +4120,9 @@ static void Launch(int mode, const char *partie = NULL)
             HANDLE rq = CreateFileW((LocalDir() + L"lancer-par-steam.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
             if (rq != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(rq, "1", 1, &n, NULL); CloseHandle(rq); }
         }
-        HINSTANCE r = ShellExecuteW(g_wnd, L"open", (std::wstring(L"steam://rungameid/") + GM().appid).c_str(), NULL, NULL, SW_SHOWNORMAL);
-        LaunchLog("lancement (mode %d) par Steam (steam://rungameid/%s) : %s", mode, Narrow(GM().appid).c_str(), (INT_PTR)r > 32 ? "demande" : "ECHEC");
-        if ((INT_PTR)r <= 32) { SetStatus(K_ERR, T(L"Steam n'a pas pu lancer le jeu (Steam est-il ouvert ?)", L"Steam could not start the game (is Steam open?)")); return; }
+        bool r = ShellOpen((std::wstring(L"steam://rungameid/") + GM().appid).c_str());
+        LaunchLog("lancement (mode %d) par Steam (steam://rungameid/%s) : %s", mode, Narrow(GM().appid).c_str(), r ? "demande" : "ECHEC");
+        if (!r) { SetStatus(K_ERR, T(L"Steam n'a pas pu lancer le jeu (Steam est-il ouvert ?)", L"Steam could not start the game (is Steam open?)")); return; }
         g_proc = NULL;
         g_pid = 0;
         done();
@@ -6422,7 +6423,7 @@ static void LogsOpenFolder()
     std::wstring d = g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\", ld = LocalDir();
     if ((d.empty() || !isDir(d)) && !ld.empty() && isDir(ld)) d = ld;
     else if (!d.empty() && !isDir(d)) EnsureModDir();
-    if (!d.empty()) ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    if (!d.empty()) ShellOpen(d.c_str());
 }
 
 // Zip SANS compression (methode 0 "stored") : en-tete local + donnees par fichier, puis repertoire central et fin ;
@@ -6819,7 +6820,7 @@ static void BugReport()
 {
     if (g_state == ST_IDLE && BugPanelWanted()) { LaunchLog("signaler un bug : panneau integre"); BugOpen(); return; }   // (partie en cours : le navigateur, la page du serveur reste)   // (27/10 : Windows 10+, pas Wine, moteur WebView2 present, pas de reglage « dans le navigateur »)
     std::wstring url = std::wstring(kBugSiteUrl) + L"?lang=" + LangCode();
-    ShellExecuteW(g_wnd, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    ShellOpen(url.c_str());
     std::vector<std::wstring> files = ZipFiles();
     LaunchLog("signaler un bug : %s, %d journal(aux)", Narrow(url, CP_UTF8).c_str(), (int)files.size());
     if (files.empty()) { SetStatus(K_WARN, T(L"Formulaire ouvert, mais aucun journal pour l'instant : lance le jeu avec MWCoop d'abord", L"Form opened, but no logs yet: start the game with MWCoop first")); return; }
@@ -6871,10 +6872,10 @@ static void OnButton(int id)
         else ThemeSet(g_dark ? THEME_CLAIR : THEME_SOMBRE);
         break;
     case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
-    case B_BUY: ShellExecuteW(g_wnd, L"open", StoreUrl().c_str(), NULL, NULL, SW_SHOWNORMAL); break;
-    case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
-    case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
-    case B_DISCORD: ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); break;
+    case B_BUY: ShellOpen(StoreUrl().c_str()); break;
+    case B_GITHUB: ShellOpen(L"https://github.com/Parricidium/MWCoop"); break;
+    case B_KOFI: ShellOpen(L"https://ko-fi.com/parricidium"); break;
+    case B_DISCORD: ShellOpen(kDiscordUrl); break;
     case B_UPDATE: StartUpdate(true); break;
     case B_UPDLANCEUR: StartLauncherUpdate(); break;
     case B_COLOR: CarPickColor(); break;
@@ -7037,6 +7038,26 @@ static void TypeChar(wchar_t ch)
     f.text += ch;
 }
 
+// Ouvre une adresse https, un fichier ou un dossier avec le programme associe, avec deux replis (JD 27/10, Zen Browser en
+// navigateur par defaut : « quand je clique ici rien ne se passe ») : explorer.exe "<cible>", puis, pour une adresse, le
+// navigateur par defaut lu dans les associations (AssocQueryString https). Le resultat est journalise ; false si rien n'a marche.
+static bool ShellOpen(const std::wstring &target)
+{
+    INT_PTR r1 = (INT_PTR)ShellOpen(target.c_str());
+    if (r1 > 32) return true;
+    wchar_t win[MAX_PATH] = L""; GetWindowsDirectoryW(win, MAX_PATH);
+    std::wstring q = L"\"" + target + L"\"";
+    INT_PTR r2 = (INT_PTR)ShellExecuteW(g_wnd, NULL, (std::wstring(win) + L"\\explorer.exe").c_str(), q.c_str(), NULL, SW_SHOWNORMAL);
+    if (r2 > 32) { LaunchLog("ouvrir : %s par explorer.exe (ShellExecute : %d)", Narrow(target, CP_UTF8).c_str(), (int)r1); return true; }
+    INT_PTR r3 = 0;
+    if (!_wcsnicmp(target.c_str(), L"http", 4)) {
+        wchar_t exe[MAX_PATH] = L""; DWORD n = MAX_PATH;
+        if (SUCCEEDED(AssocQueryStringW((ASSOCF)0, ASSOCSTR_EXECUTABLE, L"https", L"open", exe, &n)) && exe[0]) r3 = (INT_PTR)ShellExecuteW(g_wnd, NULL, exe, target.c_str(), NULL, SW_SHOWNORMAL);
+        if (r3 > 32) { LaunchLog("ouvrir : %s par le navigateur par defaut %s (ShellExecute : %d, explorer.exe : %d)", Narrow(target, CP_UTF8).c_str(), Narrow(exe, CP_UTF8).c_str(), (int)r1, (int)r2); return true; }
+    }
+    LaunchLog("ouvrir : ECHEC %s (ShellExecute : %d, explorer.exe : %d, navigateur : %d)", Narrow(target, CP_UTF8).c_str(), (int)r1, (int)r2, (int)r3);
+    return false;
+}
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
 {
     // Nouvelle interface, regle de fond (JD 27/10, « des reliquats » apres Prive -> Public) : toute entree qui peut changer un
@@ -7217,7 +7238,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
             if (g_tab == TAB_MODS && MscClick(x, y)) return 0;
             if (g_tab == TAB_CONTENT && ContentAt(x, y) >= 0) { ContentClick(x, y); return 0; }
-            if (g_tab == TAB_NOTES) { std::wstring u = NoteImgAt(x, y); if (!u.empty()) { ShellExecuteW(NULL, L"open", u.c_str(), NULL, NULL, SW_SHOWNORMAL); return 0; } }
+            if (g_tab == TAB_NOTES) { std::wstring u = NoteImgAt(x, y); if (!u.empty()) { ShellOpen(u.c_str()); return 0; } }
             if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
             if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
             if (g_tab == TAB_SKIN && SkinMouseDown(x, y)) return 0;

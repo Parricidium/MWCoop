@@ -704,9 +704,9 @@ static void VhsClick(int id)
         VhsImport(i);
         return;
     }
-    if (id == UI_VHS_OPEN) { CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL); CreateDirectoryW(VhsFilmDir().c_str(), NULL); ShellExecuteW(g_wnd, L"open", VhsFilmDir().c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
+    if (id == UI_VHS_OPEN) { CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL); CreateDirectoryW(VhsFilmDir().c_str(), NULL); ShellOpen(VhsFilmDir().c_str()); return; }
     if (id == UI_VHS_REFRESH) { g_vhsEdit = -1; g_pvOf.clear(); VhsScan(); return; }
-    if (id == UI_VHS_VIDDIR) { std::wstring d = VhsVideoDir(); SHCreateDirectoryExW(NULL, d.c_str(), NULL); ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
+    if (id == UI_VHS_VIDDIR) { std::wstring d = VhsVideoDir(); SHCreateDirectoryExW(NULL, d.c_str(), NULL); ShellOpen(d.c_str()); return; }
     if (id == UI_VHS_PLAY) {
         if (g_pvPause) { g_pvPause = false; g_pvStart = GetTickCount() - (DWORD)(g_pvAt * 1000); }
         else { g_pvAt = VhsPreviewTime(); g_pvPause = true; }
@@ -986,7 +986,7 @@ static void DrawAlbum(Graphics &g)
 static void AlbClick(int id)
 {
     if (id != UI_ALB_SLIDE) g_albSlide = false;   // (un clic arrete le diaporama)
-    if (id == UI_ALB_FOLDER) { std::wstring d = AlbDir(); CreateDirectoryW(d.c_str(), NULL); ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
+    if (id == UI_ALB_FOLDER) { std::wstring d = AlbDir(); CreateDirectoryW(d.c_str(), NULL); ShellOpen(d.c_str()); return; }
     if (id >= UI_ALB_VIEW && id < UI_ALB_VIEW + 3) { g_albView = id - UI_ALB_VIEW; g_scroll[TAB_ALBUM] = 0; return; }
     if (id == UI_ALB_SLIDE) {
         g_albSlide = !g_albSlide;
@@ -1004,7 +1004,7 @@ static void AlbClick(int id)
     if (id >= UI_ALB) { int i = id - UI_ALB; if (i < (int)g_alb.size()) { g_albSel = i; g_albDel = -1; } return; }
     if (g_albSel < 0 || g_albSel >= (int)g_alb.size()) return;
     AlbPhoto &ph = g_alb[g_albSel];
-    if (id == UI_ALB_OPEN) { ShellExecuteW(g_wnd, L"open", ph.path.c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
+    if (id == UI_ALB_OPEN) { ShellOpen(ph.path.c_str()); return; }
     if (id == UI_ALB_DIR) { std::wstring a = L"/select,\"" + ph.path + L"\""; ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL); return; }
     if (id == UI_ALB_FAV) {
         if (AlbIsFav(ph)) g_albFav.erase(ph.name); else g_albFav.insert(ph.name);

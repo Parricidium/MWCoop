@@ -1738,7 +1738,7 @@ static bool UiClick(int id)
     case UI_SET_STEAM: case UI_SET_IP: if ((id == UI_SET_STEAM) != g_steamNet && g_lobby == LB_NONE) OnButton(id == UI_SET_STEAM ? B_NETSTEAM : B_NETIP); return true;
     case UI_SET_PORTM: case UI_SET_PORTP: for (int i = 0; i < (int)g_opts.size(); i++) if (!strcmp(g_opts[i].key, "Port")) OptStep(i, id == UI_SET_PORTP ? 1 : -1); return true;
     case UI_SET_FOLDER: ChooseExe(); return true;
-    case UI_SET_BUY: ShellExecuteW(g_wnd, L"open", StoreUrl().c_str(), NULL, NULL, SW_SHOWNORMAL); return true;
+    case UI_SET_BUY: ShellOpen(StoreUrl().c_str()); return true;
     case UI_SET_UNINST: Uninstall(); return true;
     case UI_SET_COMPAT: {
         bool on = !CompatAuto();

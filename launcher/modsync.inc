@@ -1845,7 +1845,7 @@ static void ContentOpenMusicDir()
     if (g_contentSel != 1) for (int cd = 1; cd <= 3; cd++) if (g_contentInfo[cd - 1].songs) { root = L"CD" + std::to_wstring(cd); break; }   // (le premier CD garni)
     std::wstring d = g_gameDir + root;
     SHCreateDirectoryExW(NULL, d.c_str(), NULL);
-    ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    ShellOpen(d.c_str());
 }
 
 // ---- zones (comme mods.inc MscZone : la souris passe par ContentAt, le clic par ContentClick)

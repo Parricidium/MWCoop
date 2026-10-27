@@ -2045,7 +2045,7 @@ static bool SetClick(int id)
     case UI_SET_PRIV: case UI_SET_PRIV + 1: WritePrivateProfileStringW(L"Lanceur", L"SalonPrive", id == UI_SET_PRIV ? L"0" : L"1", g_iniLauncher.c_str()); return true;
     case UI_SET_NOTES: GoPage(TAB_NOTES); return true;
     case UI_SET_API: GoPage(TAB_API); return true;
-    case UI_SET_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); return true;
+    case UI_SET_GITHUB: ShellOpen(L"https://github.com/Parricidium/MWCoop"); return true;
     case UI_SET_LOGDIR: LogsOpenFolder(); return true;
     case UI_SET_CLEID: CleCopyId(); return true;
     case UI_SET_CLEPASTE: ClePaste(); return true;

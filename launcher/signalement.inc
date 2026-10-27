@@ -110,7 +110,7 @@ static void BugOpenBrowser(const wchar_t *u)   // (https seulement ; en essai : 
     if (host.empty()) { LaunchLog("signalement : adresse ignoree (pas https)"); return; }
     LaunchLog("signalement : %s -> navigateur", Narrow(host, CP_UTF8).c_str());
     if (g_bugTest) return;
-    ShellExecuteW(g_wnd, L"open", u, NULL, NULL, SW_SHOWNORMAL);
+    ShellOpen(u);
 }
 
 // ---- rappels COM du moteur : un seul gabarit (IUnknown + Invoke a deux arguments)
@@ -396,7 +396,7 @@ static bool BugClick(int id)
     case UI_BUG_BROWSER: {
         std::wstring url = std::wstring(kBugSiteUrl) + L"?lang=" + LangCode();
         LaunchLog("signalement : formulaire ouvert dans le navigateur (bouton de la bande)");
-        if (!g_bugTest) ShellExecuteW(g_wnd, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        if (!g_bugTest) ShellOpen(url.c_str());
         SetStatus(K_OK, T(L"Formulaire ouvert dans le navigateur", L"Form opened in the browser"));
         return true;
     }

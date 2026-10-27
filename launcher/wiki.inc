@@ -730,7 +730,7 @@ static bool WikiClick(int id)
     }
     if (id == UI_WIKI_GO + 199) { GoPage(TAB_NOTES); return true; }   // colonne Nouveautes : « Tout »
     if (id == UI_WIKI_GO + 197) { GoPage(TAB_CREDITS); return true; }
-    if (id == UI_WIKI_GO + 198) { ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); return true; }
+    if (id == UI_WIKI_GO + 198) { ShellOpen(kDiscordUrl); return true; }
     if (id >= UI_WIKI_GO && id < UI_WIKI_GO + 200) {
         const WikiArticle &art = kWikiArt[g_wikiSel];
         int i = id - UI_WIKI_GO;

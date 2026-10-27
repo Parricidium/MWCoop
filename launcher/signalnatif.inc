@@ -19,7 +19,7 @@ static const wchar_t *kSigApiBase = L"https://live.myseasonscar.workers.dev/api/
 static const wchar_t *kSigPage = L"https://live.myseasonscar.workers.dev/lanceur.html";
 enum { UI_SIG = 14000, UI_SIG_LOGIN = 14000, UI_SIG_OPENPAGE, UI_SIG_CANCEL, UI_SIG_NEWCODE, UI_SIG_NEW, UI_SIG_LOGOUT, UI_SIG_BROWSER, UI_SIG_BACK,
        UI_SIG_CAMARCHE, UI_SIG_TOUJOURS, UI_SIG_COMPLETER, UI_SIG_RETIRER, UI_SIG_ADDSEND, UI_SIG_ADDCANCEL, UI_SIG_ADDZIP, UI_SIG_ADDTEXT,
-       UI_SIG_SEND, UI_SIG_FORMCANCEL, UI_SIG_TOLIST, UI_SIG_RETRY, UI_SIG_PANEL, UI_SIG_REFRESH,
+       UI_SIG_SEND, UI_SIG_FORMCANCEL, UI_SIG_TOLIST, UI_SIG_RETRY, UI_SIG_PANEL, UI_SIG_REFRESH, UI_SIG_COPYURL,
        UI_SIG_FIELD = 14100,   // + 10 * champ : +0 le texte (focus), +1..+7 les options d'un choix, +8 le detail, +9 l'interrupteur
        UI_SIG_ROW = 14300 };   // + i : une ligne de « Mes dossiers » (50 au plus)
 enum { SV_LOADING, SV_LOGIN, SV_CODE, SV_LIST, SV_DETAIL, SV_FORM, SV_SEND, SV_DONE, SV_ERROR };
@@ -115,6 +115,8 @@ static std::wstring g_sigFatal;                          // SV_ERROR : site injo
 // connexion par code
 static std::string g_sigAppareil;                        // secret de /code, en memoire seulement
 static std::wstring g_sigCode, g_sigCodeUrl; static DWORD g_sigCodeT0; static int g_sigCodeExpire = 600, g_sigCodeState;   // 0 en attente, 1 expire, 2 refuse
+static bool g_sigOpenFailed;                             // « Ouvrir la page » : le navigateur ne s'est pas ouvert (adresse a copier)
+static bool CopyText(const std::wstring &t);   // (launcher.cpp)
 // dossiers
 struct SigEvt { long long ts; std::string evt; std::wstring detail; };
 struct SigDossier { int n = 0; std::wstring titre; std::string jeu, etat, confie, versionCorrigee, motif; long long cree = 0, maj = 0; int reouvertures = 0; bool peutRouvrir = false, peutRetirer = false, dmBloque = false; std::vector<SigEvt> hist; };
@@ -702,8 +704,10 @@ static void SigSendAdd()
 static void SigOpenPage()
 {
     std::wstring u = g_sigCodeUrl.empty() ? kSigPage : g_sigCodeUrl;
-    LaunchLog("signalement : page de connexion ouverte dans le navigateur");
-    if (!g_sigTest && !g_sigCapture) ShellExecuteW(g_wnd, L"open", u.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    LaunchLog("signalement : ouverture de la page de connexion dans le navigateur");
+    g_sigOpenFailed = !g_sigTest && !g_sigCapture && !ShellOpen(u);   // (echec : l'adresse reste a copier, message sous le bouton)
+    if (g_sigOpenFailed) SoftNotify(T(L"La page ne s'est pas ouverte : copie l'adresse dans ton navigateur", L"The page didn't open: copy the address into your browser"), SC_WARN);
+    InvalidateAll();
 }
 
 // ---- saisie au clavier (champs du formulaire, texte d'ajout)
@@ -825,7 +829,20 @@ static float SigDrawCode(Graphics &g, float x, float y, float w, const RectF &cl
     }
     std::wstring cb = T(L"Annuler", L"Cancel"); float cw = SigBtnW(cb, false);
     SoftButton(g, RectF(bx, y, cw, 46), cb, UI_SIG_CANCEL, false); SigHot(RectF(bx, y, cw, 46), UI_SIG_CANCEL, clip);
-    y += 46 + 20;
+    y += 46 + 16;
+    {   // l'adresse en clair, a copier (JD 27/10, Zen Browser : le navigateur ne s'ouvrait pas)
+        std::wstring u = g_sigCodeUrl.empty() ? kSigPage : g_sigCodeUrl, shown = u.compare(0, 8, L"https://") == 0 ? u.substr(8) : u;
+        std::wstring lab = T(L"Adresse de la page : ", L"Page address: ");
+        float lw = MeasureW(MeasureG(), lab, 13, FontStyleRegular), sw = MeasureW(MeasureG(), shown, 13, FontStyleBold);
+        Text(g, lab, RectF(x, y + 4, lw + 4, 22), 13, FontStyleRegular, g_soft.muted, StringAlignmentNear);
+        Text(g, shown, RectF(x + lw + 2, y + 4, sw + 6, 22), 13, FontStyleBold, g_soft.ink, StringAlignmentNear);
+        std::wstring cpb = T(L"Copier l'adresse", L"Copy the address"); float cpw = SigBtnW(cpb, false);
+        float cx2 = min(x + lw + sw + 20, x + w - cpw);
+        SoftButton(g, RectF(cx2, y - 4, cpw, 38), cpb, UI_SIG_COPYURL, false, -1, true, 19); SigHot(RectF(cx2, y - 4, cpw, 38), UI_SIG_COPYURL, clip);
+        y += 40;
+        if (g_sigOpenFailed) y += SigPara(g, T(L"La page ne s'est pas ouverte ? Copie l'adresse dans ton navigateur, connecte-toi avec Discord et tape le code.", L"The page didn't open? Copy the address into your browser, sign in with Discord and type the code."), x, y, w, 13, g_soft.warn, FontStyleBold) + 8;
+    }
+    y += 4;
     y += SigPara(g, ST("lnAvertir"), x, y, w, 12.5f, g_soft.warn) + 8;
     y += SigPara(g, T(L"Le code n'est jamais mis dans l'adresse : c'est toi qui le tapes sur la page.", L"The code is never put in the address: you type it on the page yourself."), x, y, w, 12.5f, g_soft.muted) + 8;
     return y - y0;
@@ -1072,13 +1089,15 @@ static bool SigClick(int id)
     if (id == UI_SIG_BROWSER) {
         std::wstring url = std::wstring(kBugSiteUrl) + L"?lang=" + LangCode();
         LaunchLog("signalement : site ouvert dans le navigateur (page native)");
-        if (!g_sigTest && !g_sigCapture) ShellExecuteW(g_wnd, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        if (!g_sigTest && !g_sigCapture) ShellOpen(url.c_str());
         return true;
     }
+    if (id == UI_SIG_OPENPAGE) { SigOpenPage(); return true; }   // (pendant l'interrogation du jeton -- g_sigBusy -- le bouton reste actif : JD 27/10, « rien ne se passe »)
+    if (id == UI_SIG_COPYURL) { std::wstring u = g_sigCodeUrl.empty() ? kSigPage : g_sigCodeUrl; SoftNotify(CopyText(u) ? T(L"Adresse copiée", L"Address copied") : T(L"Copie impossible", L"Could not copy"), SC_OK); return true; }
     if (g_sigBusy && id != UI_SIG_CANCEL) return true;
     g_sigNote.clear();
     switch (id) {
-    case UI_SIG_LOGIN: case UI_SIG_NEWCODE: g_sigCodeState = 0; if (!g_sigCapture) SigGo(SOP_CODE); return true;
+    case UI_SIG_LOGIN: case UI_SIG_NEWCODE: g_sigCodeState = 0; g_sigOpenFailed = false; if (!g_sigCapture) SigGo(SOP_CODE); return true;
     case UI_SIG_OPENPAGE: SigOpenPage(); return true;
     case UI_SIG_CANCEL: InterlockedExchange(&g_sigCancel, 1); g_sigAppareil.clear(); g_sigView = SV_LOGIN; LaunchLog("signalement : connexion annulee"); return true;
     case UI_SIG_NEW: SigNewForm(); return true;
@@ -1139,6 +1158,7 @@ static void SigCaptureState(const std::wstring &st)
     g_sigMesOk = true;
     if (st == L"signaler-natif-connexion") { g_sigLogged = false; g_sigView = SV_LOGIN; }
     else if (st == L"signaler-natif-code") { g_sigView = SV_CODE; g_sigCode = L"K7QF-M2XP"; g_sigCodeT0 = GetTickCount() - 73000; g_sigCodeExpire = 600; }
+    else if (st == L"signaler-natif-code-echec") { g_sigView = SV_CODE; g_sigCode = L"K7QF-M2XP"; g_sigCodeT0 = GetTickCount() - 73000; g_sigCodeExpire = 600; g_sigOpenFailed = true; }
     else if (st == L"signaler-natif-liste") g_sigView = SV_LIST;
     else if (st == L"signaler-natif-dossier") { g_sigView = SV_DETAIL; g_sigSel = 0; }
     else if (st == L"signaler-natif-dossier-ajout") { g_sigView = SV_DETAIL; g_sigSel = 2; g_sigAddMode = 1; g_sigAddText = L"Ça arrive aussi avec la Ferndale, dès que l'invité ouvre le coffre.\nVersion mwc-1.15.10, salon Steam à 3."; }
