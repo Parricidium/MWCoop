@@ -375,8 +375,10 @@ static void PaintGlass(Graphics &g, RectF r, float rad, Color tint, bool shadow)
 }
 // Carte de verre de la page (gardee dans l'image de fond).
 static void Glass(RectF r, float rad = 22) { g_glassNow.push_back({ r, rad }); }
-static bool g_newUi;   // (fenetre.inc)
 static void SoftCard(Graphics &g, RectF r, float rad);   // (soft.inc)
+static void SoftButton(Graphics &g, RectF r, const std::wstring &s, int id, bool primary, int icon, bool enabled, float rad);
+static void SoftToggleAt(Graphics &g, RectF r, bool on, bool hot);
+static void SoftSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labs, int sel, int id0, bool enabled, float px);
 // Verre dessine tout de suite (bulle, menu, fenetre par-dessus le contenu) : plus opaque.
 static void GlassLive(Graphics &g, RectF r, float rad)
 {
@@ -401,6 +403,7 @@ static float PillW(const std::wstring &s, float px = 11) { Graphics &mg = Measur
 // Bouton plein (accent) ou en verre clair ; zone cliquable id.
 static void UiButton(Graphics &g, RectF r, const std::wstring &s, int id, bool primary, int icon = -1, bool enabled = true, float rad = 14)
 {
+    if (g_newUi) { SoftButton(g, r, s, id, primary, icon, enabled, rad); return; }   // (nouvelle interface : relief Soft, soft.inc)
     bool hot = enabled && g_uiHot == id;
     float a = enabled ? 1.0f : 0.4f;
     GraphicsPath p; RoundRect(p, r, min(rad, r.Height / 2));
@@ -423,6 +426,7 @@ static void UiButton(Graphics &g, RectF r, const std::wstring &s, int id, bool p
 // Interrupteur (48 x 28 dans la maquette).
 static void UiToggle(Graphics &g, RectF r, bool on, bool hot)
 {
+    if (g_newUi) { SoftToggleAt(g, r, on, hot); return; }   // (nouvelle interface : creux, pastille qui glisse)
     GraphicsPath p; RoundRect(p, r, r.Height / 2);
     SolidBrush b(on ? kAcc : TH(toggleOff)); g.FillPath(&b, &p);
     if (hot) { Pen hp(WithA(kAcc, 0.9f), 1.4f); g.DrawPath(&hp, &p); }
@@ -433,6 +437,7 @@ static void UiToggle(Graphics &g, RectF r, bool on, bool hot)
 // Choix a segments (2 ou plus) : celui qui est pris en accent ; zones id0 + i.
 static void UiSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labels, int sel, int id0, float px = 12.5f)
 {
+    if (g_newUi) { SoftSeg(g, r, labels, sel, id0, true, px); return; }   // (nouvelle interface : curseur d'accent qui glisse)
     GraphicsPath tp; RoundRect(tp, r, min(12.0f, r.Height / 2));
     SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
     float w = (r.Width - 6) / labels.size();

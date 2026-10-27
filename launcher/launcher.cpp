@@ -186,6 +186,7 @@ static bool g_modOk;                                // version.dll + MWCoop\MWCo
 static int g_state = ST_IDLE;
 static float g_scale = 1, g_alpha = 0, g_time = 0;
 static int g_offX, g_offY;   // nouvelle interface (fenetre.inc / coque.inc) : coin de la colonne de page dans la fenetre, en pixels (0 dans l'ancienne)
+static bool g_newUi;         // nouvelle interface (refonte Soft UI : fenetre.inc UiNewRead) ; les pages d'avant y prennent la palette Soft (kSoft, ThemeTab)
 static float g_sceneT = 12;   // horloge de la scene animee (g_time est remis a zero par le curseur des champs)
 static int g_benchSkip;       // /capture ... /sauter n : essais de vitesse (1 sans la neige, 2 sans l'interface)
 static int g_bench;           // /capture ... /images n : temps de n images (journal a cote de la capture)
@@ -2109,7 +2110,8 @@ static int g_aurore = 2;   // aurore et neige du fond : 0 off, 1 calme, 2 vivant
 static bool g_glass = true;   // [Lanceur] Verre : cartes en verre depoli (scene floutee dessous) ou opaques
 static int g_densite = 1;     // [Lanceur] Densite : 0 aeree, 1 normale, 2 compacte (pas des lignes des pages)
 static int g_texte = 100;     // [Lanceur] Texte : taille du texte en % (80..110, toutes les polices)
-static Theme &ThemeTab() { return g_theme == THEME_CLAIR ? kLight : g_theme == THEME_AURORE ? kAurore : g_theme == THEME_GARAGE ? kGarage : g_theme == THEME_ETE ? kEte : kDark; }
+static Theme kSoft;   // nouvelle interface : les jetons Soft UI (soft.inc SoftThemeApply) sous les noms de l'ancien theme -- toutes les pages d'avant les prennent
+static Theme &ThemeTab() { if (g_newUi) return kSoft; return g_theme == THEME_CLAIR ? kLight : g_theme == THEME_AURORE ? kAurore : g_theme == THEME_GARAGE ? kGarage : g_theme == THEME_ETE ? kEte : kDark; }
 static float UiTextScale() { return g_texte / 100.0f; }
 // Cle de la scene de fond (ui.inc) : refaite quand le theme, l'aurore ou le verre changent.
 static int SceneKey() { return g_theme + g_aurore * 8 + (g_glass ? 32 : 0) + (g_game == GAME_MSC ? 64 : 0); }
@@ -2651,16 +2653,20 @@ static float MeasureTitleW(Graphics &g, const std::wstring &s, float px)
 
 
 
+static void SoftFieldBox(Graphics &g, RectF r, bool focus);   // (soft.inc)
 static void DrawField(Graphics &g, int i, const wchar_t *label)
 {
     Field &f = g_fields[i];
     if (label && *label) Text(g, label, RectF(f.r.X + 2, f.r.Y - 18, f.r.Width, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+    if (g_newUi) SoftFieldBox(g, f.r, g_focus == i);   // (soft.inc : creux)
+    else {
     GraphicsPath p;
     RoundRect(p, f.r, 14);
     SolidBrush fill(TH(field));
     g.FillPath(&fill, &p);
     Pen pen(g_focus == i ? kAcc : TH(fieldBorder), g_focus == i ? 2.0f : 1.2f);
     g.DrawPath(&pen, &p);
+    }
     RectF tr(f.r.X + 16, f.r.Y, f.r.Width - 32, f.r.Height);
     std::wstring shown = f.text;
     bool placeholder = shown.empty() && g_focus != i;

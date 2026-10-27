@@ -55,6 +55,16 @@ static void SoftThemeApply()
         g_soft.accSoft = Color(46, g_soft.acc.GetR(), g_soft.acc.GetG(), g_soft.acc.GetB());
     }
     if (g_newUi) g_dark = g_softDark;   // (la carte d'avant, dessinee dedans en L0 / L1, suit)
+    // les pages d'avant : les jetons Soft sous les noms de l'ancien theme (TH(x), kInk, kAcc... : ThemeTab -> kSoft)
+    const SoftTokens &s = g_soft;
+    Color acc2 = Color(255, (BYTE)min(255, s.acc.GetR() + 24), (BYTE)min(255, s.acc.GetG() + 24), (BYTE)min(255, s.acc.GetB() + 24));
+    kSoft.ink = s.ink; kSoft.grey = s.muted; kSoft.panel = s.bg; kSoft.panelBorder = s.line; kSoft.sep = s.line;
+    kSoft.card = s.bg; kSoft.cardSel = s.accSoft; kSoft.choiceBorder = s.line; kSoft.toggleOff = s.bgIn;
+    kSoft.field = s.bgIn; kSoft.fieldBorder = s.line; kSoft.placeholder = s.faint;
+    kSoft.tab = s.bgIn; kSoft.tabHot = s.accSoft; kSoft.pill = s.bgIn; kSoft.btn2 = s.bg; kSoft.btn2Hot = s.accSoft;
+    kSoft.circle = s.bg; kSoft.circleHot = s.accSoft; kSoft.fallA = s.bg; kSoft.fallB = s.bgIn;
+    kSoft.accent = s.acc; kSoft.accent2 = acc2; kSoft.onAccent = s.accInk; kSoft.pillHot = s.accSoft;
+    kSoft.ok = s.ok; kSoft.warn = s.warn; kSoft.red = s.bad; kSoft.solid = s.bg;
 }
 static void SoftModeSet(int mode)   // Reglages > Fenetre du lanceur : Clair / Sombre / Auto
 {
@@ -246,10 +256,9 @@ static void SoftButton(Graphics &g, RectF r, const std::wstring &s, int id, bool
     if (enabled) HotZone(r, id);
 }
 // Interrupteur 52 x 30 : creux, pastille qui glisse (220 ms), fond accent quand actif.
-static void SoftToggle(Graphics &g, RectF r, bool on, int id, bool enabled = true)
+static void SoftToggleDraw(Graphics &g, RectF r, bool on, bool hot, long long key, bool enabled)
 {
-    float t = AnimTo(AK(AKH_TOGGLE, id), on ? 1.0f : 0.0f, kSoftTUi, SE_MOVE);
-    bool hot = enabled && g_uiHot == id;
+    float t = AnimTo(key, on ? 1.0f : 0.0f, kSoftTUi, SE_MOVE);
     Color fill = Color((BYTE)255, (BYTE)(g_soft.bgIn.GetR() + (g_soft.acc.GetR() - g_soft.bgIn.GetR()) * t), (BYTE)(g_soft.bgIn.GetG() + (g_soft.acc.GetG() - g_soft.bgIn.GetG()) * t), (BYTE)(g_soft.bgIn.GetB() + (g_soft.acc.GetB() - g_soft.bgIn.GetB()) * t));
     SoftShape(g, r, r.Height / 2, WithA(fill, enabled ? 1.0f : 0.5f));
     if (t < 0.5f) { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftInset(g, r, r.Height / 2, 3, 6); g.Restore(st); }
@@ -257,7 +266,21 @@ static void SoftToggle(Graphics &g, RectF r, bool on, int id, bool enabled = tru
     float d = r.Height - 8, x = r.X + 4 + (r.Width - 8 - d) * t, y = r.Y + 4;
     SoftRaised(g, RectF(x, y, d, d), d / 2, 2, 5, 0.9f);
     SolidBrush k(enabled ? g_soft.bg : WithA(g_soft.bg, 0.7f)); g.FillEllipse(&k, x, y, d, d);
+}
+static void SoftToggle(Graphics &g, RectF r, bool on, int id, bool enabled = true)
+{
+    SoftToggleDraw(g, r, on, enabled && g_uiHot == id, AK(AKH_TOGGLE, id), enabled);
     if (enabled) HotZone(r, id);
+}
+static void SoftToggleAt(Graphics &g, RectF r, bool on, bool hot)   // (UiToggle des pages d'avant : la zone est celle de la ligne ; cle = position)
+{
+    SoftToggleDraw(g, r, on, hot, AK(AKH_TOGGLE, (((int)r.X & 0x7FFF) << 15) | ((int)r.Y & 0x7FFF)), true);
+}
+static void SoftFieldBox(Graphics &g, RectF r, bool focus)   // (DrawField des pages d'avant : la boite creuse)
+{
+    SoftShape(g, r, kSoftRCtl, g_soft.bgIn);
+    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, kSoftRCtl); g.SetClip(&p); SoftInset(g, r, kSoftRCtl); g.Restore(st); }
+    if (focus) { Pen fp(g_soft.acc, 2.0f); GraphicsPath p; RoundRect(p, RectF(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2), kSoftRCtl - 1); g.DrawPath(&fp, &p); }
 }
 // Segments / onglets : creux ; le curseur d'accent glisse sous le choix (220 ms, un seul objet) ; zones id0 + i.
 static float SoftSegW(const std::vector<std::wstring> &labs, float px = 13)
