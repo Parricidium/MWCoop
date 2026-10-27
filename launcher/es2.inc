@@ -327,6 +327,7 @@ static std::wstring SavePartieKey(const std::wstring &dir, const wchar_t *key)
 static void SaveCheckRun(std::wstring prof, std::wstring name, std::wstring dir = L"")   // (par valeur : on l'appelle avec g_chk.prof)   // (dir : captures, un dossier d'essai)
 {
     g_chk = SaveCheckState(); g_chk.prof = prof; g_chk.name = name;
+    g_saveImportArc.clear();   // (SaveImportFile le remet apres : la fenetre dit alors d'ou vient la partie)
     if (dir.empty()) dir = SaveDirOf(prof);
     const Es2Rules *r = Es2RulesFor(g_game);
     Es2Ctx c = { r, 0, false, 0 };
@@ -415,6 +416,10 @@ static void DrawSaveCheck(Graphics &g, RectF c, float y)
     else swprintf_s(sum, T(L"« %s » : %d réparable(s), %d à surveiller, %d fichier(s) illisible(s).", L"\"%s\": %d repairable, %d to watch, %d unreadable file(s)."), g_chk.name.c_str(), g_chk.fix, g_chk.warn, g_chk.broken);
     Para(g, sum, RectF(x, y, w, 40), 13.5f, kInk);   // (deux lignes : le russe est plus long)
     y += sum[0] && MeasureW(MeasureG(), sum, 13.5f, FontStyleRegular) > w ? 46 : 28;
+    if (!g_saveImportArc.empty()) {   // (juste importee : d'ou elle vient, et la suite)
+        Para(g, std::wstring(T(L"Importée depuis ", L"Imported from ")) + g_saveImportArc + T(L". Elle est dans ta liste : Utiliser pour héberger, et tes invités la reçoivent comme d'habitude.", L". It is in your list: Use for hosting, and your guests receive it as usual."), RectF(x, y, w, 40), 12, kGrey);
+        y += 46;
+    }
     int rows = 0;
     const int maxRows = 13;
     auto row = [&](Color col, const std::wstring &t) {

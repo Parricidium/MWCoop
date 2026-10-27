@@ -1,0 +1,18 @@
+IMP01	Import a save
+IMP02	Choose a save archive (.zip, .rar, .7z)
+IMP03	Imported save
+IMP04	Archive not found
+IMP05	Archive too big for a save (over 512 MB)
+IMP06	Unreadable archive (%s): make it a .zip (right click > Compress) then import it
+IMP07	This is a My Summer Car save, not a My Winter Car one: switch to MSC (under the version number) to import it
+IMP08	This is a My Winter Car save, not a My Summer Car one: switch to MWC (under the version number) to import it
+IMP09	No save in this archive (defaultES2File.txt not found)
+IMP10	No save in this archive (savefile.txt not found)
+IMP11	\"%s\" imported (%d files): pick it with Use for hosting
+IMP12	Imported from 
+IMP13	. It is in your list: Use for hosting, and your guests receive it as usual.
+IMP14	New game: a fresh save. A save received or downloaded (zip, rar, 7z): Import, at the top.
+IMP15	A save downloaded or received (.zip, .rar, .7z): it becomes a game in your list, checked right away. Use for hosting, and your guests receive it.
+IMP16	Import a save (header button, left of New game): a save downloaded (Nexus…) or received from a friend, as .zip, .rar or .7z. The launcher finds its files, even inside a subfolder, makes a new game named after the archive (Rename to change it) and checks it right away. A save of the other game is refused: switch to MSC or MWC first.
+IMP17	Import
+IMP18	Import a save (.zip, .rar, .7z)

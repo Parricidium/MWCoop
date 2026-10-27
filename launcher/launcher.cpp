@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|sauvegardes-copies|sauvegardes-toutes|sauvegardes-vraies|sauvegardes-verif|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-voyage|salon-mods-gros|accueil-retard-gros|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-triches|salon-invite-triches|reglages-triches|sauvegardes-copies|sauvegardes-toutes|sauvegardes-vraies|sauvegardes-verif|sauvegardes-import|sauvegardes-survol-import|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n>|flux|flux-notes|flux-reglages|steam-refus|rail-defile [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -7864,6 +7864,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow, kZipSiteMax, Narrow(kBugSiteUrl, CP_UTF8).c_str(), Narrow(LangCode()).c_str());
         return 0;
     }
+    // Essai : /testimport <dossier de jeu factice> <journal> <msc|mwc> <archive>... -- Importer une sauvegarde : chaque archive
+    // dans une partie-N du jeu factice (refus : mauvais jeu, pas de sauvegarde, format illisible), puis la verification.
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/testimport")) {
+        g_launcherLog = argv[3];
+        g_game = !_wcsicmp(argv[4], L"msc") ? GAME_MSC : GAME_MWC;
+        g_gameDir = g_modRoot = WithSlash(argv[2]);
+        for (int i = 5; i < argc; i++) {
+            bool ok = SaveImportFile(argv[i], L"");
+            LaunchLog("testimport : %s -> %s, statut « %s »", Narrow(argv[i], CP_UTF8).c_str(), ok ? "IMPORTEE" : "refusee", Narrow(g_status, CP_UTF8).c_str());
+            if (!ok) continue;
+            int sel = SaveSelIndex();
+            if (sel >= 0) LaunchLog("testimport :   partie %s « %s », %llu octets, jour %d, stats %d", Narrow(g_saves[sel].prof, CP_UTF8).c_str(), Narrow(g_saves[sel].name, CP_UTF8).c_str(), g_saves[sel].bytes, g_saves[sel].jour, (int)g_saves[sel].stats);
+            LaunchLog("testimport :   verification : %d reparable(s), %d attention, %d illisible(s)", g_chk.fix, g_chk.warn, g_chk.broken);
+            for (auto &sf : g_chk.files) {
+                LaunchLog("testimport :     %s : %s", Narrow(sf.name, CP_UTF8).c_str(), !sf.present ? "absent" : !sf.ok ? ("ILLISIBLE " + sf.err).c_str() : (std::to_string(sf.is.size()) + " remarque(s)").c_str());
+                for (auto &is : sf.is) LaunchLog("testimport :       [%d] %s %s", is.sev, is.entry < sf.f.e.size() ? sf.f.e[is.entry].tag.c_str() : "", Narrow(is.what, CP_UTF8).c_str());
+            }
+        }
+        return 0;
+    }
     // Essai : /testtuto <journal> <ini d'essai> -- bulles des nouveautes : 1er demarrage avec l'ancienne valeur (TutoVersion =
     // version du mod, 1.15.8), visite passee (Echap), 2e demarrage : plus aucune bulle ; puis meme chose sur l'autre jeu.
     if (argc >= 4 && !_wcsicmp(argv[1], L"/testtuto")) {
@@ -8188,6 +8208,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"sauvegardes-verif") {   // (Verifier la sauvegarde : fichiers du dossier MWCOOP_VERIF -- essais)
             g_tab = TAB_SAVES; SavesFake(); wchar_t vd[MAX_PATH] = L""; GetEnvironmentVariableW(L"MWCOOP_VERIF", vd, MAX_PATH);
             SaveCheckRun(L"", g_saves.empty() ? L"" : g_saves[0].name, WithSlash(vd)); g_saveModal = SM_CHECK;
+        }
+        else if (st == L"sauvegardes-survol-import") { g_tab = TAB_SAVES; SavesFake(); g_uiHot = UI_SAVE_IMPORT; }   // (en-tete : etiquette du bouton Importer)
+        else if (st == L"sauvegardes-import") {   // (fenetre apres un import : fichiers du dossier MWCOOP_VERIF, archive MWCOOP_IMPORTNOM)
+            g_tab = TAB_SAVES; SavesFake(); wchar_t vd[MAX_PATH] = L"", an[MAX_PATH] = L""; GetEnvironmentVariableW(L"MWCOOP_VERIF", vd, MAX_PATH); GetEnvironmentVariableW(L"MWCOOP_IMPORTNOM", an, MAX_PATH);
+            SaveCheckRun(L"", g_saves.empty() ? L"" : g_saves[0].name, WithSlash(vd)); g_saveImportArc = an; g_saveModal = SM_CHECK;
         }
         else if (st == L"sauvegardes-vraies") { g_tab = TAB_SAVES; SavesScan(); std::wstring cur = SaveCurrentProf(); for (int k = 0; k < (int)g_saves.size(); k++) if (g_saves[k].prof == cur) g_saveSel = k; }   // (les vraies parties de ce lanceur, la partie utilisee choisie : copies de secours)
         else if (st == L"sauvegardes-copies" || st == L"sauvegardes-toutes") {   // (copies de secours factices : au lancement, avant une version, avant une remise, Reworked)

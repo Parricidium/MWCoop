@@ -762,7 +762,24 @@ static void DrawHeader(Graphics &g)
         Text(g, tl, tr, 12.5f, FontStyleBold, WithA(kInk, a));
     }
     if (g_state == ST_IDLE) {
-        if (g_tab == TAB_SAVES) { UiButton(g, RectF(right - 164, 22, 164, 44), T(L"Nouvelle partie", L"New game"), UI_SAVE_NEW, true, IC_HOMEPLUS); right -= 174; }   // (saves.inc)
+        if (g_tab == TAB_SAVES) {   // (saves.inc)
+            UiButton(g, RectF(right - 164, 22, 164, 44), T(L"Nouvelle partie", L"New game"), UI_SAVE_NEW, true, IC_HOMEPLUS); right -= 174;
+            // Importer une sauvegarde (demande de JD, 27/10 : une sauvegarde telechargee, .zip / .rar / .7z) : a gauche de Nouvelle partie
+            // (« Importer » : le nom entier, au survol -- en entier, le titre de la page ne tenait plus)
+            const wchar_t *il = T(L"Importer", L"Import");
+            float iw = MeasureW(MeasureG(), il, 13.5f, FontStyleBold) + 24 + 36;
+            g_saveImportR = RectF(right - iw, 22, iw, 44);
+            UiButton(g, g_saveImportR, il, UI_SAVE_IMPORT, false, IC_DOWNLOAD); right -= iw + 10;
+            if (g_uiHot == UI_SAVE_IMPORT && g_saveModal == SM_NONE) {
+                const wchar_t *tl = T(L"Importer une sauvegarde (.zip, .rar, .7z)", L"Import a save (.zip, .rar, .7z)");
+                float tw = MeasureW(MeasureG(), tl, 12.5f, FontStyleBold) + 24;
+                RectF br = g_saveImportR, tr(br.X + br.Width / 2 - tw / 2, br.Y + br.Height + 8, tw, 28);
+                GraphicsPath tp; RoundRect(tp, tr, 10);
+                SolidBrush tb(TH(solid)); g.FillPath(&tb, &tp);
+                Pen tpen(TH(fieldBorder), 1.0f); g.DrawPath(&tpen, &tp);
+                Text(g, tl, tr, 12.5f, FontStyleBold, kInk);
+            }
+        }
         if (g_tab == TAB_CONTENT || g_tab == TAB_MODS) {
             int n = MscModCount();
             std::vector<std::wstring> lab = { std::wstring(T(L"Contenu · ", L"Content · ")) + ContentSummary(), std::wstring(L"Mods · ") + std::to_wstring(n) };

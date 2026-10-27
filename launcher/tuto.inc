@@ -134,6 +134,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.15.16 (26/10) : Signaler un bug, a cote des Journaux (58)
     { L"Signaler un bug", L"L'insecte en haut à droite, à côté des Journaux : il ouvre le formulaire du site de signalement et met le zip des journaux sur le Bureau. Glisse-le dans le formulaire, juste après le problème.",
       L"Report a bug", L"The bug icon at the top right, next to the Logs: it opens the bug report form and puts the logs zip on the Desktop. Drag it into the form, right after the problem.", "1.15.16" },
+    // lanceur-1.15.17 (27/10) : Importer une sauvegarde, en-tete des Sauvegardes (59)
+    { L"Importer une sauvegarde", L"Une sauvegarde téléchargée ou reçue (.zip, .rar, .7z) : elle devient une partie de ta liste, vérifiée tout de suite. Utiliser pour héberger, et tes invités la reçoivent.",
+      L"Import a save", L"A save downloaded or received (.zip, .rar, .7z): it becomes a game in your list, checked right away. Use for hosting, and your guests receive it.", "1.15.17" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -232,10 +235,12 @@ static RectF TutoTarget(int i)
     case 57: return g_placesCardR;                           // bandeau Placement des sieges (page Outils : outils-places.inc)
     // 1.15.16
     case 58: return g_btn[B_BUG].r;                          // Signaler un bug (en-tete, a cote des Journaux : ui.inc DrawHeader)
+    // 1.15.17
+    case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

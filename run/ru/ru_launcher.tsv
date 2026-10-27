@@ -2105,3 +2105,20 @@ The bug icon at the top right, next to the Logs: it opens the bug report form an
 Form opened, but no logs yet: start the game with MWCoop first	Форма открыта, но логов пока нет: сначала запусти игру с MWCoop
 Form opened: drag the logs zip (on the Desktop) into it	Форма открыта: перетащи в неё zip с логами (на рабочем столе)
 Report a bug (the bug icon at the top right): the form and the logs zip. Or Logs > Make the zip, on Discord (#bug-reports).	«Сообщить об ошибке» (значок жука вверху справа): форма и zip с логами. Или Логи > Создать zip, в Discord (#bug-reports).
+Import a save	Импортировать сохранение
+Choose a save archive (.zip, .rar, .7z)	Выбери архив сохранения (.zip, .rar, .7z)
+Imported save	Импортированное сохранение
+Archive not found	Архив не найден
+Archive too big for a save (over 512 MB)	Архив слишком большой для сохранения (больше 512 МБ)
+Unreadable archive (%s): make it a .zip (right click > Compress) then import it	Архив не читается (%s): сделай из него .zip (правый клик > Сжать) и импортируй его
+This is a My Summer Car save, not a My Winter Car one: switch to MSC (under the version number) to import it	Это сохранение My Summer Car, а не My Winter Car: переключись на MSC (под номером версии), чтобы импортировать его
+This is a My Winter Car save, not a My Summer Car one: switch to MWC (under the version number) to import it	Это сохранение My Winter Car, а не My Summer Car: переключись на MWC (под номером версии), чтобы импортировать его
+No save in this archive (defaultES2File.txt not found)	В этом архиве нет сохранения (defaultES2File.txt не найден)
+No save in this archive (savefile.txt not found)	В этом архиве нет сохранения (savefile.txt не найден)
+\"%s\" imported (%d files): pick it with Use for hosting	«%s» импортировано (файлов: %d): выбери его кнопкой «Использовать для хостинга»
+Imported from 	Импортировано из 
+. It is in your list: Use for hosting, and your guests receive it as usual.	. Оно в твоём списке: «Использовать для хостинга» — и гости получат его как обычно.
+New game: a fresh save. A save received or downloaded (zip, rar, 7z): Import, at the top.	Новая игра: чистое сохранение. Полученное или скачанное сохранение (zip, rar, 7z): «Импорт», вверху.
+A save downloaded or received (.zip, .rar, .7z): it becomes a game in your list, checked right away. Use for hosting, and your guests receive it.	Скачанное или полученное сохранение (.zip, .rar, .7z) становится игрой в твоём списке и сразу проверяется. «Использовать для хостинга» — и гости его получат.
+Import	Импорт
+Import a save (.zip, .rar, .7z)	Импортировать сохранение (.zip, .rar, .7z)
