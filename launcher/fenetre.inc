@@ -483,7 +483,7 @@ static void DrawUiChoice(Graphics &g)
 // ---- essai cache : /testfenetre <journal> -- la nouvelle fenetre jamais montree : disposition a plusieurs tailles, taille
 // minimale, zones du cadre (WM_NCHITTEST), plein ecran, memoire de la taille, une image rendue (temps).
 static bool g_winTest;
-static bool UiClick(int id); static int SoftNavIndex(int tab); static void SoftPressNote(int id); static void SoftToastsClear(); static void SoftThemeCircle(PointF from); static void SoftModeSet(int mode); static bool SoftAnimatingTake();
+static bool UiClick(int id); static int SoftNavIndex(int tab); static void SoftPressNote(int id); static void SoftToastsClear(); static void WinTutoTest(); static void SoftThemeCircle(PointF from); static void SoftModeSet(int mode); static bool SoftAnimatingTake();
 // Preuve de la correction des animations (JD 27/10, indicateur de la barre fige a mi-chemin) : on simule un clic (ligne de la
 // barre, onglet de Reglages, segment du theme, interrupteur), on laisse tourner images et transitions comme le Tick le ferait
 // (une image tant qu'une zone est sale, qu'une animation ou une transition est en cours), puis l'image AFFICHEE doit etre
@@ -647,5 +647,6 @@ static void WinSelfTest()
     g_tab = TAB_HOME; g_profilOn = false;
     SoftSelfTest();   // (soft.inc : courbes, animations, transitions, cache des ombres)
     WinAnimTest();    // (chaque animation : l'image affichee a la fin == un rendu complet, au pixel pres)
+    WinTutoTest();    // (tuto.inc : chaque bulle de la visite entiere dans la fenetre, barre repliee et deployee)
     LaunchLog("testfenetre : NouvelleEnCours=%d avant l'effacement (filet), fin", GetPrivateProfileIntW(L"Lanceur", L"NouvelleEnCours", 0, g_iniLauncher.c_str()));
 }

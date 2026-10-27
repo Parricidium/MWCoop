@@ -307,20 +307,38 @@ static void TutoAtStartup()
 }
 
 // Bulle : sous l'element (ou au-dessus s'il n'y a pas la place), dans la fenetre ; fleche vers l'element.
-static RectF TutoBubble(RectF tg, bool *below)
+// La fenetre, en coordonnees de la carte (nouvelle interface : la barre et l'en-tete sont a gauche et au-dessus de la colonne
+// de page, donc a des x et y negatifs ; ancienne : la carte).
+static RectF TutoWin() { return g_newUi ? RectF(-g_offX / g_scale - kM, -g_offY / g_scale - kM, g_winW / g_scale, g_winH / g_scale) : RectF(0, 0, kCardW, kCardH); }
+// Element de la barre de gauche (ou grand element a gauche dans l'ancienne) : bulle a sa droite, fleche vers la gauche.
+static bool TutoSide(RectF tg) { return tg.Width > 0 && (g_newUi ? tg.X + tg.Width < 264 : (tg.X + tg.Width < 260 && tg.Height > 120)); }
+static float TutoTitleH(const std::wstring &t, float w)   // hauteur du titre, coupe aux mots (2 lignes au plus)
 {
-    const float w = 380, h = 170;
-    if (tg.Width <= 0) { *below = true; return RectF(kCardW / 2 - w / 2, kCardH / 2 - h / 2, w, h); }
-    if (tg.X + tg.Width < 260 && tg.Height > 120) {   // grand element de la barre de gauche : bulle a sa droite
+    Font &f = *FontOf(TitleFont(), 17, FontStyleBold); StringFormat sf; RectF box;
+    MeasureStr(MeasureG(), t.c_str(), -1, &f, RectF(0, 0, w, 100), &sf, &box);
+    return min(box.Height, 50.0f);
+}
+static float TutoTitleW(int step) { return 380 - 18 - 96 - (g_tutoAll ? 0 : 72); }
+static RectF TutoBubble(RectF tg, bool *below, int step)
+{
+    const float w = 380, m = 16;
+    float h = 170 + (TutoTitleH(T(TutoStepOf(step).tFr, TutoStepOf(step).tEn), TutoTitleW(step)) > 26 ? 22 : 0);
+    RectF win = TutoWin();
+    auto clampX = [&](float x) { return min(max(x, win.X + m), win.X + win.Width - m - w); };
+    auto clampY = [&](float y) { return min(max(y, win.Y + m), win.Y + win.Height - m - h); };
+    if (tg.Width <= 0) { *below = true; return RectF(win.X + win.Width / 2 - w / 2, win.Y + win.Height / 2 - h / 2, w, h); }
+    if (TutoSide(tg)) {   // element de la barre de gauche : a sa droite, centree sur lui, entiere dans la fenetre (JD 27/10 : bulle 60 coupee, barre repliee)
         *below = true;
-        return RectF(tg.X + tg.Width + 24, min(max(tg.Y + tg.Height / 2 - h / 2, 24.0f), kCardH - 24 - h), w, h);
+        return RectF(clampX(tg.X + tg.Width + 24), clampY(tg.Y + tg.Height / 2 - h / 2), w, h);
     }
     float cx = tg.X + tg.Width / 2;
-    float x = min(max(cx - w / 2, 24.0f), kCardW - 24 - w);
-    *below = tg.Y + tg.Height + 18 + h < kCardH - 16;
+    float x = clampX(cx - w / 2);
+    *below = tg.Y + tg.Height + 18 + h < win.Y + win.Height - m;
     float y = *below ? tg.Y + tg.Height + 18 : tg.Y - 18 - h;
-    return RectF(x, y, w, h);
+    if (y < win.Y + m) { *below = true; y = tg.Y + tg.Height + 18; }   // (pas la place au-dessus : en dessous, puis recadree)
+    return RectF(x, clampY(y), w, h);
 }
+static RectF TutoBubble(RectF tg, bool *below) { return TutoBubble(tg, below, TutoCur()); }
 static RectF TutoBtn(RectF b, int k)   // 1 suivant, 2 passer, 3 retour
 {
     if (k == 1) return RectF(b.X + b.Width - 130, b.Y + b.Height - 50, 114, 36);
@@ -351,6 +369,33 @@ static bool TutoKey(WPARAM wp)
     return true;
 }
 
+// Essai (fenetre.inc WinSelfTest, jamais de fenetre) : chaque bulle de la visite, en 990 x 640 (barre repliee) et 1980 x 1260,
+// doit tenir entiere dans la fenetre (JD 27/10 : bulle 60 coupee a gauche, barre repliee).
+static void WinLayout(); static void PresentNew(); static void InvalidateAll();
+static void WinTutoTest()
+{
+    int fails = 0, tested = 0;
+    for (int sz = 0; sz < 2; sz++) {
+        int tw = sz ? 1980 : 990, th = sz ? 1260 : 640;
+        SetWindowPos(g_wnd, NULL, 0, 0, tw, th, SWP_NOZORDER | SWP_NOACTIVATE); WinLayout();
+        g_tutoAll = true;
+        for (int i = 1; i < kTutoN; i++) {
+            if (TutoSkip(i)) continue;
+            g_tutoList = { i }; g_tuto = 0;
+            int tab = TutoTab(i); if (tab >= 0 && tab != g_tab) { GoPage(tab); }
+            InvalidateAll(); PresentNew();   // (les cibles -- barre, boutons -- sont posees par le dessin)
+            InvalidateAll(); PresentNew();
+            bool below; RectF tg = TutoTarget(i), b = TutoBubble(tg, &below, i), win = TutoWin();
+            bool in = b.X >= win.X && b.Y >= win.Y && b.X + b.Width <= win.X + win.Width && b.Y + b.Height <= win.Y + win.Height;
+            tested++;
+            if (!in) { fails++; LaunchLog("testtuto : %d x %d, bulle %d : HORS FENETRE (%.0f,%.0f %.0fx%.0f ; fenetre %.0f,%.0f %.0fx%.0f)", tw, th, i, b.X, b.Y, b.Width, b.Height, win.X, win.Y, win.Width, win.Height); }
+        }
+        g_tuto = -1; g_tutoList.clear();
+        LaunchLog("testtuto : %d x %d (%s) : %d bulles verifiees", tw, th, sz ? "barre deployee" : "barre repliee", tested);
+    }
+    GoPage(TAB_HOME); InvalidateAll(); PresentNew();
+    LaunchLog("testtuto : fin, %d bulle(s) hors fenetre", fails);
+}
 static void DrawTuto(Graphics &g)
 {
     if (g_tuto < 0) return;
@@ -374,7 +419,14 @@ static void DrawTuto(Graphics &g)
     GlassLive(g, b, 18);
     Pen bpen(WithA(kAcc, 0.8f), 1.4f);
     { GraphicsPath bp; RoundRect(bp, b, 18); g.DrawPath(&bpen, &bp); }
-    if (tg.Width > 0 && !(tg.X + tg.Width < 260 && tg.Height > 120)) {   // fleche vers l'element
+    if (TutoSide(tg)) {   // element de la barre : fleche vers la gauche, a la hauteur de l'element
+        float ay = min(max(tg.Y + tg.Height / 2, b.Y + 28), b.Y + b.Height - 28);
+        PointF tri[3] = { PointF(b.X + 1, ay - 10), PointF(b.X + 1, ay + 10), PointF(b.X - 11, ay) };
+        SolidBrush tb(g_dark ? Color(235, 30, 44, 84) : Color(240, 255, 255, 255));
+        g.FillPolygon(&tb, tri, 3);
+        g.DrawLine(&bpen, tri[0], tri[2]);
+        g.DrawLine(&bpen, tri[1], tri[2]);
+    } else if (tg.Width > 0) {   // fleche vers l'element
         float ax = min(max(tg.X + tg.Width / 2, b.X + 28), b.X + b.Width - 28);
         PointF tri[3];
         if (below) { tri[0] = PointF(ax - 10, b.Y + 1); tri[1] = PointF(ax + 10, b.Y + 1); tri[2] = PointF(ax, b.Y - 11); }
@@ -395,8 +447,13 @@ static void DrawTuto(Graphics &g)
         Pill(g, RectF(tx, b.Y + 15, w, 20), kRed, nl, Color(255, 255, 255, 255), 10);
         tx += w + 8;
     }
-    Title(g, T(st.tFr, st.tEn), RectF(tx, b.Y + 10, b.X + b.Width - 96 - tx, 28), 17, kAcc);
-    Para(g, T(st.dFr, st.dEn), RectF(b.X + 18, b.Y + 44, b.Width - 36, b.Height - 100), 13, kInk);
+    {   // titre sur deux lignes au plus (coupe aux mots), la description en dessous
+        std::wstring title = T(st.tFr, st.tEn); float tw = b.X + b.Width - 96 - tx, th = TutoTitleH(title, tw);
+        Font &f = *FontOf(TitleFont(), 17, FontStyleBold); StringFormat sf; sf.SetTrimming(StringTrimmingEllipsisWord); SolidBrush br(kAcc);
+        DrawStr(g, title.c_str(), -1, &f, RectF(tx, b.Y + 12, tw, th + 2), &sf, &br);
+        float dy = th > 26 ? 22 : 0;
+        Para(g, T(st.dFr, st.dEn), RectF(b.X + 18, b.Y + 44 + dy, b.Width - 36, b.Height - 100 - dy), 13, kInk);
+    }
     for (int k = 1; k <= 3; k++) {
         if (k == 3 && g_tuto == 0) continue;
         if (k == 2 && g_tuto == (int)g_tutoList.size() - 1) continue;   // (derniere bulle : rien a passer)

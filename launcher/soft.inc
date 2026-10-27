@@ -456,6 +456,7 @@ static void SoftTooltipFlush(Graphics &g, int winW, int winH)   // (coque.inc Re
         RectF r(a.X + a.Width / 2 - w / 2, a.Y + a.Height + 8, w, h);
         if ((r.X + r.Width) * sc > winW - 4) r.X = winW / sc - 4 / sc - r.Width;   // (jamais hors de la fenetre a droite)
         if (r.X * sc < 4) r.X = 4 / sc;
+        if ((r.Y + r.Height) * sc > winH - 4) r.Y = a.Y - 8 - h;   // (ni en bas : au-dessus de l'element)
         GraphicsState st = g.Save();
         g.ResetTransform(); g.SetClip(Rect(0, 0, winW, winH));
         g.ScaleTransform(sc, sc);
