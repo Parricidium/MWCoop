@@ -192,6 +192,26 @@ namespace MWCoop.Net
             if (IsHost) Broadcast(w, reliable); else SendToHost(w, reliable);
         }
 
+        // Hote : il va charger un niveau (continuer, nouvelle partie : 10 a 40 s sans une image, donc sans un paquet). Au-dela
+        // de 15 s de silence, l'invite au menu le tenait pour parti et se reconnectait (essais chaos, 27/10 : un chargement
+        // de 24 s). Prevenu juste avant, il tolere le silence (Transport.Grace), comme l'hote le fait pour un invite qui charge.
+        public const int LoadingGrace = 60;
+        public static void AnnounceLoading()
+        {
+            if (!Active || !IsHost || T == null || RemoteCount == 0) return;
+            Broadcast(new NetWriter(Msg.Loading).U8(LoadingGrace), true);
+            T.Flush();
+            Log.Info("hote : chargement annonce aux invites (silence tolere " + LoadingGrace + " s)");
+        }
+
+        static void OnLoading(Peer from, NetReader r)
+        {
+            if (IsHost || from != hostPeer) return;
+            int s = r.U8();
+            T.Grace(from, s);
+            Log.Info("hote : il charge un niveau, son silence est tolere " + s + " s");
+        }
+
         public static int RemoteCount { get { return Players.Count - (Players.ContainsKey(LocalId) ? 1 : 0); } }
 
         // ------------------------------------------------------------ evenements
@@ -323,6 +343,7 @@ namespace MWCoop.Net
                     case Msg.PlayerState: PlayerSync.OnState(from, r, data, off, len); break;
                     case Msg.Chat: Chat.OnMessage(from, r); break;
                     case Msg.SaveBegin: case Msg.SaveChunk: case Msg.SaveEnd: SaveTransfer.OnMessage(type, r); break;
+                    case Msg.Loading: OnLoading(from, r); break;
                     default: World.OnMessage(type, from, r); break;
                 }
             }
