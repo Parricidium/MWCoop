@@ -2232,6 +2232,24 @@ Different version (you %s, host %s): update	إصدار مختلف (لديك %s،
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.
 Different version (you %s, host %s): the host must update MWCoop	إصدار مختلف (لديك %s، لدى المضيف %s): على المضيف تحديث MWCoop
 \"Different version\": the host and you don't have the same version. If the host is more up to date, the launcher offers to update right away (it restarts by itself); otherwise the host must update.	«إصدار مختلف»: ليس لديك ولدى المضيف الإصدار نفسه. إن كان المضيف أحدث، يعرض عليك المشغّل التحديث فوراً (ويعيد تشغيل نفسه)؛ وإلا فعلى المضيف أن يحدّث.
+Import a save	استيراد حفظ
+Choose a save archive (.zip, .rar, .7z)	اختر أرشيف حفظ (‎.zip، ‎.rar، ‎.7z)
+Imported save	حفظ مستورد
+Archive not found	الأرشيف غير موجود
+Archive too big for a save (over 512 MB)	الأرشيف أكبر من أن يكون حفظًا (أكثر من 512 ميغابايت)
+Unreadable archive (%s): make it a .zip (right click > Compress) then import it	أرشيف غير مقروء (%s): حوّله إلى ‎.zip (نقرة يمنى > ضغط) ثم استورده
+This is a My Summer Car save, not a My Winter Car one: switch to MSC (under the version number) to import it	هذا حفظ لـ My Summer Car وليس لـ My Winter Car: انتقل إلى MSC (تحت رقم الإصدار) لاستيراده
+This is a My Winter Car save, not a My Summer Car one: switch to MWC (under the version number) to import it	هذا حفظ لـ My Winter Car وليس لـ My Summer Car: انتقل إلى MWC (تحت رقم الإصدار) لاستيراده
+No save in this archive (defaultES2File.txt not found)	لا يوجد حفظ في هذا الأرشيف (لم يُعثر على defaultES2File.txt)
+No save in this archive (savefile.txt not found)	لا يوجد حفظ في هذا الأرشيف (لم يُعثر على savefile.txt)
+\"%s\" imported (%d files): pick it with Use for hosting	تم استيراد «%s» (%d ملفات): اختره بزر «استخدمه للاستضافة»
+Imported from 	مستورد من 
+. It is in your list: Use for hosting, and your guests receive it as usual.	. إنه في قائمتك: «استخدمه للاستضافة»، وسيستلمه ضيوفك كالمعتاد.
+New game: a fresh save. A save received or downloaded (zip, rar, 7z): Import, at the top.	لعبة جديدة: حفظ جديد. حفظ مستلم أو منزّل (zip، rar، 7z): «استيراد»، في الأعلى.
+A save downloaded or received (.zip, .rar, .7z): it becomes a game in your list, checked right away. Use for hosting, and your guests receive it.	حفظ منزّل أو مستلم (‎.zip، ‎.rar، ‎.7z): يصبح لعبة في قائمتك ويُفحص فورًا. «استخدمه للاستضافة»، وسيستلمه ضيوفك.
+Import a save (header button, left of New game): a save downloaded (Nexus…) or received from a friend, as .zip, .rar or .7z. The launcher finds its files, even inside a subfolder, makes a new game named after the archive (Rename to change it) and checks it right away. A save of the other game is refused: switch to MSC or MWC first.	استيراد حفظ (زر في الترويسة، على يسار «لعبة جديدة»): حفظ منزّل (Nexus…) أو مستلم من صديق، بصيغة ‎.zip أو ‎.rar أو ‎.7z. يجد المشغّل ملفاته حتى داخل مجلد فرعي، ويجعل منه لعبة جديدة باسم الأرشيف (إعادة تسمية لتغييره) ويفحصه فورًا. يُرفض حفظ اللعبة الأخرى: انتقل أولًا إلى MSC أو MWC.
+Import	استيراد
+Import a save (.zip, .rar, .7z)	استيراد حفظ (‎.zip، ‎.rar، ‎.7z)
 Host's game: 	لعبة المضيف: 
 New save, or restart one	حفظ جديد، أو إعادة بدء حفظ
 Main game	اللعبة الرئيسية

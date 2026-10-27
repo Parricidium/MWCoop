@@ -30,7 +30,7 @@ static std::wstring g_saveNameText;
 static const int kSaveNameMax = 32;
 enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAVE_MOK, UI_SAVE_MRESTART, UI_SAVE_MFRESH, UI_SAVE_LOBBY,
        UI_SAVE_DUP, UI_SAVE_EXPORT, UI_SAVE_RESTART, UI_SAVE_DEL,   // onglet, carte de droite : sur la partie choisie (g_saveSel)
-       UI_SAVE_IMPORT,       // fenetre du nom : « Depuis un zip… » (la sauvegarde d'un ami, Exporter (zip))
+       UI_SAVE_IMPORT,       // en-tete : « Importer une sauvegarde » ; fenetre du nom : « Depuis un zip… » (zip, rar, 7z)
        UI_SAVE_COPIES,       // carte de droite : « Toutes les copies » (fenetre SM_COPIES)
        UI_SAVE_CHECK, UI_SAVE_REPAIR, UI_SAVE_CHECKCOPIES,   // « Verifier la sauvegarde » (fenetre SM_CHECK : es2.inc), Reparer, Copies de secours
        UI_SAVE_RESTORE = 9050,   // + k : copie de secours k de la partie choisie (9050-9089)
@@ -123,6 +123,7 @@ static void SaveStatsRead(SaveSlot &s, const std::wstring &dir)
         else if (k == L"date") s.date = v;
         else if (k == L"avec") s.avec = v;
         else if (k == L"role") s.role = v;
+        else continue;   // (version=, jeu=, importee= : pas des chiffres de partie)
         s.stats = true;
     }
 }
@@ -350,33 +351,196 @@ static void SaveNameDone()
     if (g_saveNameForGame) LobbyApplyPartie(PARTIE_NOUVELLE);
     SetStatus(K_OK, T(L"Sauvegarde « %s » créée et utilisée", L"Save \"%s\" created and in use"), n.c_str());
 }
-// « Depuis un zip… » (fenetre du nom) : la sauvegarde d'un ami (Exporter (zip) : fichiers a plat) dans une nouvelle partie-N
-// portant le nom saisi. Le zip est deballe dans le dossier LocalLow de la partie ; rien d'autre n'est touche.
-static void SaveImportZip()
+// ---- Importer une sauvegarde (demande de JD, 27/10 : « importer un .zip de sauvegarde, et de l'ajouter à la liste des
+// sauvegardes [...] pouvoir la choisir au lancement de ma partie pour moi et les autres ») : une archive .zip, .rar ou .7z
+// (sauvegarde telechargee sur Nexus, Exporter (zip) d'un ami) deballee dans un dossier temporaire par le tar.exe de Windows
+// (libarchive : zip, rar, 7z ; Windows 10 1803+, rien de lie au lanceur) -- seulement les .txt, rien n'est execute --, puis le
+// dossier de sauvegarde trouve (a la racine de l'archive ou dans un sous-dossier) copie dans une nouvelle partie-N nommee
+// d'apres l'archive, et « Verifier la sauvegarde » lance tout de suite (es2.inc). L'archive vient d'internet : donnees non
+// fiables -- aucun lien suivi, chemins en « .. » refuses (tar, Unzip), tailles plafonnees, le dossier temporaire efface.
+static std::wstring g_saveImportArc;   // (dernier import : nom de l'archive, montre dans la fenetre de verification)
+static void SaveCheckRun(std::wstring prof, std::wstring name, std::wstring dir);   // (es2.inc)
+static RectF g_saveImportR;            // bouton « Importer une sauvegarde » de l'en-tete (bulle du tuto)
+static const LONGLONG kSaveImportMax = 512LL << 20, kSaveImportFile = 64LL << 20;   // (archive ; un fichier de sauvegarde)
+static void SaveTmpDelete(const std::wstring &dir)   // (sans jamais suivre un lien : on l'enleve, lui seul)
 {
-    std::wstring n = SaveCleanName(g_saveNameText);
-    if (n.empty()) { SetStatus(K_WARN, T(L"Donne d'abord un nom à la partie", L"Name the game first")); return; }
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring n = fd.cFileName, p = dir + L"\\" + n;
+            if (n == L"." || n == L"..") continue;
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) { if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) RemoveDirectoryW(p.c_str()); else DeleteFileW(p.c_str()); }
+            else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) SaveTmpDelete(p);
+            else { SetFileAttributesW(p.c_str(), FILE_ATTRIBUTE_NORMAL); DeleteFileW(p.c_str()); }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    RemoveDirectoryW(dir.c_str());
+}
+// Jeu d'un dossier de sauvegarde : My Winter Car (savefile.txt, carparts.txt, items2.txt) ; My Summer Car (defaultES2File.txt
+// sans ceux-la : My Winter Car en a aussi un, petit). -1 : pas une sauvegarde.
+static int SaveDirGame(const std::wstring &d)
+{
+    auto has = [&](const wchar_t *f) { DWORD a = GetFileAttributesW((d + f).c_str()); return a != INVALID_FILE_ATTRIBUTES && !(a & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)); };
+    if (has(L"savefile.txt") || has(L"carparts.txt") || has(L"items2.txt")) return GAME_MWC;
+    if (has(L"defaultES2File.txt")) return GAME_MSC;
+    return -1;
+}
+static void SaveFindDirs(const std::wstring &d, int depth, std::vector<std::pair<int, std::wstring>> &out)
+{
+    if (SaveDirGame(d) >= 0) out.push_back({ depth, d });
+    if (depth >= 6) return;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((d + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L".." || !(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) continue;
+        SaveFindDirs(d + n + L"\\", depth + 1, out);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+static DWORD SaveRunTar(const std::wstring &tar, const std::wstring &args, const std::wstring &cwd)
+{
+    std::wstring cmd = L"\"" + tar + L"\" " + args;
+    std::vector<wchar_t> cb(cmd.begin(), cmd.end()); cb.push_back(0);
+    STARTUPINFOW si = { sizeof(si) }; PROCESS_INFORMATION pi = {};
+    if (!CreateProcessW(tar.c_str(), cb.data(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, cwd.c_str(), &si, &pi)) return (DWORD)-1;
+    DWORD rc = (DWORD)-2;
+    if (WaitForSingleObject(pi.hProcess, 60000) == WAIT_TIMEOUT) TerminateProcess(pi.hProcess, (UINT)-2);
+    else GetExitCodeProcess(pi.hProcess, &rc);
+    CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+    return rc;
+}
+// Deballe l'archive dans <tmp>\x (les .txt seulement avec tar ; un .zip sans tar.exe : Unzip du lanceur, stocke ou deflate).
+// 0 : ok ; 1 : format illisible ; 2 : lisible, mais sans aucun .txt.
+static int SaveUnpack(const std::wstring &arc, const std::wstring &tmp, std::string &why)
+{
+    std::wstring ext = arc.substr(arc.find_last_of(L'.') == std::wstring::npos ? arc.size() : arc.find_last_of(L'.'));
+    for (auto &ch : ext) ch = towlower(ch);
+    if (ext != L".zip" && ext != L".rar" && ext != L".7z") ext = L".zip";   // (tar reconnait le format au contenu)
+    std::wstring src = tmp + L"\\archive" + ext, out = tmp + L"\\x";   // (copie au nom simple : tar.exe et les accents)
+    SHCreateDirectoryExW(NULL, out.c_str(), NULL);
+    if (!CopyFileW(arc.c_str(), src.c_str(), FALSE)) { why = "copie de l'archive (" + std::to_string(GetLastError()) + ")"; return 1; }
+    wchar_t sys[MAX_PATH] = L"";
+    GetSystemDirectoryW(sys, MAX_PATH);
+    std::wstring tar = WithSlash(sys) + L"tar.exe";
+    if (GetFileAttributesW(tar.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        DWORD rc = SaveRunTar(tar, L"-xf \"" + src + L"\" -C \"" + out + L"\" \"*.txt\"", tmp);
+        LaunchLog("sauvegardes : import, tar.exe -x : code %ld", (long)rc);
+        if (rc == 0) return 0;
+        std::vector<std::pair<int, std::wstring>> part;   // (entrees refusees par tar -- chemins en « .. » --, le reste deballe : on le garde)
+        SaveFindDirs(out + L"\\", 0, part);
+        if (!part.empty()) { LaunchLog("sauvegardes : import, tar.exe a refuse des entrees ; sauvegarde trouvee dans le reste"); return 0; }
+        DWORD lr = SaveRunTar(tar, L"-tf \"" + src + L"\"", tmp);   // (code 1 aussi quand « *.txt » ne trouve rien : l'archive est-elle lisible ?)
+        if (lr == 0) { why = "aucun .txt"; return 2; }
+        if (ext != L".zip") { why = "tar.exe " + std::to_string((long)rc); return 1; }
+    } else LaunchLog("sauvegardes : import, pas de tar.exe dans %s", Narrow(sys, CP_UTF8).c_str());
+    if (ext == L".zip") return Unzip(src, out, &why) ? 0 : 1;
+    why = "pas de tar.exe";
+    return 1;
+}
+// Nom propose : celui de l'archive, sans l'extension ni la fin d'un telechargement Nexus (« -2212-1-0-1660838201 » : numero
+// du mod, version, horodatage) ni « - My Summer Car » ; renommable ensuite (Renommer).
+static std::wstring SaveImportName(const std::wstring &arc)
+{
+    std::wstring n = arc.substr(arc.find_last_of(L"\\/") == std::wstring::npos ? 0 : arc.find_last_of(L"\\/") + 1);
+    size_t dot = n.find_last_of(L'.');
+    if (dot != std::wstring::npos && dot > 0) n.resize(dot);
+    for (size_t d; (d = n.find_last_of(L'-')) != std::wstring::npos && d + 1 < n.size() && n.find_first_not_of(L"0123456789", d + 1) == std::wstring::npos; ) n.resize(d);
+    for (auto &ch : n) if (ch == L'_') ch = L' ';
+    n = Trim(n);
+    for (const wchar_t *g : { L"My Summer Car", L"My Winter Car" }) {
+        size_t gl = wcslen(g);
+        if (n.size() > gl && !_wcsicmp(n.c_str() + n.size() - gl, g)) { n.resize(n.size() - gl); while (!n.empty() && (n.back() == L' ' || n.back() == L'-')) n.pop_back(); }
+    }
+    n = SaveCleanName(n);
+    return n.empty() ? T(L"Sauvegarde importée", L"Imported save") : n;
+}
+static bool SaveImportFile(const std::wstring &arc, std::wstring name)
+{
+    std::wstring arcName = arc.substr(arc.find_last_of(L"\\/") == std::wstring::npos ? 0 : arc.find_last_of(L"\\/") + 1);
+    WIN32_FILE_ATTRIBUTE_DATA fa = {};
+    if (!GetFileAttributesExW(arc.c_str(), GetFileExInfoStandard, &fa)) { SetStatus(K_ERR, T(L"Archive introuvable", L"Archive not found")); return false; }
+    if ((((LONGLONG)fa.nFileSizeHigh << 32) | fa.nFileSizeLow) > kSaveImportMax) { SetStatus(K_ERR, T(L"Archive trop grosse pour une sauvegarde (plus de 512 Mo)", L"Archive too big for a save (over 512 MB)")); return false; }
+    wchar_t tp[MAX_PATH] = L"";
+    GetTempPathW(MAX_PATH, tp);
+    wchar_t tn[64]; swprintf_s(tn, L"MWCoop-import-%lu-%lu", GetCurrentProcessId(), GetTickCount());
+    std::wstring tmp = WithSlash(tp) + tn;
+    SHCreateDirectoryExW(NULL, tmp.c_str(), NULL);
+    std::string why;
+    int up = SaveUnpack(arc, tmp, why);
+    LaunchLog("sauvegardes : import de %s : %s%s", Narrow(arcName, CP_UTF8).c_str(), up == 0 ? "deballee" : up == 2 ? "sans .txt" : "ILLISIBLE ", up == 1 ? why.c_str() : "");
+    std::vector<std::pair<int, std::wstring>> found;
+    if (up == 0) SaveFindDirs(tmp + L"\\x\\", 0, found);
+    int other = -1, best = 99;
+    std::wstring dir;
+    for (auto &f : found) {   // (le dossier du jeu choisi le moins profond)
+        int gm = SaveDirGame(f.second);
+        if (gm != g_game) { other = gm; continue; }
+        if (f.first < best) { best = f.first; dir = f.second; }
+    }
+    if (dir.empty()) {
+        SaveTmpDelete(tmp);
+        if (up == 1) SetStatus(K_ERR, T(L"Archive illisible (%s) : refais-en un .zip (clic droit > Compresser) puis importe-le", L"Unreadable archive (%s): make it a .zip (right click > Compress) then import it"), Widen(why, CP_UTF8).c_str());
+        else if (other >= 0) SetStatus(K_ERR, other == GAME_MSC ? T(L"C'est une sauvegarde de My Summer Car, pas de My Winter Car : passe sur MSC (sous le numéro de version) pour l'importer", L"This is a My Summer Car save, not a My Winter Car one: switch to MSC (under the version number) to import it")
+                                                               : T(L"C'est une sauvegarde de My Winter Car, pas de My Summer Car : passe sur MWC (sous le numéro de version) pour l'importer", L"This is a My Winter Car save, not a My Summer Car one: switch to MWC (under the version number) to import it"));   // (les deux jeux nommes : pas de GameSwap)
+        else SetStatus(K_ERR, g_game == GAME_MSC ? T(L"Pas de sauvegarde dans cette archive (defaultES2File.txt introuvable)", L"No save in this archive (defaultES2File.txt not found)")
+                                                 : T(L"Pas de sauvegarde dans cette archive (savefile.txt introuvable)", L"No save in this archive (savefile.txt not found)"));
+        LaunchLog("sauvegardes : import refuse (%s)", other >= 0 ? "autre jeu" : "pas de sauvegarde");
+        return false;
+    }
+    if (name.empty()) name = SaveImportName(arc);
+    std::wstring prof = SaveCreate(name);
+    if (prof.empty()) { SaveTmpDelete(tmp); return false; }
+    std::wstring dst = SaveDirOf(prof);
+    int n = 0;
+    bool partie = false;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring fn = fd.cFileName, lo = fn;
+            for (auto &ch : lo) ch = towlower(ch);
+            if (fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) continue;
+            if (lo.size() < 5 || lo.compare(lo.size() - 4, 4, L".txt")) continue;
+            if (lo == L"options.txt" || !lo.compare(0, 4, L"read") || !lo.compare(0, 5, L"lisez")) { LaunchLog("sauvegardes : import, %s laisse de cote", Narrow(fn, CP_UTF8).c_str()); continue; }   // (reglages graphiques de l'auteur, notice)
+            if ((((LONGLONG)fd.nFileSizeHigh << 32) | fd.nFileSizeLow) > kSaveImportFile) { LaunchLog("sauvegardes : import, %s trop gros, laisse de cote", Narrow(fn, CP_UTF8).c_str()); continue; }
+            if (CopyFileW((dir + fn).c_str(), (dst + fn).c_str(), TRUE)) { n++; if (lo == L"partie.txt") partie = true; }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    SaveTmpDelete(tmp);
+    if (!partie) {   // (pas encore jouee avec MWCoop : le jeu et l'origine ; version= : ecrite par le mod a la premiere sauvegarde)
+        std::string pt = std::string("jeu=") + (g_game == GAME_MSC ? "msc" : "mwc") + "\nimportee=" + Narrow(arcName, CP_UTF8) + "\n";
+        HANDLE f = CreateFileW((dst + L"partie.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, pt.data(), (DWORD)pt.size(), &w, NULL); CloseHandle(f); }
+    }
+    TestLog("sauvegardes : %s importee dans %s (%d fichier(s), dossier %s)", Narrow(arcName, CP_UTF8).c_str(), Narrow(prof, CP_UTF8).c_str(), n, Narrow(dir.substr(tmp.size()), CP_UTF8).c_str());
+    SavesScan();
+    for (int k = 0; k < (int)g_saves.size(); k++) if (g_saves[k].prof == prof) g_saveSel = k;
+    g_saveEdit = -1;
+    SaveCheckRun(prof, name, L"");   // (passe co-op : Verifier la sauvegarde, resultat montre tout de suite)
+    g_saveImportArc = arcName;
+    g_saveModal = SM_CHECK;
+    SetStatus(K_OK, T(L"« %s » importée (%d fichiers) : choisis-la avec Utiliser pour héberger", L"\"%s\" imported (%d files): pick it with Use for hosting"), name.c_str(), n);
+    return true;
+}
+// Bouton « Importer une sauvegarde » (en-tete de la page) et « Depuis un zip… » (fenetre du nom : le nom saisi, s'il a change).
+static void SaveImportArchive(const std::wstring &name)
+{
     if (!SaveGuard()) return;
     wchar_t file[MAX_PATH] = L"";
     OPENFILENAMEW of = { sizeof(of) };
     of.hwndOwner = g_wnd;
-    of.lpstrFilter = L"Zip\0*.zip\0*.*\0*.*\0";
+    of.lpstrFilter = L"zip, rar, 7z\0*.zip;*.rar;*.7z\0*.*\0*.*\0";
     of.lpstrFile = file; of.nMaxFile = MAX_PATH;
-    of.lpstrTitle = T(L"Choisir le zip d'une sauvegarde (Exporter (zip) chez un ami)", L"Choose a save zip (Export (zip) at a friend's)");
+    of.lpstrTitle = T(L"Choisir l'archive d'une sauvegarde (.zip, .rar, .7z)", L"Choose a save archive (.zip, .rar, .7z)");
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
     if (!GetOpenFileNameW(&of)) return;
-    std::wstring prof = SaveCreate(n);
-    if (prof.empty()) return;
-    std::wstring dir = SaveDirOf(prof);
-    if (!dir.empty() && dir.back() == L'\\') dir.pop_back();
-    std::string why;
-    if (!Unzip(file, dir, &why)) { SetStatus(K_ERR, T(L"Zip illisible (%s) : la partie « %s » reste vide", L"Unreadable zip (%s): the game \"%s\" stays empty"), Widen(why, CP_UTF8).c_str(), n.c_str()); SavesScan(); g_saveModal = SM_NONE; return; }
-    TestLog("sauvegardes : %s importee dans %s", Narrow(file, CP_UTF8).c_str(), Narrow(prof, CP_UTF8).c_str());
     g_saveModal = SM_NONE;
-    SavesScan();
-    for (int k = 0; k < (int)g_saves.size(); k++) if (g_saves[k].prof == prof) g_saveSel = k;
-    SaveSetCurrent(prof);
-    SetStatus(K_OK, T(L"« %s » créée depuis le zip et utilisée", L"\"%s\" created from the zip and in use"), n.c_str());
+    SaveImportFile(file, name);
 }
 static void SavePickRow(int i)
 {
@@ -846,8 +1010,8 @@ static void DrawSaves(Graphics &g)
                 SolidBrush sb(Color((BYTE)(g_dark ? 50 : 14), 0, 0, 0)); g.FillPath(&sb, &sp);
                 Pen spn(WithA(kInk, 0.3f), 1.0f); spn.SetDashStyle(DashStyleDash); g.DrawPath(&spn, &sp);
                 Icon(g, IC_PLUS, sq.X + 23, sq.Y + 23, 18, kGrey, 2.4f);
-                Para(g, T(L"Nouvelle partie : une sauvegarde neuve, ou une copie de celle d'un ami (zip reçu).",
-                          L"New game: a fresh save, or a copy of a friend's (zip received)."), RectF(r.X + 76, r.Y + 16, r.Width - 92, 44), 12.5f, kGrey);
+                Para(g, T(L"Nouvelle partie : une sauvegarde neuve. Une sauvegarde reçue ou téléchargée (zip, rar, 7z) : Importer, en haut.",
+                          L"New game: a fresh save. A save received or downloaded (zip, rar, 7z): Import, at the top."), RectF(r.X + 76, r.Y + 16, r.Width - 92, 44), 12.5f, kGrey);
                 if (vis) HotZone(r, UI_SAVE_NEW);
                 continue;
             }
@@ -1043,7 +1207,7 @@ static void DrawSaveModal(Graphics &g)
         }
         UiButton(g, RectF(c.X + c.Width - 24 - 150, c.Y + c.Height - 24 - 44, 150, 44), T(L"Créer", L"Create"), UI_SAVE_MOK, true, IC_CHECK, !SaveCleanName(g_saveNameText).empty());
         UiButton(g, RectF(c.X + c.Width - 24 - 150 - 12 - 130, c.Y + c.Height - 24 - 44, 130, 44), T(L"Annuler", L"Cancel"), UI_SAVE_MCLOSE, false, -1);
-        if (!g_saveNameForGame) UiButton(g, RectF(c.X + 24, c.Y + c.Height - 24 - 44, 170, 44), T(L"Depuis un zip…", L"From a zip…"), UI_SAVE_IMPORT, false, IC_ZIP, !SaveCleanName(g_saveNameText).empty());   // (la sauvegarde d'un ami)
+        if (!g_saveNameForGame) UiButton(g, RectF(c.X + 24, c.Y + c.Height - 24 - 44, 170, 44), T(L"Depuis un zip…", L"From a zip…"), UI_SAVE_IMPORT, false, IC_ZIP);   // (la sauvegarde d'un ami ; aussi .rar, .7z)
         return;
     }
     // listes : choisir (avec « Nouvelle sauvegarde… » en bas) ou recommencer
@@ -1087,7 +1251,7 @@ static void SaveClick(int id)
     if (id == UI_SAVE_MFRESH) { if (SaveGuard()) SaveAskName(true); return; }
     if (id == UI_SAVE_MRESTART) { SavesScan(); g_saveModal = SM_RESTART; return; }
     if (id == UI_SAVE_MOK) { SaveNameDone(); return; }
-    if (id == UI_SAVE_IMPORT) { SaveImportZip(); return; }
+    if (id == UI_SAVE_IMPORT) { std::wstring n = g_saveModal == SM_NAME ? SaveCleanName(g_saveNameText) : L""; SaveImportArchive(n == SaveDefaultName() ? L"" : n); return; }   // (nom saisi, sinon celui de l'archive)
     if (id >= UI_SAVE_PICK && id < UI_SAVE_END) { SavePickRow(id - UI_SAVE_PICK); return; }
     int sel = SaveSelIndex();
     if (id == UI_SAVE_DUP) { SaveDuplicate(sel); return; }
