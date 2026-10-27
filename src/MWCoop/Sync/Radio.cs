@@ -190,7 +190,9 @@ namespace MWCoop
                 if (c.Muted) { c.Muted = false; c.Upd.enabled = true; c.Last = null; Log.Info("radio : lecteur " + c.Name + " rendu a ce joueur (celui de l'hote est arrete)"); }
                 return;
             }
-            if (!c.Muted) { c.Muted = true; if (c.Upd.enabled) c.Upd.enabled = false; Log.Info("radio : lecteur " + c.Name + " mene par l'hote (enchainement local coupe)"); }
+            // (prise en main par l'hote : la position est recalee meme sous le seuil -- le lecteur d'ici, lance avant, gardait ~1 s d'avance)
+            bool taken = false;
+            if (!c.Muted) { c.Muted = true; taken = true; if (c.Upd.enabled) c.Upd.enabled = false; Log.Info("radio : lecteur " + c.Name + " mene par l'hote (enchainement local coupe)"); }
             FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD"); if (cv != null && cd.Length > 0) cv.Value = cd;
             FsmInt iv = c.Upd.FsmVariables.FindFsmInt("Index"); if (iv != null && idx >= 0) iv.Value = idx;
             string key = cd + ":" + idx;
@@ -205,7 +207,8 @@ namespace MWCoop
             bool swap = a.clip != clip;
             if (swap) { a.clip = clip; if (a.isPlaying) a.Stop(); }
             bool seekable = clip.loadType != AudioClipLoadType.Streaming;   // (un flux -- CD importe -- ne se positionne pas)
-            if (seekable && (swap || Mathf.Abs(a.time - t) > 1.5f)) a.time = Mathf.Clamp(t, 0f, Mathf.Max(0f, clip.length - 0.05f));
+            // (0,75 s : avec 1,5 s, jusqu'a 0,9 s de retard restait apres chaque fin de piste, 27/10)
+            if (seekable && (swap || taken || Mathf.Abs(a.time - t) > 0.75f)) a.time = Mathf.Clamp(t, 0f, Mathf.Max(0f, clip.length - 0.05f));
             if (!a.isPlaying && a.gameObject.activeInHierarchy) a.Play();
             if (c.Last != key) { c.Last = key; Log.Info("radio : lecteur " + c.Name + " -> " + key + " a " + t.ToString("F0") + " s (hote)"); }
         }
@@ -558,6 +561,31 @@ namespace MWCoop
                 FsmString cd = c.Upd.FsmVariables.FindFsmString("CurrentCD"); FsmInt idx = c.Upd.FsmVariables.FindFsmInt("Index");
                 sb.Append(" ; cd ").Append(c.Name).Append(" '").Append(cd != null ? cd.Value : "?").Append(":").Append(idx != null ? idx.Value.ToString() : "?").Append("' ")
                   .Append(c.A.clip != null ? c.A.time.ToString("F0") + "/" + c.A.clip.length.ToString("F0") + " s" : "-").Append(c.A.isPlaying ? " joue" : " arrete").Append(c.Muted ? " (hote)" : " [" + c.Upd.ActiveStateName + "]");
+            }
+            return sb.ToString();
+        }
+
+        // Essais (mscradio / mscradiodump) : pistes de chaque disque (nom, chargement, duree) et lecteurs CD (clip joue, position).
+        public static string CdTestState()
+        {
+            var sb = new System.Text.StringBuilder();
+            if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
+            foreach (string cd in new[] { "CD1", "CD2", "CD3" })
+            {
+                System.Collections.ArrayList l = ArrayListOf(cdRoot, cd);
+                if (l == null || l.Count == 0) continue;
+                sb.Append(cd).Append(" [");
+                for (int i = 0; i < l.Count && i < 12; i++) { AudioClip c = l[i] as AudioClip; sb.Append(i > 0 ? " " : "").Append(c != null ? (c.name.Length > 0 ? c.name : "?") + "/" + c.length.ToString("F0") + "s" + (c.loadType == AudioClipLoadType.Streaming ? "~" : "") : "null"); }
+                sb.Append("] ");
+            }
+            FindCds(Time.realtimeSinceStartup);
+            foreach (Cd c in cds)
+            {
+                if (c.A == null || c.Upd == null) continue;
+                FsmString cd = c.Upd.FsmVariables.FindFsmString("CurrentCD"); FsmInt idx = c.Upd.FsmVariables.FindFsmInt("Index");
+                sb.Append("lecteur ").Append(c.Name).Append(" ").Append(cd != null ? cd.Value : "?").Append(":").Append(idx != null ? idx.Value.ToString() : "?")
+                  .Append(" clip ").Append(c.A.clip != null ? (c.A.clip.name.Length > 0 ? c.A.clip.name : "?") + " " + c.A.time.ToString("F1") + "/" + c.A.clip.length.ToString("F0") : "-")
+                  .Append(c.A.isPlaying ? " joue" : " arrete").Append(c.Muted ? " (hote)" : " [" + (c.Upd.enabled ? c.Upd.ActiveStateName : "coupe") + "]").Append(" ; ");
             }
             return sb.ToString();
         }

@@ -2604,6 +2604,7 @@ namespace MWCoop
                         Log.Info("autotest : mscradiodump autre " + pth + " :: " + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (eteint)"));
                     }
                     { var names = new System.Text.StringBuilder(); foreach (Object o in Game.FsmsNamed("Buy")) { var bf = o as PlayMakerFSM; HutongGames.PlayMaker.FsmString bn = bf != null ? bf.FsmVariables.FindFsmString("Name") : null; if (bn != null) names.Append(bn.Value).Append(" (").Append(Recon.Path(bf.transform)).Append(") "); } Log.Info("autotest : mscradiodump produits " + names); }
+                    Log.Info("autotest : mscradiodump disques " + Radio.CdTestState());
                     foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
                         if (tr != null && tr.gameObject.hideFlags == HideFlags.None && (tr.name.StartsWith("cd(") || tr.name.StartsWith("cd case") || tr.name.ToLowerInvariant().Contains("cdcase")))
                             Log.Info("autotest : mscradiodump disque " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (eteint)") + " corps " + (tr.GetComponent<Rigidbody>() != null) + " cle " + Props.KeyOf(tr.gameObject));

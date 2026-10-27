@@ -105,10 +105,24 @@ namespace MWCoop
         }
 
         // Cle du disque (Props) : le disque tenu en main que trigger_disc a pris (Part) -- ou, insere, l'enfant du chariot.
+        // (le disque n'a pas de corps dans son boitier ni dans le lecteur -- pas de cle d'objet stable : designe par son disque,
+        // Player.ThisCD = CD1, CD2, CD3, comme le jeu)
         static string DiscKey(Unit u)
         {
             FsmGameObject p = u.Disc != null ? u.Disc.FsmVariables.FindFsmGameObject("Part") : null;
-            return p != null && p.Value != null ? Props.KeyOf(p.Value) ?? "" : "";
+            PlayMakerFSM pl = p != null && p.Value != null ? Game.FsmOn(p.Value, "Player") : null;
+            FsmString cd = pl != null ? pl.FsmVariables.FindFsmString("ThisCD") : null;
+            return cd != null && !string.IsNullOrEmpty(cd.Value) ? cd.Value : "";
+        }
+        static GameObject DiscNamed(string cd)
+        {
+            foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+            {
+                if (f == null || f.FsmName != "Player" || f.hideFlags != HideFlags.None || !f.gameObject.name.StartsWith("cd(")) continue;
+                FsmString v = f.FsmVariables.FindFsmString("ThisCD");
+                if (v != null && v.Value == cd) return f.gameObject;
+            }
+            return null;
         }
 
         public static void Update()
@@ -266,10 +280,13 @@ namespace MWCoop
         static void Insert(Unit u, string dk, int who)
         {
             if (u.Disc == null || B(u.Disc, "CDin")) { u.In = B(u.Disc, "CDin"); return; }
-            GameObject disc = dk.Length > 0 ? Props.ObjectOf(dk) : null;
+            GameObject disc = dk.Length > 0 ? DiscNamed(dk) : null;
             if (disc == null) { Log.Warn("radio (MSC) : " + u.Car.name + " : disque " + dk + " de #" + who + " introuvable ici"); return; }
             u.Guard = Time.realtimeSinceStartup + 1.5f;
             Props.ReleaseRemote(disc);
+            // (encore dans son boitier ici : sorti comme le clic droit -- Removal « Remove part » -- avant d'etre pose dans la fente)
+            PlayMakerFSM rem = Game.FsmOn(disc, "Removal");
+            if (rem != null && disc.transform.parent != null && disc.transform.parent.name == "PivotCD") { rem.enabled = true; Set(rem, "Remove part"); }
             u.Disc.FsmVariables.GetFsmGameObject("Part").Value = disc;
             if (!u.Disc.enabled) u.Disc.enabled = true;
             Set(u.Disc, "Assemble");
@@ -339,7 +356,7 @@ namespace MWCoop
                 case "suivante": Set(u.Track, "State 1"); break;
                 case "insere":   // (disque w[1] = cd(item1).. pose dans la fente, comme le clic : « Assemble »)
                 {
-                    GameObject d = Game.FindAny(w.Length > 1 ? w[1] : "cd(item1)");
+                    GameObject d = DiscNamed(w.Length > 1 ? w[1] : "CD1");
                     if (d == null || u.Disc == null) return "pas de disque " + what;
                     u.Disc.FsmVariables.GetFsmGameObject("Part").Value = d; if (!u.Disc.enabled) u.Disc.enabled = true; Set(u.Disc, "Assemble");
                     return u.Car.name + " disque " + d.name + " (" + Props.KeyOf(d) + ") -> fente " + u.Disc.ActiveStateName;
@@ -364,6 +381,7 @@ namespace MWCoop
                 .Append(u.Switch != null ? " inter " + (u.Switch.enabled ? u.Switch.ActiveStateName : "coupe") : "").Append(u.Track != null ? " pistes " + (u.Track.enabled ? u.Track.ActiveStateName : "coupe") : "")
                 .Append(u.Chan != null ? " canaux " + (u.Chan.enabled ? u.Chan.ActiveStateName : "coupe") : "").Append(u.Disc != null ? " fente " + u.Disc.ActiveStateName : "").Append(" ; ");
             foreach (var kv in EtatLines()) sb.Append(kv.Key).Append(kv.Value).Append(" ; ");
+            sb.Append(Radio.CdTestState());
             return sb.ToString();
         }
     }
