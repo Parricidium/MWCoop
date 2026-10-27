@@ -119,6 +119,7 @@ enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE
        IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM, IC_TOOLS, IC_MAP, IC_BUG, IC_MAX, IC_RESTORE };   // (IC_MAX / IC_RESTORE : Agrandir de la nouvelle interface)
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
+    ProfScope ps(3);
     float k = size / 24.0f;
     auto P = [&](float x, float y) { return PointF(cx + (x - 12) * k, cy + (y - 12) * k); };
     Pen pen(c, stroke * k);

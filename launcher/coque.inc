@@ -205,8 +205,8 @@ static void ShellDrawRail(Graphics &g)
     if (g_btn[B_UPDATE].visible) {
         Button &b = g_btn[B_UPDATE];
         RectF br(x0, y, w, 40); b.r = DipToCard(br);
-        float pulse = b.enabled ? 0.5f + 0.5f * sinf(g_time * 3.0f) : 0.0f;
-        if (b.enabled) { SoftShape(g, RectF(br.X - 3, br.Y - 3, br.Width + 6, br.Height + 6), 15, WithA(g_soft.acc, 0.10f + 0.12f * pulse * (1 - b.hover))); InvalidateAll(); }
+        float pulse = b.enabled ? 0.5f : 0.0f;   // (halo fixe : la pulsation redessinait toute la fenetre a chaque image tant qu'une mise a jour etait proposee -- JD 27/10, « le launcher lag »)
+        if (b.enabled) SoftShape(g, RectF(br.X - 3, br.Y - 3, br.Width + 6, br.Height + 6), 15, WithA(g_soft.acc, 0.10f + 0.12f * pulse * (1 - b.hover)));
         SoftRaised(g, br, 12, 3, 8); SoftShape(g, br, 12, WithA(g_soft.acc, b.enabled ? 1.0f : 0.45f));
         if (b.hover > 0.01f) SoftShape(g, br, 12, Color((BYTE)(40 * b.hover), 255, 255, 255));
         std::wstring v = UpdAvail(); size_t dash = v.find(L'-'); if (dash != std::wstring::npos) v.resize(dash);
@@ -473,12 +473,13 @@ static void RenderToNew(Bitmap &target)
     std::wstring status; int kind;
     EnterCriticalSection(&g_cs); status = g_status; kind = g_statusKind; LeaveCriticalSection(&g_cs);
     float prog = g_progress;
+    LARGE_INTEGER pm; QueryPerformanceCounter(&pm);
     for (int pass = 0; pass < 2; pass++) {
         Graphics g(&target);
         g.Clear(g_soft.bg);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(g_textHint);
-        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetInterpolationMode(InterpolationModeHighQualityBilinear);   // (bicubique : plusieurs fois plus cher, pour rien a l'ecran)
         g.SetPixelOffsetMode(PixelOffsetModeHalf);
         g_zones.clear(); g_glassNow.clear();
         // la colonne de page (coordonnees de la carte), limitee a la zone de page
@@ -492,6 +493,7 @@ static void RenderToNew(Bitmap &target)
             DrawUI(g);
             g.Restore(st);
         }
+        ProfilMark(0, pm);
         // la coque (DIP) : zones enregistrees en coordonnees de la carte
         {
             GraphicsState st = g.Save();
@@ -503,6 +505,7 @@ static void RenderToNew(Bitmap &target)
             g_zoneDip = false;
             g.Restore(st);
         }
+        ProfilMark(1, pm);
         // couches : visite, guide / invitation / choix d'interface, par-dessus tout (voile sur la fenetre entiere d'abord)
         if (g_guide) { SolidBrush v(Color(g_softDark ? 150 : 110, 2, 6, 18)); g.FillRectangle(&v, RectF(0, 0, (float)w, (float)h)); }   // (guides, invitation, choix d'interface : le voile sur toute la fenetre ; la visite guidee fait le sien, troue sur sa cible)
         {
@@ -514,6 +517,7 @@ static void RenderToNew(Bitmap &target)
             DrawTuto(g);
             g.Restore(st);
         }
+        ProfilMark(2, pm);
         {
             GraphicsState st = g.Save();
             g.ScaleTransform(d, d);
@@ -523,6 +527,7 @@ static void RenderToNew(Bitmap &target)
             g_zoneDip = false;
             g.Restore(st);
         }
+        ProfilMark(3, pm);
         if (g_glassNow == g_glassUsed) break;
         g_glassUsed = g_glassNow;
     }

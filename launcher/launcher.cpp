@@ -2432,8 +2432,12 @@ static bool RtlText(const WCHAR *s, INT n, std::wstring &out)
     return true;
 }
 // Ecriture de tout le texte du lanceur (DrawString, ou ses lettres en formes si DrawString est muet ici).
+// Profil d'une image (essai /testfenetre, nouvelle interface) : temps cumule et nombre d'appels -- 0 texte, 1 ombres, 2 creux, 3 icones.
+static bool g_profilOn; static double g_profAcc[4]; static int g_profN[4];
+struct ProfScope { int i; LARGE_INTEGER a; ProfScope(int k) : i(k) { if (g_profilOn) QueryPerformanceCounter(&a); } ~ProfScope() { if (!g_profilOn) return; LARGE_INTEGER z, f; QueryPerformanceCounter(&z); QueryPerformanceFrequency(&f); g_profAcc[i] += (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart; g_profN[i]++; } };
 static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, const RectF &r, const StringFormat *sf, const Brush *b)
 {
+    ProfScope ps(0);
     std::wstring rtl;
     if (RtlText(s, n, rtl)) { s = rtl.c_str(); n = (INT)rtl.size(); }
     if (g_textGdi) return GdiDraw(g, std::wstring(s, n < 0 ? wcslen(s) : (size_t)n), font, r, sf, b, true);
@@ -3088,6 +3092,7 @@ static const wchar_t *kDiscordUrl = g_discordUrl.c_str();
 static const wchar_t *kBugSiteUrl = L"https://live.myseasonscar.workers.dev/depot.html";
 static const RectF kDiscCard(390, 166, 500, 476), kDiscJoin(430, 486, 420, 54), kDiscLater(430, 552, 420, 44), kDiscClose(836, 182, 40, 40);
 static int g_guideKind;   // 0 guide Steam, 1 invitation au Discord, 2 nouvelle interface ? (fenetre.inc)
+static float g_frameMs;   // (nouvelle interface : duree moyenne d'une image complete en ms ; au-dela de 60 ms les animations se coupent d'elles-memes -- fenetre.inc AnimReduced)
 #include "fenetre.inc"   // (refonte Soft UI, lot L0 : nouvelle interface -- fenetre libre, memoire de taille, choix ancienne / nouvelle, filet)
 #include "soft.inc"      // (refonte Soft UI, lot L1 : jetons, ombres en cache, composants, animations)
 static void DiscordAskOpen() { g_guide = true; g_guideKind = 1; g_guideHot = 0; g_focus = -1; }
@@ -6910,7 +6915,7 @@ static void Tick()
     if (!g_testSalon.empty()) { TestSalonStep(); return; }   // (mode d'essai : rien a dessiner)
     for (int i = 0; i < B_COUNT; i++) {
         float want = (g_hot == i && g_btn[i].enabled) ? 1.0f : 0.0f;
-        g_btn[i].hover += (want - g_btn[i].hover) * min(dt * 12, 1.0f);
+        g_btn[i].hover += (want - g_btn[i].hover) * (g_newUi && AnimReduced() ? 1.0f : min(dt * 12, 1.0f));   // (nouvelle interface, animations reduites : sans fondu, donc sans image a 60 i/s)
     }
     if (g_state == ST_CLOSING) {
         g_alpha -= dt * 4;
@@ -6967,7 +6972,7 @@ static void Tick()
         else if (changed && lastKind != K_NORMAL && !lastStatus.empty()) SoftNotify(lastStatus, lastKind == K_OK ? SC_OK : lastKind == K_WARN ? SC_WARN : SC_BAD);
         float prog = g_progress;
         if (prog != lastProg) { lastProg = prog; changed = true; }
-        bool anim = active || hoverAnim || changed || g_aurore != 0 || g_lobby != LB_NONE || g_state != ST_IDLE || g_busy || g_guide || g_tuto >= 0;
+        bool anim = active || hoverAnim || changed || g_lobby != LB_NONE || g_state != ST_IDLE || g_busy || g_guide || g_tuto >= 0;
         if (g_softAnimating || g_softPageT || g_softThemeT) { every = 1; InvalidateAll(); }   // (soft.inc : 60 images/s seulement pendant une animation)
         g_softAnimating = false;
         {   // (L6 : 0 image/s au repos -- ce que les fils de fond changent sans statut : notes, versions, catalogue, journaux, salon, pages)
@@ -6983,7 +6988,18 @@ static void Tick()
         if (anim || frameN % 600 == 0) InvalidateAll();   // (filet : une image toutes les 10 s)
         UiNewFlagTick();
     }
-    if (!IsIconic(g_wnd) && frameN % every == 0) Present();   // (reduit : rien a dessiner)
+    if (!IsIconic(g_wnd) && frameN % every == 0) {   // (reduit : rien a dessiner)
+        bool timed = g_newUi && g_dirtyAll;   // (nouvelle interface : duree d'une image complete, en moyenne glissante -- garde-fou des animations)
+        LARGE_INTEGER a = {}, z = {}, f = {};
+        if (timed) QueryPerformanceCounter(&a);
+        Present();
+        if (timed) {
+            QueryPerformanceCounter(&z); QueryPerformanceFrequency(&f);
+            float ms = (float)((z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart);
+            g_frameMs = g_frameMs <= 0 ? ms : g_frameMs * 0.8f + ms * 0.2f;
+            static bool said; if (!said && g_frameMs > 60) { said = true; LaunchLog("interface : image complete %.0f ms en moyenne (%d x %d) : animations reduites d'elles-memes", g_frameMs, g_winW, g_winH); }
+        }
+    }
 }
 
 // ---------------------------------------------------------------- fenetre

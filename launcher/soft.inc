@@ -179,7 +179,7 @@ static SoftShadowSlice &SoftShadowFor(int rad, int blur, Color c)
     SoftShadowSlice s = { SoftMaskToBitmap(m, w, h, c), cs };
     return g_softShadows.emplace(key, s).first->second;
 }
-static void SoftDraw9(Graphics &g, Bitmap *b, int cs, RectF dst)   // (dst : la zone couverte par l'ombre, coins compris)
+static void SoftDraw9(Graphics &g, Bitmap *b, int cs, RectF dst, Color fill)   // (dst : la zone couverte par l'ombre, coins compris ; fill : la couleur pleine du centre)
 {
     int sw = (int)b->GetWidth(), mid = sw - 2 * cs;
     float x0 = dst.X, y0 = dst.Y, x1 = dst.X + dst.Width, y1 = dst.Y + dst.Height, c = (float)cs;
@@ -188,25 +188,30 @@ static void SoftDraw9(Graphics &g, Bitmap *b, int cs, RectF dst)   // (dst : la 
     part(x0, y0, c, c, 0, 0, cs, cs); part(x1 - c, y0, c, c, cs + mid, 0, cs, cs); part(x0, y1 - c, c, c, 0, cs + mid, cs, cs); part(x1 - c, y1 - c, c, c, cs + mid, cs + mid, cs, cs);
     part(x0 + c, y0, dst.Width - 2 * c, c, cs, 0, mid, cs); part(x0 + c, y1 - c, dst.Width - 2 * c, c, cs, cs + mid, mid, cs);
     part(x0, y0 + c, c, dst.Height - 2 * c, 0, cs, cs, mid); part(x1 - c, y0 + c, c, dst.Height - 2 * c, cs + mid, cs, cs, mid);
-    part(x0 + c, y0 + c, dst.Width - 2 * c, dst.Height - 2 * c, cs, cs, mid, mid);
+    if (dst.Width > 2 * c && dst.Height > 2 * c) { SolidBrush fb(fill); g.FillRectangle(&fb, x0 + c, y0 + c, dst.Width - 2 * c, dst.Height - 2 * c); }   // (le centre est uni : un remplissage, pas un DrawImage de 4 x 4 etire a toute la carte -- JD 27/10, « le launcher lag » : 44 ms sur 51 d'image)
 }
 // Relief d'un element (r : son rectangle) : ombre sombre en bas a droite (dx, dy, flou), claire en haut a gauche.
 static void SoftRaised(Graphics &g, RectF r, float rad, int off, int blur, float strength = 1.0f)
 {
+    ProfScope ps(1);
+    // Tranches posees par le Graphics (a l'echelle de la colonne de page), voisin le plus proche : 6 fois moins cher que le bilineaire
+    // sur des degrades aussi doux, identique a l'oeil ; le centre uni est un remplissage (SoftDraw9). 21 ombres : 44 ms -> 3,5 ms par
+    // image (JD 27/10, « le launcher lag »).
     int pad = SoftBlurPad(blur);
-    InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeBilinear);
+    InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeNearestNeighbor);
     PixelOffsetMode pm = g.GetPixelOffsetMode(); g.SetPixelOffsetMode(PixelOffsetModeHalf);
     Color sd = WithA(g_soft.shD, strength), sl = WithA(g_soft.shL, g_softDark ? strength * 0.9f : strength);
     SoftShadowSlice &a = SoftShadowFor((int)rad, blur, sd);
-    SoftDraw9(g, a.b, a.cs, RectF(r.X + off - pad, r.Y + off - pad, r.Width + 2 * pad, r.Height + 2 * pad));
+    SoftDraw9(g, a.b, a.cs, RectF(r.X + off - pad, r.Y + off - pad, r.Width + 2 * pad, r.Height + 2 * pad), sd);
     SoftShadowSlice &l = SoftShadowFor((int)rad, blur, sl);
-    SoftDraw9(g, l.b, l.cs, RectF(r.X - off - pad, r.Y - off - pad, r.Width + 2 * pad, r.Height + 2 * pad));
+    SoftDraw9(g, l.b, l.cs, RectF(r.X - off - pad, r.Y - off - pad, r.Width + 2 * pad, r.Height + 2 * pad), sl);
     g.SetInterpolationMode(im); g.SetPixelOffsetMode(pm);
 }
 // Creux (ombres interieures) : bitmap par (taille, rayon, decalage, flou, theme), clippe a la forme.
 static std::map<std::wstring, Bitmap *> g_softInsets;
 static void SoftInset(Graphics &g, RectF r, float rad, int off = 3, int blur = 7)
 {
+    ProfScope ps(2);
     int w = max(1, (int)(r.Width + 0.5f)), h = max(1, (int)(r.Height + 0.5f));
     wchar_t k[64]; swprintf_s(k, L"%d,%d,%d,%d,%d,%d,%d", w, h, (int)rad, off, blur, (int)g_softDark, g_game == GAME_MSC);
     auto it = g_softInsets.find(k);
@@ -223,6 +228,14 @@ static void SoftInset(Graphics &g, RectF r, float rad, int off = 3, int blur = 7
         it = g_softInsets.emplace(k, b).first;
     }
     g.DrawImage(it->second, r.X, r.Y, (float)w, (float)h);
+}
+// Invalidation cadencee (curseur, squelette, barre, compte a rebours) : une image par pas de ms, pas une par tick -- chaque image
+// complete coute 100 a 200 ms sur une grande fenetre (JD 27/10, « le launcher lag »).
+static void SoftBlink(DWORD ms, int slot)
+{
+    static DWORD last[8]; DWORD k = GetTickCount() / (ms ? ms : 1);
+    if (slot < 0 || slot >= 8) slot = 0;
+    if (last[slot] != k) { last[slot] = k; InvalidateAll(); }
 }
 static void SoftShape(Graphics &g, RectF r, float rad, Color fill) { GraphicsPath p; RoundRect(p, r, rad); SolidBrush b(fill); g.FillPath(&b, &p); }
 
@@ -327,7 +340,7 @@ static void SoftField(Graphics &g, RectF r, const std::wstring &text, const std:
     std::wstring s = text.empty() ? placeholder : text;
     Text(g, s, RectF(x, r.Y, r.Width - (x - r.X) - 12, r.Height), 14, text.empty() ? FontStyleRegular : FontStyleBold, text.empty() ? g_soft.faint : g_soft.ink, StringAlignmentNear);
     if (focus && (GetTickCount() / 500) % 2 == 0) { float cx = x + (text.empty() ? 0 : MeasureW(MeasureG(), text, 14, FontStyleBold)) + 1; Pen cp(g_soft.ink, 1.5f); g.DrawLine(&cp, cx, r.Y + 12, cx, r.Y + r.Height - 12); }
-    if (focus) InvalidateAll();   // (clignotement)
+    if (focus) SoftBlink(500, 0);   // (clignotement : 2 images par seconde)
 }
 enum { SC_OK, SC_WARN, SC_BAD, SC_ACC };   // puces : toujours avec un texte
 static float SoftChipW(const std::wstring &s) { return MeasureW(MeasureG(), s, 12, FontStyleBold) + 26; }   // (+6 : le cyrillique se mesure un peu court -- police de repli au dessin)
@@ -346,7 +359,7 @@ static void SoftProgress(Graphics &g, RectF r, float frac)   // creux + barre ac
 {
     SoftShape(g, r, r.Height / 2, g_soft.bgIn);
     { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, r.Height / 2, 2, 5); g.Restore(st); }
-    if (frac < 0) { float t = (GetTickCount() % 1400) / 1400.0f, w = r.Width * 0.3f, x = r.X + (r.Width + w) * t - w; GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftShape(g, RectF(x, r.Y, w, r.Height), r.Height / 2, g_soft.acc); g.Restore(st); InvalidateAll(); return; }
+    if (frac < 0) { float t = (GetTickCount() % 1400) / 1400.0f, w = r.Width * 0.3f, x = r.X + (r.Width + w) * t - w; GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftShape(g, RectF(x, r.Y, w, r.Height), r.Height / 2, g_soft.acc); g.Restore(st); SoftBlink(80, 2); return; }
     float w = r.Width * min(max(frac, 0.0f), 1.0f);
     if (w > 0) SoftShape(g, RectF(r.X, r.Y, max(w, r.Height), r.Height), r.Height / 2, g_soft.acc);
 }
@@ -397,7 +410,7 @@ static void SoftSkeleton(Graphics &g, RectF r, float rad = 10)   // chargement (
 {
     float t = (GetTickCount() % 1600) / 1600.0f, a = 0.5f + 0.3f * sinf(t * 6.2832f);
     SoftShape(g, r, rad, WithA(g_soft.bgIn, a));
-    InvalidateAll();
+    SoftBlink(120, 1);
 }
 static void SoftTooltip(Graphics &g, RectF anchor, const std::wstring &s)   // sous l'element, centree
 {
@@ -448,7 +461,7 @@ static void SoftDrawToasts(Graphics &g, float areaW = kCardW, float areaH = kCar
         Text(g, t.text, RectF(rs.X + 40, rs.Y, rs.Width - 52, rs.Height), 13.5f, FontStyleBold, WithA(g_soft.ink, a), StringAlignmentNear);
         y -= h + 10;
     }
-    InvalidateAll();
+    SoftBlink(40, 5);
 }
 
 // ---- changement de page (sens = position dans la barre) et cercle du theme : composes dans PresentNew sur la carte rendue

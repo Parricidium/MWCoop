@@ -51,6 +51,7 @@ static bool AnimReduced()   // Reglages > Fenetre du lanceur, ou Windows « affi
     static int ini = -1;
     if (ini < 0) ini = GetPrivateProfileIntW(L"Lanceur", L"AnimationsReduites", 0, g_iniLauncher.c_str()) ? 1 : 0;
     if (ini) return true;
+    if (g_frameMs > 60.0f) return true;   // (image complete trop lente -- grande fenetre, PC modeste : glissement de page, cercle du theme et fondus coupes d'eux-memes)
     BOOL anim = TRUE;
     SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &anim, 0);
     return !anim;
@@ -272,14 +273,19 @@ static bool WinProcNew(HWND h, UINT m, WPARAM wp, LPARAM lp, LRESULT &res)
 // Image de la nouvelle interface : la carte rendue (RenderTo) puis composee sur le fond uni, et seulement la zone changee
 // copiee a l'ecran. Rien a faire si rien n'a change.
 static Color WinBg() { return g_dark ? Color(255, 29, 33, 41) : Color(255, 228, 233, 240); }   // (jetons bg de la spec §3)
+static double g_profilMs[8];   // (essai : temps par partie d'une image -- 0 page, 1 coque, 2 couches, 3 palette/toasts, 4 composition, 5 copie, 6 BitBlt)
+static void ProfilMark(int i, LARGE_INTEGER &prev) { if (!g_profilOn) return; LARGE_INTEGER z, f; QueryPerformanceCounter(&z); QueryPerformanceFrequency(&f); g_profilMs[i] = (z.QuadPart - prev.QuadPart) * 1000.0 / f.QuadPart; prev = z; }
 static void PresentNew()
 {
     if (!g_wnd || !g_memDC) return;
     if (!g_dirtyAll && IsRectEmpty(&g_dirtyPx)) return;
+    LARGE_INTEGER pm; QueryPerformanceCounter(&pm);
     int cw = g_winW, ch = g_winH;   // (L2 : l'image = la fenetre entiere, coque comprise -- coque.inc RenderToNew)
     if (!g_cardBmp || (int)g_cardBmp->GetWidth() != cw || (int)g_cardBmp->GetHeight() != ch) { delete g_cardBmp; g_cardBmp = new Bitmap(cw, ch, PixelFormat32bppPARGB); }
     RenderToNew(*g_cardBmp);
+    QueryPerformanceCounter(&pm);
     SoftCompose(*g_cardBmp);   // (soft.inc : transitions)
+    ProfilMark(4, pm);
     {
         Bitmap win(g_winW, g_winH, g_winW * 4, PixelFormat32bppPARGB, (BYTE *)g_bits);
         Graphics g(&win);
@@ -288,10 +294,12 @@ static void PresentNew()
         g.DrawImage(g_cardBmp, 0, 0, cw, ch);
     }
     GdiFlush();
+    ProfilMark(5, pm);
     RECT r = g_dirtyAll ? RECT{ 0, 0, g_winW, g_winH } : g_dirtyPx;
     HDC dc = GetDC(g_wnd);
     BitBlt(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, g_memDC, r.left, r.top, SRCCOPY);
     ReleaseDC(g_wnd, dc);
+    ProfilMark(6, pm);
     g_dirtyAll = false; SetRectEmpty(&g_dirtyPx);
 }
 // Filet de securite : drapeau pose avant la premiere image, efface 5 s apres (Tick).
@@ -446,6 +454,17 @@ static void WinSelfTest()
     QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);   // (rien de change : rien a faire)
     double t2 = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
     LaunchLog("testfenetre : image complete %.1f ms (1600 x 900), image sans changement %.2f ms", t1, t2);
+    g_profilOn = true;
+    for (int i = 0; i < 4; i++) { g_profAcc[i] = 0; g_profN[i] = 0; }
+    InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);   // (a chaud : caches des ombres, creux et polices remplis)
+    double t3 = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
+    LaunchLog("testfenetre : image complete a chaud %.1f ms : page %.1f, coque %.1f, couches %.1f, palette/toasts %.1f, composition %.1f, copie %.1f, BitBlt %.1f", t3, g_profilMs[0], g_profilMs[1], g_profilMs[2], g_profilMs[3], g_profilMs[4], g_profilMs[5], g_profilMs[6]);
+    LaunchLog("testfenetre : dans cette image : texte %d appels %.1f ms, ombres %d appels %.1f ms, creux %d appels %.1f ms, icones %d appels %.1f ms", g_profN[0], g_profAcc[0], g_profN[1], g_profAcc[1], g_profN[2], g_profAcc[2], g_profN[3], g_profAcc[3]);
+    g_tab = TAB_WIKI; InvalidateAll(); PresentNew(); InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);
+    LaunchLog("testfenetre : image complete a chaud, Guide : %.1f ms (page %.1f, coque %.1f)", (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart, g_profilMs[0], g_profilMs[1]);
+    g_tab = TAB_COOP; InvalidateAll(); PresentNew(); InvalidateAll(); QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);
+    LaunchLog("testfenetre : image complete a chaud, Reglages : %.1f ms (page %.1f, coque %.1f)", (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart, g_profilMs[0], g_profilMs[1]);
+    g_tab = TAB_HOME; g_profilOn = false;
     SoftSelfTest();   // (soft.inc : courbes, animations, transitions, cache des ombres)
     LaunchLog("testfenetre : NouvelleEnCours=%d avant l'effacement (filet), fin", GetPrivateProfileIntW(L"Lanceur", L"NouvelleEnCours", 0, g_iniLauncher.c_str()));
 }

@@ -654,7 +654,8 @@ static void SigTick()
         SigOnDone(g_sigJob.kind, r);
         InvalidateAll();
     }
-    if (g_tab == TAB_BUG && SigActive() && (g_sigView == SV_CODE || g_sigBusy)) InvalidateAll();   // (compte a rebours, barre d'envoi)
+    if (g_tab == TAB_BUG && SigActive() && g_sigView == SV_CODE) SoftBlink(1000, 3);   // (compte a rebours : une image par seconde)
+    else if (g_tab == TAB_BUG && SigActive() && g_sigBusy) SoftBlink(250, 4);   // (barre d'envoi)
 }
 static void SigOpen()   // bouton Signaler un bug (nouvelle interface, natif)
 {
@@ -875,7 +876,7 @@ static float SigDrawTextArea(Graphics &g, RectF &r, float x, float y, float w, s
     SoftFieldBox(g, r, focus);
     SigText(g, shown, RectF(x + 16, y + 12, w - 32, h - 20), 14, text.empty() && !focus ? FontStyleRegular : FontStyleBold, text.empty() && !focus ? g_soft.faint : g_soft.ink);
     SigHot(r, id, clip);
-    if (focus) InvalidateAll();
+    if (focus) SoftBlink(500, 0);
     return h;
 }
 static float SigDrawDetail(Graphics &g, float x, float y, float w, const RectF &clip)
@@ -1000,7 +1001,7 @@ static float SigDrawSend(Graphics &g, float x, float y, float w, const RectF &)
     y += SigPara(g, ST("dpEnvoi"), x, y, w, 18, g_soft.ink, FontStyleBold) + 12;
     SoftProgress(g, RectF(x, y, min(w, 520.0f), 14), fr); y += 26;
     y += SigPara(g, p.empty() ? ST("dpEnvoi") : p, x, y, w, 13.5f, g_soft.muted) + 8;
-    InvalidateAll();
+    SoftBlink(250, 4);
     return y - y0;
 }
 static float SigDrawDone(Graphics &g, float x, float y, float w, const RectF &clip)
@@ -1061,7 +1062,7 @@ static void DrawSigPage(Graphics &g)
     g_sigContentH = h + 2 * pad;
     if (g_sigBusy && g_sigView != SV_SEND && g_sigView != SV_LOADING) {   // (une operation en cours : un fil discret en bas de la carte)
         SigLock(); float fr = g_sigFrac; SigUnlock();
-        SoftProgress(g, RectF(card.X + 24, card.Y + card.Height - 12, card.Width - 48, 6), fr); InvalidateAll();
+        SoftProgress(g, RectF(card.X + 24, card.Y + card.Height - 12, card.Width - 48, 6), fr); SoftBlink(250, 4);
     }
 }
 static float SigMaxScroll() { return max(0.0f, g_sigContentH - 656); }
