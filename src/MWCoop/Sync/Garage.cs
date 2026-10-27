@@ -373,7 +373,9 @@ namespace MWCoop
                 d.T1.Value = d.P1; d.T2.Value = d.P2; d.HB.Value = hb;
                 // Boulonne chez l'hote alors que le crochet attend ici (ses vis a lui n'ont pas suivi : inactives tant que
                 // le crochet n'est pas sur le moteur) : l'evenement de son automate Data, envoye a sa place.
-                if (hb && d.Hook.ActiveStateName == "Wait") d.Hook.SendEvent("ISASSEMBLED");
+                // (My Summer Car : HoistBolted reste vrai chez l'hote crochet vide, detecteurs libres -- le moteur etait pendu chez l'invite
+                // seul, Block.InHoist a 1 chez lui ; sauvegarde du dossier #6, 27/10 : il faut aussi une boule du moteur dans un detecteur)
+                if (hb && d.Hook.ActiveStateName == "Wait" && (!Game.Msc || d.P1 || d.P2)) d.Hook.SendEvent("ISASSEMBLED");
                 if (d.Hook.ActiveStateName != d.HookState) { Log.Info("atelier : crochet du " + d.Key + " ici : " + (d.HookState ?? "?") + " -> " + d.Hook.ActiveStateName); d.HookState = d.Hook.ActiveStateName; }
             }
         }

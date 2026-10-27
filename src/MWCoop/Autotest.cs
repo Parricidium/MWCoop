@@ -1044,6 +1044,7 @@ namespace MWCoop
         // sauvegarde ou qui tient dans le temps : entrees Database (booleens, flottants, entiers de 'Data'), serrage et crans de chaque
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
         static float etatAt, frNext;
+        static int radioStep, radioLog;
         static string EtatArray(GameObject go)
         {
             PlayMakerArrayListProxy best = null;
@@ -1107,6 +1108,7 @@ namespace MWCoop
                 }
                 else if (n == "Inspect" && g == "InspectionProcess") { EtatVars(sb, f, false); lines["ct:" + g] = sb.ToString(); }
             }
+            foreach (var kv in RadioMsc.EtatLines()) lines[kv.Key] = kv.Value;   // (autoradios et lecteurs CD partages, 27/10)
             var keys = new System.Collections.Generic.List<string>(lines.Keys);
             keys.Sort(string.CompareOrdinal);
             var outp = new System.Text.StringBuilder();
@@ -2510,6 +2512,54 @@ namespace MWCoop
                     if (MWCoop.Net.Session.IsHost && t > 35f && t < 75f && t >= holdLog) { holdLog = t + 3f; FsmGameObject wt = FsmVariables.GlobalVariables.FindFsmGameObject("WiringTool"); Log.Info("autotest : cablage, WiringTool ici = " + (wt != null && wt.Value != null ? wt.Value.name : "null")); }
                 }
                 LightsGuard.TestKey(mode, t);
+                // ([Test] Autotest=mscradio : RadioGestes=t:voiture:geste;... -- geste=volume=0.5, station=0.071, mode, canal, suivante, ejecte --
+                // simules ici comme la molette / le bouton ; RadioReleves=t,t : etat des postes au journal + instantane mscetat)
+                if (mode == "mscradio")
+                {
+                    string[] gs = Config.Get("Test", "RadioGestes", "").Split(new[] { ';' }, System.StringSplitOptions.RemoveEmptyEntries);
+                    while (radioStep < gs.Length)
+                    {
+                        string[] g3 = gs[radioStep].Split(':');
+                        if (g3.Length < 3 || t <= float.Parse(g3[0], System.Globalization.CultureInfo.InvariantCulture)) break;
+                        radioStep++;
+                        Log.Info("autotest : mscradio, geste " + RadioMsc.TestGesture(g3[1], g3[2]));
+                    }
+                    string[] rs = Config.Get("Test", "RadioReleves", "").Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
+                    if (radioLog < rs.Length && t > float.Parse(rs[radioLog], System.Globalization.CultureInfo.InvariantCulture))
+                    {
+                        radioLog++;
+                        Log.Info("autotest : mscradio, releve " + radioLog + " : " + RadioMsc.TestState());
+                        MscEtat();
+                    }
+                }
+                // ([Test] Autotest=mscradiodump : automates de l'autoradio / du lecteur CD / du haut-parleur de la SATSUMA, liste puis vidage)
+                if (mode == "mscradiodump" && t > 40f && step == 0)
+                {
+                    step = 1;
+                    var specs = new System.Collections.Generic.List<string>();
+                    Rigidbody sb = VehicleSync.Body("SATSUMA(557kg, 248)");
+                    if (sb != null)
+                        foreach (PlayMakerFSM f in sb.GetComponentsInChildren<PlayMakerFSM>(true))
+                        {
+                            string pth = Recon.Path(f.transform), low = pth.ToLowerInvariant();
+                            if (!(low.Contains("radio") || low.Contains("cd player") || low.Contains("cdplayer") || low.Contains("speaker"))) continue;
+                            Log.Info("autotest : mscradiodump " + pth + " :: " + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (eteint)"));
+                            specs.Add(pth + ":" + f.FsmName);
+                        }
+                    foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                    {
+                        if (f == null || f.hideFlags != HideFlags.None || f.transform.root.name.StartsWith("SATSUMA")) continue;
+                        string pth = Recon.Path(f.transform), low = pth.ToLowerInvariant();
+                        if (!(low.Contains("radio") || low.Contains("cd player") || low.Contains("cdplayer"))) continue;
+                        Log.Info("autotest : mscradiodump autre " + pth + " :: " + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (eteint)"));
+                    }
+                    { var names = new System.Text.StringBuilder(); foreach (Object o in Game.FsmsNamed("Buy")) { var bf = o as PlayMakerFSM; HutongGames.PlayMaker.FsmString bn = bf != null ? bf.FsmVariables.FindFsmString("Name") : null; if (bn != null) names.Append(bn.Value).Append(" (").Append(Recon.Path(bf.transform)).Append(") "); } Log.Info("autotest : mscradiodump produits " + names); }
+                    foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
+                        if (tr != null && tr.gameObject.hideFlags == HideFlags.None && (tr.name.StartsWith("cd(") || tr.name.StartsWith("cd case") || tr.name.ToLowerInvariant().Contains("cdcase")))
+                            Log.Info("autotest : mscradiodump disque " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (eteint)") + " corps " + (tr.GetComponent<Rigidbody>() != null) + " cle " + Props.KeyOf(tr.gameObject));
+                    foreach (string sp in Config.Get("Test", "RadioAussi", "").Split(';')) if (sp.Length > 0) specs.Add(sp);
+                    DumpFsms(string.Join(";", specs.ToArray()));
+                }
                 Spy(t);
                 if (LightsGuard.KeyReleve) { LightsGuard.KeyReleve = false; MscEtat(); }   // (mscphares : etat de la Satsuma a chaque releve, pour etat-diff.py)
                 MscTest(mode, t); return;

@@ -223,6 +223,7 @@ namespace MWCoop
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
             SewageHose.OnLevelLoaded();
             PhoneMsc.OnLevelLoaded();
+            RadioMsc.OnLevelLoaded();
             TractsMsc.OnLevelLoaded();
             RunOver.OnLevelLoaded();
             specialsScanned = false; logTrigger = null; ltCollider = null;
@@ -254,7 +255,7 @@ namespace MWCoop
         public static void Update()
         {
             SewageHose.Update();
-            if (Game.Msc) { PhoneMsc.Update(); TractsMsc.Update(); }   // (telephone de MSC : decroche partage, PhoneMsc.cs ; tracts de Teimo)
+            if (Game.Msc) { PhoneMsc.Update(); TractsMsc.Update(); RadioMsc.Update(); }   // (telephone de MSC : decroche partage, PhoneMsc.cs ; tracts de Teimo)
             if (nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
@@ -2068,7 +2069,8 @@ namespace MWCoop
                 case "@tow": ModTowCart.OnMessage(who, r); break;
                 case "@jack": ModJackStands.OnMessage(who, r); break;
                 case "@carbu": FuelPrices.OnMessage(who, r); break;
-                case "@tel": PhoneMsc.OnMessage(who, r); break;   // (MSC : appel decroche par un autre)
+                case "@tel": PhoneMsc.OnMessage(who, r); break;
+                case "@radio": RadioMsc.OnMessage(who, r); break;   // (MSC, 27/10 : etat des autoradios et lecteurs CD des vehicules)   // (MSC : appel decroche par un autre)
                 case "@rallymsc": RallyMsc.OnMessage(who, r); break;   // (MSC : temps d'un pilote humain au rallye)
                 case "@dragmsc": DragMsc.OnMessage(who, r); break;   // (MSC : meilleur temps d'un pilote humain aux dragsters)
                 case "@trophee": RallyMsc.OnTrophy(who, r); break;   // (MSC : trophee du podium du rallye cree chez le gagnant)

@@ -259,6 +259,7 @@ namespace MWCoop
         }
 
         // Essais : cle d'un corps suivi ici (null : pas suivi).
+        public static string KeyOf(GameObject go) { Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null; Prop p; return rb != null && byBody.TryGetValue(rb, out p) ? p.Id : null; }
         public static string TestKeyOf(Rigidbody rb) { Prop p; return byBody.TryGetValue(rb, out p) ? p.Id : null; }
 
         // Essais (Autotest=mscprise) : cle et ID de sauvegarde d'un corps, ici.
