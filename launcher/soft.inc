@@ -217,7 +217,7 @@ static void SoftInset(Graphics &g, RectF r, float rad, int off = 3, int blur = 7
 static void SoftShape(Graphics &g, RectF r, float rad, Color fill) { GraphicsPath p; RoundRect(p, r, rad); SolidBrush b(fill); g.FillPath(&b, &p); }
 
 // ---- composants
-static void SoftCard(Graphics &g, RectF r, float rad = kSoftRCard) { SoftRaised(g, r, rad, 7, 16); SoftShape(g, r, rad, g_soft.bg); }
+static void SoftCard(Graphics &g, RectF r, float rad) { SoftRaised(g, r, rad, 7, 16); SoftShape(g, r, rad, g_soft.bg); }
 static void SoftCardTitle(Graphics &g, RectF card, const std::wstring &title, const std::wstring &sub = L"")
 {
     Text(g, title, RectF(card.X + 22, card.Y + 18, card.Width - 44, 22), 16, FontStyleBold, g_soft.ink, StringAlignmentNear);
@@ -397,13 +397,13 @@ static void SoftNotify(const std::wstring &text, int kind = SC_OK)
     if (g_softToasts.size() > 4) g_softToasts.erase(g_softToasts.begin());
     InvalidateAll();
 }
-static void SoftDrawToasts(Graphics &g)
+static void SoftDrawToasts(Graphics &g, float areaW = kCardW, float areaH = kCardH)
 {
     if (g_softToasts.empty()) return;
     DWORD now = GetTickCount();
     int in = SoftDur(260), out = SoftDur(160), life = 2600;
     for (size_t i = 0; i < g_softToasts.size();) { if (now - g_softToasts[i].t0 > (DWORD)(life + out)) g_softToasts.erase(g_softToasts.begin() + i); else i++; }
-    float y = kCardH - 56;
+    float y = areaH - 12;
     for (int i = (int)g_softToasts.size() - 1; i >= 0; i--) {
         SoftToast &t = g_softToasts[i];
         DWORD el = now - t.t0;
@@ -411,8 +411,8 @@ static void SoftDrawToasts(Graphics &g)
         if (el < (DWORD)in) { float e = SoftEase(el / (float)in, SE_OUT); a = e; dy = 12 * (1 - e); sc = 0.96f + 0.04f * e; }
         else if (el > (DWORD)life) { float e = SoftEase((el - life) / (float)out, SE_MOVE); a = 1 - e; dx = 16 * e; }
         float w = MeasureW(MeasureG(), t.text, 13.5f, FontStyleBold) + 56, h = 44;
-        w = min(w, kCardW * 0.6f);
-        RectF r(kCardW - 24 - w + dx, y - h + dy, w, h);
+        w = min(w, areaW * 0.6f);
+        RectF r(areaW - 24 - w + dx, y - h + dy, w, h);
         RectF rs(r.X + r.Width * (1 - sc) / 2, r.Y + r.Height * (1 - sc) / 2, r.Width * sc, r.Height * sc);
         SoftRaised(g, rs, 14, 4, 10, a); SoftShape(g, rs, 14, WithA(g_soft.bg, a));
         Color fg = t.kind == SC_OK ? g_soft.ok : t.kind == SC_WARN ? g_soft.warn : t.kind == SC_BAD ? g_soft.bad : g_soft.acc;
@@ -461,7 +461,7 @@ static void SoftCompose(Bitmap &card)
         Graphics g(&card);
         g.SetCompositingMode(CompositingModeSourceCopy);
         g.DrawImage(g_softThemeOld, 0, 0, (INT)card.GetWidth(), (INT)card.GetHeight());
-        float cx = (g_softThemeC.X + kM) * g_scale, cy = (g_softThemeC.Y + kM) * g_scale;
+        float cx = g_offX + (g_softThemeC.X + kM) * g_scale, cy = g_offY + (g_softThemeC.Y + kM) * g_scale;
         float farR = sqrtf(max(cx, card.GetWidth() - cx) * max(cx, card.GetWidth() - cx) + max(cy, card.GetHeight() - cy) * max(cy, card.GetHeight() - cy)) * e;
         GraphicsPath p; p.AddEllipse(cx - farR, cy - farR, 2 * farR, 2 * farR);
         g.SetClip(&p);
@@ -474,7 +474,7 @@ static void SoftCompose(Bitmap &card)
     float t = min(1.0f, (now - g_softPageT) / (float)din);
     if (t >= 1 || !g_softPageOld) { g_softPageT = 0; delete g_softPageOld; g_softPageOld = NULL; return; }
     float ein = SoftEase(t, SE_OUT), eout = SoftEase(min(1.0f, (now - g_softPageT) / (float)dout), SE_MOVE);
-    RectF page((kMain.X + kM) * g_scale, (kMain.Y + kM) * g_scale, kMain.Width * g_scale, kMain.Height * g_scale);   // (L0 / L1 : la zone de page de la carte d'avant)
+    RectF page(g_offX + (264 + kM) * g_scale, g_offY + (0 + kM) * g_scale, 1000 * g_scale, 744 * g_scale);   // (la colonne de page : titre, commandes et page de la carte d'avant)
     Bitmap cur(card.GetWidth(), card.GetHeight(), PixelFormat32bppPARGB);
     { Graphics gc(&cur); gc.DrawImage(&card, 0, 0, (INT)card.GetWidth(), (INT)card.GetHeight()); }
     Graphics g(&card);
@@ -509,7 +509,7 @@ static void DrawSoftDemo(Graphics &g)
         SoftChip(g, x, 32, L"Steam", SC_ACC);
     }
     // carte 1 : boutons
-    RectF c1(32, 96, 400, 300); SoftCard(g, c1); SoftCardTitle(g, c1, T(L"Boutons", L"Buttons"), T(L"Relief, principal, icône, appuyé, désactivé", L"Raised, primary, icon, pressed, disabled"));
+    RectF c1(32, 96, 400, 300); SoftCard(g, c1, kSoftRCard); SoftCardTitle(g, c1, T(L"Boutons", L"Buttons"), T(L"Relief, principal, icône, appuyé, désactivé", L"Raised, primary, icon, pressed, disabled"));
     SoftButton(g, RectF(c1.X + 22, c1.Y + 70, 160, 44), T(L"Héberger", L"Host"), UI_SOFT_DEMO, true, IC_HOME);
     SoftButton(g, RectF(c1.X + 196, c1.Y + 70, 160, 44), T(L"Rejoindre", L"Join"), UI_SOFT_DEMO + 1, false, IC_LOGIN);
     SoftButton(g, RectF(c1.X + 22, c1.Y + 128, 44, 44), L"", UI_SOFT_DEMO + 2, false, IC_GEAR);
@@ -521,7 +521,7 @@ static void DrawSoftDemo(Graphics &g)
     SoftProgress(g, RectF(c1.X + 22, c1.Y + 198, 356, 12), 0.62f);
     SoftSlider(g, RectF(c1.X + 34, c1.Y + 230, 332, 32), 0.4f, UI_SOFT_DEMO + 6);
     // carte 2 : interrupteurs, segments, champ
-    RectF c2(456, 96, 400, 300); SoftCard(g, c2); SoftCardTitle(g, c2, T(L"Réglages", L"Settings"), T(L"Interrupteurs, segments, champ", L"Switches, segments, field"));
+    RectF c2(456, 96, 400, 300); SoftCard(g, c2, kSoftRCard); SoftCardTitle(g, c2, T(L"Réglages", L"Settings"), T(L"Interrupteurs, segments, champ", L"Switches, segments, field"));
     Text(g, T(L"Vocal de proximité", L"Proximity voice"), RectF(c2.X + 22, c2.Y + 76, 240, 22), 14, FontStyleBold, g_soft.ink, StringAlignmentNear);
     SoftToggle(g, RectF(c2.X + c2.Width - 74, c2.Y + 72, 52, 30), true, UI_SOFT_DEMO + 7);
     Text(g, T(L"Animations réduites", L"Reduced animations"), RectF(c2.X + 22, c2.Y + 118, 240, 22), 14, FontStyleBold, g_soft.ink, StringAlignmentNear);
@@ -531,19 +531,19 @@ static void DrawSoftDemo(Graphics &g)
     SoftSeg(g, RectF(c2.X + 22, c2.Y + 170, SoftSegW(labs), 44), labs, g_softMode < 0 ? 2 : g_softMode, UI_SOFT_DEMO + 9);
     SoftField(g, RectF(c2.X + 22, c2.Y + 232, 356, 46), L"", T(L"Chercher un réglage…", L"Search a setting…"), false, IC_SPARK);
     // carte 3 : tuiles et rangees
-    RectF c3(880, 96, 368, 300); SoftCard(g, c3); SoftCardTitle(g, c3, T(L"Tuiles et listes", L"Tiles and lists"), L"");
+    RectF c3(880, 96, 368, 300); SoftCard(g, c3, kSoftRCard); SoftCardTitle(g, c3, T(L"Tuiles et listes", L"Tiles and lists"), L"");
     SoftTile(g, RectF(c3.X + 22, c3.Y + 56, 154, 150), T(L"Voitures", L"Cars"), T(L"Addons, livrées", L"Add-ons, liveries"), IC_CAR, false, UI_SOFT_DEMO + 10);
     SoftTile(g, RectF(c3.X + 192, c3.Y + 56, 154, 150), L"Mods", T(L"Kupla…", L"Kupla…"), IC_PUZZLE, true, UI_SOFT_DEMO + 11);
     SoftRow(g, RectF(c3.X + 14, c3.Y + 218, c3.Width - 28, 34), L"mwcoop.log", L"", UI_SOFT_DEMO + 12, IC_FILE);
     SoftRow(g, RectF(c3.X + 14, c3.Y + 254, c3.Width - 28, 34), L"chargeur.log", L"", UI_SOFT_DEMO + 13, IC_FILE);
     // carte 4 : texte, squelette, info-bulle, modale
-    RectF c4(32, 420, 400, 300); SoftCard(g, c4); SoftCardTitle(g, c4, T(L"Texte", L"Text"), T(L"Nunito 700 / 400 · étiquettes en capitales", L"Nunito 700 / 400 · uppercase labels"));
+    RectF c4(32, 420, 400, 300); SoftCard(g, c4, kSoftRCard); SoftCardTitle(g, c4, T(L"Texte", L"Text"), T(L"Nunito 700 / 400 · étiquettes en capitales", L"Nunito 700 / 400 · uppercase labels"));
     Text(g, T(L"ÉTIQUETTE DE SECTION", L"SECTION LABEL"), RectF(c4.X + 22, c4.Y + 70, 300, 16), 11, FontStyleBold, g_soft.faint, StringAlignmentNear);
     Para(g, T(L"Texte courant à 14 px, contraste ≥ 4,5:1 sur le fond. Le secondaire est en 13 px gris. Chaque état a une couleur ET un mot.", L"Body text at 14 px, contrast ≥ 4.5:1 on the background. Secondary is 13 px grey. Every state has a colour AND a word."), RectF(c4.X + 22, c4.Y + 92, 356, 70), 14, g_soft.ink);
     Text(g, L"1 234 567 · 97 % · v1.15.19", RectF(c4.X + 22, c4.Y + 166, 356, 20), 13, FontStyleRegular, g_soft.muted, StringAlignmentNear);
     SoftSkeleton(g, RectF(c4.X + 22, c4.Y + 200, 240, 14)); SoftSkeleton(g, RectF(c4.X + 22, c4.Y + 222, 320, 14)); SoftSkeleton(g, RectF(c4.X + 22, c4.Y + 244, 180, 14));
     // carte 5 : couleurs des jetons
-    RectF c5(456, 420, 400, 300); SoftCard(g, c5); SoftCardTitle(g, c5, T(L"Jetons", L"Tokens"), g_softDark ? T(L"Sombre", L"Dark") : T(L"Clair", L"Light"));
+    RectF c5(456, 420, 400, 300); SoftCard(g, c5, kSoftRCard); SoftCardTitle(g, c5, T(L"Jetons", L"Tokens"), g_softDark ? T(L"Sombre", L"Dark") : T(L"Clair", L"Light"));
     struct Sw { const wchar_t *n; Color c; } sw[] = { { L"bg", g_soft.bg }, { L"bg-in", g_soft.bgIn }, { L"ink", g_soft.ink }, { L"muted", g_soft.muted }, { L"faint", g_soft.faint }, { L"acc", g_soft.acc }, { L"acc-soft", g_soft.accSoft }, { L"ok", g_soft.ok }, { L"warn", g_soft.warn }, { L"bad", g_soft.bad }, { L"sh-d", g_soft.shD }, { L"sh-l", g_soft.shL } };
     for (int i = 0; i < 12; i++) {
         float x = c5.X + 22 + (i % 4) * 90, y = c5.Y + 70 + (i / 4) * 72;
@@ -552,7 +552,7 @@ static void DrawSoftDemo(Graphics &g)
         Text(g, sw[i].n, RectF(x, y + 44, 78, 16), 11.5f, FontStyleBold, g_soft.muted);
     }
     // carte 6 : notification et modale
-    RectF c6(880, 420, 368, 300); SoftCard(g, c6); SoftCardTitle(g, c6, T(L"Modale, notification", L"Modal, notification"), L"");
+    RectF c6(880, 420, 368, 300); SoftCard(g, c6, kSoftRCard); SoftCardTitle(g, c6, T(L"Modale, notification", L"Modal, notification"), L"");
     RectF m(c6.X + 22, c6.Y + 60, c6.Width - 44, 150);
     SoftShape(g, m, 16, WithA(Color(255, 0, 0, 0), 0.25f));
     RectF mm(m.X + 30, m.Y + 22, m.Width - 60, 106);

@@ -20,7 +20,15 @@ static const RectF kSetBuy(284, 684, 220, 44), kSetUninst(512, 684, 224, 44);   
 struct HotRect { RectF r; int id; };
 static std::vector<HotRect> g_zones;
 static int g_uiHot = -1;
-static void HotZone(RectF r, int id) { g_zones.push_back({ r, id }); }
+static bool g_zoneDip;   // (coque.inc : la coque dessine en DIP ; ses zones sont converties en coordonnees de la carte)
+static const int kPalRows = 8;   // (coque.inc : lignes de la palette)
+static bool ShellClick(int id);  // (coque.inc)
+static float g_dpiScale;   // (fenetre.inc)
+static void HotZone(RectF r, int id)
+{
+    if (g_zoneDip) { float d = g_dpiScale; r = RectF((r.X * d - g_offX) / g_scale - kM, (r.Y * d - g_offY) / g_scale - kM, r.Width * d / g_scale, r.Height * d / g_scale); }
+    g_zones.push_back({ r, id });
+}
 static int ZoneAt(float x, float y)
 {
     for (int i = (int)g_zones.size() - 1; i >= 0; i--) if (g_zones[i].r.Contains(x, y)) return g_zones[i].id;
@@ -62,6 +70,7 @@ enum {
     UI_KUPLA_NIVEAU = 10030, UI_KUPLA_COMPTEUR = 10033,                       // ADDONS > Mods, carte Kupla (modules.inc) : niveau (+0..2 : leger / moyen / fort), compteur d'images par seconde
     UI_SET_INTERFACE = 10040, UI_SET_FENMEM = 10042, UI_SET_ANIMRED,          // REGLAGES > Lanceur > Fenetre du lanceur (fenetre.inc) : ancienne / nouvelle (+0/1), memoire de la taille, animations reduites
     UI_SET_THEMENOUV = 10044,                                                 // + 0..2 : theme de la nouvelle interface, Clair / Sombre / Auto (soft.inc)
+    UI_RAIL_COLLAPSE = 10060, UI_STATUS_LOBBY, UI_PALETTE_OPEN, UI_PAL_ROW = 10070,   // COQUE (coque.inc) : replier la barre, salon de la barre d'etat, ouvrir la palette Ctrl+K, lignes de la palette (+ 0..7)
     UI_PLACES_OPEN = 10300, UI_PLACES_EXPORT,   // OUTILS : placement des sieges (cle d'acces) -- ouvrir l'outil, exporter mes voitures (outils-places.inc)
     UI_LOBBY_PRIV = 3300,         // + 0 public, 1 prive   (3300+ depuis 1.8.9 : 26 options x 3 debordaient sur 3260-3279, Marqueurs cliquait « Tous » des ajouts)
     UI_LOBBY_COPY = 3302, UI_LOBBY_REGEN, UI_LOBBY_MAXM, UI_LOBBY_MAXP,   // code : copier, nouveau ; joueurs au plus - / +
@@ -366,9 +375,12 @@ static void PaintGlass(Graphics &g, RectF r, float rad, Color tint, bool shadow)
 }
 // Carte de verre de la page (gardee dans l'image de fond).
 static void Glass(RectF r, float rad = 22) { g_glassNow.push_back({ r, rad }); }
+static bool g_newUi;   // (fenetre.inc)
+static void SoftCard(Graphics &g, RectF r, float rad);   // (soft.inc)
 // Verre dessine tout de suite (bulle, menu, fenetre par-dessus le contenu) : plus opaque.
 static void GlassLive(Graphics &g, RectF r, float rad)
 {
+    if (g_newUi) { SoftCard(g, r, rad); return; }   // (nouvelle interface : carte en relief)
     PaintGlass(g, r, rad, g_dark ? Color(205, 18, 30, 64) : Color(225, 255, 255, 255), true);
 }
 

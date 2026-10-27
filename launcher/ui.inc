@@ -724,8 +724,9 @@ static void DrawHeader(Graphics &g)
     // avant le rework), puis celles de la page.
     float right = 1264;
     for (int id : { B_CLOSE, B_MIN, B_THEME, B_LANG }) { g_btn[id].r = RectF(right - 44, 22, 44, 44); right -= 54; }
+    if (g_newUi) right = 1256;   // (nouvelle interface : les raccourcis sont dans l'en-tete de la coque ; ici, la ligne de titre et les commandes de la page)
+    else {
     HeadButton(g, B_CLOSE, IC_CLOSE);
-    if (g_newUi) HeadButton(g, B_MAX, g_fullscreen || IsZoomed(g_wnd) ? IC_RESTORE : IC_MAX);   // (Agrandir, entre Reduire et Fermer : refonte §1, fenetre.inc)
     HeadButton(g, B_MIN, IC_MIN);
     HeadButton(g, B_THEME, g_dark ? IC_SUN : IC_MOON);
     HeadButton(g, B_LANG, 0, g_fr ? L"FR" : g_ru ? L"RU" : g_ar ? L"AR" : L"EN");
@@ -750,8 +751,9 @@ static void DrawHeader(Graphics &g)
         HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_TOOLS, IC_TOOLS);
         right -= 54;
     }
+    }
     g_headRight = right;
-    if (g_btn[B_BUG].hover > 0.05f) {   // (etiquette sous le bouton Signaler un bug)
+    if (!g_newUi && g_btn[B_BUG].hover > 0.05f) {   // (etiquette sous le bouton Signaler un bug)
         const wchar_t *tl = T(L"Signaler un bug", L"Report a bug");
         float a = std::min(1.0f, g_btn[B_BUG].hover), tw = MeasureW(MeasureG(), tl, 12.5f, FontStyleBold) + 24;
         RectF br = g_btn[B_BUG].r, tr(br.X + br.Width / 2 - tw / 2, br.Y + br.Height + 8, tw, 28);
@@ -1591,7 +1593,7 @@ static void DrawUI(Graphics &g)
     status = g_status; kind = g_statusKind;
     LeaveCriticalSection(&g_cs);
     float prog = g_progress;
-    DrawRail(g);
+    if (!g_newUi) DrawRail(g);   // (nouvelle interface : la barre est dans la coque, coque.inc)
     if (g_state == ST_RUNNING) DrawServer(g);
     else if (g_state == ST_LAUNCH || g_state == ST_CLOSING) DrawLaunchPage(g);
     else switch (g_tab) {
@@ -1614,7 +1616,7 @@ static void DrawUI(Graphics &g)
     default: DrawHome(g); break;
     }
     DrawHeader(g);
-    DrawFooter(g, status, kind, prog);
+    if (!g_newUi) DrawFooter(g, status, kind, prog);   // (nouvelle interface : barre d'etat de la coque)
     DrawSaveModal(g);   // (saves.inc : par-dessus tout)
 }
 
@@ -1629,6 +1631,7 @@ static bool UiClick(int id)
     if (id >= UI_ADDON_FILTER && id < UI_ADDON_FILTER + 8) { AddonsSetFilter(id - UI_ADDON_FILTER); return true; }
     if (id >= UI_ADDON_GET && id < UI_ADDON_GET + 20) { int i = id - UI_ADDON_GET; if (i < (int)g_addonList.size()) AddonDownload(g_addonList[i].key); return true; }   // (catalogue : Telecharger / Mettre a jour)
     if (id >= UI_ADDON_CARD && id < UI_ADDON_CARD + 20) { g_addonSel = id - UI_ADDON_CARD; g_addonThumbOf.clear(); return true; }   // (onglet Addons : carte -> son volet ; 1.5.2, clic oublie en 1.5.0)
+    if (id >= UI_PAL_ROW && id < UI_PAL_ROW + kPalRows) return ShellClick(id);   // (coque.inc : palette)
     if (id >= UI_NAV && id < UI_NAV + TAB_COUNT) { int p = id - UI_NAV; if (PageEnabled(p)) GoPage(p); return true; }
     if (id >= UI_NAV_GROUP && id < UI_NAV_GROUP + 5) { RailToggle(id - UI_NAV_GROUP); return true; }
     if (id == UI_SEG || id == UI_SEG + 1) {   // (en-tete : Contenu / Mods ; Personnage et Media ont leurs propres onglets)
@@ -1705,6 +1708,7 @@ static bool UiClick(int id)
     case UI_KUPLA_NIVEAU: case UI_KUPLA_NIVEAU + 1: case UI_KUPLA_NIVEAU + 2: if (KuplaRenduGet()) KuplaNiveauSet(id - UI_KUPLA_NIVEAU + 1); return true;   // (grise quand Kupla est eteint)
     case UI_KUPLA_COMPTEUR: KuplaCompteurToggle(); return true;
     case UI_BUG_ZIP: case UI_BUG_BROWSER: case UI_BUG_CLOSE: return BugClick(id);   // (signalement.inc : la bande du panneau)
+    case UI_RAIL_COLLAPSE: case UI_STATUS_LOBBY: case UI_PALETTE_OPEN: return ShellClick(id);   // (coque.inc)
     case UI_SET_SIGNALNAV: {   // (Reglages > Lanceur > Depannage : Signaler un bug dans le navigateur)
         bool on = GetPrivateProfileIntW(L"Lanceur", L"SignalerNavigateur", 0, g_iniLauncher.c_str()) != 0;
         WritePrivateProfileStringW(L"Lanceur", L"SignalerNavigateur", on ? NULL : L"1", g_iniLauncher.c_str());

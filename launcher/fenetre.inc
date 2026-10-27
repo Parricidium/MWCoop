@@ -16,10 +16,7 @@
 //    de la nouvelle interface, efface 5 s plus tard ; retrouve au demarrage = elle a plante : l'ancienne s'ouvre, Interface
 //    remis a ancienne, et la barre d'etat propose Signaler un bug.
 // Aucun import statique (regle version.dll) : user32 recent (PPP par fenetre) et dwmapi (coins, ombre) par GetProcAddress.
-static bool g_newUi;                 // nouvelle interface (lue au demarrage : UiNewRead)
 static bool g_uiCrashed;             // filet : la nouvelle a plante au lancement precedent
-static int g_offX, g_offY;           // nouvelle : coin de la carte (kImgW x kImgH a l'echelle) dans la fenetre
-static float g_dpiScale = 1;         // nouvelle : PPP de la fenetre / 96 (taille minimale, taille par defaut)
 static bool g_fullscreen;            // F11
 static WINDOWPLACEMENT g_fsBefore;   // placement avant le plein ecran
 static bool g_winSizeKnown;          // taille lue de l'ini (sinon centree au demarrage)
@@ -30,6 +27,9 @@ static Bitmap *g_cardBmp;            // nouvelle : la carte rendue (PARGB), comp
 static const int kWinMinW = 960, kWinMinH = 600;
 static void RenderTo(Bitmap &target, float scale);   // (launcher.cpp)
 static void SoftCompose(Bitmap &card);                // (soft.inc : changement de page, cercle du theme)
+static void RenderToNew(Bitmap &target);              // (coque.inc : la fenetre entiere)
+static float g_shW, g_shH;                            // (coque.inc)
+static bool g_palOpen;
 static void SoftThemeApply();                         // (soft.inc : jetons du theme et de l'accent)
 static void SoftSelfTest();                           // (soft.inc : essai cache)
 static int HitButton(float x, float y);
@@ -146,8 +146,7 @@ static void WinLayout()
     int w = max(1L, c.right - c.left), h = max(1L, c.bottom - c.top);
     if (w == g_winW && h == g_winH && g_memDC) return;
     g_winW = w; g_winH = h;
-    g_scale = max(0.3f, min(w / kImgW, h / kImgH));
-    g_offX = (int)((w - kImgW * g_scale) / 2); g_offY = (int)((h - kImgH * g_scale) / 2);
+    g_offX = g_offY = 0;   // (coque.inc ShellLayout pose g_scale et la colonne de page a chaque image)
     if (g_memDC) { DeleteDC(g_memDC); g_memDC = NULL; }
     if (g_dib) { DeleteObject(g_dib); g_dib = NULL; }
     BITMAPINFO bi = {};
@@ -220,8 +219,7 @@ static LRESULT WinNcHitTest(HWND h, LPARAM lp)
         if (l) return HTLEFT; if (r) return HTRIGHT; if (t) return HTTOP; if (bo) return HTBOTTOM;
     }
     float x = (p.x - g_offX) / g_scale - kM, y = (p.y - g_offY) / g_scale - kM;   // (coordonnees de la carte)
-    if (x < 0 || y < 0 || x > kCardW || y > kCardH) return HTCAPTION;             // (le fond autour de la carte : glisser)
-    if (y < 84 && HitButton(x, y) < 0 && ZoneAt(x, y) < 0 && HitField(x, y) < 0) return HTCAPTION;   // (l'en-tete, hors de ses boutons et champs)
+    if (p.y < 64 * g_dpiScale && !g_palOpen && HitButton(x, y) < 0 && ZoneAt(x, y) < 0 && HitField(x, y) < 0) return HTCAPTION;   // (l'en-tete de la coque, hors de ses boutons : glisser)
     return HTCLIENT;
 }
 static bool WinProcNew(HWND h, UINT m, WPARAM wp, LPARAM lp, LRESULT &res)
@@ -278,18 +276,16 @@ static void PresentNew()
 {
     if (!g_wnd || !g_memDC) return;
     if (!g_dirtyAll && IsRectEmpty(&g_dirtyPx)) return;
-    int cw = (int)(kImgW * g_scale), ch = (int)(kImgH * g_scale);
+    int cw = g_winW, ch = g_winH;   // (L2 : l'image = la fenetre entiere, coque comprise -- coque.inc RenderToNew)
     if (!g_cardBmp || (int)g_cardBmp->GetWidth() != cw || (int)g_cardBmp->GetHeight() != ch) { delete g_cardBmp; g_cardBmp = new Bitmap(cw, ch, PixelFormat32bppPARGB); }
-    RenderTo(*g_cardBmp, g_scale);
+    RenderToNew(*g_cardBmp);
     SoftCompose(*g_cardBmp);   // (soft.inc : transitions)
     {
         Bitmap win(g_winW, g_winH, g_winW * 4, PixelFormat32bppPARGB, (BYTE *)g_bits);
         Graphics g(&win);
-        if (g_dirtyAll) g.Clear(WinBg());
-        g.SetCompositingMode(CompositingModeSourceOver);
+        g.SetCompositingMode(CompositingModeSourceCopy);
         g.SetInterpolationMode(InterpolationModeNearestNeighbor);
-        if (!g_dirtyAll) { g.Clear(WinBg()); }   // (zone partielle : la carte entiere est quand meme recomposee, L0 -- la copie a l'ecran, elle, est partielle)
-        g.DrawImage(g_cardBmp, g_offX, g_offY, cw, ch);
+        g.DrawImage(g_cardBmp, 0, 0, cw, ch);
     }
     GdiFlush();
     RECT r = g_dirtyAll ? RECT{ 0, 0, g_winW, g_winH } : g_dirtyPx;

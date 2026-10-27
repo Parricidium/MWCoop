@@ -185,6 +185,7 @@ static std::wstring g_localVer;                     // MWCoop\version.txt
 static bool g_modOk;                                // version.dll + MWCoop\MWCoop.dll presents
 static int g_state = ST_IDLE;
 static float g_scale = 1, g_alpha = 0, g_time = 0;
+static int g_offX, g_offY;   // nouvelle interface (fenetre.inc / coque.inc) : coin de la colonne de page dans la fenetre, en pixels (0 dans l'ancienne)
 static float g_sceneT = 12;   // horloge de la scene animee (g_time est remis a zero par le curseur des champs)
 static int g_benchSkip;       // /capture ... /sauter n : essais de vitesse (1 sans la neige, 2 sans l'interface)
 static int g_bench;           // /capture ... /images n : temps de n images (journal a cote de la capture)
@@ -4919,6 +4920,7 @@ static std::wstring FitText(const std::wstring &s, float px, int style, float ma
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
+#include "coque.inc"   // (refonte Soft UI, lot L2 : en-tete, barre, barre d'etat, palette Ctrl+K, disposition de la nouvelle interface)
 #include "install.inc"
 // Reglages > Co-op : « Revoir le guide de l'hote » ouvre l'article du guide (wikidata.inc : Heberger une partie, 5e article).
 static void WikiOpenAddons()   // (onglet Addons : bouton Aide)
@@ -6952,6 +6954,8 @@ static void Tick()
         bool changed = g_status != lastStatus || g_statusKind != lastKind;
         if (changed) { lastStatus = g_status; lastKind = g_statusKind; }
         LeaveCriticalSection(&g_cs);
+        if (changed && lastKind != K_NORMAL && !lastStatus.empty() && !g_softToasts.empty() == false) SoftNotify(lastStatus, lastKind == K_OK ? SC_OK : lastKind == K_WARN ? SC_WARN : SC_BAD);   // (coque.inc : le message reste aussi dans la barre d'etat)
+        else if (changed && lastKind != K_NORMAL && !lastStatus.empty()) SoftNotify(lastStatus, lastKind == K_OK ? SC_OK : lastKind == K_WARN ? SC_WARN : SC_BAD);
         float prog = g_progress;
         if (prog != lastProg) { lastProg = prog; changed = true; }
         bool anim = active || hoverAnim || changed || g_aurore != 0 || g_lobby != LB_NONE || g_state != ST_IDLE || g_busy || g_guide || g_tuto >= 0;
@@ -6994,6 +6998,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
 {
     if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || m == WM_KEYDOWN || m == WM_CHAR) g_inputT = GetTickCount();
     { LRESULT res; if (WinProcNew(h, m, wp, lp, res)) return res; }   // (fenetre.inc : taille libre, cadre, image, F11)
+    if (g_newUi) { LRESULT res; if (PalMessage(m, wp, lp, res)) return res; }   // (coque.inc : palette Ctrl+K)
     switch (m) {
     case WM_TIMER:
         if (wp == 77) { KillTimer(h, 77); TestLog("test : fin (hote garde ouvert)"); DestroyWindow(h); return 0; }
@@ -7154,6 +7159,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (g_lobbyOpts && !g_lobbyPopR.Contains(x, y) && !g_lobbyGearR.Contains(x, y)) { g_lobbyOpts = false; return 0; }   // (clic a cote : ferme le menu)
         g_chatFocus = false;   // (le champ du tchat le reprend si c'est lui qui est clique)
         int z = ZoneAt(x, y);
+        if (g_palOpen && z != UI_NONE && !(z >= UI_PAL_ROW && z < UI_PAL_ROW + kPalRows)) { PalClose(); return 0; }   // (coque.inc : clic a cote de la palette)
         if (z >= 0) { g_focus = -1; if (g_newUi) SoftPressNote(z); UiClick(z); return 0; }   // (soft.inc : appui de 140 ms)
         int b = HitButton(x, y), f = HitField(x, y);
         if (b >= 0) { g_pressed = b; SetCapture(h); return 0; }
@@ -7390,6 +7396,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/densite")) g_densite = max(0, min(2, _wtoi(argv[i + 1])));
         if (!_wcsicmp(argv[i], L"/texte")) g_texte = max(80, min(110, _wtoi(argv[i + 1])));
         if (!_wcsicmp(argv[i], L"/echelle")) g_scale = (float)_wtof(argv[i + 1]);   // captures : rendu agrandi
+        if (!_wcsicmp(argv[i], L"/nouvelle")) g_capNew = true;   // (coque.inc : la fenetre entiere de la nouvelle interface)
+        if (!_wcsicmp(argv[i], L"/taille") && i + 1 < argc) swscanf(argv[i + 1], L"%dx%d", &g_capW, &g_capH);
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
         if (!_wcsicmp(argv[i], L"/depotaddons")) g_addonsRepo = argv[i + 1];   // (catalogue des voitures d'un autre depot : essais)
         if (!_wcsicmp(argv[i], L"/testsalon") && i + 2 < argc) { g_testSalon = argv[i + 1]; g_testSalonLog = argv[i + 2]; }
@@ -8454,7 +8462,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         int rc = 1;
         {
-            Bitmap out((INT)(kImgW * g_scale), (INT)(kImgH * g_scale), PixelFormat32bppPARGB);
+            Bitmap out(g_capNew ? g_capW : (INT)(kImgW * g_scale), g_capNew ? g_capH : (INT)(kImgH * g_scale), PixelFormat32bppPARGB);
+            if (g_capNew) { g_newUi = true; g_dpiScale = 1; g_softMode = g_dark ? 1 : 0; RenderToNew(out); }   // (coque.inc)
+            else
             RenderTo(out, g_scale);
             if (g_bench > 0) {
                 LARGE_INTEGER f, a, z;

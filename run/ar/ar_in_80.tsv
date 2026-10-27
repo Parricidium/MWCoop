@@ -34,3 +34,17 @@ UI33	New interface: F11 for full screen, Maximize next to Minimize, edges and co
 UI34	If the new interface fails to start, the old one comes back by itself at the next start: Report a bug (the bug icon) sends the logs.
 UI35	Light, Dark, or Auto: the Windows one
 UI36	Dark
+UI40	Search a page, a setting, an article…
+UI41	Page
+UI42	Settings · 
+UI43	Page, setting, article… then Enter
+UI44	No result. Try \"lobby\" or \"shadows\".
+UI45	Game not found
+UI46	Mod missing
+UI47	Updating…
+UI48	Update available
+UI49	Mod up to date
+UI50	Lobby open · %d players
+UI51	Lobby open · %d player
+UI52	launcher 
+UI53	Tools
