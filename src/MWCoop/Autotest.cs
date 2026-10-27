@@ -1347,6 +1347,57 @@ namespace MWCoop
                 }
                 return;
             }
+            // ([Test] Autotest=mschache, 2 joueurs, dossier #6 27/10 : « l'ami prend une hache, elle s'envole, puis il ne peut plus rien ramasser ») :
+            // l'invite, a HacheA s (60), va au tas de bois et prend la hache ITEMS/ax(itemx) comme le joueur (main 'PickUp' : RaycastHitObject +
+            // « State 1 »), puis EQUIP (« Check item » -> Ax) a +3 s ; a +25 s DROP_PART (lachee) ; a +35 s il prend [Test] HacheEnsuite (sausages) ;
+            // chacun note toutes les 2 s l'etat de la main de l'invite, l'objet tenu, la hache (actif, pose, corps) -- chez l'hote, sa copie.
+            if (mode == "mschache")
+            {
+                float ha = Config.GetFloat("Test", "HacheA", 60f);
+                bool me = !Net.Session.IsHost;
+                GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                Rigidbody ax = Props.BodyOf(Props.FindKey("ax(itemx)"));
+                if (ax == null) foreach (Rigidbody r in Resources.FindObjectsOfTypeAll<Rigidbody>()) if (r.name == "ax(itemx)" && r.gameObject.hideFlags == HideFlags.None) { ax = r; break; }
+                Transform cam = PlayerSync.LocalCamera;
+                System.Func<Rigidbody, bool> take = ob =>
+                {
+                    if (hf == null || ob == null || cam == null) return false;
+                    ob.gameObject.SetActive(true);
+                    ob.transform.position = cam.position + cam.forward * 0.6f;
+                    HutongGames.PlayMaker.FsmGameObject rh = hf.FsmVariables.FindFsmGameObject("RaycastHitObject");
+                    if (rh == null) return false;
+                    rh.Value = ob.gameObject; Game.SetState(hf, "State 1");
+                    return true;
+                };
+                if (me && t > ha - 5f && prStep == 0 && ax != null)
+                {
+                    prStep = 1;
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; pl.transform.position = ax.position + Vector3.up * 0.2f + Vector3.forward * 1.2f; cc.enabled = true; }
+                    Log.Info("autotest hache : invite pres de la hache " + ax.position.ToString("F1"));
+                }
+                if (me && t > ha && prStep == 1) { prStep = 2; Log.Info("autotest hache : prise -> " + take(ax) + ", main " + (hf != null ? hf.ActiveStateName : "?")); }
+                if (me && t > ha + 3f && prStep == 2) { prStep = 3; if (hf != null) hf.SendEvent("EQUIP"); Log.Info("autotest hache : EQUIP -> main " + (hf != null ? hf.ActiveStateName : "?")); }
+                if (me && t > ha + 25f && prStep == 3) { prStep = 4; if (hf != null) hf.SendEvent("DROP_PART"); Log.Info("autotest hache : DROP_PART -> main " + (hf != null ? hf.ActiveStateName : "?")); }
+                if (me && t > ha + 35f && prStep == 4)
+                {
+                    prStep = 5;
+                    string other = Config.Get("Test", "HacheEnsuite", "sausages");
+                    Rigidbody ob = Props.BodyOf(Props.FindKey(other));
+                    if (ob == null) foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>()) { PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use"); HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null; if (iv != null && iv.Value.StartsWith(other)) { ob = r; break; } }
+                    Log.Info("autotest hache : prise de " + other + " -> " + take(ob) + ", main " + (hf != null ? hf.ActiveStateName : "?"));
+                }
+                if (t > 30f && t > prLogAt)
+                {
+                    prLogAt = t + 2f;
+                    HutongGames.PlayMaker.FsmGameObject po = hf != null ? hf.FsmVariables.FindFsmGameObject("PickedObject") : null;
+                    HutongGames.PlayMaker.FsmBool axh = hf != null ? hf.FsmVariables.FindFsmBool("AxInHand") : null;
+                    Log.Info("autotest hache : main " + (hf != null ? hf.ActiveStateName : "?") + ", tenu " + (po != null && po.Value != null ? po.Value.name : "-") + ", AxInHand " + (axh != null && axh.Value)
+                             + " | hache " + (ax == null ? "introuvable" : (ax.gameObject.activeInHierarchy ? "active" : ax.gameObject.activeSelf ? "parent eteint" : "eteinte") + " en " + ax.position.ToString("F1") + (ax.isKinematic ? " cin" : " libre v " + ax.velocity.magnitude.ToString("F1")) + ", parent " + (ax.transform.parent != null ? ax.transform.parent.name : "-")));
+                }
+                return;
+            }
             // ([Test] Autotest=mscprise, 2 joueurs -- objets qui partent en vrille quand l'invite les prend, JD 26/10) : l'invite
             // tient l'objet [Test] PriseObjet (sausages) devant sa camera de 45 a 75 s en tournant sur lui-meme (PriseTour deg/s,
             // 40) ; chacun note toutes les 0,5 s l'objet par rapport a la tete du joueur qui le tient (avatar chez l'hote) et sa
