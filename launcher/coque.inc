@@ -111,7 +111,7 @@ static void ShellPage(Graphics &g, RectF r, int page, int icon)   // (raccourci 
     bool en = PageEnabled(page), on = g_tab == page && g_state == ST_IDLE, hot = en && g_uiHot == UI_NAV + page;
     g_navR[page] = DipToCard(r);
     ShellIconBtn(g, r, page == TAB_CREDITS ? -1 : icon, hot ? 1.0f : 0.0f, on, false, en);
-    if (page == TAB_CREDITS) RgbStar(g, r.X + r.Width / 2, r.Y + r.Height / 2, 20, g_time, on || hot);
+    if (page == TAB_CREDITS) { RgbStar(g, r.X + r.Width / 2, r.Y + r.Height / 2, 20, g_time, on || hot); SoftLive(r); }   // (etoile RGB : animee en continu)
     if (page == TAB_LOGS && g_crashT && !on) { RectF d(r.X + r.Width - 12, r.Y - 2, 14, 14); SolidBrush rb(g_soft.bad); g.FillEllipse(&rb, d); Pen e(g_soft.bg, 2); g.DrawEllipse(&e, d); }
     if (en) HotZone(r, UI_NAV + page);
 }
@@ -528,6 +528,7 @@ static void RenderToNew(Bitmap &target, const RECT *clip)
             g_zoneDip = false;
             g.Restore(st);
         }
+        SoftTooltipFlush(g, w, h);   // (soft.inc : l'info-bulle en tout dernier, au-dessus de tout)
         ProfilMark(3, pm);
         if (g_glassNow == g_glassUsed) break;
         g_glassUsed = g_glassNow;

@@ -36,6 +36,7 @@ static const float kPersoTabY = 26, kPersoTabH = 36;   // onglets Tenue / Visage
 static float g_persoTabRight = 1264;                   // bord droit des onglets (ui.inc DrawHeader)
 static int g_lookZone;                                       // image perso montree dans la bande « Mes images » (0 visage, 1 haut, 2 pantalon)
 static float g_skinYaw;                                     // vue montree (0..16, la plus proche est dessinee)
+static RectF g_skinHomeR;                                   // (accueil : la zone de l'apercu, redessinee a chaque image quand il tourne -- launcher.cpp Tick)
 static bool g_skinDrag;
 static float g_skinDragX;
 static DWORD g_skinIdleT, g_skinChangeT;                    // fin du dernier glisser / changement de tenue

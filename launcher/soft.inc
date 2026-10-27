@@ -97,6 +97,9 @@ static int SoftDur(int ms) { return AnimReduced() ? 1 : ms; }
 static RectF g_softAnimR; static bool g_softAnimROk;   // (zone du composant en cours : ses animations n'invalident qu'elle)
 static void SoftAnimAt(RectF r) { g_softAnimR = r; g_softAnimROk = true; }
 static void SoftAnimEnd() { g_softAnimROk = false; }
+// Element anime en continu (apercu 3D qui tourne, etoile RGB, points de chargement) : sa zone est redessinee a la prochaine
+// image, a 60 images/s, tant qu'il est dessine (JD 27/10 : « on dirait que ca capture la rotation toutes les X secondes »).
+static void SoftLive(RectF r) { if (!g_newUi) return; InvalidateSoft(r, 6); g_softAnimating = true; }
 static void SoftAnimDirty() { if (g_softAnimROk) InvalidateSoft(g_softAnimR, 30); else InvalidateAll(); }
 static float AnimTo(long long key, float target, int dur = kSoftTUi, int curve = SE_MOVE)
 {
@@ -423,12 +426,37 @@ static void SoftSkeleton(Graphics &g, RectF r, float rad = 10)   // chargement (
     SoftShape(g, r, rad, WithA(g_soft.bgIn, a));
     SoftBlinkAt(r, 120, 1);
 }
+// Info-bulle : notee pendant le dessin (en pixels d'ecran), dessinee en tout dernier par SoftTooltipFlush -- au-dessus de la
+// page et de la coque, jamais coupee par le rectangle de la page ; sa zone est invalidee quand elle apparait, bouge ou part
+// (JD 27/10 : la bulle du bouton Signaler passait « en dessous » de la page, coupee par le rectangle sale du survol).
+static std::wstring g_tipText; static RectF g_tipPx; static float g_tipScale = 1; static bool g_tipPending; static RECT g_tipLastPx;
 static void SoftTooltip(Graphics &g, RectF anchor, const std::wstring &s)   // sous l'element, centree
 {
-    float w = MeasureW(MeasureG(), s, 12.5f, FontStyleBold) + 24, h = 30;
-    RectF r(anchor.X + anchor.Width / 2 - w / 2, anchor.Y + anchor.Height + 8, w, h);
-    SoftRaised(g, r, 10, 3, 8); SoftShape(g, r, 10, g_soft.bg);
-    Text(g, s, r, 12.5f, FontStyleBold, g_soft.ink);
+    Matrix m; g.GetTransform(&m); REAL e[6]; m.GetElements(e);
+    float sc = e[0] > 0.01f ? e[0] : 1.0f;
+    PointF o(anchor.X, anchor.Y); m.TransformPoints(&o, 1);
+    g_tipText = s; g_tipPx = RectF(o.X, o.Y, anchor.Width * sc, anchor.Height * sc); g_tipScale = sc; g_tipPending = true;
+}
+static void SoftTooltipFlush(Graphics &g, int winW, int winH)   // (coque.inc RenderToNew, en dernier)
+{
+    RECT now = { 0, 0, 0, 0 };
+    if (g_tipPending) {
+        float sc = g_tipScale;
+        RectF a(g_tipPx.X / sc, g_tipPx.Y / sc, g_tipPx.Width / sc, g_tipPx.Height / sc);
+        float w = MeasureW(MeasureG(), g_tipText, 12.5f, FontStyleBold) + 24, h = 30;
+        RectF r(a.X + a.Width / 2 - w / 2, a.Y + a.Height + 8, w, h);
+        if ((r.X + r.Width) * sc > winW - 4) r.X = winW / sc - 4 / sc - r.Width;   // (jamais hors de la fenetre a droite)
+        if (r.X * sc < 4) r.X = 4 / sc;
+        GraphicsState st = g.Save();
+        g.ResetTransform(); g.SetClip(Rect(0, 0, winW, winH));
+        g.ScaleTransform(sc, sc);
+        SoftRaised(g, r, 10, 3, 8); SoftShape(g, r, 10, g_soft.bg);
+        Text(g, g_tipText, r, 12.5f, FontStyleBold, g_soft.ink);
+        g.Restore(st);
+        now = RECT{ (LONG)((r.X - 14) * sc), (LONG)((r.Y - 14) * sc), (LONG)((r.X + r.Width + 14) * sc) + 1, (LONG)((r.Y + r.Height + 14) * sc) + 1 };
+    }
+    if (!EqualRect(&now, &g_tipLastPx)) { if (!IsRectEmpty(&g_tipLastPx)) InvalidatePx(g_tipLastPx); if (!IsRectEmpty(&now)) InvalidatePx(now); g_tipLastPx = now; }   // (la zone de la bulle : a la prochaine image)
+    g_tipPending = false;
 }
 static void SoftVeil(Graphics &g, float a = 0.45f) { SolidBrush b(Color((BYTE)(255 * a), 0, 0, 0)); g.FillPath(&b, CardPath()); }
 // Fenetre modale : apparait depuis son declencheur (96 % -> 100 %, 220 ms) ; 'open' anime le voile (180 ms). Rend l'echelle.

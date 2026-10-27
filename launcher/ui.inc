@@ -1062,6 +1062,7 @@ static void DrawHomeLook(Graphics &g, RectF stage)
     const Opt *ap = SkinOpt();
     if (g_perso.state == 1) {
         float yaw = floorf(g_skinYaw * 4) / 4;   // (64 vues par tour : ~3 rendus par seconde au lieu de 60)
+        g_skinHomeR = dst;
         if (Bitmap *pb = PersoImage(dst, yaw * 6.2831853f / 16)) DrawPixels(g, pb, dst);
     } else if (ap) {
         std::string skin = ap->svals[OptGet(*ap)];
@@ -1471,7 +1472,7 @@ static void CreditCard(Graphics &g, const Credit &k, float y, float x, float w)
         float iw = (float)im->GetWidth(), ih = (float)im->GetHeight(), side = min(iw, ih);
         g.DrawImage(im, av, (iw - side) / 2, (ih - side) / 2, side, side, UnitPixel);
         g.Restore(gs);
-        Pen ring(Hue(g_time * 70.0f), 2.4f); g.DrawEllipse(&ring, av);
+        Pen ring(Hue(g_time * 70.0f), 2.4f); g.DrawEllipse(&ring, av); SoftLive(av);
     } else {
         SolidBrush ab(WithA(kAcc, 0.85f)); g.FillEllipse(&ab, av);
         Text(g, std::wstring(1, k.name[0]), av, 26, FontStyleBold, Color(255, 255, 255, 255));
@@ -1499,6 +1500,7 @@ static void DrawCreditsPage(Graphics &g)
         float hue = g_time * 70.0f;
         GraphicsPath sp; RoundRect(sp, s, min(9.0f, s.Height / 2));
         if (!on) { SolidBrush hb(Hue(hue, (BYTE)(hot ? 70 : 40))); g.FillPath(&hb, &sp); }
+        SoftLive(s);
         LinearGradientBrush lb(s, Hue(hue), Hue(hue + 180), fmodf(g_time * 90.0f, 360.0f));
         Color cols[5] = { Hue(hue), Hue(hue + 90), Hue(hue + 180), Hue(hue + 270), Hue(hue + 360) };
         REAL pos[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
@@ -1558,6 +1560,7 @@ static void DrawLaunchPage(Graphics &g)
     RectF c(kMain.X + 170, kMain.Y + 120, 660, 360);
     Glass(c);
     int dots = (int)(g_time * 2.5f) % 4;
+    SoftLive(c);
     std::wstring title = T(L"My Winter Car se lance", L"My Winter Car is starting");
     title += std::wstring(dots, L'.') + std::wstring(3 - dots, L' ');
     Icon(g, IC_PLAY, c.X + c.Width / 2, c.Y + 62, 36, kAcc, 2.0f);

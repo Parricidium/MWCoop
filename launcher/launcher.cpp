@@ -6922,10 +6922,10 @@ static void Tick()
         if (g_alpha <= 0) { DestroyWindow(g_wnd); return; }
     } else if (g_alpha < 1) g_alpha = min(g_alpha + dt * 5, 1.0f);
     // Apercu de la voiture : rotation lente, arretee pendant un glisser et 2,5 s apres
-    if (g_tab == TAB_CAR && g_state == ST_IDLE && !g_carDrag && now - g_carIdleT > 2500) g_carYaw = fmodf(g_carYaw + dt * 0.45f, 6.2831853f);
+    if (g_tab == TAB_CAR && g_state == ST_IDLE && !g_carDrag && now - g_carIdleT > 2500) { g_carYaw = fmodf(g_carYaw + dt * 0.45f, 6.2831853f); if (g_newUi) { InvalidateCard(kCarCard, 4); g_softAnimating = true; } }   // (nouvelle interface : sa carte, a chaque image)
     // Tenue : un tour en 10 s ; arretee pendant un glisser, et 1,5 s apres (ou apres un changement : de face)
     // (accueil : deux fois plus lent, l'apercu y est refait moins souvent)
-    if ((g_tab == TAB_SKIN || g_tab == TAB_HOME) && g_state == ST_IDLE && !g_skinDrag && now - g_skinIdleT > 1500) g_skinYaw = fmodf(g_skinYaw + dt * (g_tab == TAB_HOME ? 0.8f : 1.6f), 16.0f);
+    if ((g_tab == TAB_SKIN || g_tab == TAB_HOME) && g_state == ST_IDLE && !g_skinDrag && now - g_skinIdleT > 1500) { g_skinYaw = fmodf(g_skinYaw + dt * (g_tab == TAB_HOME ? 0.8f : 1.6f), 16.0f); if (g_newUi) { InvalidateCard(g_tab == TAB_HOME ? g_skinHomeR : kSkinCard, 4); g_softAnimating = true; } }   // (nouvelle interface : la zone de l'apercu, a chaque image)
 
     // Ecran d'attente : jusqu'a la fenetre du jeu. Le processus lance peut se fermer tout de suite si Steam relance
     // le jeu lui-meme : on ne conclut a un echec qu'apres 15 s sans aucun mywintercar.exe.
