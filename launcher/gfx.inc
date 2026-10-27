@@ -485,8 +485,10 @@ static int g_setFound;                  // lignes trouvees (sous-titre de l'en-t
 static float g_setContentH;             // hauteur du contenu (molette)
 static float g_setTop, g_setBottom;     // zone visible : zones cliquables seulement dedans
 static RectF g_setSteamRow, g_setCompatRow, g_setBuy, g_setUninst, g_setApiRow;   // (bulles du guide : tuto.inc)
-static const RectF kSetArea(264, 136, 1000, 608);                   // sous les pastilles (y 92..128)
-static const RectF kGfxTop(264, 136, 494, 128), kGfxArea(264, 136, 1000, 608);   // (bulles du guide 30-32 : prereglages, onglet Jeu)
+static RectF kSetArea(264, 136, 1000, 608);                         // sous les pastilles (y 92..128) ; (refonte L3b : largeur de la colonne fluide, SetLayout)
+static const RectF kGfxTop(264, 136, 494, 128);
+static RectF kGfxArea(264, 136, 1000, 608);   // (bulles du guide 30-32 : prereglages, onglet Jeu)
+static void SetLayout() { kSetArea = RectF(g_pageR.X, 136, g_pageR.Width, 608); kGfxArea = kSetArea; }
 static const float kSetPad = 18;
 // Pas des lignes : densite choisie (Reglages > Theme) -- aeree, normale, compacte.
 // (et la taille du texte : les lignes grandissent avec lui)
@@ -1828,6 +1830,7 @@ static void HudPreview(Graphics &g, RectF box, int style, bool big)
 
 static void DrawSettingsPage(Graphics &g)
 {
+    SetLayout();   // (cartes a la largeur de la colonne de page)
     if (GetTickCount() - g_gfxReadT > 2000) GfxLoad();   // (le jeu peut les avoir changes : son menu, F10)
     // pastilles des onglets
     float x = kMain.X;

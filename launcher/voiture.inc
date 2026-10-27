@@ -36,8 +36,16 @@ static const CarSwatch kSwatches[] = {   // teintes des annees 70-80
 };
 static const int kSwatchN = 1 + _countof(kSwatches);   // pastille 0 : au hasard
 // Page PERSONNAGE (maquette du 17/10) : onglets Tenue / Visage / Voiture en haut de la page (tenue.inc), cartes dessous.
-static const RectF kCarCard(264, 88, 640, 656), kCarPanel(920, 88, 344, 656);   // (cartes a y 88, onglets dans l'en-tete : maquette du 17/10)
-static const RectF kCarView(284, 118, 600, 472);
+// (refonte L3b : plus const -- CarLayout les recalcule depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
+static RectF kCarCard(264, 88, 640, 656), kCarPanel(920, 88, 344, 656);   // (cartes a y 88, onglets dans l'en-tete : maquette du 17/10)
+static RectF kCarView(284, 118, 600, 472);
+static void CarLayout()
+{
+    float x = g_pageR.X, w = g_pageR.Width, panelW = 344, gap = 16, left = w - panelW - gap;
+    kCarCard = RectF(x, 88, left, 656);
+    kCarPanel = RectF(x + left + gap, 88, panelW, 656);
+    kCarView = RectF(x + 20, 118, left - 40, 472);
+}
 static const float kPitchMin = 0.04f, kPitchMax = 0.55f;
 static int g_carHot = -1;                // pastille survolee (1000 + k : onglet k de la page, tenue.inc)
 static void PersoTabsDraw(Graphics &g);              // (tenue.inc : onglets de la page PERSONNAGE)
@@ -1534,6 +1542,7 @@ static void DrawCarWheel(Graphics &g, RectF r)
 
 static void DrawCar(Graphics &g)
 {
+    CarLayout();   // (cartes a la largeur de la colonne de page)
     if (g_addonsTab) { DrawAddons(g); return; }   // (onglet Addons : voitures en extension ; My Summer Car aussi depuis le 24/10)
     CarCheckFile();
     Glass(kCarCard);

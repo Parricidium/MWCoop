@@ -5975,6 +5975,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
 static void DrawLobbyPopover(Graphics &g);
 static void DrawLobby(Graphics &g)
 {
+    LobbyLayout();   // (salon.inc : cartes a la largeur de la colonne de page)
     std::vector<LobbyPeer> peers;
     EnterCriticalSection(&g_lcs);
     peers = g_peers;

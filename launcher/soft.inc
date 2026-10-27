@@ -292,9 +292,14 @@ static float SoftSegW(const std::vector<std::wstring> &labs, float px = 13)
 static void SoftSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labs, int sel, int id0, bool enabled = true, float px = 13)
 {
     Graphics &mg = MeasureG();
-    std::vector<float> w; float tot = 0;
-    for (auto &l : labs) { float ww = MeasureW(mg, l, px, FontStyleBold) + 28; w.push_back(ww); tot += ww; }
-    float gap = 4, extra = max(0.0f, (r.Width - 10 - tot - gap * (labs.size() - 1)) / labs.size());
+    std::vector<float> w; float tot = 0, txt = 0;
+    for (auto &l : labs) { float tw = MeasureW(mg, l, px, FontStyleBold); float ww = tw + 28; w.push_back(ww); tot += ww; txt += tw; }
+    float gap = 4, avail = r.Width - 10 - gap * (labs.size() - 1), extra = max(0.0f, (avail - tot) / labs.size());
+    if (tot > avail) {   // (trop serre : marges reduites, jusqu'a 6 de chaque cote, pour que tout tienne dans le creux)
+        float pad = max(12.0f, (avail - txt) / labs.size()); tot = 0;
+        for (size_t i = 0; i < w.size(); i++) { w[i] = w[i] - 28 + pad; tot += w[i]; }
+        extra = max(0.0f, (avail - tot) / labs.size());
+    }
     SoftShape(g, r, min(kSoftRCtl, r.Height / 2), g_soft.bgIn);
     { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, min(kSoftRCtl, r.Height / 2)); g.SetClip(&p); SoftInset(g, r, min(kSoftRCtl, r.Height / 2)); g.Restore(st); }
     float x = r.X + 5, tx = x, tw = w.empty() ? 0 : w[0] + extra;

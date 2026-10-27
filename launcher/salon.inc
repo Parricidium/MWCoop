@@ -59,10 +59,22 @@ static std::string g_mySkinSent;                    // derniere apparence annonc
 // Mise en page du salon (0.97.0, maquette du 17/10) : bandeau en haut (code de session chez l'hote, l'hote chez l'invite),
 // dessous deux colonnes Joueurs / Options, a droite une seule carte (partie, envoi, mods, conseil, LANCER / PRET).
 static RectF kLobbyList(280, 274, 288, 454);   // liste des joueurs (placee par DrawLobby : pleine carte en connexion / amis Steam)
-static const RectF kLobbyCard(264, 88, 654, 656);          // carte unique de gauche (connexion, amis Steam a inviter)
-static const RectF kLobbyBanner(264, 88, 654, 108);
-static const RectF kLobbyPlayersCard(264, 210, 320, 534), kLobbyOptsCard(598, 210, 320, 534);
-static const RectF kLobbyRight(932, 88, 332, 656);
+// (refonte L3b : plus const -- LobbyLayout les recalcule a chaque image depuis g_pageR, la zone de page fluide ; dans
+// l'ancienne interface g_pageR = kMain et les valeurs sont celles d'avant)
+static RectF kLobbyCard(264, 88, 654, 656);          // carte unique de gauche (connexion, amis Steam a inviter)
+static RectF kLobbyBanner(264, 88, 654, 108);
+static RectF kLobbyPlayersCard(264, 210, 320, 534), kLobbyOptsCard(598, 210, 320, 534);
+static RectF kLobbyRight(932, 88, 332, 656);
+static void LobbyLayout()
+{
+    float x = g_pageR.X, w = g_pageR.Width, rightW = 332, gap = 14, left = w - rightW - gap;
+    kLobbyCard = RectF(x, 88, left, 656);
+    kLobbyBanner = RectF(x, 88, left, 108);
+    float half = (left - gap) / 2;
+    kLobbyPlayersCard = RectF(x, 210, half, 534);
+    kLobbyOptsCard = RectF(x + half + gap, 210, half, 534);
+    kLobbyRight = RectF(x + left + gap, 88, rightW, 656);
+}
 static RectF kChoiceR[2] = { RectF(950, 136, 296, 50), RectF(950, 192, 296, 50) };   // (placees par la carte de droite)
 static const float kLobbyRowH = 72;
 static DWORD g_lobbySinceT;                         // entree dans ce salon (bandeau de l'invite : « dans ce salon depuis »)
