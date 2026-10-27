@@ -198,6 +198,7 @@ namespace MWCoop
             new Mod("vue (troisieme personne)", ThirdPerson.Update),
             new Mod("camera drone", DroneCam.Update),
             new Mod("ray tracing", RayTracing.Update),
+            new Mod("kupla", Kupla.Update),   // (27/10 : optimisation, seulement si [Coop] KuplaRendu=1 -- Active)
             new Mod("boissons", Drinks.Update),
             new Mod("rayons", Stock.Update),
             new Mod("PNJ", Npcs.Update),
@@ -343,6 +344,7 @@ namespace MWCoop
             ModJackStands.OnLevelLoaded();
             CutterHitch.OnLevelLoaded();
             AssembleIcon.OnLevelLoaded();
+            if (Kupla.On) Kupla.OnLevelLoaded();   // (27/10 : eteint = jamais appele)
             CarLeaks.OnLevelLoaded();
             GarageDoor.OnLevelLoaded();
             ThirdPerson.OnLevelLoaded();
@@ -422,6 +424,7 @@ namespace MWCoop
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
             }
+            if (Kupla.On) { try { Kupla.OnLevelLoaded(); } catch (System.Exception e) { Log.Error("MSC, chargement de Kupla : " + e); } }   // (27/10 : eteint = jamais appele)
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Game.LevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
         static readonly System.Collections.Generic.HashSet<string> MscModules = new System.Collections.Generic.HashSet<string>
@@ -443,6 +446,7 @@ namespace MWCoop
             "gestes", "outils en main", "cuisine", "maison", "evenements", "monde (automates)", "partie chez l'invite",
             "courses",   // (22/10 : voitures IA et resultats du rallye de MSC -- racine RALLY, Races.Rp)
             "rallye (MSC)", "rallye avec sa voiture (MSC)", "dragsters (MSC)",
+            "kupla",   // (27/10 : optimisation, les deux jeux)
             "monde",   // (heure et meteo : World.FindMsc / SendMsc)
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
@@ -482,7 +486,7 @@ namespace MWCoop
                 if (active == null)
                 {
                     var l = new System.Collections.Generic.List<Mod>();
-                    foreach (Mod m in mods) if (!Game.Msc || MscModules.Contains(m.Name)) l.Add(m);
+                    foreach (Mod m in mods) if ((!Game.Msc || MscModules.Contains(m.Name)) && (m.Name != "kupla" || Kupla.On)) l.Add(m);
                     active = l.ToArray();
                 }
                 return active;

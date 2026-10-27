@@ -10,6 +10,8 @@ namespace MWCoop
     public static class Perf
     {
         static readonly Dictionary<string, double> acc = new Dictionary<string, double>();
+        // Essais : les modules passes depuis la derniere ligne perf (Autotest=kupla : « kupla » absent quand il est eteint).
+        public static string ModuleNames() { var l = new List<string>(acc.Keys); l.Sort(); return string.Join(",", l.ToArray()); }
         static readonly System.Diagnostics.Stopwatch part = new System.Diagnostics.Stopwatch();
         static int frames;
         static float since = -1, worst, lastFrame, period = -1;

@@ -2341,6 +2341,15 @@ namespace MWCoop
             }
             if (Game.Msc)   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC ; vidage d'automates : les deux jeux)
             {
+                if (mode == "kupladump" && t > 25f && !done) { done = true; KuplaDump(); }   // (Kupla : les deux jeux)
+                if (mode == "kuplamesure") KuplaMeasure(t);
+                if (mode == "kupla")
+                {
+                    string kcar = Config.Get("Test", "TestVoiture", "");
+                    if (t > 20f && step == 0) { step = 1; if (kcar.Length > 0) VehicleSync.TestEnter(kcar, false); }
+                    if (t > 24f && step == 1 && kcar.Length > 0 && kmTries == 0) { kmTries = 1; Log.Info("autotest : kupla, au volant : " + VehicleSync.TestEnter(kcar, true)); }
+                    if ((t > 30f && step == 1) || (t > 60f && step == 2)) { step++; Log.Info("autotest : kupla : " + Kupla.Describe() + " ; modules " + Perf.ModuleNames()); }
+                }
                 if (mode == "automate" && t > 40f && step == 0) { step = 1; DumpFsms(Config.Get("Test", "Automate", "")); }
                 if (mode == "texte" && t > 40f && step == 0) { step = 1; DumpTexts(Config.Get("Test", "Texte", "")); }
                 // [Test] Autotest=cablage (MSC, 2 joueurs) : l'invite tient le faisceau de 40 a 55 s ; l'hote note toutes les 3 s ce que
@@ -3174,6 +3183,24 @@ namespace MWCoop
                 foreach (Terrain tr in ts) sb.Append(" [").Append(tr.name).Append(" herbe ").Append(tr.detailObjectDistance).Append("/").Append(tr.detailObjectDensity).Append(" arbres ").Append(tr.treeDistance).Append(" erreur ").Append(tr.heightmapPixelError).Append("]");
                 foreach (Light l in Object.FindObjectsOfType<Light>()) if (l.type == LightType.Directional) sb.Append(", lumiere ").Append(l.name).Append(" ombres ").Append(l.shadows).Append(" force ").Append(l.shadowStrength);
                 Log.Info(sb.ToString());
+            }
+            // [Test] Autotest=kupladump (Kupla P1, 27/10) : a 25 s, dumps\kupla.txt -- par calque : nom, objets rendus (actifs) et
+            // distance au joueur la plus lointaine, lumieres ; cameras (distances de coupe par calque de la camera joueur, cameras
+            // des retroviseurs) ; lumieres non directionnelles avec ombres, par distance. Releve des noms avant d'ecrire Kupla.cs.
+            if (mode == "kupladump" && t > 25f && !done)
+            {
+                done = true;
+                KuplaDump();
+            }
+            // [Test] Autotest=kupla : a 30 s puis 60 s, l'etat de Kupla (eteint : la preuve qu'aucun module ni rappel ne tourne -- la ligne perf
+            // ne doit pas non plus contenir « kupla ») ; au volant de [Test] TestVoiture a 20 s si TestVoiture est donnee (retroviseurs).
+                if (mode == "kuplamesure") KuplaMeasure(t);
+            if (mode == "kupla")
+            {
+                string car = Config.Get("Test", "TestVoiture", "");
+                if (t > 20f && step == 0) { step = 1; if (car.Length > 0) VehicleSync.TestEnter(car, false); }
+                if (t > 24f && step == 1 && car.Length > 0 && kmTries == 0) { kmTries = 1; Log.Info("autotest : kupla, au volant : " + VehicleSync.TestEnter(car, true)); }
+                if ((t > 30f && step == 1) || (t > 60f && step == 2)) { step++; Log.Info("autotest : kupla : " + Kupla.Describe() + " ; modules " + Perf.ModuleNames()); }
             }
             if (mode == "cabine")
             {
@@ -4955,6 +4982,121 @@ namespace MWCoop
                 if (step == 41) Log.Info("autotest : palan desserre ; Hook [" + hk.ActiveStateName + "], moteur parent " + parent + ", joint " + (moteur.GetComponent<FixedJoint>() != null));
                 step++;
             }
+        }
+
+        // [Test] Autotest=kuplamesure (Kupla P1) : mesure du temps d'image, lieu par lieu -- [Test] KuplaLieux (defaut
+        // maison,ville,port,voiture : lieux des triches, /lieu ; « voiture » = retour a la maison puis au volant de [Test]
+        // TestVoiture). Chaque lieu : 40 s, dont 12 s de mise en place puis 28 s de mesure (moyenne, pire image, images/s).
+        // Meme partie, memes [Graphismes], KuplaRendu=0 puis 1 : la difference est l'effet de Kupla.
+        static string[] kmPlaces; static int kmIndex = -1, kmTries; static float kmStart, kmSum, kmWorst, kmTryAt; static int kmFrames;
+        static void KuplaMeasure(float t)
+        {
+            if (kmPlaces == null) kmPlaces = Config.Get("Test", "KuplaLieux", Game.Msc ? "maison,ville,magasin,voiture" : "maison,ville,port,voiture").Split(',');
+            if (kmIndex >= kmPlaces.Length) return;
+            bool car = kmIndex >= 0 && kmPlaces[kmIndex].Trim() == "voiture";
+            float len = car ? 60f : 40f, from = car ? 30f : 12f;   // (voiture : 30 s pour monter au volant, essais toutes les 4 s)
+            if (kmIndex < 0 || t - kmStart >= len)
+            {
+                if (kmIndex >= 0 && kmFrames > 0)
+                    Log.Info("autotest : kuplamesure " + kmPlaces[kmIndex].Trim() + " : " + kmFrames + " images, moyenne " + (kmSum / kmFrames * 1000f).ToString("F2") + " ms, pire " + (kmWorst * 1000f).ToString("F0") + " ms, " + (kmFrames / kmSum).ToString("F0") + " images/s"
+                             + (car ? (ReferenceEquals(VehicleSync.LocalDrivingRoot, null) ? ", PAS AU VOLANT" : ", au volant") : "") + " ; " + Kupla.Describe());
+                kmIndex++; kmStart = t; kmSum = kmWorst = 0; kmFrames = 0; kmTries = 0; kmTryAt = 3f;
+                if (kmIndex >= kmPlaces.Length) { Log.Info("autotest : kuplamesure fini"); return; }
+                string key = kmPlaces[kmIndex].Trim();
+                Cheats.Place p = Cheats.FindPlace(key == "voiture" || key == "retros" ? "maison" : key);
+                if (p != null) Cheats.GoPlace(p); else Log.Warn("autotest : kuplamesure : lieu inconnu " + key);
+                return;
+            }
+            float dt = t - kmStart;
+            if (kmPlaces[kmIndex].Trim() == "retros" && dt > 3f && kmTries == 0)
+            {   // (« retros » : a la maison, a pied, les 3 cameras des retroviseurs allumees de force -- leur cout de rendu sans monter en voiture)
+                kmTries = 1; int n = 0;
+                foreach (Camera c in Resources.FindObjectsOfTypeAll<Camera>())
+                {
+                    if (c == null || c.hideFlags != HideFlags.None || !c.name.EndsWith("MirrorCam") || c.targetTexture == null) continue;
+                    for (Transform x = c.transform; x != null; x = x.parent) if (!x.gameObject.activeSelf) x.gameObject.SetActive(true);
+                    c.enabled = true; n++;
+                }
+                Log.Info("autotest : kuplamesure, retroviseurs forces : " + n + " cameras allumees");
+            }
+            if (car && dt < from && dt >= kmTryAt && kmTries < 6)
+            {   // (a cote de la voiture, puis au volant 2 s plus tard, jusqu'a y etre : comme Autotest=gifulevier)
+                string kcar = Config.Get("Test", "TestVoiture", Game.Msc ? "SATSUMA(557kg, 248)" : "SORBET(190-200psi)");
+                Rigidbody b = VehicleSync.Body(kcar);
+                bool driving = b != null && ReferenceEquals(VehicleSync.LocalDrivingRoot, b.transform);
+                if (!driving)
+                {
+                    if ((kmTries & 1) == 0) { kmTryAt = dt + 2f; VehicleSync.TestEnter(kcar, false); }
+                    else { kmTryAt = dt + 2f; Log.Info("autotest : kuplamesure, au volant de " + kcar + " (essai " + (kmTries / 2 + 1) + ") : " + VehicleSync.TestEnter(kcar, true)); }
+                    kmTries++;
+                }
+                else kmTryAt = 1e9f;
+            }
+            if (dt < from) return;
+            float f = Time.unscaledDeltaTime;
+            kmSum += f; kmFrames++; if (f > kmWorst) kmWorst = f;
+        }
+
+        static void KuplaDump()
+        {
+            var sb = new System.Text.StringBuilder();
+            Transform pl = Game.PlayerT;
+            Vector3 pp = pl != null ? pl.position : Vector3.zero;
+            int[] rend = new int[32], lit = new int[32]; float[] far = new float[32];
+            var names = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string, int>>();
+            foreach (Renderer r in Object.FindObjectsOfType<Renderer>())
+            {
+                if (r == null || !r.enabled) continue;
+                int l = r.gameObject.layer; rend[l]++;
+                float d = (r.transform.position - pp).magnitude; if (d > far[l]) far[l] = d;
+                // racine de l'objet (pour situer chaque calque : quels arbres du monde y sont)
+                Transform root = r.transform; while (root.parent != null) root = root.parent;
+                System.Collections.Generic.Dictionary<string, int> dn; if (!names.TryGetValue(l, out dn)) names[l] = dn = new System.Collections.Generic.Dictionary<string, int>();
+                int c; dn.TryGetValue(root.name, out c); dn[root.name] = c + 1;
+            }
+            foreach (Light l in Object.FindObjectsOfType<Light>()) if (l.enabled) lit[l.gameObject.layer]++;
+            Camera cam = Game.MainCam;
+            float[] cull = cam != null ? cam.layerCullDistances : null;
+            sb.Append("---- calques (camera ").Append(cam != null ? cam.name + " loin " + cam.farClipPlane + " masque " + cam.cullingMask : "?").Append(")\n");
+            sb.Append("n\tnom\trendus\tplus loin\tlumieres\tcoupe cam\tracines\n");
+            for (int i = 0; i < 32; i++)
+            {
+                string nm = LayerMask.LayerToName(i);
+                if (string.IsNullOrEmpty(nm) && rend[i] == 0 && lit[i] == 0) continue;
+                sb.Append(i).Append('\t').Append(nm).Append('\t').Append(rend[i]).Append('\t').Append(far[i].ToString("F0")).Append('\t').Append(lit[i]).Append('\t').Append(cull != null ? cull[i].ToString("F0") : "?").Append('\t');
+                System.Collections.Generic.Dictionary<string, int> dn;
+                if (names.TryGetValue(i, out dn))
+                {
+                    var ks = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, int>>(dn);
+                    ks.Sort((a, b) => b.Value.CompareTo(a.Value));
+                    for (int k = 0; k < ks.Count && k < 8; k++) sb.Append(k > 0 ? ", " : "").Append(ks[k].Key).Append(' ').Append(ks[k].Value);
+                }
+                sb.Append('\n');
+            }
+            sb.Append("\n---- cameras actives\n");
+            foreach (Camera c in Resources.FindObjectsOfTypeAll<Camera>())
+            {
+                if (c == null || (c.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
+                bool on = c.enabled && c.gameObject.activeInHierarchy;
+                if (!on && c.targetTexture == null) continue;
+                sb.Append(Recon.Path(c.transform)).Append('\t').Append(on ? "allumee" : "eteinte").Append('\t').Append(c.targetTexture != null ? c.targetTexture.width + "x" + c.targetTexture.height : "ecran")
+                  .Append("\tprofondeur ").Append(c.depth).Append("\tloin ").Append(c.farClipPlane).Append("\tmasque ").Append(c.cullingMask).Append('\n');
+            }
+            sb.Append("\n---- lumieres non directionnelles avec ombres (distance au joueur)\n");
+            var ls = new System.Collections.Generic.List<Light>();
+            foreach (Light l in Object.FindObjectsOfType<Light>()) if (l.enabled && l.type != LightType.Directional && l.shadows != LightShadows.None) ls.Add(l);
+            ls.Sort((a, b) => (a.transform.position - pp).sqrMagnitude.CompareTo((b.transform.position - pp).sqrMagnitude));
+            foreach (Light l in ls) sb.Append((l.transform.position - pp).magnitude.ToString("F0")).Append(" m\t").Append(l.type).Append('\t').Append(l.shadows).Append("\tportee ").Append(l.range.ToString("F0")).Append('\t').Append(Recon.Path(l.transform)).Append('\n');
+            int lsAll = 0; foreach (Light l in Object.FindObjectsOfType<Light>()) if (l.enabled && l.type != LightType.Directional) lsAll++;
+            sb.Append("\n---- terrains (herbe : distance / densite ; arbres : distance, max rendus, billboard ; erreur du relief ; distance)\n");
+            foreach (Terrain tr in Object.FindObjectsOfType<Terrain>())
+                sb.Append(Recon.Path(tr.transform)).Append('\t').Append(tr.detailObjectDistance).Append(" / ").Append(tr.detailObjectDensity.ToString("F2")).Append('\t').Append(tr.treeDistance).Append(' ').Append(tr.treeMaximumFullLODCount).Append(' ').Append(tr.treeBillboardDistance)
+                  .Append('\t').Append(tr.heightmapPixelError).Append('\t').Append((tr.transform.position - pp).magnitude.ToString("F0")).Append(" m\tcalque ").Append(tr.gameObject.layer).Append('\n');
+            sb.Append("\n---- groupes de LOD : ").Append(Object.FindObjectsOfType<LODGroup>().Length).Append(" ; particules : ").Append(Object.FindObjectsOfType<ParticleSystem>().Length).Append(" ; sondes de reflexion : ").Append(Object.FindObjectsOfType<ReflectionProbe>().Length).Append('\n');
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "kupla.txt"), sb.ToString());
+            Log.Info("autotest : kupladump : dumps\\kupla.txt ; " + ls.Count + " lumieres a ombres sur " + lsAll + " allumees, joueur " + pp.ToString("F0"));
         }
 
         static void DumpCameras(string when)

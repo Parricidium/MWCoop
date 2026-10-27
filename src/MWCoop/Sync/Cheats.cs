@@ -366,7 +366,7 @@ namespace MWCoop
             return best;
         }
 
-        static Place FindPlace(string q)
+        public static Place FindPlace(string q)   // (public : Autotest=kuplamesure)
         {
             q = (q ?? "").Trim().ToLowerInvariant();
             if (q.Length == 0) return null;
