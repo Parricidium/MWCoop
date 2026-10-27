@@ -3081,6 +3081,7 @@ static const wchar_t *kBugSiteUrl = L"https://live.myseasonscar.workers.dev/depo
 static const RectF kDiscCard(390, 166, 500, 476), kDiscJoin(430, 486, 420, 54), kDiscLater(430, 552, 420, 44), kDiscClose(836, 182, 40, 40);
 static int g_guideKind;   // 0 guide Steam, 1 invitation au Discord, 2 nouvelle interface ? (fenetre.inc)
 #include "fenetre.inc"   // (refonte Soft UI, lot L0 : nouvelle interface -- fenetre libre, memoire de taille, choix ancienne / nouvelle, filet)
+#include "soft.inc"      // (refonte Soft UI, lot L1 : jetons, ombres en cache, composants, animations)
 static void DiscordAskOpen() { g_guide = true; g_guideKind = 1; g_guideHot = 0; g_focus = -1; }
 static void DiscordAskMaybe()
 {
@@ -6849,7 +6850,10 @@ static void OnButton(int id)
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
     case B_MAX: WinMaximizeToggle(); break;   // (nouvelle interface : fenetre.inc)
-    case B_THEME: ThemeSet(g_dark ? THEME_CLAIR : THEME_SOMBRE); break;   // (lune / soleil : sombre <-> clair ; les autres themes dans Reglages > Theme)
+    case B_THEME:   // (lune / soleil : sombre <-> clair ; les autres themes dans Reglages > Theme)
+        if (g_newUi) { SoftThemeCircle(PointF(g_btn[B_THEME].r.X + g_btn[B_THEME].r.Width / 2, g_btn[B_THEME].r.Y + g_btn[B_THEME].r.Height / 2)); SoftModeSet(g_softDark ? 0 : 1); }   // (soft.inc : cercle depuis le bouton)
+        else ThemeSet(g_dark ? THEME_CLAIR : THEME_SOMBRE);
+        break;
     case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
     case B_BUY: ShellExecuteW(g_wnd, L"open", StoreUrl().c_str(), NULL, NULL, SW_SHOWNORMAL); break;
     case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
@@ -6951,6 +6955,8 @@ static void Tick()
         float prog = g_progress;
         if (prog != lastProg) { lastProg = prog; changed = true; }
         bool anim = active || hoverAnim || changed || g_aurore != 0 || g_lobby != LB_NONE || g_state != ST_IDLE || g_busy || g_guide || g_tuto >= 0;
+        if (g_softAnimating || g_softPageT || g_softThemeT) { every = 1; InvalidateAll(); }   // (soft.inc : 60 images/s seulement pendant une animation)
+        g_softAnimating = false;
         if (anim || frameN % 120 == 0) InvalidateAll();
         UiNewFlagTick();
     }
@@ -7148,7 +7154,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (g_lobbyOpts && !g_lobbyPopR.Contains(x, y) && !g_lobbyGearR.Contains(x, y)) { g_lobbyOpts = false; return 0; }   // (clic a cote : ferme le menu)
         g_chatFocus = false;   // (le champ du tchat le reprend si c'est lui qui est clique)
         int z = ZoneAt(x, y);
-        if (z >= 0) { g_focus = -1; UiClick(z); return 0; }
+        if (z >= 0) { g_focus = -1; if (g_newUi) SoftPressNote(z); UiClick(z); return 0; }   // (soft.inc : appui de 140 ms)
         int b = HitButton(x, y), f = HitField(x, y);
         if (b >= 0) { g_pressed = b; SetCapture(h); return 0; }
         if (f >= 0) { g_focus = f; g_time = 0; return 0; }
@@ -8125,6 +8131,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"guide-steam") { g_steamNet = true; SteamGuideOpen(); g_guideHot = 1; }
         else if (st == L"discord") { DiscordAskOpen(); g_guideHot = 1; }
         else if (st == L"choix-interface") { UiChoiceOpen(); g_guideHot = 1; }   // (fenetre.inc : essayer la nouvelle interface ?)
+        else if (st == L"composants") { g_softDemo = true; g_softMode = g_dark ? 1 : 0; }   // (soft.inc : la planche des composants, au theme demande)
         else if (st == L"serveur" || st == L"partie-invite") {   // partie en cours, lanceur ouvert (faux joueurs)
             bool host = st == L"serveur";
             g_state = ST_RUNNING;

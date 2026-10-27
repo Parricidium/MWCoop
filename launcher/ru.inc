@@ -2193,6 +2193,7 @@ static const wchar_t *const kRu[][2] = {
     { L"Ctrl+K search, status bar", L"Поиск Ctrl+K, строка состояния" },
     { L"Previous themes missing for now", L"Прежних тем пока нет" },
     { L" (in test)", L" (тест)" },
+    { L"Light, Dark, or Auto: the Windows one", L"Светлая, Тёмная или Авто: как в Windows" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

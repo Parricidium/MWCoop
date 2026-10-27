@@ -61,6 +61,7 @@ enum {
     UI_BUG_ZIP = 10020, UI_BUG_BROWSER, UI_BUG_CLOSE, UI_SET_SIGNALNAV,       // SIGNALER UN BUG (signalement.inc) : la bande du panneau ; Reglages > Lanceur : dans le navigateur
     UI_KUPLA_NIVEAU = 10030, UI_KUPLA_COMPTEUR = 10033,                       // ADDONS > Mods, carte Kupla (modules.inc) : niveau (+0..2 : leger / moyen / fort), compteur d'images par seconde
     UI_SET_INTERFACE = 10040, UI_SET_FENMEM = 10042, UI_SET_ANIMRED,          // REGLAGES > Lanceur > Fenetre du lanceur (fenetre.inc) : ancienne / nouvelle (+0/1), memoire de la taille, animations reduites
+    UI_SET_THEMENOUV = 10044,                                                 // + 0..2 : theme de la nouvelle interface, Clair / Sombre / Auto (soft.inc)
     UI_PLACES_OPEN = 10300, UI_PLACES_EXPORT,   // OUTILS : placement des sieges (cle d'acces) -- ouvrir l'outil, exporter mes voitures (outils-places.inc)
     UI_LOBBY_PRIV = 3300,         // + 0 public, 1 prive   (3300+ depuis 1.8.9 : 26 options x 3 debordaient sur 3260-3279, Marqueurs cliquait « Tous » des ajouts)
     UI_LOBBY_COPY = 3302, UI_LOBBY_REGEN, UI_LOBBY_MAXM, UI_LOBBY_MAXP,   // code : copier, nouveau ; joueurs au plus - / +

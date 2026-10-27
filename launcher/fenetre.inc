@@ -29,6 +29,9 @@ static DWORD g_uiFlagT;              // filet : quand effacer NouvelleEnCours
 static Bitmap *g_cardBmp;            // nouvelle : la carte rendue (PARGB), composee sur le fond uni de g_memDC
 static const int kWinMinW = 960, kWinMinH = 600;
 static void RenderTo(Bitmap &target, float scale);   // (launcher.cpp)
+static void SoftCompose(Bitmap &card);                // (soft.inc : changement de page, cercle du theme)
+static void SoftThemeApply();                         // (soft.inc : jetons du theme et de l'accent)
+static void SoftSelfTest();                           // (soft.inc : essai cache)
 static int HitButton(float x, float y);
 static int HitField(float x, float y);
 struct WinMargins { int l, r, t, b; };   // (MARGINS de dwmapi.h, sans l'en-tete)
@@ -66,6 +69,7 @@ static void UiNewRead()
         LaunchLog("interface : la nouvelle n'a pas passe son premier demarrage la derniere fois : ancienne interface, Interface=ancienne");
     }
     LaunchLog("interface : %s", g_newUi ? "nouvelle (refonte, lot L0)" : "ancienne");
+    if (g_newUi) SoftThemeApply();
 }
 static void UiNewSet(bool on)   // (Reglages, ou la fenetre de choix) : ecrit, puis le lanceur redemarre
 {
@@ -277,6 +281,7 @@ static void PresentNew()
     int cw = (int)(kImgW * g_scale), ch = (int)(kImgH * g_scale);
     if (!g_cardBmp || (int)g_cardBmp->GetWidth() != cw || (int)g_cardBmp->GetHeight() != ch) { delete g_cardBmp; g_cardBmp = new Bitmap(cw, ch, PixelFormat32bppPARGB); }
     RenderTo(*g_cardBmp, g_scale);
+    SoftCompose(*g_cardBmp);   // (soft.inc : transitions)
     {
         Bitmap win(g_winW, g_winH, g_winW * 4, PixelFormat32bppPARGB, (BYTE *)g_bits);
         Graphics g(&win);
@@ -445,5 +450,6 @@ static void WinSelfTest()
     QueryPerformanceCounter(&a); PresentNew(); QueryPerformanceCounter(&z);   // (rien de change : rien a faire)
     double t2 = (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart;
     LaunchLog("testfenetre : image complete %.1f ms (1600 x 900), image sans changement %.2f ms", t1, t2);
+    SoftSelfTest();   // (soft.inc : courbes, animations, transitions, cache des ombres)
     LaunchLog("testfenetre : NouvelleEnCours=%d avant l'effacement (filet), fin", GetPrivateProfileIntW(L"Lanceur", L"NouvelleEnCours", 0, g_iniLauncher.c_str()));
 }

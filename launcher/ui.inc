@@ -345,6 +345,7 @@ static void GoPage(int p)
     if (p == TAB_ADDONS) { AddonsGo(); return; }
     if (p == TAB_CAR) AddonsLeave();
     if (p == g_tab) return;
+    SoftPageChange(g_tab, p);   // (soft.inc, nouvelle interface : l'ancienne page part, la nouvelle arrive dans le sens de la barre)
     if (PageSnap(p) && !PageSnap(g_tab)) {   // valeurs a rendre si on annule
         const Opt *ap = OptByKey("Apparence");
         g_snapSkin = ap ? OptGet(*ap) : -1; g_snapCar = g_carColor; g_snapFrom = g_tab;
@@ -1573,8 +1574,16 @@ static void DrawCar(Graphics &g);
 static void DrawContent(Graphics &g);
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
+static int SoftNavIndex(int tab)   // (soft.inc : sens du changement de page = place dans la barre)
+{
+    if (tab == TAB_GFX) tab = TAB_COOP;   // (Jeu et Co-op : meme page Reglages)
+    for (int i = 0; i < (int)(sizeof(kNav) / sizeof(kNav[0])); i++) if (kNav[i].page == tab) return i;
+    if (tab == TAB_CAR) return 4;
+    return -1;
+}
 static void DrawUI(Graphics &g)
 {
+    if (g_softDemo) { DrawSoftDemo(g); return; }   // (soft.inc : /capture ... composants)
     UpdateButtons();
     std::wstring status;
     int kind;
