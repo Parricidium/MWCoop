@@ -24,7 +24,7 @@ enum { UI_SIG = 14000, UI_SIG_LOGIN = 14000, UI_SIG_OPENPAGE, UI_SIG_CANCEL, UI_
        UI_SIG_ROW = 14300 };   // + i : une ligne de « Mes dossiers » (50 au plus)
 enum { SV_LOADING, SV_LOGIN, SV_CODE, SV_LIST, SV_DETAIL, SV_FORM, SV_SEND, SV_DONE, SV_ERROR };
 static float SigMaxScroll();
-enum { SOP_NONE, SOP_TEXTES, SOP_CODE, SOP_JETON, SOP_MOI, SOP_MES, SOP_RENOUVELER, SOP_DECONNEXION, SOP_DEPOSER, SOP_CAMARCHE, SOP_RETIRER };
+enum { SOP_NONE, SOP_TEXTES, SOP_CODE, SOP_JETON, SOP_MOI, SOP_MES, SOP_RENOUVELER, SOP_DECONNEXION, SOP_DEPOSER, SOP_CAMARCHE, SOP_RETIRER, SOP_AVATAR };
 
 // ---- JSON : un petit arbre (le site renvoie des objets et des tableaux imbriques)
 struct Jv {
@@ -104,6 +104,8 @@ static std::string g_sigJeton;                           // le jeton (jamais jou
 static std::wstring g_sigPseudo;
 static std::string g_sigExpire, g_sigRenouv;             // dates ISO du site
 static bool g_sigLogged, g_sigDepotOuvert = true, g_sigDmBloque;
+static bool g_sigAvatarFlag; static Bitmap *g_sigAvatar;   // avatar Discord 64x64 (GET /avatar), garde dans signalement-avatar.png
+static Bitmap *LoadPngMem(const void *p, size_t n, UINT maxW, UINT maxH);   // (launcher.cpp)
 static int g_sigQuotaH = -1, g_sigQuotaJ = -1;
 static long long g_sigZipMax = 15LL * 1024 * 1024, g_sigEnvoiMax = 40LL * 1024 * 1024, g_sigMorceau = 1024 * 1024;
 static Jv g_sigTx; static std::string g_sigTxLang; static bool g_sigTxOk;
@@ -211,6 +213,8 @@ static void SigTokenClear()
 {
     g_sigJeton.clear(); g_sigPseudo.clear(); g_sigExpire.clear(); g_sigRenouv.clear(); g_sigLogged = false; g_sigMes.clear(); g_sigMesOk = false; g_sigSel = -1;
     std::wstring p = SigTokenPath(); if (!p.empty()) DeleteFileW(p.c_str());
+    if (g_sigAvatar) { delete g_sigAvatar; g_sigAvatar = NULL; }
+    if (!LocalDir().empty()) DeleteFileW((LocalDir() + L"signalement-avatar.png").c_str());
 }
 static void SigTokenLoad()
 {
@@ -222,6 +226,8 @@ static void SigTokenLoad()
     g_sigJeton = j.str("jeton"); g_sigPseudo = Widen(j.str("pseudo")); g_sigExpire = j.str("expire"); g_sigRenouv = j.str("renouvelableJusqua");
     g_sigLogged = g_sigJeton.size() >= 20;
     LaunchLog("signalement : jeton charge (%s)", g_sigLogged ? "connecte" : "vide");
+    std::vector<unsigned char> av;
+    if (g_sigLogged && !g_sigAvatar && ReadAll(LocalDir() + L"signalement-avatar.png", av) && av.size() > 8) g_sigAvatar = LoadPngMem(av.data(), av.size(), 64, 64);
 }
 static int SigDaysLeft(const std::string &iso)   // jours avant une date ISO (…Z) ; 999 si illisible
 {
@@ -420,6 +426,7 @@ static DWORD WINAPI SigThread(void *)
     case SOP_DECONNEXION: SigCall(L"POST", L"/deconnexion", "{}", true, true, r); break;
     case SOP_CAMARCHE: SigCall(L"POST", L"/dossiers/" + std::to_wstring(job.n) + L"/ca-marche", "{}", true, true, r); break;
     case SOP_RETIRER: SigCall(L"POST", L"/dossiers/" + std::to_wstring(job.n) + L"/retirer", "{}", true, true, r); break;
+    case SOP_AVATAR: SigCall(L"GET", L"/avatar", "", false, true, r); break;
     case SOP_DEPOSER: SigDeposer(job, r); break;
     }
     SigLock(); g_sigRes = r; SigUnlock();
@@ -542,7 +549,7 @@ static std::wstring SigZipPath() { return LocalDir() + L"signalement-envoi.zip";
 static void SigOpenList();
 static void SigOnDone(int kind, SigHttp &r)
 {
-    bool authed = kind == SOP_MOI || kind == SOP_MES || kind == SOP_RENOUVELER || kind == SOP_DEPOSER || kind == SOP_CAMARCHE || kind == SOP_RETIRER;
+    bool authed = kind == SOP_MOI || kind == SOP_MES || kind == SOP_RENOUVELER || kind == SOP_DEPOSER || kind == SOP_CAMARCHE || kind == SOP_RETIRER || kind == SOP_AVATAR;
     if (r.status == 426) { g_sigFatal = ST("er_mise-a-jour"); g_sigView = SV_ERROR; LaunchLog("signalement : lanceur trop ancien pour le site (426)"); return; }
     if (authed && r.status == 401) {   // jeton, membre, reconnexion : on repart de la connexion
         std::wstring why = SigErrText(r);
@@ -580,7 +587,7 @@ static void SigOnDone(int kind, SigHttp &r)
         break;
     case SOP_MOI:
         if (r.status == 200) {
-            g_sigDepotOuvert = r.j.flag("depotOuvert", true);
+            g_sigDepotOuvert = r.j.flag("depotOuvert", true); g_sigAvatarFlag = r.j.flag("avatar");
             std::string p = r.j.str("pseudo"); if (!p.empty()) g_sigPseudo = Widen(p);
             if (const Jv *q = r.j.get("quotas")) { g_sigQuotaH = (int)q->num("heure", -1); g_sigQuotaJ = (int)q->num("jour", -1); }
             if (const Jv *l = r.j.get("limites")) { g_sigZipMax = (long long)l->num("zipMax", (double)g_sigZipMax); g_sigEnvoiMax = (long long)l->num("envoiMax", (double)g_sigEnvoiMax); g_sigMorceau = (long long)l->num("morceau", (double)g_sigMorceau); }
@@ -592,9 +599,18 @@ static void SigOnDone(int kind, SigHttp &r)
         if (r.status == 200) { SigParseMes(r.j); if (g_sigView == SV_LOADING || g_sigView == SV_LIST || g_sigView == SV_DONE) g_sigView = SV_LIST; if (g_sigView == SV_DETAIL && g_sigSel >= (int)g_sigMes.size()) g_sigView = SV_LIST; }
         else { if (g_sigView == SV_LOADING) g_sigView = g_sigMesOk ? SV_LIST : SV_ERROR; if (!g_sigMesOk) g_sigFatal = SigErrText(r); else SigNote(SigErrText(r), SC_WARN); }
         if (g_sigView == SV_LIST && g_sigLogged && SigDaysLeft(g_sigExpire) < 2 && SigDaysLeft(g_sigRenouv) > 0) SigGo(SOP_RENOUVELER);   // (moins de 2 jours : on renouvelle, sans navigateur)
+        else if (g_sigLogged && g_sigAvatarFlag && !g_sigAvatar && !g_sigCapture) SigGo(SOP_AVATAR);
         break;
     case SOP_RENOUVELER:
         if (r.status == 200) { g_sigExpire = r.j.str("expire"); g_sigRenouv = r.j.str("renouvelableJusqua"); SigTokenSave(); LaunchLog("signalement : jeton renouvele"); }
+        if (g_sigLogged && g_sigAvatarFlag && !g_sigAvatar) SigGo(SOP_AVATAR);
+        break;
+    case SOP_AVATAR:
+        if (r.status == 200 && r.body.size() > 8 && !r.body.compare(0, 4, "\x89PNG")) {
+            if (g_sigAvatar) delete g_sigAvatar;
+            g_sigAvatar = LoadPngMem(r.body.data(), r.body.size(), 64, 64);
+            if (!LocalDir().empty()) { HANDLE f = CreateFileW((LocalDir() + L"signalement-avatar.png").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL); if (f != INVALID_HANDLE_VALUE) { DWORD w = 0; WriteFile(f, r.body.data(), (DWORD)r.body.size(), &w, NULL); CloseHandle(f); } }
+        } else g_sigAvatarFlag = false;   // (404 : pas d'avatar ; on n'insiste pas)
         break;
     case SOP_DECONNEXION:
         SigTokenClear(); g_sigView = SV_LOGIN; g_sigNote.clear();
@@ -819,7 +835,14 @@ static float SigDrawList(Graphics &g, float x, float y, float w, const RectF &cl
     SigNoteDraw(g, x, y, w);
     std::wstring who = SigFmt(ST("dpConnecteEn"), L"{p}", g_sigPseudo);
     Text(g, ST("dpMes"), RectF(x, y, w / 2, 28), 18, FontStyleBold, g_soft.ink, StringAlignmentNear);
-    Text(g, who, RectF(x + w / 2, y + 4, w / 2, 22), 12.5f, FontStyleRegular, g_soft.muted, StringAlignmentFar);
+    float aw = g_sigAvatar ? 36.0f : 0.0f;
+    Text(g, who, RectF(x + w / 2, y + 4, w / 2 - aw, 22), 12.5f, FontStyleRegular, g_soft.muted, StringAlignmentFar);
+    if (g_sigAvatar) {   // (rond de 28, a droite du nom)
+        RectF ar(x + w - 28, y - 1, 28, 28);
+        GraphicsState st = g.Save(); GraphicsPath p; p.AddEllipse(ar); g.SetClip(&p, CombineModeIntersect);
+        g.DrawImage(g_sigAvatar, ar.X, ar.Y, ar.Width, ar.Height); g.Restore(st);
+        Pen rim(g_soft.line, 1.0f); g.DrawEllipse(&rim, ar);
+    }
     y += 32;
     if (g_sigQuotaH >= 0) { wchar_t q[160]; swprintf_s(q, T(L"Envois restants : %d cette heure · %d aujourd'hui", L"Sends left: %d this hour · %d today"), g_sigQuotaH, g_sigQuotaJ); y += SigPara(g, q, x, y, w, 12, g_soft.faint) + 8; }
     if (!g_sigDepotOuvert) y += SigPara(g, ST("dpFerme") + L" " + ST("dpFermeSous"), x, y, w, 13, g_soft.warn, FontStyleBold) + 10;
@@ -1096,6 +1119,12 @@ static void SigCaptureState(const std::wstring &st)
     g_sigCapture = true; g_tab = TAB_BUG;
     SigTxLoadCache(SigLang(), NULL);
     g_sigLogged = true; g_sigPseudo = L"Teppo"; g_sigQuotaH = 3; g_sigQuotaJ = 9; g_sigZipFiles = 7;
+    if (!g_sigAvatar) {   // (faux avatar : un rond Discord avec l'initiale)
+        g_sigAvatar = new Bitmap(64, 64, PixelFormat32bppARGB); Graphics gb(g_sigAvatar); gb.SetSmoothingMode(SmoothingModeAntiAlias); gb.SetTextRenderingHint(TextRenderingHintAntiAlias);
+        SolidBrush br(Color(255, 88, 101, 242)); gb.FillEllipse(&br, 0, 0, 64, 64);
+        UiFont f(L"Segoe UI", 30, FontStyleBold); SolidBrush wb(Color(255, 255, 255, 255)); StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
+        gb.DrawString(L"T", 1, &f, RectF(0, 0, 64, 64), &sf, &wb);
+    }
     auto mk = [](int n, const wchar_t *titre, const char *jeu, const char *etat, const char *confie, const char *ver, bool rouvrir, bool retirer) {
         SigDossier d; d.n = n; d.titre = titre; d.jeu = jeu; d.etat = etat; d.confie = confie; d.versionCorrigee = ver; d.cree = 1761580000000LL; d.maj = 1761590000000LL; d.peutRouvrir = rouvrir; d.peutRetirer = retirer;
         d.hist.push_back({ 1761580000000LL, "depose", L"" }); d.hist.push_back({ 1761583000000LL, "traite", L"" });
