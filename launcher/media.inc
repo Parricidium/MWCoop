@@ -497,10 +497,10 @@ static bool VhsExportTick()
 }
 
 // Onglets de la page MEDIA (VHS / Album), dessines par l'en-tete : zones UI_VHS_TAB + k, suivies par VhsClick.
-static float MediaTabsW() { return PillW(L"VHS", 13) + 16 + 6 + PillW(L"Album", 13) + 16; }
+static float MediaTabsW() { return PillW(L"VHS", 13) + 16 + 6 + PillW(T(L"Album", L"Album"), 13) + 16; }
 static void MediaTabsDraw(Graphics &g)
 {
-    const wchar_t *lab[2] = { L"VHS", L"Album" };
+    const std::wstring labS[2] = { L"VHS", T(L"Album", L"Album") }; const wchar_t *lab[2] = { labS[0].c_str(), labS[1].c_str() };
     float x = g_mediaTabRight - MediaTabsW();
     for (int k = 0; k < 2; k++) {
         float w = PillW(lab[k], 13) + 16;
@@ -903,7 +903,7 @@ static void DrawAlbum(Graphics &g)
     std::vector<AlbCell> cells; std::vector<AlbDay> days; float total = 0;
     AlbLayout(cells, days, total);
     if (g_albSlide && GetTickCount() - g_albSlideT >= kAlbSlideMs) AlbSlideNext(cells);
-    Title(g, T(L"Album", L"Album") + (g_alb.empty() ? L"" : L" · " + std::to_wstring(g_alb.size()) + T(L" photo", L" photo") + (g_alb.size() > 1 ? L"s" : L"")), RectF(lx, c.Y + 14, 300, 36), 16, kInk);
+    Title(g, T(L"Album", L"Album") + (g_alb.empty() ? L"" : L" · " + std::to_wstring(g_alb.size()) + T(L" photo", L" photo") + (g_alb.size() > 1 && !g_ru && !g_ar ? L"s" : L"")), RectF(lx, c.Y + 14, 300, 36), 16, kInk);
     UiSeg(g, RectF(lx + lw - 252, c.Y + 15, 252, 34), { T(L"Récentes", L"Recent"), T(L"Par partie", L"By session"), T(L"Favoris", L"Favorites") }, g_albView, UI_ALB_VIEW, 12);
     Text(g, T(L"Photos prises au drone (F8 en jeu, clic gauche). Clic sur une photo : en grand à droite.", L"Photos taken with the drone (F8 in game, left click). Click a photo: large on the right."),
          RectF(lx, c.Y + 52, lw, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);

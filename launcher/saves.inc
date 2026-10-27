@@ -230,7 +230,7 @@ static std::wstring SaveDateRel(const std::wstring &d, bool cap)
     std::wstring w;
     if (ago == 0) w = cap ? T(L"Aujourd'hui", L"Today") : T(L"aujourd'hui", L"today");
     else if (ago == 1) w = cap ? T(L"Hier", L"Yesterday") : T(L"hier", L"yesterday");
-    else { wchar_t b[48]; if (g_fr) swprintf_s(b, L"%s %02d/%02d", cap ? L"Le" : L"le", da, mo); else swprintf_s(b, L"%s %02d/%02d", cap ? L"On" : L"on", mo, da); if (y != t.wYear) { wchar_t yb[8]; swprintf_s(yb, L"/%04d", y); wcscat_s(b, yb); } w = b; }
+    else { wchar_t b[48]; if (g_fr) swprintf_s(b, L"%s %02d/%02d", cap ? L"Le" : L"le", da, mo); else if (g_ru || g_ar) swprintf_s(b, L"%02d/%02d", da, mo); else swprintf_s(b, L"%s %02d/%02d", cap ? L"On" : L"on", mo, da); if (y != t.wYear) { wchar_t yb[8]; swprintf_s(yb, L"/%04d", y); wcscat_s(b, yb); } w = b; }
     return w + L" " + hm;
 }
 // « avec Teppo, Pekka » (joueurs de la derniere partie), ou le role.
