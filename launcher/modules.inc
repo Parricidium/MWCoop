@@ -122,8 +122,8 @@ static void DrawAddonsHome(Graphics &g)
         float pw = PillW(s, 9.5f) - 2, nw = MeasureW(MeasureG(), L"Kupla", 19, FontStyleBold);
         Pill(g, RectF(lx + nw + 12, kc.Y + 25, pw, 18), Color(255, 255, 107, 139), s, Color(255, 255, 255, 255), 9.5f);
     }
-    Para(g, T(L"Allège le jeu pour les PC modestes : rétroviseurs rendus moins souvent, petits objets du décor cachés plus tôt, décor coupé plus loin. Jamais les joueurs, les voitures, les objets tenus ni le trafic ; tes réglages Graphismes restent les maîtres. Éteint, le jeu reste exactement comme avant. Pris en compte au lancement de la partie.",
-              L"Lightens the game for modest PCs: mirrors rendered less often, small scenery objects hidden sooner, scenery cut further away. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, the game stays exactly as before. Applied when the game starts."),
+    Para(g, T(L"Allège le jeu pour les PC modestes : rétroviseurs rendus moins souvent, petits objets du décor cachés plus tôt, le décor très lointain n'est plus affiché. Jamais les joueurs, les voitures, les objets tenus ni le trafic ; tes réglages Graphismes restent les maîtres. Éteint, le jeu reste exactement comme avant. Pris en compte au lancement de la partie.",
+              L"Lightens the game for modest PCs: mirrors rendered less often, small scenery objects hidden sooner, very distant scenery is no longer drawn. Never the players, the cars, held objects or the traffic; your Graphics settings stay in charge. Off, the game stays exactly as before. Applied when the game starts."),
          RectF(lx, kc.Y + 80, lw, 104), 12.5f, kInk);
     // a droite : la case « Rendu (pour moi) », le niveau (leger / moyen / fort), la case du compteur d'images par seconde
     float rx = lx + lw + 28, rw = kc.X + kc.Width - 20 - rx;
