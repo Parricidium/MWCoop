@@ -777,6 +777,10 @@ namespace MWCoop
         static void Send(Prop p, int state, bool reliable = false)
         {
             if (p.Body == null) return;
+            // (pose aberrante -- emplacement d'attente du jeu a x = 7,8e31, ou physique emballee : l'autre cote la jetait de toute facon
+            // (« non fini ou aberrant »), l'hote la renvoyait toutes les 6 s ; rien a envoyer)
+            Vector3 bp = p.Body.position;
+            if (float.IsNaN(bp.x + bp.y + bp.z) || Mathf.Abs(bp.x) > 1e5f || Mathf.Abs(bp.y) > 1e5f || Mathf.Abs(bp.z) > 1e5f) return;
             p.LastSentPos = p.Body.position;
             var w = new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(state)
                 .Vec(p.Body.position).Quat(p.Body.rotation).Vec(p.Body.velocity);
@@ -891,6 +895,15 @@ namespace MWCoop
             // (en chute libre seulement : un objet range par le jeu loin sous la carte, immobile, reste ou il est)
             if (!bad && (at.y > -150f || p.Body.velocity.y > -10f)) return false;
             if (p.RescueOff) return false;
+            // Emplacement d'attente du jeu (My Summer Car, import d'une sauvegarde vanilla, 27/10) : un objet jamais apparu (cadeau de Noel
+            // MISC/holiday present(Clon2) et son turbo, pas achete) est range a x = 7,8e31, z = 6,7e22 et y tombe ; « sauve », il
+            // arrivait devant le joueur -- turbo gratuit. Une vraie chute garde x et z dans le monde (< 4000) : au-dela de 1e5, on le laisse.
+            if (!bad && (Mathf.Abs(at.x) > 1e5f || Mathf.Abs(at.z) > 1e5f))
+            {
+                p.RescueOff = true;
+                Log.Info("objet " + p.Id + " a l'emplacement d'attente du jeu (" + at.ToString("F0") + ") : laisse ou il est");
+                return false;
+            }
             // Pas de collision (range par le jeu ou un mod tout au fond -- sac a dos, 18/10 : boitiers de CD a y = -9000) : remis
             // devant le joueur, il retraversait la voiture et le sol toutes les 3 s (« des pieces s'envolent de la Rivett » chez
             // l'hote de NotHuyarma, 18/10). On le laisse. Pareil s'il retombe aussitot (deux fois en 30 s) : on arrete.

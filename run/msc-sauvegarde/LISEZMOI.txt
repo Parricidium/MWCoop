@@ -31,6 +31,12 @@ FORMAT (defaultES2File.txt, items.txt ; pas chiffre)
      pieces et objets (PART, ITEM, TOOL, le reste) : sol du garage, x de -15.5 a -13.5, z de 5 a 9, y = -0.27
        (0,3 m au-dessus du sol ; ecarter de 0,4 m chaque objet replace)
    Rotation invalide (NaN, ou quaternion nul) : (0, 0, 0, 1).
+   EMPLACEMENT D'ATTENTE DU JEU (27/10, import « Stock Satsuma Save Game ») : une piece PAS MONTEE (XInstalled=false) ou un
+   objet PAS ACHETE (XPurchased=false) dont la position est absurde (|x|, |y| ou |z| > 1e5 ; ex. turbo(xxxxx) et
+   holiday present(Clon2) a 7,8e31 / -2,3e7 / 6,7e22) n'est PAS une erreur : c'est la ou le jeu d'origine range l'objet
+   jamais apparu (le turbo est dans le cadeau de Noel, MISC/holiday present(Clon2)/Parts/turbo(Clone), inactif tant que
+   le cadeau n'est pas achete). Ne rien reparer, au plus une ligne d'information : « repare », il arriverait au garage
+   gratuitement. Une piece montee ou un objet achete a position absurde reste une erreur a reparer (physique emballee).
    ESSAI : Satsuma a position NaN -> le jeu PLANTE 3,5 s apres le chargement (0xC0000005). Reparation indispensable.
 3. NOMBRES : seuls NaN et +-infini sont des erreurs. De tres grandes valeurs existent dans le jeu d'origine
    (amortisseurs rallye « Rebound » = 4.46e30) : ne pas y toucher.

@@ -138,7 +138,8 @@ namespace MWCoop
             if (f.FsmName != "Use") return false;
             Fsm m = f.Fsm;
             return m.GetState("Open door") != null && (m.GetState("Open door 2") != null || m.GetState("Open door 3") != null) && m.GetState("Close door") != null
-                   || m.GetState("Open hood") != null && m.GetState("Close hood") != null;
+                   || m.GetState("Open hood") != null && m.GetState("Close hood") != null
+                   || m.GetState("Open hood 2") != null && m.GetState("Close hood 2") != null;   // (capot de la SATSUMA, MSC -- CarDoors, 27/10)
         }
 
         // Automate mene seulement par les portieres : pas d'autre transition que FINISHED et leurs evenements, et

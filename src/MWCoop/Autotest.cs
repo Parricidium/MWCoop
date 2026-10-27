@@ -1009,6 +1009,32 @@ namespace MWCoop
                 if (bLog++ < 12) Log.Info("autotest : mscboulons, corps " + Recon.Path(rb.transform) + (rb.gameObject.activeInHierarchy ? "" : " (inactif)") + " : decale de " + d.ToString("F2") + " m de sa pose locale, " + (rb.isKinematic ? "cinematique" : "LIBRE v " + rb.velocity.magnitude.ToString("F1")) + ", interpolation " + rb.interpolation + ", pose physique a " + Vector3.Distance(rb.position, rb.transform.position).ToString("F2") + " m du transform");
             }
             Log.Info("autotest : mscboulons, corps BoltPM : " + bn + ", cinematiques " + bKin + ", interpoles " + bInt + ", colliders declencheurs " + bTrig + ", decales ou libres " + bDrift);
+            // (pieces montees -- corps des objets a 'Removal' sous la voiture (batterie, alternateur, portieres...) : cinematiques ? interpoles ?
+            // attache ? decales de leur pose locale du premier releve, ou corps physique loin de leur transform ? Markos 25/10 : « the batteries
+            // float too » ; essai de la batterie en priorite, [Test] BoulonsPiece (battery))
+            if (car != null)
+            {
+                string want = Config.Get("Test", "BoulonsPiece", "battery");
+                int pn = 0, pKin = 0, pDrift = 0, pLog = 0;
+                foreach (PlayMakerFSM rem in car.GetComponentsInChildren<PlayMakerFSM>(true))
+                {
+                    if (rem.FsmName != "Removal") continue;
+                    Rigidbody rb = rem.GetComponent<Rigidbody>();
+                    if (rb == null) continue;
+                    pn++;
+                    if (rb.isKinematic) pKin++;
+                    Vector3 lp = rb.transform.localPosition, l0;
+                    if (!boltLocal.TryGetValue(rb, out l0)) { boltLocal[rb] = lp; l0 = lp; }
+                    float d = (lp - l0).magnitude, phys = Vector3.Distance(rb.position, rb.transform.position);
+                    bool odd = d > 0.05f || phys > 0.05f || !rb.isKinematic && car.isKinematic;
+                    if (odd) pDrift++;
+                    if ((odd || rem.name.StartsWith(want)) && pLog++ < 16)
+                        Log.Info("autotest : mscboulons, piece " + Recon.Path(rem.transform) + (rem.gameObject.activeInHierarchy ? "" : " (inactive)") + " : locale " + lp.ToString("F3") + " (ecart " + d.ToString("F2") + " m), "
+                                 + (rb.isKinematic ? "cinematique" : "LIBRE v " + rb.velocity.magnitude.ToString("F1")) + ", interpolation " + rb.interpolation + ", pose physique a " + phys.ToString("F2") + " m du transform, attaches "
+                                 + rem.GetComponents<Joint>().Length + ", parent " + (rem.transform.parent != null ? rem.transform.parent.name : "aucun") + (car.isKinematic ? " (voiture = copie)" : ""));
+                }
+                Log.Info("autotest : mscboulons, pieces montees a corps : " + pn + ", cinematiques " + pKin + ", suspectes " + pDrift);
+            }
         }
         static readonly System.Collections.Generic.Dictionary<Rigidbody, Vector3> boltLocal = new System.Collections.Generic.Dictionary<Rigidbody, Vector3>();
 
@@ -1529,6 +1555,88 @@ namespace MWCoop
             if (mode == "mscremonte") { Parts.TestRemount(t); return; }   // (aile arrachee au montage chez l'hote, WIGA 25/10)
             // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
             // (envoye), remontee a 50 s (message NON envoye) ; l'empreinte des 2 s doit la faire remonter chez l'invite en 6 s au plus ; etat a EtatA s)
+            // ([Test] Autotest=msccapot, 2 joueurs, упердок 25/10 : « capot ouvert par l'hote, l'invite ne le voit pas ») : l'hote ouvre le capot de la
+            // SATSUMA a CapotA s (150) et le referme a CapotA+25 ; chacun note toutes les 2 s l'etat de l'automate 'Use' du capot, son angle et Open)
+            if (mode == "msccapot")
+            {
+                float ca = Config.GetFloat("Test", "CapotA", 150f);
+                if (Net.Session.IsHost && t > ca && step == 0) { step = 1; Log.Info("autotest capot : ouvre -> " + CarDoors.TestOpen("SATSUMA", true, "hood")); }
+                if (Net.Session.IsHost && t > ca + 25f && step == 1) { step = 2; Log.Info("autotest capot : ferme -> " + CarDoors.TestOpen("SATSUMA", false, "hood")); }
+                if (t > 30f && t > psLogAt)
+                {
+                    psLogAt = t + 2f;
+                    Rigidbody cb = VehicleSync.Body("SATSUMA");
+                    Transform hd = null; if (cb != null) foreach (Transform x in cb.GetComponentsInChildren<Transform>(true)) if (x.name == "hood(Clone)") { hd = x; break; }
+                    PlayMakerFSM hu = hd != null ? Game.FsmOn(hd.gameObject, "Use") : null;
+                    HutongGames.PlayMaker.FsmBool op = hu != null ? hu.FsmVariables.FindFsmBool("Open") : null;
+                    Log.Info("autotest capot : " + (hd == null ? "capot introuvable" : "capot rot locale " + hd.localEulerAngles.ToString("F0") + ", Use [" + (hu != null ? hu.ActiveStateName : "?") + "] Open=" + (op != null ? op.Value.ToString() : "?") + ", parent " + (hd.parent != null ? hd.parent.name : "aucun")));
+                }
+                return;
+            }
+            // ([Test] Autotest=mscpile, 2 joueurs, Markos 25/10 : « the batteries float too » -- piles R20 sorties de leur boite, en l'air au-dessus de l'etabli
+            // chez l'invite) : l'acteur ([Test] PileActeur=invite, sinon l'hote) sort une pile de la premiere boite r20batterybox a PileA s (150) comme un
+            // clic ('Create Plug' : crochet de Boxes en tete) ; chacun note toutes les 2 s chaque objet « r20 battery* » : pose, corps, parent.)
+            if (mode == "mscpile")
+            {
+                bool actor = (Config.Get("Test", "PileActeur", "hote") == "invite") != Net.Session.IsHost;
+                float pa = Config.GetFloat("Test", "PileA", 150f);
+                // (pas de boite dans la sauvegarde d'essai : chacun cree la sienne a partir du modele de la scene (PileModele, racine, ex. sparkplugbox0),
+                // meme nom donc meme ID de 'Use' et meme cle Props, posee au sol du garage a PilePos, 20 s avant la prise)
+                float pre = Config.GetFloat("Test", "PileAvant", 20f);
+                if (t > pa - pre && step == 0)
+                {
+                    step = -1;
+                    string tplName = Config.Get("Test", "PileModele", "sparkplugbox0");
+                    GameObject tpl = null;
+                    foreach (GameObject g in Resources.FindObjectsOfTypeAll<GameObject>()) if (g.name == tplName && g.transform.parent == null && g.hideFlags == HideFlags.None) { tpl = g; break; }
+                    if (tpl == null) Log.Info("autotest pile : modele " + tplName + " introuvable");
+                    else
+                    {
+                        string[] pc = Config.Get("Test", "PilePos", "-14.5,-0.3,8.5").Split(',');
+                        Vector3 pos = new Vector3(float.Parse(pc[0], System.Globalization.CultureInfo.InvariantCulture), float.Parse(pc[1], System.Globalization.CultureInfo.InvariantCulture), float.Parse(pc[2], System.Globalization.CultureInfo.InvariantCulture));
+                        GameObject bx = (GameObject)Object.Instantiate(tpl, pos, Quaternion.identity);
+                        bx.name = tplName + "(Clone)";   // (= l'ID que son 'Use' lit a son depart (GetOwner/GetName), avant de se renommer « spark plug box(Clone) »)
+                        bx.SetActive(true);
+                        // (le distributeur est pose par le magasin a la creation : ici a la main -- Spawner/CreateItems, automate Sparkplug / R20Battery...)
+                        PlayMakerFSM bu = Game.FsmOn(bx, "Use");
+                        HutongGames.PlayMaker.FsmGameObject cdb = bu != null ? bu.FsmVariables.FindFsmGameObject("CreateItemsDB") : null;
+                        GameObject spw = Game.FindAny("Spawner/CreateItems");
+                        if (cdb != null) cdb.Value = spw;
+                        Log.Info("autotest pile : boite " + bx.name + " creee en " + pos.ToString("F1") + " (modele " + (tpl.activeSelf ? "actif" : "inactif") + ", distributeur " + (spw != null ? "pose" : "INTROUVABLE") + ", ID '" + (bu != null && bu.FsmVariables.FindFsmString("ID") != null ? bu.FsmVariables.FindFsmString("ID").Value : "?") + "')");
+                    }
+                }
+                if (actor && t > pa && step == -1)
+                {
+                    step = 1;
+                    PlayMakerFSM box = null;
+                    // ([Test] PileBoite : debut du nom de la boite (r20batterybox ; sparkplugbox dans la sauvegarde d'essai -- meme mecanique Boxes) ;
+                    // PileMot : morceau du nom des objets a noter (battery / plug))
+                    string boxName = Config.Get("Test", "PileBoite", Config.Get("Test", "PileModele", "sparkplugbox0") + "(Clone)");
+                    foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                    {
+                        if (f.FsmName != "Use" || f.Fsm.GetState("Create Plug") == null) continue;
+                        HutongGames.PlayMaker.FsmString bid = f.FsmVariables.FindFsmString("ID");
+                        if (f.gameObject.name.StartsWith(boxName) || bid != null && bid.Value.StartsWith(boxName)) { box = f; break; }
+                    }
+                    if (box != null) { Log.Info("autotest pile : boite " + Recon.Path(box.transform) + " [" + box.ActiveStateName + "] Quantity " + box.FsmVariables.GetFsmInt("Quantity").Value + " -> Create Plug"); Game.SetState(box, "Create Plug"); }
+                    else Log.Info("autotest pile : aucune boite " + boxName + " active");
+                }
+                if (t > 30f && t > psLogAt)
+                {
+                    psLogAt = t + 2f;
+                    var sb = new System.Text.StringBuilder("autotest pile :");
+                    int n = 0;
+                    string word = Config.Get("Test", "PileMot", "battery");
+                    foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                    {
+                        if (rb.name.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) < 0 || rb.name.Contains("box")) continue;
+                        n++;
+                        sb.Append(' ').Append(rb.name).Append(" pos ").Append(rb.transform.position.ToString("F2")).Append(rb.isKinematic ? " cin" : " libre v " + rb.velocity.magnitude.ToString("F2")).Append(" phys-tr ").Append(Vector3.Distance(rb.position, rb.transform.position).ToString("F2")).Append(" parent ").Append(rb.transform.parent != null ? rb.transform.parent.name : "-").Append(rb.IsSleeping() ? " dort" : "").Append(" ;");
+                    }
+                    Log.Info(sb.ToString() + " (" + n + " piles)");
+                }
+                return;
+            }
             if (mode == "mscperte")
             {
                 Parts.TestRemount(t - Config.GetFloat("Test", "PerteDecalage", 0f));   // (decalage : l'invite doit etre en jeu avant le demontage des 40 s)

@@ -160,6 +160,16 @@ namespace MWCoop
                         grab = Reached(f, "State 2") ? "State 2" : f.Fsm.GetState("Drop") != null ? "Drop" : f.Fsm.GetState("State 2") != null ? "State 2" : null;
                         close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood";
                     }
+                    // Capot de la SATSUMA (My Summer Car ; упердок 25/10 : « if the host opens it, the guest doesn't see it ») : memes etats
+                    // numerotes 2 -- "Mouse over 3" -OPEN-> "Open hood 2" (couple tant que le bouton est tenu, "State 1" = butees ouvertes),
+                    // "Mouse over 4" -OPEN-> "State 2" (pousse vers la fermeture) -CLOSE-> "Sound" -> "Close hood 2". Jamais reconnu : le capot
+                    // passait par Jobs comme une commande ordinaire, et son angle n'etait pas suivi.
+                    else if (f.Fsm.GetState("Open hood 2") != null && f.Fsm.GetState("Close hood 2") != null)
+                    {
+                        open = "Open hood 2";
+                        grab = f.Fsm.GetState("State 2") != null ? "State 2" : null;
+                        close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood 2";
+                    }
                     if (open == null) continue;
                     string rel = VehicleSync.RelPath(car.transform, f.transform);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;   // compte aussi les portieres deja suivies
