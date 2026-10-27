@@ -261,7 +261,7 @@ static void ShellDrawRail(Graphics &g)
     }
     // indicateur : un creux avec un trait d'accent, qui glisse (le meme objet)
     if (curY >= 0) {
-        float iy = AnimTo(AK(AKH_TAB, 2), curY, kSoftTUi, SE_MOVE);
+        SoftAnimAt(r); float iy = AnimTo(AK(AKH_TAB, 2), curY, kSoftTUi, SE_MOVE); SoftAnimEnd();   // (zone : toute la barre -- ancienne position, nouvelle et le trajet)
         RectF ir(x0, iy, w, step - 2);
         SoftShape(g, ir, 13, g_soft.bgIn);
         { GraphicsState s2 = g.Save(); GraphicsPath p; RoundRect(p, ir, 13); g.SetClip(&p); SoftInset(g, ir, 13, 3, 7); g.Restore(s2); }
@@ -462,7 +462,7 @@ static bool ShellClick(int id)   // (UiClick)
 
 // ---- l'image entiere de la nouvelle interface : coque en DIP, colonne de page en coordonnees de la carte, puis les
 // couches par-dessus (bulles de la visite, guides, fenetre de choix, palette, notifications)
-static void RenderToNew(Bitmap &target, const RECT *clip)
+static void RenderToNew(Bitmap &target, const RECT *clip, const RECT *exclude)
 {
     SoftThemeApply();
     g_skinBudget = g_wnd ? 6 : 100000;
@@ -477,6 +477,7 @@ static void RenderToNew(Bitmap &target, const RECT *clip)
     for (int pass = 0; pass < 2; pass++) {
         Graphics g(&target);
         if (clip) g.SetClip(Rect(clip->left, clip->top, clip->right - clip->left, clip->bottom - clip->top));   // (rendu partiel : GDI+ ne rasterise que la-dedans ; les zones cliquables sont quand meme toutes reposees)
+        if (exclude) g.SetClip(Rect(exclude->left, exclude->top, exclude->right - exclude->left, exclude->bottom - exclude->top), CombineModeExclude);   // (transition de page : la colonne vient des caches)
         { SolidBrush bgb(g_soft.bg); g.FillRectangle(&bgb, 0, 0, w, h); }   // (Clear ignorerait le clip)
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(g_textHint);

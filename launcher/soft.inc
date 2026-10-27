@@ -514,6 +514,13 @@ static DWORD g_softPageT;       // debut du changement (0 : aucun)
 static DWORD g_softThemeT; static PointF g_softThemeC;
 static int SoftNavIndex(int tab);   // (ui.inc : place de la page dans la barre, -1 si absente)
 static bool SoftTransitionActive() { return g_softPageT != 0 || g_softThemeT != 0; }
+static bool SoftPageTransition() { return g_softPageT != 0; }
+static bool g_trNewOkPublic() { return g_trNewOk; }
+static RECT SoftPageRectPx()   // (la colonne de page en pixels : titre, commandes et page)
+{
+    int px = (int)(g_offX + (264 + kM) * g_scale), py = (int)(g_offY + kM * g_scale), pw = (int)(g_pageW * g_scale + 0.5f), ph = (int)(744 * g_scale + 0.5f);
+    RECT r = { px, py, px + pw, py + ph }; return r;
+}
 static void SoftDibFree(SoftDib &d) { if (d.dc) DeleteDC(d.dc); if (d.bmp) DeleteObject(d.bmp); d = SoftDib(); }
 static bool SoftDibCapture(SoftDib &d)   // (copie de la fenetre telle qu'elle est a l'ecran : g_memDC)
 {
@@ -540,6 +547,7 @@ static void SoftTransitionEnd()
     if (g_trNewOk && g_memDC) { BitBlt(g_memDC, 0, 0, g_winW, g_winH, g_trNew.dc, 0, 0, SRCCOPY); HDC dc = GetDC(g_wnd); BitBlt(dc, 0, 0, g_winW, g_winH, g_memDC, 0, 0, SRCCOPY); ReleaseDC(g_wnd, dc); }
     g_softPageT = 0; g_softThemeT = 0; g_trNewOk = false;
     SoftDibFree(g_trOld); SoftDibFree(g_trNew);
+    InvalidateAll();   // (une image entiere : ce qui a bouge pendant la transition -- indicateur de la barre, survols -- se met a jour)
 }
 static void SoftPageChange(int from, int to)
 {

@@ -7276,6 +7276,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return TRUE;
     }
     case WM_APP_RELAUNCH: {
+        UiNewFlagClear();   // (fenetre.inc : sortie propre, pas un plantage de la nouvelle interface)
         STARTUPINFOW si = { sizeof(si) };
         PROCESS_INFORMATION pi;
         std::wstring cmd = L"\"" + g_self + L"\"";
@@ -7289,7 +7290,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_WINDOWPOSCHANGED: BugPanelSync(); break;   // (signalement.inc : la popup du site suit la fenetre)
-    case WM_CLOSE: LobbyClose(); g_state = ST_CLOSING; return 0;
+    case WM_CLOSE: LobbyClose(); g_state = ST_CLOSING; UiNewFlagClear(); return 0;
     case WM_DESTROY:
         BugPanelClose();
         LobbyClose();

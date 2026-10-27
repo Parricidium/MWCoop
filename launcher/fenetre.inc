@@ -26,9 +26,9 @@ static DWORD g_uiFlagT;              // filet : quand effacer NouvelleEnCours
 static Bitmap *g_cardBmp;            // nouvelle : la carte rendue (PARGB), composee sur le fond uni de g_memDC
 static const int kWinMinW = 960, kWinMinH = 600;
 static void RenderTo(Bitmap &target, float scale);   // (launcher.cpp)
-static void RenderToNew(Bitmap &target, const RECT *clip = NULL);   // (coque.inc : la fenetre entiere, ou seulement le rectangle sale)
-static bool SoftTransitionActive();   // (soft.inc : changement de page ou cercle du theme en cours -> image entiere)
-static bool SoftTransitionFrame(); static void SoftTransitionCaptureNew();   // (soft.inc : composition GDI depuis les deux images en cache)
+static void RenderToNew(Bitmap &target, const RECT *clip = NULL, const RECT *exclude = NULL);   // (coque.inc : la fenetre entiere, ou seulement le rectangle sale, moins une zone)
+static bool SoftTransitionActive(); static bool g_trNewOkPublic();   // (soft.inc : changement de page ou cercle du theme en cours -> image entiere)
+static bool SoftTransitionFrame(); static void SoftTransitionCaptureNew(); static bool SoftPageTransition(); static RECT SoftPageRectPx();   // (soft.inc : composition GDI depuis les deux images en cache)
 static float g_shW, g_shH;                            // (coque.inc)
 static bool g_palOpen;
 static void SoftThemeApply();                         // (soft.inc : jetons du theme et de l'accent)
@@ -81,10 +81,15 @@ static void UiNewRead()
     GetPrivateProfileStringW(L"Lanceur", L"Interface", L"ancienne", v, 16, g_iniLauncher.c_str());
     g_newUi = !_wcsicmp(v, L"nouvelle");
     if (g_newUi && GetPrivateProfileIntW(L"Lanceur", L"NouvelleEnCours", 0, g_iniLauncher.c_str())) {   // filet : elle a plante la derniere fois
-        g_newUi = false; g_uiCrashed = true;
-        WritePrivateProfileStringW(L"Lanceur", L"Interface", L"ancienne", g_iniLauncher.c_str());
+        // (JD 27/10 : la bascule MWC <-> MSC relance le lanceur ; le drapeau est maintenant efface aux sorties propres, et un seul
+        // echec ne rend plus l'ancienne interface permanente : il en faut deux de suite)
+        int fails = GetPrivateProfileIntW(L"Lanceur", L"NouvelleEchecs", 0, g_iniLauncher.c_str()) + 1;
+        wchar_t fb[8]; swprintf_s(fb, L"%d", fails);
+        WritePrivateProfileStringW(L"Lanceur", L"NouvelleEchecs", fb, g_iniLauncher.c_str());
         WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", NULL, g_iniLauncher.c_str());
-        LaunchLog("interface : la nouvelle n'a pas passe son premier demarrage la derniere fois : ancienne interface, Interface=ancienne");
+        g_newUi = false; g_uiCrashed = true;
+        if (fails >= 2) { WritePrivateProfileStringW(L"Lanceur", L"Interface", L"ancienne", g_iniLauncher.c_str()); LaunchLog("interface : la nouvelle n'a pas passe son premier demarrage deux fois de suite : Interface=ancienne"); }
+        else LaunchLog("interface : la nouvelle n'a pas passe son premier demarrage la derniere fois : ancienne interface pour cette fois (echec %d)", fails);
     }
     LaunchLog("interface : %s", g_newUi ? "nouvelle (refonte, lot L0)" : "ancienne");
     if (g_newUi) SoftThemeApply();
@@ -299,7 +304,18 @@ static void PresentNew()
     LARGE_INTEGER pm; QueryPerformanceCounter(&pm);
     int cw = g_winW, ch = g_winH;   // (L2 : l'image = la fenetre entiere, coque comprise -- coque.inc RenderToNew)
     if (!g_cardBmp || (int)g_cardBmp->GetWidth() != cw || (int)g_cardBmp->GetHeight() != ch) { delete g_cardBmp; g_cardBmp = new Bitmap(cw, ch, PixelFormat32bppPARGB); g_dirtyAll = true; }
-    if (SoftTransitionActive()) { if (SoftTransitionFrame()) { g_dirtyAll = false; SetRectEmpty(&g_dirtyPx); return; } g_dirtyAll = true; }   // (transition : composee depuis les caches ; la premiere image est rendue en entier et gardee)
+    if (SoftTransitionActive()) {   // (transition : la premiere image est rendue en entier et gardee ; ensuite, changement de page : la coque reste vivante, la colonne de page est composee depuis les caches)
+        if (SoftPageTransition() && g_trNewOkPublic()) {
+            RECT pr = SoftPageRectPx();
+            RenderToNew(*g_cardBmp, NULL, &pr);
+            Bitmap win(g_winW, g_winH, g_winW * 4, PixelFormat32bppPARGB, (BYTE *)g_bits);
+            Graphics g(&win); g.SetCompositingMode(CompositingModeSourceCopy); g.SetInterpolationMode(InterpolationModeNearestNeighbor); g.SetPixelOffsetMode(PixelOffsetModeNone);
+            g.DrawImage(g_cardBmp, 0, 0, cw, ch);
+            GdiFlush();
+        }
+        if (SoftTransitionFrame()) { g_dirtyAll = false; SetRectEmpty(&g_dirtyPx); return; }
+        g_dirtyAll = true;
+    }
     RECT full = { 0, 0, cw, ch };
     RECT r = g_dirtyAll ? full : g_dirtyPx;
     IntersectRect(&r, &r, &full);
@@ -328,7 +344,8 @@ static void PresentNew()
 }
 // Filet de securite : drapeau pose avant la premiere image, efface 5 s apres (Tick).
 static void UiNewFlagStart() { if (g_newUi) { WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", L"1", g_iniLauncher.c_str()); g_uiFlagT = GetTickCount() + 5000; } }
-static void UiNewFlagTick() { if (g_uiFlagT && GetTickCount() >= g_uiFlagT) { g_uiFlagT = 0; WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", NULL, g_iniLauncher.c_str()); } }
+static void UiNewFlagClear() { g_uiFlagT = 0; if (g_newUi) WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", NULL, g_iniLauncher.c_str()); }   // (sortie propre : relance, fermeture)
+static void UiNewFlagTick() { if (g_uiFlagT && GetTickCount() >= g_uiFlagT) { g_uiFlagT = 0; WritePrivateProfileStringW(L"Lanceur", L"NouvelleEnCours", NULL, g_iniLauncher.c_str()); WritePrivateProfileStringW(L"Lanceur", L"NouvelleEchecs", NULL, g_iniLauncher.c_str()); } }   // (demarrage reussi : plus d'echec compte)
 
 // ---- fenetre de choix au premier lancement (g_guideKind 2) : apercu des deux interfaces, Essayer / Garder
 // (JD, 27/10 : « au 1er lancement, demander le choix du launcher en expliquant les + et les - de chacune » ; la nouvelle
