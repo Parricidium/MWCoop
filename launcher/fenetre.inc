@@ -133,9 +133,12 @@ static void WinDwm(HWND h)   // coins arrondis (Win11), ombre (DWM actif) ; rien
 }
 // Liseré de Windows 11 (DWMWA_BORDER_COLOR) a la couleur du fond du theme, et cadre en mode sombre quand le theme l'est
 // (JD 27/10 : « le launcher a un contour blanc ») ; reapplique a chaque changement de theme (soft.inc SoftThemeApply).
+static int g_ncHandled;   // (essai : messages non client traites ici)
+static HWND g_dwmBorderH;   // (derniere fenetre a laquelle la bordure a ete appliquee ; WinDwmBorderReset force une nouvelle application)
+static void WinDwmBorderReset() { g_dwmBorderH = NULL; }
 static void WinDwmBorder(HWND h, bool dark, COLORREF bg)
 {
-    static bool lastDark; static COLORREF lastBg = 0xFFFFFFFF; static HWND lastH;
+    static bool lastDark; static COLORREF lastBg = 0xFFFFFFFF; HWND &lastH = g_dwmBorderH;
     if (!h || IsWine() || (h == lastH && dark == lastDark && bg == lastBg)) return;
     lastH = h; lastDark = dark; lastBg = bg;
     HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
@@ -273,6 +276,12 @@ static bool WinProcNew(HWND h, UINT m, WPARAM wp, LPARAM lp, LRESULT &res)
         }
         res = 0; return true;
     case WM_NCHITTEST: res = WinNcHitTest(h, lp); return true;
+    // Activation / desactivation (boite modale, perte du focus) : rien a dessiner par Windows -- tout est zone cliente --, sinon
+    // DefWindowProc peint le cadre « inactif » (lisere clair) par-dessus l'image, jusqu'a l'image entiere suivante (JD 27/10 :
+    // « je l'ai eu lors de cette notification et apres il est reste 10 s »). La bordure DWM est reappliquee et l'image redessinee.
+    case WM_NCACTIVATE: g_ncHandled++; WinDwmBorderReset(); InvalidateAll(); res = TRUE; return true;
+    case WM_NCPAINT: g_ncHandled++; res = 0; return true;
+    case WM_ACTIVATE: g_ncHandled++; WinDwmBorderReset(); InvalidateAll(); return false;   // (le reste du traitement d'avant continue)
     case WM_GETMINMAXINFO: {
         MINMAXINFO *mi = (MINMAXINFO *)lp;
         mi->ptMinTrackSize.x = (LONG)(kWinMinW * g_dpiScale); mi->ptMinTrackSize.y = (LONG)(kWinMinH * g_dpiScale);
@@ -527,6 +536,18 @@ static void WinAnimTest()
     SoftThemeCircle(PointF(1150, 44)); SoftModeSet(g_dark ? 0 : 1); InvalidateAll(); WinAnimCheck("cercle du theme");
     SoftThemeCircle(PointF(1150, 44)); SoftModeSet(g_dark ? 0 : 1); InvalidateAll(); WinAnimCheck("cercle du theme (retour)");
     UiClick(UI_NAV + TAB_HOME); InvalidateAll(); WinAnimCheck("barre, retour Accueil");
+    {   // perte et retour du focus (boite modale) : Windows ne doit rien peindre, et l'image doit etre entiere apres
+        int before = g_ncHandled;
+        LRESULT r1 = SendMessageW(g_wnd, WM_NCACTIVATE, FALSE, 0), r2 = SendMessageW(g_wnd, WM_NCPAINT, 1, 0);
+        SendMessageW(g_wnd, WM_ACTIVATE, WA_INACTIVE, 0);
+        WinAnimCheck("fenetre desactivee (boite modale)");
+        LRESULT r3 = SendMessageW(g_wnd, WM_NCACTIVATE, TRUE, 0);
+        SendMessageW(g_wnd, WM_ACTIVATE, WA_ACTIVE, 0);
+        WinAnimCheck("fenetre reactivee");
+        bool ok = g_ncHandled - before == 5 && r1 == TRUE && r3 == TRUE && r2 == 0;
+        if (!ok) g_animTestFails++;
+        LaunchLog("testanim : messages non client (NCACTIVATE, NCPAINT, ACTIVATE) : %d traites ici sans DefWindowProc, retours %d/%d/%d : %s", g_ncHandled - before, (int)r1, (int)r2, (int)r3, ok ? "OK" : "ECHEC");
+    }
     g_animTestNoLive = false;
     LaunchLog("testanim : fin, %d echec(s)", g_animTestFails);
 }
