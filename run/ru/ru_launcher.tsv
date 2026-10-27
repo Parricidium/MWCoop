@@ -2170,3 +2170,20 @@ Heavy	Сильный
 Kupla: mild level from the next game	Kupla: лёгкий уровень со следующей игры
 Kupla: moderate level from the next game	Kupla: средний уровень со следующей игры
 Kupla: heavy level from the next game	Kupla: сильный уровень со следующей игры
+New launcher interface	Новый интерфейс лаунчера
+The launcher has a new interface: free window (maximize, full screen), light or dark \"Soft UI\" theme, roomier layout, animations. Same pages, same buttons, same settings. You can change your mind any time in Settings > Launcher > Launcher window.	У лаунчера новый интерфейс: свободное окно (развернуть, полный экран), светлая или тёмная тема «Soft UI», более просторная компоновка, анимации. Те же страницы, те же кнопки, те же настройки. Передумать можно в любой момент: Настройки > Лаунчер > Окно лаунчера.
+Current	Текущий
+New (in test)	Новый (тест)
+The new interface is in test: if something goes wrong, the old one comes back by itself at the next start.	Новый интерфейс пока на тесте: если что-то пойдёт не так, при следующем запуске сам вернётся старый.
+Try the new interface	Попробовать новый интерфейс
+Keep the current one	Оставить текущий
+The new interface failed to start last time: old interface. Report a bug (the bug icon) sends the logs	Новый интерфейс в прошлый раз не запустился: старый интерфейс. «Сообщить об ошибке» (значок жука) отправит журналы
+Launcher window	Окно лаунчера
+New interface (in test), size, animations	Новый интерфейс (тест), размер, анимации
+Old, or the new one (Soft UI, in test) · the launcher restarts	Старый или новый (Soft UI, тест) · лаунчер перезапустится
+Remember the window size	Запоминать размер окна
+New interface: position and size restored at start	Новый интерфейс: положение и размер восстанавливаются при запуске
+Reduced animations	Уменьшенные анимации
+No motion; also follows the Windows setting	Без движения; также следует настройке Windows
+Old	Старый
+New	Новый

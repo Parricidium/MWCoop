@@ -1971,7 +1971,7 @@ static void UpdateTick()
 enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
 static int g_tab = TAB_HOME;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_MAX, B_COUNT };   // (B_MAX : Agrandir, nouvelle interface seulement -- fenetre.inc)   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -2016,7 +2016,7 @@ static void UpdateButtons()
     g_btn[B_SOLO].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = g_btn[B_LANG].enabled = true;
-    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = g_btn[B_BUG].enabled = true;
+    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = g_btn[B_BUG].enabled = g_btn[B_MAX].enabled = true;
     g_btn[B_BUY].visible = false;
     g_btn[B_LOGS].visible = false;
     bool home = g_tab == TAB_HOME;
@@ -3079,7 +3079,8 @@ static const wchar_t *kDiscordUrl = g_discordUrl.c_str();
 // ou est son adresse (un nom de domaine viendra peut-etre : workers.dev est filtre en Russie) ; « ?lang=xx » ajoute au clic.
 static const wchar_t *kBugSiteUrl = L"https://live.myseasonscar.workers.dev/depot.html";
 static const RectF kDiscCard(390, 166, 500, 476), kDiscJoin(430, 486, 420, 54), kDiscLater(430, 552, 420, 44), kDiscClose(836, 182, 40, 40);
-static int g_guideKind;   // 0 guide Steam, 1 invitation au Discord
+static int g_guideKind;   // 0 guide Steam, 1 invitation au Discord, 2 nouvelle interface ? (fenetre.inc)
+#include "fenetre.inc"   // (refonte Soft UI, lot L0 : nouvelle interface -- fenetre libre, memoire de taille, choix ancienne / nouvelle, filet)
 static void DiscordAskOpen() { g_guide = true; g_guideKind = 1; g_guideHot = 0; g_focus = -1; }
 static void DiscordAskMaybe()
 {
@@ -3142,6 +3143,7 @@ static void SteamGuideClose()
 static int SteamGuideHit(float x, float y)
 {
     if (g_guideKind == 1) return DiscordHit(x, y);
+    if (g_guideKind == 2) return UiChoiceHit(x, y);   // (fenetre.inc : nouvelle interface ?)
     if (kGuideCopy.Contains(x, y)) return 1;
     if (kGuideOk.Contains(x, y)) return 2;
     if (kGuideNoMore.Contains(x, y)) return 3;
@@ -3151,6 +3153,7 @@ static int SteamGuideHit(float x, float y)
 static void SteamGuideClick(float x, float y)
 {
     int h = SteamGuideHit(x, y);
+    if (g_guideKind == 2) { UiChoiceClick(h); return; }   // (fenetre.inc)
     if (g_guideKind == 1) {   // invitation au Discord
         if (h == 1) ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL);
         if (h == 1 || h == 2 || h == 4 || h < 0) SteamGuideClose();
@@ -3168,6 +3171,7 @@ static void DrawSteamGuide(Graphics &g)
 {
     if (!g_guide) return;
     if (g_guideKind == 1) { DrawDiscordAsk(g); return; }
+    if (g_guideKind == 2) { DrawUiChoice(g); return; }   // (fenetre.inc)
     SolidBrush db(Color(g_dark ? 150 : 110, 2, 6, 18));
     g.FillPath(&db, CardPath());
     RectF c = kGuideCard;
@@ -4962,6 +4966,7 @@ static void RenderTo(Bitmap &target, float scale)
 static void Present()
 {
     if (!g_wnd || !g_memDC) return;
+    if (g_newUi) { PresentNew(); return; }   // (fenetre.inc : fenetre non layered, zone changee seulement)
     {
         Bitmap frame(g_winW, g_winH, g_winW * 4, PixelFormat32bppPARGB, (BYTE *)g_bits);
         RenderTo(frame, g_scale);
@@ -6843,6 +6848,7 @@ static void OnButton(int id)
     case B_EXE: ChooseExe(); break;
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
+    case B_MAX: WinMaximizeToggle(); break;   // (nouvelle interface : fenetre.inc)
     case B_THEME: ThemeSet(g_dark ? THEME_CLAIR : THEME_SOMBRE); break;   // (lune / soleil : sombre <-> clair ; les autres themes dans Reglages > Theme)
     case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
     case B_BUY: ShellExecuteW(g_wnd, L"open", StoreUrl().c_str(), NULL, NULL, SW_SHOWNORMAL); break;
@@ -6934,6 +6940,20 @@ static void Tick()
     bool active = g_carDrag || g_skinDrag || now - g_inputT < 1500 || (g_state != ST_IDLE && g_state != ST_RUNNING) || g_alpha < 1 || g_lobby == LB_CONNECTING;
     unsigned every = g_state == ST_RUNNING && now - g_inputT >= 1500 ? (front ? 30 : 60) : active ? 1 : front ? 2 : 10;
     if (!active && g_aurore == 0) every = front ? 30 : 60;   // (Reglages > Theme > Aurore et neige : Off = fond fige, rien ne bouge : 2 images/s suffisent)
+    if (g_newUi) {   // (fenetre.inc : rien ne bouge = rien a dessiner ; un battement toutes les 2 s en attendant que les composants s'invalident eux-memes, L1)
+        bool hoverAnim = false;
+        for (int i = 0; i < B_COUNT; i++) if (g_btn[i].hover > 0.002f && g_btn[i].hover < 0.998f) hoverAnim = true;
+        static std::wstring lastStatus; static int lastKind = -1; static float lastProg = -1;
+        EnterCriticalSection(&g_cs);
+        bool changed = g_status != lastStatus || g_statusKind != lastKind;
+        if (changed) { lastStatus = g_status; lastKind = g_statusKind; }
+        LeaveCriticalSection(&g_cs);
+        float prog = g_progress;
+        if (prog != lastProg) { lastProg = prog; changed = true; }
+        bool anim = active || hoverAnim || changed || g_aurore != 0 || g_lobby != LB_NONE || g_state != ST_IDLE || g_busy || g_guide || g_tuto >= 0;
+        if (anim || frameN % 120 == 0) InvalidateAll();
+        UiNewFlagTick();
+    }
     if (!IsIconic(g_wnd) && frameN % every == 0) Present();   // (reduit : rien a dessiner)
 }
 
@@ -6967,6 +6987,7 @@ static void TypeChar(wchar_t ch)
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
 {
     if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || m == WM_KEYDOWN || m == WM_CHAR) g_inputT = GetTickCount();
+    { LRESULT res; if (WinProcNew(h, m, wp, lp, res)) return res; }   // (fenetre.inc : taille libre, cadre, image, F11)
     switch (m) {
     case WM_TIMER:
         if (wp == 77) { KillTimer(h, 77); TestLog("test : fin (hote garde ouvert)"); DestroyWindow(h); return 0; }
@@ -7052,7 +7073,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_MOUSEMOVE: {
-        float x = (short)LOWORD(lp) / g_scale - kM, y = (short)HIWORD(lp) / g_scale - kM;   // (coordonnees de la carte)
+        float x = ((short)LOWORD(lp) - g_offX) / g_scale - kM, y = ((short)HIWORD(lp) - g_offY) / g_scale - kM;   // (coordonnees de la carte ; g_offX/Y : nouvelle interface, fenetre.inc)
         if (g_carDrag) { CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         if (g_skinDrag) { SkinDragTo(x); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         if (g_tuto >= 0) {   // (visite guidee : elle seule repond)
@@ -7110,7 +7131,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (!g_guide && g_tuto < 0 && g_state == ST_IDLE) {
             POINT pt = { (short)LOWORD(lp), (short)HIWORD(lp) };
             ScreenToClient(h, &pt);
-            float x = pt.x / g_scale - kM, y = pt.y / g_scale - kM;
+            float x = (pt.x - g_offX) / g_scale - kM, y = (pt.y - g_offY) / g_scale - kM;
             float step = -(short)HIWORD(wp) / 120.0f * 64;
             if (g_tab == TAB_SKIN && SkinWheel(x, y, (short)HIWORD(wp))) return 0;   // (apercu du personnage : zoom)
             if (g_railScrollMax > 0 && g_railView.Contains(x, y)) { g_railScroll = min(max(g_railScroll + step * 0.6f, 0.0f), g_railScrollMax); return 0; }   // (barre de gauche, quand elle defile)
@@ -7121,7 +7142,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     case WM_SETCURSOR: return TRUE;
     case WM_LBUTTONDOWN: {
-        float x = (short)LOWORD(lp) / g_scale - kM, y = (short)HIWORD(lp) / g_scale - kM;
+        float x = ((short)LOWORD(lp) - g_offX) / g_scale - kM, y = ((short)HIWORD(lp) - g_offY) / g_scale - kM;
         if (g_tuto >= 0) { TutoClick(x, y); return 0; }
         if (g_guide) { SteamGuideClick(x, y); return 0; }
         if (g_lobbyOpts && !g_lobbyPopR.Contains(x, y) && !g_lobbyGearR.Contains(x, y)) { g_lobbyOpts = false; return 0; }   // (clic a cote : ferme le menu)
@@ -7159,7 +7180,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         int p = g_pressed;
         g_pressed = -1;
         ReleaseCapture();
-        float x = (short)LOWORD(lp) / g_scale - kM, y = (short)HIWORD(lp) / g_scale - kM;
+        float x = ((short)LOWORD(lp) - g_offX) / g_scale - kM, y = ((short)HIWORD(lp) - g_offY) / g_scale - kM;
         if (p >= 0 && HitButton(x, y) == p && g_btn[p].enabled) OnButton(p);
         return 0;
     }
@@ -7885,6 +7906,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // Essai : /testsignal <journal> <mode> -- Signaler un bug dans le lanceur (signalement.inc) : win7 / wine / absent (la
     // decision seulement : navigateur), panneau (le vrai moteur WebView2 sur une fenetre jamais montree : page chargee, puis
     // une navigation hors liste, refusee ; fin au bout de 30 s au plus). Jamais de navigateur ni de fenetre pendant l'essai.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testfenetre")) { g_launcherLog = argv[2]; g_winTest = true; }   // (fenetre.inc : la nouvelle fenetre, jamais montree)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/testsignal")) {
         g_launcherLog = argv[2];
         std::wstring mode = argv[3];
@@ -8102,6 +8124,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"menu-steam") g_steamNet = true;
         else if (st == L"guide-steam") { g_steamNet = true; SteamGuideOpen(); g_guideHot = 1; }
         else if (st == L"discord") { DiscordAskOpen(); g_guideHot = 1; }
+        else if (st == L"choix-interface") { UiChoiceOpen(); g_guideHot = 1; }   // (fenetre.inc : essayer la nouvelle interface ?)
         else if (st == L"serveur" || st == L"partie-invite") {   // partie en cours, lanceur ouvert (faux joueurs)
             bool host = st == L"serveur";
             g_state = ST_RUNNING;
@@ -8448,7 +8471,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     bool cmdLine = argc >= 2 && argv[1][0] == L'/';
     std::string cmdName = cmdLine ? Narrow(argv[1], CP_UTF8) : "";
     LocalFree(argv);
-    if (cmdLine && g_testSalon.empty() && g_autoLaunch < 0 && !g_bugTest) {   // (/testsignal panneau continue aussi : signalement.inc)
+    if (cmdLine && g_testSalon.empty() && g_autoLaunch < 0 && !g_bugTest && !g_winTest) {   // (/testsignal panneau continue aussi : signalement.inc)
         LaunchLog("commande %s inconnue de ce lanceur : rien n'est fait", cmdName.c_str());
         GdiplusShutdown(gtok); WSACleanup();
         return 2;
@@ -8505,6 +8528,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
     }
 
+    UiNewRead();   // (fenetre.inc : [Lanceur] Interface, filet de securite)
+    if (g_winTest) g_newUi = true;
+    if (g_newUi) WinDpiAwareness();
     // Taille : l'image a l'echelle de l'ecran (PPP), sans depasser 94 % de la zone de travail.
     HDC sdc = GetDC(NULL);
     g_scale = GetDeviceCaps(sdc, LOGPIXELSX) / 96.0f;
@@ -8525,9 +8551,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     wc.lpszClassName = L"MWCoopLauncher";
     RegisterClassExW(&wc);
     int x = work.left + (work.right - work.left - g_winW) / 2, y = work.top + (work.bottom - work.top - g_winH) / 2;
+    if (g_newUi) WinCreateNew(inst, wc.lpszClassName);   // (fenetre.inc : fenetre libre, non layered, taille gardee)
+    else {
     g_wnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_APPWINDOW, wc.lpszClassName, L"MWCoop", WS_POPUP | WS_MINIMIZEBOX | WS_SYSMENU,
                             x, y, g_winW, g_winH, NULL, NULL, inst, NULL);
-    DragAcceptFiles(g_wnd, TRUE);   // (fichiers deposes : WM_DROPFILES, page Contenu envoye)
 
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
@@ -8538,10 +8565,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     g_memDC = CreateCompatibleDC(NULL);
     g_dib = CreateDIBSection(g_memDC, &bi, DIB_RGB_COLORS, &g_bits, NULL, 0);
     SelectObject(g_memDC, g_dib);
+    }
+    DragAcceptFiles(g_wnd, TRUE);   // (fichiers deposes : WM_DROPFILES, page Contenu envoye)
+    UiNewFlagStart();   // (fenetre.inc : filet de securite de la nouvelle interface, avant la premiere image)
 
     RtHiddenMigrate();   // (ray tracing cache : coupe dans les mwcoop.ini des deux jeux, une fois)
     Present();
-    if (g_bugTest) {   // (essai /testsignal panneau : fenetre jamais montree, le moteur WebView2 seul ; rien d'autre ne demarre)
+    if (g_winTest) { WinSelfTest(); DestroyWindow(g_wnd); }   // (essai /testfenetre : fenetre jamais montree)
+    else if (g_bugTest) {   // (essai /testsignal panneau : fenetre jamais montree, le moteur WebView2 seul ; rien d'autre ne demarre)
         SetTimer(g_wnd, 1, 16, NULL);
         SetTimer(g_wnd, 79, 30000, NULL);
         BugOpen();
@@ -8551,6 +8582,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     SetTimer(g_wnd, 1, 16, NULL);
     if (!g_gameDir.empty() && !g_sConnect && g_autoLaunch < 0) TutoAtStartup();   // visite guidee : complete la 1re fois, puis les nouveautes
     if (!g_sConnect && g_tuto < 0 && g_autoLaunch < 0) DiscordAskMaybe();          // invitation au Discord (une fois ; sinon a la fin de la visite)
+    if (!g_guide && g_tuto < 0 && g_autoLaunch < 0 && UiChoiceDue()) UiChoiceOpen();   // (fenetre.inc : essayer la nouvelle interface ? une fois)
+    if (g_uiCrashed) SetStatus(K_WARN, T(L"La nouvelle interface n'a pas démarré la dernière fois : ancienne interface. Signaler un bug (l'insecte) envoie les journaux", L"The new interface failed to start last time: old interface. Report a bug (the bug icon) sends the logs"));
     if (g_autoLaunch < 0) FirstReworkedBackup();   // (essai /lancer : ni copie avant Reworked, ni recherche de mise a jour -- rien ne s'installe)
     if (!g_gameDir.empty() && g_autoLaunch < 0) StartUpdate();
     else {

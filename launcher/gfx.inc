@@ -558,6 +558,7 @@ static const SetCard kSetCards[] = {
     { SET_HUD, 1, L"Jauges affichées", L"Gauges shown", NULL, NULL },                                                                                                // 24
     { SET_HUD, 1, L"Coop", L"Co-op", L"Aussi avec Vanilla", L"Also with Vanilla" },                                                                                  // 25
     { SET_LANCEUR, 0, L"Accès réservé", L"Restricted access", L"Ton ID MWCoop", L"Your MWCoop ID", "acces" },   // 26 (places.inc ; sous-titre : l'ID MWCoop lui-meme)
+    { SET_LANCEUR, 1, L"Fenêtre du lanceur", L"Launcher window", L"Nouvelle interface (en test), taille, animations", L"New interface (in test), size, animations" },   // 27 (refonte Soft UI : fenetre.inc)
 };
 static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
@@ -715,6 +716,9 @@ static const SetItem kSetItems[] = {
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé… toi et tes amis", L"Very hungry, exhausted… you and your friends", 0, 2 },   // (pas de froid dans My Summer Car)
     // Acces reserve (outil des places, cle d'acces signee par JD, 26/10) : l'ID a lui envoyer, la cle recue (explication : son etat)
     { 26, SI_X, "cle", L"Clé d'accès", L"Access key", NULL, NULL },
+    { 27, SI_X, "interface", L"Interface", L"Interface", L"Ancienne, ou la nouvelle (Soft UI, en test) · le lanceur redémarre", L"Old, or the new one (Soft UI, in test) · the launcher restarts" },
+    { 27, SI_X, "fenmemoire", L"Se souvenir de la taille de la fenêtre", L"Remember the window size", L"Nouvelle interface : place et taille reprises au démarrage", L"New interface: position and size restored at start" },
+    { 27, SI_X, "animreduites", L"Animations réduites", L"Reduced animations", L"Sans mouvement ; suivi aussi du réglage de Windows", L"No motion; also follows the Windows setting" },
 };
 static const int kSetItemN = (int)(sizeof(kSetItems) / sizeof(kSetItems[0]));
 
@@ -1263,7 +1267,7 @@ static float SetItemH(const SetItem &it, float w)
     if (!strcmp(k, "cle")) return SetCtlRowH(T(it.fr, it.en), CleEtatText(), w, CleButtonsW());
     if (!strcmp(k, "accent")) return SetCtlRowH(T(it.fr, it.en), T(it.dFr, it.dEn), w, 5 * 30 + 4 * 8);
     if (!strcmp(k, "texte")) return SetCtlRowH(T(it.fr, it.en), L"", w, kSetSliderW);
-    if (!strcmp(k, "aurore") || !strcmp(k, "densite") || !strcmp(k, "max") || !strcmp(k, "prive") || !strcmp(k, "net") || !strcmp(k, "canal") || !strcmp(k, "sessions") || !strcmp(k, "start") || !strcmp(k, "ajouts")) {
+    if (!strcmp(k, "aurore") || !strcmp(k, "densite") || !strcmp(k, "max") || !strcmp(k, "prive") || !strcmp(k, "net") || !strcmp(k, "canal") || !strcmp(k, "sessions") || !strcmp(k, "interface") || !strcmp(k, "start") || !strcmp(k, "ajouts")) {
         std::vector<std::wstring> labs;
         if (!strcmp(k, "aurore")) labs = { T(L"Off", L"Off"), T(L"Calme", L"Calm"), T(L"Vivant", L"Lively") };
         else if (!strcmp(k, "densite")) labs = { T(L"Aérée", L"Airy"), T(L"Normale", L"Normal"), T(L"Compacte", L"Compact") };
@@ -1272,6 +1276,7 @@ static float SetItemH(const SetItem &it, float w)
         else if (!strcmp(k, "net")) labs = { L"Steam", L"IP / VPN" };
         else if (!strcmp(k, "canal")) labs = { L"MSC", L"MWC" };
         else if (!strcmp(k, "sessions")) labs = { L"3", L"10", L"30" };
+        else if (!strcmp(k, "interface")) labs = { T(L"Ancienne", L"Old"), T(L"Nouvelle", L"New") };
         else if (!strcmp(k, "start")) labs = { T(L"Copie", L"Copy"), T(L"Dossier du jeu", L"Game folder"), L"Steam" };
         else labs = { T(L"Tous", L"All"), T(L"Choisir", L"Choose"), T(L"Aucun", L"None") };
         return SetCtlRowH(T(it.fr, it.en), it.dFr ? T(it.dFr, it.dEn) : L"", w, SetSegW(labs, 12));
@@ -1574,6 +1579,9 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             UiButton(g, RectF(x + w - w1 - w2 - 8, cy - 16, w1, 32), b1, UI_SET_LOGDIR, false, IC_FOLDER, ok);
             UiButton(g, RectF(x + w - w2, cy - 16, w2, 32), b2, UI_SET_LOGZIP, true, IC_ZIP, ok);
         } else if (!strcmp(k, "sessions")) { int n = LogsSessionsKept(); SetSegRow(g, it, row, { L"3", L"10", L"30" }, n == 3 ? 0 : n == 10 ? 1 : 2, UI_SET_SESS); }
+        else if (!strcmp(k, "interface")) SetSegRow(g, it, row, { T(L"Ancienne", L"Old"), T(L"Nouvelle", L"New") }, g_newUi ? 1 : 0, UI_SET_INTERFACE, g_lobby == LB_NONE && !g_busy);   // (fenetre.inc)
+        else if (!strcmp(k, "fenmemoire")) SetToggleRow(g, it, row, WinMemoryOn(), UI_SET_FENMEM);
+        else if (!strcmp(k, "animreduites")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"AnimationsReduites", 0, g_iniLauncher.c_str()) != 0, UI_SET_ANIMRED);
         else if (!strcmp(k, "compat")) { SetToggleRow(g, it, row, CompatAuto(), UI_SET_COMPAT); g_setCompatRow = row; }
         else if (!strcmp(k, "debug")) SetToggleRow(g, it, row, g_debug, UI_LOG_DEBUG);
         else if (!strcmp(k, "discordask")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"DiscordPropose", 0, g_iniLauncher.c_str()) == 0, UI_SET_DISCORDASK);
@@ -1955,6 +1963,8 @@ static void SetTabDefaults(int tab)
             else if (!strcmp(k, "sessions")) WritePrivateProfileStringW(L"Lanceur", L"Sessions", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "discordask")) WritePrivateProfileStringW(L"Lanceur", L"DiscordPropose", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "signalnav")) WritePrivateProfileStringW(L"Lanceur", L"SignalerNavigateur", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "fenmemoire")) WritePrivateProfileStringW(L"Lanceur", L"FenetreMemoire", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "animreduites")) WritePrivateProfileStringW(L"Lanceur", L"AnimationsReduites", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "compat")) WritePrivateProfileStringW(L"Lanceur", L"RetirerCompat", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "debug")) { g_debug = false; WritePrivateProfileStringW(L"Lanceur", L"Debug", NULL, g_iniLauncher.c_str()); }
             else if (!strcmp(k, "start")) WritePrivateProfileStringW(L"Lanceur", L"SansCopie", NULL, g_iniLauncher.c_str());
@@ -2046,6 +2056,9 @@ static bool SetClick(int id)
     if (id >= UI_SET_AURORE && id < UI_SET_AURORE + 3) { ThemeSetAurore(id - UI_SET_AURORE); return true; }
     if (id >= UI_SET_DENS && id < UI_SET_DENS + 3) { ThemeSetDensite(id - UI_SET_DENS); return true; }
     if (id >= UI_SET_TEXTE && id < UI_SET_TEXTE + 7) { ThemeSetTexte(80 + 5 * (id - UI_SET_TEXTE)); return true; }
+    if (id == UI_SET_INTERFACE || id == UI_SET_INTERFACE + 1) { bool nw = id == UI_SET_INTERFACE + 1; if (nw != g_newUi && g_lobby == LB_NONE && !g_busy) UiNewSet(nw); return true; }   // (fenetre.inc : le lanceur redemarre)
+    if (id == UI_SET_FENMEM) { WritePrivateProfileStringW(L"Lanceur", L"FenetreMemoire", WinMemoryOn() ? L"0" : NULL, g_iniLauncher.c_str()); return true; }
+    if (id == UI_SET_ANIMRED) { AnimReducedSet(GetPrivateProfileIntW(L"Lanceur", L"AnimationsReduites", 0, g_iniLauncher.c_str()) == 0); return true; }
     if (id >= UI_SET_SESS && id < UI_SET_SESS + 3) { static const int n[] = { 3, 10, 30 }; WritePrivateProfileStringW(L"Lanceur", L"Sessions", n[id - UI_SET_SESS] == 30 ? NULL : std::to_wstring(n[id - UI_SET_SESS]).c_str(), g_iniLauncher.c_str()); return true; }
     if (id >= UI_SET_PORTSEG && id < UI_SET_PORTSEG + 8) { if (const Opt *o = OptByKey("Port")) if (id - UI_SET_PORTSEG < (int)o->vals.size()) OptSet(*o, o->vals[id - UI_SET_PORTSEG]); return true; }
     if (id >= UI_SET_MAXP && id < UI_SET_MAXP + 4) { static const int m[] = { 4, 8, 12, 16 }; WritePrivateProfileStringW(L"Lanceur", L"SalonMax", std::to_wstring(m[id - UI_SET_MAXP]).c_str(), g_iniLauncher.c_str()); return true; }

@@ -60,6 +60,7 @@ enum {
     UI_ADDONS_CARS = 10010, UI_ADDONS_MODS, UI_ADDONS_HOME, UI_KUPLA_RENDU,   // ADDONS (modules.inc) : cartes Voitures / Mods, retour a l'accueil, case Rendu de Kupla
     UI_BUG_ZIP = 10020, UI_BUG_BROWSER, UI_BUG_CLOSE, UI_SET_SIGNALNAV,       // SIGNALER UN BUG (signalement.inc) : la bande du panneau ; Reglages > Lanceur : dans le navigateur
     UI_KUPLA_NIVEAU = 10030, UI_KUPLA_COMPTEUR = 10033,                       // ADDONS > Mods, carte Kupla (modules.inc) : niveau (+0..2 : leger / moyen / fort), compteur d'images par seconde
+    UI_SET_INTERFACE = 10040, UI_SET_FENMEM = 10042, UI_SET_ANIMRED,          // REGLAGES > Lanceur > Fenetre du lanceur (fenetre.inc) : ancienne / nouvelle (+0/1), memoire de la taille, animations reduites
     UI_PLACES_OPEN = 10300, UI_PLACES_EXPORT,   // OUTILS : placement des sieges (cle d'acces) -- ouvrir l'outil, exporter mes voitures (outils-places.inc)
     UI_LOBBY_PRIV = 3300,         // + 0 public, 1 prive   (3300+ depuis 1.8.9 : 26 options x 3 debordaient sur 3260-3279, Marqueurs cliquait « Tous » des ajouts)
     UI_LOBBY_COPY = 3302, UI_LOBBY_REGEN, UI_LOBBY_MAXM, UI_LOBBY_MAXP,   // code : copier, nouveau ; joueurs au plus - / +
@@ -100,7 +101,7 @@ enum {
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
        IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK,
-       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM, IC_TOOLS, IC_MAP, IC_BUG };
+       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM, IC_TOOLS, IC_MAP, IC_BUG, IC_MAX, IC_RESTORE };   // (IC_MAX / IC_RESTORE : Agrandir de la nouvelle interface)
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -170,6 +171,8 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
     }
     case IC_SUN: circ(12, 12, 4); for (int i = 0; i < 8; i++) { float a = i * 3.14159265f / 4; line(12 + cosf(a) * 7, 12 + sinf(a) * 7, 12 + cosf(a) * 9.5f, 12 + sinf(a) * 9.5f); } break;
     case IC_MIN: line(6, 12, 18, 12); break;
+    case IC_MAX: line(6, 6, 18, 6); line(18, 6, 18, 18); line(18, 18, 6, 18); line(6, 18, 6, 6); break;
+    case IC_RESTORE: line(8, 8, 8, 18); line(8, 18, 18, 18); line(18, 18, 18, 8); line(18, 8, 8, 8); line(10, 8, 10, 5); line(10, 5, 20, 5); line(20, 5, 20, 15); line(20, 15, 18, 15); break;
     case IC_CLOSE: line(6, 6, 18, 18); line(18, 6, 6, 18); break;
     case IC_DOWNLOAD: line(12, 4, 12, 15); poly({ 7, 10, 12, 15, 17, 10 }, false); line(5, 20, 19, 20); break;
     case IC_CHECK: poly({ 5, 12.5f, 9.5f, 17, 19, 7.5f }, false); break;

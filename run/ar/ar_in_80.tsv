@@ -1,0 +1,17 @@
+UI01	New launcher interface
+UI02	The launcher has a new interface: free window (maximize, full screen), light or dark \"Soft UI\" theme, roomier layout, animations. Same pages, same buttons, same settings. You can change your mind any time in Settings > Launcher > Launcher window.
+UI03	Current
+UI04	New (in test)
+UI05	The new interface is in test: if something goes wrong, the old one comes back by itself at the next start.
+UI06	Try the new interface
+UI07	Keep the current one
+UI08	The new interface failed to start last time: old interface. Report a bug (the bug icon) sends the logs
+UI09	Launcher window
+UI10	New interface (in test), size, animations
+UI11	Old, or the new one (Soft UI, in test) · the launcher restarts
+UI12	Remember the window size
+UI13	New interface: position and size restored at start
+UI14	Reduced animations
+UI15	No motion; also follows the Windows setting
+UI16	Old
+UI17	New

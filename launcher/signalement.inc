@@ -258,12 +258,13 @@ static LRESULT CALLBACK BugWndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     }
     return DefWindowProcW(h, m, wp, lp);
 }
-static RECT BugPanelRect()   // la popup, en pixels de l'ecran : la zone du site, sous la bande
+static RECT BugPanelRect()   // la popup, en pixels de l'ecran (nouvelle interface : fenetre enfant, pixels de la fenetre) : la zone du site, sous la bande
 {
-    RECT wr; GetWindowRect(g_wnd, &wr);
+    RECT wr = { 0, 0, 0, 0 };
+    if (!g_newUi) GetWindowRect(g_wnd, &wr);
     RectF w = BugWebR();
     RECT r;
-    r.left = wr.left + (LONG)((w.X + kM) * g_scale); r.top = wr.top + (LONG)((w.Y + kM) * g_scale);
+    r.left = wr.left + g_offX + (LONG)((w.X + kM) * g_scale); r.top = wr.top + g_offY + (LONG)((w.Y + kM) * g_scale);
     r.right = r.left + (LONG)(w.Width * g_scale); r.bottom = r.top + (LONG)(w.Height * g_scale);
     return r;
 }
@@ -279,7 +280,8 @@ static void BugPanelCreate()
             reg = true;
         }
         RECT r = BugPanelRect();
-        g_bugWnd = CreateWindowExW(WS_EX_TOOLWINDOW, L"MWCoopSignalement", L"", WS_POPUP | WS_CLIPCHILDREN, r.left, r.top, r.right - r.left, r.bottom - r.top, g_wnd, NULL, GetModuleHandleW(NULL), NULL);
+        g_bugWnd = g_newUi ? CreateWindowExW(0, L"MWCoopSignalement", L"", WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, r.left, r.top, r.right - r.left, r.bottom - r.top, g_wnd, NULL, GetModuleHandleW(NULL), NULL)   // (nouvelle interface, non layered : un enfant s'y dessine)
+                          : CreateWindowExW(WS_EX_TOOLWINDOW, L"MWCoopSignalement", L"", WS_POPUP | WS_CLIPCHILDREN, r.left, r.top, r.right - r.left, r.bottom - r.top, g_wnd, NULL, GetModuleHandleW(NULL), NULL);
         if (!g_bugWnd) { BugFail(HRESULT_FROM_WIN32(GetLastError()), "fenetre du panneau"); return; }
         g_bugLastR = r;
     }

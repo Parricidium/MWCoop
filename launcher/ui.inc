@@ -724,6 +724,7 @@ static void DrawHeader(Graphics &g)
     float right = 1264;
     for (int id : { B_CLOSE, B_MIN, B_THEME, B_LANG }) { g_btn[id].r = RectF(right - 44, 22, 44, 44); right -= 54; }
     HeadButton(g, B_CLOSE, IC_CLOSE);
+    if (g_newUi) HeadButton(g, B_MAX, g_fullscreen || IsZoomed(g_wnd) ? IC_RESTORE : IC_MAX);   // (Agrandir, entre Reduire et Fermer : refonte §1, fenetre.inc)
     HeadButton(g, B_MIN, IC_MIN);
     HeadButton(g, B_THEME, g_dark ? IC_SUN : IC_MOON);
     HeadButton(g, B_LANG, 0, g_fr ? L"FR" : g_ru ? L"RU" : g_ar ? L"AR" : L"EN");

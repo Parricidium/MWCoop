@@ -2357,6 +2357,23 @@ Pick the save to erase and restart.	اختر الحفظ الذي تريد مسح
 Saves	الحفظات
 One game per group of friends: pick, name, restart	لعبة لكل مجموعة أصدقاء: اختيار، تسمية، إعادة بدء
 Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.	عدة ألعاب، لعبة لكل مجموعة أصدقاء: أنشئها، سمّها، اختر التي تستضيفها (هنا أو في الردهة). يستلم ضيوفك حفظك، وحفظهم لا يُمسّ.
+New launcher interface	واجهة جديدة للمشغّل
+The launcher has a new interface: free window (maximize, full screen), light or dark \"Soft UI\" theme, roomier layout, animations. Same pages, same buttons, same settings. You can change your mind any time in Settings > Launcher > Launcher window.	للمشغّل واجهة جديدة: نافذة حرة (تكبير، ملء الشاشة)، سمة \"Soft UI\" فاتحة أو داكنة، تخطيط أرحب، حركات. الصفحات نفسها والأزرار نفسها والإعدادات نفسها. يمكنك تغيير رأيك في أي وقت من الإعدادات > المشغّل > نافذة المشغّل.
+Current	الحالية
+New (in test)	الجديدة (تجريبية)
+The new interface is in test: if something goes wrong, the old one comes back by itself at the next start.	الواجهة الجديدة قيد الاختبار: إن حدث خلل، تعود الواجهة القديمة من تلقاء نفسها عند التشغيل التالي.
+Try the new interface	جرّب الواجهة الجديدة
+Keep the current one	الإبقاء على الحالية
+The new interface failed to start last time: old interface. Report a bug (the bug icon) sends the logs	لم تنجح الواجهة الجديدة في التشغيل في المرة الماضية: الواجهة القديمة. «الإبلاغ عن خلل» (أيقونة الحشرة) يرسل السجلات
+Launcher window	نافذة المشغّل
+New interface (in test), size, animations	الواجهة الجديدة (تجريبية)، الحجم، الحركات
+Old, or the new one (Soft UI, in test) · the launcher restarts	القديمة أو الجديدة (Soft UI، تجريبية) · يُعاد تشغيل المشغّل
+Remember the window size	تذكّر حجم النافذة
+New interface: position and size restored at start	الواجهة الجديدة: يُستعاد الموضع والحجم عند التشغيل
+Reduced animations	حركات مخفّفة
+No motion; also follows the Windows setting	بلا حركة؛ ويتبع أيضًا إعداد Windows
+Old	القديمة
+New	الجديدة
 Different version (you %s, host %s)	نسخة مختلفة (لديك %s، لدى المضيف %s)
 The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n
 ⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?	⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟
