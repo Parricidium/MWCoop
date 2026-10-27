@@ -834,6 +834,7 @@ static void AlbLayout(std::vector<AlbCell> &cells, std::vector<AlbDay> &days, fl
 {
     cells.clear(); days.clear();
     float y = 0; int col = 0; ULONGLONG lastDay = ~0ULL;
+    int cols = max(1, (int)(kAlbGrid.Width / kAlbCellW));   // (refonte L6 : autant de colonnes que la grille en contient ; 3 dans l'ancienne interface)
     for (int i = 0; i < (int)g_alb.size(); i++) {
         if (g_albView == 2 && !AlbIsFav(g_alb[i])) continue;
         if (g_albView == 1) {
@@ -841,7 +842,7 @@ static void AlbLayout(std::vector<AlbCell> &cells, std::vector<AlbDay> &days, fl
             if (d != lastDay) { if (col) { y += kAlbCellH; col = 0; } days.push_back({ y, AlbDayLabel(g_alb[i].t) }); y += kAlbDayH; lastDay = d; }
         }
         cells.push_back({ i, RectF(kAlbGrid.X + col * kAlbCellW, kAlbGrid.Y + y, kAlbCellW - 8, kAlbCellH - 8) });
-        if (++col == 3) { col = 0; y += kAlbCellH; }
+        if (++col == cols) { col = 0; y += kAlbCellH; }
     }
     if (col) y += kAlbCellH;
     total = y;

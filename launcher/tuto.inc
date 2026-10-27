@@ -359,7 +359,8 @@ static void DrawTuto(Graphics &g)
     // voile sur la fenetre, trou arrondi autour de l'element
     GraphicsPath veil;
     veil.SetFillMode(FillModeAlternate);
-    RoundRect(veil, RectF(0, 0, kCardW, kCardH), 24);
+    if (g_newUi) veil.AddRectangle(RectF(-20000, -20000, 40000, 40000));   // (nouvelle interface : le voile couvre toute la fenetre, coque.inc dessine en coordonnees de la carte sans limite)
+    else RoundRect(veil, RectF(0, 0, kCardW, kCardH), 24);
     RectF hole = tg;
     if (tg.Width > 0) { hole.Inflate(6, 6); RoundRect(veil, hole, min(16.0f, hole.Height / 2)); }
     SolidBrush vb(Color(170, 2, 6, 18));

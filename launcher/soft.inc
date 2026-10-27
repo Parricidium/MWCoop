@@ -330,7 +330,7 @@ static void SoftField(Graphics &g, RectF r, const std::wstring &text, const std:
     if (focus) InvalidateAll();   // (clignotement)
 }
 enum { SC_OK, SC_WARN, SC_BAD, SC_ACC };   // puces : toujours avec un texte
-static float SoftChipW(const std::wstring &s) { return MeasureW(MeasureG(), s, 12, FontStyleBold) + 20; }
+static float SoftChipW(const std::wstring &s) { return MeasureW(MeasureG(), s, 12, FontStyleBold) + 26; }   // (+6 : le cyrillique se mesure un peu court -- police de repli au dessin)
 static float SoftChip(Graphics &g, float x, float y, const std::wstring &s, int kind, int icon = -1)
 {
     Color fg = kind == SC_OK ? g_soft.ok : kind == SC_WARN ? g_soft.warn : kind == SC_BAD ? g_soft.bad : g_soft.acc;

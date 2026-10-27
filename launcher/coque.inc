@@ -340,7 +340,7 @@ static void ShellDrawStatus(Graphics &g, const std::wstring &status, int kind, f
     // droite : langue, version du lanceur
     float rx = s.X + s.Width - 18;
     { const wchar_t *lg = g_fr ? L"FR" : g_ru ? L"RU" : g_ar ? L"AR" : L"EN"; float lw = SoftChipW(lg); rx -= lw; SoftChip(g, rx, cy - 12, lg, SC_ACC); rx -= 10; }
-    { std::wstring lv = std::wstring(T(L"lanceur ", L"launcher ")) + LauncherVer(); float lw = MeasureW(mg, lv, 12, FontStyleRegular) + 4; rx -= lw; Text(g, lv, RectF(rx, cy - 10, lw, 20), 12, FontStyleRegular, g_soft.faint, StringAlignmentNear); rx -= 14; }
+    if (g_shW >= 1100) { std::wstring lv = std::wstring(T(L"lanceur ", L"launcher ")) + LauncherVer(); float lw = MeasureW(mg, lv, 12, FontStyleRegular) + 4; rx -= lw; Text(g, lv, RectF(rx, cy - 10, lw, 20), 12, FontStyleRegular, g_soft.faint, StringAlignmentNear); rx -= 14; }   // (fenetre etroite : la version du lanceur s'efface, le reste respire)
     if (g_lobby != LB_NONE) {   // salon en cours : cliquable
         EnterCriticalSection(&g_lcs); int n = (int)g_peers.size(); LeaveCriticalSection(&g_lcs);
         wchar_t b[64]; swprintf_s(b, n > 1 ? T(L"Salon en cours · %d joueurs", L"Lobby open · %d players") : T(L"Salon en cours · %d joueur", L"Lobby open · %d player"), n);
@@ -504,7 +504,7 @@ static void RenderToNew(Bitmap &target)
             g.Restore(st);
         }
         // couches : visite, guide / invitation / choix d'interface, par-dessus tout (voile sur la fenetre entiere d'abord)
-        if (g_tuto >= 0 || g_guide) { SolidBrush v(Color(g_softDark ? 110 : 80, 2, 6, 18)); g.FillRectangle(&v, RectF(0, 0, (float)w, (float)h)); }
+        if (g_guide) { SolidBrush v(Color(g_softDark ? 150 : 110, 2, 6, 18)); g.FillRectangle(&v, RectF(0, 0, (float)w, (float)h)); }   // (guides, invitation, choix d'interface : le voile sur toute la fenetre ; la visite guidee fait le sien, troue sur sa cible)
         {
             GraphicsState st = g.Save();
             g.TranslateTransform((float)g_offX, (float)g_offY);

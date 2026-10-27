@@ -1450,7 +1450,7 @@ static const Credit kCredits[] = {
 #include "credits-images.inc"
 static int g_credTab = CRED_3D;
 static float g_credContentH;   // hauteur du contenu de l'onglet (pour la molette)
-static RectF CreditsArea() { return RectF(kMain.X + 24, kMain.Y + 168, kMain.Width - 48, kMain.Height - 168 - 64); }
+static RectF CreditsArea() { return RectF(g_pageR.X + 24, g_pageR.Y + 168, g_pageR.Width - 48, g_pageR.Height - 168 - 64); }   // (refonte L6 : largeur de la colonne fluide)
 static float CreditsMaxScroll() { return max(0.0f, g_credContentH - CreditsArea().Height); }
 
 static void CreditCard(Graphics &g, const Credit &k, float y, float x, float w)

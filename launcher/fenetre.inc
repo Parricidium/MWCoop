@@ -350,7 +350,7 @@ static void DrawUiPreview(Graphics &g, RectF r, bool soft)
 static void DrawUiChoice(Graphics &g)
 {
     SolidBrush db(Color(g_dark ? 150 : 110, 2, 6, 18));
-    g.FillPath(&db, CardPath());
+    if (!g_newUi) g.FillPath(&db, CardPath());   // (nouvelle interface : le voile couvre toute la fenetre, coque.inc)
     RectF c = kUiChoiceCard;
     GlassLive(g, c, 24);
     Icon(g, IC_SPARK, c.X + 56, c.Y + 45, 32, kAcc);

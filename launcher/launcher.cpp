@@ -3105,7 +3105,7 @@ static int DiscordHit(float x, float y)
 static void DrawDiscordAsk(Graphics &g)
 {
     SolidBrush db(Color(g_dark ? 150 : 110, 2, 6, 18));
-    g.FillPath(&db, CardPath());
+    if (!g_newUi) g.FillPath(&db, CardPath());   // (nouvelle interface : le voile couvre toute la fenetre, coque.inc)
     RectF c = kDiscCard;
     GlassLive(g, c, 24);
     {   // fermer
@@ -3181,7 +3181,7 @@ static void DrawSteamGuide(Graphics &g)
     if (g_guideKind == 1) { DrawDiscordAsk(g); return; }
     if (g_guideKind == 2) { DrawUiChoice(g); return; }   // (fenetre.inc)
     SolidBrush db(Color(g_dark ? 150 : 110, 2, 6, 18));
-    g.FillPath(&db, CardPath());
+    if (!g_newUi) g.FillPath(&db, CardPath());   // (nouvelle interface : le voile couvre toute la fenetre, coque.inc)
     RectF c = kGuideCard;
     GlassLive(g, c, 24);
     Icon(g, IC_STEAM, c.X + 56, c.Y + 45, 32, kAcc);
@@ -6968,7 +6968,17 @@ static void Tick()
         bool anim = active || hoverAnim || changed || g_aurore != 0 || g_lobby != LB_NONE || g_state != ST_IDLE || g_busy || g_guide || g_tuto >= 0;
         if (g_softAnimating || g_softPageT || g_softThemeT) { every = 1; InvalidateAll(); }   // (soft.inc : 60 images/s seulement pendant une animation)
         g_softAnimating = false;
-        if (anim || frameN % 120 == 0) InvalidateAll();
+        {   // (L6 : 0 image/s au repos -- ce que les fils de fond changent sans statut : notes, versions, catalogue, journaux, salon, pages)
+            static size_t lastSig; size_t sig = 0;
+            auto mix = [&](size_t v) { sig = sig * 1315423911u + v + 1; };
+            mix((size_t)g_notesDone); mix((size_t)g_relState.load()); mix((size_t)(bool)g_busy); mix((size_t)g_lobby); mix((size_t)(g_crashT != 0)); mix(g_addonList.size());
+            mix(UpdAvail().size()); mix(LancAvail().size()); mix(g_localVer.size()); mix((size_t)g_state); mix((size_t)g_tab); mix((size_t)(g_uiHot + 2)); mix((size_t)(g_hot + 2)); mix((size_t)(g_focus + 2));
+            mix((size_t)(g_railScroll * 4)); mix((size_t)(g_scroll[g_tab] * 4)); mix((size_t)g_setTab); mix((size_t)g_wikiSel); mix((size_t)(g_tuto + 2)); mix((size_t)g_guide); mix((size_t)g_palOpen); mix((size_t)g_bugState);
+            mix((size_t)g_mscHot + 2); mix((size_t)g_logRowHot + 2); mix((size_t)g_carHot + 2); mix((size_t)g_lobbyHot + 2); mix((size_t)g_skinHot + 2); mix((size_t)g_contentHot + 2); mix((size_t)g_srvHot + 2);
+            EnterCriticalSection(&g_lcs); mix(g_peers.size()); LeaveCriticalSection(&g_lcs);
+            if (sig != lastSig) { lastSig = sig; InvalidateAll(); }
+        }
+        if (anim || frameN % 600 == 0) InvalidateAll();   // (filet : une image toutes les 10 s)
         UiNewFlagTick();
     }
     if (!IsIconic(g_wnd) && frameN % every == 0) Present();   // (reduit : rien a dessiner)
