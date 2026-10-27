@@ -2170,3 +2170,130 @@ Heavy	Сильный
 Kupla: mild level from the next game	Kupla: лёгкий уровень со следующей игры
 Kupla: moderate level from the next game	Kupla: средний уровень со следующей игры
 Kupla: heavy level from the next game	Kupla: сильный уровень со следующей игры
+60° = the game	60° = как в игре
+A zip to post on the Discord	Zip для отправки в Discord
+Accent colour	Цвет акцента
+Allow cheats (F7)	Разрешить читы (F7)
+Also the wheel	И руль тоже
+Animated background behind the pages	Анимированный фон за страницами
+Applied at the next game start · in game: F10.	Применяется при следующем запуске игры · в игре: F10.
+Applied at the next game start.	Применяется при следующем запуске игры.
+Applied right away, even in game.	Применяется сразу, даже в игре.
+At launcher start, from GitHub	При запуске лаунчера, с GitHub
+Aurora and snow	Северное сияние и снег
+Before everyone, sometimes broken	Раньше всех, иногда с поломками
+Buttons, active tab, pills	Кнопки, активная вкладка, метки
+Buy the game, uninstall MWCoop	Купить игру, удалить MWCoop
+Card transparency	Прозрачность карточек
+Cars run players over	Машины сбивают игроков
+Change	Изменить
+Checks the port, the firewall and Steam.	Проверяет порт, брандмауэр и Steam.
+Click a key, then press the new one · Esc: cancel · Del: default	Нажми на клавишу, затем на новую · Esc: отмена · Del: по умолчанию
+Close the launcher during the game	Закрывать лаунчер во время игры
+Comfort & in-game display	Комфорт и отображение в игре
+Customize	Настроить
+DXR 1.1 GPU · in development	Видеокарта DXR 1.1 · в разработке
+Default lobby	Лобби по умолчанию
+Default network	Сеть по умолчанию
+Density	Плотность
+Detailed logs for the zip	Подробные журналы для zip
+Display	Отображение
+Display distance	Дальность отображения
+Every guest starts with the game's nest egg	Каждый гость начинает со стартовыми деньгами игры
+Faces, paints, posters	Лица, покраски, постеры
+Faster	Быстрее
+Follow Windows	Как в Windows
+For the launcher and the in-game F10 menu; the game's own texts follow its language	Для лаунчера и меню F10 в игре; собственные тексты игры следуют её языку
+Friends and NPCs	Друзья и NPC
+Frosted glass	Матовое стекло
+Full = costly	Полные = дорого
+Full = more video memory	Полные = больше видеопамяти
+Game start	Запуск игры
+Give money to the player you look at	Дать деньги игроку, на которого смотришь
+Hold the key	Удерживать клавишу
+Host or guest	Хост или гость
+If the host allows them	Если хост их разрешает
+In the launch copy, never in your folder	В копии запуска, никогда в твоей папке
+Lamp coronas	Ореолы ламп
+Launcher help bubbles	Подсказки лаунчера
+Launcher theme	Тема лаунчера
+Light & shadows	Свет и тени
+Live preview	Предпросмотр в реальном времени
+Logs of the previous games	Журналы предыдущих игр
+MSCLoader provided by MWCoop	MSCLoader от MWCoop
+MWCoop menu	Меню MWCoop
+MWCoop's GitHub repository: code, releases, issues	Репозиторий MWCoop на GitHub: код, версии, задачи
+Map (M)	Карта (M)
+Mods and content, without asking again	Моды и контент, без повторных вопросов
+My content sent	Мой отправленный контент
+My microphone (for the others)	Мой микрофон (для остальных)
+Network & launch	Сеть и запуск
+None = vanilla game	Нет = ванильная игра
+Offer the Discord	Предлагать Discord
+On foot, in vehicles	Пешком, в транспорте
+On my side	У меня
+Only if MWCoop doesn't load from the launcher	Только если MWCoop не загружается из лаунчера
+Otherwise it stays open: players, ping, kicks	Иначе остаётся открытым: игроки, пинг, исключения
+Photo mode (F8)	Режим фото (F8)
+Players at most	Максимум игроков
+Players, sync, options	Игроки, синхронизация, настройки
+Port (IP / VPN)	Порт (IP / VPN)
+Preset	Пресет
+Private: session code required	Приватное: нужен код сессии
+Proximity voice, hold the key	Голос по близости, удерживай клавишу
+Release notes	Заметки о версии
+Repair MWCoop	Починить MWCoop
+Rewrites the launch copy and the loader	Переписывает копию запуска и загрузчик
+Sessions kept	Хранимых сессий
+Sets everything at once · every line stays editable · Vanilla = the game as is	Задаёт всё сразу · каждую строку можно менять · Vanilla = игра как есть
+Shared marker	Общая метка
+So that PLAY opens MWCoop (optional)	Чтобы ИГРАТЬ открывал MWCoop (необязательно)
+Space between rows and cards	Расстояние между строками и карточками
+Start the game through Steam	Запускать игру через Steam
+Steam: friends; IP / VPN: port to open	Steam: друзья; IP / VPN: открыть порт
+Stored in the album	Сохраняются в альбом
+Taken when the lobby opens · a change there only applies to that lobby	Берётся при открытии лобби · изменение там действует только для этого лобби
+Tap: place · hold: remove	Нажать: поставить · удерживать: убрать
+Test builds (nightly)	Тестовые сборки (nightly)
+Text size	Размер текста
+The invitation after the guided tour	Приглашение после обучения
+The keys apply to all your games.	Клавиши действуют во всех твоих играх.
+The launch copy protects your folder; \"game folder\" if MWCoop doesn't load from the copy	Копия запуска защищает твою папку; «папка игры» — если MWCoop не загружается из копии
+The little explanations on the first visit	Небольшие пояснения при первом посещении
+Tilt and zoom	Наклон и масштаб
+Troubleshooting	Устранение неполадок
+UDP and TCP; to forward on the router	UDP и TCP; пробросить на роутере
+Update automatically	Обновлять автоматически
+Version & updates	Версия и обновления
+What you hear	Что ты слышишь
+When I host	Когда я хост
+Who hears you, and how loud	Кто тебя слышит и насколько громко
+Windows' light or dark theme	Светлая или тёмная тема Windows
+Zoom in	Приблизить
+Frame	Кадр
+Games & additions	Игры и дополнения
+Move	Перемещение
+Rules	Правила
+See	Обзор
+Sharing & display	Общий доступ и отображение
+With the others	С другими
+Lasting, for all your games · \"Game\" = the game's own value	Постоянные, для всех твоих игр · «Игра» = значение самой игры
+Light, shadows, ray tracing · in game: F10	Свет, тени, трассировка лучей · в игре: F10
+Proximity voice: who hears you, how loud	Голос по близости: кто тебя слышит и насколько громко
+What you offer when hosting, and what you want on your side	Что ты предлагаешь как хост и что хочешь у себя
+MWCoop keys · the game's own: in the game (Options > Controls)	Клавиши MWCoop · клавиши игры: в самой игре (Options > Controls)
+Theme, accent colour, aurora and snow, glass, density, text	Тема, цвет акцента, северное сияние и снег, стекло, плотность, текст
+Launcher: language, version, game folder, updates, logs	Лаунчер: язык, версия, папка игры, обновления, журналы
+Northern night	Северная ночь
+Daylight	Дневной свет
+Green aurora	Зелёное сияние
+Garage	Гараж
+Light, snow in the sun	Светлая, снег на солнце
+Strong contrast, mint accent	Сильный контраст, мятный акцент
+Wood, amber, oil lamp	Дерево, янтарь, керосиновая лампа
+Press	Нажать
+Window	Окно
+as is	как есть
+old PC	старый ПК
+60 fps	60 к/с
+shadows, HDR	тени, HDR
