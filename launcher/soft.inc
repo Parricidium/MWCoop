@@ -497,7 +497,7 @@ static void SoftCompose(Bitmap &card)
     float t = min(1.0f, (now - g_softPageT) / (float)din);
     if (t >= 1 || !g_softPageOld) { g_softPageT = 0; delete g_softPageOld; g_softPageOld = NULL; return; }
     float ein = SoftEase(t, SE_OUT), eout = SoftEase(min(1.0f, (now - g_softPageT) / (float)dout), SE_MOVE);
-    RectF page(g_offX + (264 + kM) * g_scale, g_offY + (0 + kM) * g_scale, 1000 * g_scale, 744 * g_scale);   // (la colonne de page : titre, commandes et page de la carte d'avant)
+    RectF page(g_offX + (264 + kM) * g_scale, g_offY + (0 + kM) * g_scale, g_pageW * g_scale, 744 * g_scale);   // (la colonne de page : titre, commandes et page)
     Bitmap cur(card.GetWidth(), card.GetHeight(), PixelFormat32bppPARGB);
     { Graphics gc(&cur); gc.DrawImage(&card, 0, 0, (INT)card.GetWidth(), (INT)card.GetHeight()); }
     Graphics g(&card);

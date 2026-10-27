@@ -724,7 +724,7 @@ static void DrawHeader(Graphics &g)
     // avant le rework), puis celles de la page.
     float right = 1264;
     for (int id : { B_CLOSE, B_MIN, B_THEME, B_LANG }) { g_btn[id].r = RectF(right - 44, 22, 44, 44); right -= 54; }
-    if (g_newUi) right = 1256;   // (nouvelle interface : les raccourcis sont dans l'en-tete de la coque ; ici, la ligne de titre et les commandes de la page)
+    if (g_newUi) right = g_pageR.X + g_pageR.Width - 8;   // (nouvelle interface : les raccourcis sont dans l'en-tete de la coque ; ici, la ligne de titre et les commandes de la page, jusqu'au bord de la colonne fluide)
     else {
     HeadButton(g, B_CLOSE, IC_CLOSE);
     HeadButton(g, B_MIN, IC_MIN);
@@ -851,7 +851,7 @@ static std::vector<std::wstring> NoteBullets(const Note &n, int max);
 static void DrawHome(Graphics &g)
 {
     if (g_gameDir.empty()) {   // jeu introuvable : choisir l'exe, ou l'acheter
-        RectF c(kMain.X + 150, kMain.Y + 110, 700, 380);
+        RectF c(g_pageR.X + 150, g_pageR.Y + 110, 700, 380);
         Glass(c);
         Icon(g, IC_ALERT, c.X + c.Width / 2, c.Y + 64, 40, kWarn, 2.0f);
         Title(g, T(L"My Winter Car introuvable", L"My Winter Car not found"), RectF(c.X, c.Y + 96, c.Width, 40), 26, kInk, StringAlignmentCenter);
@@ -867,7 +867,7 @@ static void DrawHome(Graphics &g)
         return;
     }
     // --- a gauche : le personnage et le pseudo
-    RectF left(kMain.X, kMain.Y, 340, kMain.Height);
+    RectF left(g_pageR.X, g_pageR.Y, 340, g_pageR.Height);
     Glass(left);
     Title(g, T(L"Ton personnage", L"Your character"), RectF(left.X + 20, left.Y + 14, 200, 24), 16, kInk);
     {
@@ -889,9 +889,9 @@ static void DrawHome(Graphics &g)
         if (g_carColor >= 0) { SolidBrush cb(CarRgb(g_carColor)); g.FillEllipse(&cb, d); } else DrawCarWheel(g, d);
     }
     // --- a droite : par ou jouer, heberger / rejoindre, solo, nouveautes
-    float rx = kMain.X + 360, rw = kMain.Width - 360;
+    float rx = g_pageR.X + 360, rw = g_pageR.Width - 360;
     int lobby = g_lobby;
-    RectF net(rx, kMain.Y, rw, 188);
+    RectF net(rx, g_pageR.Y, rw, 188);
     Glass(net);
     Title(g, T(L"Par où jouer", L"How to connect"), RectF(net.X + 20, net.Y + 16, 300, 24), 17, kInk);
     Text(g, T(L"Tes amis doivent choisir le même", L"Your friends must pick the same"), RectF(net.X + 300, net.Y + 16, net.Width - 320, 24), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
@@ -1011,7 +1011,7 @@ static void DrawHome(Graphics &g)
         }
     }
     // nouveautes
-    RectF nc(rx, ty + th + 92, rw, kMain.Y + kMain.Height - (ty + th + 92));
+    RectF nc(rx, ty + th + 92, rw, g_pageR.Y + g_pageR.Height - (ty + th + 92));
     Glass(nc);
     std::vector<Note> notes;
     EnterCriticalSection(&g_cs);

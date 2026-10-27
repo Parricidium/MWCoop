@@ -72,6 +72,8 @@ static void ShellLayout()
     float cx = (g_shPage.X + 18) * d, cy = g_shPage.Y * d, cw = (g_shPage.Width - 26) * d, ch = (g_shPage.Height - 6) * d;   // (18 : le bouton de repli de la barre deborde de 14)
     float s = max(0.3f, min(cw / 1000.0f, ch / 744.0f));
     g_scale = s;
+    g_pageW = max(1000.0f, cw / s);   // (fenetre large : la colonne s'elargit en unites de la carte ; etroite : 1000, tout a l'echelle)
+    g_pageR = RectF(kMain.X, kMain.Y, g_pageW - 16, kMain.Height);   // (x 264 ... bord droit moins 16, comme avant)
     g_offX = (int)(cx - (264 + kM) * s); g_offY = (int)(cy - (0 + kM) * s);
 }
 // ---- petits dessins

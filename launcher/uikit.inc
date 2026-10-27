@@ -11,6 +11,11 @@
 // une image (g_glassCache), refaite quand la mise en page change (RenderTo redessine alors l'image dans la foulee).
 // Clics : zones declarees pendant le dessin (HotZone, identifiants UI_*), plus les boutons g_btn (B_*).
 static const RectF kRail(16, 16, 232, 768), kMain(264, 88, 1000, 656), kFooter(264, 752, 1000, 32);
+// Zone de page FLUIDE (refonte, L3b) : = kMain dans l'ancienne interface ; dans la nouvelle, sa largeur suit la fenetre
+// (coque.inc ShellLayout : en fenetre large, la colonne de page garde l'echelle de la hauteur et s'elargit en unites de la
+// carte). Les pages qui s'en servent (Accueil d'abord) remplissent la largeur ; les autres gardent kMain (1000).
+static RectF g_pageR = kMain;
+static float g_pageW = 1000;   // largeur de la colonne de page en unites de la carte (x 264 + ...)
 static const RectF kSetSteamRow(792, 450, 452, 48), kSetCompatRow(792, 504, 452, 48);
 static const RectF kSetKeysRow(792, 704, 452, 34);   // Reglages > Chez un ami : touches en jeu (tchat, porte-monnaie, vocal)   // Reglages > Jeu : demarrer le jeu, modes de compatibilite
 static const RectF kLogsDebugRow(288, 172, 952, 48);   // JOURNAUX : mode debogage (ui.inc, bulle du guide)
