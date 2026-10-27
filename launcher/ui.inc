@@ -1256,6 +1256,31 @@ static std::wstring LogDay(const FILETIME &ft, std::wstring *hm)
 
 // En-tete d'un groupe (une partie) : chevron, date et heures, version / mode / profil / taille, pastilles, boutons
 // dossier, zip, corbeille (rouge quand la suppression attend son second clic).
+// Texte de l'en-tete d'une partie : titre (« Dernière partie · date · début → fin ») et sous-titre (« MWCoop 1.15.14 · Hôte ·
+// 14 journaux, 586 Ko ») -- le meme pour la page Journaux et le selecteur du formulaire de signalement (JD 27/10 : « classé par
+// date et heure comme dans le launcher »). Date nulle (partie sans journal date) : « date inconnue », jamais 01/01/1601.
+static void LogHeadText(const LogGroup &gr, std::wstring &title, std::wstring &sub)
+{
+    bool cur = gr.key == L"*", noDate = !gr.end.dwLowDateTime && !gr.end.dwHighDateTime;
+    std::wstring endHM, day = noDate ? T(L"date inconnue", L"unknown date") : LogDay(gr.end, &endHM);
+    if (cur) title = std::wstring(gr.live ? T(L"Partie en cours", L"Current session") : T(L"Dernière partie", L"Last session")) + L" \u00B7 " + day;
+    else title = std::wstring(T(L"Partie du ", L"Session of ")) + day;
+    if (!gr.startHM.empty()) {
+        std::wstring s = gr.startHM;
+        if (!g_fr && s.size() == 5) s[2] = L':';
+        title += L" \u00B7 " + s + (gr.live || noDate ? L"" : L" \u2192 " + endHM);
+    } else if (!gr.live && !noDate) title += L" \u00B7 " + endHM;
+    sub.clear();
+    auto part = [&](const std::wstring &s) { if (s.empty()) return; if (!sub.empty()) sub += L" \u00B7 "; sub += s; };
+    if (!gr.version.empty()) part(L"MWCoop " + gr.version);
+    part(gr.mode);
+    if (!gr.profile.empty()) part((gr.profile[0] == L'(' || gr.profile.find(L' ') != std::wstring::npos ? L"" : std::wstring(T(L"profil ", L"profile "))) + gr.profile);
+    wchar_t nb[64];
+    if (gr.files == 1) swprintf_s(nb, T(L"1 journal, %s", L"1 log, %s"), SaveSizeText(gr.bytes).c_str());
+    else if (gr.bytes < 1048576) swprintf_s(nb, T(L"%d journaux, %.0f Ko", L"%d logs, %.0f KB"), gr.files, gr.bytes / 1024.0);
+    else swprintf_s(nb, T(L"%d journaux, %.1f Mo", L"%d logs, %.1f MB"), gr.files, gr.bytes / 1048576.0);
+    part(nb);
+}
 static void DrawLogHead(Graphics &g, const LogGroup &gr, RectF r, int hotPart)
 {
     bool open = LogGroupOpen(gr), cur = gr.key == L"*";
@@ -1263,23 +1288,7 @@ static void DrawLogHead(Graphics &g, const LogGroup &gr, RectF r, int hotPart)
     SolidBrush rb(hotPart == 0 ? TH(cardSel) : cur ? WithA(kAcc, 0.10f) : TH(card)); g.FillPath(&rb, &rp);
     Pen rpen(hotPart >= 0 ? WithA(kAcc, 0.7f) : cur ? WithA(kAcc, 0.45f) : TH(choiceBorder), 1.0f); g.DrawPath(&rpen, &rp);
     Icon(g, open ? IC_CHEVD : IC_CHEVR, r.X + 24, r.Y + r.Height / 2, 18, hotPart == 0 ? kAcc : kInk, 2.3f);
-    std::wstring endHM, day = LogDay(gr.end, &endHM), title;
-    if (cur) title = std::wstring(gr.live ? T(L"Partie en cours", L"Current session") : T(L"Dernière partie", L"Last session")) + L" \u00B7 " + day;
-    else title = std::wstring(T(L"Partie du ", L"Session of ")) + day;
-    if (!gr.startHM.empty()) {
-        std::wstring s = gr.startHM;
-        if (!g_fr && s.size() == 5) s[2] = L':';
-        title += L" \u00B7 " + s + (gr.live ? L"" : L" \u2192 " + endHM);
-    } else if (!gr.live) title += L" \u00B7 " + endHM;
-    std::wstring sub;
-    auto part = [&](const std::wstring &s) { if (s.empty()) return; if (!sub.empty()) sub += L" \u00B7 "; sub += s; };
-    if (!gr.version.empty()) part(L"MWCoop " + gr.version);
-    part(gr.mode);
-    if (!gr.profile.empty()) part((gr.profile[0] == L'(' || gr.profile.find(L' ') != std::wstring::npos ? L"" : std::wstring(T(L"profil ", L"profile "))) + gr.profile);
-    wchar_t nb[64];
-    if (gr.bytes < 1048576) swprintf_s(nb, T(L"%d journaux, %.0f Ko", L"%d logs, %.0f KB"), gr.files, gr.bytes / 1024.0);
-    else swprintf_s(nb, T(L"%d journaux, %.1f Mo", L"%d logs, %.1f MB"), gr.files, gr.bytes / 1048576.0);
-    part(nb);
+    std::wstring title, sub; LogHeadText(gr, title, sub);
     float textW = r.Width - 52 - 3 * 46 - 24;
     // Pastilles a droite du texte, avant les boutons.
     float px = LogHeadBtn(r, 1).X - 12;

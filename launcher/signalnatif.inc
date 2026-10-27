@@ -557,85 +557,51 @@ static std::wstring SigSessGameDir(int game)   // dossier du jeu demande : celui
 }
 static std::wstring SigSessModRoot(int game, const std::wstring &dir) { return game == g_game ? g_modRoot : dir.empty() ? L"" : ModInGame() ? dir : g_dir + (game == GAME_MSC ? L"MSC\\" : L"MWC\\"); }
 static int SigGameOfForm() { for (auto &f : g_sigForm) if (f.champ == "jeu" && f.sel >= 0 && f.sel < (int)f.opts.size()) return f.opts[f.sel].first == "msc" ? GAME_MSC : GAME_MWC; return g_game; }
+static void LogHeadText(const LogGroup &gr, std::wstring &title, std::wstring &sub);   // (ui.inc : l'en-tete d'une partie, le meme que la page Journaux)
+static std::wstring SigModVersion(int game)   // version du mod installe pour ce jeu (l'autre jeu : son MWCoop\version.txt)
+{
+    if (game == g_game) return g_localVer;
+    std::vector<unsigned char> d; std::wstring root = SigSessModRoot(game, SigSessGameDir(game));
+    return !root.empty() && ReadAll(root + L"MWCoop\\version.txt", d) ? Trim(Widen(std::string(d.begin(), d.end()))) : L"";
+}
+static std::wstring SigVersionAuto(int game) { std::wstring v = SigModVersion(game); return v.empty() ? L"" : std::wstring(game == GAME_MSC ? L"msc-" : L"mwc-") + v; }
+static std::wstring g_sigVerAuto;   // (derniere version preremplie : remplacee au changement de jeu si le joueur n'y a pas touche)
+// Le selecteur = les parties de la page Journaux, par LogsScan (meme regroupement, meme tri : la plus recente en haut). L'autre
+// jeu : les globales du jeu basculent le temps du scan, puis la page Journaux est rescannee pour le jeu en cours.
 static void SigSessScan(int game, bool keepChecks)
 {
     std::vector<std::wstring> was; if (keepChecks) for (auto &s : g_sigSess) if (s.checked) was.push_back(s.g.key);
     g_sigSess.clear(); g_sigCommon.clear(); g_sigSessGame = game;
-    if (g_sigCapture) {   // (captures : trois parties factices, sans disque)
-        auto mk = [](const wchar_t *key, const wchar_t *mode, const wchar_t *ver, int files, uint64_t bytes, int daysAgo) {
-            SigSess s; s.g.key = key; s.g.mode = mode; s.g.version = ver; s.g.files = files; s.g.bytes = bytes;
-            FILETIME now; GetSystemTimeAsFileTime(&now); ULARGE_INTEGER u; u.LowPart = now.dwLowDateTime; u.HighPart = now.dwHighDateTime;
-            u.QuadPart -= (ULONGLONG)daysAgo * 864000000000ULL + 3600ULL * 10000000ULL * (daysAgo + 1); s.g.end.dwLowDateTime = u.LowPart; s.g.end.dwHighDateTime = u.HighPart;
+    if (g_sigCapture) {   // (captures : trois parties factices, comme sur la page Journaux)
+        auto mk = [](const wchar_t *key, const wchar_t *mode, const wchar_t *ver, const wchar_t *startHM, int files, uint64_t bytes, int daysAgo, int hour, int minute) {
+            SigSess s; s.g.key = key; s.g.mode = mode; s.g.version = ver; s.g.startHM = startHM; s.g.files = files; s.g.bytes = bytes;
+            SYSTEMTIME st; GetLocalTime(&st); st.wHour = (WORD)hour; st.wMinute = (WORD)minute; st.wSecond = 0; st.wMilliseconds = 0;
+            FILETIME lt; SystemTimeToFileTime(&st, &lt); ULARGE_INTEGER u; u.LowPart = lt.dwLowDateTime; u.HighPart = lt.dwHighDateTime; u.QuadPart -= (ULONGLONG)daysAgo * 864000000000ULL; lt.dwLowDateTime = u.LowPart; lt.dwHighDateTime = u.HighPart;
+            LocalFileTimeToFileTime(&lt, &s.g.end);
             for (int i = 0; i < files; i++) s.paths.push_back(L"factice");
             return s; };
-        g_sigSess.push_back(mk(L"*", T(L"Hôte", L"Host"), L"1.15.13", 3, 2300000, 0));
-        g_sigSess.push_back(mk(L"a", T(L"Invité", L"Guest"), L"1.15.13", 3, 1100000, 1));
-        g_sigSess.push_back(mk(L"b", T(L"Solo", L"Solo"), L"1.15.12", 2, 400000, 2));
+        g_sigSess.push_back(mk(L"*", T(L"Hôte", L"Host"), L"1.15.14", L"18h11", 14, 600000, 0, 18, 36));
+        g_sigSess.push_back(mk(L"a", T(L"Invité", L"Guest"), L"1.15.13", L"21h02", 3, 1100000, 1, 21, 40));
+        g_sigSess.push_back(mk(L"b", T(L"Solo", L"Solo"), L"1.15.12", L"17h20", 2, 400000, 2, 17, 39));
         g_sigSess[0].checked = true; g_sigCommon = { L"factice", L"factice", L"factice", L"factice" }; g_sigZipFiles = 7;
         return;
     }
-    std::wstring dir = SigSessGameDir(game), root = SigSessModRoot(game, dir);
-    bool running = game == g_game && GameProcessRunning(NULL);
-    auto addPath = [](SigSess &s, const std::wstring &p) {
-        WIN32_FILE_ATTRIBUTE_DATA a;
-        if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return;
-        uint64_t b = ((uint64_t)a.nFileSizeHigh << 32) | a.nFileSizeLow;
-        s.paths.push_back(p); s.g.files++; s.g.bytes += b < 4ull * 1024 * 1024 ? b : 4ull * 1024 * 1024;   // (4 Mo par fichier au plus dans le zip)
-    };
-    std::vector<std::pair<std::wstring, std::wstring>> bases;   // (dossier logs\, profil)
-    if (!root.empty()) {
-        bases.push_back({ root + L"MWCoop\\logs\\", L"" });
-        WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((root + L"MWCoop\\profils\\*").c_str(), &fd);
-        if (h != INVALID_HANDLE_VALUE) { do { if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && fd.cFileName[0] != L'.') bases.push_back({ root + L"MWCoop\\profils\\" + fd.cFileName + L"\\logs\\", fd.cFileName }); } while (FindNextFileW(h, &fd)); FindClose(h); }
-    }
-    std::wstring ld = LocalDir();
-    if (game == g_game && !ld.empty()) { bases.push_back({ ld + L"logs\\", L"(secours)" }); bases.push_back({ ld + L"profils\\invite\\logs\\", L"invite (secours)" }); }
-    {   // la derniere partie : les journaux en place (toutes les bases), et celui de Unity dans le jeu
-        SigSess s; s.g.key = L"*"; s.g.live = running;
-        for (auto &b : bases) { addPath(s, b.first + L"mwcoop.log"); addPath(s, b.first + L"chargeur.log"); }
-        if (!dir.empty()) addPath(s, dir + kGames[game].data + L"\\output_log.txt");
-        std::wstring mod; FILETIME best = {};
-        for (auto &p : s.paths) if (p.find(L"mwcoop.log") != std::wstring::npos) { WIN32_FILE_ATTRIBUTE_DATA a; if (GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a) && (mod.empty() || CompareFileTime(&a.ftLastWriteTime, &best) > 0)) { mod = p; best = a.ftLastWriteTime; } }
-        if (!mod.empty()) SessionInfo(s.g, mod, running);
-        SigSessEnd(s);   // (JD 27/10 : « 01/01/1601 » -- la partie n'avait que le journal de Unity)
+    int gameWas = g_game; std::wstring dirWas = g_gameDir, rootWas = g_modRoot;
+    if (game != g_game) { std::wstring d = SigSessGameDir(game), root = SigSessModRoot(game, d); g_game = game; g_gameDir = d; g_modRoot = root; }
+    std::vector<std::wstring> all = ZipFiles();   // (LogsScan dedans : g_logGroups / g_logList = les parties de la page Journaux)
+    for (const LogGroup &gr : g_logGroups) {
+        SigSess s; s.g = gr;
+        for (int i : gr.items) if (i >= 0 && i < (int)g_logList.size()) s.paths.push_back(g_logList[i].path);
+        if (!s.g.end.dwLowDateTime && !s.g.end.dwHighDateTime) SigSessEnd(s);   // (partie sans journal date : le fichier le plus recent, sinon « date inconnue »)
         if (s.g.files) g_sigSess.push_back(s);
     }
-    for (auto &b : bases) {   // les parties rangees par le chargeur : <logs>\sessions\AAAA-MM-JJ_HHhMMmSS (dossiers)
-        WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((b.first + L"sessions\\*").c_str(), &fd);
-        if (h == INVALID_HANDLE_VALUE) continue;
-        do {
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
-            SigSess s; s.g.dir = b.first + L"sessions\\" + fd.cFileName + L"\\"; s.g.key = s.g.dir; s.g.profile = b.second; s.g.end = fd.ftLastWriteTime;
-            SYSTEMTIME st = {};
-            if (swscanf_s(fd.cFileName, L"%hu-%hu-%hu_%huh%hum%hu", &st.wYear, &st.wMonth, &st.wDay, &st.wHour, &st.wMinute, &st.wSecond) == 6) { FILETIME lt; if (SystemTimeToFileTime(&st, &lt)) LocalFileTimeToFileTime(&lt, &s.g.end); }
-            FILETIME keep = s.g.end;
-            addPath(s, s.g.dir + L"mwcoop.log"); addPath(s, s.g.dir + L"chargeur.log"); addPath(s, s.g.dir + L"output_log.txt");
-            s.g.end = keep;   // (la date du dossier fait foi)
-            if (!s.g.files) continue;
-            if (!s.g.end.dwLowDateTime && !s.g.end.dwHighDateTime) SigSessEnd(s);
-            if (FileExists(s.g.dir + L"mwcoop.log")) SessionInfo(s.g, s.g.dir + L"mwcoop.log", false);
-            g_sigSess.push_back(s);
-        } while (FindNextFileW(h, &fd));
-        FindClose(h);
-    }
-    size_t from = !g_sigSess.empty() && g_sigSess[0].g.key == L"*" ? 1 : 0;   // (la derniere partie reste en tete ; les rangees, les plus recentes d'abord)
-    std::stable_sort(g_sigSess.begin() + from, g_sigSess.end(), [](const SigSess &a, const SigSess &b) { return CompareFileTime(&a.g.end, &b.g.end) > 0; });
     if (g_sigSess.size() > 30) g_sigSess.resize(30);
-    // Fichiers communs : ceux du zip d'avant (reglages, journal du lanceur, MSCLoader, copies de lancement) moins les journaux
-    // des parties ; pour l'autre jeu : ses reglages, et le lanceur.
-    std::vector<std::wstring> all = game == g_game ? ZipFiles() : std::vector<std::wstring>();
-    if (game != g_game) {
-        if (!root.empty()) { all.push_back(root + L"MWCoop\\mwcoop.ini"); all.push_back(root + L"MWCoop\\lancement.ini"); }
-        if (!g_launcherLog.empty()) all.push_back(g_launcherLog);
-        if (!ld.empty()) all.push_back(ld + L"lanceur-precedent.log");
-        if (!g_iniLauncher.empty()) all.push_back(g_iniLauncher);
-    }
-    for (auto &p : all) {
-        if (!FileExists(p)) continue;
+    for (auto &p : all) {   // fichiers communs : ceux du zip de la page Journaux moins les journaux des parties (reglages, lanceur, MSCLoader, copies)
         bool sess = false;
         for (auto &s : g_sigSess) for (auto &q : s.paths) if (!_wcsicmp(q.c_str(), p.c_str())) sess = true;
         if (!sess) g_sigCommon.push_back(p);
     }
+    if (game != gameWas) { g_game = gameWas; g_gameDir = dirWas; g_modRoot = rootWas; LogsScan(); }   // (la page Journaux retrouve le jeu en cours)
     bool any = false;   // cochee d'office : la derniere partie (ou celles cochees avant, si elles sont encore la)
     for (auto &s : g_sigSess) { s.checked = std::find(was.begin(), was.end(), s.g.key) != was.end(); any = any || s.checked; }
     if (!any && !g_sigSess.empty()) g_sigSess[0].checked = true;
@@ -965,7 +931,7 @@ static void SigFormBuild()
         if (const Jv *d = c.get("detail")) { x.dChamp = d->str("champ"); x.dSi = d->str("si"); x.dIndice = d->str("indice"); x.dExemple = d->str("exemple"); x.dMax = (int)d->num("max"); }
         // valeurs de depart : le jeu en cours, la version du mod, 1 joueur = solo par defaut non choisi (le joueur dit son role)
         if (x.champ == "jeu") { const char *v = g_game == GAME_MSC ? "msc" : "mwc"; for (int i = 0; i < (int)x.opts.size(); i++) if (x.opts[i].first == v) x.sel = i; }
-        if (x.champ == "version" && !g_localVer.empty()) x.val = std::wstring(g_game == GAME_MSC ? L"msc-" : L"mwc-") + g_localVer;
+        if (x.champ == "version") { int gm = g_game; for (auto &f : g_sigForm) if (f.champ == "jeu" && f.sel >= 0 && f.sel < (int)f.opts.size()) gm = f.opts[f.sel].first == "msc" ? GAME_MSC : GAME_MWC; g_sigVerAuto = SigVersionAuto(gm); x.val = g_sigVerAuto; }   // (msc- / mwc- + version du mod de CE jeu)
         if (x.champ == "zips") x.on = true;
         g_sigForm.push_back(x);
     }
@@ -1433,16 +1399,12 @@ static float SigDrawForm(Graphics &g, float x, float y, float w, const RectF &cl
             if (g_sigSess.empty()) y += SigPara(g, T(L"Aucune partie enregistrée pour ce jeu : lance-le une fois avec MWCoop. Les réglages et le journal du lanceur sont joints quand même.", L"No recorded game session for this game: start it once with MWCoop. The settings and the launcher log are attached anyway."), x, y, w, 12.5f, g_soft.muted, FontStyleBold) + 8;
             for (int k = 0; k < (int)g_sigSess.size(); k++) {
                 const SigSess &s = g_sigSess[k];
-                RectF r(x, y, w, 40);
-                SoftToggle(g, RectF(x, y + 5, 52, 30), s.checked, UI_SIG_SESS + k, true); SigHot(r, UI_SIG_SESS + k, clip);
-                std::wstring t = SigDateOf(s.g.end);
-                if (s.g.key == L"*") t += s.g.live ? T(L" · partie en cours", L" · game running") : T(L" · dernière partie", L" · latest game session");
-                if (!s.g.mode.empty()) t += L" · " + s.g.mode;
-                if (!s.g.version.empty()) t += L" · " + s.g.version;
-                if (!s.g.profile.empty()) t += T(L" · profil ", L" · profile ") + s.g.profile;
-                t += L" · " + SigFilesText(s.g.files) + L", " + SaveSizeText(s.g.bytes);
-                Text(g, t, RectF(x + 64, y + 10, w - 64, 22), 13, s.checked ? FontStyleBold : FontStyleRegular, s.checked ? g_soft.ink : g_soft.muted, StringAlignmentNear);
-                y += 40;
+                RectF r(x, y, w, 52);
+                SoftToggle(g, RectF(x, y + 11, 52, 30), s.checked, UI_SIG_SESS + k, true); SigHot(r, UI_SIG_SESS + k, clip);
+                std::wstring title, sub; LogHeadText(s.g, title, sub);   // (le meme en-tete que la page Journaux)
+                Text(g, title, RectF(x + 64, y + 6, w - 64, 22), 13.5f, FontStyleBold, s.checked ? g_soft.ink : g_soft.muted, StringAlignmentNear);
+                Text(g, sub, RectF(x + 64, y + 27, w - 64, 20), 12, FontStyleRegular, g_soft.muted, StringAlignmentNear);
+                y += 52;
             }
             for (int k = 0; k < (int)g_sigExt.size(); k++) {
                 std::wstring n = g_sigExt[k].substr(g_sigExt[k].find_last_of(L"\\/") + 1);
@@ -1632,7 +1594,12 @@ static bool SigClick(int id)
         else if (k >= 1 && k <= 7) { f.sel = k - 1; g_sigFocus = SigDetailOn(f) ? 100 + i : -1; }
         else if (k == 8) g_sigFocus = 100 + i;
         else if (k == 9) f.on = !f.on;
-        if (f.champ == "jeu" && k >= 1 && k <= 7 && SigGameOfForm() != g_sigSessGame) SigSessScan(SigGameOfForm(), true);   // (le selecteur de journaux suit le jeu)
+        if (f.champ == "jeu" && k >= 1 && k <= 7) {   // le selecteur de journaux et la version suivent le jeu (JD 27/10 : « mwc-9.9.9 » avec My Summer Car)
+            if (SigGameOfForm() != g_sigSessGame) SigSessScan(SigGameOfForm(), true);
+            std::wstring v = SigVersionAuto(SigGameOfForm());
+            for (auto &x : g_sigForm) if (x.champ == "version" && (Trim(x.val).empty() || x.val == g_sigVerAuto)) { x.val = v; x.err.clear(); }
+            g_sigVerAuto = v;
+        }
         return true;
     }
     if (id >= UI_SIG_SESS && id < UI_SIG_SESS + 30) { int k = id - UI_SIG_SESS; if (k < (int)g_sigSess.size()) { g_sigSess[k].checked = !g_sigSess[k].checked; for (auto &f : g_sigForm) if (f.type == "zips") f.err.clear(); } return true; }
@@ -1748,6 +1715,52 @@ static int SigSelfTest(const std::wstring &log, const std::wstring &base)
         // jeu du formulaire : le selecteur suit le choix (scan reel sur cette instance, sans partie : au moins les communs)
         for (auto &f : g_sigForm) if (f.champ == "jeu") { f.sel = 0; SigSessScan(SigGameOfForm(), false); int g0 = g_sigSessGame; f.sel = 1; SigSessScan(SigGameOfForm(), false); check(g0 == GAME_MWC && g_sigSessGame == GAME_MSC, "selecteur : suit le jeu choisi (mwc puis msc)", r); }
         LaunchLog("testsignalnatif : selecteur reel sur cette instance : %d partie(s), %d fichier(s) commun(s)", (int)g_sigSess.size(), (int)g_sigCommon.size());
+        {   // JD 27/10 : « ça c'est ma liste réelle » -- le selecteur = les parties de la page Journaux (meme regroupement, meme en-tete, meme tri) :
+            // un faux dossier de jeu (profils partie-1 / 2 / 3 avec leurs journaux en place, trois parties rangees), LogsScan des deux cotes
+            std::wstring root = log + L".jeu\\", dirWas = g_gameDir, rootWas = g_modRoot; std::vector<SigField> formWas = g_sigForm;   // (le formulaire rempli est rendu a la fin)
+            auto mkdir = [](const std::wstring &d) { CreateDirectoryW(d.c_str(), NULL); };
+            auto put = [](const std::wstring &p, const char *txt) { HANDLE f = CreateFileW(p.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL); if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, txt, (DWORD)strlen(txt), &w, NULL); CloseHandle(f); } };
+            mkdir(root); mkdir(root + L"MWCoop"); mkdir(root + L"MWCoop\\logs"); mkdir(root + L"MWCoop\\logs\\sessions"); mkdir(root + L"MWCoop\\profils");
+            put(root + L"MWCoop\\logs\\mwcoop.log", "18:11:05 MWCoop 1.15.14, hote sur le port 7777\nx\njeu ferme normalement\n");
+            put(root + L"MWCoop\\logs\\chargeur.log", "18:11:00 chargeur\n");
+            for (int k = 1; k <= 3; k++) { std::wstring pr = root + L"MWCoop\\profils\\partie-" + std::to_wstring(k) + L"\\"; mkdir(pr); mkdir(pr + L"logs"); put(pr + L"logs\\mwcoop.log", "18:12:00 MWCoop 1.15.14, hote sur le port 7777\njeu ferme normalement\n"); }
+            const wchar_t *dates[3] = { L"2026-10-25_18h11m00", L"2026-10-26_21h02m10", L"2026-10-27_09h30m00" };
+            for (int k = 0; k < 3; k++) { std::wstring sd = root + L"MWCoop\\logs\\sessions\\" + dates[k] + L"\\"; mkdir(sd); put(sd + L"mwcoop.log", k == 1 ? "21:02:10 MWCoop 1.15.13, connexion a 1.2.3.4\njeu ferme normalement\n" : "09:30:00 MWCoop 1.15.12\njeu ferme normalement\n"); put(sd + L"chargeur.log", "x\n"); }
+            g_gameDir = root; g_modRoot = root;
+            LogsScan();
+            std::vector<std::wstring> pageTitles, pageSubs; std::vector<int> pageFiles; std::vector<uint64_t> pageBytes;
+            for (auto &gr : g_logGroups) { std::wstring t, su; LogHeadText(gr, t, su); pageTitles.push_back(t); pageSubs.push_back(su); pageFiles.push_back(gr.files); pageBytes.push_back(gr.bytes); }
+            g_sigForm.clear(); SigSessScan(g_game, false);
+            bool same = g_sigSess.size() == g_logGroups.size() && g_logGroups.size() == 4;
+            for (size_t k = 0; same && k < g_sigSess.size(); k++) { std::wstring t, su; LogHeadText(g_sigSess[k].g, t, su); same = t == pageTitles[k] && su == pageSubs[k] && g_sigSess[k].g.files == pageFiles[k] && g_sigSess[k].g.bytes == pageBytes[k] && (int)g_sigSess[k].paths.size() == pageFiles[k]; }
+            check(same, "selecteur = page Journaux : 4 parties (derniere + 3 rangees), memes en-tetes, memes journaux, memes tailles, meme ordre", r);
+            bool order = g_sigSess.size() == 4 && g_sigSess[0].g.key == L"*" && g_sigSess[0].g.files == 5 && g_sigSess[1].g.dir.find(dates[2]) != std::wstring::npos && g_sigSess[2].g.dir.find(dates[1]) != std::wstring::npos && g_sigSess[3].g.dir.find(dates[0]) != std::wstring::npos && g_sigSess[0].checked && !g_sigSess[1].checked;
+            check(order, "ordre : derniere partie (5 journaux : partie-1/2/3 + logs) puis 27/10, 26/10, 25/10 ; la derniere cochee d'office", r);
+            bool head = g_sigSess.size() == 4 && pageTitles[0].find(L"18h1") != std::wstring::npos && pageSubs[0].find(L"MWCoop 1.15.14") != std::wstring::npos && pageSubs[0].find(T(L"Hôte", L"Host")) != std::wstring::npos && pageSubs[2].find(T(L"Invité", L"Guest")) != std::wstring::npos && pageTitles[1].find(L"1601") == std::wstring::npos;
+            check(head, "en-tete : « 18h11 », « MWCoop 1.15.14 », Hote, Invite pour la partie du 26/10, jamais 1601", r);
+            for (size_t k = 0; k < pageTitles.size(); k++) LaunchLog("testsignalnatif : partie %d : %s -- %s", (int)k, Narrow(pageTitles[k], CP_UTF8).c_str(), Narrow(pageSubs[k], CP_UTF8).c_str());
+            std::vector<SigZipSpec> zs = SigZipSpecs(false);
+            check(zs.size() == 1 && zs[0].files.size() == 5 + g_sigCommon.size(), "zip de la derniere partie = ses 5 journaux + les communs (le pack entier)", r);
+            g_gameDir = dirWas; g_modRoot = rootWas; LogsScan();
+            for (int k = 0; k < 3; k++) { std::wstring sd = root + L"MWCoop\\logs\\sessions\\" + dates[k] + L"\\"; DeleteFileW((sd + L"mwcoop.log").c_str()); DeleteFileW((sd + L"chargeur.log").c_str()); RemoveDirectoryW(sd.c_str()); }
+            for (int k = 1; k <= 3; k++) { std::wstring pr = root + L"MWCoop\\profils\\partie-" + std::to_wstring(k) + L"\\"; DeleteFileW((pr + L"logs\\mwcoop.log").c_str()); RemoveDirectoryW((pr + L"logs").c_str()); RemoveDirectoryW(pr.c_str()); }
+            DeleteFileW((root + L"MWCoop\\logs\\mwcoop.log").c_str()); DeleteFileW((root + L"MWCoop\\logs\\chargeur.log").c_str());
+            RemoveDirectoryW((root + L"MWCoop\\logs\\sessions").c_str()); RemoveDirectoryW((root + L"MWCoop\\logs").c_str()); RemoveDirectoryW((root + L"MWCoop\\profils").c_str()); RemoveDirectoryW((root + L"MWCoop").c_str()); RemoveDirectoryW(root.c_str());
+            // version : suit le jeu ; anonyme : decoche d'office, valeur JSON
+            SigFormBuild();
+            std::wstring v0; bool anonOff = true, anonSeen = false;
+            for (auto &f : g_sigForm) { if (f.champ == "version") v0 = f.val; if (f.champ == "anonyme") { anonSeen = true; anonOff = !f.on; } }
+            check(anonSeen && anonOff && SigFormJson().find("\"anonyme\":false") != std::string::npos, "anonyme : decoche d'office, JSON anonyme:false", r);
+            for (auto &f : g_sigForm) if (f.champ == "anonyme") f.on = true;
+            check(SigFormJson().find("\"anonyme\":true") != std::string::npos, "anonyme coche : JSON anonyme:true", r);
+            for (auto &f : g_sigForm) if (f.champ == "anonyme") f.on = false;
+            int jeuIdx = -1; for (int k = 0; k < (int)g_sigForm.size(); k++) if (g_sigForm[k].champ == "jeu") jeuIdx = k;
+            std::wstring vMwc, vMsc;
+            if (jeuIdx >= 0) { SigClick(UI_SIG_FIELD + jeuIdx * 10 + 1); for (auto &f : g_sigForm) if (f.champ == "version") vMwc = f.val; SigClick(UI_SIG_FIELD + jeuIdx * 10 + 2); for (auto &f : g_sigForm) if (f.champ == "version") vMsc = f.val; }
+            check(jeuIdx >= 0 && (vMwc.empty() || vMwc.rfind(L"mwc-", 0) == 0) && (vMsc.empty() || vMsc.rfind(L"msc-", 0) == 0) && vMsc.find(L"mwc-") == std::wstring::npos, "version : prefixe du jeu choisi (mwc- puis msc-), jamais mwc- avec My Summer Car", r);
+            LaunchLog("testsignalnatif : version preremplie : %s ; apres MWC : %s ; apres MSC : %s", Narrow(v0, CP_UTF8).c_str(), Narrow(vMwc, CP_UTF8).c_str(), Narrow(vMsc, CP_UTF8).c_str());
+            g_sigForm = formWas;
+        }
         {   // JD 27/10 : « 01/01/1601 01h00 · derniere partie · 1 fichiers » -- partie sans mwcoop.log (le journal de Unity seul), accord du nombre
             bool noneZero = true; for (auto &s : g_sigSess) if (!s.g.end.dwLowDateTime && !s.g.end.dwHighDateTime) noneZero = false;
             check(noneZero, "scan reel : aucune partie datee 1601", r);
