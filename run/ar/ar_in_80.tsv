@@ -98,3 +98,29 @@ UI100	Nothing to attach yet: tick at least one game session, or add a zip.
 UI101	Estimated size: %s in %d zip(s) · site limits: %s per zip, 16 zips, %s in all%s
 UI102	 · one zip is over: its biggest logs will be cut
 UI103	New interface: Report a bug (the bug icon at the top right): \"My reports\" and the form are drawn by the launcher, the game sessions' logs are ticked right in the form (the latest for you; another player's zip can be added), and you follow your reports (states, the team's answers, \"It works\" / \"Still there\"). The first time, connect the launcher to your Discord account: a code shows up, you type it on the site's page that opens, then \"Allow this launcher\". Works on Windows 7 and Linux too.
+UI104	Desktop
+UI105	Downloads
+UI106	Not a logs zip: \"IMG_2041.jpg\" is not .txt, .log or .json
+UI107	File not found
+UI108	Too big: %s (%s at most per zip)
+UI109	Not a zip (unreadable or empty file)
+UI110	Not a zip
+UI111	Empty zip
+UI112	Too many entries: %u (500 at most)
+UI113	Damaged zip (directory outside the file)
+UI114	Damaged zip (unreadable entry)
+UI115	Damaged zip (truncated name)
+UI116	Dangerous name in the zip: \"%s\"
+UI117	Not a logs zip: \"%s\" is not .txt, .log or .json
+UI118	Too big once unpacked: %s (64 MB at most)
+UI119	%d zip(s) added, %d refused: %s
+UI120	%d zip(s) added to the report
+UI121	Add logs zips
+UI122	Another player's logs zips (their Logs → Create a zip button, or yours sent over Discord). Tick the ones to attach: each one is checked before sending.
+UI123	Parent folder
+UI124	No recent zip on the Desktop, in Downloads, Documents or MWCoop. Open a folder above, or Browse…
+UI125	No zip or subfolder here.
+UI126	 · already added
+UI127	%d ticked, %s · with the report: %s in %d zip(s) · 15 MB per zip, 16 zips, 40 MB in all
+UI128	Add
+UI129	Browse…

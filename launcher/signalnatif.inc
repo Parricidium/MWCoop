@@ -665,6 +665,267 @@ static void SigAddExt()   // « Ajouter un zip d'un autre joueur… » : un .zip
     for (auto &f : g_sigForm) if (f.type == "zips") f.err.clear();
     InvalidateAll();
 }
+// ---- fenetre integree de choix des zips d'un autre joueur (JD 27/10 : « un popup integre au launcher avec son design ») :
+// Recents (les .zip du Bureau, des Telechargements, des Documents et de MWCoop dans LOCALAPPDATA, les plus recents en haut), raccourcis
+// de dossiers et fil d'Ariane pour aller ailleurs, cases a cocher (plusieurs), « Parcourir… » (boite Windows, selection multiple) en
+// repli. Chaque zip est verifie AVANT d'etre ajoute (SigZipInspect : un vrai zip, 15 Mo au plus, entrees .txt / .log / .json, pas de
+// « .. » ni de chemin absolu, 64 Mo decompresses au plus, 500 entrees au plus) : sinon un message clair sur sa ligne. Essais et
+// captures : dossier factice (g_zpFake), bouchon de la boite Windows, jamais de fenetre.
+enum { UI_SIG_ZP_CLOSE = 14480, UI_SIG_ZP_ADD, UI_SIG_ZP_BROWSE, UI_SIG_ZP_UP, UI_SIG_ZP_SHORT = 14485, UI_SIG_ZP_ROW = 14500, UI_SIG_ZP_CRUMB = 14590 };   // raccourcis +0..4, lignes +0..79, fil +0..7
+struct ZpItem { std::wstring path, name, where; bool dir = false; FILETIME mt = {}; long long bytes = 0; bool checked = false; std::wstring bad; };
+static bool g_zpOpen; static int g_zpView;                // 0 : Recents ; 1 : un dossier (g_zpDir)
+static std::wstring g_zpDir, g_zpFake, g_zpNote; static int g_zpNoteKind;
+static std::vector<ZpItem> g_zpItems; static float g_zpScroll; static RectF g_zpListR;
+static std::wstring SigZpKnown(int which)   // 0 Bureau, 1 Telechargements, 2 Documents, 3 MWCoop (LOCALAPPDATA)
+{
+    if (!g_zpFake.empty()) return which == 1 ? g_zpFake + L"telechargements\\" : g_zpFake;
+    wchar_t p[MAX_PATH] = L"";
+    if (which == 3) return LocalDir();
+    if (which == 1) {
+        PWSTR kf = NULL;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, 0, NULL, &kf)) && kf) { std::wstring d = WithSlash(kf); CoTaskMemFree(kf); return d; }
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_PROFILE, NULL, SHGFP_TYPE_CURRENT, p)) && p[0]) return WithSlash(p) + L"Downloads\\";   // (Wine, Windows 7 sans le dossier connu)
+        return L"";
+    }
+    if (SUCCEEDED(SHGetFolderPathW(NULL, which == 0 ? CSIDL_DESKTOPDIRECTORY : CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, p)) && p[0]) return WithSlash(p);
+    return L"";
+}
+static const wchar_t *SigZpKnownName(int which) { return which == 0 ? T(L"Bureau", L"Desktop") : which == 1 ? T(L"Téléchargements", L"Downloads") : which == 2 ? T(L"Documents", L"Documents") : L"MWCoop"; }
+static void SigZpScanDir(const std::wstring &dir, const std::wstring &where, bool dirsToo, std::vector<ZpItem> &out)
+{
+    if (dir.empty()) return;
+    WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.cFileName[0] == L'.' || (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))) continue;
+        bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        size_t n = wcslen(fd.cFileName);
+        if (!isDir && (n < 4 || _wcsicmp(fd.cFileName + n - 4, L".zip"))) continue;
+        if (isDir && !dirsToo) continue;
+        ZpItem it; it.name = fd.cFileName; it.path = dir + fd.cFileName + (isDir ? L"\\" : L""); it.where = where; it.dir = isDir; it.mt = fd.ftLastWriteTime;
+        it.bytes = ((long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+        for (auto &e : g_sigExt) if (!_wcsicmp(e.c_str(), it.path.c_str())) it.checked = true;   // (deja ajoute : coche, grise)
+        bool dup = false; for (auto &o : out) if (!_wcsicmp(o.path.c_str(), it.path.c_str())) dup = true;   // (Recents : deux dossiers connus confondus)
+        if (!dup) out.push_back(it);
+    } while (FindNextFileW(h, &fd) && out.size() < 400);
+    FindClose(h);
+}
+static void SigZpSort(std::vector<ZpItem> &v)   // dossiers d'abord (par nom), puis les zips les plus recents en haut
+{
+    std::stable_sort(v.begin(), v.end(), [](const ZpItem &a, const ZpItem &b) { if (a.dir != b.dir) return a.dir; if (a.dir) return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0; return CompareFileTime(&a.mt, &b.mt) > 0; });
+    if (v.size() > 80) v.resize(80);
+}
+static void SigZpScan()
+{
+    g_zpItems.clear(); g_zpScroll = 0;
+    if (g_sigCapture) {   // (captures : cinq zips factices, un deja coche, un refuse)
+        auto mk = [](const wchar_t *name, const wchar_t *where, long long bytes, int hoursAgo, bool checked, const wchar_t *bad) {
+            ZpItem it; it.name = name; it.path = std::wstring(L"C:\\factice\\") + name; it.where = where; it.bytes = bytes; it.checked = checked; it.bad = bad;
+            FILETIME now; GetSystemTimeAsFileTime(&now); ULARGE_INTEGER u; u.LowPart = now.dwLowDateTime; u.HighPart = now.dwHighDateTime; u.QuadPart -= (ULONGLONG)hoursAgo * 36000000000ULL; it.mt.dwLowDateTime = u.LowPart; it.mt.dwHighDateTime = u.HighPart; return it; };
+        g_zpItems.push_back(mk(L"MWCoop-journaux-2026-10-27_19h02.zip", T(L"Téléchargements", L"Downloads"), 1900000, 2, true, L""));
+        g_zpItems.push_back(mk(L"MWCoop-journaux-2026-10-26_21h40.zip", T(L"Bureau", L"Desktop"), 2400000, 23, false, L""));
+        g_zpItems.push_back(mk(L"MWCoop-signalement-2026-10-26.zip", L"MWCoop", 650000, 26, false, L""));
+        g_zpItems.push_back(mk(L"photos-vacances.zip", T(L"Téléchargements", L"Downloads"), 48000000, 40, false, T(L"Pas un zip de journaux : « IMG_2041.jpg » n'est ni .txt, ni .log, ni .json", L"Not a logs zip: \"IMG_2041.jpg\" is not .txt, .log or .json")));
+        g_zpItems.push_back(mk(L"logs-kristof.zip", T(L"Documents", L"Documents"), 880000, 70, false, L""));
+        return;
+    }
+    if (g_zpView == 0) { for (int k = 0; k < 4; k++) SigZpScanDir(SigZpKnown(k), SigZpKnownName(k), false, g_zpItems); }
+    else SigZpScanDir(g_zpDir, L"", true, g_zpItems);
+    SigZpSort(g_zpItems);
+}
+static void SigZpOpen() { g_zpOpen = true; g_zpView = 0; g_zpNote.clear(); SigZpScan(); InvalidateAll(); }
+static void SigZpGo(const std::wstring &dir) { g_zpView = 1; g_zpDir = WithSlash(dir); g_zpNote.clear(); SigZpScan(); }
+// Verification d'un zip avant l'envoi (les memes regles que le site, pour un message clair ici) : vrai zip, 15 Mo au plus, entrees
+// .txt / .log / .json, pas de « .. » ni de chemin absolu, 64 Mo decompresses au plus, 500 entrees au plus, au moins une entree.
+static bool SigZipInspect(const std::wstring &path, std::wstring &why)
+{
+    WIN32_FILE_ATTRIBUTE_DATA a; wchar_t b[320];
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a)) { why = T(L"Fichier introuvable", L"File not found"); return false; }
+    long long size = ((long long)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+    if (size > g_sigZipMax) { swprintf_s(b, T(L"Trop gros : %s (%s au plus par zip)", L"Too big: %s (%s at most per zip)"), SaveSizeText(size).c_str(), SaveSizeText(g_sigZipMax).c_str()); why = b; return false; }
+    std::vector<unsigned char> d;
+    if (size < 22 || !ReadAll(path, d)) { why = T(L"Pas un zip (fichier illisible ou vide)", L"Not a zip (unreadable or empty file)"); return false; }
+    auto u16 = [&](size_t o) { return (uint32_t)d[o] | ((uint32_t)d[o + 1] << 8); };
+    auto u32 = [&](size_t o) { return u16(o) | (u16(o + 2) << 16); };
+    size_t eocd = std::wstring::npos;
+    for (size_t o = d.size() - 22; ; o--) { if (u32(o) == 0x06054b50) { eocd = o; break; } if (o == 0 || d.size() - o > 65557) break; }
+    if (eocd == std::wstring::npos || u32(0) != 0x04034b50) { why = T(L"Pas un zip", L"Not a zip"); return false; }
+    uint32_t n = u16(eocd + 10), cdSize = u32(eocd + 12), cdOff = u32(eocd + 16);
+    if (n == 0) { why = T(L"Zip vide", L"Empty zip"); return false; }
+    if (n > 500) { swprintf_s(b, T(L"Trop d'entrées : %u (500 au plus)", L"Too many entries: %u (500 at most)"), n); why = b; return false; }
+    if ((uint64_t)cdOff + cdSize > d.size()) { why = T(L"Zip abîmé (répertoire hors du fichier)", L"Damaged zip (directory outside the file)"); return false; }
+    size_t o = cdOff; unsigned long long total = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (o + 46 > d.size() || u32(o) != 0x02014b50) { why = T(L"Zip abîmé (entrée illisible)", L"Damaged zip (unreadable entry)"); return false; }
+        uint32_t usize = u32(o + 24), nameLen = u16(o + 28), extraLen = u16(o + 30), comLen = u16(o + 32);
+        if (o + 46 + nameLen > d.size()) { why = T(L"Zip abîmé (nom tronqué)", L"Damaged zip (truncated name)"); return false; }
+        std::string name((const char *)&d[o + 46], nameLen);
+        std::wstring wn = Widen(name);
+        total += usize;
+        bool dirEntry = !name.empty() && (name.back() == '/' || name.back() == '\\');
+        std::string low = name; for (auto &c : low) c = (char)tolower((unsigned char)c);
+        auto ends = [&](const char *x) { size_t m = strlen(x); return low.size() >= m && !low.compare(low.size() - m, m, x); };
+        if (name.find("..") != std::string::npos || name.empty() || name[0] == '/' || name[0] == '\\' || (name.size() > 1 && name[1] == ':')) { swprintf_s(b, T(L"Nom dangereux dans le zip : « %s »", L"Dangerous name in the zip: \"%s\""), wn.c_str()); why = b; return false; }
+        if (!dirEntry && !ends(".txt") && !ends(".log") && !ends(".json")) { swprintf_s(b, T(L"Pas un zip de journaux : « %s » n'est ni .txt, ni .log, ni .json", L"Not a logs zip: \"%s\" is not .txt, .log or .json"), wn.c_str()); why = b; return false; }
+        o += 46 + nameLen + extraLen + comLen;
+    }
+    if (total > 64ull * 1024 * 1024) { swprintf_s(b, T(L"Trop gros une fois décompressé : %s (64 Mo au plus)", L"Too big once unpacked: %s (64 MB at most)"), SaveSizeText(total).c_str()); why = b; return false; }
+    return true;
+}
+static int SigZpAddPath(const std::wstring &path, std::wstring &why)   // 1 ajoute, 0 deja la, -1 refuse (why)
+{
+    for (auto &e : g_sigExt) if (!_wcsicmp(e.c_str(), path.c_str())) return 0;
+    if (g_sigExt.size() >= 16) { why = ST("er_trop-de-zips"); return -1; }
+    if (!g_sigTest && !g_sigCapture && !SigZipInspect(path, why)) return -1;
+    if (g_sigTest && !SigZipInspect(path, why)) return -1;   // (essais : les zips factices existent vraiment)
+    g_sigExt.push_back(path);
+    for (auto &f : g_sigForm) if (f.type == "zips") f.err.clear();
+    return 1;
+}
+static void SigZpAddChecked()   // « Ajouter » : chaque zip coche est verifie ; les refuses restent dans la liste avec leur raison
+{
+    int added = 0, bad = 0; std::wstring firstWhy;
+    for (auto &it : g_zpItems) {
+        if (it.dir || !it.checked) continue;
+        bool already = false; for (auto &e : g_sigExt) if (!_wcsicmp(e.c_str(), it.path.c_str())) already = true;
+        if (already) continue;
+        std::wstring why; int r = SigZpAddPath(it.path, why);
+        if (r == 1) added++; else if (r < 0) { bad++; it.bad = why; it.checked = false; if (firstWhy.empty()) firstWhy = why; }
+    }
+    if (bad) { wchar_t b[400]; swprintf_s(b, T(L"%d zip(s) ajouté(s), %d refusé(s) : %s", L"%d zip(s) added, %d refused: %s"), added, bad, firstWhy.c_str()); g_zpNote = b; g_zpNoteKind = SC_BAD; }
+    else { g_zpOpen = false; if (added) { wchar_t b[120]; swprintf_s(b, T(L"%d zip(s) ajouté(s) au dossier", L"%d zip(s) added to the report"), added); SoftNotify(b, SC_OK); } }
+    InvalidateAll();
+}
+static void SigZpBrowse()   // « Parcourir… » : la boite Windows (selection multiple), bouchon en essai et en capture
+{
+    std::vector<std::wstring> picked;
+    if (g_sigTest || g_sigCapture) picked.push_back(g_sigCapture ? L"C:\\factice\\ailleurs.zip" : g_zpFake + L"ailleurs.zip");
+    else {
+        std::vector<wchar_t> buf(32768, 0);
+        OPENFILENAMEW of = { sizeof(of) };
+        of.hwndOwner = g_wnd; of.lpstrFilter = L"zip\0*.zip\0"; of.lpstrFile = buf.data(); of.nMaxFile = (DWORD)buf.size();
+        of.lpstrTitle = T(L"Choisir le zip des journaux d'un autre joueur", L"Choose another player's logs zip");
+        of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
+        if (!GetOpenFileNameW(&of)) return;
+        const wchar_t *p = buf.data(); std::wstring first = p; p += first.size() + 1;
+        if (!*p) picked.push_back(first);   // (un seul : le chemin complet)
+        else for (; *p; p += wcslen(p) + 1) picked.push_back(WithSlash(first) + p);
+    }
+    int added = 0; std::wstring why, firstWhy;
+    for (auto &f : picked) { int r = SigZpAddPath(f, why); if (r == 1) added++; else if (r < 0 && firstWhy.empty()) firstWhy = why; }
+    if (!firstWhy.empty()) { g_zpNote = firstWhy; g_zpNoteKind = SC_BAD; SigZpScan(); }
+    else { g_zpOpen = false; if (added) { wchar_t b[120]; swprintf_s(b, T(L"%d zip(s) ajouté(s) au dossier", L"%d zip(s) added to the report"), added); SoftNotify(b, SC_OK); } }
+    InvalidateAll();
+}
+static bool SigZipPickWheel(float step) { if (!g_zpOpen || g_tab != TAB_BUG) return false; g_zpScroll = max(0.0f, g_zpScroll + step); InvalidateAll(); return true; }
+static bool SigZpClick(int id)
+{
+    if (!g_zpOpen) return false;
+    if (id == UI_SIG_ZP_CLOSE) { g_zpOpen = false; return true; }
+    if (id == UI_SIG_ZP_ADD) { SigZpAddChecked(); return true; }
+    if (id == UI_SIG_ZP_BROWSE) { SigZpBrowse(); return true; }
+    if (id == UI_SIG_ZP_UP) { if (g_zpView == 1) { std::wstring d = g_zpDir; if (d.size() > 3) { d.pop_back(); size_t k = d.find_last_of(L'\\'); if (k != std::wstring::npos && k >= 2) SigZpGo(d.substr(0, k + 1)); } } return true; }
+    if (id >= UI_SIG_ZP_SHORT && id < UI_SIG_ZP_SHORT + 5) { int k = id - UI_SIG_ZP_SHORT; if (k == 0) { g_zpView = 0; g_zpNote.clear(); SigZpScan(); } else SigZpGo(SigZpKnown(k - 1)); return true; }
+    if (id >= UI_SIG_ZP_CRUMB && id < UI_SIG_ZP_CRUMB + 8) {   // fil d'Ariane : le segment k du dossier
+        int k = id - UI_SIG_ZP_CRUMB; std::wstring d = g_zpDir; size_t pos = 0;
+        for (int i = 0; i <= k; i++) { pos = d.find(L'\\', pos); if (pos == std::wstring::npos) return true; pos++; }
+        SigZpGo(d.substr(0, pos)); return true;
+    }
+    if (id >= UI_SIG_ZP_ROW && id < UI_SIG_ZP_ROW + 80) {
+        int k = id - UI_SIG_ZP_ROW; if (k >= (int)g_zpItems.size()) return true;
+        ZpItem &it = g_zpItems[k];
+        if (it.dir) { SigZpGo(it.path); return true; }
+        bool already = false; for (auto &e : g_sigExt) if (!_wcsicmp(e.c_str(), it.path.c_str())) already = true;
+        if (already) return true;
+        it.checked = !it.checked; it.bad.clear(); g_zpNote.clear();
+        return true;
+    }
+    return id == UI_NONE;
+}
+static float SigPara(Graphics &g, const std::wstring &t, float x, float y, float w, float px, Color c, int style = FontStyleRegular);   // (plus bas)
+static float SigBtnW(const std::wstring &s, bool icon);
+static void SigDrawZipPick(Graphics &g, const RectF &card)   // par-dessus la carte de la page ; rien en dessous ne repond
+{
+    if (!g_zpOpen) return;
+    HotZone(RectF(g_pageR.X, 0, g_pageR.Width, 800), UI_NONE);
+    SolidBrush veil(Color(g_dark ? 150 : 110, 0, 0, 0)); g.FillRectangle(&veil, card);
+    float w = min(800.0f, card.Width - 40), h = min(620.0f, card.Height - 24);
+    RectF c(card.X + (card.Width - w) / 2, card.Y + (card.Height - h) / 2, w, h);
+    SoftCard(g, c, kSoftRCard);
+    float x = c.X + 24, y = c.Y + 20, cw = c.Width - 48;
+    Title(g, T(L"Ajouter des zips de journaux", L"Add logs zips"), RectF(x, y, cw - 50, 30), 18, g_soft.ink);
+    SoftButton(g, RectF(c.X + c.Width - 24 - 40, y - 2, 40, 36), L"", UI_SIG_ZP_CLOSE, false, IC_CLOSE, true, 18); HotZone(RectF(c.X + c.Width - 24 - 40, y - 2, 40, 36), UI_SIG_ZP_CLOSE);
+    y += 34;
+    y += SigPara(g, T(L"Les zips des journaux d'un autre joueur (son bouton Journaux → Créer un zip, ou le tien envoyé par Discord). Coche ceux à joindre : chacun est vérifié avant l'envoi.", L"Another player's logs zips (their Logs → Create a zip button, or yours sent over Discord). Tick the ones to attach: each one is checked before sending."), x, y, cw, 12, g_soft.muted) + 10;
+    {   // raccourcis : Recents, Bureau, Telechargements, Documents, MWCoop
+        float bx = x;
+        for (int k = 0; k < 5; k++) {
+            std::wstring s = k == 0 ? T(L"Récents", L"Recent") : SigZpKnownName(k - 1); float bw = SigBtnW(s, k == 0) - 6;
+            bool cur = k == 0 ? g_zpView == 0 : g_zpView == 1 && !_wcsicmp(g_zpDir.c_str(), SigZpKnown(k - 1).c_str());
+            SoftButton(g, RectF(bx, y, bw, 34), s, UI_SIG_ZP_SHORT + k, cur, k == 0 ? IC_SPARK : -1, true, 17); HotZone(RectF(bx, y, bw, 34), UI_SIG_ZP_SHORT + k);
+            bx += bw + 8;
+        }
+        y += 34 + 10;
+    }
+    if (g_zpView == 1) {   // fil d'Ariane : C:\ › Users › JD › Downloads, chaque segment cliquable, et « Dossier parent »
+        float bx = x; std::wstring d = g_zpDir; size_t pos = 0; int k = 0;
+        while (pos < d.size() && k < 8) {
+            size_t e = d.find(L'\\', pos); if (e == std::wstring::npos) break;
+            std::wstring seg = d.substr(pos, e - pos); if (seg.empty()) { pos = e + 1; continue; }
+            bool last = e + 1 >= d.size();
+            float sw = MeasureW(MeasureG(), seg, 12.5f, last ? FontStyleBold : FontStyleRegular) + 10;
+            if (bx + sw > x + cw - 120) { Text(g, L"…", RectF(bx, y, 16, 24), 12.5f, FontStyleRegular, g_soft.muted, StringAlignmentNear); break; }
+            Text(g, seg, RectF(bx, y, sw, 24), 12.5f, last ? FontStyleBold : FontStyleRegular, last ? g_soft.ink : g_soft.muted, StringAlignmentNear);
+            if (!last) HotZone(RectF(bx, y, sw, 24), UI_SIG_ZP_CRUMB + k);
+            bx += sw; if (!last) { Text(g, L"›", RectF(bx, y, 14, 24), 12.5f, FontStyleRegular, g_soft.faint, StringAlignmentCenter); bx += 14; }
+            pos = e + 1; k++;
+        }
+        std::wstring up = T(L"Dossier parent", L"Parent folder"); float uw = SigBtnW(up, true) - 6;
+        SoftButton(g, RectF(x + cw - uw, y - 5, uw, 32), up, UI_SIG_ZP_UP, false, IC_CHEVL, g_zpDir.size() > 3, 16); HotZone(RectF(x + cw - uw, y - 5, uw, 32), UI_SIG_ZP_UP);
+        y += 30;
+    }
+    // la liste (defile a la molette)
+    float bottomH = 58 + (g_zpNote.empty() ? 0 : 26);
+    RectF list(x, y, cw, c.Y + c.Height - bottomH - y);
+    g_zpListR = list;
+    float rowH = 44, totalH = (float)g_zpItems.size() * rowH;
+    g_zpScroll = max(0.0f, min(g_zpScroll, max(0.0f, totalH - list.Height)));
+    GraphicsState st = g.Save(); g.SetClip(list, CombineModeIntersect);
+    if (g_zpItems.empty()) SigPara(g, g_zpView == 0 ? T(L"Aucun zip récent sur le Bureau, dans Téléchargements, Documents ou MWCoop. Ouvre un dossier au-dessus, ou Parcourir…", L"No recent zip on the Desktop, in Downloads, Documents or MWCoop. Open a folder above, or Browse…") : T(L"Aucun zip ni sous-dossier ici.", L"No zip or subfolder here."), x, y + 8, cw, 13, g_soft.muted);
+    for (int k = 0; k < (int)g_zpItems.size(); k++) {
+        ZpItem &it = g_zpItems[k];
+        RectF r(x, y + k * rowH - g_zpScroll, cw, rowH);
+        if (r.Y + rowH < list.Y || r.Y > list.Y + list.Height) continue;
+        bool already = false; if (!it.dir) for (auto &e : g_sigExt) if (!_wcsicmp(e.c_str(), it.path.c_str())) already = true;
+        if (it.dir) { Icon(g, IC_FOLDER, r.X + 26, r.Y + rowH / 2, 20, g_soft.ink, 1.8f); Text(g, it.name, RectF(r.X + 60, r.Y + 11, cw - 70, 22), 13.5f, FontStyleBold, g_soft.ink, StringAlignmentNear); }
+        else {
+            SoftToggle(g, RectF(r.X, r.Y + 7, 52, 30), it.checked || already, UI_SIG_ZP_ROW + k, !already);
+            std::wstring t = it.name + L" · " + LogDate(it.mt) + L" · " + SaveSizeText(it.bytes);
+            if (!it.where.empty()) t += L" · " + it.where;
+            if (already) t += T(L" · déjà ajouté", L" · already added");
+            bool bad = !it.bad.empty();
+            Text(g, t, RectF(r.X + 64, r.Y + (bad ? 3 : 11), cw - 70, 22), 13, it.checked || already ? FontStyleBold : FontStyleRegular, bad ? g_soft.bad : already ? g_soft.muted : g_soft.ink, StringAlignmentNear);
+            if (bad) Text(g, it.bad, RectF(r.X + 64, r.Y + 22, cw - 70, 20), 11.5f, FontStyleRegular, g_soft.bad, StringAlignmentNear);
+        }
+        if (r.Y >= list.Y - rowH && r.Y + rowH <= list.Y + list.Height + rowH) { RectF hz = r; if (hz.Y < list.Y) { hz.Height -= list.Y - hz.Y; hz.Y = list.Y; } if (hz.Y + hz.Height > list.Y + list.Height) hz.Height = list.Y + list.Height - hz.Y; if (hz.Height > 4) HotZone(hz, UI_SIG_ZP_ROW + k); }
+    }
+    g.Restore(st);
+    // en bas : note, total, Ajouter (n), Parcourir…, Annuler
+    y = c.Y + c.Height - bottomH + 4;
+    if (!g_zpNote.empty()) { y += SigPara(g, g_zpNote, x, y, cw, 12.5f, g_zpNoteKind == SC_BAD ? g_soft.bad : g_soft.ink, FontStyleBold) + 4; }
+    int n = 0; long long sz = 0; for (auto &it : g_zpItems) if (!it.dir && it.checked) { bool already = false; for (auto &e : g_sigExt) if (!_wcsicmp(e.c_str(), it.path.c_str())) already = true; if (!already) { n++; sz += it.bytes; } }
+    long long total, big; int nz; SigZipCheck(&total, &nz, &big);
+    wchar_t tb[200]; swprintf_s(tb, T(L"%d coché(s), %s · avec le dossier : %s en %d zip(s) · 15 Mo par zip, 16 zips, 40 Mo en tout", L"%d ticked, %s · with the report: %s in %d zip(s) · 15 MB per zip, 16 zips, 40 MB in all"), n, SaveSizeText(sz).c_str(), SaveSizeText(total + sz).c_str(), nz + n);
+    std::wstring ab = T(L"Ajouter", L"Add"); if (n) { wchar_t nb[16]; swprintf_s(nb, L" (%d)", n); ab += nb; } float aw = SigBtnW(ab, true);
+    std::wstring pb = T(L"Parcourir…", L"Browse…"); float pw = SigBtnW(pb, true);
+    std::wstring cb = T(L"Annuler", L"Cancel"); float cww = SigBtnW(cb, false);
+    bool over = total + sz > g_sigEnvoiMax || nz + n > 16;
+    SigPara(g, tb, x, y + 2, cw - aw - pw - cww - 30, 11.5f, over ? g_soft.bad : g_soft.muted);   // (deux lignes si la place manque)
+    float bx = x + cw - aw - pw - cww - 20;
+    SoftButton(g, RectF(bx, y, aw, 42), ab, UI_SIG_ZP_ADD, true, IC_CHECK, n > 0 && !over); HotZone(RectF(bx, y, aw, 42), UI_SIG_ZP_ADD); bx += aw + 10;
+    SoftButton(g, RectF(bx, y, pw, 42), pb, UI_SIG_ZP_BROWSE, false, IC_FOLDER); HotZone(RectF(bx, y, pw, 42), UI_SIG_ZP_BROWSE); bx += pw + 10;
+    SoftButton(g, RectF(bx, y, cww, 42), cb, UI_SIG_ZP_CLOSE, false); HotZone(RectF(bx, y, cww, 42), UI_SIG_ZP_CLOSE);
+}
 static void SigFormBuild()
 {
     g_sigForm.clear();
@@ -905,6 +1166,7 @@ static void SigFocusNext()
 static bool SigChar(wchar_t ch)
 {
     if (g_tab != TAB_BUG || !SigActive() || g_sigBusy) return false;
+    if (g_zpOpen) { if (ch == 27) { g_zpOpen = false; InvalidateAll(); } return true; }   // (fenetre de choix des zips : Echap la ferme)
     if (g_sigFocus < 0) return false;
     int maxLen = 0; bool multi = false;
     std::wstring *t = SigFocusText(&maxLen, &multi);
@@ -940,7 +1202,7 @@ static void SigText(Graphics &g, const std::wstring &t, RectF r, float px, int s
     UiFont f(L"Segoe UI", px, style); StringFormat sf; SolidBrush b(c);
     DrawStr(g, t.c_str(), -1, &f, r, &sf, &b);
 }
-static float SigPara(Graphics &g, const std::wstring &t, float x, float y, float w, float px, Color c, int style = FontStyleRegular)   // rend la hauteur
+static float SigPara(Graphics &g, const std::wstring &t, float x, float y, float w, float px, Color c, int style)   // rend la hauteur
 {
     float h = SigTextH(t, w, px, style);
     SigText(g, t, RectF(x, y, w, h + 4), px, style, c);
@@ -1289,6 +1551,7 @@ static void DrawSigPage(Graphics &g)
     }
     g.Restore(st);
     g_sigContentH = h + 2 * pad;
+    SigDrawZipPick(g, card);   // (fenetre integree de choix des zips, par-dessus la carte)
     if (g_sigBusy && g_sigView != SV_SEND && g_sigView != SV_LOADING) {   // (une operation en cours : un fil discret en bas de la carte)
         SigLock(); float fr = g_sigFrac; SigUnlock();
         SoftProgress(g, RectF(card.X + 24, card.Y + card.Height - 12, card.Width - 48, 6), fr); SoftBlinkAt(RectF(card.X, card.Y + card.Height - 24, card.Width, 24), 250, 4);
@@ -1297,6 +1560,7 @@ static void DrawSigPage(Graphics &g)
 static float SigMaxScroll() { return max(0.0f, g_sigContentH - 656); }
 static bool SigClick(int id)
 {
+    if (g_zpOpen && SigZpClick(id)) { InvalidateAll(); return true; }   // (fenetre de choix des zips, par-dessus la page)
     if (id < UI_SIG || id >= UI_SIG + 1000) return false;
     if (id == UI_SIG_BROWSER) {
         std::wstring url = std::wstring(kBugSiteUrl) + L"?lang=" + LangCode();
@@ -1345,7 +1609,7 @@ static bool SigClick(int id)
     }
     if (id >= UI_SIG_SESS && id < UI_SIG_SESS + 30) { int k = id - UI_SIG_SESS; if (k < (int)g_sigSess.size()) { g_sigSess[k].checked = !g_sigSess[k].checked; for (auto &f : g_sigForm) if (f.type == "zips") f.err.clear(); } return true; }
     if (id >= UI_SIG_EXT && id < UI_SIG_EXT + 16) { int k = id - UI_SIG_EXT; if (k < (int)g_sigExt.size()) g_sigExt.erase(g_sigExt.begin() + k); return true; }
-    if (id == UI_SIG_ADDEXT) { SigAddExt(); return true; }
+    if (id == UI_SIG_ADDEXT) { SigZpOpen(); return true; }
     return true;
 }
 
@@ -1380,6 +1644,7 @@ static void SigCaptureState(const std::wstring &st)
     else if (st == L"signaler-natif-dossier-ajout") { g_sigView = SV_DETAIL; g_sigSel = 2; g_sigAddMode = 1; g_sigAddText = L"Ça arrive aussi avec la Ferndale, dès que l'invité ouvre le coffre.\nVersion mwc-1.15.10, salon Steam à 3."; }
     else if (st == L"signaler-natif-formulaire") { SigFormBuild(); g_sigView = SV_FORM; for (auto &f : g_sigForm) { if (f.champ == "titre") f.val = L"Roue qui tombe chez l'invité"; if (f.champ == "type") f.sel = 2; if (f.champ == "probleme") f.val = L"Après un saut, la roue avant gauche tombe chez l'invité mais pas chez l'hôte."; if (f.champ == "role") f.sel = 2; if (f.champ == "joueurs") f.val = L"2"; } g_sigForm[1].err.clear(); }
     else if (st == L"signaler-natif-formulaire-bas") { SigFormBuild(); g_sigView = SV_FORM; for (auto &f : g_sigForm) if (f.champ == "mods_choix") f.sel = 1; if (g_sigSess.size() > 1) g_sigSess[1].checked = true; SigAddExt(); DrawSigPage(MeasureG()); g_scroll[TAB_BUG] = SigMaxScroll(); }   // (le bas du formulaire : detail des mods, selecteur de journaux, anonyme, Envoyer)
+    else if (st == L"signaler-natif-zips") { SigFormBuild(); g_sigView = SV_FORM; SigAddExt(); DrawSigPage(MeasureG()); for (auto &f : g_sigForm) if (f.type == "zips") g_scroll[TAB_BUG] = max(0.0f, min(SigMaxScroll(), f.r.Y - 150 + g_scroll[TAB_BUG])); SigZpOpen(); }   // (la fenetre de choix des zips)
     else if (st == L"signaler-natif-formulaire-journaux") { SigFormBuild(); g_sigView = SV_FORM; if (g_sigSess.size() > 1) g_sigSess[1].checked = true; SigAddExt(); DrawSigPage(MeasureG()); for (auto &f : g_sigForm) if (f.type == "zips") g_scroll[TAB_BUG] = max(0.0f, min(SigMaxScroll(), f.r.Y - 150 + g_scroll[TAB_BUG])); }   // (le selecteur de journaux)
     else if (st == L"signaler-natif-formulaire-erreurs") { SigFormBuild(); g_sigView = SV_FORM; SigValidate(); g_sigNote = ST("erCorriger"); g_sigNoteKind = SC_BAD; }
     else if (st == L"signaler-natif-envoi") { g_sigView = SV_SEND; g_sigProg = T(L"Envoi des journaux (2/3)…", L"Sending the logs (2/3)…"); g_sigFrac = 0.4f; }
@@ -1455,6 +1720,40 @@ static int SigSelfTest(const std::wstring &log, const std::wstring &base)
         // jeu du formulaire : le selecteur suit le choix (scan reel sur cette instance, sans partie : au moins les communs)
         for (auto &f : g_sigForm) if (f.champ == "jeu") { f.sel = 0; SigSessScan(SigGameOfForm(), false); int g0 = g_sigSessGame; f.sel = 1; SigSessScan(SigGameOfForm(), false); check(g0 == GAME_MWC && g_sigSessGame == GAME_MSC, "selecteur : suit le jeu choisi (mwc puis msc)", r); }
         LaunchLog("testsignalnatif : selecteur reel sur cette instance : %d partie(s), %d fichier(s) commun(s)", (int)g_sigSess.size(), (int)g_sigCommon.size());
+        {   // fenetre de choix des zips : dossier factice (Bureau = Documents = MWCoop = <journal>.zp\, Telechargements = son sous-dossier), jamais de fenetre
+            g_zpFake = log + L".zp\\"; CreateDirectoryW(g_zpFake.c_str(), NULL); CreateDirectoryW((g_zpFake + L"telechargements\\").c_str(), NULL);
+            int nf = 0; std::vector<std::wstring> one = { g_iniLauncher };
+            WriteZip(g_zpFake + L"bon.zip", one, &nf, 0, 16 << 20, true);
+            WriteZip(g_zpFake + L"telechargements\\sous-dossier.zip", one, &nf, 0, 16 << 20, true);
+            WriteZip(g_zpFake + L"ailleurs.zip", one, &nf, 0, 16 << 20, true);
+            { HANDLE f = CreateFileW((g_zpFake + L"pas-un-zip.zip").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL); if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, "bonjour, ceci n'est pas un zip du tout, juste du texte", 54, &w, NULL); CloseHandle(f); } }
+            { std::wstring exe = g_zpFake + L"journal.exe"; CopyFileW(g_iniLauncher.c_str(), exe.c_str(), FALSE); std::vector<std::wstring> e = { exe }; WriteZip(g_zpFake + L"mauvaise-extension.zip", e, &nf, 0, 16 << 20, false); DeleteFileW(exe.c_str()); }
+            g_sigExt.clear(); SigZpOpen();
+            int zips = 0, dirs = 0; for (auto &it : g_zpItems) { if (it.dir) dirs++; else zips++; }
+            check(g_zpOpen && g_zpView == 0 && zips == 5 && dirs == 0, "fenetre des zips : Recents = 5 zips des dossiers connus (bon x3 dont le sous-dossier Telechargements, pas-un-zip, mauvaise extension)", r);
+            for (auto &it : g_zpItems) it.checked = it.name == L"bon.zip" || it.name == L"pas-un-zip.zip" || it.name == L"mauvaise-extension.zip";
+            SigZpAddChecked();
+            std::wstring badNot, badExt; for (auto &it : g_zpItems) { if (it.name == L"pas-un-zip.zip") badNot = it.bad; if (it.name == L"mauvaise-extension.zip") badExt = it.bad; }
+            check(g_zpOpen && g_sigExt.size() == 1 && !badNot.empty() && !badExt.empty() && badExt.find(L".exe") != std::wstring::npos, "Ajouter : le bon zip ajoute, les deux mauvais refuses avec leur raison (pas un zip ; journal.exe)", r);
+            LaunchLog("testsignalnatif : raisons : « %s » ; « %s »", Narrow(badNot, CP_UTF8).c_str(), Narrow(badExt, CP_UTF8).c_str());
+            SigZpBrowse();
+            check(!g_zpOpen && g_sigExt.size() == 2, "Parcourir… (bouchon) : ailleurs.zip ajoute, fenetre fermee", r);
+            SigZpOpen(); SigZpGo(g_zpFake);
+            int sub = -1; for (int k = 0; k < (int)g_zpItems.size(); k++) if (g_zpItems[k].dir && g_zpItems[k].name == L"telechargements") sub = k;
+            check(g_zpView == 1 && sub >= 0, "dossier : le sous-dossier Telechargements est liste", r);
+            if (sub >= 0) SigZpClick(UI_SIG_ZP_ROW + sub);
+            int szip = -1; for (int k = 0; k < (int)g_zpItems.size(); k++) if (!g_zpItems[k].dir && g_zpItems[k].name == L"sous-dossier.zip") szip = k;
+            check(szip >= 0 && g_zpDir == g_zpFake + L"telechargements\\", "entrer dans le sous-dossier : son zip est la", r);
+            SigZpClick(UI_SIG_ZP_UP);
+            check(g_zpDir == g_zpFake, "Dossier parent", r);
+            SigZpGo(g_zpFake + L"telechargements\\"); if (szip >= 0) { SigZpClick(UI_SIG_ZP_ROW + szip); SigZpClick(UI_SIG_ZP_ADD); }
+            check(!g_zpOpen && g_sigExt.size() == 3, "zip du sous-dossier coche puis Ajouter : 3 zips d'un autre joueur", r);
+            long long t, b; int n; check(SigZipCheck(&t, &n, &b) == 0 && n == 4, "limites avec les 3 zips ajoutes + les communs : 4 zips, accepte", r);
+            std::wstring why; check(!SigZipInspect(g_zpFake + L"pas-un-zip.zip", why) && !why.empty(), "SigZipInspect : texte brut refuse", r);
+            check(SigZipInspect(g_zpFake + L"bon.zip", why), "SigZipInspect : zip du lanceur accepte", r);
+            for (const wchar_t *f : { L"bon.zip", L"ailleurs.zip", L"pas-un-zip.zip", L"mauvaise-extension.zip", L"telechargements\\sous-dossier.zip" }) DeleteFileW((g_zpFake + f).c_str());
+            RemoveDirectoryW((g_zpFake + L"telechargements").c_str()); RemoveDirectoryW(g_zpFake.c_str()); g_zpFake.clear(); g_sigExt.clear();
+        }
         g_sigSess.clear(); g_sigExt.clear(); g_sigCommon = { log, g_iniLauncher };
     }
     for (auto &f : g_sigForm) if (f.champ == "joueurs") f.val = L"1";

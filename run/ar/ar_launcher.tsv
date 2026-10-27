@@ -2588,6 +2588,32 @@ Nothing to attach yet: tick at least one game session, or add a zip.	لا شيء
 Estimated size: %s in %d zip(s) · site limits: %s per zip, 16 zips, %s in all%s	الحجم التقديري: %s في %d ملف(ات) zip · حدود الموقع: %s لكل zip، 16 ملف zip، %s إجمالًا%s
  · one zip is over: its biggest logs will be cut	 · أحد ملفات zip يتجاوز الحد: ستُقتطع أكبر سجلاته
 New interface: Report a bug (the bug icon at the top right): \"My reports\" and the form are drawn by the launcher, the game sessions' logs are ticked right in the form (the latest for you; another player's zip can be added), and you follow your reports (states, the team's answers, \"It works\" / \"Still there\"). The first time, connect the launcher to your Discord account: a code shows up, you type it on the site's page that opens, then \"Allow this launcher\". Works on Windows 7 and Linux too.	الواجهة الجديدة: الإبلاغ عن خلل (أيقونة الحشرة في الأعلى يمينًا): «تقاريري» والنموذج يرسمهما المشغّل، وسجلات جلسات اللعب تُحدَّد داخل النموذج مباشرة (الأخيرة محدّدة مسبقًا؛ ويمكن إضافة ملف zip للاعب آخر)، وتتابع تقاريرك (الحالات، ردود الفريق، «يعمل» / «ما زال موجودًا»). في المرة الأولى، اربط المشغّل بحساب Discord الخاص بك: يظهر رمز، تكتبه في صفحة الموقع التي تُفتح، ثم «السماح لهذا المشغّل». يعمل أيضًا على Windows 7 وLinux.
+Desktop	سطح المكتب
+Downloads	التنزيلات
+Not a logs zip: \"IMG_2041.jpg\" is not .txt, .log or .json	ليس ملف zip سجلات: «IMG_2041.jpg» ليس ‎.txt ولا ‎.log ولا ‎.json
+File not found	الملف غير موجود
+Too big: %s (%s at most per zip)	كبير جدًا: %s (الحد %s لكل zip)
+Not a zip (unreadable or empty file)	ليس ملف zip (ملف غير قابل للقراءة أو فارغ)
+Not a zip	ليس ملف zip
+Empty zip	ملف zip فارغ
+Too many entries: %u (500 at most)	عدد المدخلات كبير جدًا: %u (الحد 500)
+Damaged zip (directory outside the file)	ملف zip تالف (الفهرس خارج الملف)
+Damaged zip (unreadable entry)	ملف zip تالف (مدخل غير قابل للقراءة)
+Damaged zip (truncated name)	ملف zip تالف (اسم مبتور)
+Dangerous name in the zip: \"%s\"	اسم خطير داخل zip: «%s»
+Not a logs zip: \"%s\" is not .txt, .log or .json	ليس ملف zip سجلات: «%s» ليس ‎.txt ولا ‎.log ولا ‎.json
+Too big once unpacked: %s (64 MB at most)	كبير جدًا بعد فك الضغط: %s (الحد 64 MB)
+%d zip(s) added, %d refused: %s	أُضيف %d ملف(ات) zip، ورُفض %d: %s
+%d zip(s) added to the report	أُضيف %d ملف(ات) zip إلى التقرير
+Add logs zips	إضافة ملفات zip للسجلات
+Another player's logs zips (their Logs → Create a zip button, or yours sent over Discord). Tick the ones to attach: each one is checked before sending.	ملفات zip سجلات لاعب آخر (زرّه السجلات ← إنشاء zip، أو ملفك المُرسل عبر Discord). حدّد ما تريد إرفاقه: يُفحص كل ملف قبل الإرسال.
+Parent folder	المجلد الأصل
+No recent zip on the Desktop, in Downloads, Documents or MWCoop. Open a folder above, or Browse…	لا ملفات zip حديثة على سطح المكتب أو في التنزيلات أو المستندات أو MWCoop. افتح مجلدًا في الأعلى، أو استعرض…
+No zip or subfolder here.	لا ملف zip ولا مجلد فرعي هنا.
+ · already added	 · مُضاف مسبقًا
+%d ticked, %s · with the report: %s in %d zip(s) · 15 MB per zip, 16 zips, 40 MB in all	محدّد %d، %s · مع التقرير: %s في %d ملف(ات) zip · 15 MB لكل zip، 16 ملف zip، 40 MB إجمالًا
+Add	إضافة
+Browse…	استعراض…
 Different version (you %s, host %s)	نسخة مختلفة (لديك %s، لدى المضيف %s)
 The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n
 ⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?	⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟

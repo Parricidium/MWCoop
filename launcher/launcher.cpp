@@ -7231,6 +7231,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             float step = -(short)HIWORD(wp) / 120.0f * 64;
             if (g_tab == TAB_SKIN && SkinWheel(x, y, (short)HIWORD(wp))) return 0;   // (apercu du personnage : zoom)
             if (g_railScrollMax > 0 && g_railView.Contains(x, y)) { g_railScroll = min(max(g_railScroll + step * 0.6f, 0.0f), g_railScrollMax); return 0; }   // (barre de gauche, quand elle defile)
+            if (SigZipPickWheel(step)) return 0;   // (signalnatif.inc : fenetre de choix des zips, par-dessus la page)
             if (g_tab == TAB_NOTES && kNotesList.Contains(x, y)) g_noteListScroll += step;
             else if (g_tab == TAB_WIKI && kWikiList.Contains(x, y)) g_wikiListScroll += step;
             else g_scroll[g_tab] = min(max(g_scroll[g_tab] + step, 0.0f), MaxScroll(g_tab));
