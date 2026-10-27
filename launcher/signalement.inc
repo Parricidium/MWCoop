@@ -35,7 +35,7 @@ static RECT g_bugLastR;
 static DWORD g_bugHiddenT;                              // cachee depuis (fermeture apres une minute)
 static bool g_bugCapture;                               // /capture signaler : jamais de fenetre
 static bool g_bugTest;                                  // /testsignal panneau : fenetre jamais montree, pas de navigateur
-static int g_bugTestNav, g_bugTestDone;                 // essai : navigations vues, fin demandee
+static int g_bugTestNav, g_bugTestDone;                 // essai : navigations vues, etape (1 : example.com, 2 : racine du site, 3 : fin)
 static DWORD g_bugTestEndT;
 static int g_bugPossible = -1;                          // BugPanelPossible (-1 : pas encore regarde)
 static std::wstring g_bugVer;                           // version du moteur
@@ -87,7 +87,23 @@ static bool BugHostOk(const std::wstring &host)
     auto under = [&](const wchar_t *d) { size_t n = wcslen(d); return host == d || (host.size() > n && host[host.size() - n - 1] == L'.' && !host.compare(host.size() - n, n, d)); };
     return host == kBugHost || under(L"discord.com") || under(L"hcaptcha.com");
 }
-static bool BugUrlOk(const wchar_t *u) { return u && (!_wcsicmp(u, L"about:blank") || BugHostOk(BugUrlHost(u))); }
+// Sur le site lui-meme : seulement le formulaire et la connexion (/depot, /connexion, /deconnexion). Le tableau « MWCoop en
+// direct » (la racine, bouton « Retour au tableau » du formulaire) et le reste du site partent dans le navigateur : le
+// panneau, c'est le formulaire (retour de JD, 27/10 : le tableau s'etait ouvert dedans).
+static bool BugSitePathOk(const wchar_t *u)
+{
+    const wchar_t *p = wcschr(u + 8, L'/');
+    if (!p) return false;
+    return !_wcsnicmp(p, L"/depot", 6) || !_wcsnicmp(p, L"/connexion", 10) || !_wcsnicmp(p, L"/deconnexion", 12);
+}
+static bool BugUrlOk(const wchar_t *u)
+{
+    if (!u) return false;
+    if (!_wcsicmp(u, L"about:blank")) return true;
+    std::wstring host = BugUrlHost(u);
+    if (host == kBugHost) return BugSitePathOk(u);
+    return BugHostOk(host);
+}
 static void BugOpenBrowser(const wchar_t *u)   // (https seulement ; en essai : le journal)
 {
     std::wstring host = BugUrlHost(u);
@@ -143,7 +159,7 @@ static HRESULT BugNavStart(ICoreWebView2 *, ICoreWebView2NavigationStartingEvent
     if (!BugUrlOk(u)) {
         a->put_Cancel(TRUE);
         std::wstring host = BugUrlHost(u);
-        LaunchLog("signalement : navigation refusee (%s)", host.empty() ? "pas https" : Narrow(host, CP_UTF8).c_str());
+        LaunchLog("signalement : navigation refusee (%s%s)", host.empty() ? "pas https" : Narrow(host, CP_UTF8).c_str(), host == kBugHost ? ", hors du formulaire" : "");
         BugOpenBrowser(u);
     }
     CoTaskMemFree(u);
@@ -174,8 +190,8 @@ static HRESULT BugNavDone(ICoreWebView2 *wv, ICoreWebView2NavigationCompletedEve
     a->get_IsSuccess(&ok); a->get_WebErrorStatus(&st);
     if (ok || st != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED)   // (annulee : une navigation refusee, deja dans le journal)
         LaunchLog("signalement : page %s%s (%s)", ok ? "chargee" : "en echec ", ok ? "" : std::to_string((int)st).c_str(), Narrow(g_bugHost, CP_UTF8).c_str());
-    if (g_bugTest && !g_bugTestDone) {   // essai : une adresse hors liste doit etre refusee, puis fin
-        g_bugTestDone = 1; g_bugTestEndT = GetTickCount() + 1500;
+    if (g_bugTest && !g_bugTestDone) {   // essai : une adresse hors liste, puis la racine du site (le tableau), refusees ; puis fin
+        g_bugTestDone = 1; g_bugTestEndT = GetTickCount() + 1200;
         LaunchLog("testsignal : essai d'une navigation vers example.com");
         wv->Navigate(L"https://example.com/");
     }
@@ -303,8 +319,14 @@ static void BugPanelSync()
 static void BugTestTick()   // (essai /testsignal panneau : fin)
 {
     if (!g_bugTest || !g_bugTestDone || (g_bugTestEndT && GetTickCount() < g_bugTestEndT)) return;
+    if (g_bugTestDone == 1 && g_bugWv) {
+        g_bugTestDone = 2; g_bugTestEndT = GetTickCount() + 1200;
+        LaunchLog("testsignal : essai d'une navigation vers la racine du site (le tableau)");
+        g_bugWv->Navigate((std::wstring(L"https://") + kBugHost + L"/").c_str());
+        return;
+    }
     LaunchLog("testsignal : fin, etat %d, %d navigation(s) vue(s), domaine « %s »", g_bugState, g_bugTestNav, Narrow(g_bugHost, CP_UTF8).c_str());
-    g_bugTest = false; g_bugTestDone = 2;
+    g_bugTest = false; g_bugTestDone = 3;
     BugPanelClose();
     DestroyWindow(g_wnd);
 }
