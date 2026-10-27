@@ -185,6 +185,13 @@ static std::vector<Es2Issue> Es2Check(const Es2File &f, Es2Ctx &c)
             bool badP = Es2Bad(p[0]) || Es2Bad(p[1]) || Es2Bad(p[2]);
             bool under = !badP && c.r && p[1] < c.r->ymin;
             bool outside = !badP && (c.r ? (p[0] < c.r->xmin || p[0] > c.r->xmax || p[2] < c.r->zmin || p[2] > c.r->zmax || p[1] > c.r->ymax) : (fabsf(p[0]) > 1e5f || fabsf(p[2]) > 1e5f));
+            // My Summer Car ([MSC], 27/10, run/msc-sauvegarde §2) : objet jamais apparu -- <X>Installed ou <X>Purchased faux -- a une
+            // position au-dela de 1e5 : l'emplacement d'attente du jeu vanilla (turbo(xxxxx), contenu du cadeau de Noel ; holiday
+            // present(Clon2) pas achete). Rien a reparer : remis au garage, il y arriverait gratuitement.
+            if (c.r && !c.r->mwc && !badP && (fabsf(p[0]) > 1e5f || fabsf(p[1]) > 1e5f || fabsf(p[2]) > 1e5f)) {
+                auto off = [&](const char *suf) { auto it = idx.find(e.tag + suf); return it != idx.end() && Es2Kind(f, f.e[it->second]) == ES2_BOOL && b[f.e[it->second].data + 5] == 0; };
+                if (off("Installed") || off("Purchased")) continue;
+            }
             // piece montee de My Winter Car (<ID>AID > 0) : le jeu la remet sur son point de montage -- pas deplacee ; NaN : la voiture
             bool mounted = false;
             const float *mountAt = NULL;   // (montee ailleurs que sur la voiture : sa position si NaN)
