@@ -514,7 +514,7 @@ static void WinAnimCheck(const char *what)
     size_t bad = 0; int x0 = g_winW, y0 = g_winH, x1 = -1, y1 = -1;
     for (int y = 0; y < g_winH; y++) for (int x = 0; x < g_winW; x++) {
         size_t i = ((size_t)y * g_winW + x) * 4;
-        if (abs((int)shown[i] - full[i]) > 2 || abs((int)shown[i + 1] - full[i + 1]) > 2 || abs((int)shown[i + 2] - full[i + 2]) > 2) { bad++; /* (tolerance 2 par canal : bruit d'anti-crenelage d'un rendu partiel, invisible) */ if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        if (abs((int)shown[i] - full[i]) > 4 || abs((int)shown[i + 1] - full[i + 1]) > 4 || abs((int)shown[i + 2] - full[i + 2]) > 4) { bad++; /* (tolerance 4 par canal : bruit d'anti-crenelage d'un rendu partiel, et arrondi de GDI+ sur un DrawImage clippe -- les ombres (voisin le plus proche, echelle 1,125, theme clair) differaient de 3 a 4 niveaux sur 89 pixels entre le rendu partiel et le complet, Wine simule en 1600 x 900 le 27/10 ; une zone pas redessinee differe de dizaines de niveaux) */ if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
     }
     if (bad > 4) {   // (jusqu'a 4 pixels : un pixel de bord de clip anti-crenele, invisible)
         g_animTestFails++; LaunchLog("testanim : %s : %d images, ECHEC : %zu pixels differents dans (%d,%d)-(%d,%d)", what, n, bad, x0, y0, x1, y1);
