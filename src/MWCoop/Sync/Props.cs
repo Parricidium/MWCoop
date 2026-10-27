@@ -501,7 +501,16 @@ namespace MWCoop
                 else if (held != null && !DropInCopy(held)) { held.SettleUntil = now + 5f; if (!settling.Contains(held)) settling.Add(held); }
                 if (h != null)
                 {
-                    settling.Remove(h); Unride(h); h.RemoteBy = -1; SetKinematic(h, false); Log.Info("piece prise : " + h.Id);
+                    // Pris ici alors qu'il etait suivi (recale par l'hote, lache ou tenu par un autre : cinematique, calque 16) : la main du jeu
+                    // vient de le prendre (calque 16, attache a la main). Le rendre comme un objet lache -- vitesse recue, calque d'avant (19) --
+                    // le faisait heurter le joueur et les murs au bout de l'attache : objet qui part en glissant, traverse les murs, main restee
+                    // « pleine » (dossier #6 au frigo, sac de courses de GG le 26/10). held d'abord (HeldLook garde le calque du jeu), sans vitesse.
+                    bool wasFollowed = h.Kinematic || h.RemoteBy >= 0;
+                    settling.Remove(h); Unride(h); h.RemoteBy = -1; h.HeadBy = -1;
+                    if (Config.GetInt("Test", "PriseAncienne", 0) == 0) { held = h; h.Vel = Vector3.zero; }   // ([Test] PriseAncienne=1 : comme avant le 27/10)
+                    SetKinematic(h, false);
+                    if (h.Body != null && wasFollowed && !h.Body.isKinematic && held == h) { h.Body.velocity = Vector3.zero; h.Body.angularVelocity = Vector3.zero; }
+                    Log.Info("piece prise : " + h.Id + (wasFollowed ? " (elle etait suivie : rendue sans vitesse, calque du jeu garde)" : ""));
                     if (h.Body != null) Consume.Track(h.Body.gameObject);   // empoche ou mange en main : deja suivi
                 }
                 held = h;

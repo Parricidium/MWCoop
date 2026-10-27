@@ -1043,7 +1043,7 @@ namespace MWCoop
         // (scratchpad etat-diff.py) : ce qui diverge apres un chargement, un montage, une casse, un reglage. Seulement ce que le jeu
         // sauvegarde ou qui tient dans le temps : entrees Database (booleens, flottants, entiers de 'Data'), serrage et crans de chaque
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
-        static float etatAt;
+        static float etatAt, frNext;
         static string EtatArray(GameObject go)
         {
             PlayMakerArrayListProxy best = null;
@@ -1351,6 +1351,70 @@ namespace MWCoop
             // l'invite, a HacheA s (60), va au tas de bois et prend la hache ITEMS/ax(itemx) comme le joueur (main 'PickUp' : RaycastHitObject +
             // « State 1 »), puis EQUIP (« Check item » -> Ax) a +3 s ; a +25 s DROP_PART (lachee) ; a +35 s il prend [Test] HacheEnsuite (sausages) ;
             // chacun note toutes les 2 s l'etat de la main de l'invite, l'objet tenu, la hache (actif, pose, corps) -- chez l'hote, sa copie.
+            // ([Test] Autotest=mscfrigo, 2 joueurs, dossier #6 (frigo) et sac de GG du 26/10 : l'hote deplace l'objet [Test] FrigoObjet (sausages)
+            // de 0,3 m toutes les 1 s a partir de FrigoA-10 s (ses poses repartent, l'invite le suit sans cesse) ; l'invite le prend a FrigoA (90) par
+            // la main du jeu et le garde ; chacun note toutes les 0,5 s l'objet : pose par rapport a la camera de l'invite (chez lui), vitesse,
+            // calque, cinematique. Avec [Test] PriseAncienne=1 chez l'invite : comportement d'avant.)
+            if (mode == "mscfrigo")
+            {
+                // (frNext : prochain deplacement par l'hote, 1 s)
+                float fa = Config.GetFloat("Test", "FrigoA", 90f);
+                string name = Config.Get("Test", "FrigoObjet", "sausages");
+                Rigidbody ob = Props.BodyOf(Props.FindKey(name));
+                if (ob == null) foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>()) { PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use"); HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null; if (iv != null && iv.Value.StartsWith(name)) { ob = r; break; } }
+                // (l'hote le prend en main a FrigoA-3 s et le lache a FrigoA-1,5 s : ses poses « retombe » (5 s) le font suivre chez l'invite,
+                // comme JD lachant le sac de GG le 26/10 ; [Test] FrigoBouge=1 : simples deplacements toutes les 1 s a la place)
+                if (Net.Session.IsHost && ob != null && Config.GetInt("Test", "FrigoBouge", 0) != 0 && t > fa - 10f && t < fa + 20f && t > frNext)
+                {
+                    frNext = t + 1f;
+                    ob.transform.position += new Vector3(Mathf.Sin(t) * 0.3f, 0f, Mathf.Cos(t) * 0.3f); ob.position = ob.transform.position; ob.WakeUp();
+                }
+                if (Net.Session.IsHost && ob != null && Config.GetInt("Test", "FrigoBouge", 0) == 0 && (t > fa - 3f && prStep == 0 || t > fa - 1.5f && prStep == 1))
+                {
+                    GameObject hg0 = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                    PlayMakerFSM hf0 = hg0 != null ? Game.FsmOn(hg0, "PickUp") : null;
+                    Transform cam0 = PlayerSync.LocalCamera;
+                    if (prStep == 0 && hf0 != null && cam0 != null)
+                    {
+                        GameObject pl0 = Game.PlayerGo; var cc0 = pl0 != null ? pl0.GetComponent<CharacterController>() : null;
+                        if (cc0 != null) { cc0.enabled = false; pl0.transform.position = ob.position + Vector3.back * 1.0f; cc0.enabled = true; }
+                        ob.transform.position = cam0.position + cam0.forward * 0.6f; ob.position = ob.transform.position;
+                        HutongGames.PlayMaker.FsmGameObject rh0 = hf0.FsmVariables.FindFsmGameObject("RaycastHitObject");
+                        if (rh0 != null) { rh0.Value = ob.gameObject; Game.SetState(hf0, "State 1"); }
+                        Log.Info("autotest frigo : l'hote prend " + ob.name + " -> main " + hf0.ActiveStateName);
+                    }
+                    else if (prStep == 1 && hf0 != null)
+                    {
+                        // ([Test] FrigoLance=1 : lance comme le clic droit -- 'Drop part 2' puis 'Throw part' -- au lieu de le poser)
+                        if (Config.GetInt("Test", "FrigoLance", 0) != 0) Game.SetState(hf0, "Drop part 2"); else hf0.SendEvent("DROP_PART");
+                        Log.Info("autotest frigo : l'hote le " + (Config.GetInt("Test", "FrigoLance", 0) != 0 ? "lance" : "lache") + " -> main " + hf0.ActiveStateName);
+                    }
+                    prStep++;
+                }
+                if (!Net.Session.IsHost && ob != null && t > fa - 3f && prStep == 0)
+                {
+                    prStep = 1;
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; pl.transform.position = ob.position + Vector3.forward * 1.0f; cc.enabled = true; }
+                }
+                if (!Net.Session.IsHost && ob != null && t > fa && prStep == 1)
+                {
+                    prStep = 2;
+                    GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                    PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                    Transform cam = PlayerSync.LocalCamera;
+                    HutongGames.PlayMaker.FsmGameObject rh = hf != null ? hf.FsmVariables.FindFsmGameObject("RaycastHitObject") : null;
+                    if (rh != null && cam != null) { ob.transform.position = cam.position + cam.forward * 0.6f; ob.position = ob.transform.position; rh.Value = ob.gameObject; Game.SetState(hf, "State 1"); }
+                    Log.Info("autotest frigo : prise de " + ob.name + " (" + (ob.isKinematic ? "cinematique" : "libre") + ", calque " + ob.gameObject.layer + ") -> main " + (hf != null ? hf.ActiveStateName : "?"));
+                }
+                if (ob != null && t > fa - 12f && t < fa + 25f && t > psLogAt)
+                {
+                    psLogAt = t + 0.5f;
+                    Transform cam = PlayerSync.LocalCamera;
+                    Log.Info("autotest frigo : " + ob.name + " a " + (cam != null ? Vector3.Distance(cam.position, ob.position).ToString("F2") + " m de la camera" : "?") + ", v " + ob.velocity.magnitude.ToString("F1") + (ob.isKinematic ? " cin" : "") + ", calque " + ob.gameObject.layer + ", parent " + (ob.transform.parent != null ? ob.transform.parent.name : "-"));
+                }
+                return;
+            }
             if (mode == "mschache")
             {
                 float ha = Config.GetFloat("Test", "HacheA", 60f);
