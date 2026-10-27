@@ -121,14 +121,23 @@ static void ShellDrawHeader(Graphics &g)
     bool narrow = g_shW < 1100;
     Pen ln(g_soft.line, 1); g.DrawLine(&ln, h.X, h.Y + h.Height - 0.5f, h.X + h.Width, h.Y + h.Height - 0.5f);
     float x = 18, cy = h.Y + h.Height / 2;
-    RectF mk(x, cy - 19, 38, 38);
-    SoftRaised(g, mk, 12, 3, 8); SoftShape(g, mk, 12, g_soft.accSoft);
-    if (g_game == GAME_MSC) Icon(g, IC_SUN, mk.X + 19, mk.Y + 19, 20, g_soft.acc, 2.0f); else DrawSnowflake(g, mk.X + 19, mk.Y + 19, 10, g_soft.acc);
-    x += 48;
-    if (!narrow) {
-        Text(g, L"My Seasons Car", RectF(x, cy - 19, 150, 20), 15, FontStyleBold, g_soft.ink, StringAlignmentNear);
-        Text(g, g_game == GAME_MSC ? L"My Summer Car" : L"My Winter Car", RectF(x, cy + 1, 150, 16), 11.5f, FontStyleRegular, g_soft.muted, StringAlignmentNear);
-        x += 142;
+    {   // notre logo (demande de JD, 27/10 : « mettre notre logo en haut a gauche au lieu de l'icone + texte ») : net a toute
+        // echelle (une version reduite par hauteur en pixels, en cache), plus petit en fenetre etroite ; en sombre, un leger halo
+        // clair derriere pour que le contour noir des lettres se detache
+        static Bitmap *src; static Bitmap *cache; static int cacheH;
+        if (!src) src = LoadPngRes(11);
+        float lh = narrow ? 36.0f : 48.0f;
+        if (src) {
+            int ph = (int)(lh * g_dpiScale + 0.5f), pw = (int)(ph * (float)src->GetWidth() / src->GetHeight() + 0.5f);
+            if (!cache || cacheH != ph) { delete cache; cache = new Bitmap(pw, ph, PixelFormat32bppPARGB); Graphics gc(cache); gc.SetInterpolationMode(InterpolationModeHighQualityBicubic); gc.SetPixelOffsetMode(PixelOffsetModeHalf); gc.DrawImage(src, RectF(0, 0, (float)pw, (float)ph), 0, 0, (float)src->GetWidth(), (float)src->GetHeight(), UnitPixel); cacheH = ph; }
+            float lw = lh * pw / (float)ph;
+            RectF lr(x, cy - lh / 2, lw, lh);
+            if (g_softDark) SoftShape(g, RectF(lr.X - 6, lr.Y - 2, lr.Width + 12, lr.Height + 4), 12, Color(26, 255, 255, 255));
+            InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeHighQualityBilinear);
+            g.DrawImage(cache, lr, 0, 0, (float)pw, (float)ph, UnitPixel);
+            g.SetInterpolationMode(im);
+            x += lw + 14;
+        }
     }
     std::vector<std::wstring> labs = { L"MSC", L"MWC" };
     float sw = SoftSegW(labs, 12.5f);

@@ -16,6 +16,8 @@
 8 RCDATA "Nunito-ExtraBold.ttf"
 // 5 : le chargeur (build\version.dll) de la meme compilation -- reference pour verifier celui du jeu (LoaderEnsure)
 5 RCDATA "build\\version.dll"
+// 11 : notre logo (docs\img\logo-seasons.png, 760 x 497) : en-tete de la nouvelle interface (coque.inc ; demande de JD, 27/10)
+11 RCDATA "..\\docs\\img\\logo-seasons.png"
 
 1 VERSIONINFO
 FILEVERSION MWV_NUM
