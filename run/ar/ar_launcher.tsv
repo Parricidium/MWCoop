@@ -2538,6 +2538,29 @@ Mod up to date	المود محدّث
 Lobby open · %d players	الردهة مفتوحة · %d لاعبين
 Lobby open · %d player	الردهة مفتوحة · %d لاعب
 launcher 	المشغّل 
+Your reports and the form, right here in the launcher · the logs zip attached for you	تقاريرك والنموذج هنا في المشغّل مباشرة · ملف zip للسجلات يُرفق تلقائيًا
+Report a bug: your reports and the form, right here in the launcher · the logs zip is attached for you	الإبلاغ عن خلل: تقاريرك والنموذج هنا في المشغّل مباشرة · ملف zip للسجلات يُرفق تلقائيًا
+Open the site in the browser	فتح الموقع في المتصفح
+1. Open the site's page. 2. Sign in with Discord. 3. Type this code, then \"Allow this launcher\".	1. افتح صفحة الموقع. 2. سجّل الدخول عبر Discord. 3. اكتب هذا الرمز ثم «السماح لهذا المشغّل».
+Waiting for the site… code still valid for %d:%02d	في انتظار الموقع… الرمز صالح لمدة %d:%02d
+New code	رمز جديد
+Open the page	فتح الصفحة
+The code is never put in the address: you type it on the page yourself.	لا يوضع الرمز في العنوان أبدًا: أنت من يكتبه في الصفحة.
+Sends left: %d this hour · %d today	الإرسالات المتبقية: %d هذه الساعة · %d اليوم
+%s · the logs zip (%d files)	%s · ملف zip للسجلات (%d ملفات)
+%s · attached for you (%d files)	%s · يُرفق تلقائيًا (%d ملفات)
+Preparing the logs zip…	جارٍ تجهيز ملف zip للسجلات…
+Sending the fields…	جارٍ إرسال الحقول…
+Sending the logs (%d/%d)…	جارٍ إرسال السجلات (%d/%d)…
+Finishing…	جارٍ الإنهاء…
+Bug report site unreachable (error %lu)	تعذّر الوصول إلى موقع الإبلاغ (خطأ %lu)
+Unexpected answer from the site (%lu)	ردّ غير متوقع من الموقع (%lu)
+Could not build the logs zip (error %lu)	تعذّر إنشاء ملف zip للسجلات (خطأ %lu)
+Sending cancelled	أُلغي الإرسال
+Retry	إعادة المحاولة
+The site's form (panel)	نموذج الموقع (اللوحة)
+Bug reports inside the launcher (native)	الإبلاغ عن الأخطاء داخل المشغّل (أصلي)
+My reports and the form drawn by the launcher · off: the site's panel, or the browser	تقاريري والنموذج يرسمهما المشغّل · عند الإيقاف: لوحة الموقع أو المتصفح
 Different version (you %s, host %s)	نسخة مختلفة (لديك %s، لدى المضيف %s)
 The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n
 ⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?	⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟

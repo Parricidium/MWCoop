@@ -1,4 +1,5 @@
-﻿// ---------------------------------------------------------------- page GRAPHISMES - inclus par launcher.cpp
+﻿static bool SigActive(); static bool SigNativeOn();   // (signalnatif.inc, inclus apres : signalement natif de la nouvelle interface)
+// ---------------------------------------------------------------- page GRAPHISMES - inclus par launcher.cpp
 // Demande de JD (07/10), comme les GTA : les reglages graphiques dans le lanceur (et en jeu, menu F10). Ecrits dans
 // [Graphismes] du mwcoop.ini du jeu (MWCoop\Gfx.cs les applique au chargement, et tout de suite si le jeu tourne) ;
 // cle absente : le jeu decide ("Jeu" pour les reglages du moteur). Options du jeu (son menu) et reglages du moteur en
@@ -692,6 +693,7 @@ static const SetItem kSetItems[] = {
     { 20, SI_X, "compat", L"Retirer les modes de compatibilité", L"Remove compatibility modes", L"Windows en ajoute après un plantage : MWCoop ne se charge plus", L"Windows adds some after a crash: MWCoop stops loading" },
     { 20, SI_X, "debug", L"Mode débogage", L"Debug mode", L"Journaux détaillés pour le zip", L"Detailed logs for the zip" },
     { 20, SI_X, "discordask", L"Proposer le Discord", L"Offer the Discord", L"L'invitation après la visite guidée", L"The invitation after the guided tour" },
+    { 20, SI_X, "signalnatif", L"Signalement dans le lanceur (natif)", L"Bug reports inside the launcher (native)", L"Mes dossiers et le formulaire dessinés par le lanceur · coupé : le panneau du site, ou le navigateur", L"My reports and the form drawn by the launcher · off: the site's panel, or the browser" },
     { 20, SI_X, "signalnav", L"Signaler un bug dans le navigateur", L"Report bugs in the browser", L"Plutôt que dans le panneau du lanceur · le zip des journaux va sur le Bureau", L"Rather than in the launcher's panel · the logs zip goes to the Desktop" },
     { 20, SI_X, "repair", L"Réparer MWCoop", L"Repair MWCoop", L"Réécrit la copie de lancement et le chargeur", L"Rewrites the launch copy and the loader" },
     // (ex-boutons de l'en-tete, maquette du 17/10 : la page API des moddeurs, le depot GitHub)
@@ -881,7 +883,8 @@ static bool SetItemOn(const SetItem &it)
     if (it.only == 3) return !kRtShown;
     if (!kRtShown && (IsRtKey(it.key) || it.card == kRtCard)) return false;   // (carte Ray tracing entiere, son pied compris)
     if (it.key && !strcmp(it.key, "TrichesHote") && GfxGet("Triches") <= 0) return false;   // (sous-reglage : seulement triches autorisees)
-    if (it.key && !strcmp(it.key, "signalnav") && !BugPanelPossible()) return false;   // (sans le panneau -- Win7, Wine, moteur absent -- c'est deja le navigateur)
+    if (it.key && !strcmp(it.key, "signalnatif") && !g_newUi) return false;   // (nouvelle interface seulement)
+    if (it.key && !strcmp(it.key, "signalnav") && (!BugPanelPossible() || SigActive())) return false;   // (sans le panneau -- Win7, Wine, moteur absent -- c'est deja le navigateur)
     if (it.key && !strcmp(it.key, "themenouv") && !g_newUi) return false;   // (theme de la nouvelle interface : dans la nouvelle seulement ; l'ancienne a son onglet Theme)
     return it.kind != SI_GFX || SetGfxIdx(it.key) >= 0;
 }
@@ -1591,6 +1594,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
         else if (!strcmp(k, "compat")) { SetToggleRow(g, it, row, CompatAuto(), UI_SET_COMPAT); g_setCompatRow = row; }
         else if (!strcmp(k, "debug")) SetToggleRow(g, it, row, g_debug, UI_LOG_DEBUG);
         else if (!strcmp(k, "discordask")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"DiscordPropose", 0, g_iniLauncher.c_str()) == 0, UI_SET_DISCORDASK);
+        else if (!strcmp(k, "signalnatif")) SetToggleRow(g, it, row, SigNativeOn(), UI_SET_SIGNALNATIF);   // (signalnatif.inc)
         else if (!strcmp(k, "signalnav")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"SignalerNavigateur", 0, g_iniLauncher.c_str()) != 0, UI_SET_SIGNALNAV);   // (signalement.inc)
         else if (!strcmp(k, "repair")) SetButtonRow(g, it, row, T(L"Réparer", L"Repair"), UI_SET_REPAIR, false, !g_gameDir.empty() && g_lobby == LB_NONE && !g_busy);
         else if (!strcmp(k, "api")) { SetButtonRow(g, it, row, T(L"Ouvrir", L"Open"), UI_SET_API); g_setApiRow = row; }
@@ -1970,6 +1974,7 @@ static void SetTabDefaults(int tab)
             else if (!strcmp(k, "sessions")) WritePrivateProfileStringW(L"Lanceur", L"Sessions", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "discordask")) WritePrivateProfileStringW(L"Lanceur", L"DiscordPropose", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "signalnav")) WritePrivateProfileStringW(L"Lanceur", L"SignalerNavigateur", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "signalnatif")) WritePrivateProfileStringW(L"Lanceur", L"SignalerNatif", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "fenmemoire")) WritePrivateProfileStringW(L"Lanceur", L"FenetreMemoire", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "animreduites")) WritePrivateProfileStringW(L"Lanceur", L"AnimationsReduites", NULL, g_iniLauncher.c_str());
             else if (!strcmp(k, "themenouv")) SoftModeSet(2);

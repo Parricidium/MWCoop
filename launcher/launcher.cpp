@@ -2852,7 +2852,8 @@ static float SavesMaxScroll();     // (saves.inc)
 static float AddonsMaxScroll();    // (voiture.inc)
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
-static float MaxScroll(int t) { return t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX || t == TAB_COOP ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : t == TAB_CAR ? AddonsMaxScroll() : 0.0f; }
+static float SigMaxScroll();   // (signalnatif.inc)
+static float MaxScroll(int t) { return t == TAB_BUG ? SigMaxScroll() : t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX || t == TAB_COOP ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : t == TAB_CAR ? AddonsMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -4922,7 +4923,8 @@ static std::wstring FitText(const std::wstring &s, float px, int style, float ma
 #include "es2.inc"   // (lecture et reecriture des sauvegardes du jeu : Verifier la sauvegarde)
 #include "places.inc"   // (outil des places reserve : ID MWCoop, cle d'acces signee par JD, cles retirees)
 #include "outils-places.inc"   // (page Outils : bandeau Placement des sieges, [Addons et Tools])
-#include "signalement.inc"   // (Signaler un bug : le site de signalement dans le lanceur, moteur WebView2 ; sinon BugReport)
+#include "signalement.inc"
+#include "signalnatif.inc"   // (refonte L5 : Signaler un bug natif -- API JSON du site, connexion par code, Mes dossiers, formulaire, envoi des zips)   // (Signaler un bug : le site de signalement dans le lanceur, moteur WebView2 ; sinon BugReport)
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -6891,7 +6893,7 @@ static void Tick()
     LobbySoundsTick();
     SteamTick();
     MscTick();
-    BugPanelSync(); BugTestTick();   // (signalement.inc : la popup du site suit la fenetre, ou se cache)
+    BugPanelSync(); BugTestTick(); SigTick();   // (signalement.inc : la popup du site suit la fenetre, ou se cache)
     if (g_debug && (g_state == ST_LAUNCH || g_state == ST_RUNNING) && g_launchT) {   // (DLL du jeu a 5 et 15 s ; 30 s : RunTick)
         static DWORD doneFor, step;
         if (doneFor != g_launchT) { doneFor = g_launchT; step = 0; }
@@ -7215,6 +7217,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     }
     case WM_DROPFILES: if (!CleDrop((HDROP)wp)) ContentDrop((HDROP)wp); return 0;   // (fichier de cle d'acces .txt : places.inc)   // (modsync.inc : pistes .ogg et images deposees, page Contenu envoye)
     case WM_CHAR:
+        if (SigChar((wchar_t)wp)) return 0;   // (signalnatif.inc : champs du formulaire de signalement)
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
         if (SetChar((wchar_t)wp)) return 0;   // (gfx.inc : champ Chercher des reglages)
@@ -7938,6 +7941,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // decision seulement : navigateur), panneau (le vrai moteur WebView2 sur une fenetre jamais montree : page chargee, puis
     // une navigation hors liste, refusee ; fin au bout de 30 s au plus). Jamais de navigateur ni de fenetre pendant l'essai.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testfenetre")) { g_launcherLog = argv[2]; g_winTest = true; }   // (fenetre.inc : la nouvelle fenetre, jamais montree)
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/testsignalnatif")) return SigSelfTest(argv[2], argv[3]);   // (signalnatif.inc : parcours complet contre le relais local de [Site Tableau])
     if (argc >= 4 && !_wcsicmp(argv[1], L"/testsignal")) {
         g_launcherLog = argv[2];
         std::wstring mode = argv[3];
@@ -8207,6 +8211,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 }
         else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"survol-bug" || st == L"journaux-survol-bug") { if (st[0] == L'j') g_tab = TAB_LOGS; g_btn[B_BUG].hover = 1.0f; }   // (en-tete : etiquette du bouton Signaler un bug)
+        else if (!wcsncmp(st.c_str(), L"signaler-natif", 14)) SigCaptureState(st);   // (signalnatif.inc : connexion, code, liste, dossier, formulaire, envoi, merci, erreur)
         else if (st == L"signaler" || st == L"signaler-survol-zip" || st == L"signaler-echec") {   // (signalement.inc : la bande et un faux panneau, jamais de fenetre)
             g_tab = TAB_BUG; g_bugCapture = true; g_bugPossible = 1;
             if (st == L"signaler-survol-zip") g_uiHot = UI_BUG_ZIP;

@@ -243,7 +243,7 @@ static void SoftButton(Graphics &g, RectF r, const std::wstring &s, int id, bool
     if (press > 0) { float k = 1 - 0.03f * press; rr = RectF(r.X + r.Width * (1 - k) / 2, r.Y + r.Height * (1 - k) / 2, r.Width * k, r.Height * k); }
     if (press < 1) SoftRaised(g, rr, rad, 4, 10, a * (1 - press));
     SoftShape(g, rr, rad, primary ? WithA(g_soft.acc, a) : WithA(g_soft.bg, 1.0f));
-    if (press > 0) { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, rr, rad); g.SetClip(&p); Bitmap *dummy = NULL; (void)dummy;
+    if (press > 0) { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, rr, rad); g.SetClip(&p, CombineModeIntersect); Bitmap *dummy = NULL; (void)dummy;
         SoftShape(g, rr, rad, primary ? Color((BYTE)(70 * press), 0, 0, 0) : WithA(g_soft.bgIn, press)); g.Restore(st); if (!primary) { GraphicsState s2 = g.Save(); GraphicsPath p2; RoundRect(p2, rr, rad); g.SetClip(&p2); SoftInset(g, rr, rad); g.Restore(s2); } }
     if (hot && primary) { SoftShape(g, rr, rad, Color(28, 255, 255, 255)); }
     Color ink = primary ? WithA(g_soft.accInk, a) : WithA(hot ? g_soft.acc : g_soft.ink, a);
@@ -261,7 +261,7 @@ static void SoftToggleDraw(Graphics &g, RectF r, bool on, bool hot, long long ke
     float t = AnimTo(key, on ? 1.0f : 0.0f, kSoftTUi, SE_MOVE);
     Color fill = Color((BYTE)255, (BYTE)(g_soft.bgIn.GetR() + (g_soft.acc.GetR() - g_soft.bgIn.GetR()) * t), (BYTE)(g_soft.bgIn.GetG() + (g_soft.acc.GetG() - g_soft.bgIn.GetG()) * t), (BYTE)(g_soft.bgIn.GetB() + (g_soft.acc.GetB() - g_soft.bgIn.GetB()) * t));
     SoftShape(g, r, r.Height / 2, WithA(fill, enabled ? 1.0f : 0.5f));
-    if (t < 0.5f) { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftInset(g, r, r.Height / 2, 3, 6); g.Restore(st); }
+    if (t < 0.5f) { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, r.Height / 2, 3, 6); g.Restore(st); }
     if (hot) { Pen hp(WithA(g_soft.acc, 0.9f), 1.5f); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.DrawPath(&hp, &p); }
     float d = r.Height - 8, x = r.X + 4 + (r.Width - 8 - d) * t, y = r.Y + 4;
     SoftRaised(g, RectF(x, y, d, d), d / 2, 2, 5, 0.9f);
@@ -279,7 +279,7 @@ static void SoftToggleAt(Graphics &g, RectF r, bool on, bool hot)   // (UiToggle
 static void SoftFieldBox(Graphics &g, RectF r, bool focus)   // (DrawField des pages d'avant : la boite creuse)
 {
     SoftShape(g, r, kSoftRCtl, g_soft.bgIn);
-    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, kSoftRCtl); g.SetClip(&p); SoftInset(g, r, kSoftRCtl); g.Restore(st); }
+    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, kSoftRCtl); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, kSoftRCtl); g.Restore(st); }
     if (focus) { Pen fp(g_soft.acc, 2.0f); GraphicsPath p; RoundRect(p, RectF(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2), kSoftRCtl - 1); g.DrawPath(&fp, &p); }
 }
 // Segments / onglets : creux ; le curseur d'accent glisse sous le choix (220 ms, un seul objet) ; zones id0 + i.
@@ -301,7 +301,7 @@ static void SoftSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labs,
         extra = max(0.0f, (avail - tot) / labs.size());
     }
     SoftShape(g, r, min(kSoftRCtl, r.Height / 2), g_soft.bgIn);
-    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, min(kSoftRCtl, r.Height / 2)); g.SetClip(&p); SoftInset(g, r, min(kSoftRCtl, r.Height / 2)); g.Restore(st); }
+    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, min(kSoftRCtl, r.Height / 2)); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, min(kSoftRCtl, r.Height / 2)); g.Restore(st); }
     float x = r.X + 5, tx = x, tw = w.empty() ? 0 : w[0] + extra;
     std::vector<float> xs;
     for (size_t i = 0; i < labs.size(); i++) { xs.push_back(x); if ((int)i == sel) { tx = x; tw = w[i] + extra; } x += w[i] + extra + gap; }
@@ -320,7 +320,7 @@ static void SoftSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labs,
 static void SoftField(Graphics &g, RectF r, const std::wstring &text, const std::wstring &placeholder, bool focus, int icon = -1)
 {
     SoftShape(g, r, kSoftRCtl, g_soft.bgIn);
-    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, kSoftRCtl); g.SetClip(&p); SoftInset(g, r, kSoftRCtl); g.Restore(st); }
+    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, kSoftRCtl); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, kSoftRCtl); g.Restore(st); }
     if (focus) { Pen fp(g_soft.acc, 2.0f); GraphicsPath p; RoundRect(p, RectF(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2), kSoftRCtl - 1); g.DrawPath(&fp, &p); }
     float x = r.X + 14;
     if (icon >= 0) { Icon(g, icon, x + 9, r.Y + r.Height / 2, 18, g_soft.faint, 1.9f); x += 28; }
@@ -345,7 +345,7 @@ static float SoftChip(Graphics &g, float x, float y, const std::wstring &s, int 
 static void SoftProgress(Graphics &g, RectF r, float frac)   // creux + barre accent (frac < 0 : indeterminee)
 {
     SoftShape(g, r, r.Height / 2, g_soft.bgIn);
-    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftInset(g, r, r.Height / 2, 2, 5); g.Restore(st); }
+    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p, CombineModeIntersect); SoftInset(g, r, r.Height / 2, 2, 5); g.Restore(st); }
     if (frac < 0) { float t = (GetTickCount() % 1400) / 1400.0f, w = r.Width * 0.3f, x = r.X + (r.Width + w) * t - w; GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, r, r.Height / 2); g.SetClip(&p); SoftShape(g, RectF(x, r.Y, w, r.Height), r.Height / 2, g_soft.acc); g.Restore(st); InvalidateAll(); return; }
     float w = r.Width * min(max(frac, 0.0f), 1.0f);
     if (w > 0) SoftShape(g, RectF(r.X, r.Y, max(w, r.Height), r.Height), r.Height / 2, g_soft.acc);
@@ -355,7 +355,7 @@ static void SoftSlider(Graphics &g, RectF r, float frac, int id, bool enabled = 
     float cy = r.Y + r.Height / 2, h = 10;
     RectF track(r.X, cy - h / 2, r.Width, h);
     SoftShape(g, track, h / 2, g_soft.bgIn);
-    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, track, h / 2); g.SetClip(&p); SoftInset(g, track, h / 2, 2, 5); g.Restore(st); }
+    { GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, track, h / 2); g.SetClip(&p, CombineModeIntersect); SoftInset(g, track, h / 2, 2, 5); g.Restore(st); }
     float x = r.X + r.Width * min(max(frac, 0.0f), 1.0f);
     SoftShape(g, RectF(r.X, cy - h / 2, max(x - r.X, h), h), h / 2, WithA(g_soft.acc, enabled ? 1.0f : 0.5f));
     float d = 24;
@@ -371,7 +371,7 @@ static void SoftTile(Graphics &g, RectF r, const std::wstring &title, const std:
     float press = enabled ? SoftPress(id) : 0;
     RectF rr = r;
     if (press > 0) { float k = 1 - 0.025f * press; rr = RectF(r.X + r.Width * (1 - k) / 2, r.Y + r.Height * (1 - k) / 2, r.Width * k, r.Height * k); }
-    if (selected || press > 0.5f) { SoftShape(g, rr, 20, g_soft.bgIn); GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, rr, 20); g.SetClip(&p); SoftInset(g, rr, 20, 4, 9); g.Restore(st); }
+    if (selected || press > 0.5f) { SoftShape(g, rr, 20, g_soft.bgIn); GraphicsState st = g.Save(); GraphicsPath p; RoundRect(p, rr, 20); g.SetClip(&p, CombineModeIntersect); SoftInset(g, rr, 20, 4, 9); g.Restore(st); }
     else { SoftRaised(g, rr, 20, 6, 14, enabled ? 1.0f : 0.5f); SoftShape(g, rr, 20, g_soft.bg); }
     if (hot && !selected) { Pen hp(WithA(g_soft.acc, 0.5f), 1.2f); GraphicsPath p; RoundRect(p, rr, 20); g.DrawPath(&hp, &p); }
     RectF sq(rr.X + 18, rr.Y + 18, 46, 46);

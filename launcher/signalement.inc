@@ -334,8 +334,10 @@ static void BugTestTick()   // (essai /testsignal panneau : fin)
 }
 
 // ---- la page : la bande, et le site dessous (la popup ; sans elle, un cadre et un mot)
+static bool SigActive(); static void SigOpen();   // (signalnatif.inc)
 static void BugOpen()
 {
+    if (SigActive()) { SigOpen(); return; }   // (refonte L5 : la version native, dans la nouvelle interface)
     if (g_tab != TAB_BUG) GoPage(TAB_BUG);
     BugPanelCreate();
     SetStatus(K_NORMAL, T(L"Signaler un bug : le formulaire du site, ici · « Créer le zip des journaux » en haut, puis glisse le zip dedans",

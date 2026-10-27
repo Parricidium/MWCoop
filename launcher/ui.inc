@@ -717,7 +717,7 @@ static void DrawHeader(Graphics &g)
     case TAB_VHS: case TAB_ALBUM:
         if (g_game == GAME_MSC) { title = T(L"Album", L"Album"); sub = T(L"Les photos prises au drone.", L"The photos taken with the drone."); break; }   // (pas de VHS sur MSC)
         title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
-    case TAB_BUG: title = T(L"Signaler un bug", L"Report a bug"); sub = T(L"Le formulaire du site, dans le lanceur · tes journaux en un clic", L"The site's form, inside the launcher · your logs in one click"); break;   // (signalement.inc)
+    case TAB_BUG: title = T(L"Signaler un bug", L"Report a bug"); sub = SigActive() || g_sigCapture ? T(L"Tes dossiers et le formulaire, ici dans le lanceur · le zip des journaux joint tout seul", L"Your reports and the form, right here in the launcher · the logs zip attached for you") : T(L"Le formulaire du site, dans le lanceur · tes journaux en un clic", L"The site's form, inside the launcher · your logs in one click"); break;   // (signalement.inc)
     case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Tes parties MWCoop, à part de la sauvegarde solo du jeu. L'hôte choisit laquelle lancer ; les invités la reçoivent.", L"Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it."); break;
     }
     // commandes de droite : fermer, reduire, theme, langue | API moddeurs, Journaux, Credits (retour de JD, 18/10 : comme
@@ -1615,7 +1615,7 @@ static void DrawUI(Graphics &g)
     case TAB_VHS: DrawVhs(g); break;
     case TAB_ALBUM: DrawAlbum(g); break;
     case TAB_SAVES: DrawSaves(g); break;
-    case TAB_BUG: DrawBugPage(g); break;   // (signalement.inc : la bande ; le site, dans sa popup par-dessus)
+    case TAB_BUG: if (SigActive() || g_sigCapture) DrawSigPage(g); else DrawBugPage(g); break;   // (signalnatif.inc : la version native ; sinon   // (signalement.inc : la bande ; le site, dans sa popup par-dessus)
     default: DrawHome(g); break;
     }
     DrawHeader(g);
@@ -1630,6 +1630,8 @@ static void LobbyOptClick(int id);   // (cartes du bas du salon : code, public /
 static bool UiClick(int id)
 {
     if (id == UI_NONE) return true;
+    if (id >= UI_SIG && id < UI_SIG + 1000) return SigClick(id);   // (signalnatif.inc)
+    if (id == UI_SET_SIGNALNATIF) { bool on = SigNativeOn(); WritePrivateProfileStringW(L"Lanceur", L"SignalerNatif", on ? L"0" : NULL, g_iniLauncher.c_str()); if (on) { g_sigView = SV_LOADING; } else BugPanelClose(); return true; }
     if (id >= UI_ADDON_VIEW && id < UI_ADDON_VIEW + 2) { AddonsSetView(id - UI_ADDON_VIEW); return true; }
     if (id >= UI_ADDON_FILTER && id < UI_ADDON_FILTER + 8) { AddonsSetFilter(id - UI_ADDON_FILTER); return true; }
     if (id >= UI_ADDON_GET && id < UI_ADDON_GET + 20) { int i = id - UI_ADDON_GET; if (i < (int)g_addonList.size()) AddonDownload(g_addonList[i].key); return true; }   // (catalogue : Telecharger / Mettre a jour)

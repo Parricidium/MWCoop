@@ -2341,3 +2341,26 @@ My CORRIS paint	Покраска моей CORRIS
 In front of the garage	Перед гаражом
 Total size	Общий размер
 Above 100 MB, guests take longer to arrive.	Свыше 100 МБ гости заходят дольше.
+Your reports and the form, right here in the launcher · the logs zip attached for you	Твои дела и форма, прямо в лаунчере · zip журналов прикрепляется сам
+Report a bug: your reports and the form, right here in the launcher · the logs zip is attached for you	Сообщить об ошибке: твои дела и форма прямо в лаунчере · zip журналов прикрепляется сам
+Open the site in the browser	Открыть сайт в браузере
+1. Open the site's page. 2. Sign in with Discord. 3. Type this code, then \"Allow this launcher\".	1. Открой страницу сайта. 2. Войди через Discord. 3. Введи этот код, затем «Разрешить этот лаунчер».
+Waiting for the site… code still valid for %d:%02d	Ждём сайт… код действует ещё %d:%02d
+New code	Новый код
+Open the page	Открыть страницу
+The code is never put in the address: you type it on the page yourself.	Код никогда не ставится в адрес: ты вводишь его на странице сам.
+Sends left: %d this hour · %d today	Осталось отправок: %d в этот час · %d сегодня
+%s · the logs zip (%d files)	%s · zip журналов (%d файлов)
+%s · attached for you (%d files)	%s · прикрепляется сам (%d файлов)
+Preparing the logs zip…	Готовим zip журналов…
+Sending the fields…	Отправляем поля…
+Sending the logs (%d/%d)…	Отправляем журналы (%d/%d)…
+Finishing…	Завершаем…
+Bug report site unreachable (error %lu)	Сайт сообщений об ошибках недоступен (ошибка %lu)
+Unexpected answer from the site (%lu)	Неожиданный ответ сайта (%lu)
+Could not build the logs zip (error %lu)	Не удалось собрать zip журналов (ошибка %lu)
+Sending cancelled	Отправка отменена
+Retry	Повторить
+The site's form (panel)	Форма сайта (панель)
+Bug reports inside the launcher (native)	Сообщения об ошибках в лаунчере (встроенные)
+My reports and the form drawn by the launcher · off: the site's panel, or the browser	Мои дела и форма рисуются лаунчером · выкл: панель сайта или браузер
