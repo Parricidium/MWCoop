@@ -16,7 +16,7 @@ namespace MWCoop
     // Chaine d'apparence (reseau, [Coop] du mwcoop.ini) : "haut|pantalon|visage|corps|chapeau|lunettes|cheveux" ;
     // un champ vide = celui du modele ; une chaine sans '|' = le haut seul (ancien format).
     // Apercu du lanceur : cache\perso.mesh + cache\perso\<matiere>.png (Export), refaits a chaque version du mod.
-    // My Summer Car (BETA, 19/10) : tout vient aussi des PNJ de la scene, donc de MSC seulement (jamais une tenue de MWC) ; memes
+    // My Summer Car (19/10) : tout vient aussi des PNJ de la scene, donc de MSC seulement (jamais une tenue de MWC) ; memes
     // maillages de corps (memes cles, UV et sous-maillages) et memes noms de matieres char_shirtNN / char_pantsNN / char_faceNN
     // (autres textures). Correlation (ref\msc-v.250908-04\apparences.txt, exports des deux jeux) :
     //  - hauts : 01-04, 07, 09-13, 16-20, 22, cop_shirt, cop_shirt2, rally_shirt dans les deux ; 05, 06, 08, 14, 15 MSC seulement ;

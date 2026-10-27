@@ -25,7 +25,7 @@ namespace MWCoop
         /// <summary>Largest payload of an unreliable message (one packet; the latest one wins, some may be lost).</summary>
         public const int MaxUnreliableBytes = 1000;
 
-        /// <summary>The game MWCoop runs in: "My Winter Car" or "My Summer Car" (same API in both; MSC support is in BETA).</summary>
+        /// <summary>The game MWCoop runs in: "My Winter Car" or "My Summer Car" (same API in both).</summary>
         public static string GameName { get { return Game.Name; } }
 
         /// <summary>True in My Summer Car, false in My Winter Car.</summary>

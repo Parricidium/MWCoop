@@ -6,7 +6,7 @@ namespace MWCoop
     // Acces aux objets du jeu.
     public static class Game
     {
-        // Le jeu : My Summer Car (switch MSC / MWC du lanceur, 19/10, BETA) ou My Winter Car. Sur MSC, seuls les modules
+        // Le jeu : My Summer Car (switch MSC / MWC du lanceur, 19/10) ou My Winter Car. Sur MSC, seuls les modules
         // generiques tournent (Core.MscModules) tant que les autres n'ont pas leur table de noms pour ce jeu.
         public static readonly bool Msc = Application.dataPath.EndsWith("mysummercar_Data", System.StringComparison.OrdinalIgnoreCase);
         public static string Name { get { return Msc ? "My Summer Car" : "My Winter Car"; } }

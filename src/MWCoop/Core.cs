@@ -16,7 +16,7 @@ namespace MWCoop
             useGUILayout = false;   // (aucun GUILayout : pas de passage Layout dans OnGUI, une passe de moins par evenement -- revue du 14/10)
             Config.Load();
             dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0 || Config.Get("Test", "VidageCibles", "").Length > 0;
-            Log.Info("jeu : " + Game.Name + (Game.Msc ? " (BETA : modules generiques et voitures)" : ""));
+            Log.Info("jeu : " + Game.Name);
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
             Log.Info("sauvegardes : " + Application.persistentDataPath);
             Application.runInBackground = true;   // (hote en Alt-Tab : plus de paquets pendant 15 s -> delai depasse chez les invites ; relecture du 15/10)
@@ -388,7 +388,7 @@ namespace MWCoop
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Game.LevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 
-        // My Summer Car (BETA) : les modules generiques seulement (inventaire du 19/10, docs\MSC-inventaire.md) ; les autres
+        // My Summer Car : les modules generiques seulement (inventaire du 19/10, docs\MSC-inventaire.md) ; les autres
         // attendent leur table de noms pour ce jeu. Chacun a part : une erreur n'empeche pas les suivants.
         void MscLevelLoaded()
         {

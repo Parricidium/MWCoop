@@ -27,7 +27,7 @@ namespace MWCoop
     // et quand le mod entre lui-meme en partie (Flow.AutoSkip) avec des musiques a lire (recues de l'hote, ou dans ses
     // propres dossiers), l'import est lance comme par le bouton ; Flow attend sa fin (30 s au plus).
     //
-    // My Summer Car (BETA, 19/10) : memes lecteurs (vidage ref\msc-v.250908-04 : GetAppPath + BuildString "Images/" + fichier ;
+    // My Summer Car (19/10) : memes lecteurs (vidage ref\msc-v.250908-04 : GetAppPath + BuildString "Images/" + fichier ;
     // CD1-3 et Radio/Folk::LoadSongs comme MWC) pour car.png (ImportCarTexture, la SATSUMA), jonnez.png, flag_garage.png,
     // poster1-3.png, window_sticker.png et les musiques ; ni fabric.png ni Extra (le lanceur ne les envoie pas). La boucle de
     // Traffic (qui appelle OnLevelLoaded et Update dans MWC) ne tourne pas sur MSC : MenuUpdate s'en charge (MscGame).
