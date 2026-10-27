@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using UnityEngine;
 
@@ -195,6 +195,83 @@ namespace MWCoop
                 f.SendEvent("ON"); f.SendEvent("ON"); n++;
             }
             return "phares : touche simulee dans " + n + " bouton(s)";
+        }
+
+        // Autotest « mscphares » (2 joueurs, chacun au volant de sa voiture) : la touche des phares simulee comme le jeu la lit --
+        // chaque automate Use dont l'etat courant lit HighBeam (GetButtonDown) recoit son evenement, dans TOUS les vehicules ;
+        // « court » : relachee 0,15 s apres (GetButtonUp des etats qui l'attendent), « long » : tenue (le delai de l'automate joue).
+        // [Test] PharesVoiture=HAYOSIKO(1500kg, 250) ; PharesAppuis=55:court,110:long (temps de chacun) ; PharesReleves=95,125 :
+        // feux de chaque bouton (Selection / LightsOn) et voiture du joueur. Attendu : seuls les feux de la voiture de celui qui
+        // appuie changent, chez lui et chez l'autre (avant le 27/10 : ceux de la voiture de l'autre aussi, chez l'autre).
+        static int keyStep, keyLogStep;
+        public static bool KeyReleve;
+        static float keyReleaseAt = -1;
+        public static void TestKey(string mode, float t)
+        {
+            if (mode != "mscphares") return;
+            string car = Config.Get("Test", "PharesVoiture", "SATSUMA(557kg, 248)");
+            if (keyStep == 0 && t > 30f) { keyStep = 1; Log.Info("autotest : mscphares, " + VehicleSync.TestEnter(car, false)); }
+            if ((keyStep == 1 && t > 33f) || (keyStep == 2 && t > 35f)) { keyStep++; Log.Info("autotest : mscphares, au volant : " + VehicleSync.TestEnter(car, true)); }
+            string[] presses = Config.Get("Test", "PharesAppuis", "").Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
+            int pi = keyStep - 3;
+            if (keyStep >= 3 && pi < presses.Length)
+            {
+                string[] pp = presses[pi].Split(':');
+                float at; float.TryParse(pp[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out at);
+                if (t > at)
+                {
+                    keyStep++;
+                    bool shortP = pp.Length < 2 || pp[1] != "long";
+                    Log.Info("autotest : mscphares, appui " + (shortP ? "court" : "long") + " (PlayerCurrentVehicle '" + Cur() + "') : " + SendKey("GetButtonDown"));
+                    if (shortP) keyReleaseAt = t + 0.15f;
+                }
+            }
+            if (keyReleaseAt > 0 && t > keyReleaseAt) { keyReleaseAt = -1; Log.Info("autotest : mscphares, touche relachee : " + SendKey("GetButtonUp")); }
+            string[] logs = Config.Get("Test", "PharesReleves", "").Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
+            if (keyLogStep < logs.Length)
+            {
+                float at; float.TryParse(logs[keyLogStep], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out at);
+                if (t > at) { keyLogStep++; KeyReleve = true; Log.Info("autotest : mscphares, releve " + keyLogStep + " (voiture du joueur " + (VehicleSync.LocalDrivingRoot != null ? VehicleSync.LocalDrivingRoot.name : "aucune") + ") : " + LightStates()); }
+            }
+        }
+        static string Cur() { FsmString c = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle"); return c != null ? c.Value : "?"; }
+        static string SendKey(string action)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Object o in Game.FsmsNamed("Use"))
+            {
+                PlayMakerFSM f = o as PlayMakerFSM;
+                if (f == null || !f.enabled || !f.gameObject.activeInHierarchy || f.Fsm == null || f.Fsm.ActiveState == null) continue;
+                FsmStateAction[] acts;
+                try { acts = f.Fsm.ActiveState.Actions; } catch { continue; }
+                foreach (FsmStateAction a in acts)
+                {
+                    FsmEvent ev = null; FsmString bn = null;
+                    var d = a as HutongGames.PlayMaker.Actions.GetButtonDown; if (d != null && action == "GetButtonDown") { ev = d.sendEvent; bn = d.buttonName; }
+                    var u = a as HutongGames.PlayMaker.Actions.GetButtonUp; if (u != null && action == "GetButtonUp") { ev = u.sendEvent; bn = u.buttonName; }
+                    if (ev == null || bn == null || bn.Value != Config.Get("Test", "PharesTouche", "HighBeam")) continue;   // (My Winter Car : LightsDrive, HiBeamToggle...)
+                    sb.Append(Recon.Path(f.transform).Split('/')[0]).Append(':').Append(f.ActiveStateName).Append("-").Append(ev.Name).Append(' ');
+                    f.SendEvent(ev.Name);
+                    break;
+                }
+            }
+            return sb.Length > 0 ? sb.ToString() : "aucun bouton";
+        }
+        static string LightStates()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Object o in Game.FsmsNamed("Use"))
+            {
+                PlayMakerFSM f = o as PlayMakerFSM;
+                if (f == null || f.Fsm == null) continue;
+                string n = f.gameObject.name;
+                if (n != "Lights" && n != "LightModes" && n != "ButtonLights" && n != "ButtonLightModes") continue;
+                FsmInt sel = f.FsmVariables.FindFsmInt("Selection");
+                FsmBool on = f.FsmVariables.FindFsmBool("LightsOn");
+                string val = on != null ? (on.Value ? "allumes" : "eteints") : sel != null ? sel.Value.ToString() : "?";
+                sb.Append(Recon.Path(f.transform).Split('/')[0]).Append('=').Append(val).Append('[').Append(f.ActiveStateName).Append("] ");
+            }
+            return sb.ToString();
         }
 
         // Essais : etat des automates (autotest « phares »).

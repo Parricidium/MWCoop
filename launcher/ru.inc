@@ -2417,6 +2417,8 @@ static const wchar_t *const kRu[][2] = {
     { L"Browse…", L"Обзор…" },
     { L"file|files", L"файл|файла|файлов" },
     { L"unknown date", L"дата неизвестна" },
+    { L"Before the streams", L"До разделения на потоки" },
+    { L" (the mod)", L" (мод)" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

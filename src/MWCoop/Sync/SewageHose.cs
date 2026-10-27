@@ -1,4 +1,4 @@
-using HutongGames.PlayMaker;
+﻿using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -27,10 +27,26 @@ namespace MWCoop
         static float nextSend, lastRemote, nextLook;
         static Vector3 rp; static Quaternion rq;
         static int logs;
+        static bool leading, ignoring, selfMode; static int oldRule = -1;
+        static Collider[] gifuCols;
+        static void IgnoreCopy(Transform gt, bool on)
+        {
+            if (on == ignoring || cols == null || gt == null) return;
+            ignoring = on;
+            if (gifuCols == null) gifuCols = gt.GetComponentsInChildren<Collider>(true);
+            int n = 0;
+            foreach (Collider a in cols)
+            {
+                if (a == null || !a.enabled) continue;
+                foreach (Collider b in gifuCols)
+                    if (b != null && b.enabled && !b.isTrigger && !b.transform.IsChildOf(root.transform)) { Physics.IgnoreCollision(a, b, on); n++; }
+            }
+            if (logs++ < 10) Log.Info("tuyau de la GIFU : chocs avec la copie du camion " + (on ? "coupes" : "rendus") + " (" + n + " paires)");
+        }
 
         static Transform Gifu() { Rigidbody b = VehicleSync.Body("GIFU(750/450psi)"); return b != null ? b.transform : null; }
 
-        public static void OnLevelLoaded() { root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; npcDone.Clear(); nextNpcLook = 0; }
+        public static void OnLevelLoaded() { leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; npcDone.Clear(); nextNpcLook = 0; }
 
         static bool Find()
         {
@@ -49,6 +65,7 @@ namespace MWCoop
             for (int i = 0; i < 200; i++) { Transform n = t.Find("Hose(xxxxx)"); if (n == null) break; t = n; Rigidbody rb = n.GetComponent<Rigidbody>(); if (rb != null) l.Add(rb); }
             end = t != c ? t.GetComponent<Rigidbody>() : null;
             coupler = c; segs = l.ToArray(); cols = root.GetComponentsInChildren<Collider>(true);
+            couplerRb = c.GetComponent<Rigidbody>(); couplerParent = c.parent; couplerPos = c.localPosition; couplerRot = c.localRotation;
             if (end != null) Log.Info("tuyau de la GIFU : bout " + t.name + " (" + Recon.Path(t).Split('/').Length + " niveaux)");
             return end != null;
         }
@@ -86,13 +103,25 @@ namespace MWCoop
             bool isOut = root.activeInHierarchy;
             if (!isOut)
             {
-                if (wasOut) { Release(); mine = false; remoteBy = -1; wasOut = false; }
+                if (wasOut) { Release(); IgnoreCopy(Gifu(), false); mine = false; remoteBy = -1; wasOut = false; leading = false; }
                 return;
             }
             wasOut = true;
             bool held = FireTools.Held() == end.gameObject || testHeld;
             if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) Release(); } }
-            if (mine && Session.RemoteCount > 0 && now >= nextSend)
+            // Personne ne l'a encore eu en main (sorti, pas tenu) : celui qui mene la GIFU fait foi et envoie la pose du bout. Avant,
+            // personne n'envoyait : chez les autres la chaine restait physique, accrochee au raccord de la COPIE cinematique du camion
+            // (moteur tournant, recalee a chaque message), percutee a 15-80 km/h et projetee dans tous les sens (JD et GG, MSC,
+            // 27/10 : « il partait dans tous les sens comme un serpent »). Chez eux, elle suit maintenant cette pose, sans physique.
+            Transform gt = Gifu();
+            if (oldRule < 0) oldRule = Config.GetInt("Test", "TuyauAncien", 0);   // (essais : regle d'avant le 27/10)
+            bool lead = oldRule == 0 && !mine && remoteBy < 0 && gt != null && VehicleSync.SimAuthority(gt);
+            if (lead && !leading) { leading = true; if (logs++ < 10) Log.Info("tuyau de la GIFU : sorti, pas encore en main : pose du bout envoyee d'ici (camion mene ici)"); }
+            if (!lead) leading = false;
+            // (chaine physique ici sur une copie du camion -- tenue ici : ses maillons ne heurtent plus les collisionneurs de la copie,
+            // deplacee par les messages et pas par la physique)
+            if (oldRule == 0) IgnoreCopy(gt, (!following || selfMode) && gt != null && !VehicleSync.SimAuthority(gt));
+            if ((mine || lead) && Session.RemoteCount > 0 && now >= nextSend)
             {
                 nextSend = now + (held ? 0.1f : 0.5f);
                 Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@bout").Vec(end.position).Quat(end.rotation).Bool(held), false);
@@ -102,27 +131,51 @@ namespace MWCoop
                 if (now - lastRemote > 3f) { Release(); remoteBy = -1; return; }
                 Follow();
             }
+            else if (mine && oldRule == 0 && gt != null && !VehicleSync.SimAuthority(gt)) Follow(true, held);
+            else if (selfMode) Release();
         }
 
         // Chaine posee sans physique : du raccord (sur le camion) au bout recu, en courbe (le mou pend).
-        static void Follow()
+        // self : chaine tenue ICI alors que le camion est une copie (deplacee par les messages) : la chaine physique, soudee au
+        // ShitTank cinematique de la copie, explosait chez celui qui tenait le bout (essai MSC 27/10 : maillons a 15 000 m/s, a 800 km ;
+        // GG chez JD : « il partait dans tous les sens comme un serpent ») et ses poses folles partaient chez les autres. Posee comme
+        // chez les autres, du raccord au bout que la main tient (le bout reste au jeu).
+        static bool endKin, selfHeld, couplerKin;
+        // Raccord (corps soude au ShitTank) : sur une copie du camion, sa pose physique restait en arriere de la voiture deplacee
+        // (Unity 5.0 : corps enfant en retard -- [MWC] 27/10, raccord a ~20 m chez l'invite, poses du bout fausses et refusees chez
+        // l'hote au-dela de 30 m). Pendant le suivi : cinematique, a sa pose de repos sous HOSE.
+        static Rigidbody couplerRb; static Transform couplerParent; static Vector3 couplerPos; static Quaternion couplerRot;
+        static void Follow(bool self = false, bool held = false)
         {
             if (segs == null || segs.Length == 0 || coupler == null) return;
+            if (following && self != selfMode) Release();
             if (!following)
             {
-                following = true;
+                following = true; selfMode = self; endKin = end.isKinematic; selfHeld = held;
+                if (couplerRb != null) { couplerKin = couplerRb.isKinematic; couplerRb.isKinematic = true; }
                 chainLen = 0f;
                 Vector3 prev = coupler.position;
                 foreach (Rigidbody r in segs) { chainLen += (r.position - prev).magnitude; prev = r.position; }
                 if (!(chainLen > 1f && chainLen < 50f)) chainLen = segs.Length * 0.25f;
-                foreach (Rigidbody r in segs) { r.isKinematic = true; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
-                foreach (Collider c in cols) if (c != null) c.enabled = false;
+                foreach (Rigidbody r in segs) { if (!r.isKinematic) { r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; } r.isKinematic = true; }   // (le bout aussi : tenu, il suit la main -- son parent -- ; lache, il reste ou il est pose)
+                foreach (Collider c in cols) if (c != null && !(self && c.attachedRigidbody == end)) c.enabled = false;
             }
+            Vector3 ep0 = end.transform.position; Quaternion eq0 = end.transform.rotation;   // (le raccord est la racine de la chaine : le recaler deplace le bout)
+            if (couplerRb != null && coupler.parent == couplerParent) { coupler.localPosition = couplerPos; coupler.localRotation = couplerRot; }
+            if (self) { end.transform.position = ep0; end.transform.rotation = eq0; }
+            if (self && !end.isKinematic) { end.isKinematic = true; end.velocity = Vector3.zero; }   // (la main ou le jeu l'ont rendu physique : la chaine posee ne le tire plus)
+            if (self && selfHeld && !held) Ground();   // (lache ici : pose au sol)
+            if (self) selfHeld = held;
             Vector3 a = coupler.position;
-            Vector3 b = Vector3.Lerp(segs[segs.Length - 1].position, rp, 0.5f);
+            Vector3 b = self ? end.transform.position : Vector3.Lerp(segs[segs.Length - 1].position, rp, 0.5f);
             float d = (b - a).magnitude, sag = Mathf.Max(0f, chainLen - d) * 0.5f;
+            // (le mou ne descend pas sous le plus bas des deux bouts : tuyau pose par terre, pas sous le sol -- essai MSC 27/10, chaine a
+            // 4,6 m du raccord chez l'invite pour 1,7 m chez celui qui la menait)
+            sag = Mathf.Min(sag, Mathf.Max(0f, (a.y + b.y) * 0.5f - Mathf.Min(a.y, b.y) + 0.05f));
             int n = segs.Length;
-            for (int i = 0; i < n; i++)
+            // (le bout est l'enfant du maillon d'avant tant que la main ne l'a pas repris : sa pose gardee et remise apres la passe)
+            Vector3 ep = end.transform.position; Quaternion eq = end.transform.rotation;
+            for (int i = 0; i < (self ? n - 1 : n); i++)
             {
                 float k = (i + 1f) / n;
                 Vector3 p = Vector3.Lerp(a, b, k) + Vector3.down * (sag * 4f * k * (1f - k));
@@ -133,13 +186,29 @@ namespace MWCoop
                 if (i == n - 1) t.rotation = Quaternion.Slerp(t.rotation, rq, 0.5f);
                 else if ((q - p).sqrMagnitude > 1e-6f) t.rotation = Quaternion.LookRotation(q - p, Vector3.up);
             }
+            if (self) { end.transform.position = ep; end.transform.rotation = eq; }
+        }
+
+        // Bout lache ici sur une copie (chaine posee) : sur le premier sol sous lui, pas en l'air.
+        static void Ground()
+        {
+            Vector3 from = end.transform.position + Vector3.up * 0.5f;
+            float best = float.MaxValue; Vector3 at = Vector3.zero;
+            foreach (RaycastHit h in Physics.RaycastAll(from, Vector3.down, 30f, ~0))
+            {
+                if (h.collider == null || h.collider.isTrigger || h.collider.transform.IsChildOf(root.transform) || Game.UnderPlayer(h.collider.transform)) continue;
+                if (h.distance < best) { best = h.distance; at = h.point; }
+            }
+            if (best < float.MaxValue) end.transform.position = at + Vector3.up * 0.06f;
         }
 
         static void Release()
         {
             if (!following) return;
-            following = false;
-            if (segs != null) foreach (Rigidbody r in segs) if (r != null) { r.isKinematic = false; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
+            following = false; ignoring = false;
+            bool wasSelf = selfMode; selfMode = false;
+            if (couplerRb != null) couplerRb.isKinematic = couplerKin;   // (colliders rallumes : IgnoreCollision a refaire)
+            if (segs != null) foreach (Rigidbody r in segs) if (r != null) { if (wasSelf && r == end) { r.isKinematic = endKin; continue; } r.isKinematic = false; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
             if (cols != null) foreach (Collider c in cols) if (c != null) c.enabled = true;
         }
 
@@ -156,6 +225,22 @@ namespace MWCoop
         static bool testHeld;
         static void TestHose(float now)
         {
+            // ([Test] TuyauVolant=1 : l'hote au volant de la GIFU des 30 s, moteur lance -- rapport de JD 27/10 ; TuyauTenu=0 : l'invite sort
+            // le tuyau sans le prendre en main ; releve : vitesse max des maillons et ecart max au raccord)
+            if (Session.IsHost && Config.GetInt("Test", "TuyauVolant", 0) != 0 && Gifu() != null)
+            {
+                if (tvStep == 0 && Time.timeSinceLevelLoad > 30f) { tvStep = 1; Log.Info("autotest : tuyau, " + VehicleSync.TestEnter("GIFU(750/450psi)", false)); }
+                if (tvStep == 1 && Time.timeSinceLevelLoad > 33f || tvStep == 2 && Time.timeSinceLevelLoad > 35f) { tvStep++; Log.Info("autotest : tuyau, au volant : " + VehicleSync.TestEnter("GIFU(750/450psi)", true)); }
+                if (tvStep == 3 && Time.timeSinceLevelLoad > 37f) { tvStep = 4; Log.Info("autotest : tuyau, " + VehicleSync.TestStart("GIFU(750/450psi)")); }
+            }
+            // (TuyauVolant=1 : l'hote roule 6 s avec la GIFU, l'invite la voit bouger -- copie deplacee, comme JD avant que GG sorte le tuyau)
+            if (Session.IsHost && Config.GetInt("Test", "TuyauVolant", 0) != 0 && tvStep == 4 && Jobs.OtherInGame(20f)) { tvStep = 5; tvAt = now; Log.Info("autotest : tuyau, la GIFU roule 6 s"); }
+            if (tvStep == 5)
+            {
+                Rigidbody gb = VehicleSync.Body("GIFU(750/450psi)");
+                if (gb != null && now - tvAt < 6f) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); }
+                if (now - tvAt >= 6f) { tvStep = 6; if (gb != null) gb.velocity = Vector3.zero; Log.Info("autotest : tuyau, la GIFU s'arrete en " + (gb != null ? gb.position.ToString("F1") : "?")); }
+            }
             if (tStep == 0 && Jobs.OtherInGame(40f)) { tStep = 1; tAt = now; }
             if (tStep == 0) return;
             Transform gt = Gifu(), at = gt != null ? gt.Find("ActivateHose") : null;
@@ -170,23 +255,34 @@ namespace MWCoop
             if (!Session.IsHost)
             {
                 if (tStep == 1 && use != null) { tStep = 2; Game.SetState(use, "Remove part"); Log.Info("autotest : tuyau, sorti -> " + use.ActiveStateName); }
-                if (tStep == 2 && now - tAt > 2f && Find()) { tStep = 3; testHeld = true; end.isKinematic = true; }
+                if (tStep == 2 && now - tAt > 2f && Find() && Config.GetInt("Test", "TuyauTenu", 1) != 0) {
+                    // (comme la vraie prise en main : chaine rendue physique d'abord, puis le bout pris par une « main » -- son parent, comme
+                    // ItemPivot -- deplacee ici ; l'ancien MovePosition sur un bout reste enfant de la chaine ne ressemblait pas au jeu)
+                    tStep = 3; Release(); remoteBy = -1; testHeld = true; end.isKinematic = true;
+                    testHand = new GameObject("MWCoopTestHand").transform; testHand.position = end.transform.position; endParent = end.transform.parent; end.transform.parent = testHand;
+                }
                 if (tStep == 3 && end != null)
                 {
                     float k = now - tAt - 2f;
                     Vector3 basePos = ah.transform.position + ah.transform.right * 3f;
-                    end.MovePosition(basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f));
-                    if (k > 10f) { tStep = 4; testHeld = false; end.isKinematic = false; }
+                    if (testHand != null) testHand.position = basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
+                    if (k > 10f) { tStep = 4; testHeld = false; end.isKinematic = false; if (testHand != null) { end.transform.parent = endParent; Object.Destroy(testHand.gameObject); testHand = null; } }
                 }
                 if (tStep == 4 && now - tAt > 50f && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
             }
             if (Find() && now >= nextTestLog && now - tAt < 56f)
             {
                 nextTestLog = now + 4f;
+                float vmax = 0f, dmax = 0f;
+                if (segs != null && coupler != null) foreach (Rigidbody r in segs) if (r != null) { vmax = Mathf.Max(vmax, r.velocity.magnitude); dmax = Mathf.Max(dmax, (r.position - coupler.position).magnitude); }
+                Transform stt = Gifu() != null ? Gifu().Find("ShitTank") : null; Rigidbody stb = stt != null ? stt.GetComponent<Rigidbody>() : null;
+                if (stb != null) Log.Info("autotest : tuyau, ShitTank : corps a " + (stb.position - stt.position).magnitude.ToString("F2") + " m de son objet" + (stb.isKinematic ? " (cin)" : " (libre)") + ", raccord a " + (coupler != null ? (coupler.position - stt.position).magnitude.ToString("F2") : "?") + " m");
+                Log.Info("autotest : tuyau, maillons : vitesse max " + vmax.ToString("F1") + " m/s, ecart max au raccord " + dmax.ToString("F1") + " m" + (following ? " (suivi)" : "") + (ignoring ? " (chocs copie coupes)" : ""));
                 Log.Info("autotest : tuyau, " + (root.activeInHierarchy ? "sorti" : "range") + ", bout en " + end.position.ToString("F2") + (end.isKinematic ? " (cinematique)" : "") + (mine ? " a nous" : remoteBy >= 0 ? " suivi sur #" + remoteBy : "") + (following ? ", chaine posee" : "") + (cols != null && cols.Length > 0 && cols[0] != null && !cols[0].enabled ? ", sans collision" : ""));
             }
         }
-        static float nextTestLog;
+        static float nextTestLog, tvAt; static int tvStep;
+        static Transform testHand, endParent;
 
         public static void Test(string mode, float t)
         {

@@ -2616,6 +2616,8 @@ Add	إضافة
 Browse…	استعراض…
 file|files	ملف|ملفان|ملفات|ملفًا
 unknown date	تاريخ غير معروف
+Before the streams	قبل تقسيم القنوات
+ (the mod)	 (المود)
 Different version (you %s, host %s)	نسخة مختلفة (لديك %s، لدى المضيف %s)
 The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n
 ⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?	⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟

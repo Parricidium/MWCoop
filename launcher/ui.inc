@@ -1123,7 +1123,7 @@ static std::vector<std::wstring> NoteBullets(const Note &n, int maxN)
 }
 
 // ---- page NOUVEAUTES : versions a gauche, detail a droite (texte, images)
-static int g_noteSel;
+static int g_noteSel; static bool g_noteSelAuto = true;   // (selection d'office : la derniere version du mod du jeu, tant que le joueur n'a rien choisi)
 static float g_noteListScroll;
 // (refonte L4 : plus const -- recalcules a chaque image depuis g_pageR, la zone de page fluide ; ancienne interface : valeurs d'avant)
 static RectF kNotesList(264, 88, 280, 656), kNotesBody(560, 88, 704, 656);
@@ -1145,15 +1145,43 @@ static void DrawNotesPage(Graphics &g)
         Text(g, msg, kNotesBody, 14, FontStyleRegular, kGrey);
         return;
     }
-    if (g_noteSel < 0 || g_noteSel >= (int)notes.size()) g_noteSel = 0;
+    // Sections par flux (dossier #11, yaxqd 27/10 : « le tri des versions ne marche pas, deux versions installées ») : les flux
+    // mélangés par heure de publication se lisaient comme un tri cassé (My Winter Car 1.15.11, Lanceur 1.15.19, My Winter Car
+    // 1.15.10…) avec deux « INSTALLÉE » (le mod et le lanceur). Ici : le mod du jeu, le lanceur, les outils, l'histoire d'avant les
+    // flux ; dans chaque section les numéros décroissent, une seule « INSTALLÉE ». (g_notes garde l'ordre de publication :
+    // l'accueil et NewestNote s'en servent.)
+    struct NoteRow { int note, section; };   // note -1 : l'en-tete de la section
+    std::vector<NoteRow> rows; std::vector<std::wstring> secNames;
+    {
+        int order[4] = { ModStream(), STR_LANCEUR, STR_OUTILS, STR_GLOBAL };
+        for (int s = 0; s < 4; s++) {
+            std::vector<int> idx; for (int i = 0; i < (int)notes.size(); i++) if (notes[i].stream == order[s]) idx.push_back(i);
+            if (idx.empty()) continue;
+            std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return CmpVer(notes[a].ver, notes[b].ver) > 0; });
+            std::wstring name = order[s] == STR_LANCEUR ? T(L"Lanceur", L"Launcher") : order[s] == STR_OUTILS ? T(L"Outils", L"Tools") : order[s] == STR_GLOBAL ? T(L"Avant les flux", L"Before the streams") : std::wstring(GM().name) + T(L" (le mod)", L" (the mod)");
+            int sec = (int)secNames.size(); secNames.push_back(name);
+            rows.push_back({ -1, sec }); for (int i : idx) rows.push_back({ i, sec });
+        }
+    }
+    if (g_noteSel < 0 || g_noteSel >= (int)notes.size() || g_noteSelAuto) { g_noteSel = 0; for (auto &rw : rows) if (rw.note >= 0) { g_noteSel = rw.note; break; } }
     // liste
     RectF lr(kNotesList.X + 10, kNotesList.Y + 10, kNotesList.Width - 20, kNotesList.Height - 20);
-    const float rh = 66;
-    g_noteListScroll = min(max(g_noteListScroll, 0.0f), max(0.0f, notes.size() * rh - lr.Height));
+    const float rh = 66, hh = 30;
+    float totalH = 0; for (auto &rw : rows) totalH += rw.note < 0 ? hh : rh;
+    g_noteListScroll = min(max(g_noteListScroll, 0.0f), max(0.0f, totalH - lr.Height));
     GraphicsState st = g.Save();
     g.SetClip(lr, CombineModeIntersect);
-    for (int i = 0; i < (int)notes.size(); i++) {
-        RectF r(lr.X, lr.Y + i * rh - g_noteListScroll, lr.Width, rh - 4);
+    float yy = lr.Y - g_noteListScroll;
+    for (auto &rw : rows) {
+        if (rw.note < 0) {   // en-tete de section
+            RectF hr(lr.X, yy, lr.Width, hh); yy += hh;
+            if (hr.Y + hr.Height < lr.Y || hr.Y > lr.Y + lr.Height) continue;
+            std::wstring nm = secNames[rw.section]; for (auto &c : nm) c = (wchar_t)towupper(c);
+            Text(g, nm, RectF(hr.X + 14, hr.Y + 9, hr.Width - 28, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+            continue;
+        }
+        int i = rw.note;
+        RectF r(lr.X, yy, lr.Width, rh - 4); yy += rh;
         if (r.Y + r.Height < lr.Y || r.Y > lr.Y + lr.Height) continue;
         bool on = i == g_noteSel, hot = g_uiHot == UI_NOTE + i;
         if (on || hot) { GraphicsPath p; RoundRect(p, r, 14); SolidBrush b(on ? TH(cardSel) : TH(card)); g.FillPath(&b, &p); }
@@ -1768,7 +1796,7 @@ static bool UiClick(int id)
     }
     if (id >= UI_CAR_VINOPT && id < UI_CAR_VINOPT + kVinKeyN) { VinCycle(id - UI_CAR_VINOPT); return true; }
     if (id >= UI_WIKI_CAT && id <= UI_WIKI_FIG) return WikiClick(id);
-    if (id >= UI_NOTE && id < UI_NOTE + 90) { g_noteSel = id - UI_NOTE; g_scroll[TAB_NOTES] = 0; return true; }
+    if (id >= UI_NOTE && id < UI_NOTE + 90) { g_noteSel = id - UI_NOTE; g_noteSelAuto = false; g_scroll[TAB_NOTES] = 0; return true; }
     if (id >= UI_LOOKPIN && id < UI_LOOKPIN + 4) { g_lookZone = id - UI_LOOKPIN; return true; }
     if (id == UI_LOOKROT || id == UI_LOOKROT + 1) { g_skinYaw = fmodf(g_skinYaw + (id == UI_LOOKROT ? 2.0f : -2.0f) + 16, 16.0f); g_skinIdleT = GetTickCount(); return true; }
     if (id == UI_LOOKRAND) { LookRandom(); return true; }

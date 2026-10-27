@@ -416,7 +416,7 @@ namespace MWCoop
         // 20 s : l'hote prend la n 3 ; 30 s : il note sa voiture ; 40 s : l'invite note la sienne (celle de l'hote chez lui) ;
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
-        static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone;
+        static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone, srcPanneDone, srcPanneLogged;
         static int tourShot = -1, braqueShot = -1; static bool rendusDone, tourLog;
         static Camera testCam;
         static int entryStep, assisStep;
@@ -821,6 +821,21 @@ namespace MWCoop
             // ([Test] VazModele=1 : une Evo III, 2 : une 205 T16 -- extensions privees)
             // ([Test] VazDemande=s : demande a s secondes au lieu de 20 -- un invite deja assis dans la SORBET, VazCar.SetAside)
             float ask = Config.GetFloat("Test", "VazDemande", 20f);
+            // [Test] VazSourcePanne=1 : juste avant la demande, puissance et couple de la voiture source (SATSUMA / CORRIS) mis a 0,
+            // comme le jeu le fait quand son moteur n'est pas monte (dossier #9, 27/10 : VAZ a 0 ch qui ne roulait pas).
+            if (host && testStep == 0 && t > ask - 1f && !srcPanneDone && Config.GetInt("Test", "VazSourcePanne", 0) != 0)
+            {
+                srcPanneDone = true;
+                GameObject s = Game.FindAny(Game.Msc ? "SATSUMA(557kg, 248)" : "CORRIS");
+                Drivetrain sd = s != null ? s.GetComponent<Drivetrain>() : null;
+                if (sd != null) { Log.Info("autotest vaz : source " + s.name + " " + sd.maxPower.ToString("F0") + " ch / " + sd.maxTorque.ToString("F0") + " Nm / embrayage " + sd.clutchMaxTorque.ToString("F0") + " -> 0 ch, 0 Nm"); sd.maxPower = 0f; sd.maxTorque = 0f; }
+            }
+            if (host && testStep == 1 && t > ask + 5f && !srcPanneLogged)
+            {
+                srcPanneLogged = true;
+                Transform c = CarOf(Me); Drivetrain d = c != null ? c.GetComponent<Drivetrain>() : null;
+                Log.Info("autotest vaz : moteur de ma VAZ : " + (d != null ? d.maxPower.ToString("F0") + " ch x " + d.powerMultiplier.ToString("F2") + ", " + d.maxTorque.ToString("F0") + " Nm, embrayage " + d.clutchMaxTorque.ToString("F0") : "pas de voiture"));
+            }
             if (host && testStep == 0 && t > ask) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
             if (host && testStep == 1 && t > ask + 10f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
             if (!host && testStep == 0 && t > 40f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-invite", 1f); }

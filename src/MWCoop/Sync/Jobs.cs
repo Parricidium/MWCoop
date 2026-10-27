@@ -98,6 +98,8 @@ namespace MWCoop
             public HashSet<string> InputStates = new HashSet<string>();                      // etats qui lisent la souris ou le clavier
             public HashSet<string> KeyStates = new HashSet<string>();                        // etats qui lisent une touche (GetButton*, GetKey*)
             public HashSet<string> MouseStates = new HashSet<string>();                      // etats qui visent un objet a la souris (MousePick*, GetMouse*)
+            public HashSet<string> KeyEvents = new HashSet<string>();                        // « etat|evenement » envoyes par une touche
+            public HashSet<string> MouseEvents = new HashSet<string>();                      // ... par la souris
             public Transform Vehicle;                                                        // vehicule de l'automate (null : aucun)
             public HashSet<string> ClockStates = new HashSet<string>();                      // etats qui lisent l'heure du jeu (SUN 'Color' Hours)
             public string ClockLast; public float ClockAt = -1000f;                          // derniere transition d'horloge envoyee
@@ -221,6 +223,7 @@ namespace MWCoop
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
             SewageHose.OnLevelLoaded();
             PhoneMsc.OnLevelLoaded();
+            RadioMsc.OnLevelLoaded();
             TractsMsc.OnLevelLoaded();
             RunOver.OnLevelLoaded();
             specialsScanned = false; logTrigger = null; ltCollider = null;
@@ -252,7 +255,7 @@ namespace MWCoop
         public static void Update()
         {
             SewageHose.Update();
-            if (Game.Msc) { PhoneMsc.Update(); TractsMsc.Update(); }   // (telephone de MSC : decroche partage, PhoneMsc.cs ; tracts de Teimo)
+            if (Game.Msc) { PhoneMsc.Update(); TractsMsc.Update(); RadioMsc.Update(); }   // (telephone de MSC : decroche partage, PhoneMsc.cs ; tracts de Teimo)
             if (nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
@@ -441,8 +444,15 @@ namespace MWCoop
                         if (RandomActions.Contains(tn)) j.RandomStates.Add(s.Name);
                         if (ClickActions.Contains(tn)) j.ClickStates.Add(s.Name);
                         foreach (string p in InputActions) if (tn.StartsWith(p)) j.InputStates.Add(s.Name);
-                        if (tn.StartsWith("GetButton") || tn.StartsWith("GetKey")) j.KeyStates.Add(s.Name);
-                        if (tn.StartsWith("MousePick") || tn.StartsWith("GetMouse")) j.MouseStates.Add(s.Name);
+                        bool keyA = tn.StartsWith("GetButton") || tn.StartsWith("GetKey"), mouseA = tn.StartsWith("MousePick") || tn.StartsWith("GetMouse");
+                        if (keyA) j.KeyStates.Add(s.Name);
+                        if (mouseA) j.MouseStates.Add(s.Name);
+                        if (keyA || mouseA)
+                            foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                            {
+                                var fe = fi.FieldType == typeof(FsmEvent) ? fi.GetValue(a) as FsmEvent : null;
+                                if (fe != null && !string.IsNullOrEmpty(fe.Name)) (keyA ? j.KeyEvents : j.MouseEvents).Add(s.Name + "|" + fe.Name);
+                            }
                         var gf = a as HutongGames.PlayMaker.Actions.GetFsmFloat;
                         if (gf != null && gf.variableName != null && (gf.variableName.Value == "Hours" || gf.variableName.Value == "Minutes")) j.ClockStates.Add(s.Name);
                     }
@@ -491,7 +501,12 @@ namespace MWCoop
             // ceux qui appuient sur Range, meme dans un autre vehicule) : seul celui qui conduit ce vehicule l'envoie. Avant :
             // l'hote changeait la gamme de son KEKMET, la GIFU de l'invite au volant perdait 20 d'air a chaque fois, freins
             // serres, camion immobile (OpNoob, 0.82.2, 12/10).
-            if (from != null && j.KeyStates.Contains(from.Name) && !j.MouseStates.Contains(from.Name))
+            // Un etat qui lit la touche ET le survol de la souris (bouton des phares : « Wait player » -FINISHED-> au survol,
+            // -ON-> a la touche HighBeam) : seule la transition de la touche compte comme touche. Avant, ces etats etaient laisses
+            // de cote : la touche des phares, lue par les boutons de TOUS les vehicules, partait pour chacun ; chez un autre joueur
+            // au volant de l'un d'eux, l'automate rejoue comparait SA voiture et allumait ses phares (Tavirus, MSC, 27/10 : les
+            // phares de l'autre voiture s'allumaient et s'eteignaient avec les siens).
+            if (from != null && KeyDriven(j, from.Name, tr.EventName))
             {
                 if (j.Vehicle == null) j.Vehicle = VehicleOf(j.F.transform);
                 if (j.Vehicle != null && VehicleSync.LocalDrivingRoot != j.Vehicle) return;
@@ -543,6 +558,19 @@ namespace MWCoop
                 if (again) return;
             }
             Send(j, from != null ? from.Name : null, tr.EventName, state);
+        }
+
+        // Transition menee par une touche : depuis un etat qui lit une touche sans viser a la souris, ou dont l'evenement vient
+        // de la touche et pas de la souris.
+        static float nextKeyLog; static int oldKey = -1;
+        static bool KeyDriven(Job j, string from, string ev)
+        {
+            if (!j.KeyStates.Contains(from)) return false;
+            if (!j.MouseStates.Contains(from)) return true;
+            if (oldKey < 0) oldKey = Config.GetInt("Test", "ToucheAncienne", 0);   // (essais : regle d'avant le 27/10, pour voir le defaut)
+            if (oldKey != 0) return false;
+            string k = from + "|" + ev;
+            return j.KeyEvents.Contains(k) && !j.MouseEvents.Contains(k);
         }
 
         // Garde-fou puis envoi d'une transition prise ici (OnLocal ; essai boucle).
@@ -918,6 +946,17 @@ namespace MWCoop
             bool pause = prev == PauseMark;   // recalage apres une pause du garde-fou chez l'autre (comme un instantane)
             if (j.Control && !pause) PlayerSync.ReachFor(who, j.F.transform);   // (son avatar appuie sur la commande)
             if (j.Kind == K_IGNITION) { ApplyIgnition(j, who, key, state); return; }
+            // Touche lue dans le vehicule que je conduis, envoyee par un autre (version d'avant le 27/10 : la touche des phares
+            // partait pour les boutons de tous les vehicules) : pas la sienne, ignoree.
+            if (!pause && prev.Length > 0 && KeyDriven(j, prev, ev))
+            {
+                if (j.Vehicle == null) j.Vehicle = VehicleOf(j.F.transform);
+                if (j.Vehicle != null && j.Vehicle == VehicleSync.LocalDrivingRoot)
+                {
+                    if (Time.realtimeSinceStartup >= nextKeyLog) { nextKeyLog = Time.realtimeSinceStartup + 10f; Log.Info("quete de #" + who + " : " + key + " " + prev + " -" + ev + "-> " + state + " : touche du vehicule que je conduis, ignoree"); }
+                    return;
+                }
+            }
             // Etat de paie ou de pointage chez l'autre (version d'avant, ou instantane) : sa paie, son travail, pas les notres --
             // ignore (relecture du 15/10 ; usine 16/10).
             string own = OwnTransition(j, prev, state);
@@ -2030,7 +2069,8 @@ namespace MWCoop
                 case "@tow": ModTowCart.OnMessage(who, r); break;
                 case "@jack": ModJackStands.OnMessage(who, r); break;
                 case "@carbu": FuelPrices.OnMessage(who, r); break;
-                case "@tel": PhoneMsc.OnMessage(who, r); break;   // (MSC : appel decroche par un autre)
+                case "@tel": PhoneMsc.OnMessage(who, r); break;
+                case "@radio": RadioMsc.OnMessage(who, r); break;   // (MSC, 27/10 : etat des autoradios et lecteurs CD des vehicules)   // (MSC : appel decroche par un autre)
                 case "@rallymsc": RallyMsc.OnMessage(who, r); break;   // (MSC : temps d'un pilote humain au rallye)
                 case "@dragmsc": DragMsc.OnMessage(who, r); break;   // (MSC : meilleur temps d'un pilote humain aux dragsters)
                 case "@trophee": RallyMsc.OnTrophy(who, r); break;   // (MSC : trophee du podium du rallye cree chez le gagnant)

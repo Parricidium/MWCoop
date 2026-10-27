@@ -2449,6 +2449,7 @@ namespace MWCoop
         }
 
         // L'objet appartient-il a une voiture qu'un autre joueur conduit en ce moment ?
+        public static bool IsCar(Transform t) { return CarOf(t) != null; }
         public static bool RemotelyDriven(Transform t)
         {
             Car c = CarOf(t);
@@ -2991,6 +2992,33 @@ namespace MWCoop
                 if ((f.FsmName == "UseNew" || f.FsmName == "Use") && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState(state) != null)
                 { Game.SetState(f, state); return "cle " + Recon.Path(f.transform) + " -> " + state + ", demarreur " + (c.Starter != null ? c.Starter.ActiveStateName : "?"); }
             return "pas de cle";
+        }
+        // Essais (mscdemarre) : cle, demarreur (etat, Starting, ACC), Electrics (actif, ElectricsOK, Charge), regime, copie.
+        public static string StartProbe(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return "?";
+            var sb = new System.Text.StringBuilder();
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                if ((f.FsmName == "UseNew" || f.FsmName == "Use") && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState("Motor starting") != null) { sb.Append("cle ").Append(f.ActiveStateName); break; }
+            if (c.Starter != null)
+            {
+                FsmBool st = c.Starter.FsmVariables.FindFsmBool("Starting"), acc = c.Starter.FsmVariables.FindFsmBool("ACC");
+                sb.Append(" | demarreur ").Append(c.Starter.enabled ? c.Starter.ActiveStateName : "coupe").Append(" Starting ").Append(st != null && st.Value).Append(" ACC ").Append(acc != null && acc.Value);
+                foreach (NamedVariable v in c.Starter.FsmVariables.GetAllNamedVariables())
+                    if (v is FsmFloat || v is FsmBool && v.Name != "Starting" && v.Name != "ACC") sb.Append(' ').Append(v.Name).Append('=').Append(v.ToString());
+            }
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Electrics" && f.FsmVariables.FindFsmBool("ElectricsOK") != null)
+                {
+                    FsmFloat ch = f.FsmVariables.FindFsmFloat("Charge");
+                    sb.Append(" | Electrics ").Append(f.gameObject.activeInHierarchy ? f.ActiveStateName : "eteint").Append(" OK ").Append(f.FsmVariables.FindFsmBool("ElectricsOK").Value).Append(" Charge ").Append(ch != null ? ch.Value.ToString("F1") : "?");
+                    break;
+                }
+            if (c.Dt != null) sb.Append(" | regime ").Append(c.Dt.rpm.ToString("F0")).Append(c.Dt.enabled ? "" : " (boite coupee)");
+            Transform eng = c.T.Find("CarSimulation/Engine");
+            sb.Append(" | Engine ").Append(eng == null ? "?" : eng.gameObject.activeInHierarchy ? "actif" : "eteint").Append(" | copie ").Append(c.Kinematic).Append(" mene par #").Append(c.RemoteBy);
+            return sb.ToString();
         }
         public static string DriveProbe(string name)
         {

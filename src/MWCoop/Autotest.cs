@@ -1043,7 +1043,9 @@ namespace MWCoop
         // (scratchpad etat-diff.py) : ce qui diverge apres un chargement, un montage, une casse, un reglage. Seulement ce que le jeu
         // sauvegarde ou qui tient dans le temps : entrees Database (booleens, flottants, entiers de 'Data'), serrage et crans de chaque
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
-        static float etatAt;
+        static float etatAt, frNext;
+        static int radioStep, radioLog, dmStep, dmKey;
+        static float dmLog; static bool dmTuyau, liqDone; static int liqLog;
         static string EtatArray(GameObject go)
         {
             PlayMakerArrayListProxy best = null;
@@ -1107,6 +1109,7 @@ namespace MWCoop
                 }
                 else if (n == "Inspect" && g == "InspectionProcess") { EtatVars(sb, f, false); lines["ct:" + g] = sb.ToString(); }
             }
+            foreach (var kv in RadioMsc.EtatLines()) lines[kv.Key] = kv.Value;   // (autoradios et lecteurs CD partages, 27/10)
             var keys = new System.Collections.Generic.List<string>(lines.Keys);
             keys.Sort(string.CompareOrdinal);
             var outp = new System.Text.StringBuilder();
@@ -1344,6 +1347,121 @@ namespace MWCoop
                     Transform dr = null; foreach (Transform x in cb.GetComponentsInChildren<Transform>()) if (x.name == "door right(Clone)") { dr = x; break; }
                     Rigidbody drb = dr != null ? dr.GetComponent<Rigidbody>() : null;
                     Log.Info("autotest passager : voiture " + cb.velocity.magnitude.ToString("F1") + " m/s" + (cb.isKinematic ? " (copie)" : "") + ", portiere droite " + (dr != null ? "rot locale " + dr.localEulerAngles.ToString("F0") + (drb != null ? (drb.isKinematic ? " cinematique" : " libre") + " v " + drb.angularVelocity.magnitude.ToString("F1") : "") : "introuvable"));
+                }
+                return;
+            }
+            // ([Test] Autotest=mschache, 2 joueurs, dossier #6 27/10 : « l'ami prend une hache, elle s'envole, puis il ne peut plus rien ramasser ») :
+            // l'invite, a HacheA s (60), va au tas de bois et prend la hache ITEMS/ax(itemx) comme le joueur (main 'PickUp' : RaycastHitObject +
+            // « State 1 »), puis EQUIP (« Check item » -> Ax) a +3 s ; a +25 s DROP_PART (lachee) ; a +35 s il prend [Test] HacheEnsuite (sausages) ;
+            // chacun note toutes les 2 s l'etat de la main de l'invite, l'objet tenu, la hache (actif, pose, corps) -- chez l'hote, sa copie.
+            // ([Test] Autotest=mscfrigo, 2 joueurs, dossier #6 (frigo) et sac de GG du 26/10 : l'hote deplace l'objet [Test] FrigoObjet (sausages)
+            // de 0,3 m toutes les 1 s a partir de FrigoA-10 s (ses poses repartent, l'invite le suit sans cesse) ; l'invite le prend a FrigoA (90) par
+            // la main du jeu et le garde ; chacun note toutes les 0,5 s l'objet : pose par rapport a la camera de l'invite (chez lui), vitesse,
+            // calque, cinematique. Avec [Test] PriseAncienne=1 chez l'invite : comportement d'avant.)
+            if (mode == "mscfrigo")
+            {
+                // (frNext : prochain deplacement par l'hote, 1 s)
+                float fa = Config.GetFloat("Test", "FrigoA", 90f);
+                string name = Config.Get("Test", "FrigoObjet", "sausages");
+                Rigidbody ob = Props.BodyOf(Props.FindKey(name));
+                if (ob == null) foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>()) { PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use"); HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null; if (iv != null && iv.Value.StartsWith(name)) { ob = r; break; } }
+                // (l'hote le prend en main a FrigoA-3 s et le lache a FrigoA-1,5 s : ses poses « retombe » (5 s) le font suivre chez l'invite,
+                // comme JD lachant le sac de GG le 26/10 ; [Test] FrigoBouge=1 : simples deplacements toutes les 1 s a la place)
+                if (Net.Session.IsHost && ob != null && Config.GetInt("Test", "FrigoBouge", 0) != 0 && t > fa - 10f && t < fa + 20f && t > frNext)
+                {
+                    frNext = t + 1f;
+                    ob.transform.position += new Vector3(Mathf.Sin(t) * 0.3f, 0f, Mathf.Cos(t) * 0.3f); ob.position = ob.transform.position; ob.WakeUp();
+                }
+                if (Net.Session.IsHost && ob != null && Config.GetInt("Test", "FrigoBouge", 0) == 0 && (t > fa - 3f && prStep == 0 || t > fa - 1.5f && prStep == 1))
+                {
+                    GameObject hg0 = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                    PlayMakerFSM hf0 = hg0 != null ? Game.FsmOn(hg0, "PickUp") : null;
+                    Transform cam0 = PlayerSync.LocalCamera;
+                    if (prStep == 0 && hf0 != null && cam0 != null)
+                    {
+                        GameObject pl0 = Game.PlayerGo; var cc0 = pl0 != null ? pl0.GetComponent<CharacterController>() : null;
+                        if (cc0 != null) { cc0.enabled = false; pl0.transform.position = ob.position + Vector3.back * 1.0f; cc0.enabled = true; }
+                        ob.transform.position = cam0.position + cam0.forward * 0.6f; ob.position = ob.transform.position;
+                        HutongGames.PlayMaker.FsmGameObject rh0 = hf0.FsmVariables.FindFsmGameObject("RaycastHitObject");
+                        if (rh0 != null) { rh0.Value = ob.gameObject; Game.SetState(hf0, "State 1"); }
+                        Log.Info("autotest frigo : l'hote prend " + ob.name + " -> main " + hf0.ActiveStateName);
+                    }
+                    else if (prStep == 1 && hf0 != null)
+                    {
+                        // ([Test] FrigoLance=1 : lance comme le clic droit -- 'Drop part 2' puis 'Throw part' -- au lieu de le poser)
+                        if (Config.GetInt("Test", "FrigoLance", 0) != 0) Game.SetState(hf0, "Drop part 2"); else hf0.SendEvent("DROP_PART");
+                        Log.Info("autotest frigo : l'hote le " + (Config.GetInt("Test", "FrigoLance", 0) != 0 ? "lance" : "lache") + " -> main " + hf0.ActiveStateName);
+                    }
+                    prStep++;
+                }
+                if (!Net.Session.IsHost && ob != null && t > fa - 3f && prStep == 0)
+                {
+                    prStep = 1;
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; pl.transform.position = ob.position + Vector3.forward * 1.0f; cc.enabled = true; }
+                }
+                if (!Net.Session.IsHost && ob != null && t > fa && prStep == 1)
+                {
+                    prStep = 2;
+                    GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                    PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                    Transform cam = PlayerSync.LocalCamera;
+                    HutongGames.PlayMaker.FsmGameObject rh = hf != null ? hf.FsmVariables.FindFsmGameObject("RaycastHitObject") : null;
+                    if (rh != null && cam != null) { ob.transform.position = cam.position + cam.forward * 0.6f; ob.position = ob.transform.position; rh.Value = ob.gameObject; Game.SetState(hf, "State 1"); }
+                    Log.Info("autotest frigo : prise de " + ob.name + " (" + (ob.isKinematic ? "cinematique" : "libre") + ", calque " + ob.gameObject.layer + ") -> main " + (hf != null ? hf.ActiveStateName : "?"));
+                }
+                if (ob != null && t > fa - 12f && t < fa + 25f && t > psLogAt)
+                {
+                    psLogAt = t + 0.5f;
+                    Transform cam = PlayerSync.LocalCamera;
+                    Log.Info("autotest frigo : " + ob.name + " a " + (cam != null ? Vector3.Distance(cam.position, ob.position).ToString("F2") + " m de la camera" : "?") + ", v " + ob.velocity.magnitude.ToString("F1") + (ob.isKinematic ? " cin" : "") + ", calque " + ob.gameObject.layer + ", parent " + (ob.transform.parent != null ? ob.transform.parent.name : "-"));
+                }
+                return;
+            }
+            if (mode == "mschache")
+            {
+                float ha = Config.GetFloat("Test", "HacheA", 60f);
+                bool me = !Net.Session.IsHost;
+                GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                Rigidbody ax = Props.BodyOf(Props.FindKey("ax(itemx)"));
+                if (ax == null) foreach (Rigidbody r in Resources.FindObjectsOfTypeAll<Rigidbody>()) if (r.name == "ax(itemx)" && r.gameObject.hideFlags == HideFlags.None) { ax = r; break; }
+                Transform cam = PlayerSync.LocalCamera;
+                System.Func<Rigidbody, bool> take = ob =>
+                {
+                    if (hf == null || ob == null || cam == null) return false;
+                    ob.gameObject.SetActive(true);
+                    ob.transform.position = cam.position + cam.forward * 0.6f;
+                    HutongGames.PlayMaker.FsmGameObject rh = hf.FsmVariables.FindFsmGameObject("RaycastHitObject");
+                    if (rh == null) return false;
+                    rh.Value = ob.gameObject; Game.SetState(hf, "State 1");
+                    return true;
+                };
+                if (me && t > ha - 5f && prStep == 0 && ax != null)
+                {
+                    prStep = 1;
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; pl.transform.position = ax.position + Vector3.up * 0.2f + Vector3.forward * 1.2f; cc.enabled = true; }
+                    Log.Info("autotest hache : invite pres de la hache " + ax.position.ToString("F1"));
+                }
+                if (me && t > ha && prStep == 1) { prStep = 2; Log.Info("autotest hache : prise -> " + take(ax) + ", main " + (hf != null ? hf.ActiveStateName : "?")); }
+                if (me && t > ha + 3f && prStep == 2) { prStep = 3; if (hf != null) hf.SendEvent("EQUIP"); Log.Info("autotest hache : EQUIP -> main " + (hf != null ? hf.ActiveStateName : "?")); }
+                if (me && t > ha + 25f && prStep == 3) { prStep = 4; if (hf != null) hf.SendEvent("DROP_PART"); Log.Info("autotest hache : DROP_PART -> main " + (hf != null ? hf.ActiveStateName : "?")); }
+                if (me && t > ha + 35f && prStep == 4)
+                {
+                    prStep = 5;
+                    string other = Config.Get("Test", "HacheEnsuite", "sausages");
+                    Rigidbody ob = Props.BodyOf(Props.FindKey(other));
+                    if (ob == null) foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>()) { PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use"); HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null; if (iv != null && iv.Value.StartsWith(other)) { ob = r; break; } }
+                    Log.Info("autotest hache : prise de " + other + " -> " + take(ob) + ", main " + (hf != null ? hf.ActiveStateName : "?"));
+                }
+                if (t > 30f && t > prLogAt)
+                {
+                    prLogAt = t + 2f;
+                    HutongGames.PlayMaker.FsmGameObject po = hf != null ? hf.FsmVariables.FindFsmGameObject("PickedObject") : null;
+                    HutongGames.PlayMaker.FsmBool axh = hf != null ? hf.FsmVariables.FindFsmBool("AxInHand") : null;
+                    Log.Info("autotest hache : main " + (hf != null ? hf.ActiveStateName : "?") + ", tenu " + (po != null && po.Value != null ? po.Value.name : "-") + ", AxInHand " + (axh != null && axh.Value)
+                             + " | hache " + (ax == null ? "introuvable" : (ax.gameObject.activeInHierarchy ? "active" : ax.gameObject.activeSelf ? "parent eteint" : "eteinte") + " en " + ax.position.ToString("F1") + (ax.isKinematic ? " cin" : " libre v " + ax.velocity.magnitude.ToString("F1")) + ", parent " + (ax.transform.parent != null ? ax.transform.parent.name : "-")));
                 }
                 return;
             }
@@ -2150,6 +2268,40 @@ namespace MWCoop
             Log.Info("autotest : textes '" + word + "' : " + n);
         }
 
+        // [Test] Espion=chemin:automate;chemin:automate (MSC, tout mode) : chaque changement d'etat de ces automates (et de l'objet
+        // allume / eteint) au journal, avec le temps de jeu -- pour suivre un enchainement au chargement.
+        static System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, PlayMakerFSM>> spies;
+        static readonly System.Collections.Generic.Dictionary<PlayMakerFSM, string> spyLast = new System.Collections.Generic.Dictionary<PlayMakerFSM, string>();
+        static float spyFind;
+        static void Spy(float t)
+        {
+            string spec = Config.Get("Test", "Espion", "");
+            if (spec.Length == 0) return;
+            if ((spies == null || spies.Count < spec.Split(';').Length) && Time.realtimeSinceStartup >= spyFind)
+            {
+                spyFind = Time.realtimeSinceStartup + 0.5f;
+                spies = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, PlayMakerFSM>>();
+                foreach (string sp in spec.Split(';'))
+                {
+                    int c = sp.LastIndexOf(':'); if (c <= 0) continue;
+                    GameObject go = Game.FindAny(sp.Substring(0, c));
+                    PlayMakerFSM f = go != null ? Game.FsmOn(go, sp.Substring(c + 1)) : null;
+                    if (f != null) spies.Add(new System.Collections.Generic.KeyValuePair<string, PlayMakerFSM>(sp, f));
+                }
+            }
+            if (spies == null) return;
+            foreach (var kv in spies)
+            {
+                PlayMakerFSM f = kv.Value;
+                if (f == null) continue;
+                string st = (f.gameObject.activeInHierarchy ? "" : "(eteint) ") + (f.enabled ? "" : "(coupe) ") + f.ActiveStateName;
+                string last;
+                if (spyLast.TryGetValue(f, out last) && last == st) continue;
+                spyLast[f] = st;
+                Log.Info("autotest : espion t=" + t.ToString("F2") + " " + kv.Key + " -> " + st);
+            }
+        }
+
         static void DumpFsms(string specs)
         {
             foreach (string spec in specs.Split(specs.Contains(";") ? ';' : ','))   // (« ; » quand un chemin contient une virgule : SATSUMA(557kg, 248))
@@ -2360,6 +2512,107 @@ namespace MWCoop
                     if (!MWCoop.Net.Session.IsHost && t > 55f && step == 1) { step = 2; Props.TestHold(Props.FindKey("wiring mess"), null); Log.Info("autotest : cablage, faisceau lache"); }
                     if (MWCoop.Net.Session.IsHost && t > 35f && t < 75f && t >= holdLog) { holdLog = t + 3f; FsmGameObject wt = FsmVariables.GlobalVariables.FindFsmGameObject("WiringTool"); Log.Info("autotest : cablage, WiringTool ici = " + (wt != null && wt.Value != null ? wt.Value.name : "null")); }
                 }
+                LightsGuard.TestKey(mode, t);
+                if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
+                // (Autotest=liquide aussi sur MSC : LiquideCle / LiquideDelta a LiquideA s ; SuivreLiquide releve a SuivreA=t,t,...)
+                if (mode == "liquide" && !liqDone && Config.Get("Test", "LiquideCle", "").Length > 0 && t > Config.GetFloat("Test", "LiquideA", 40f))
+                { liqDone = true; Log.Info("autotest : liquide " + Fluids.TestBump(Config.Get("Test", "LiquideCle", ""), Config.GetFloat("Test", "LiquideDelta", 10f))); }
+                if (mode == "liquide" && Config.Get("Test", "SuivreLiquide", "").Length > 0)
+                {
+                    string[] la = Config.Get("Test", "SuivreA", "35,45,60").Split(',');
+                    if (liqLog < la.Length && t > float.Parse(la[liqLog], System.Globalization.CultureInfo.InvariantCulture))
+                    { liqLog++; Log.Info("autotest : liquide t=" + t.ToString("F0") + " " + Fluids.TestState(Config.Get("Test", "SuivreLiquide", ""))); }
+                }
+                // ([Test] Autotest=articulations, ArticVoiture=GIFU(750/450psi), ArticA=40 : chaque articulation sous la voiture ou reliee a elle)
+                if (mode == "articulations" && step == 0 && Config.GetInt("Test", "ArticTuyau", 0) != 0 && t > 35f && !dmTuyau)
+                {
+                    dmTuyau = true;
+                    Rigidbody gb = VehicleSync.Body("GIFU(750/450psi)"); Transform aht = gb != null ? gb.transform.Find("ActivateHose") : null;
+                    GameObject ah = aht != null ? aht.gameObject : null;
+                    PlayMakerFSM au = ah != null ? Game.FsmOn(ah, "Use") : null;
+                    if (au != null) { Game.SetState(au, "Remove part"); Log.Info("autotest : articulations, tuyau sorti -> " + au.ActiveStateName); }
+                }
+                if (mode == "articulations" && step == 0 && t > Config.GetFloat("Test", "ArticA", 40f))
+                {
+                    step = 1;
+                    Rigidbody vb = VehicleSync.Body(Config.Get("Test", "ArticVoiture", "GIFU(750/450psi)"));
+                    if (vb != null)
+                        foreach (Joint j in Object.FindObjectsOfType<Joint>())
+                        {
+                            if (j == null) continue;
+                            bool inCar = j.transform.IsChildOf(vb.transform), toCar = j.connectedBody != null && j.connectedBody.transform.IsChildOf(vb.transform);
+                            if (!inCar && !toCar) continue;
+                            Rigidbody jr = j.GetComponent<Rigidbody>();
+                            Log.Info("autotest : articulation " + Recon.Path(j.transform) + " " + j.GetType().Name + " -> " + (j.connectedBody != null ? Recon.Path(j.connectedBody.transform) : "MONDE " + j.connectedAnchor.ToString("F1"))
+                                     + (jr != null ? (jr.isKinematic ? " (cin)" : " (libre)") + " m=" + jr.mass.ToString("F0") : "") + " casse " + j.breakForce);
+                        }
+                }
+                // ([Test] Autotest=mscdemarre, rapport de JD 27/10 « je tournais la cle, rien, ni demarreur ni moteur ») : DemarreVolant=1 : au volant
+                // de DemarreVoiture (SATSUMA) a 30 s ; DemarrePassager=1 : assis place 0 a 30 s ; DemarreA=<t> : la cle tournee comme la souris
+                // (« Test » puis tenue : ACC on -> Motor starting) et relachee DemarreTenue s apres (« Shut off ») ; releve toutes les 0,5 s de
+                // DemarreA-2 a DemarreA+12 : cle, demarreur, contact, courant, regime.
+                if (mode == "mscdemarre")
+                {
+                    string dcar = Config.Get("Test", "DemarreVoiture", "SATSUMA(557kg, 248)");
+                    float da = Config.GetFloat("Test", "DemarreA", 0f), dt = Config.GetFloat("Test", "DemarreTenue", 5f);
+                    if (Config.GetInt("Test", "DemarreVolant", 0) != 0 && dmStep == 0 && t > 30f) { dmStep = 1; Log.Info("autotest : mscdemarre, " + VehicleSync.TestEnter(dcar, false)); }
+                    if (Config.GetInt("Test", "DemarreVolant", 0) != 0 && (dmStep == 1 && t > 33f || dmStep == 2 && t > 35f)) { dmStep++; Log.Info("autotest : mscdemarre, au volant : " + VehicleSync.TestEnter(dcar, true)); }
+                    if (Config.GetInt("Test", "DemarrePassager", 0) != 0 && dmStep == 0 && t > 30f) { dmStep = 3; Log.Info("autotest : mscdemarre, passager : " + Seats.TestSit(dcar.Split('(')[0], 0)); }
+                    if (da > 0f && dmKey == 0 && t > da) { dmKey = 1; Log.Info("autotest : mscdemarre, cle tournee : " + VehicleSync.TestKey(dcar, "Test")); }
+                    if (da > 0f && dmKey == 1 && t > da + dt) { dmKey = 2; Log.Info("autotest : mscdemarre, cle relachee : " + VehicleSync.TestKey(dcar, "Shut off")); }
+                    if (da > 0f && t > da - 2f && t < da + 12f && Time.realtimeSinceStartup >= dmLog) { dmLog = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : mscdemarre t=" + t.ToString("F1") + " " + VehicleSync.StartProbe(dcar)); }
+                }
+                // ([Test] Autotest=mscradio : RadioGestes=t:voiture:geste;... -- geste=volume=0.5, station=0.071, mode, canal, suivante, ejecte --
+                // simules ici comme la molette / le bouton ; RadioReleves=t,t : etat des postes au journal + instantane mscetat)
+                if (mode == "mscradio")
+                {
+                    string[] gs = Config.Get("Test", "RadioGestes", "").Split(new[] { ';' }, System.StringSplitOptions.RemoveEmptyEntries);
+                    while (radioStep < gs.Length)
+                    {
+                        string[] g3 = gs[radioStep].Split(':');
+                        if (g3.Length < 3 || t <= float.Parse(g3[0], System.Globalization.CultureInfo.InvariantCulture)) break;
+                        radioStep++;
+                        Log.Info("autotest : mscradio, geste " + RadioMsc.TestGesture(g3[1], g3[2]));
+                    }
+                    string[] rs = Config.Get("Test", "RadioReleves", "").Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
+                    if (radioLog < rs.Length && t > float.Parse(rs[radioLog], System.Globalization.CultureInfo.InvariantCulture))
+                    {
+                        radioLog++;
+                        Log.Info("autotest : mscradio, releve " + radioLog + " : " + RadioMsc.TestState());
+                        MscEtat();
+                    }
+                }
+                // ([Test] Autotest=mscradiodump : automates de l'autoradio / du lecteur CD / du haut-parleur de la SATSUMA, liste puis vidage)
+                if (mode == "mscradiodump" && t > 40f && step == 0)
+                {
+                    step = 1;
+                    var specs = new System.Collections.Generic.List<string>();
+                    Rigidbody sb = VehicleSync.Body("SATSUMA(557kg, 248)");
+                    if (sb != null)
+                        foreach (PlayMakerFSM f in sb.GetComponentsInChildren<PlayMakerFSM>(true))
+                        {
+                            string pth = Recon.Path(f.transform), low = pth.ToLowerInvariant();
+                            if (!(low.Contains("radio") || low.Contains("cd player") || low.Contains("cdplayer") || low.Contains("speaker"))) continue;
+                            Log.Info("autotest : mscradiodump " + pth + " :: " + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (eteint)"));
+                            specs.Add(pth + ":" + f.FsmName);
+                        }
+                    foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                    {
+                        if (f == null || f.hideFlags != HideFlags.None || f.transform.root.name.StartsWith("SATSUMA")) continue;
+                        string pth = Recon.Path(f.transform), low = pth.ToLowerInvariant();
+                        if (!(low.Contains("radio") || low.Contains("cd player") || low.Contains("cdplayer"))) continue;
+                        Log.Info("autotest : mscradiodump autre " + pth + " :: " + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (eteint)"));
+                    }
+                    { var names = new System.Text.StringBuilder(); foreach (Object o in Game.FsmsNamed("Buy")) { var bf = o as PlayMakerFSM; HutongGames.PlayMaker.FsmString bn = bf != null ? bf.FsmVariables.FindFsmString("Name") : null; if (bn != null) names.Append(bn.Value).Append(" (").Append(Recon.Path(bf.transform)).Append(") "); } Log.Info("autotest : mscradiodump produits " + names); }
+                    Log.Info("autotest : mscradiodump disques " + Radio.CdTestState());
+                    foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
+                        if (tr != null && tr.gameObject.hideFlags == HideFlags.None && (tr.name.StartsWith("cd(") || tr.name.StartsWith("cd case") || tr.name.ToLowerInvariant().Contains("cdcase")))
+                            Log.Info("autotest : mscradiodump disque " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (eteint)") + " corps " + (tr.GetComponent<Rigidbody>() != null) + " cle " + Props.KeyOf(tr.gameObject));
+                    foreach (string sp in Config.Get("Test", "RadioAussi", "").Split(';')) if (sp.Length > 0) specs.Add(sp);
+                    DumpFsms(string.Join(";", specs.ToArray()));
+                }
+                Spy(t);
+                if (LightsGuard.KeyReleve) { LightsGuard.KeyReleve = false; MscEtat(); }   // (mscphares : etat de la Satsuma a chaque releve, pour etat-diff.py)
                 MscTest(mode, t); return;
             }
             if (Config.Get("Test", "Triche", "").Length > 0 && t > Config.GetFloat("Test", "TricheA", 30f) && !tricheDone) { tricheDone = true; foreach (string tc in Config.Get("Test", "Triche", "").Split(';')) if (tc.Trim().Length > 0) Log.Info("autotest : triche " + tc.Trim() + " -> " + (Cheats.Command(tc.Trim()) ?? "ok")); if (Config.GetInt("Test", "TricheCapture", 0) != 0) CaptureSoon("triche", 4f); }   // (« ; » : plusieurs a la suite ; TricheCapture=1 : capture 4 s apres)
@@ -2525,6 +2778,8 @@ namespace MWCoop
                 if (cf != null && t > 46f && step == 2) { step = 3; Game.SetState(cf, "Move up"); Log.Info("autotest : debout"); }
             }
             if (mode == "conduite") Conduite(t);
+            if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
+            if (mode == "mscphares") { LightsGuard.TestKey(mode, t); return; }   // (touche des phares, Jobs commun : [Test] PharesTouche=LightsDrive sur MWC, 27/10)
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
@@ -4655,12 +4910,14 @@ namespace MWCoop
             if (mode == "liquide" && t > 40f && !done)
             {
                 done = true;
-                string bump = Config.Get("Test", "LiquideCle", "");   // ([Test] LiquideCle=gasoline : +10 a cette valeur)
-                Log.Info("autotest : liquide " + (bump.Length > 0 ? Fluids.TestBump(bump, 10f) : Fluids.TestNearest(Config.Get("Test", "TestLiquide", "Fluid"))));
+                string bump = Config.Get("Test", "LiquideCle", "");   // ([Test] LiquideCle=gasoline : +LiquideDelta (10) a cette valeur ; negatif : une vidange)
+                Log.Info("autotest : liquide " + (bump.Length > 0 ? Fluids.TestBump(bump, Config.GetFloat("Test", "LiquideDelta", 10f)) : Fluids.TestNearest(Config.Get("Test", "TestLiquide", "Fluid"))));
             }
-            // [Test] SuivreLiquide=gasoline : valeurs suivies dont la cle contient ce texte, a 35 et 60 s.
+            // [Test] SuivreLiquide=gasoline : valeurs suivies dont la cle contient ce texte, a 35 et 60 s (et 45, 50 avec SuivreLiquideSerre=1).
             string fluidWatch = Config.Get("Test", "SuivreLiquide", "");
-            if (fluidWatch.Length > 0 && ((t > 35f && step == 0) || (t > 60f && step == 1))) { step++; Log.Info("autotest : liquide t=" + t.ToString("F0") + " " + Fluids.TestState(fluidWatch)); }
+            bool fluidTight = Config.GetInt("Test", "SuivreLiquideSerre", 0) != 0;
+            if (fluidWatch.Length > 0 && ((t > 35f && step == 0) || (fluidTight && t > 45f && step == 1) || (fluidTight && t > 50f && step == 2) || (t > 60f && step == (fluidTight ? 3 : 1))))
+            { step++; Log.Info("autotest : liquide t=" + t.ToString("F0") + " " + Fluids.TestState(fluidWatch)); }
             if (mode == "interactifs" && t > 40f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpInteractive()); }
             if (mode == "monde" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpWorldFsms()); }
             // [Test] Autotest=corps : etat du corps de l'invite garde d'une session a l'autre. Chacun note faim, soif, ivresse
