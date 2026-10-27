@@ -1044,7 +1044,8 @@ namespace MWCoop
         // sauvegarde ou qui tient dans le temps : entrees Database (booleens, flottants, entiers de 'Data'), serrage et crans de chaque
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
         static float etatAt, frNext;
-        static int radioStep, radioLog;
+        static int radioStep, radioLog, dmStep, dmKey;
+        static float dmLog; static bool dmTuyau;
         static string EtatArray(GameObject go)
         {
             PlayMakerArrayListProxy best = null;
@@ -2512,6 +2513,46 @@ namespace MWCoop
                     if (MWCoop.Net.Session.IsHost && t > 35f && t < 75f && t >= holdLog) { holdLog = t + 3f; FsmGameObject wt = FsmVariables.GlobalVariables.FindFsmGameObject("WiringTool"); Log.Info("autotest : cablage, WiringTool ici = " + (wt != null && wt.Value != null ? wt.Value.name : "null")); }
                 }
                 LightsGuard.TestKey(mode, t);
+                if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
+                // ([Test] Autotest=articulations, ArticVoiture=GIFU(750/450psi), ArticA=40 : chaque articulation sous la voiture ou reliee a elle)
+                if (mode == "articulations" && step == 0 && Config.GetInt("Test", "ArticTuyau", 0) != 0 && t > 35f && !dmTuyau)
+                {
+                    dmTuyau = true;
+                    Rigidbody gb = VehicleSync.Body("GIFU(750/450psi)"); Transform aht = gb != null ? gb.transform.Find("ActivateHose") : null;
+                    GameObject ah = aht != null ? aht.gameObject : null;
+                    PlayMakerFSM au = ah != null ? Game.FsmOn(ah, "Use") : null;
+                    if (au != null) { Game.SetState(au, "Remove part"); Log.Info("autotest : articulations, tuyau sorti -> " + au.ActiveStateName); }
+                }
+                if (mode == "articulations" && step == 0 && t > Config.GetFloat("Test", "ArticA", 40f))
+                {
+                    step = 1;
+                    Rigidbody vb = VehicleSync.Body(Config.Get("Test", "ArticVoiture", "GIFU(750/450psi)"));
+                    if (vb != null)
+                        foreach (Joint j in Object.FindObjectsOfType<Joint>())
+                        {
+                            if (j == null) continue;
+                            bool inCar = j.transform.IsChildOf(vb.transform), toCar = j.connectedBody != null && j.connectedBody.transform.IsChildOf(vb.transform);
+                            if (!inCar && !toCar) continue;
+                            Rigidbody jr = j.GetComponent<Rigidbody>();
+                            Log.Info("autotest : articulation " + Recon.Path(j.transform) + " " + j.GetType().Name + " -> " + (j.connectedBody != null ? Recon.Path(j.connectedBody.transform) : "MONDE " + j.connectedAnchor.ToString("F1"))
+                                     + (jr != null ? (jr.isKinematic ? " (cin)" : " (libre)") + " m=" + jr.mass.ToString("F0") : "") + " casse " + j.breakForce);
+                        }
+                }
+                // ([Test] Autotest=mscdemarre, rapport de JD 27/10 « je tournais la cle, rien, ni demarreur ni moteur ») : DemarreVolant=1 : au volant
+                // de DemarreVoiture (SATSUMA) a 30 s ; DemarrePassager=1 : assis place 0 a 30 s ; DemarreA=<t> : la cle tournee comme la souris
+                // (« Test » puis tenue : ACC on -> Motor starting) et relachee DemarreTenue s apres (« Shut off ») ; releve toutes les 0,5 s de
+                // DemarreA-2 a DemarreA+12 : cle, demarreur, contact, courant, regime.
+                if (mode == "mscdemarre")
+                {
+                    string dcar = Config.Get("Test", "DemarreVoiture", "SATSUMA(557kg, 248)");
+                    float da = Config.GetFloat("Test", "DemarreA", 0f), dt = Config.GetFloat("Test", "DemarreTenue", 5f);
+                    if (Config.GetInt("Test", "DemarreVolant", 0) != 0 && dmStep == 0 && t > 30f) { dmStep = 1; Log.Info("autotest : mscdemarre, " + VehicleSync.TestEnter(dcar, false)); }
+                    if (Config.GetInt("Test", "DemarreVolant", 0) != 0 && (dmStep == 1 && t > 33f || dmStep == 2 && t > 35f)) { dmStep++; Log.Info("autotest : mscdemarre, au volant : " + VehicleSync.TestEnter(dcar, true)); }
+                    if (Config.GetInt("Test", "DemarrePassager", 0) != 0 && dmStep == 0 && t > 30f) { dmStep = 3; Log.Info("autotest : mscdemarre, passager : " + Seats.TestSit(dcar.Split('(')[0], 0)); }
+                    if (da > 0f && dmKey == 0 && t > da) { dmKey = 1; Log.Info("autotest : mscdemarre, cle tournee : " + VehicleSync.TestKey(dcar, "Test")); }
+                    if (da > 0f && dmKey == 1 && t > da + dt) { dmKey = 2; Log.Info("autotest : mscdemarre, cle relachee : " + VehicleSync.TestKey(dcar, "Shut off")); }
+                    if (da > 0f && t > da - 2f && t < da + 12f && Time.realtimeSinceStartup >= dmLog) { dmLog = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : mscdemarre t=" + t.ToString("F1") + " " + VehicleSync.StartProbe(dcar)); }
+                }
                 // ([Test] Autotest=mscradio : RadioGestes=t:voiture:geste;... -- geste=volume=0.5, station=0.071, mode, canal, suivante, ejecte --
                 // simules ici comme la molette / le bouton ; RadioReleves=t,t : etat des postes au journal + instantane mscetat)
                 if (mode == "mscradio")
