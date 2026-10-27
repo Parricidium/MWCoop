@@ -52,6 +52,9 @@ namespace MWCoop
         static readonly string[] BaseWheel = { "a", "b", "c", "mass", "rollingFrictionCoefficient" };
         static readonly string[] Skip = { "powered", "maxSteeringAngle", "suspensionRate", "suspensionTravel", "bumpRate", "reboundRate", "forwardGripFactor", "sidewaysGripFactor" };
 
+        // Puissance et couple quand la voiture source n'est pas en etat de rouler (releves sur une Satsuma de serie montee : 153 ch,
+        // 137 Nm, journaux du 27/10 ; avant multiplicateur PowerMul).
+        const float StockPower = 153f, StockTorque = 137f;
         static float mass = 950f;
         static float comFrac = -1f, comHeight = float.NaN;
 
@@ -93,7 +96,18 @@ namespace MWCoop
                     Rigidbody srb = src.GetComponent<Rigidbody>();
                     if (srb != null && srb.mass > 600f) mass = srb.mass;
                     if (b.Rb != null && srb != null) { b.Rb.drag = Msc ? SatDrag : srb.drag; b.Rb.angularDrag = srb.angularDrag; }
-                    n += CopyFields(src.GetComponent<Drivetrain>(), b.Dt, BaseDrive);
+                    // Moteur : seulement d'une voiture source en etat de rouler. Satsuma (ou Rivett) en cours de montage -- bloc,
+                    // embrayage ou boite demontes : le jeu met sa puissance, son couple ou son embrayage a 0 -- recopiee telle quelle,
+                    // la VAZ demarrait mais ne bougeait pas (dossier #9, 27/10 : « Cars from F10 aren't moving », 0 ch x 1.43,
+                    // regime 1230 fixe chez trois joueurs). Alors : le moteur de la copie de la Ruscko, puissance et couple de serie.
+                    Drivetrain sdt = src.GetComponent<Drivetrain>();
+                    if (sdt != null && sdt.maxPower >= 30f && sdt.maxTorque >= 30f && sdt.clutchMaxTorque > 0f) n += CopyFields(sdt, b.Dt, BaseDrive);
+                    else if (b.Dt != null)
+                    {
+                        b.Dt.maxPower = b.Dt.originalMaxPower = StockPower; b.Dt.maxTorque = StockTorque;
+                        Log.Info("vaz : moteur de la " + sn + " pas en etat (" + (sdt != null ? sdt.maxPower.ToString("F0") + " ch, " + sdt.maxTorque.ToString("F0") + " Nm, embrayage " + sdt.clutchMaxTorque.ToString("F0") : "sans Drivetrain")
+                                 + ") : moteur de serie (" + StockPower + " ch, " + StockTorque + " Nm)");
+                    }
                     n += CopyFields(src.GetComponent("CarDynamics"), car.GetComponent("CarDynamics"), new[] { "inertiaFactor", "physicMaterials" });
                     Component sa = src.GetComponent("Axles"), ca = car.GetComponent("Axles");
                     if (sa != null && ca != null)
