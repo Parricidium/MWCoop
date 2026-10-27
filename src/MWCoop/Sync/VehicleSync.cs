@@ -2449,6 +2449,7 @@ namespace MWCoop
         }
 
         // L'objet appartient-il a une voiture qu'un autre joueur conduit en ce moment ?
+        public static bool IsCar(Transform t) { return CarOf(t) != null; }
         public static bool RemotelyDriven(Transform t)
         {
             Car c = CarOf(t);

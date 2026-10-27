@@ -357,6 +357,9 @@ namespace MWCoop
             GameObject st = Game.FindAny("Database/PartsStatus/Radio");
             PlayMakerFSM sf = st != null ? Game.FsmOn(st, "Status") : null;
             if (sf != null) sb.Append("courant radio ").Append(B(sf, "RadioOK")).Append(" cd ").Append(B(sf, "CDPlayerOK")).Append(" ; ");
+            GameObject bat = Game.FindAny("Database/PartsStatus/Battery");
+            PlayMakerFSM bf = bat != null ? Game.FsmOn(bat, "Data") : null;
+            if (bf != null) sb.Append("batterie ").Append(F(bf, "Charge").ToString("F3")).Append(" ; ");
             foreach (Unit u in units) if (u.Vol != null) sb.Append(u.Car.name).Append(u.Cd ? "/cd" : "/radio").Append(" molette ").Append(u.Vol.ActiveStateName)
                 .Append(u.Switch != null ? " inter " + (u.Switch.enabled ? u.Switch.ActiveStateName : "coupe") : "").Append(u.Track != null ? " pistes " + (u.Track.enabled ? u.Track.ActiveStateName : "coupe") : "")
                 .Append(u.Chan != null ? " canaux " + (u.Chan.enabled ? u.Chan.ActiveStateName : "coupe") : "").Append(u.Disc != null ? " fente " + u.Disc.ActiveStateName : "").Append(" ; ");

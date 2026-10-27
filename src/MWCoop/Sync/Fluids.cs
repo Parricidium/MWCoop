@@ -51,6 +51,7 @@ namespace MWCoop
             public int Sends, Recvs; public float WindowStart; public bool Contested;
             public bool Septic;   // fosse ou citerne : envoyee par l'autorite de la GIFU seulement
             public float Pending, NextDelta;   // remplissage fait ici, pas encore envoye (valeur que l'on n'envoie pas)
+            public float Auth; public bool HasAuth;   // derniere valeur recue de celui qui fait autorite
         }
 
         static float Val(Watch x)
@@ -79,7 +80,23 @@ namespace MWCoop
                 if (satsuma == null) { GameObject s = Game.FindAny("SATSUMA(557kg, 248)"); satsuma = s != null ? s.transform : null; }
                 if (satsuma != null) t = satsuma;
             }
-            return VehicleSync.RemotelyDriven(t);
+            if (VehicleSync.RemotelyDriven(t)) return true;
+            // Voiture garee (personne ne la mene) : chacun la consommait chez lui -- batterie videe par les phares, la radio, le
+            // demarreur rejoue chez l'invite -- et envoyait sa valeur, qui ecrasait celle de l'autre : deux consommations pour une,
+            // batterie de la SATSUMA videe deux fois plus vite (JD et GG, 27/10 : 69,2 chez l'hote, 60,8 recue de l'invite). Seul
+            // celui qui fait autorite sur la voiture (l'hote tant que personne ne la mene) envoie sa derive ; les pleins faits
+            // ailleurs partent en ajout, comme pour une voiture menee par un autre. ([Test] ConsoAncienne=1 : regle d'avant.)
+            if (oldConso < 0) oldConso = Config.GetInt("Test", "ConsoAncienne", 0);
+            return oldConso == 0 && VehicleSync.IsCar(t) && !VehicleSync.SimAuthority(t);
+        }
+        static int oldConso = -1;
+        // (nettoyage : Dirt qui baisse sur une voiture garee, lavee ici -- garde comme un geste d'ici)
+        static bool NotOurs(Watch x, float v)
+        {
+            if (x.Var != null && x.Var.Name == "Dirt" && v < x.Last && !VehicleSync.RemotelyDriven(x.Fsm.transform)) return false;
+            // (reglages a la main -- jeu aux soupapes, calage -- : des gestes, pas une consommation ; regle d'avant)
+            if (x.List != null || x.Rot != null) return VehicleSync.RemotelyDriven(x.Fsm.transform);
+            return Driven(x.Fsm.transform);
         }
 
         static bool Changed(Watch x, float v)
@@ -288,10 +305,15 @@ namespace MWCoop
                     if (!septicHere) { x.Last = v; continue; }
                     if (now < x.NextSend) continue;
                 }
-                else if (Driven(x.Fsm.transform) || (x.Contested && !Session.IsHost) || now < x.NextSend)
+                else if (NotOurs(x, v) || (x.Contested && !Session.IsHost) || now < x.NextSend)
                 {
-                    bool notOurs = Driven(x.Fsm.transform) || (x.Contested && !Session.IsHost);
+                    bool notOurs = NotOurs(x, v) || (x.Contested && !Session.IsHost);
                     if (notOurs && Fill(x) && v > x.Last) { x.Pending += v - x.Last; x.Last = v; continue; }   // rempli ici : en ajout
+                    // Consommation d'ici sur une valeur qui n'est pas a nous (voiture garee : autorite a l'hote ; menee par un autre) :
+                    // remise a la derniere valeur recue. Avant, elle restait plus basse ici jusqu'au prochain changement chez l'autre
+                    // (batterie a 110,6 chez l'invite, 119,2 chez l'hote, essai 27/10). Pas un remplissage en cours d'envoi.
+                    if (notOurs && x.HasAuth && !x.Septic && x.Var != null && x.Pending <= 0.02f && (v < x.Auth || !Fill(x)) && Mathf.Abs(v - x.Auth) > 0.005f + 0.001f * Mathf.Abs(v))
+                    { SetVal(x, x.Auth); x.Last = Val(x); continue; }
                     if (now >= x.NextSend) x.Last = v;   // derive locale ignoree
                     continue;
                 }
@@ -354,7 +376,7 @@ namespace MWCoop
                 float here = Val(x);
                 if (Fill(x) && here > x.Last && (Driven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += here - x.Last;
                 SetVal(x, v + (Fill(x) ? x.Pending : 0f));
-                x.Last = Val(x);
+                x.Last = Val(x); x.Auth = x.Last; x.HasAuth = true;
                 Tally(x, false, now);
                 if (++applied % 200 == 1) Log.Info("liquides et usure : " + applied + " valeurs recues (" + key + " = " + v + ", joueur #" + who + ")");
             }
