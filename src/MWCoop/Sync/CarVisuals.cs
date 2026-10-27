@@ -62,6 +62,14 @@ namespace MWCoop
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 13f : -1;
         }
 
+        // Essais : cles suivies d'une voiture (nom contenant 'car'), et si chacune est une pose ou un affichage.
+        public static string TrackedOf(string car)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var kv in cars) if (kv.Key.StartsWith(car)) foreach (Item it in kv.Value.Items) sb.Append(it.Key).Append(it.Pose ? "(p)" : "").Append(it.Show ? "(s)" : "").Append(" ; ");
+            return sb.ToString();
+        }
+        static bool HandLever(string parent) { string p = parent.ToLowerInvariant(); return p == "throttle" || p == "brake" || p == "clutch"; }
         static bool Has(string n, string[] words) { foreach (string w in words) if (n.Contains(w)) return true; return false; }
 
         static bool SeatbeltPart(Transform t, Transform root)
@@ -96,6 +104,11 @@ namespace MWCoop
                     bool pose = Has(n, PoseWords), show = Has(n, ShowWords) || ShowNames.Contains(n) || t.GetComponent<Light>() != null;   // toute lampe
                     // Levier de vitesses de la SORBET : c'est Gearstick/Pivot qui tourne (son automate Movemement), pas Gearstick.
                     if (!pose && n == "pivot" && t.parent != null && t.parent.name.ToLowerInvariant().Contains("gear")) pose = true;
+                    // Leviers au guidon de la JONNEZ (SteeringPivot/Throttle, Brake, Clutch : leur automate 'Angle' tourne Pivot d'apres
+                    // throttleInput / brakeInput / clutchInput de l'AxisCarController -- a zero sur la copie) : la poignee d'accelerateur
+                    // ne tournait que chez celui qui conduisait (Markos, MSC, 28/10). Envoyes par le conducteur, comme les pedales.
+                    bool handLever = n == "pivot" && t.parent != null && HandLever(t.parent.name) && Config.GetInt("Test", "LevierAncien", 0) == 0;   // ([Test] LevierAncien=1 : regle d'avant)
+                    if (!pose && handLever) pose = true;
                     if (!pose && !show) continue;
                     // Ceintures : objets des automates du jeu (boucle, languette), a chaque joueur -- Seats montre celles des
                     // autres. Recopiee d'un autre, la boucle du conducteur s'eteignait (ou se rallumait : automate reparti en
@@ -104,7 +117,7 @@ namespace MWCoop
                     string rel = VehicleSync.RelPath(rb.transform, t);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
                     var it = new Item { Key = rel + "#" + k, T = t, Pose = pose, Show = show, Pos = t.localPosition, Rot = t.localRotation, Active = t.gameObject.activeSelf,
-                                        Pedal = n.Contains("pedal") || (n.StartsWith("pivot_") && t.parent != null && t.parent.name.ToLowerInvariant().Contains("pedal")),
+                                        Pedal = handLever || n.Contains("pedal") || (n.StartsWith("pivot_") && t.parent != null && t.parent.name.ToLowerInvariant().Contains("pedal")),
                                         Gear = pose && (n.Contains("gear") || AncestorHas(t, "gear", 3)) };   // (GIFU : GearLever/Pivot/Lever, c'est Lever qui bouge -- Menor, 21/10)
                     c.Items.Add(it);
                     c.ByKey[it.Key] = it;
