@@ -555,6 +555,35 @@ static void WinAnimTest()
         LaunchLog("testanim : fond : WM_ERASEBKGND -> %d (1 attendu), pinceau de classe %s, copies completes du cache a l'activation : %d", (int)er, brush ? "nul (ok)" : "PRESENT (erreur)", g_blitAllN);
         LaunchLog("testanim : messages non client (NCACTIVATE, NCPAINT, ACTIVATE) : %d traites ici sans DefWindowProc, retours %d/%d/%d : %s", g_ncHandled - before, (int)r1, (int)r2, (int)r3, ok ? "OK" : "ECHEC");
     }
+    // Parcours automatique : sur chaque page, chaque zone cliquable enregistree qui ne change qu'un etat d'affichage (onglets,
+    // groupes de la barre, segments, pastilles et interrupteurs des Reglages, onglets des Credits et des medias, taille du texte).
+    // Laissees de cote : les actions (jeu, navigateur, reseau, fichiers, suppressions, relance) et les listes.
+    {
+        auto safe = [](int id) {
+            return (id >= UI_NAV_GROUP && id < UI_NAV_GROUP + 4) || (id >= 2900 && id < 2910) || (id >= 2980 && id < 2984) || (id >= 456 && id < 460) || (id >= 2995 && id < 2997)
+                || (id >= 3300 && id < 3302) || (id >= 3308 && id < 3310) || (id >= 10042 && id < 10048) || (id >= 12000 && id < 13007);
+        };
+        int crawled = 0, skipped = 0, failsBefore = g_animTestFails;
+        for (int t = 0; t < TAB_COUNT; t++) {
+            if (SoftNavIndex(t) < 0 || t == TAB_ADDONS || t == TAB_ALBUM) continue;
+            UiClick(UI_NAV + t); InvalidateAll();
+            char what[96]; sprintf_s(what, "parcours, page %d", t); WinAnimCheck(what);
+            if (g_tab != t) continue;   // (page refusee : pas de jeu, pas de salon)
+            for (int tab = 0; tab < (t == TAB_COOP ? 8 : 1); tab++) {
+                if (t == TAB_COOP) { UiClick(2900 + tab); InvalidateAll(); sprintf_s(what, "parcours, Reglages onglet %d", tab); WinAnimCheck(what); }
+                std::vector<HotRect> zones = g_zones;
+                for (const HotRect &z : zones) {
+                    if (z.id < 0 || z.id == UI_NONE || (z.id >= UI_NAV && z.id < UI_NAV_GROUP) || (z.id >= 2900 && z.id < 2910) || z.id == 2996) continue;   // (2996 : onglet Album, vignettes en arriere-plan)
+                    if (!safe(z.id)) { skipped++; continue; }
+                    SoftPressNote(z.id); UiClick(z.id); InvalidateAll();
+                    sprintf_s(what, "parcours, page %d, zone %d", t, z.id); WinAnimCheck(what); crawled++;
+                    if (g_tab != t) { UiClick(UI_NAV + t); InvalidateAll(); WinAnimCheck("parcours, retour de page"); if (t == TAB_COOP) { UiClick(2900 + tab); InvalidateAll(); WinAnimCheck("parcours, retour d'onglet"); } }
+                }
+            }
+        }
+        UiClick(13004); InvalidateAll(); WinAnimCheck("parcours, taille du texte 100 %");   // (remise)
+        LaunchLog("testanim : parcours automatique : %d zones cliquees sur toutes les pages, %d laissees (actions, listes), %d echec(s)", crawled, skipped, g_animTestFails - failsBefore);
+    }
     g_animTestNoLive = false;
     LaunchLog("testanim : fin, %d echec(s)", g_animTestFails);
 }

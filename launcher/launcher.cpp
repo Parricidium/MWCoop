@@ -7039,6 +7039,10 @@ static void TypeChar(wchar_t ch)
 
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
 {
+    // Nouvelle interface, regle de fond (JD 27/10, « des reliquats » apres Prive -> Public) : toute entree qui peut changer un
+    // etat -- et donc la disposition -- vaut une image entiere (13 ms), quel que soit l'element touche. Les zones sales ne
+    // servent qu'aux animations et aux survols entre deux entrees.
+    if (g_newUi && (m == WM_LBUTTONDOWN || m == WM_LBUTTONUP || m == WM_LBUTTONDBLCLK || m == WM_RBUTTONDOWN || m == WM_RBUTTONUP || m == WM_MBUTTONDOWN || m == WM_KEYDOWN || m == WM_CHAR || m == WM_MOUSEWHEEL)) InvalidateAll();
     if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || m == WM_KEYDOWN || m == WM_CHAR) g_inputT = GetTickCount();
     { LRESULT res; if (WinProcNew(h, m, wp, lp, res)) return res; }   // (fenetre.inc : taille libre, cadre, image, F11)
     if (g_newUi) { LRESULT res; if (PalMessage(m, wp, lp, res)) return res; }   // (coque.inc : palette Ctrl+K)

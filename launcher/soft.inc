@@ -335,8 +335,14 @@ static void SoftSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labs,
     float x = r.X + 5, tx = x, tw = w.empty() ? 0 : w[0] + extra;
     std::vector<float> xs;
     for (size_t i = 0; i < labs.size(); i++) { xs.push_back(x); if ((int)i == sel) { tx = x; tw = w[i] + extra; } x += w[i] + extra + gap; }
+    {   // (segment deplace -- la disposition a change : la pastille ne glisse pas de l'ancienne place a la nouvelle, elle suit ; JD 27/10, « reliquats » Prive -> Public)
+        static std::map<int, RectF> lastR; auto it = lastR.find(id0);
+        if (it != lastR.end() && (fabsf(it->second.X - r.X) > 0.5f || fabsf(it->second.Y - r.Y) > 0.5f || fabsf(it->second.Width - r.Width) > 0.5f)) { g_softAnims.erase(AK(AKH_SEG, id0)); g_softAnims.erase(AK(AKH_SEG, id0 + 1000)); }
+        lastR[id0] = r;
+    }
     SoftAnimAt(r); float cx = AnimTo(AK(AKH_SEG, id0), tx, kSoftTUi, SE_MOVE), cw = AnimTo(AK(AKH_SEG, id0 + 1000), tw, kSoftTUi, SE_MOVE); SoftAnimEnd();
     RectF th(cx, r.Y + 5, cw, r.Height - 10);
+    if (th.X < r.X || th.X + th.Width > r.X + r.Width) InvalidateSoft(th, 30);   // (pastille hors du creux pendant un glissement : sa zone aussi)
     SoftRaised(g, th, 10, 3, 8, enabled ? 0.8f : 0.4f);
     SoftShape(g, th, 10, WithA(g_soft.acc, enabled ? 1.0f : 0.5f));
     for (size_t i = 0; i < labs.size(); i++) {
