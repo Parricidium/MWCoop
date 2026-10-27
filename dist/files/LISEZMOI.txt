@@ -1,4 +1,4 @@
-MWCoop - My Winter Car et My Summer Car (BETA) en cooperation
+MWCoop - My Winter Car et My Summer Car en cooperation
 ==============================================================
 
 Installation
@@ -7,7 +7,7 @@ Installation
 2. Acceptez l'installation : le lanceur s'installe dans %LOCALAPPDATA%\MWCoop et pose un raccourci
    "MWCoop" sur le bureau. Rien n'est ecrit dans le dossier du jeu. Une ancienne installation (lanceur
    dans le dossier du jeu) est reprise : sauvegardes et reglages copies, anciens fichiers a la Corbeille.
-3. Choisissez le jeu sous le numero de version : MWC (My Winter Car) ou MSC (My Summer Car, BETA).
+3. Choisissez le jeu sous le numero de version : MWC (My Winter Car) ou MSC (My Summer Car).
 4. Quand une nouvelle version sort, cliquez sur NOUVELLE VERSION - METTRE A JOUR (sous le logo).
 
 Jouer

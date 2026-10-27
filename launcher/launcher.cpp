@@ -1616,12 +1616,12 @@ static bool NoteForMsc(Note &n)
     filt(n.fr); filt(n.ru); filt(n.ar); filt(n.en);
     return !n.en.empty() || !n.fr.empty();
 }
-// L'entree « My Summer Car (BETA) » : ce qui marche, en puces (premiere puce = titre de l'accueil et de la colonne du Guide).
+// L'entree « My Summer Car » (arrivee en 1.1.0) : ce qui marchait, en puces (premiere puce = titre de l'accueil et de la colonne du Guide).
 static Note MscBetaNote()
 {
     static const wchar_t *b[][2] = {
-        { L"My Summer Car arrive dans MWCoop, en BETA : choisis MSC sous le numéro de version, en haut à gauche du lanceur.",
-          L"My Summer Car joins MWCoop, in BETA: pick MSC under the version number, top left of the launcher." },
+        { L"My Summer Car arrive dans MWCoop : choisis MSC sous le numéro de version, en haut à gauche du lanceur.",
+          L"My Summer Car joins MWCoop: pick MSC under the version number, top left of the launcher." },
         { L"Les joueurs, les tenues et les visages, le vocal de proximité, le tchat, les marqueurs, la sauvegarde de l'hôte envoyée aux invités.",
           L"Players, outfits and faces, proximity voice, chat, markers, the host's save sent to the guests." },
         { L"Voitures partagées : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED et le bateau, avec les passagers, les portières et les tableaux de bord.",
@@ -1629,11 +1629,9 @@ static Note MscBetaNote()
         { L"HUD noir et jaune, carte M de l'été, onglets Dragsters et Rallye dans F10, vue à la 3e personne et caméra drone.",
           L"Black and yellow HUD, summer M map, Drag race and Rally tabs in F10, third-person view and drone camera." },
         { L"Lanceur : thème Été, MSCLoader pour My Summer Car, un Guide qui parle de My Summer Car.",
-          L"Launcher: Summer theme, MSCLoader for My Summer Car, a Guide about My Summer Car." },
-        { L"Pas encore : objets, pièces, argent, magasins, boulots, heure et météo. Ils arrivent au fil des versions.",
-          L"Not yet: items, parts, money, shops, jobs, time and weather. They come over the next versions." } };
+          L"Launcher: Summer theme, MSCLoader for My Summer Car, a Guide about My Summer Car." } };
     Note n;
-    n.ver = kMscFirstVer; n.date = L"BETA";
+    n.ver = kMscFirstVer; n.date = L"19/10/2026";   // (plus « BETA » a la place de la date : JD, 27/10)
     for (auto &l : b) {
         const wchar_t *sep = n.en.empty() ? L"" : L"\n";
         n.fr += sep + std::wstring(L"• ") + l[0];

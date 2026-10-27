@@ -487,15 +487,10 @@ static void DrawRail(Graphics &g)
     std::wstring ver = g_localVer.empty() ? L"" : L"v" + g_localVer.substr(0, g_localVer.find(L'-'));
     float vw = ver.empty() ? 0 : PillW(ver, 10.5f), x = kRail.X + (kRail.Width - vw) / 2;
     if (vw > 0) Pill(g, RectF(x, 104, vw, 20), TH(cardSel), ver, kInk, 10.5f);
-    // jeu, sous le numero (JD, 19/10, a la place de Legacy / Reworked) : MSC (etiquette BETA) / MWC ; clic : saves.inc GameSet,
-    // le lanceur se relance sur l'autre jeu
+    // jeu, sous le numero (JD, 19/10, a la place de Legacy / Reworked) : MSC / MWC ; clic : saves.inc GameSet, le lanceur se
+    // relance sur l'autre jeu. (Etiquette BETA sur MSC retiree : decision de JD, 27/10.)
     g_canalRect = RectF(28, 130, 208, 30);
     UiSeg(g, g_canalRect, { L"MSC", L"MWC" }, g_game == GAME_MSC ? 0 : 1, UI_SET_CANAL, 12);
-    {
-        const wchar_t *bl = L"BETA";
-        float w = PillW(bl, 8);
-        Pill(g, RectF(g_canalRect.X - 2, g_canalRect.Y - 8, w, 15), kRed, bl, Color(255, 255, 255, 255), 8);
-    }
     float y0 = 168;
     if (g_btn[B_UPDATE].visible) {   // mise a jour proposee : bouton sous la version
         Button &b = g_btn[B_UPDATE];

@@ -671,7 +671,7 @@ static const SetItem kSetItems[] = {
     { 16, SI_X, "apercu", NULL, NULL, NULL, NULL },
     { 17, SI_X, "lang", L"Langue", L"Language", NULL, NULL },
     { 18, SI_X, "update", L"Mise à jour", L"Update", NULL, NULL },
-    { 18, SI_X, "canal", L"Jeu", L"Game", L"My Summer Car (BETA) ou My Winter Car · le lanceur se relance", L"My Summer Car (BETA) or My Winter Car · the launcher restarts" },
+    { 18, SI_X, "canal", L"Jeu", L"Game", L"My Summer Car ou My Winter Car · le lanceur se relance", L"My Summer Car or My Winter Car · the launcher restarts" },
     { 18, SI_X, "majauto", L"Mettre à jour automatiquement", L"Update automatically", L"Au démarrage du lanceur, depuis GitHub", L"At launcher start, from GitHub" },
     { 18, SI_X, "nightly", L"Versions d'essai (nightly)", L"Test builds (nightly)", L"Avant tout le monde, parfois cassées", L"Before everyone, sometimes broken" },
     { 18, SI_X, "notes", L"Notes de version", L"Release notes", L"Ce qui change à chaque version", L"What changes in each version" },

@@ -104,9 +104,9 @@ static const WikiBlock kW_Update[] = {
     { WB_TIP, L"Réglages > Lanceur > Version & mises à jour > « Mettre à jour automatiquement » : plus besoin de cliquer, la mise à jour se fait à chaque démarrage. Juste à côté : « Versions d'essai (nightly) », avant tout le monde mais parfois cassées.",
               L"Settings > Launcher > Version & updates > \"Update automatically\": no more clicking, updates happen at every start. Right next to it: \"Test builds (nightly)\", before everyone but sometimes broken." },
     { WB_H, L"MSC ou MWC", L"MSC or MWC" },
-    { WB_P, L"Sous le numéro de version, en haut à gauche du lanceur : le jeu auquel tu joues, My Summer Car (MSC, en BETA) ou My Winter Car (MWC). Le lanceur se relance sur le jeu choisi : son dossier, ses sauvegardes et ses amis Steam. Tout le monde doit être sur le même jeu pour jouer ensemble ; en rejoignant un hôte de l'autre jeu, le lanceur propose de changer.",
-            L"Under the version number, top left of the launcher: the game you play, My Summer Car (MSC, in BETA) or My Winter Car (MWC). The launcher restarts on the chosen game: its folder, its saves and its Steam friends. Everyone must be on the same game to play together; when joining a host on the other game, the launcher offers to switch." },
-    { WB_TIP, L"My Summer Car en BETA : presque tout ce qui l'est sur My Winter Car est partagé (joueurs, voitures, mécanique, argent, boulots, radio, monde). Ce qui reste est dans « Ce qui marche sur My Summer Car ».", L"My Summer Car in BETA: nearly everything of My Winter Car is shared now (players, cars, mechanics, money, jobs, radio, world). What's left is listed in \"What works on My Summer Car\"." },
+    { WB_P, L"Sous le numéro de version, en haut à gauche du lanceur : le jeu auquel tu joues, My Summer Car (MSC) ou My Winter Car (MWC). Le lanceur se relance sur le jeu choisi : son dossier, ses sauvegardes et ses amis Steam. Tout le monde doit être sur le même jeu pour jouer ensemble ; en rejoignant un hôte de l'autre jeu, le lanceur propose de changer.",
+            L"Under the version number, top left of the launcher: the game you play, My Summer Car (MSC) or My Winter Car (MWC). The launcher restarts on the chosen game: its folder, its saves and its Steam friends. Everyone must be on the same game to play together; when joining a host on the other game, the launcher offers to switch." },
+    { WB_TIP, L"My Summer Car : presque tout ce qui l'est sur My Winter Car est partagé (joueurs, voitures, mécanique, argent, boulots, radio, monde). Le détail, et ce qui n'existe que sur My Winter Car : « Ce qui marche sur My Summer Car ».", L"My Summer Car: nearly everything of My Winter Car is shared (players, cars, mechanics, money, jobs, radio, world). The details, and what exists only in My Winter Car: \"What works on My Summer Car\"." },
     { WB_GO, L"Ce qui marche sur My Summer Car", L"What works on My Summer Car", 1000 + WA_MSCBETA, WG_MSC },
     { WB_WARN, L"Ferme le jeu et le salon avant de mettre à jour. Hôte et invités doivent avoir exactement la même version, sinon le salon refuse.",
                L"Close the game and the lobby before updating. Host and guests must have exactly the same version, or the lobby refuses." },
@@ -221,7 +221,6 @@ static const WikiBlock kW_Save[] = {
     { WB_B, L"Seul l'hôte sauvegarde le monde. Une sauvegarde coop est aussi possible aux toilettes, comme en solo.", L"Only the host saves the world. A co-op save is also possible at the toilet, like in solo." },
     { WB_B, L"L'invité joue dans un profil à part (MWCoop\\profils\\invite) : sa sauvegarde solo et ses réglages restent intacts.", L"The guest plays in a separate profile (MWCoop\\profils\\invite): their solo save and settings stay intact." },
     { WB_B, L"L'argent : chacun a son porte-monnaie et garde sa paie (touche N pour donner de l'argent à un autre joueur). Les délits et la prison : à chacun les siens.", L"Money: everyone has their own wallet and keeps their own pay (N key to give money to another player). Crimes and jail: everyone has their own.", 0, WG_MWC },
-    { WB_B, L"My Summer Car (BETA) : quelques à-côtés ne sont pas encore partagés (prix du rallye, résultats des dragsters) ; voir « Ce qui marche sur My Summer Car ».", L"My Summer Car (BETA): a few side things are not shared yet (rally prizes, drag race results); see \"What works on My Summer Car\".", 0, WG_MSC },
 };
 static const WikiBlock kW_InGame[] = {
     { WB_P, L"En jeu, MWCoop ajoute quelques touches et un menu. En haut à gauche, une pastille montre l'état de la connexion et le nombre de joueurs.",
@@ -248,12 +247,10 @@ static const WikiBlock kW_InGame[] = {
             L"Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to the chat.", 0, WG_MSC },
     { WB_H, L"Ce qui est partagé", L"What's shared", 0, WG_MWC },
     { WB_P, L"Les joueurs et leurs gestes, l'heure et la météo de l'hôte, les portes, la télé et les CD, les véhicules (conducteur, passagers, dégâts), chaque boulon, la peinture, les liquides, l'argent, les magasins, les PNJ, la police, les travaux, les factures, le téléphone, la circulation, le feu, le remorquage…",
-            L"Players and their moves, the host's time and weather, doors, TV and CDs, vehicles (driver, passengers, damage), every bolt, paint, fluids, money, shops, NPCs, police, jobs, bills, phone, traffic, fire, towing…" },
-    { WB_H, L"Ce qui est partagé (BETA)", L"What's shared (BETA)", 0, WG_MSC },
-    { WB_P, L"Les joueurs et leurs gestes, leurs tenues et leurs visages, le vocal, le tchat, les marqueurs, et les voitures : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED et le bateau (conducteur, passagers, portières, tableau de bord).",
-            L"Players and their moves, their outfits and faces, voice, chat, markers, and the cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat (driver, passengers, doors, dashboard).", 0, WG_MSC },
-    { WB_B, L"Pas encore : les objets et les pièces, l'argent, les magasins, les boulots, l'heure et la météo de l'hôte. Ils arrivent au fil des versions.",
-            L"Not yet: items and parts, money, shops, jobs, the host's time and weather. They come over the next versions.", 0, WG_MSC },
+            L"Players and their moves, the host's time and weather, doors, TV and CDs, vehicles (driver, passengers, damage), every bolt, paint, fluids, money, shops, NPCs, police, jobs, bills, phone, traffic, fire, towing…", 0, WG_MWC },
+    { WB_H, L"Ce qui est partagé", L"What's shared", 0, WG_MSC },
+    { WB_P, L"Les joueurs et leurs gestes, leurs tenues et leurs visages, le vocal, le tchat, les marqueurs, les voitures (SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, le bateau, la VAZ-2108 et les addons), l'heure et la météo de l'hôte, la circulation et les PNJ, les boulots, l'argent, les magasins, la mécanique, la radio, les dragsters et le rallye… Le détail : « Ce qui marche sur My Summer Car ».",
+            L"Players and their moves, their outfits and faces, voice, chat, markers, the cars (SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, the boat, the VAZ-2108 and the add-ons), the host's time and weather, traffic and NPCs, jobs, money, shops, mechanics, radio, drag races and the rally… The details: \"What works on My Summer Car\".", 0, WG_MSC },
     { WB_H, L"Sac de couchage", L"Sleeping bag", 0, WG_MWC },
     { WB_B, L"Un sac par joueur, dans la chambre du départ (à côté du lit). Plié, il se prend en main et se transporte comme un objet du jeu, même dans les voitures. Posé par terre (sur un sol plat, pas sur un canapé ou un lit) : F pour le déplier, puis tiens F pour dormir dessus comme dans un lit ; un appui bref sur F le replie.",
             L"One bag per player, in the starting bedroom (next to the bed). Rolled up, you pick it up and carry it like any game item, cars included. On the ground (flat floor, not on a sofa or bed): F to unroll it, then hold F to sleep on it like a bed; a short F press rolls it back up." },
@@ -524,8 +521,8 @@ static const WikiBlock kW_ModsKo[] = {
 static const WikiBlock kW_ModCompat[] = {
     { WB_P, L"La plupart des mods MSCLoader marchent en coop tant qu'ils ne font que des choses à toi. Ceux qui ajoutent des objets ou des véhicules que les autres doivent voir ont besoin que MWCoop les synchronise : voici la liste, et les mods à éviter.",
             L"Most MSCLoader mods work in co-op as long as they only do things for you. Those that add objects or vehicles the others must see need MWCoop to sync them: here is the list, and the mods to avoid.", 0, WG_MWC },
-    { WB_P, L"La plupart des mods MSCLoader marchent en coop tant qu'ils ne font que des choses à toi. Sur My Summer Car (BETA), MWCoop ne synchronise encore aucun mod : les objets ou véhicules qu'un mod ajoute ne sont vus que par ceux qui l'ont. Voici aussi les mods à éviter.",
-            L"Most MSCLoader mods work in co-op as long as they only do things for you. On My Summer Car (BETA), MWCoop doesn't sync any mod yet: the objects or vehicles a mod adds are only seen by the players who have it. Here are also the mods to avoid.", 0, WG_MSC },
+    { WB_P, L"La plupart des mods MSCLoader marchent en coop tant qu'ils ne font que des choses à toi. Sur My Summer Car, MWCoop ne synchronise aucun mod : les objets ou véhicules qu'un mod ajoute ne sont vus que par ceux qui l'ont. Voici aussi les mods à éviter.",
+            L"Most MSCLoader mods work in co-op as long as they only do things for you. On My Summer Car, MWCoop doesn't sync any mod: the objects or vehicles a mod adds are only seen by the players who have it. Here are also the mods to avoid.", 0, WG_MSC },
     { WB_H, L"Synchronisés par MWCoop", L"Synced by MWCoop", 0, WG_MWC },
     { WB_B, L"Machtwagen 300D : portes, verrouillage, toit ouvrant, vitres, clim, moteur.", L"Machtwagen 300D: doors, locking, sunroof, windows, A/C, engine." },
     { WB_B, L"Second Machtwagen : achat, couleur, plaque, préparation.", L"Second Machtwagen: purchase, color, plate, tuning." },
@@ -797,11 +794,11 @@ static const WikiBlock kW_Kartturi[] = {
     { WB_B, L"Les autres te voient le tenir à deux mains, et son écran marche chez tous (posé dans la voiture aussi).", L"The others see you holding it with both hands, and its screen works for everyone (also lying in the car)." },
 };
 
-// ---- My Summer Car (BETA, 19/10) : ce qui marche deja (Core.MscModules du mod), ce qui arrive. Article montre sur MSC seulement.
+// ---- My Summer Car (19/10 ; plus BETA depuis le 27/10, JD) : ce qui marche (Core.MscModules du mod). Article montre sur MSC seulement.
 // (Pas de « My Winter Car » seul dans ces textes : T() le changerait en My Summer Car, GameSwap de launcher.cpp.)
 static const WikiBlock kW_MscBeta[] = {
-    { WB_P, L"My Summer Car est en BETA dans MWCoop : le même lanceur, le même salon et le même menu F10, avec ce qui est déjà prêt. Pour jouer ensemble, tout le monde doit être sur MSC (en haut à gauche du lanceur).",
-            L"My Summer Car is in BETA in MWCoop: the same launcher, the same lobby and the same F10 menu, with what's ready so far. To play together, everyone must be on MSC (top left of the launcher)." },
+    { WB_P, L"My Summer Car se joue dans MWCoop avec le même lanceur, le même salon et le même menu F10. Pour jouer ensemble, tout le monde doit être sur MSC (en haut à gauche du lanceur).",
+            L"My Summer Car is played in MWCoop with the same launcher, the same lobby and the same F10 menu. To play together, everyone must be on MSC (top left of the launcher)." },
     { WB_H, L"Ce qui marche", L"What works" },
     { WB_B, L"Le salon par Steam ou par IP, la sauvegarde de l'hôte envoyée aux invités, plusieurs sauvegardes.", L"The lobby through Steam or by IP, the host's save sent to the guests, several saves." },
     { WB_B, L"Les joueurs et leurs gestes, les tenues et les visages (page Personnage), le vocal de proximité (V), le tchat (T), les marqueurs partagés, les coups de poing entre joueurs (si l'hôte les autorise).",
@@ -816,16 +813,16 @@ static const WikiBlock kW_MscBeta[] = {
     { WB_B, L"Depuis 1.9.0 : la radio et le lecteur CD (même morceau à la même seconde, la radio de chaque voiture entendue là où elle est), les voix des PNJ, les particules du monde, la vapeur du sauna, les portes automatiques, les chocs entre voitures de joueurs, les fuites, les commandes tenues, les gestes et les outils en main, la cuisine, la maison (fusibles, kilju), les évènements du monde, tout le reste du monde, la partie de l'hôte rangée chez l'invité, les voitures IA et les résultats du rallye avec les temps des pilotes humains.", L"Since 1.9.0: the radio and the CD player (same song at the same second, each car's radio heard where it is), the NPCs' voices, the particles of the world, the sauna steam, the automatic doors, crashes between players' cars, leaks, held controls, gestures and hand tools, cooking, the house (fuses, kilju), the world's events, everything else of the world, the host's game kept on the guest's side, the rally's AI cars and results with the human drivers' times." },
     { WB_B, L"Depuis 1.14 : la VAZ-2108 et les voitures addons (F10 > Voitures, page Personnage > Addons du lanceur), sur la base de la RUSCKO, avec leurs roues de terre et la tenue de route de la SATSUMA rallye ; le rallye du week-end avec elles.",
             L"Since 1.14: the VAZ-2108 and the add-on cars (F10 > Cars, launcher's Character > Add-ons page), built on the RUSCKO, with their gravel wheels and the rally SATSUMA's handling; the weekend rally with them." },
-    { WB_B, L"Depuis 1.14 : la boutique OSUUSKAUPPA s21 et son coin vidéo (caméscope, magnétoscope, télé, montage), le musée de la Corse, les sacs de couchage, les casques et le KARTTURI 2000 sur les spéciales de MSC, au même endroit que dans My Winter Car (Peräjärvi).",
-            L"Since 1.14: the OSUUSKAUPPA s21 shop and its video corner (camcorder, VCR, TV, editing), the Museum of Corsica, sleeping bags, helmets and the KARTTURI 2000 on MSC's stages, in the same place as in My Winter Car (Peräjärvi)." },
-    { WB_B, L"Le cinéma KINO TÄHTI aussi, au même endroit que dans My Winter Car : au bord de la route, à l'est des silos MAATALOUS.",
-            L"The KINO TÄHTI cinema too, in the same place as in My Winter Car: by the road, east of the MAATALOUS silos." },
-    { WB_H, L"Pas encore", L"Not yet" },
-    { WB_B, L"Les prix du rallye et les résultats des dragsters des autres joueurs : pas encore.", L"Rally prizes and the drag race results of the other players: not yet." },
+    { WB_B, L"Depuis 1.14 : la boutique OSUUSKAUPPA s21 et son coin vidéo (caméscope, magnétoscope, télé, montage), le musée de la Corse, les sacs de couchage, les casques et le KARTTURI 2000 sur les spéciales de MSC, au même endroit que sur MWC (Peräjärvi).",
+            L"Since 1.14: the OSUUSKAUPPA s21 shop and its video corner (camcorder, VCR, TV, editing), the Museum of Corsica, sleeping bags, helmets and the KARTTURI 2000 on MSC's stages, in the same place as in MWC (Peräjärvi)." },
+    { WB_B, L"Le cinéma KINO TÄHTI aussi, au même endroit que sur MWC : au bord de la route, à l'est des silos MAATALOUS.",
+            L"The KINO TÄHTI cinema too, in the same place as in MWC: by the road, east of the MAATALOUS silos." },
+    { WB_B, L"Depuis msc-1.15.1 : les résultats des dragsters avec les temps des autres joueurs, les trophées du rallye pour chacun, et un podium qui attend les autres pilotes humains.", L"Since msc-1.15.1: drag race results with the other players' times, rally trophies for everyone, and a podium that waits for the other human drivers." },
+    { WB_H, L"Absents de My Summer Car", L"Not in My Summer Car" },
     { WB_B, L"Course sur glace et magasin de pièces CARDINAL : des ajouts faits pour My Winter Car, absents de My Summer Car.",
             L"Ice race and CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car." },
-    { WB_TIP, L"Quelque chose cloche ? Envoie le zip des journaux sur le Discord (#bug-reports) : la BETA avance avec vos retours.",
-              L"Something wrong? Send the logs zip on the Discord (#bug-reports): the BETA moves on with your reports." },
+    { WB_TIP, L"Quelque chose cloche ? Signaler un bug (l'insecte en haut à droite) : le formulaire et le zip des journaux.",
+              L"Something wrong? Report a bug (the bug icon at the top right): the form and the logs zip." },
     { WB_GO, L"Changer de jeu (MSC ou MWC)", L"Switch game (MSC or MWC)", 1000 + WA_UPDATE },
     { WB_GO, L"Envoyer ses journaux", L"Send your logs", 1000 + WA_LOGS },
 };
@@ -1134,7 +1131,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(2, L"Mods pris en charge et déconseillés", L"Mod support and known incompatibilities", L"Ce qui est synchronisé, ce qui pose souci", L"What is synced, what causes trouble", kW_ModCompat),
     WART(3, L"Le HUD en jeu", L"The in-game HUD", L"Vanilla, Carte, Anneaux ou Bandeau", L"Vanilla, Card, Rings or Strip", kW_Hud),   // (WA_HUD = 30)
     WART(0, L"Linux et Steam Deck", L"Linux and Steam Deck", L"Proton, option de lancement, limites", L"Proton, launch option, limits", kW_Linux),   // (WA_LINUX = 31)
-    WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
+    WARTG(WG_MSC, 0, L"My Summer Car", L"My Summer Car", L"Ce qui est partagé", L"What's shared", kW_MscBeta),   // (WA_MSCBETA = 32)
     WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, relief, végétation, lumières, co-op", L"Objects, roads, terrain, plants, lights, co-op", kW_Editor),   // (WA_EDITOR = 33)
     WART(2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34 ; My Summer Car aussi depuis le 24/10)
     WARTG(WG_ALL, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)

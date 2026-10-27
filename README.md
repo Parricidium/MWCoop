@@ -24,7 +24,7 @@
 
 # My Seasons Car — co-op for My Winter Car and My Summer Car
 
-**My Seasons Car** (formerly MWCoop) is a co-op mod for **My Winter Car** and, since 1.1.0, **My Summer Car** (BETA)
+**My Seasons Car** (formerly MWCoop) is a co-op mod for **My Winter Car** and, since 1.1.0, **My Summer Car**
 (Steam). The same launcher runs both games; in game the mod is called **MWCoop** on My Winter Car and **MSCoop** on
 My Summer Car. Website: **[parricidium.github.io/MWCoop](https://parricidium.github.io/MWCoop/)**.
 
@@ -355,7 +355,7 @@ Amistech Games; this project is not affiliated with them.
 # Version française
 
 **My Seasons Car** (anciennement MWCoop) est un mod coopératif pour **My Winter Car** et, depuis la 1.1.0,
-**My Summer Car** (BETA) (Steam). Le même lanceur gère les deux jeux ; en jeu, le mod s'appelle **MWCoop** sur
+**My Summer Car** (Steam). Le même lanceur gère les deux jeux ; en jeu, le mod s'appelle **MWCoop** sur
 My Winter Car et **MSCoop** sur My Summer Car. Site : **[parricidium.github.io/MWCoop](https://parricidium.github.io/MWCoop/)**.
 
 Un joueur héberge son monde, ses amis rejoignent

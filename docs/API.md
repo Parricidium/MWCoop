@@ -7,7 +7,7 @@ between the players of a co-op session**. It is the static class `MWCoop.CoopApi
 - Public names and docs are in English. The rest of the MWCoop source is in French, but it is open source and not
   obfuscated, so you never need to read it to use this API.
 - Works with MSCLoader mods, or any code running in the game process.
-- The same API in My Winter Car and My Summer Car (MSC support is in BETA since 1.1.0): one `MWCoop.dll`, nothing to change
+- The same API in My Winter Car and My Summer Car (MSC support since 1.1.0): one `MWCoop.dll`, nothing to change
   in your mod. Use `IsMySummerCar` / `GameName` if your mod behaves differently per game.
 
 ## What MWCoop already does for your mod
