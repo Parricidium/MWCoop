@@ -2414,3 +2414,5 @@ No zip or subfolder here.	Здесь нет ни zip, ни подпапок.
 %d ticked, %s · with the report: %s in %d zip(s) · 15 MB per zip, 16 zips, 40 MB in all	Отмечено %d, %s · вместе с отчётом: %s в %d zip · 15 МБ на zip, 16 zip, 40 МБ всего
 Add	Добавить
 Browse…	Обзор…
+file|files	файл|файла|файлов
+unknown date	дата неизвестна

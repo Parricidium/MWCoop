@@ -517,6 +517,33 @@ static std::wstring SigOptLabel(const Jv &o) { std::string t = o.str("texte"); r
 static std::vector<std::wstring> ZipFiles();   // (launcher.cpp)
 static void SteamLibraries(std::vector<std::wstring> &out);   // (launcher.cpp)
 static bool GameProcessRunning(DWORD *pidOut);
+static std::wstring SigDateOf(const FILETIME &ft) { return ft.dwLowDateTime == 0 && ft.dwHighDateTime == 0 ? T(L"date inconnue", L"unknown date") : LogDate(ft); }   // (jamais 01/01/1601)
+// Accord d'un nom avec un nombre : formes « a|b|c|d » du texte traduit -- FR / EN : 1, autres ; russe : 1, 2-4, 5+ (11-14 : 5+) ;
+// arabe : 1, 2, 3-10, 11+. S'il manque des formes, la derniere sert.
+static std::wstring SigPlural(int n, const wchar_t *forms)
+{
+    std::vector<std::wstring> f; std::wstring cur;
+    for (const wchar_t *p = forms; ; p++) { if (*p == L'|' || !*p) { f.push_back(cur); cur.clear(); if (!*p) break; } else cur += *p; }
+    int i;
+    if (g_ru) { int m10 = n % 10, m100 = n % 100; i = m10 == 1 && m100 != 11 ? 0 : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 1 : 2; }
+    else if (g_ar) i = n == 1 ? 0 : n == 2 ? 1 : n >= 3 && n <= 10 ? 2 : 3;
+    else i = n == 1 ? 0 : 1;
+    if (i >= (int)f.size()) i = (int)f.size() - 1;
+    return f[i];
+}
+static std::wstring SigFilesText(int n) { wchar_t b[48]; swprintf_s(b, L"%d %s", n, SigPlural(n, T(L"fichier|fichiers", L"file|files")).c_str()); return b; }
+// Date d'une partie : son mwcoop.log le plus recent, sinon le fichier le plus recent (le journal de Unity compris : JD 27/10,
+// « 01/01/1601 » sur une partie qui n'avait que lui), sinon 0 -> « date inconnue ».
+static void SigSessEnd(SigSess &s)
+{
+    FILETIME best = {}; bool mod = false;
+    for (auto &p : s.paths) {
+        WIN32_FILE_ATTRIBUTE_DATA a; if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a)) continue;
+        bool isMod = p.find(L"mwcoop.log") != std::wstring::npos;
+        if ((isMod && !mod) || (isMod == mod && CompareFileTime(&a.ftLastWriteTime, &best) > 0)) { best = a.ftLastWriteTime; mod = mod || isMod; }
+    }
+    s.g.end = best;
+}
 static std::wstring SigSessGameDir(int game)   // dossier du jeu demande : celui en cours, ou l'autre (dossier du lanceur, dossier retenu, bibliotheques Steam)
 {
     if (game == g_game) return g_gameDir;
@@ -554,7 +581,6 @@ static void SigSessScan(int game, bool keepChecks)
         if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return;
         uint64_t b = ((uint64_t)a.nFileSizeHigh << 32) | a.nFileSizeLow;
         s.paths.push_back(p); s.g.files++; s.g.bytes += b < 4ull * 1024 * 1024 ? b : 4ull * 1024 * 1024;   // (4 Mo par fichier au plus dans le zip)
-        if (CompareFileTime(&a.ftLastWriteTime, &s.g.end) > 0 && p.find(L"output_log") == std::wstring::npos) s.g.end = a.ftLastWriteTime;
     };
     std::vector<std::pair<std::wstring, std::wstring>> bases;   // (dossier logs\, profil)
     if (!root.empty()) {
@@ -571,6 +597,7 @@ static void SigSessScan(int game, bool keepChecks)
         std::wstring mod; FILETIME best = {};
         for (auto &p : s.paths) if (p.find(L"mwcoop.log") != std::wstring::npos) { WIN32_FILE_ATTRIBUTE_DATA a; if (GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a) && (mod.empty() || CompareFileTime(&a.ftLastWriteTime, &best) > 0)) { mod = p; best = a.ftLastWriteTime; } }
         if (!mod.empty()) SessionInfo(s.g, mod, running);
+        SigSessEnd(s);   // (JD 27/10 : « 01/01/1601 » -- la partie n'avait que le journal de Unity)
         if (s.g.files) g_sigSess.push_back(s);
     }
     for (auto &b : bases) {   // les parties rangees par le chargeur : <logs>\sessions\AAAA-MM-JJ_HHhMMmSS (dossiers)
@@ -585,6 +612,7 @@ static void SigSessScan(int game, bool keepChecks)
             addPath(s, s.g.dir + L"mwcoop.log"); addPath(s, s.g.dir + L"chargeur.log"); addPath(s, s.g.dir + L"output_log.txt");
             s.g.end = keep;   // (la date du dossier fait foi)
             if (!s.g.files) continue;
+            if (!s.g.end.dwLowDateTime && !s.g.end.dwHighDateTime) SigSessEnd(s);
             if (FileExists(s.g.dir + L"mwcoop.log")) SessionInfo(s.g, s.g.dir + L"mwcoop.log", false);
             g_sigSess.push_back(s);
         } while (FindNextFileW(h, &fd));
@@ -900,7 +928,7 @@ static void SigDrawZipPick(Graphics &g, const RectF &card)   // par-dessus la ca
         if (it.dir) { Icon(g, IC_FOLDER, r.X + 26, r.Y + rowH / 2, 20, g_soft.ink, 1.8f); Text(g, it.name, RectF(r.X + 60, r.Y + 11, cw - 70, 22), 13.5f, FontStyleBold, g_soft.ink, StringAlignmentNear); }
         else {
             SoftToggle(g, RectF(r.X, r.Y + 7, 52, 30), it.checked || already, UI_SIG_ZP_ROW + k, !already);
-            std::wstring t = it.name + L" · " + LogDate(it.mt) + L" · " + SaveSizeText(it.bytes);
+            std::wstring t = it.name + L" · " + SigDateOf(it.mt) + L" · " + SaveSizeText(it.bytes);
             if (!it.where.empty()) t += L" · " + it.where;
             if (already) t += T(L" · déjà ajouté", L" · already added");
             bool bad = !it.bad.empty();
@@ -1407,12 +1435,12 @@ static float SigDrawForm(Graphics &g, float x, float y, float w, const RectF &cl
                 const SigSess &s = g_sigSess[k];
                 RectF r(x, y, w, 40);
                 SoftToggle(g, RectF(x, y + 5, 52, 30), s.checked, UI_SIG_SESS + k, true); SigHot(r, UI_SIG_SESS + k, clip);
-                std::wstring t = LogDate(s.g.end);
+                std::wstring t = SigDateOf(s.g.end);
                 if (s.g.key == L"*") t += s.g.live ? T(L" · partie en cours", L" · game running") : T(L" · dernière partie", L" · latest game session");
                 if (!s.g.mode.empty()) t += L" · " + s.g.mode;
                 if (!s.g.version.empty()) t += L" · " + s.g.version;
                 if (!s.g.profile.empty()) t += T(L" · profil ", L" · profile ") + s.g.profile;
-                wchar_t fb[96]; swprintf_s(fb, T(L" · %d fichiers, %s", L" · %d files, %s"), s.g.files, SaveSizeText(s.g.bytes).c_str()); t += fb;
+                t += L" · " + SigFilesText(s.g.files) + L", " + SaveSizeText(s.g.bytes);
                 Text(g, t, RectF(x + 64, y + 10, w - 64, 22), 13, s.checked ? FontStyleBold : FontStyleRegular, s.checked ? g_soft.ink : g_soft.muted, StringAlignmentNear);
                 y += 40;
             }
@@ -1720,6 +1748,26 @@ static int SigSelfTest(const std::wstring &log, const std::wstring &base)
         // jeu du formulaire : le selecteur suit le choix (scan reel sur cette instance, sans partie : au moins les communs)
         for (auto &f : g_sigForm) if (f.champ == "jeu") { f.sel = 0; SigSessScan(SigGameOfForm(), false); int g0 = g_sigSessGame; f.sel = 1; SigSessScan(SigGameOfForm(), false); check(g0 == GAME_MWC && g_sigSessGame == GAME_MSC, "selecteur : suit le jeu choisi (mwc puis msc)", r); }
         LaunchLog("testsignalnatif : selecteur reel sur cette instance : %d partie(s), %d fichier(s) commun(s)", (int)g_sigSess.size(), (int)g_sigCommon.size());
+        {   // JD 27/10 : « 01/01/1601 01h00 · derniere partie · 1 fichiers » -- partie sans mwcoop.log (le journal de Unity seul), accord du nombre
+            bool noneZero = true; for (auto &s : g_sigSess) if (!s.g.end.dwLowDateTime && !s.g.end.dwHighDateTime) noneZero = false;
+            check(noneZero, "scan reel : aucune partie datee 1601", r);
+            std::wstring ulog = log + L".output_log.txt"; CopyFileW(g_iniLauncher.c_str(), ulog.c_str(), FALSE);
+            SigSess s; s.paths = { ulog }; s.g.files = 1; SigSessEnd(s);
+            check((s.g.end.dwLowDateTime || s.g.end.dwHighDateTime) && SigDateOf(s.g.end) != T(L"date inconnue", L"unknown date") && SigDateOf(s.g.end).find(L"1601") == std::wstring::npos, "partie avec le seul journal de Unity : datee du fichier, pas 1601", r);
+            FILETIME zero = {}; SigSess z; z.paths = { log + L".absent.log" }; SigSessEnd(z);
+            check(SigDateOf(zero) == T(L"date inconnue", L"unknown date") && SigDateOf(z.g.end) == T(L"date inconnue", L"unknown date"), "aucune date valide : « date inconnue »", r);
+            DeleteFileW(ulog.c_str());
+            bool fr = g_fr, ru = g_ru, ar = g_ar;
+            g_fr = true; g_ru = g_ar = false; bool okFr = SigFilesText(1) == L"1 fichier" && SigFilesText(3) == L"3 fichiers";
+            g_fr = false; bool okEn = SigFilesText(1) == L"1 file" && SigFilesText(2) == L"2 files";
+            g_ru = true; std::wstring r1 = SigFilesText(1), r3 = SigFilesText(3), r5 = SigFilesText(5), r21 = SigFilesText(21), r12 = SigFilesText(12);
+            bool okRu = r1 == L"1 \u0444\u0430\u0439\u043b" && r3 == L"3 \u0444\u0430\u0439\u043b\u0430" && r5 == L"5 \u0444\u0430\u0439\u043b\u043e\u0432" && r21 == L"21 \u0444\u0430\u0439\u043b" && r12 == L"12 \u0444\u0430\u0439\u043b\u043e\u0432";
+            g_ru = false; g_ar = true; std::wstring a1 = SigFilesText(1), a2 = SigFilesText(2), a3 = SigFilesText(3), a11 = SigFilesText(11);
+            bool okAr = a1 != a2 && a2 != a3 && a3 != a11 && a1.find(L"1 ") == 0;
+            g_fr = fr; g_ru = ru; g_ar = ar;
+            check(okFr && okEn && okRu && okAr, "accord « fichier » : FR 1/3, EN 1/2, RU 1/3/5/21/12, AR 1/2/3/11", r);
+            LaunchLog("testsignalnatif : russe : %s, %s, %s, %s, %s ; arabe : %s, %s, %s, %s", Narrow(r1, CP_UTF8).c_str(), Narrow(r3, CP_UTF8).c_str(), Narrow(r5, CP_UTF8).c_str(), Narrow(r21, CP_UTF8).c_str(), Narrow(r12, CP_UTF8).c_str(), Narrow(a1, CP_UTF8).c_str(), Narrow(a2, CP_UTF8).c_str(), Narrow(a3, CP_UTF8).c_str(), Narrow(a11, CP_UTF8).c_str());
+        }
         {   // fenetre de choix des zips : dossier factice (Bureau = Documents = MWCoop = <journal>.zp\, Telechargements = son sous-dossier), jamais de fenetre
             g_zpFake = log + L".zp\\"; CreateDirectoryW(g_zpFake.c_str(), NULL); CreateDirectoryW((g_zpFake + L"telechargements\\").c_str(), NULL);
             int nf = 0; std::vector<std::wstring> one = { g_iniLauncher };
