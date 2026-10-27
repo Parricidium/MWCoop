@@ -3,7 +3,7 @@
 MWCoop (co-op for My Winter Car and My Summer Car) exposes a small public API so that **other mods can keep their own state in sync
 between the players of a co-op session**. It is the static class `MWCoop.CoopApi` in `MWCoop.dll`.
 
-- Available since MWCoop 0.43.0 (`CoopApi.Version == 1`). Version 2 (MWCoop 1.11.0) adds the parts shop: sell your mod's items in the game.
+- Available since MWCoop 0.43.0 (`CoopApi.Version == 1`). Version 2 (MWCoop 1.11.0) adds the parts shop: sell your mod's items in the game. Version 3 (MWCoop 1.15.5) adds map places: `AddMapPlace` / `RemoveMapPlace`.
 - Public names and docs are in English. The rest of the MWCoop source is in French, but it is open source and not
   obfuscated, so you never need to read it to use this API.
 - Works with MSCLoader mods, or any code running in the game process.
@@ -188,3 +188,4 @@ if (api != null && (int)api.GetField("Version").GetValue(null) >= 2)
 
 - **1** (MWCoop 0.43.0): first version.
 - **2** (MWCoop 1.11.0): parts shop: `ShopAvailable`, `AddShopItem`, `RemoveShopItem`.
+- **3** (MWCoop 1.15.5): map places: `AddMapPlace`, `RemoveMapPlace`.
