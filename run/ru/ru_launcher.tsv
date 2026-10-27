@@ -2370,3 +2370,21 @@ The page didn't open: copy the address into your browser	Страница не �
 The page didn't open? Copy the address into your browser, sign in with Discord and type the code.	Страница не открылась? Скопируй адрес в свой браузер, войди через Discord и введи код.
 Address copied	Адрес скопирован
 Could not copy	Не удалось скопировать
+Preparing the logs zip (%d/%d)…	Подготовка zip журналов (%d/%d)…
+Choose another player's logs zip	Выбери zip журналов другого игрока
+Tick at least one game session, or add a zip.	Отметь хотя бы одну игру или добавь zip.
+Untick a session.	Сними отметку с одной игры.
+Report a bug: your reports and the form, right here in the launcher · the game sessions' logs are ticked right there	Сообщить об ошибке: твои отчёты и форма, прямо в лаунчере · журналы игр отмечаются тут же
+Your reports and the form, right here in the launcher · the game sessions' logs are ticked right there	Твои отчёты и форма, прямо в лаунчере · журналы игр отмечаются тут же
+Logs to attach	Журналы для отправки
+The recorded game sessions of the game chosen above; the latest is ticked for you. Tick the ones where the problem happened: the settings and the launcher log are attached with them (key masked), nothing else to do.	Записанные игры для выбранной выше игры; последняя отмечена заранее. Отметь те, где случилась проблема: настройки и журнал лаунчера прикрепляются вместе с ними (ключ скрыт), больше ничего делать не нужно.
+No recorded game session for this game: start it once with MWCoop. The settings and the launcher log are attached anyway.	Для этой игры нет записанных игр: запусти её один раз через MWCoop. Настройки и журнал лаунчера всё равно прикрепляются.
+ · game running	 · игра идёт
+ · latest game session	 · последняя игра
+ · profile 	 · профиль 
+ · %d files, %s	 · %d файлов, %s
+ · another player's zip, 	 · zip другого игрока, 
+Add another player's zip…	Добавить zip другого игрока…
+Nothing to attach yet: tick at least one game session, or add a zip.	Пока нечего прикрепить: отметь хотя бы одну игру или добавь zip.
+Estimated size: %s in %d zip(s) · site limits: %s per zip, 16 zips, %s in all%s	Примерный размер: %s в %d zip · лимиты сайта: %s на zip, 16 zip, %s всего%s
+ · one zip is over: its biggest logs will be cut	 · один zip слишком большой: его самые крупные журналы будут обрезаны

@@ -79,3 +79,22 @@ UI81	The page didn't open: copy the address into your browser
 UI82	The page didn't open? Copy the address into your browser, sign in with Discord and type the code.
 UI83	Address copied
 UI84	Could not copy
+UI85	Preparing the logs zip (%d/%d)…
+UI86	Choose another player's logs zip
+UI87	Tick at least one game session, or add a zip.
+UI88	Untick a session.
+UI89	Report a bug: your reports and the form, right here in the launcher · the game sessions' logs are ticked right there
+UI90	Your reports and the form, right here in the launcher · the game sessions' logs are ticked right there
+UI91	Logs to attach
+UI92	The recorded game sessions of the game chosen above; the latest is ticked for you. Tick the ones where the problem happened: the settings and the launcher log are attached with them (key masked), nothing else to do.
+UI93	No recorded game session for this game: start it once with MWCoop. The settings and the launcher log are attached anyway.
+UI94	 · game running
+UI95	 · latest game session
+UI96	 · profile 
+UI97	 · %d files, %s
+UI98	 · another player's zip, 
+UI99	Add another player's zip…
+UI100	Nothing to attach yet: tick at least one game session, or add a zip.
+UI101	Estimated size: %s in %d zip(s) · site limits: %s per zip, 16 zips, %s in all%s
+UI102	 · one zip is over: its biggest logs will be cut
+UI103	New interface: Report a bug (the bug icon at the top right): \"My reports\" and the form are drawn by the launcher, the game sessions' logs are ticked right in the form (the latest for you; another player's zip can be added), and you follow your reports (states, the team's answers, \"It works\" / \"Still there\"). The first time, connect the launcher to your Discord account: a code shows up, you type it on the site's page that opens, then \"Allow this launcher\". Works on Windows 7 and Linux too.

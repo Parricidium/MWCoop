@@ -19,9 +19,11 @@ static const wchar_t *kSigApiBase = L"https://live.myseasonscar.workers.dev/api/
 static const wchar_t *kSigPage = L"https://live.myseasonscar.workers.dev/lanceur.html";
 enum { UI_SIG = 14000, UI_SIG_LOGIN = 14000, UI_SIG_OPENPAGE, UI_SIG_CANCEL, UI_SIG_NEWCODE, UI_SIG_NEW, UI_SIG_LOGOUT, UI_SIG_BROWSER, UI_SIG_BACK,
        UI_SIG_CAMARCHE, UI_SIG_TOUJOURS, UI_SIG_COMPLETER, UI_SIG_RETIRER, UI_SIG_ADDSEND, UI_SIG_ADDCANCEL, UI_SIG_ADDZIP, UI_SIG_ADDTEXT,
-       UI_SIG_SEND, UI_SIG_FORMCANCEL, UI_SIG_TOLIST, UI_SIG_RETRY, UI_SIG_PANEL, UI_SIG_REFRESH, UI_SIG_COPYURL,
+       UI_SIG_SEND, UI_SIG_FORMCANCEL, UI_SIG_TOLIST, UI_SIG_RETRY, UI_SIG_PANEL, UI_SIG_REFRESH, UI_SIG_COPYURL, UI_SIG_ADDEXT,
        UI_SIG_FIELD = 14100,   // + 10 * champ : +0 le texte (focus), +1..+7 les options d'un choix, +8 le detail, +9 l'interrupteur
-       UI_SIG_ROW = 14300 };   // + i : une ligne de « Mes dossiers » (50 au plus)
+       UI_SIG_ROW = 14300,     // + i : une ligne de « Mes dossiers » (50 au plus)
+       UI_SIG_SESS = 14400,    // + k : la partie k du selecteur de journaux du formulaire (30 au plus)
+       UI_SIG_EXT = 14450 };   // + k : retirer le zip k d'un autre joueur (16 au plus)
 enum { SV_LOADING, SV_LOGIN, SV_CODE, SV_LIST, SV_DETAIL, SV_FORM, SV_SEND, SV_DONE, SV_ERROR };
 static float SigMaxScroll();
 enum { SOP_NONE, SOP_TEXTES, SOP_CODE, SOP_JETON, SOP_MOI, SOP_MES, SOP_RENOUVELER, SOP_DECONNEXION, SOP_DEPOSER, SOP_CAMARCHE, SOP_RETIRER, SOP_AVATAR };
@@ -141,7 +143,12 @@ static float g_sigContentH, g_sigViewH = 600;
 static int g_sigRowHot = -1;
 // travail en arriere-plan (une operation a la fois)
 struct SigHttp { DWORD status = 0, err = 0; int retryAfter = 0; std::string body; Jv j; std::string erreur; };
-struct SigJob { int kind = SOP_NONE; std::string body, path, lang; int n = 0; std::wstring zip; std::vector<std::wstring> files; bool zipWanted = false; };
+// selecteur de journaux du formulaire (voir SigSessScan) : parties du jeu choisi, fichiers communs, zips d'un autre joueur
+struct SigSess { LogGroup g; std::vector<std::wstring> paths; bool checked = false; };
+static std::vector<SigSess> g_sigSess; static int g_sigSessGame = -1;
+static std::vector<std::wstring> g_sigCommon, g_sigExt;
+struct SigZipSpec { std::wstring path; std::vector<std::wstring> files; };   // files vide : un zip existant (autre joueur), envoye tel quel
+struct SigJob { int kind = SOP_NONE; std::string body, path, lang; int n = 0; std::wstring zip; std::vector<std::wstring> files; bool zipWanted = false; std::vector<SigZipSpec> zips; };
 static SigJob g_sigJob; static SigHttp g_sigRes;
 static volatile LONG g_sigBusy, g_sigDone, g_sigCancel;
 static std::wstring g_sigProg; static float g_sigFrac = -1; static CRITICAL_SECTION g_sigCs; static bool g_sigCsInit;
@@ -345,65 +352,75 @@ static bool SigSleep(int ms)   // attente par pas, annulable ; false : annule
 
 // ---- le depot : brouillon -> morceaux -> envoyer (dans le fil de travail)
 static bool WriteZip(const std::wstring &zip, const std::vector<std::wstring> &files, int *count, LONGLONG budget, LONGLONG parFichier, bool site);   // (launcher.cpp)
+// Plusieurs zips (JD 27/10, selecteur de journaux) : zip k = /zip/<k+1>/<morceau> ; les zips fabriques ici sont effaces a la fin,
+// ceux d'un autre joueur (choisis a la main) restent.
 static void SigDeposer(SigJob &job, SigHttp &r)
 {
-    long long size = 0; int nf = 0;
-    if (job.zipWanted && !job.files.empty()) {
-        SigProg(T(L"Préparation du zip des journaux…", L"Preparing the logs zip…"), -1);
-        CreateDirectoryW(LocalDir().c_str(), NULL);
-        if (!WriteZip(job.zip, job.files, &nf, g_sigZipMax - 256 * 1024, 4LL * 1024 * 1024, true)) { r.status = 0; r.err = GetLastError(); r.erreur = "zip-local"; return; }
-        WIN32_FILE_ATTRIBUTE_DATA fa;
-        if (GetFileAttributesExW(job.zip.c_str(), GetFileExInfoStandard, &fa)) size = (long long)fa.nFileSizeHigh << 32 | fa.nFileSizeLow;
+    if (job.zipWanted && !job.files.empty()) { SigZipSpec z; z.path = job.zip; z.files = job.files; job.zips.insert(job.zips.begin(), z); }   // (ancienne forme : un seul zip)
+    std::vector<std::wstring> paths; std::string sizesJson = "[";
+    for (int k = 0; k < (int)job.zips.size(); k++) {
+        SigZipSpec &z = job.zips[k];
+        if (!z.files.empty()) {
+            int nf = 0; wchar_t pb[96]; swprintf_s(pb, T(L"Préparation du zip des journaux (%d/%d)…", L"Preparing the logs zip (%d/%d)…"), k + 1, (int)job.zips.size()); SigProg(pb, -1);
+            CreateDirectoryW(LocalDir().c_str(), NULL);
+            if (z.path.empty()) z.path = LocalDir() + L"signalement-envoi-" + std::to_wstring(k + 1) + L".zip";
+            if (!WriteZip(z.path, z.files, &nf, g_sigZipMax - 256 * 1024, 4LL * 1024 * 1024, true)) { r.status = 0; r.err = GetLastError(); r.erreur = "zip-local"; return; }
+        }
+        WIN32_FILE_ATTRIBUTE_DATA fa; long long size = 0;
+        if (GetFileAttributesExW(z.path.c_str(), GetFileExInfoStandard, &fa)) size = (long long)fa.nFileSizeHigh << 32 | fa.nFileSizeLow;
         if (size <= 0) { r.erreur = "zip-local"; return; }
+        paths.push_back(z.path); sizesJson += (k ? "," : "") + std::to_string(size);
     }
+    sizesJson += "]";
     std::string body = job.body;
     size_t ph = body.find("__ZIPS__");
-    if (ph != std::string::npos) body.replace(ph, 8, size > 0 ? "[" + std::to_string(size) + "]" : "[]");
+    if (ph != std::string::npos) body.replace(ph, 8, sizesJson);
     SigProg(T(L"Envoi des champs…", L"Sending the fields…"), -1);
     if (!SigCall(L"POST", L"/brouillon", body, true, true, r) || r.status != 200) return;
     std::string id = r.j.str("id");
     long long morceau = (long long)r.j.num("morceau", (double)g_sigMorceau);
-    int nMorceaux = 0;
-    if (const Jv *z = r.j.arr("zips")) if (!z->a.empty()) nMorceaux = (int)z->a[0].num("morceaux");
-    if (size > 0 && nMorceaux > 0) {
-        HANDLE f = CreateFileW(job.zip.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    auto sendChunk = [&](HANDLE f, int k, int i, SigHttp &pr) {   // morceau i du zip k (0..) : false si illisible ou refuse
+        std::string chunk((size_t)morceau, 0); DWORD got = 0;
+        LARGE_INTEGER pos; pos.QuadPart = (long long)i * morceau; SetFilePointerEx(f, pos, NULL, FILE_BEGIN);
+        if (!ReadFile(f, &chunk[0], (DWORD)morceau, &got, NULL) || !got) { pr.status = 0; pr.erreur = "zip-local"; return false; }
+        chunk.resize(got);
+        std::wstring path = L"/brouillon/" + Widen(id) + L"/zip/" + std::to_wstring(k + 1) + L"/" + std::to_wstring(i);
+        return SigCall(L"PUT", path, chunk, false, true, pr) && pr.status == 200;
+    };
+    std::vector<int> nM(paths.size(), 0); int totalM = 0, doneM = 0;
+    if (const Jv *z = r.j.arr("zips")) for (int k = 0; k < (int)z->a.size() && k < (int)paths.size(); k++) { nM[k] = (int)z->a[k].num("morceaux"); totalM += nM[k]; }
+    for (int k = 0; k < (int)paths.size(); k++) {
+        if (nM[k] <= 0) continue;
+        HANDLE f = CreateFileW(paths[k].c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
         if (f == INVALID_HANDLE_VALUE) { r.status = 0; r.err = GetLastError(); r.erreur = "zip-local"; return; }
-        std::string chunk;
-        for (int i = 0; i < nMorceaux; i++) {
-            wchar_t p[64]; swprintf_s(p, T(L"Envoi des journaux (%d/%d)…", L"Sending the logs (%d/%d)…"), i + 1, nMorceaux);
-            SigProg(p, (float)i / nMorceaux);
-            chunk.assign((size_t)morceau, 0);
-            DWORD got = 0;
-            LARGE_INTEGER pos; pos.QuadPart = (long long)i * morceau; SetFilePointerEx(f, pos, NULL, FILE_BEGIN);
-            if (!ReadFile(f, &chunk[0], (DWORD)morceau, &got, NULL) || !got) { CloseHandle(f); r.status = 0; r.erreur = "zip-local"; return; }
-            chunk.resize(got);
-            std::wstring path = L"/brouillon/" + Widen(id) + L"/zip/1/" + std::to_wstring(i);
+        for (int i = 0; i < nM[k]; i++) {
+            wchar_t p[96]; swprintf_s(p, T(L"Envoi des journaux (%d/%d)…", L"Sending the logs (%d/%d)…"), doneM + 1, totalM);
+            SigProg(p, (float)doneM / totalM);
             SigHttp pr;
-            bool ok = SigCall(L"PUT", path, chunk, false, true, pr) && pr.status == 200;
-            if (!ok && !g_sigCancel) { SigSleep(1500); ok = SigCall(L"PUT", path, chunk, false, true, pr) && pr.status == 200; }   // (une coupure : on renvoie, sans doublon)
+            bool ok = sendChunk(f, k, i, pr);
+            if (!ok && pr.erreur != "zip-local" && !g_sigCancel) { SigSleep(1500); ok = sendChunk(f, k, i, pr); }   // (une coupure : on renvoie, sans doublon)
             if (!ok) { CloseHandle(f); r = pr; return; }
             if (g_sigCancel) { CloseHandle(f); r.status = 0; r.erreur = "annule"; return; }
+            doneM++;
         }
         CloseHandle(f);
     }
     SigProg(T(L"Finalisation…", L"Finishing…"), 1);
     std::wstring env = L"/brouillon/" + Widen(id) + L"/envoyer";
     if (!SigCall(L"POST", env, "{}", true, true, r)) return;
-    if (r.status == 409 && r.erreur == "morceaux-manquants" && size > 0) {   // (reprise : les morceaux manquants, puis envoyer)
+    if (r.status == 409 && r.erreur == "morceaux-manquants" && !paths.empty()) {   // (reprise : les morceaux manquants de chaque zip, puis envoyer)
         SigHttp m;
-        if (SigCall(L"GET", L"/brouillon/" + Widen(id), "", false, true, m) && m.status == 200) {
-            HANDLE f = CreateFileW(job.zip.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-            if (const Jv *z = m.j.arr("zips")) if (!z->a.empty() && f != INVALID_HANDLE_VALUE) if (const Jv *mq = z->a[0].arr("manquants"))
-                for (const Jv &k : mq->a) {
-                    int i = (int)k.n; std::string chunk((size_t)morceau, 0); DWORD got = 0;
-                    LARGE_INTEGER pos; pos.QuadPart = (long long)i * morceau; SetFilePointerEx(f, pos, NULL, FILE_BEGIN);
-                    if (ReadFile(f, &chunk[0], (DWORD)morceau, &got, NULL) && got) { chunk.resize(got); SigHttp pr; SigCall(L"PUT", L"/brouillon/" + Widen(id) + L"/zip/1/" + std::to_wstring(i), chunk, false, true, pr); }
-                }
-            if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
-        }
+        if (SigCall(L"GET", L"/brouillon/" + Widen(id), "", false, true, m) && m.status == 200)
+            if (const Jv *z = m.j.arr("zips")) for (const Jv &zz : z->a) {
+                int k = (int)zz.num("zip") - 1; if (k < 0 || k >= (int)paths.size()) continue;
+                HANDLE f = CreateFileW(paths[k].c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+                if (f == INVALID_HANDLE_VALUE) continue;
+                if (const Jv *mq = zz.arr("manquants")) for (const Jv &i : mq->a) { SigHttp pr; sendChunk(f, k, (int)i.n, pr); }
+                CloseHandle(f);
+            }
         SigCall(L"POST", env, "{}", true, true, r);
     }
-    if (!job.zip.empty()) DeleteFileW(job.zip.c_str());
+    for (auto &z : job.zips) if (!z.files.empty() && !z.path.empty()) DeleteFileW(z.path.c_str());
 }
 static DWORD WINAPI SigThread(void *)
 {
@@ -492,6 +509,162 @@ static std::wstring SigEvtText(const SigEvt &e)
 
 // ---- formulaire (depuis /textes)
 static std::wstring SigOptLabel(const Jv &o) { std::string t = o.str("texte"); return t.empty() ? ST(o.str("libelle").c_str()) : Widen(t); }
+// ---- selecteur de journaux (JD 27/10 : « selon la selection MSC ou MWC, la liste des logs s'ouvre et on en selectionne 1 ou
+// plusieurs ») : les parties enregistrees du jeu choisi en haut du formulaire, la derniere cochee d'office ; les fichiers communs
+// (reglages, journal du lanceur, MSCLoader, cle masquee) vont avec la premiere partie cochee ; chaque autre partie cochee fait son
+// propre zip ; les zips d'un autre joueur choisis a la main suivent. Limites du site (15 Mo par zip, 16 zips, 40 Mo en tout)
+// verifiees ici avant l'envoi, taille estimee affichee en direct. On ne quitte jamais le formulaire.
+static std::vector<std::wstring> ZipFiles();   // (launcher.cpp)
+static void SteamLibraries(std::vector<std::wstring> &out);   // (launcher.cpp)
+static bool GameProcessRunning(DWORD *pidOut);
+static std::wstring SigSessGameDir(int game)   // dossier du jeu demande : celui en cours, ou l'autre (dossier du lanceur, dossier retenu, bibliotheques Steam)
+{
+    if (game == g_game) return g_gameDir;
+    const GameDef &gd = kGames[game];
+    if (IsGameDirOf(g_dir, game)) return g_dir;
+    wchar_t saved[MAX_PATH] = L""; GetPrivateProfileStringW(L"Lanceur", gd.iniDir, L"", saved, MAX_PATH, g_iniLauncher.c_str());
+    if (saved[0] && IsGameDirOf(WithSlash(saved), game)) return WithSlash(saved);
+    std::vector<std::wstring> libs; SteamLibraries(libs);
+    for (const std::wstring &l : libs) { std::wstring d = l + L"steamapps\\common\\" + gd.steamDir + L"\\"; if (IsGameDirOf(d, game)) return d; }
+    return L"";
+}
+static std::wstring SigSessModRoot(int game, const std::wstring &dir) { return game == g_game ? g_modRoot : dir.empty() ? L"" : ModInGame() ? dir : g_dir + (game == GAME_MSC ? L"MSC\\" : L"MWC\\"); }
+static int SigGameOfForm() { for (auto &f : g_sigForm) if (f.champ == "jeu" && f.sel >= 0 && f.sel < (int)f.opts.size()) return f.opts[f.sel].first == "msc" ? GAME_MSC : GAME_MWC; return g_game; }
+static void SigSessScan(int game, bool keepChecks)
+{
+    std::vector<std::wstring> was; if (keepChecks) for (auto &s : g_sigSess) if (s.checked) was.push_back(s.g.key);
+    g_sigSess.clear(); g_sigCommon.clear(); g_sigSessGame = game;
+    if (g_sigCapture) {   // (captures : trois parties factices, sans disque)
+        auto mk = [](const wchar_t *key, const wchar_t *mode, const wchar_t *ver, int files, uint64_t bytes, int daysAgo) {
+            SigSess s; s.g.key = key; s.g.mode = mode; s.g.version = ver; s.g.files = files; s.g.bytes = bytes;
+            FILETIME now; GetSystemTimeAsFileTime(&now); ULARGE_INTEGER u; u.LowPart = now.dwLowDateTime; u.HighPart = now.dwHighDateTime;
+            u.QuadPart -= (ULONGLONG)daysAgo * 864000000000ULL + 3600ULL * 10000000ULL * (daysAgo + 1); s.g.end.dwLowDateTime = u.LowPart; s.g.end.dwHighDateTime = u.HighPart;
+            for (int i = 0; i < files; i++) s.paths.push_back(L"factice");
+            return s; };
+        g_sigSess.push_back(mk(L"*", T(L"Hôte", L"Host"), L"1.15.13", 3, 2300000, 0));
+        g_sigSess.push_back(mk(L"a", T(L"Invité", L"Guest"), L"1.15.13", 3, 1100000, 1));
+        g_sigSess.push_back(mk(L"b", T(L"Solo", L"Solo"), L"1.15.12", 2, 400000, 2));
+        g_sigSess[0].checked = true; g_sigCommon = { L"factice", L"factice", L"factice", L"factice" }; g_sigZipFiles = 7;
+        return;
+    }
+    std::wstring dir = SigSessGameDir(game), root = SigSessModRoot(game, dir);
+    bool running = game == g_game && GameProcessRunning(NULL);
+    auto addPath = [](SigSess &s, const std::wstring &p) {
+        WIN32_FILE_ATTRIBUTE_DATA a;
+        if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return;
+        uint64_t b = ((uint64_t)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+        s.paths.push_back(p); s.g.files++; s.g.bytes += b < 4ull * 1024 * 1024 ? b : 4ull * 1024 * 1024;   // (4 Mo par fichier au plus dans le zip)
+        if (CompareFileTime(&a.ftLastWriteTime, &s.g.end) > 0 && p.find(L"output_log") == std::wstring::npos) s.g.end = a.ftLastWriteTime;
+    };
+    std::vector<std::pair<std::wstring, std::wstring>> bases;   // (dossier logs\, profil)
+    if (!root.empty()) {
+        bases.push_back({ root + L"MWCoop\\logs\\", L"" });
+        WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((root + L"MWCoop\\profils\\*").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) { do { if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && fd.cFileName[0] != L'.') bases.push_back({ root + L"MWCoop\\profils\\" + fd.cFileName + L"\\logs\\", fd.cFileName }); } while (FindNextFileW(h, &fd)); FindClose(h); }
+    }
+    std::wstring ld = LocalDir();
+    if (game == g_game && !ld.empty()) { bases.push_back({ ld + L"logs\\", L"(secours)" }); bases.push_back({ ld + L"profils\\invite\\logs\\", L"invite (secours)" }); }
+    {   // la derniere partie : les journaux en place (toutes les bases), et celui de Unity dans le jeu
+        SigSess s; s.g.key = L"*"; s.g.live = running;
+        for (auto &b : bases) { addPath(s, b.first + L"mwcoop.log"); addPath(s, b.first + L"chargeur.log"); }
+        if (!dir.empty()) addPath(s, dir + kGames[game].data + L"\\output_log.txt");
+        std::wstring mod; FILETIME best = {};
+        for (auto &p : s.paths) if (p.find(L"mwcoop.log") != std::wstring::npos) { WIN32_FILE_ATTRIBUTE_DATA a; if (GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a) && (mod.empty() || CompareFileTime(&a.ftLastWriteTime, &best) > 0)) { mod = p; best = a.ftLastWriteTime; } }
+        if (!mod.empty()) SessionInfo(s.g, mod, running);
+        if (s.g.files) g_sigSess.push_back(s);
+    }
+    for (auto &b : bases) {   // les parties rangees par le chargeur : <logs>\sessions\AAAA-MM-JJ_HHhMMmSS (dossiers)
+        WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((b.first + L"sessions\\*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
+            SigSess s; s.g.dir = b.first + L"sessions\\" + fd.cFileName + L"\\"; s.g.key = s.g.dir; s.g.profile = b.second; s.g.end = fd.ftLastWriteTime;
+            SYSTEMTIME st = {};
+            if (swscanf_s(fd.cFileName, L"%hu-%hu-%hu_%huh%hum%hu", &st.wYear, &st.wMonth, &st.wDay, &st.wHour, &st.wMinute, &st.wSecond) == 6) { FILETIME lt; if (SystemTimeToFileTime(&st, &lt)) LocalFileTimeToFileTime(&lt, &s.g.end); }
+            FILETIME keep = s.g.end;
+            addPath(s, s.g.dir + L"mwcoop.log"); addPath(s, s.g.dir + L"chargeur.log"); addPath(s, s.g.dir + L"output_log.txt");
+            s.g.end = keep;   // (la date du dossier fait foi)
+            if (!s.g.files) continue;
+            if (FileExists(s.g.dir + L"mwcoop.log")) SessionInfo(s.g, s.g.dir + L"mwcoop.log", false);
+            g_sigSess.push_back(s);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    size_t from = !g_sigSess.empty() && g_sigSess[0].g.key == L"*" ? 1 : 0;   // (la derniere partie reste en tete ; les rangees, les plus recentes d'abord)
+    std::stable_sort(g_sigSess.begin() + from, g_sigSess.end(), [](const SigSess &a, const SigSess &b) { return CompareFileTime(&a.g.end, &b.g.end) > 0; });
+    if (g_sigSess.size() > 30) g_sigSess.resize(30);
+    // Fichiers communs : ceux du zip d'avant (reglages, journal du lanceur, MSCLoader, copies de lancement) moins les journaux
+    // des parties ; pour l'autre jeu : ses reglages, et le lanceur.
+    std::vector<std::wstring> all = game == g_game ? ZipFiles() : std::vector<std::wstring>();
+    if (game != g_game) {
+        if (!root.empty()) { all.push_back(root + L"MWCoop\\mwcoop.ini"); all.push_back(root + L"MWCoop\\lancement.ini"); }
+        if (!g_launcherLog.empty()) all.push_back(g_launcherLog);
+        if (!ld.empty()) all.push_back(ld + L"lanceur-precedent.log");
+        if (!g_iniLauncher.empty()) all.push_back(g_iniLauncher);
+    }
+    for (auto &p : all) {
+        if (!FileExists(p)) continue;
+        bool sess = false;
+        for (auto &s : g_sigSess) for (auto &q : s.paths) if (!_wcsicmp(q.c_str(), p.c_str())) sess = true;
+        if (!sess) g_sigCommon.push_back(p);
+    }
+    bool any = false;   // cochee d'office : la derniere partie (ou celles cochees avant, si elles sont encore la)
+    for (auto &s : g_sigSess) { s.checked = std::find(was.begin(), was.end(), s.g.key) != was.end(); any = any || s.checked; }
+    if (!any && !g_sigSess.empty()) g_sigSess[0].checked = true;
+    g_sigZipFiles = (int)g_sigCommon.size() + (g_sigSess.empty() ? 0 : g_sigSess[0].g.files);
+}
+static std::vector<SigZipSpec> SigZipSpecs(bool latestOnly)   // latestOnly : ajout a un dossier -- la derniere partie et les communs
+{
+    std::vector<SigZipSpec> out; bool first = true;
+    for (int k = 0; k < (int)g_sigSess.size(); k++) {
+        const SigSess &s = g_sigSess[k];
+        if (latestOnly ? k != 0 : !s.checked) continue;
+        SigZipSpec z; z.files = s.paths;
+        if (first) { z.files.insert(z.files.end(), g_sigCommon.begin(), g_sigCommon.end()); first = false; }
+        out.push_back(z);
+    }
+    if (out.empty() && !g_sigCommon.empty() && (latestOnly || g_sigSess.empty())) { SigZipSpec z; z.files = g_sigCommon; out.push_back(z); }   // (aucune partie : les communs quand meme)
+    if (!latestOnly) for (auto &e : g_sigExt) { SigZipSpec z; z.path = e; out.push_back(z); }
+    return out;
+}
+static long long SigSpecSize(const SigZipSpec &z)   // taille estimee d'un zip (stocke sans compression : la somme des fichiers, 4 Mo par fichier au plus)
+{
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (z.files.empty()) { if (g_sigCapture) return 1900000; return GetFileAttributesExW(z.path.c_str(), GetFileExInfoStandard, &a) ? (long long)(((uint64_t)a.nFileSizeHigh << 32) | a.nFileSizeLow) : 0; }
+    long long t = 0;
+    for (auto &p : z.files) {
+        if (p == L"factice") { t += 700000; continue; }
+        if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a)) continue;
+        long long b = (long long)(((uint64_t)a.nFileSizeHigh << 32) | a.nFileSizeLow);
+        t += (b < 4LL * 1024 * 1024 ? b : 4LL * 1024 * 1024) + 120;
+    }
+    return t;
+}
+static int SigZipCheck(long long *total, int *nz, long long *biggest)   // 0 ok ; 1 rien a joindre ; 2 trop de zips ; 3 trop gros en tout
+{
+    std::vector<SigZipSpec> zs = SigZipSpecs(false);
+    *total = 0; *nz = (int)zs.size(); *biggest = 0;
+    for (auto &z : zs) { long long s = SigSpecSize(z); *total += s; if (s > *biggest) *biggest = s; }
+    if (zs.empty()) return 1;
+    if (*nz > 16) return 2;
+    if (*total > g_sigEnvoiMax) return 3;
+    return 0;
+}
+static void SigAddExt()   // « Ajouter un zip d'un autre joueur… » : un .zip choisi a la main (jamais de boite en essai ni en capture)
+{
+    if (g_sigExt.size() >= 16) return;
+    if (g_sigTest || g_sigCapture) { g_sigExt.push_back(g_sigCapture ? L"C:\\Users\\Teppo\\Downloads\\MWCoop-journaux-2026-10-26.zip" : g_launcherLog + L".ext.zip"); return; }
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW of = { sizeof(of) };
+    of.hwndOwner = g_wnd; of.lpstrFilter = L"zip\0*.zip\0"; of.lpstrFile = file; of.nMaxFile = MAX_PATH;
+    of.lpstrTitle = T(L"Choisir le zip des journaux d'un autre joueur", L"Choose another player's logs zip");
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (!GetOpenFileNameW(&of)) return;
+    for (auto &e : g_sigExt) if (!_wcsicmp(e.c_str(), file)) return;
+    g_sigExt.push_back(file);
+    for (auto &f : g_sigForm) if (f.type == "zips") f.err.clear();
+    InvalidateAll();
+}
 static void SigFormBuild()
 {
     g_sigForm.clear();
@@ -504,9 +677,10 @@ static void SigFormBuild()
         // valeurs de depart : le jeu en cours, la version du mod, 1 joueur = solo par defaut non choisi (le joueur dit son role)
         if (x.champ == "jeu") { const char *v = g_game == GAME_MSC ? "msc" : "mwc"; for (int i = 0; i < (int)x.opts.size(); i++) if (x.opts[i].first == v) x.sel = i; }
         if (x.champ == "version" && !g_localVer.empty()) x.val = std::wstring(g_game == GAME_MSC ? L"msc-" : L"mwc-") + g_localVer;
-        if (x.champ == "zips") x.on = g_sigZipFiles > 0;
+        if (x.champ == "zips") x.on = true;
         g_sigForm.push_back(x);
     }
+    if (!g_sigTest) { g_sigExt.clear(); SigSessScan(SigGameOfForm(), false); }   // (le selecteur de journaux suit le jeu du formulaire)
 }
 static std::string SigFieldValue(const SigField &f) { return f.type == "choix" ? (f.sel >= 0 && f.sel < (int)f.opts.size() ? f.opts[f.sel].first : "") : Narrow(f.val, CP_UTF8); }
 static bool SigDetailOn(const SigField &f) { return !f.dChamp.empty() && f.sel >= 0 && f.sel < (int)f.opts.size() && f.opts[f.sel].first == f.dSi; }
@@ -523,7 +697,7 @@ static int SigValidate()   // premier champ en faute (-1 : tout va bien) ; les e
         else if ((f.type == "texte" || f.type == "texte_long") && f.mx && len > f.mx) f.err = SigFmt(ST("erTropLong"), L"{n}", std::to_wstring(f.mx));
         else if (f.type == "nombre" && (joueurs < 1 || joueurs > 16 || (role == "solo") != (joueurs == 1))) f.err = ST("erJoueurs");
         else if (f.champ == "connexion" && f.sel >= 0 && ((role == "solo") != (connexion == "pas_concerne"))) f.err = ST("erConnexion");
-        else if (f.type == "zips" && (!f.on || g_sigZipFiles <= 0)) f.err = ST("er_zip-manquant");
+        else if (f.type == "zips") { long long t, b; int n; int c = SigZipCheck(&t, &n, &b); if (c == 1) f.err = T(L"Coche au moins une partie, ou ajoute un zip.", L"Tick at least one game session, or add a zip."); else if (c == 2) f.err = ST("er_trop-de-zips") + L" " + T(L"Décoche une partie.", L"Untick a session."); else if (c == 3) f.err = ST("er_envoi-trop-gros") + L" " + T(L"Décoche une partie.", L"Untick a session."); }
         else if (SigDetailOn(f) && Trim(f.dVal).empty()) f.err = ST("erVide");
         else if (SigDetailOn(f) && f.dMax && (int)f.dVal.size() > f.dMax) f.err = SigFmt(ST("erTropLong"), L"{n}", std::to_wstring(f.dMax));
         if (!f.err.empty() && first < 0) first = i;
@@ -673,20 +847,20 @@ static void SigOpen()   // bouton Signaler un bug (nouvelle interface, natif)
         else if (!g_sigCapture) SigGo(SOP_TEXTES);
     } else if (g_sigLogged && !g_sigMesOk && !g_sigBusy) SigGo(SOP_MES);
     if (g_sigTxOk && !fresh && !g_sigBusy && !g_sigCapture && g_sigView != SV_LOADING) SigGo(SOP_TEXTES);   // (cache de plus d'une heure : rafraichi derriere)
-    SetStatus(K_NORMAL, T(L"Signaler un bug : tes dossiers et le formulaire, ici dans le lanceur · le zip des journaux est joint tout seul",
-                          L"Report a bug: your reports and the form, right here in the launcher · the logs zip is attached for you"));
+    SetStatus(K_NORMAL, T(L"Signaler un bug : tes dossiers et le formulaire, ici dans le lanceur · les journaux des parties se cochent sur place",
+                          L"Report a bug: your reports and the form, right here in the launcher · the game sessions' logs are ticked right there"));
 }
 static void SigOpenList() { g_sigView = SV_LIST; g_sigSel = -1; g_sigAddMode = 0; g_sigFocus = -1; g_scroll[TAB_BUG] = 0; if (!g_sigMesOk && !g_sigBusy) SigGo(SOP_MES); }
 static void SigNewForm()
 {
     if (!g_sigDepotOuvert) { SigNote(ST("dpFerme"), SC_WARN); return; }
-    SigZipCount(); SigFormBuild(); g_sigView = SV_FORM; g_sigFocus = -1; g_sigNote.clear(); g_scroll[TAB_BUG] = 0;
+    SigFormBuild(); g_sigView = SV_FORM; g_sigFocus = -1; g_sigNote.clear(); g_scroll[TAB_BUG] = 0;
 }
 static void SigSendForm()
 {
     int bad = SigValidate();
     if (bad >= 0) { SigNote(ST("erCorriger"), SC_BAD); g_scroll[TAB_BUG] = max(0.0f, g_sigForm[bad].r.Y - 180 + g_scroll[TAB_BUG]); return; }
-    SigJob j; j.kind = SOP_DEPOSER; j.body = SigFormJson(); j.zip = SigZipPath(); j.files = g_sigCapture ? std::vector<std::wstring>() : ZipFiles(); j.zipWanted = true;
+    SigJob j; j.kind = SOP_DEPOSER; j.body = SigFormJson(); if (!g_sigCapture) j.zips = SigZipSpecs(false);   // (les parties cochees, les communs avec la premiere, les zips d'un autre joueur)
     g_sigView = SV_SEND; g_sigFocus = -1; g_sigNote.clear();
     SigStart(j);
 }
@@ -697,7 +871,7 @@ static void SigSendAdd()
     if (t.size() < 10) { SigNote(SigFmt(ST("erTropCourt"), L"{n}", L"10"), SC_BAD); return; }
     if (t.size() > 2000) { SigNote(SigFmt(ST("erTropLong"), L"{n}", L"2000"), SC_BAD); return; }
     SigJob j; j.kind = SOP_DEPOSER; j.n = g_sigMes[g_sigSel].n; j.body = "{\"n\":" + std::to_string(j.n) + ",\"texte\":" + SigJStr(t) + ",\"zips\":__ZIPS__}";
-    j.zip = SigZipPath(); j.zipWanted = g_sigAddZip && g_sigZipFiles > 0; j.files = j.zipWanted && !g_sigCapture ? ZipFiles() : std::vector<std::wstring>();
+    if (g_sigAddZip && g_sigZipFiles > 0 && !g_sigCapture) { SigSessScan(g_sigMes[g_sigSel].jeu == "msc" ? GAME_MSC : GAME_MWC, false); j.zips = SigZipSpecs(true); }   // (ajout : la derniere partie du jeu du dossier, et les communs)
     g_sigView = SV_SEND; g_sigFocus = -1; g_sigNote.clear();
     SigStart(j);
 }
@@ -961,12 +1135,50 @@ static float SigDrawForm(Graphics &g, float x, float y, float w, const RectF &cl
         int id0 = UI_SIG_FIELD + i * 10;
         bool bad = !f.err.empty();
         std::wstring lab = ST(f.libelle.c_str());
-        if (f.type == "case" || f.type == "zips") {
+        if (f.type == "zips") {   // selecteur de journaux (JD 27/10) : les parties du jeu choisi, cochables ; zips d'un autre joueur ; taille estimee
+            float top = y;
+            y += SigPara(g, T(L"Journaux à joindre", L"Logs to attach"), x, y, w, 13.5f, bad ? g_soft.bad : g_soft.ink, FontStyleBold) + 4;
+            y += SigPara(g, T(L"Les parties enregistrées du jeu choisi en haut ; la dernière est cochée d'office. Coche celles où le problème est arrivé : les réglages et le journal du lanceur sont joints avec (clé masquée), rien d'autre à faire.",
+                               L"The recorded game sessions of the game chosen above; the latest is ticked for you. Tick the ones where the problem happened: the settings and the launcher log are attached with them (key masked), nothing else to do."), x, y, w, 12, g_soft.muted) + 8;
+            if (g_sigSess.empty()) y += SigPara(g, T(L"Aucune partie enregistrée pour ce jeu : lance-le une fois avec MWCoop. Les réglages et le journal du lanceur sont joints quand même.", L"No recorded game session for this game: start it once with MWCoop. The settings and the launcher log are attached anyway."), x, y, w, 12.5f, g_soft.muted, FontStyleBold) + 8;
+            for (int k = 0; k < (int)g_sigSess.size(); k++) {
+                const SigSess &s = g_sigSess[k];
+                RectF r(x, y, w, 40);
+                SoftToggle(g, RectF(x, y + 5, 52, 30), s.checked, UI_SIG_SESS + k, true); SigHot(r, UI_SIG_SESS + k, clip);
+                std::wstring t = LogDate(s.g.end);
+                if (s.g.key == L"*") t += s.g.live ? T(L" · partie en cours", L" · game running") : T(L" · dernière partie", L" · latest game session");
+                if (!s.g.mode.empty()) t += L" · " + s.g.mode;
+                if (!s.g.version.empty()) t += L" · " + s.g.version;
+                if (!s.g.profile.empty()) t += T(L" · profil ", L" · profile ") + s.g.profile;
+                wchar_t fb[96]; swprintf_s(fb, T(L" · %d fichiers, %s", L" · %d files, %s"), s.g.files, SaveSizeText(s.g.bytes).c_str()); t += fb;
+                Text(g, t, RectF(x + 64, y + 10, w - 64, 22), 13, s.checked ? FontStyleBold : FontStyleRegular, s.checked ? g_soft.ink : g_soft.muted, StringAlignmentNear);
+                y += 40;
+            }
+            for (int k = 0; k < (int)g_sigExt.size(); k++) {
+                std::wstring n = g_sigExt[k].substr(g_sigExt[k].find_last_of(L"\\/") + 1);
+                Icon(g, IC_ZIP, x + 26, y + 20, 20, g_soft.ink, 1.8f);
+                std::wstring rb = T(L"Retirer", L"Remove"); float rw = SigBtnW(rb, false);
+                SoftButton(g, RectF(x + w - rw, y + 3, rw, 34), rb, UI_SIG_EXT + k, false, -1, true, 17); SigHot(RectF(x + w - rw, y + 3, rw, 34), UI_SIG_EXT + k, clip);
+                SigZipSpec z; z.path = g_sigExt[k];
+                Text(g, n + T(L" · zip d'un autre joueur, ", L" · another player's zip, ") + SaveSizeText(SigSpecSize(z)), RectF(x + 64, y + 10, w - 64 - rw - 12, 22), 13, FontStyleBold, g_soft.ink, StringAlignmentNear);
+                y += 40;
+            }
+            y += 6;
+            std::wstring ab = T(L"Ajouter un zip d'un autre joueur…", L"Add another player's zip…"); float aw = SigBtnW(ab, true);
+            SoftButton(g, RectF(x, y, aw, 38), ab, UI_SIG_ADDEXT, false, IC_PLUS, (int)g_sigExt.size() < 16, 19); SigHot(RectF(x, y, aw, 38), UI_SIG_ADDEXT, clip);
+            y += 38 + 10;
+            long long total, big; int nz; int c = SigZipCheck(&total, &nz, &big);
+            wchar_t eb[320];
+            if (c == 1) swprintf_s(eb, L"%s", T(L"Rien à joindre pour l'instant : coche au moins une partie, ou ajoute un zip.", L"Nothing to attach yet: tick at least one game session, or add a zip."));
+            else swprintf_s(eb, T(L"Taille estimée : %s en %d zip(s) · limites du site : %s par zip, 16 zips, %s en tout%s", L"Estimated size: %s in %d zip(s) · site limits: %s per zip, 16 zips, %s in all%s"), SaveSizeText(total).c_str(), nz, SaveSizeText(g_sigZipMax).c_str(), SaveSizeText(g_sigEnvoiMax).c_str(),
+                            big > g_sigZipMax - 256 * 1024 ? T(L" · un zip dépasse : ses plus gros journaux seront coupés", L" · one zip is over: its biggest logs will be cut") : L"");
+            y += SigPara(g, eb, x, y, w, 12.5f, c ? g_soft.bad : g_soft.muted, c ? FontStyleBold : FontStyleRegular) + 4;
+            f.r = RectF(x, top, w, y - top);
+        } else if (f.type == "case") {
             RectF r(x, y, w, 44);
-            bool on = f.type == "zips" ? f.on && g_sigZipFiles > 0 : f.on;
-            SoftToggle(g, RectF(x, y + 7, 52, 30), on, id0 + 9, f.type != "zips" || g_sigZipFiles > 0); SigHot(r, id0 + 9, clip);
+            bool on = f.on;
+            SoftToggle(g, RectF(x, y + 7, 52, 30), on, id0 + 9, true); SigHot(r, id0 + 9, clip);
             std::wstring t = lab;
-            if (f.type == "zips") { wchar_t b[200]; if (g_sigZipFiles > 0) swprintf_s(b, T(L"%s · joint tout seul (%d fichiers)", L"%s · attached for you (%d files)"), lab.c_str(), g_sigZipFiles); else swprintf_s(b, L"%s", T(L"Aucun journal pour l'instant : lance le jeu avec MWCoop d'abord", L"No logs yet: start the game with MWCoop first")); t = b; }
             float th = SigTextH(t, w - 70, 13.5f, FontStyleBold);
             SigText(g, t, RectF(x + 64, y + (th > 24 ? 4 : 12), w - 70, th + 4), 13.5f, FontStyleBold, bad ? g_soft.bad : g_soft.ink);
             y += max(44.0f, th + 12);
@@ -1127,9 +1339,13 @@ static bool SigClick(int id)
         if (k == 0) g_sigFocus = i;
         else if (k >= 1 && k <= 7) { f.sel = k - 1; g_sigFocus = SigDetailOn(f) ? 100 + i : -1; }
         else if (k == 8) g_sigFocus = 100 + i;
-        else if (k == 9) { if (f.type != "zips" || g_sigZipFiles > 0) f.on = !f.on; }
+        else if (k == 9) f.on = !f.on;
+        if (f.champ == "jeu" && k >= 1 && k <= 7 && SigGameOfForm() != g_sigSessGame) SigSessScan(SigGameOfForm(), true);   // (le selecteur de journaux suit le jeu)
         return true;
     }
+    if (id >= UI_SIG_SESS && id < UI_SIG_SESS + 30) { int k = id - UI_SIG_SESS; if (k < (int)g_sigSess.size()) { g_sigSess[k].checked = !g_sigSess[k].checked; for (auto &f : g_sigForm) if (f.type == "zips") f.err.clear(); } return true; }
+    if (id >= UI_SIG_EXT && id < UI_SIG_EXT + 16) { int k = id - UI_SIG_EXT; if (k < (int)g_sigExt.size()) g_sigExt.erase(g_sigExt.begin() + k); return true; }
+    if (id == UI_SIG_ADDEXT) { SigAddExt(); return true; }
     return true;
 }
 
@@ -1163,7 +1379,8 @@ static void SigCaptureState(const std::wstring &st)
     else if (st == L"signaler-natif-dossier") { g_sigView = SV_DETAIL; g_sigSel = 0; }
     else if (st == L"signaler-natif-dossier-ajout") { g_sigView = SV_DETAIL; g_sigSel = 2; g_sigAddMode = 1; g_sigAddText = L"Ça arrive aussi avec la Ferndale, dès que l'invité ouvre le coffre.\nVersion mwc-1.15.10, salon Steam à 3."; }
     else if (st == L"signaler-natif-formulaire") { SigFormBuild(); g_sigView = SV_FORM; for (auto &f : g_sigForm) { if (f.champ == "titre") f.val = L"Roue qui tombe chez l'invité"; if (f.champ == "type") f.sel = 2; if (f.champ == "probleme") f.val = L"Après un saut, la roue avant gauche tombe chez l'invité mais pas chez l'hôte."; if (f.champ == "role") f.sel = 2; if (f.champ == "joueurs") f.val = L"2"; } g_sigForm[1].err.clear(); }
-    else if (st == L"signaler-natif-formulaire-bas") { SigFormBuild(); g_sigView = SV_FORM; for (auto &f : g_sigForm) if (f.champ == "mods_choix") f.sel = 1; DrawSigPage(MeasureG()); g_scroll[TAB_BUG] = SigMaxScroll(); }   // (le bas du formulaire : detail des mods, zip, anonyme, Envoyer)
+    else if (st == L"signaler-natif-formulaire-bas") { SigFormBuild(); g_sigView = SV_FORM; for (auto &f : g_sigForm) if (f.champ == "mods_choix") f.sel = 1; if (g_sigSess.size() > 1) g_sigSess[1].checked = true; SigAddExt(); DrawSigPage(MeasureG()); g_scroll[TAB_BUG] = SigMaxScroll(); }   // (le bas du formulaire : detail des mods, selecteur de journaux, anonyme, Envoyer)
+    else if (st == L"signaler-natif-formulaire-journaux") { SigFormBuild(); g_sigView = SV_FORM; if (g_sigSess.size() > 1) g_sigSess[1].checked = true; SigAddExt(); DrawSigPage(MeasureG()); for (auto &f : g_sigForm) if (f.type == "zips") g_scroll[TAB_BUG] = max(0.0f, min(SigMaxScroll(), f.r.Y - 150 + g_scroll[TAB_BUG])); }   // (le selecteur de journaux)
     else if (st == L"signaler-natif-formulaire-erreurs") { SigFormBuild(); g_sigView = SV_FORM; SigValidate(); g_sigNote = ST("erCorriger"); g_sigNoteKind = SC_BAD; }
     else if (st == L"signaler-natif-envoi") { g_sigView = SV_SEND; g_sigProg = T(L"Envoi des journaux (2/3)…", L"Sending the logs (2/3)…"); g_sigFrac = 0.4f; }
     else if (st == L"signaler-natif-merci") { g_sigView = SV_DONE; g_sigDoneN = 43; }
@@ -1215,8 +1432,31 @@ static int SigSelfTest(const std::wstring &log, const std::wstring &base)
         if (f.champ == "role") f.sel = 2; if (f.champ == "joueurs") f.val = L"2"; if (f.champ == "connexion") f.sel = 0; if (f.champ == "mods_choix") f.sel = 0; if (f.champ == "zips") f.on = true;
         if (f.champ == "solo_sans_mods") f.sel = 2; if (f.champ == "version_precedente_choix") f.sel = 2; if (f.champ == "media_choix") f.sel = 1; if (f.champ == "systeme_choix") f.sel = 1; if (f.champ == "sauvegarde") f.sel = 0;
     }
-    g_sigZipFiles = 2;
+    g_sigZipFiles = 2; g_sigSess.clear(); g_sigExt.clear(); g_sigCommon = { log, g_iniLauncher };
     check(SigValidate() < 0, "validation locale du formulaire", r);
+    {   // selecteur de journaux : parties factices, cochage, zips multiples, limites du site vues en local
+        auto mk = [&](const wchar_t *key, bool checked) { SigSess s; s.g.key = key; s.paths = { log }; s.g.files = 1; s.checked = checked; return s; };
+        g_sigSess = { mk(L"*", true), mk(L"a", false), mk(L"b", false) };
+        std::vector<SigZipSpec> z1 = SigZipSpecs(false);
+        check(z1.size() == 1 && z1[0].files.size() == 3, "selecteur : derniere partie cochee d'office -> 1 zip (partie + 2 communs)", r);
+        g_sigSess[1].checked = g_sigSess[2].checked = true;
+        std::vector<SigZipSpec> z3 = SigZipSpecs(false);
+        check(z3.size() == 3 && z3[0].files.size() == 3 && z3[1].files.size() == 1 && z3[2].files.size() == 1, "selecteur : 3 parties cochees -> 3 zips, communs avec la premiere seulement", r);
+        for (int i = 0; i < 14; i++) SigAddExt();
+        long long t, b; int n;
+        check(SigZipCheck(&t, &n, &b) == 2 && n == 17 && SigValidate() >= 0, "limites : 17 zips refuses en local (16 au plus)", r);
+        g_sigExt.clear(); long long keepMax = g_sigEnvoiMax; g_sigEnvoiMax = 100;
+        check(SigZipCheck(&t, &n, &b) == 3 && SigValidate() >= 0, "limites : total trop gros refuse en local", r);
+        g_sigEnvoiMax = keepMax;
+        for (auto &s : g_sigSess) s.checked = false;
+        check(SigZipCheck(&t, &n, &b) == 1 && SigValidate() >= 0, "rien de coche : refuse en local", r);
+        g_sigSess.clear(); g_sigExt.clear();
+        check(SigZipCheck(&t, &n, &b) == 0 && n == 1 && SigValidate() < 0, "aucune partie enregistree : les communs seuls, accepte", r);
+        // jeu du formulaire : le selecteur suit le choix (scan reel sur cette instance, sans partie : au moins les communs)
+        for (auto &f : g_sigForm) if (f.champ == "jeu") { f.sel = 0; SigSessScan(SigGameOfForm(), false); int g0 = g_sigSessGame; f.sel = 1; SigSessScan(SigGameOfForm(), false); check(g0 == GAME_MWC && g_sigSessGame == GAME_MSC, "selecteur : suit le jeu choisi (mwc puis msc)", r); }
+        LaunchLog("testsignalnatif : selecteur reel sur cette instance : %d partie(s), %d fichier(s) commun(s)", (int)g_sigSess.size(), (int)g_sigCommon.size());
+        g_sigSess.clear(); g_sigExt.clear(); g_sigCommon = { log, g_iniLauncher };
+    }
     for (auto &f : g_sigForm) if (f.champ == "joueurs") f.val = L"1";
     check(SigValidate() >= 0, "regle croisee role/joueurs vue en local", r);
     for (auto &f : g_sigForm) if (f.champ == "joueurs") f.val = L"2";
@@ -1228,6 +1468,20 @@ static int SigSelfTest(const std::wstring &log, const std::wstring &base)
     SigCall(L"GET", L"/mes", "", false, true, r);
     bool seen = false; if (r.status == 200) for (const Jv &d : r.j.arr("dossiers")->a) if ((int)d.num("n") == n) seen = d.str("etat") == "a_trier";
     check(seen && (int)r.j.arr("dossiers")->a.size() == before + 1, "mes : le dossier est la, a trier", r);
+    // 5b. depot a trois zips (deux fabriques ici, un « d'un autre joueur » existant), comme avec deux parties cochees + un zip ajoute
+    {
+        int nf = 0; std::wstring ext = log + L".ext.zip"; std::vector<std::wstring> one = { g_iniLauncher };
+        check(WriteZip(ext, one, &nf, 0, 16 << 20, true) && nf == 1, "zip d'un autre joueur fabrique pour l'essai", r);
+        SigJob j3; j3.kind = SOP_DEPOSER; j3.body = SigFormJson();
+        SigZipSpec a; a.files = { log, g_iniLauncher }; SigZipSpec b; b.files = { log }; SigZipSpec c; c.path = ext;
+        j3.zips = { a, b, c };
+        SigDeposer(j3, r);
+        int n3 = r.status == 200 ? (int)r.j.num("n") : 0;
+        check(r.status == 200 && n3 > 0, "depot a trois zips (2 fabriques + 1 existant)", r);
+        check(FileExists(ext) && !FileExists(LocalDir() + L"signalement-envoi-1.zip") && !FileExists(LocalDir() + L"signalement-envoi-2.zip"), "zips fabriques effaces, celui de l'autre joueur garde", r);
+        DeleteFileW(ext.c_str());
+        if (n3 > 0) { SigCall(L"POST", L"/dossiers/" + std::to_wstring(n3) + L"/retirer", "{}", true, true, r); check(r.status == 200, "retirer le dossier a trois zips", r); }
+    }
     // 6. ajout « Toujours la » refuse dans cet etat (409 etat) ; retrait ; deconnexion ; jeton mort
     SigJob add; add.kind = SOP_DEPOSER; add.n = n; add.body = "{\"n\":" + std::to_string(n) + ",\"texte\":\"Dix caractères au moins, pour l'essai.\",\"zips\":__ZIPS__}"; add.zipWanted = false;
     SigDeposer(add, r);

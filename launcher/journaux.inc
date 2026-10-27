@@ -401,7 +401,7 @@ static bool LogsMouseDown(float x, float y)
     if (part == 1) {
         std::wstring arg = L"/select,\"" + path + L"\"";
         ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
-    } else if ((INT_PTR)ShellOpen(path.c_str()) <= 32) {
+    } else if (!ShellOpen(path)) {
         std::wstring arg = L"\"" + path + L"\"";   // (.log sans programme associe)
         ShellExecuteW(g_wnd, L"open", L"notepad.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
     }
