@@ -74,6 +74,7 @@ namespace MWCoop
             public Dictionary<Joint, Vector2> JointsWas;   // attaches rendues incassables sur la copie
             public float NextJoints;
             public float LastRemote;
+            public bool Stalled;                // copie figee : flux coupe depuis 1,5 s, joueur toujours la (journal une fois)
             public float Ts = -1f; public int TsFrom = -1;   // heure de la mesure (horloge de l'emetteur) et emetteur
             public Vector3 Pos, Vel, AngVel;
             public Quaternion Rot;
@@ -991,7 +992,15 @@ namespace MWCoop
             {
                 if (c.Body == null) continue;
                 bool remote = Remote(c, now);
-                if (!remote && c.RemoteBy >= 0 && now - c.LastRemote >= 1.5f) { c.RemoteBy = -1; c.RemoteDriver = -1; }
+                if (remote && now - c.LastRemote >= 1.5f) { if (!c.Stalled) { c.Stalled = true; Log.Info("copie de " + c.Key + " figee (silence de #" + c.RemoteBy + " depuis 1,5 s)"); } }
+                else c.Stalled = false;
+                if (!remote && c.RemoteBy >= 0 && now - c.LastRemote >= 1.5f)
+                {
+                    // (copie figee par un silence (Remote) : relachee a l'arret, pas a sa derniere vitesse -- Vel/AngVel a zero AVANT
+                    // SetKinematic(false), qui arme la reprise en douceur comme d'habitude)
+                    if (c.Kinematic) { c.Vel = Vector3.zero; c.AngVel = Vector3.zero; Log.Info("copie de " + c.Key + " relachee a l'arret (flux de #" + c.RemoteBy + " coupe depuis " + (now - c.LastRemote).ToString("F0") + " s" + (Session.Players.ContainsKey(c.RemoteBy) ? "" : ", joueur parti") + ")"); }
+                    c.RemoteBy = -1; c.RemoteDriver = -1;
+                }
                 SetKinematic(c, remote);
                 Ride(c, remote && Seats.SeatedCar == c.T);
                 if (remote)
@@ -1274,8 +1283,16 @@ namespace MWCoop
         // Copie conduite ailleurs (cinematique ici, suit les messages de celui qui la fait rouler).
         static bool Remote(Car c, float now)
         {
-            return c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving && c.Index != owned && c.Index != bumped;
+            if (c.RemoteBy < 0 || c.Index == LocalDriving || c.Index == owned || c.Index == bumped) return false;
+            float silent = now - c.LastRemote;
+            if (silent < 1.5f) return true;
+            // Flux coupe mais joueur toujours dans la partie (coupure reseau ; chaos S3 sur MSC, 27/10 : apres 1,5 s de silence la copie
+            // redevenait physique a sa derniere vitesse, 5,6 m/s dans le garage -- 8 pieces arrachees chez l'invite, reservoir « demonte »
+            // renvoye a l'hote) : la copie reste figee, cinematique a sa derniere pose, jusqu'au retour du flux, au depart du joueur
+            // (Session.Players) ou a StallMax s ; relachee alors sans vitesse (Update).
+            return silent < StallMax && Session.Active && Session.Players.ContainsKey(c.RemoteBy);
         }
+        const float StallMax = Transport.Timeout + 10f;
 
         // ---------------------------------------------------------------- particules et traces de pneus
         // Effets de la voiture menee (JD, 16/10 : « tout effet visible doit l'etre chez tous ») : fumee d'echappement
@@ -2207,6 +2224,7 @@ namespace MWCoop
         static float Since(Car c)
         {
             float now = Time.realtimeSinceStartup;
+            if (now - c.LastRemote >= 1.5f) return 0f;   // (flux coupe, copie figee : a sa derniere pose, sans extrapolation)
             float dt = c.TsFrom >= 0 && clockSet[c.TsFrom] ? now - clockOff[c.TsFrom] - c.Ts : now - c.LastRemote;
             return Mathf.Clamp(dt, 0f, 0.3f);
         }
@@ -2253,18 +2271,22 @@ namespace MWCoop
 
         static void Animate(Car c)
         {
-            if (c.Dt != null) { c.Dt.rpm = c.Rpm; c.Dt.throttle = c.Throttle; }
+            // (copie figee par un silence du flux (Remote) : moteur et sons au repos, roues arretees -- pas un moteur qui hurle 25 s
+            // sur une voiture immobile ; relecture de [MWC], 27/10)
+            bool stalled = Time.realtimeSinceStartup - c.LastRemote >= 1.5f;
+            float rpm = stalled ? 0f : c.Rpm, thr = stalled ? 0f : c.Throttle; int mask = stalled ? 0 : c.SoundMask;
+            if (c.Dt != null) { c.Dt.rpm = rpm; c.Dt.throttle = thr; }
             if (c.ModDt != null)
                 try
                 {
-                    if (c.ModRpm != null) c.ModRpm.SetValue(c.ModDt, c.Rpm, null);
-                    if (c.ModRun != null) c.ModRun.SetValue(c.ModDt, c.RemoteRunning, null);
+                    if (c.ModRpm != null) c.ModRpm.SetValue(c.ModDt, rpm, null);
+                    if (c.ModRun != null) c.ModRun.SetValue(c.ModDt, c.RemoteRunning && !stalled, null);
                 }
                 catch { }
             if (c.Axis != null && fSteering != null) try { fSteering.SetValue(c.Axis, Mathf.Clamp(c.Steer, -1f, 1f)); } catch { }
             for (int i = 0; i < c.SoundObjs.Length; i++)
             {
-                bool want = (c.SoundMask & (1 << i)) != 0;
+                bool want = (mask & (1 << i)) != 0;
                 GameObject g = c.SoundObjs[i];
                 if (g == null) continue;
                 if (g.activeSelf != want) g.SetActive(want);
@@ -2278,8 +2300,8 @@ namespace MWCoop
                 a.volume = c.SoundVol[i];
                 if (!a.isPlaying && a.loop) a.Play();
             }
-            StarterFollow(c);
-            float fwd = Vector3.Dot(c.Vel, c.Body.transform.forward);
+            if (!stalled) StarterFollow(c);
+            float fwd = stalled ? 0f : Vector3.Dot(c.Vel, c.Body.transform.forward);
             for (int i = 0; i < c.Wheels.Length; i++)
             {
                 Wheel w = c.Wheels[i];
