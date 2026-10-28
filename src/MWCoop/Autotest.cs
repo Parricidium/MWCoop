@@ -416,6 +416,35 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=porteappart (MWC, 2 joueurs, dossier de Донской 28/10 : « l'hote ne peut plus ouvrir les portes de l'appartement ») :
+        // l'invite ouvre PorteObjet (HOMENEW/LOD/DoorWC) a 60 s, la ferme a 70 s, la rouvre a 80 s ; chacun note toutes les 2 s de 55 a 110 s
+        // l'etat de son automate (Wait player = cliquable), DoorOpen, l'angle du pivot et son Animation (active, en cours, temps, culling).
+        static int paStep; static float paLog;
+        static void PorteAppart(float t)
+        {
+            string obj = Config.Get("Test", "PorteObjet", "HOMENEW/LOD/DoorWC");
+            if (!Net.Session.IsHost)
+            {
+                if (t > 60f && paStep == 0) { paStep = 1; Log.Info("autotest : porteappart, " + Interactions.TestNamed(obj)); }
+                if (t > 70f && paStep == 1) { paStep = 2; Log.Info("autotest : porteappart, " + Interactions.TestNamed(obj)); }
+                if (t > 80f && paStep == 2) { paStep = 3; Log.Info("autotest : porteappart, " + Interactions.TestNamed(obj)); }
+            }
+            if (t > 55f && t < 110f && Time.realtimeSinceStartup >= paLog)
+            {
+                paLog = Time.realtimeSinceStartup + 2f;
+                PlayMakerFSM door = Game.FindFsm(obj + "/Pivot/Handle", "Use");
+                FsmBool open = door != null ? door.FsmVariables.FindFsmBool("DoorOpen") : null;
+                GameObject piv = Game.FindAny(obj + "/Pivot");
+                Animation an = piv != null ? piv.GetComponent<Animation>() : null;
+                string clip = "";
+                if (an != null) foreach (AnimationState st in an) clip += " " + st.name + (st.enabled ? " joue t=" + st.time.ToString("F2") + "/" + st.length.ToString("F2") : "");
+                Log.Info("autotest : porteappart (" + (Net.Session.IsHost ? "hote" : "invite") + ") [" + (door != null ? door.ActiveStateName : "?") + "] porte " + (open != null ? (open.Value ? "ouverte" : "fermee") : "?")
+                         + (piv != null ? " angle " + piv.transform.localEulerAngles.ToString("F0") + (piv.activeInHierarchy ? "" : " (inactif)") : " pivot ?")
+                         + (an != null ? " ; Animation " + (an.enabled ? "active" : "coupee") + ", culling " + an.cullingType + ", en cours " + an.isPlaying + clip : " ; pas d'Animation")
+                         + " ; joueur a " + (piv != null && Game.PlayerGo != null ? Vector3.Distance(piv.transform.position, Game.PlayerGo.transform.position).ToString("F1") + " m" : "?"));
+            }
+        }
+
         // [Test] Autotest=mscporte (19/10, retour de Vaydon : portes de la maison et du garage) -- l'hote : 60 s ouvre la porte
         // d'entree, 66 s allume la cuisine, 72 s pousse la porte gauche du garage (2 s), 85 s referme la porte d'entree. Chacun note
         // toutes les 5 s : porte d'entree (DoorOpen), portes du garage (angle).
@@ -2913,6 +2942,7 @@ namespace MWCoop
             if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
             if (mode == "mscphares") { LightsGuard.TestKey(mode, t); return; }   // (touche des phares, Jobs commun : [Test] PharesTouche=LightsDrive sur MWC, 27/10)
             if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)
+            if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
