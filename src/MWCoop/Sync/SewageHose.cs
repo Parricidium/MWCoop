@@ -148,7 +148,13 @@ namespace MWCoop
             }
             if (remoteBy >= 0)
             {
-                if (now - lastRemote > 3f) { Release(); remoteBy = -1; return; }
+                if (now - lastRemote > 3f)
+                {
+                    // (camion en copie ici : la chaine reste posee sans physique sur la derniere pose recue -- rendue physique, accrochee a la
+                    // copie, elle s'etirait puis explosait si personne n'envoyait plus rien ([MWC] 28/10 : 24 m apres la grace de 6 s))
+                    if (gt != null && !VehicleSync.SimAuthority(gt)) { Follow(); return; }
+                    Release(); remoteBy = -1; return;
+                }
                 Follow();
             }
             else if (mine && oldRule == 0 && gt != null && !VehicleSync.SimAuthority(gt)) Follow(true, held);
