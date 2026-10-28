@@ -279,11 +279,13 @@ namespace MWCoop
         {
             if (!PlayerSync.InGame) return;
             foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) { VazHandling.Idle(r.Car); VazCar.MscBrakeLate(r.Car); }
+            StandaloneCar.LateUpdate();   // (pilote standalone, [Test] AddonStandalone : rien sans voiture construite)
         }
 
         public static void Update()
         {
             if (!PlayerSync.InGame) return;
+            StandaloneCar.Update();
             if (!Enabled && rents.Count == 0 && wanted.Count == 0) return;   // (VAZ coupee, aucune sortie : rien a chaque image -- demande de Menor 25/10)
             float now = Time.realtimeSinceStartup;
             foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) VazCar.Tick(r.Car, now);

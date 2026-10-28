@@ -1234,7 +1234,8 @@ namespace MWCoop
             }
             if (mode == "conduite") { Conduite(t); return; }
             if (mode == "vaz" || mode == "vazcle") { Vaz.Test(mode, t); return; }   // (24/10 : voitures sur la Ruscko)
-            if (mode == "vaztenue") { VazTenue.Test(mode, t); return; }   // (28/10 : tenue de route des voitures du F10, JD)
+            if (mode == "vaztenue") { StandaloneCar.Test(t); VazTenue.Test(mode, t); return; }
+            if (mode == "standaloneroule") { StandaloneCar.Roll(t); return; }   // (pilote standalone, 28/10)   // (28/10 : tenue de route des voitures du F10, JD)
             if (mode == "vazrallye") { RallyMscVaz.Test(mode, t); return; }   // (24/10 : rallye de MSC avec sa voiture du F10)
             if (mode == "vazpanel") { VazPanel.Test(mode, t); return; }
             if (mode == "tas") { LogPiles.Test(mode, t); return; }

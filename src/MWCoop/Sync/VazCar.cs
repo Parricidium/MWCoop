@@ -533,6 +533,35 @@ namespace MWCoop
             }
         }
 
+        // Pilote « addon standalone » (spec du 28/10, StandaloneCar) : la voiture construite par notre code reprend le modele, ses
+        // matieres et la peinture du joueur d'ici (Ruscko/SORBET de la scene : matiere de base de la peinture, valeurs UnityCar).
+        public static GameObject Template() { return FindSorbet(); }
+        public static void AddModel(Built b, Transform parent, string file)
+        {
+            Model was = cur; cur = b.M ?? Vaz2108;
+            try
+            {
+                GameObject s = FindSorbet();
+                Material bp = s != null ? (FindMat(s, "paint") ?? FindMat(s, "")) : null;
+                AddParts(b, parent, file, bp, b.Paint, b.Number);
+            }
+            finally { cur = was; }
+        }
+        public static bool ModelBounds(Model m, string file, out Bounds bounds)
+        {
+            Model was = cur; cur = m; bounds = new Bounds();
+            try
+            {
+                List<Part> ps = Load(file);
+                if (ps.Count == 0) return false;
+                bounds = ps[0].Mesh.bounds;
+                foreach (Part q in ps) bounds.Encapsulate(q.Mesh.bounds);
+                return true;
+            }
+            finally { cur = was; }
+        }
+        public static Dictionary<string, Vector3> ModelInfo(Model m) { Model was = cur; cur = m; try { return Info(); } finally { cur = was; } }
+
         static Material FindMat(GameObject root, string part)
         {
             foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))

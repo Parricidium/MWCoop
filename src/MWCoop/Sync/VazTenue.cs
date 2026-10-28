@@ -20,7 +20,7 @@ namespace MWCoop
         static GameObject track;
         static Transform car;
         static Rigidbody rb;
-        static AxisCarController ax;
+        static CarController ax;   // (AxisCarController des copies, StandaloneDriver de la voiture standalone)
         static Drivetrain dt;
         static int phase = -1, sub;
         static float phaseAt, maxRoll, maxYaw, steerAt90, speedAtTurn, maxRearHb, maxSteerDeg;
@@ -33,7 +33,7 @@ namespace MWCoop
         static float[] speeds;
         static FieldInfo autoField;
         static readonly Vector3 Start = new Vector3(0f, 1501.2f, -2600f);
-        const float TrackY = 1500f;
+        internal const float TrackY = 1500f;
 
         static bool Mine { get { return !Net.Session.Active || Net.Session.IsHost || Two; } }
         // [Test] VazTenueDeux=1 (MSC, essai a deux, 28/10) : le banc tourne aussi chez l'invite, sur sa voie (80 m a cote) ; chacun
@@ -90,7 +90,7 @@ namespace MWCoop
                 phase = 2;
                 car = other.Length > 0 ? Find(other) : Vaz.CarOf(Vaz.MeId);
                 if (car == null) { Log.Info("autotest vaztenue : voiture introuvable (" + (other.Length > 0 ? other : "F10") + ")"); phase = 99; return; }
-                rb = car.GetComponent<Rigidbody>(); ax = car.GetComponent<AxisCarController>(); dt = car.GetComponent<Drivetrain>();
+                rb = car.GetComponent<Rigidbody>(); ax = car.GetComponent<CarController>(); dt = car.GetComponent<Drivetrain>();
                 Dump();
                 Log.Info("autotest vaztenue : a l'apparition, " + WaterState(car));
                 Log.Info("autotest vaztenue : tete, copie : " + HeadProbe(car));
@@ -170,7 +170,7 @@ namespace MWCoop
             {
                 if (driveFsm != null && driveFsm.ActiveStateName == "Player in car") { driveFsm.SendEvent("Key DOWN"); return; }
                 Log.Info("autotest vaztenue : relais, l'invite descend de " + car.name + " et prend " + relayCar.name);
-                car = relayCar; rb = car.GetComponent<Rigidbody>(); ax = car.GetComponent<AxisCarController>(); dt = car.GetComponent<Drivetrain>();
+                car = relayCar; rb = car.GetComponent<Rigidbody>(); ax = car.GetComponent<CarController>(); dt = car.GetComponent<Drivetrain>();
                 driveFsm = null; knobs = null; seated = false; seatTry = 0f; relay = 2;
             }
             if (relay == 2)
@@ -411,8 +411,9 @@ namespace MWCoop
             if (!on) Log.Info("autotest vaztenue : demarreur " + f.ActiveStateName + ", regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + " ; " + WaterState(car));
         }
 
-        static void MakeTrack()
+        internal static void MakeTrack()   // (aussi l'essai standaloneroule)
         {
+            if (track != null) return;
             PhysicMaterial road = null; var count = new Dictionary<PhysicMaterial, int>();
             foreach (Collider c in Object.FindObjectsOfType<Collider>())
             {
@@ -470,7 +471,7 @@ namespace MWCoop
                 sb.Append("Rigidbody : masse ").Append(r.mass).Append(", centre ").Append(r.centerOfMass.ToString("F3")).Append(", inertie ").Append(r.inertiaTensor.ToString("F1"))
                   .Append(" rot ").Append(r.inertiaTensorRotation.eulerAngles.ToString("F0")).Append(", trainee ").Append(r.drag).Append(" / ").Append(r.angularDrag)
                   .Append(", interp ").Append(r.interpolation).Append(", vitesse angulaire maxi ").Append(r.maxAngularVelocity).Append('\n');
-            foreach (string cn in new[] { "AxisCarController", "CarController", "MobileCarController", "CarDynamics", "Drivetrain", "Axles", "Aerodynamics", "FuelTank", "SteeringWheel" })
+            foreach (string cn in new[] { "AxisCarController", "StandaloneDriver", "CarController", "MobileCarController", "CarDynamics", "Drivetrain", "Axles", "Aerodynamics", "FuelTank", "SteeringWheel" })
             {
                 Component k = c.GetComponent(cn);
                 if (k == null) continue;
