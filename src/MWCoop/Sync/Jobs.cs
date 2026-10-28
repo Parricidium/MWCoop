@@ -730,6 +730,7 @@ namespace MWCoop
                          : state == "Shut off" ? rest || cur == "Shut off"
                          : cur == state;
             j.FromReplay = true;
+            if (state == "ACC on" || state == "ACC on 2" || state == "Motor starting") ContactCircuits(j.F, key);
             if (already) return;
             applying = true; Replay.Depth++;
             try
@@ -742,6 +743,28 @@ namespace MWCoop
             FsmString gi = FsmVariables.GlobalVariables.FindFsmString("GUIinteraction");
             if (gi != null && (gi.Value == "STARTER" || gi.Value == "IGNITION")) gi.Value = "";
             Log.Info("cle de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ", ACC " + (acc != null && acc.Value) + ")");
+        }
+
+        // MSC : le clic sur la cle passe par « Test », qui ALLUME le circuit du contact (SATSUMA : CarSimulation/Car/Electrics, dont
+        // ElectricsOK alimente l'autoradio, les jauges...) ; le rejeu pose « ACC on » directement et sautait cet etat : chez l'autre,
+        // contact mis mais Electrics eteint, autoradio « Not work » sans courant, aucun son -- dans les deux sens (dossier #16, Markos
+        // 28/10 : « allumee par l'hote, l'invite n'entend rien, et l'inverse »). Les ActivateGameObject (allumer) de « Test » rejoues.
+        static int contactLogs;
+        static void ContactCircuits(PlayMakerFSM f, string key)
+        {
+            FsmState st = f.Fsm != null ? f.Fsm.GetState("Test") : null;
+            if (st == null || st.Actions == null) return;
+            int n = 0;
+            foreach (FsmStateAction a in st.Actions)
+            {
+                var ag = a as HutongGames.PlayMaker.Actions.ActivateGameObject;
+                if (ag == null || !ag.activate.Value) continue;
+                GameObject go = f.Fsm.GetOwnerDefaultTarget(ag.gameObject);
+                if (go == null || go.activeSelf) continue;
+                go.SetActive(true);
+                n++;
+            }
+            if (n > 0 && contactLogs++ < 20) Log.Info("cle : " + key + " : circuit du contact allume comme au clic (" + n + ")");
         }
 
         static void OnIgnition(Job j, FsmState from, string ev, string state)

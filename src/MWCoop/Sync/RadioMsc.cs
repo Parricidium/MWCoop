@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -377,10 +377,23 @@ namespace MWCoop
             GameObject bat = Game.FindAny("Database/PartsStatus/Battery");
             PlayMakerFSM bf = bat != null ? Game.FsmOn(bat, "Data") : null;
             if (bf != null) sb.Append("batterie ").Append(F(bf, "Charge").ToString("F3")).Append(" ; ");
+            sb.Append("satsuma ").Append(VehicleSync.StartProbe("SATSUMA(557kg, 248)")).Append(" ; ");
             foreach (Unit u in units) if (u.Vol != null) sb.Append(u.Car.name).Append(u.Cd ? "/cd" : "/radio").Append(" molette ").Append(u.Vol.ActiveStateName)
                 .Append(u.Switch != null ? " inter " + (u.Switch.enabled ? u.Switch.ActiveStateName : "coupe") : "").Append(u.Track != null ? " pistes " + (u.Track.enabled ? u.Track.ActiveStateName : "coupe") : "")
                 .Append(u.Chan != null ? " canaux " + (u.Chan.enabled ? u.Chan.ActiveStateName : "coupe") : "").Append(u.Disc != null ? " fente " + u.Disc.ActiveStateName : "").Append(" ; ");
             foreach (var kv in EtatLines()) sb.Append(kv.Key).Append(kv.Value).Append(" ; ");
+            // (sons : sources des postes -- dossier #16, « allumee par l'un, l'autre n'entend rien »)
+            foreach (Unit u in units)
+            {
+                if (u.Vol == null) continue;
+                foreach (AudioSource a in u.Car.GetComponentsInChildren<AudioSource>(true))
+                {
+                    string pth = Recon.Path(a.transform), low = pth.ToLowerInvariant();
+                    if (!(low.Contains("radio") || low.Contains("speaker") || low.Contains("cd"))) continue;
+                    sb.Append("son ").Append(pth.Substring(pth.IndexOf('/') + 1)).Append(a.isPlaying ? " JOUE" : " muet").Append(a.enabled && a.gameObject.activeInHierarchy ? "" : " (eteint)")
+                      .Append(" vol ").Append(a.volume.ToString("F2")).Append(a.mute ? " coupe" : "").Append(" clip ").Append(a.clip != null ? a.clip.name : "-").Append(" ; ");
+                }
+            }
             sb.Append(Radio.CdTestState());
             return sb.ToString();
         }
