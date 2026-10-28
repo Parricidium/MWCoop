@@ -81,7 +81,7 @@ namespace MWCoop
 
         // Copie de la voiture de l'autre : plus grand saut d'une image a l'autre (ecart entre deux deplacements successifs), plus
         // grand coup de direction des roues avant d'une image a l'autre, braquage maxi et corps cinematique.
-        static Transform wCar; static Vector3 wPos, wStep; static float wJerk, wSpeed, wSteerJump, wNext, wLastSteer; static int wFrames;
+        static Transform wCar; static Vector3 wPos, wStep; static float wJerk, wJerkY, wRoll, wSpeed, wSteerJump, wNext, wLastSteer; static int wFrames;
         static void Watch(float t)
         {
             Transform c = null;
@@ -90,6 +90,8 @@ namespace MWCoop
             if (c != wCar) { wCar = c; wPos = c.position; wStep = Vector3.zero; wFrames = 0; wNext = t + 2f; return; }
             Vector3 step = c.position - wPos; wPos = c.position;
             if (wFrames > 0) wJerk = Mathf.Max(wJerk, (step - wStep).magnitude);
+            if (wFrames > 0) wJerkY = Mathf.Max(wJerkY, Mathf.Abs(step.y - wStep.y));
+            wRoll = Mathf.Max(wRoll, Vector3.Angle(c.up, Vector3.up));
             wStep = step; wFrames++;
             if (Time.deltaTime > 0f) wSpeed = Mathf.Max(wSpeed, step.magnitude / Time.deltaTime * 3.6f);
             float steer = 0f, maxA = 0f;
@@ -99,9 +101,9 @@ namespace MWCoop
             if (t < wNext) return;
             wNext = t + 2f;
             Rigidbody r = c.GetComponent<Rigidbody>();
-            Log.Info("autotest vaztenue : copie " + c.name + " : " + wFrames + " images, vitesse maxi " + wSpeed.ToString("F0") + " km/h, saut maxi " + wJerk.ToString("F3") + " m/image, coup de direction maxi " + wSteerJump.ToString("F2")
+            Log.Info("autotest vaztenue : copie " + c.name + " : " + wFrames + " images, vitesse maxi " + wSpeed.ToString("F0") + " km/h, saut maxi " + wJerk.ToString("F3") + " m/image (vertical " + wJerkY.ToString("F3") + "), roulis maxi " + wRoll.ToString("F0") + " deg, coup de direction maxi " + wSteerJump.ToString("F2")
                      + ", braquage maxi des roues avant " + maxA.ToString("F1") + " deg, " + (r == null ? "sans corps" : r.isKinematic ? "cinematique" : "SIMULEE ICI") + ", en " + c.position.ToString("F0"));
-            wJerk = 0f; wSpeed = 0f; wSteerJump = 0f; wFrames = 0;
+            wJerk = 0f; wJerkY = 0f; wRoll = 0f; wSpeed = 0f; wSteerJump = 0f; wFrames = 0;
         }
 
         static int relay; static float relayAt; static Transform relayCar;
