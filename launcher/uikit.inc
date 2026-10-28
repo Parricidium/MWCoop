@@ -44,7 +44,7 @@ enum {
     UI_NAV = 100,                 // + page
     UI_NAV_GROUP = 140,           // + groupe de la barre (1-3 pliables)
     UI_SEG = 150,                 // + k : onglets de l'en-tete (tenue / voiture ; contenu / mods)
-    UI_HOME_LOOK = 170, UI_HOME_CAR, UI_HOME_NOTES, UI_HOME_LOBBY, UI_HOME_STEAMOPT,
+    UI_HOME_LOOK = 170, UI_HOME_CAR, UI_HOME_NOTES, UI_HOME_LOBBY, UI_HOME_STEAMOPT, UI_HOME_WIN7GUIDE,   // (175 : Windows 7, methode optionnelle du reseau Steam -> Guide)
     UI_PAGE_OK = 180, UI_PAGE_CANCEL,
     UI_LOBBY_GEAR = 190, UI_LOBBY_INVITE, UI_POP_PORTM, UI_POP_PORTP, UI_POP_CLOSE, UI_POP_CONTENT, UI_POP_X, UI_POP_LOOK,
     UI_LOBBY_ME_LOOK, UI_LOBBY_ME_CAR,

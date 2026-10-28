@@ -582,3 +582,10 @@ WMS02	Weekend rally (My Summer Car): bring your car to Fleetari's tent, closer t
 WMS03	Since 1.14: the VAZ-2108 and the add-on cars (F10 > Cars, launcher's Character > Add-ons page), built on the RUSCKO, with their gravel wheels and the rally SATSUMA's handling; the weekend rally with them.
 WMS04	Since 1.14: the OSUUSKAUPPA s21 shop and its video corner (camcorder, VCR, TV, editing), the Museum of Corsica, sleeping bags, helmets and the KARTTURI 2000 on MSC's stages, in the same place as in My Winter Car (Peräjärvi).
 WMS05	Ice race, KINO TÄHTI cinema, CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car.
+WW71	Windows 7: Steam network, at your own risk
+WW72	On Windows 7, Steam Legacy no longer reaches some of Valve's servers: IP / VPN mode is the safe way. A method shared by a player can make the Steam network work again:
+WW73	At your own risk: VxKex NEXT is a third-party tool with no support from us, and Steam can sometimes disconnect. Otherwise, use IP / VPN mode.
+WW74	Install Steam Legacy (the Steam version for Windows 7).
+WW75	Download VxKex NEXT from its official GitHub page: github.com/YuZhouRen86/VxKex-NEXT (the launcher downloads and installs nothing).
+WW76	With Steam closed: right-click steamwebhelper.exe (in the Steam folder) → Properties → VxKex tab → turn it on. ONLY this file: not the game, not MWCoop.exe.
+WW77	Start Steam, then pick STEAM in the launcher.

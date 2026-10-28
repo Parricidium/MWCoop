@@ -357,6 +357,8 @@ static int WikiNeighbor(int dir)
     return -1;
 }
 static void WikiGoArt(int a) { if (!WikiArtShown(a)) return; g_wikiSel = a; g_scroll[TAB_WIKI] = 0; }
+// Accueil, ligne Windows 7 sous STEAM (28/10) : l'article Reseau, descendu jusqu'a sa section Windows 7 (apres STEAM et IP / VPN).
+static void WikiGoNetWin7() { if (!PageEnabled(TAB_WIKI)) return; GoPage(TAB_WIKI); WikiGoArt(WA_NET); g_scroll[TAB_WIKI] = 270; }
 // Temps de lecture (minutes, 1 au moins) : environ 1100 caracteres par minute.
 static int WikiMinutes(const WikiArticle &art)
 {

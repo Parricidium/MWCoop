@@ -917,12 +917,14 @@ static void DrawHome(Graphics &g)
         SmallLabel(g, T(L"CODE", L"CODE"), RectF(row.X + row.Width - 142, row.Y, 40, row.Height), kGrey);   // (code de session d'un salon privé, 0.96.4)
         g_fields[2].r = RectF(row.X + row.Width - 100, row.Y, 100, row.Height);
         DrawField(g, 2, L"");
-    } else if (IsWin7()) {   // Windows 7 : a la place de l'option de lancement, pourquoi Steam ne marchera pas (JD 26/10)
+    } else if (IsWin7()) {   // Windows 7 : a la place de l'option de lancement, pourquoi Steam ne marchera pas (JD 26/10) ; methode optionnelle -> Guide (28/10)
         g_fields[1].r = g_fields[2].r = RectF(0, 0, 0, 0);
+        bool hot = g_uiHot == UI_HOME_WIN7GUIDE;
         GraphicsPath p; RoundRect(p, row, 12);
-        SolidBrush fb(WithA(kWarn, 0.12f)); g.FillPath(&fb, &p);
+        SolidBrush fb(WithA(kWarn, hot ? 0.20f : 0.12f)); g.FillPath(&fb, &p);
         Pen pen(WithA(kWarn, 0.6f), 1.0f); g.DrawPath(&pen, &p);
-        Para(g, Win7SteamText(), RectF(row.X + 14, row.Y + 4, row.Width - 28, row.Height - 6), 12, kWarn);
+        Para(g, std::wstring(Win7SteamText()) + L" · " + T(L"Méthode optionnelle, à tes risques : Guide ›", L"Optional method, at your own risk: Guide ›"), RectF(row.X + 14, row.Y + 4, row.Width - 28, row.Height - 6), 12, kWarn);
+        HotZone(row, UI_HOME_WIN7GUIDE);
     } else {   // option de lancement Steam : pour qu'une invitation ouvre MWCoop
         g_fields[1].r = g_fields[2].r = RectF(0, 0, 0, 0);
         bool hot = g_uiHot == UI_HOME_STEAMOPT;
@@ -1665,6 +1667,7 @@ static void DrawUI(Graphics &g)
 
 // Clic sur une zone (UI_*). Vrai si traite.
 static void SteamGuideOpen();
+static void WikiGoNetWin7();   // (wiki.inc : article Reseau, section Windows 7)
 static void LobbyOptsClick(int id);
 static void LobbyOptClick(int id);   // (cartes du bas du salon : code, public / prive, joueurs max, options)
 static bool UiClick(int id)
@@ -1693,6 +1696,7 @@ static bool UiClick(int id)
     case UI_HOME_NOTES: GoPage(TAB_NOTES); return true;
     case UI_HOME_LOBBY: GoPage(TAB_LOBBY); return true;
     case UI_HOME_STEAMOPT: SteamGuideOpen(); return true;
+    case UI_HOME_WIN7GUIDE: WikiGoNetWin7(); return true;   // (Windows 7 : article Reseau, vers la section Windows 7)
     case UI_PAGE_OK: PageOk(); return true;
     case UI_PAGE_CANCEL: PageCancel(); return true;
     case UI_NOTE_UPDATE: if (g_lobby == LB_NONE && !g_busy) StartUpdate(true); return true;

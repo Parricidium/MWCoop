@@ -8295,6 +8295,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
         else if (st == L"guide-recherche") { g_tab = TAB_WIKI; g_wikiSearch = L"mods"; g_wikiFocus = true; }   // (champ Chercher de l'en-tete)
         else if (st == L"guide-credits") g_tab = TAB_CREDITS;   // (pilule Credits du Guide)
+        else if (st == L"accueil-win7") { g_tab = TAB_HOME; g_steamNet = true; }   // (Windows 7 avec MWCOOP_WIN7=1 : la ligne sous STEAM et son lien vers le Guide)
+        else if (st == L"guide-reseau-win7") { g_tab = TAB_WIKI; g_wikiSel = WA_NET; g_scroll[TAB_WIKI] = 270; }   // (article Reseau, section Windows 7 / VxKex)
         else if (st == L"album-partie" || st == L"album-favoris") {   // (Album : Par partie, Favoris -- les deux premieres photos, en memoire)
             g_tab = TAB_ALBUM; AlbScan(); g_albView = st == L"album-partie" ? 1 : 2;
             if (g_albView == 2) { for (size_t i = 0; i < g_alb.size() && i < 2; i++) g_albFav.insert(g_alb[i].name); if (!g_alb.empty()) g_albSel = 0; }
