@@ -42,8 +42,8 @@ namespace MWCoop
         public static void Update()
         {
             if (done || at < 0f || Time.realtimeSinceStartup < at || !Ajouts.Ready) return;   // (invite : les choix de l'hote d'abord)
+            if (!Kauppa.Active) return;   // (sans les ajouts COOP ni la boutique : la foret reste -- revu tant qu'ils sont coupes : l'annonce de l'hote peut arriver apres)
             done = true;
-            if (!Kauppa.Active) return;   // (sans les ajouts COOP ni la boutique : la foret reste)
             if (Config.GetInt("Boutique", "Defrichage", 1) == 0) { Log.Info("defrichage : coupe ([Boutique] Defrichage=0)"); return; }
             s21On = Ajouts.Shop || Ajouts.Museum;
             kinoOn = Kauppa.KinoOn;

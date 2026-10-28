@@ -75,6 +75,8 @@ namespace MWCoop
         {
             if (!Session.Active || !Session.IsHost) return;
             float now = Time.realtimeSinceStartup;
+            // ([Test] AjoutsAnnonceA=s : pas d'annonce avant s secondes apres le chargement -- l'invite charge sans les choix de l'hote)
+            if (now - loadedAt < Config.GetFloat("Test", "AjoutsAnnonceA", 0f)) return;
             if (now < nextSend && Session.RemoteCount <= lastRemote) { lastRemote = Session.RemoteCount; return; }
             lastRemote = Session.RemoteCount;
             nextSend = now + 10f;

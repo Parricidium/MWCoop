@@ -31,12 +31,14 @@ namespace MWCoop
         public static bool StarterBags { get { return !ShopOn || Config.GetInt("Boutique", "SacsAuDepart", 0) != 0; } }
 
         static float buildAt = -1;
+        static bool offLogged;
         static bool built;
 
         static void L(string s) { Log.Info("boutique : " + s); }
 
         public static void OnLevelLoaded()
         {
+            offLogged = false;
             root = null; door = null; doorAngle = 0f; built = false; vendor = null; looked = null; testCam = null;
             gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null; guiSub = null;
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
@@ -60,7 +62,8 @@ namespace MWCoop
             if (!built)
             {
                 if (now < buildAt || !Ajouts.Ready) return;   // (invite : les choix de l'hote d'abord)
-                if (!Active) { buildAt = -1f; L("ajouts COOP coupes (lanceur, ou choix de l'hote) : rien a construire"); return; }
+                // (coupes : en attente -- l'annonce de l'hote peut arriver apres le delai de Ajouts.Ready, 30 s, et les allumer)
+                if (!Active) { if (!offLogged) { offLogged = true; L("ajouts COOP coupes (lanceur, ou choix de l'hote) : rien a construire pour l'instant"); } return; }
                 built = true;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 if (ShopOn) try { Build(); } catch (Exception e) { L("construction : " + e); }
