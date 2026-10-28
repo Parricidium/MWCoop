@@ -46,7 +46,7 @@ namespace MWCoop
         // Seule enveloppe commune (cle fixe dans Props) : celle du catalogue. Nom compare tel quel par la boite
         // aux lettres (OrderTrigger : Letter1).
         public const string PartsEnvelope = "envelope(parts)";
-        const int K_Bill = 0, K_Order = 1, K_Job = 2, K_Phone = 3;
+        const int K_Bill = 0, K_Order = 1, K_Job = 2, K_Phone = 3, K_Week = 4;
         const int H_Find = 0, H_Hangup = 1, H_Hangup2 = 2, H_Create = 3, H_CheckHand = 4;
         const int MaxMsg = 1100, NoList = 255;
         static readonly string[] LinePaths =
@@ -98,6 +98,7 @@ namespace MWCoop
             step = step2 = 0; testCall = null; testKeypad = null; testLogged = false;
             for (int i = 0; i < phones.Length; i++) phones[i] = null;
             nextPhone = 0; nextPhoneSend = 0; phoneSig = ""; farStep = 0; farLog = 0;
+            weekSent.Clear(); nextWeekCheck = 0; weekStep = 0;
             // Avant le releve du monde (16 s apres le chargement) : les createurs de commandes sont a nous.
             resolveAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
             // Avant la premiere image (les automates demarrent a leur Start) : limite de boucle relevee, voir Arm.
@@ -139,6 +140,7 @@ namespace MWCoop
             if (now >= nextCheck) { nextCheck = now + 1f; Inject(); }
             if (now >= nextPhone) { nextPhone = now + 1f; PhoneStep(now); }
             if (orderCheckAt > 0 && now >= orderCheckAt) { orderCheckAt = -1; if (!orderSeen) NoOrder(); }
+            WeekStep(now);
             for (int i = 0; i < lines.Length; i++)
             {
                 Line l = lines[i];
@@ -653,6 +655,75 @@ namespace MWCoop
             else if (kind == K_Order) OnOrder(who, r);
             else if (kind == K_Job) OnJob(who, r);
             else if (kind == K_Phone && !Session.IsHost) OnPhones(r);
+            else if (kind == K_Week && !Session.IsHost) OnWeek(r);
+        }
+
+        // ---------------------------------------------------------------- nouvelle semaine du magazine
+        // Le jeu retire les petites annonces chaque semaine (GENERATELIST : 'Generate' de chaque annonce -> nouveau numero, prix,
+        // photo, puis 'Format' renomme l'objet au numero). Chez l'invite, rien ne bougeait : le miroir du monde ne recopie que
+        // nombres et listes, jamais le renommage -- anciens numeros, et les annonces appelees la semaine d'avant (renommees, plus
+        // appelables) le restaient sur le nouveau magazine (Донской, 28/10 : « deja appelees chez l'invite, c'est faux »).
+        // L'hote releve chaque seconde le numero de chaque annonce ; quand des annonces en ont un nouveau, il les envoie
+        // (numero, prix, photo) ; l'invite les pose et rejoue 'Format'. [Coop] SemaineMagazine=0 : comme avant.
+        static readonly Dictionary<string, string> weekSent = new Dictionary<string, string>();
+        static float nextWeekCheck;
+        static readonly string[] WeekInts = { "NMBR1", "NMBR2", "PriceInt", "Index", "IndexAudio", "TireType" };
+        static readonly string[] WeekStrs = { "NMBR1s", "NMBR2s", "Phonenumber", "PriceS" };
+        static void WeekStep(float now)
+        {
+            if (!Session.IsHost || numbers == null || now < nextWeekCheck || Config.GetInt("Coop", "SemaineMagazine", 1) == 0) return;
+            nextWeekCheck = now + 1f;
+            bool first = weekSent.Count == 0;
+            var changed = new List<Transform>();
+            for (int i = 0; i < numbers.childCount; i++)
+            {
+                Transform c = numbers.GetChild(i);
+                if (!IsDigits(c.name) || c.name.Length < 7 || Game.FsmOn(c.gameObject, "Generate") == null) continue;   // (appelee : renommee, on garde son dernier numero)
+                string key = ListingKey(c.gameObject), old;
+                if (weekSent.TryGetValue(key, out old) && old == c.name) continue;
+                weekSent[key] = c.name;
+                if (!first) changed.Add(c);
+            }
+            if (changed.Count == 0 || Session.RemoteCount == 0) return;
+            for (int s = 0; s < changed.Count; s += 12)
+            {
+                int n = Mathf.Min(12, changed.Count - s);
+                var w = new NetWriter(Msg.Call).U8(Session.LocalId).U8(K_Week).U8(n);
+                for (int i = s; i < s + n; i++)
+                {
+                    PlayMakerFSM g = Game.FsmOn(changed[i].gameObject, "Generate");
+                    w.Str(ListingKey(changed[i].gameObject)).Str(changed[i].name);
+                    foreach (string v in WeekInts) { FsmInt x = g.FsmVariables.FindFsmInt(v); w.I32(x != null ? x.Value : int.MinValue); }
+                    foreach (string v in WeekStrs) { FsmString x = g.FsmVariables.FindFsmString(v); w.Str(x != null && x.Value != null ? x.Value : ""); }
+                }
+                Session.SendAll(w, true);
+            }
+            Log.Info("appels : magazine, " + changed.Count + " annonce(s) retiree(s) chez l'hote (nouvelle semaine), envoyee(s) aux invites");
+        }
+
+        static void OnWeek(NetReader r)
+        {
+            int n = r.U8(), ok = 0, renamed = 0;
+            var miss = new List<string>();
+            for (int i = 0; i < n; i++)
+            {
+                string key = r.Str(), number = r.Str();
+                var ints = new int[WeekInts.Length]; var strs = new string[WeekStrs.Length];
+                for (int k = 0; k < ints.Length; k++) ints[k] = r.I32();
+                for (int k = 0; k < strs.Length; k++) strs[k] = r.Str();
+                Transform t = FindListing(key);
+                PlayMakerFSM g = t != null ? Game.FsmOn(t.gameObject, "Generate") : null;
+                if (g == null) { miss.Add(key); continue; }
+                for (int k = 0; k < ints.Length; k++) { FsmInt x = g.FsmVariables.FindFsmInt(WeekInts[k]); if (x != null && ints[k] != int.MinValue) x.Value = ints[k]; }
+                for (int k = 0; k < strs.Length; k++) { FsmString x = g.FsmVariables.FindFsmString(WeekStrs[k]); if (x != null) x.Value = strs[k]; }
+                Replay.Depth++;
+                try { Game.SetState(g, "Format"); }
+                finally { Replay.Depth--; }
+                if (t.name != number) { t.name = number; renamed++; }   // (Format d'une autre forme : le numero de l'hote quand meme)
+                ok++;
+            }
+            Log.Info("appels de l'hote : magazine, " + ok + "/" + n + " annonce(s) de la nouvelle semaine posee(s) ici" + (renamed > 0 ? " (" + renamed + " renommee(s) a la main)" : "")
+                     + (miss.Count > 0 ? ", introuvable(s) : " + string.Join(", ", miss.ToArray()) : ""));
         }
 
         // ---------------------------------------------------------------- appels entrants (logique de l'hote)
@@ -976,6 +1047,35 @@ namespace MWCoop
             }
             if (host && step == 3 && testActivated && testKeypad != null) { testActivated = false; testKeypad.SetActive(false); }
             if (t > (whole ? 160f : 100f) && !testLogged) { testLogged = true; Log.Info("autotest : appel, " + CallState()); }
+            // ([Test] AppelSemaine=s, dossier de Донской 28/10 « sur le nouveau magazine, des annonces deja appelees chez l'invite ») :
+            // nouvelle semaine du magazine a s secondes chez l'hote (GENERATELIST, comme le jeu) ; annonces des deux cotes 5 s avant et 15 s apres.
+            float week = Config.GetFloat("Test", "AppelSemaine", 0f);
+            if (week > 0f)
+            {
+                if (weekStep == 0 && t > week - 5f) { weekStep = 1; Log.Info("autotest : semaine, avant : " + ListingsState()); }
+                if (weekStep == 1 && t > week) { weekStep = 2; if (Session.IsHost) { PlayMakerFSM.BroadcastEvent("GENERATELIST"); Log.Info("autotest : semaine, GENERATELIST chez l'hote"); } }
+                if (weekStep == 2 && t > week + 15f) { weekStep = 3; Log.Info("autotest : semaine, apres : " + ListingsState()); }
+            }
+        }
+        static int weekStep;
+
+        // Petites annonces (Generate) : nom d'origine -> nom de l'objet (le numero ; un autre nom = plus appelable), etat de Generate.
+        static string ListingsState()
+        {
+            if (numbers == null) return "pas de PhoneNumbers";
+            var sb = new System.Text.StringBuilder();
+            int n = 0, off = 0;
+            for (int i = 0; i < numbers.childCount; i++)
+            {
+                Transform c = numbers.GetChild(i);
+                PlayMakerFSM g = Game.FsmOn(c.gameObject, "Generate");
+                if (g == null) continue;
+                n++;
+                bool num = c.name.Length >= 7 && IsDigits(c.name);
+                if (!num) off++;
+                sb.Append(StrVar(c.gameObject, "Generate", "Name")).Append('=').Append(num ? c.name : "[" + c.name + "]").Append('/').Append(g.ActiveStateName).Append(' ');
+            }
+            return n + " annonces, " + off + " plus appelables : " + sb;
         }
 
         static string FirstAdNumber(int skip)
