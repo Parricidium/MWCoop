@@ -969,8 +969,9 @@ namespace MWCoop
             }
         }
 
-        // Ceintures arriere de la SORBET : modele de Menos (25/10 ; assets/ceintures, run/ceintures-arr.py), avec la matiere de la
-        // ceinture avant du jeu, dans le repere de LOD/Seatbelts (celui des ceintures avant, ou Menos a pose les siennes). Recale sur
+        // Ceintures arriere de la SORBET : modele de Menos (25/10, v2 du 26/10 posee le 28/10 : un cote et son miroir, sangle et metal en
+        // deux matieres -- assets/ceintures, run/ceintures-arr.py), la sangle avec la matiere de la ceinture avant du jeu, le metal avec
+        // l'atlas des pieces (RearAtlas), dans le repere de LOD/Seatbelts (celui des ceintures avant, ou Menos a pose les siennes). Recale sur
         // les sieges du jeu (JD, 25/10 : « la sangle doit suivre le fauteuil, collee a lui, la boucle dans la pliure, des deux cotes
         // pareil ») : boucles et ancrages bas dans la pliure assise-dossier, bas de la ceinture bouclee avec eux, et la sangle rangee
         // faite ici, un ruban colle au bord avant du dossier, de la pliure a son sommet puis a l'ancrage de la plage arriere, la
@@ -983,6 +984,21 @@ namespace MWCoop
                                                "arr-ancre-bas-d", "arr-languette-d", "arr-sangle-haut-d", "arr-bouclee-d" };
         const int R_Top = 0, R_Buckles = 1, R_Side = 2;   // par cote (2 + 4 k) : ancrage bas, languette, sangle haute, bouclee
         static Mesh[] rearMeshes; static bool rearMeshTried;
+        // (modele v2 de Menos, 26/10 : sous-maillage 1 = metal et plastique, sur l'atlas des pieces du jeu ATLAS_MOTOR_MWC ; la sangle
+        // garde la matiere de la ceinture avant. Atlas introuvable : la matiere de la sangle partout, comme la v1)
+        static Material rearAtlas; static bool rearAtlasTried;
+        static Material RearAtlas(Material strap)
+        {
+            if (!rearAtlasTried)
+            {
+                rearAtlasTried = true;
+                string want = Config.Get("Test", "CeintureAtlas", "ATLAS_MOTOR_MWC");
+                foreach (Material mt in Resources.FindObjectsOfTypeAll<Material>())
+                    if (mt != null && mt.mainTexture != null && mt.mainTexture.name == want) { rearAtlas = mt; break; }
+                Log.Info("ceintures arriere : atlas " + want + (rearAtlas != null ? " trouve (matiere " + rearAtlas.name + ", shader " + rearAtlas.shader.name + ")" : " introuvable, matiere de la sangle"));
+            }
+            return rearAtlas ?? strap;
+        }
         static Mesh[] RearMeshes()
         {
             if (rearMeshTried) return rearMeshes;
@@ -1199,6 +1215,8 @@ namespace MWCoop
             Mesh r = Ribbon(a, c, uv);
             if (r == null) return false;
             mf.sharedMesh = r;
+            MeshRenderer mr = t.GetComponent<MeshRenderer>();   // (ruban : un seul sous-maillage, la matiere de la sangle)
+            if (mr != null && mr.sharedMaterials.Length > 1) mr.sharedMaterial = mr.sharedMaterials[0];
             return true;
         }
 
@@ -1249,7 +1267,9 @@ namespace MWCoop
                 if (mesh != null)
                 {
                     g.AddComponent<MeshFilter>().sharedMesh = mesh;
-                    g.AddComponent<MeshRenderer>().sharedMaterial = src.sharedMaterial;
+                    var mr = g.AddComponent<MeshRenderer>();
+                    if (mesh.subMeshCount > 1) mr.sharedMaterials = new[] { src.sharedMaterial, RearAtlas(src.sharedMaterial) };
+                    else mr.sharedMaterial = src.sharedMaterial;
                 }
                 return g;
             };
