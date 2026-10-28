@@ -185,7 +185,7 @@ namespace MWCoop
             float wantMass = evo ? sp.Mass : mass, steer = evo ? sp.Steer : SteerDeg, spring = evo ? sp.Spring : SpringRate, damp = evo ? sp.Damp : Damp, travel = SpringTravel;
             if (Msc) { steer = SatSteer; spring = SatSpring * wantMass / SatMass; damp = SatDamp * wantMass / SatMass; travel = SatTravel; }
             if (Rally) { spring = RallySpring * wantMass / RallyMass; damp = RallyDamp * wantMass / RallyMass; }
-            Drivetrain.Transmissions tr = evo ? Drivetrain.Transmissions.AWD : Drivetrain.Transmissions.RWD;
+            Drivetrain.Transmissions tr = evo && !sp.Rwd ? Drivetrain.Transmissions.AWD : Drivetrain.Transmissions.RWD;
             float[] gears = evo ? sp.Gears : Gears;
             if (b.Rb != null && !Mathf.Approximately(b.Rb.mass, wantMass)) { b.Rb.mass = wantMass; n++; }
             if (b.Rb != null && evo && sp.YawDamp > 0f && !Mathf.Approximately(b.Rb.angularDrag, sp.YawDamp)) { b.Rb.angularDrag = sp.YawDamp; n++; }

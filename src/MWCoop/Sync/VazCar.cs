@@ -104,8 +104,9 @@ namespace MWCoop
             // (x, 1 : rien), barres antiroulis avant / arriere (N/m, 0 : AntiRoll), amortissement du lacet (Rigidbody.angularDrag,
             // 0 : celui de la Rivett)
             public float RearGrip = 1f, HandbrakeSlide = 1f, AntiRollFront, AntiRollRear, YawDamp;
+            public bool Rwd;                  // propulsion (false : integrale, comme les autres addons) -- Rihno 5 Maxi, JD 28/10
         }
-        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5;
+        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5, ModelR5 = 6;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
@@ -255,7 +256,35 @@ namespace MWCoop
                             // (rallye moderne, JD 23/10 -- a valider sur l'Ebo 2 avant les autres) : arriere +15 % d'adherence laterale,
                             // 45 % au frein a main ; barre avant plus raide que l'arriere ; lacet amorti ; centre de gravite 4 cm plus bas
                             RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 24000f, AntiRollRear = 12000f, YawDamp = 0.6f, ComDrop = 0.04f } };
-        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b };   // (rempli : Vaz2108 au constructeur statique)
+        // Renault 5 Maxi Turbo 1985 Gr. B (JD 28/10, rally cars GrB/R5MAXI, Philips : « Rihno 5 Maxi ») : moteur central arriere,
+        // PROPULSION (WheelDrive=REAR du .hdv) ; habitacle de la vue interieure du modele (redescendu de 10 cm sur la caisse, comme
+        // la Sport Quatro du meme pack) ; tete au point de vue du pilote, 60 cm derriere le volant ; frein a main : la tige carbone de
+        // l'Evo III sur le tunnel, a droite du siege (outils/rf1/t16e2_frein.py, decalee de (-0,02 ; -0,03 ; -0,34)) ; boutons en
+        // colonne sur la face de la planche (z 0,46, tournee vers le pilote) juste a droite du volant, de haut en bas : contact
+        // (rouge), starter (bleu, tire / pousse), phares (blanc), warning (orange) ; le reste du tableau de bord coupe. Tenue de
+        // route : moteur et masse du mod rFactor (maxi turbo engine.ini : 355 ch a 6 750 tr/min, 398 Nm a 5 500, rupteur 7 000 ;
+        // 905 kg, 49 % sur l'avant, braquage 36), boite et reglages de rallye des autres addons (Ebo 2).
+        public static readonly Model R5 = new Model { Id = ModelR5, Folder = "r5maxi", Name = "Rihno 5 Maxi",
+            Head = new Vector3(-0.32f, 0.95f, -0.32f), SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.90f),
+            BrakePivot = new Vector3(-0.07f, 0.245f, -0.027f), BrakeGrip = new Vector3(-0.095f, 0.57f, 0.015f), BrakeAngle = 1.4f,
+            Controls = new[] {
+                new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.065f, 0.735f, 0.448f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(-0.065f, 0.700f, 0.448f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(-0.065f, 0.665f, 0.448f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(-0.065f, 0.630f, 0.448f)) },
+            Knobs = new[] {
+                new Knob { At = new Vector3(-0.065f, 0.735f, 0.456f), Normal = Vector3.back, Col = new Color(0.80f, 0.06f, 0.05f) },
+                new Knob { At = new Vector3(-0.065f, 0.700f, 0.456f), Normal = Vector3.back, Col = new Color(0.10f, 0.25f, 0.85f), Choke = true, Path = "Functions/Dashboard/Choke/ButtonChoke" },
+                new Knob { At = new Vector3(-0.065f, 0.665f, 0.456f), Normal = Vector3.back, Col = new Color(0.92f, 0.92f, 0.90f) },
+                new Knob { At = new Vector3(-0.065f, 0.630f, 0.456f), Normal = Vector3.back, Col = new Color(0.95f, 0.45f, 0.05f) } },
+            Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
+                          "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
+                          "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
+            Dome = new Vector3(0f, 1.12f, -0.25f), HasDome = true, ControlSize = 0.024f,
+            Sp = new Spec { Name = "R5 Maxi Turbo Gr. B", Power = 355f, PowerRpm = 6750f, Torque = 398f, TorqueRpm = 5500f, MaxRpm = 7000f,
+                            Mass = 905f, Com = 0.49f, Steer = 36f, Spring = 33000f, Damp = 2150f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f },
+                            Rwd = true, RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 24000f, AntiRollRear = 12000f, YawDamp = 0.6f, ComDrop = 0.04f } };
+        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles); }
