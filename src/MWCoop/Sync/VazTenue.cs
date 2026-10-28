@@ -33,7 +33,14 @@ namespace MWCoop
         static readonly Vector3 Start = new Vector3(0f, 1501.2f, -2600f);
         const float TrackY = 1500f;
 
-        static bool Mine { get { return !Net.Session.Active || Net.Session.IsHost; } }
+        static bool Mine { get { return !Net.Session.Active || Net.Session.IsHost || Two; } }
+        // [Test] VazTenueDeux=1 (MSC, essai a deux, 28/10) : le banc tourne aussi chez l'invite, sur sa voie (80 m a cote) ; chacun
+        // releve la copie de la voiture de l'autre toutes les 2 s (sauts, roues qui tremblent, braquage maxi de la copie).
+        // [Test] VazTenueRelais=s (avec VazTenueDeux) : passage de volant -- banc fini et s secondes passees, l'hote descend de sa
+        // voiture ; 6 s apres (et son banc fini), l'invite descend de la sienne, prend celle de l'hote et refait le banc avec.
+        static bool Two { get { return Net.Session.Active && Config.GetInt("Test", "VazTenueDeux", 0) != 0; } }
+        static bool Guest { get { return Net.Session.Active && !Net.Session.IsHost; } }
+        static Vector3 StartPos { get { return Guest ? Start + new Vector3(80f, 0f, 0f) : Start; } }
 
         public static void Test(string mode, float t)
         {
@@ -43,7 +50,7 @@ namespace MWCoop
             if (phase == 0 && t > 20f)
             {
                 phase = 1;
-                if (other.Length == 0) Log.Info("autotest vaztenue : demande -> " + Vaz.Request(3, Config.GetInt("Test", "VazModele", 0)));
+                if (other.Length == 0) Log.Info("autotest vaztenue : demande -> " + Vaz.Request(Guest ? 4 : 3, Config.GetInt("Test", "VazModele", 0)));
             }
             if (phase == 1 && t > 30f)
             {
@@ -67,6 +74,92 @@ namespace MWCoop
             if (phase == 3 && dt != null) dt.startEngine = dt.rpm < 600f;   // (demarreur du moteur tant qu'il ne tourne pas)
             if (phase == 3 && t > phaseAt + 6f) { Starter(false); if (dt != null) dt.startEngine = false; phase = 10; phaseAt = t; Reset(); }
             if (phase >= 10 && phase < 99) Run(t);
+            if (Two && phase >= 3) { Watch(t); Relay(t); }
+        }
+
+        // Copie de la voiture de l'autre : plus grand saut d'une image a l'autre (ecart entre deux deplacements successifs), plus
+        // grand coup de direction des roues avant d'une image a l'autre, braquage maxi et corps cinematique.
+        static Transform wCar; static Vector3 wPos, wStep; static float wJerk, wSpeed, wSteerJump, wNext, wLastSteer; static int wFrames;
+        static void Watch(float t)
+        {
+            Transform c = null;
+            foreach (int id in Vaz.RentIds()) if (id != Vaz.MeId && Vaz.CarOf(id) != null && Vaz.CarOf(id) != car) { c = Vaz.CarOf(id); break; }
+            if (c == null) return;
+            if (c != wCar) { wCar = c; wPos = c.position; wStep = Vector3.zero; wFrames = 0; wNext = t + 2f; return; }
+            Vector3 step = c.position - wPos; wPos = c.position;
+            if (wFrames > 0) wJerk = Mathf.Max(wJerk, (step - wStep).magnitude);
+            wStep = step; wFrames++;
+            if (Time.deltaTime > 0f) wSpeed = Mathf.Max(wSpeed, step.magnitude / Time.deltaTime * 3.6f);
+            float steer = 0f, maxA = 0f;
+            foreach (Wheel w in c.GetComponentsInChildren<Wheel>()) if (w.wheelPos.ToString().StartsWith("FRONT")) { steer = w.steering; maxA = Mathf.Max(maxA, w.maxSteeringAngle); }
+            if (wFrames > 1) wSteerJump = Mathf.Max(wSteerJump, Mathf.Abs(steer - wLastSteer));
+            wLastSteer = steer;
+            if (t < wNext) return;
+            wNext = t + 2f;
+            Rigidbody r = c.GetComponent<Rigidbody>();
+            Log.Info("autotest vaztenue : copie " + c.name + " : " + wFrames + " images, vitesse maxi " + wSpeed.ToString("F0") + " km/h, saut maxi " + wJerk.ToString("F3") + " m/image, coup de direction maxi " + wSteerJump.ToString("F2")
+                     + ", braquage maxi des roues avant " + maxA.ToString("F1") + " deg, " + (r == null ? "sans corps" : r.isKinematic ? "cinematique" : "SIMULEE ICI") + ", en " + c.position.ToString("F0"));
+            wJerk = 0f; wSpeed = 0f; wSteerJump = 0f; wFrames = 0;
+        }
+
+        static int relay; static float relayAt; static Transform relayCar;
+        static void Relay(float t)
+        {
+            float at = Config.GetFloat("Test", "VazTenueRelais", 0f);
+            if (at <= 0f || phase != 99 || car == null) return;
+            if (!Guest)
+            {
+                if (relay == 0 && t > at) { relay = 1; relayAt = t; }
+                if (relay == 1 && t < relayAt + 8f)
+                {
+                    if (driveFsm != null && driveFsm.ActiveStateName == "Player in car") driveFsm.SendEvent("Key DOWN");
+                    if (driveFsm != null && driveFsm.ActiveStateName != "Player in car" && Game.PlayerGo != null)
+                    {
+                        relay = 2;
+                        Move(car.position + car.right * 6f + Vector3.up * 1f);
+                        Log.Info("autotest vaztenue : relais, l'hote descend de " + car.name + " (" + driveFsm.ActiveStateName + ")");
+                    }
+                }
+                return;
+            }
+            if (relay == 0 && t > at + 6f)
+            {
+                foreach (int id in Vaz.RentIds()) if (id != Vaz.MeId && Vaz.CarOf(id) != null) { relayCar = Vaz.CarOf(id); break; }
+                if (relayCar == null) { Log.Info("autotest vaztenue : relais, pas de voiture de l'hote"); relay = 9; return; }
+                relay = 1; relayAt = t;
+            }
+            if (relay == 1)
+            {
+                if (driveFsm != null && driveFsm.ActiveStateName == "Player in car") { driveFsm.SendEvent("Key DOWN"); return; }
+                Log.Info("autotest vaztenue : relais, l'invite descend de " + car.name + " et prend " + relayCar.name);
+                car = relayCar; rb = car.GetComponent<Rigidbody>(); ax = car.GetComponent<AxisCarController>(); dt = car.GetComponent<Drivetrain>();
+                driveFsm = null; knobs = null; seated = false; seatTry = 0f; relay = 2;
+            }
+            if (relay == 2)
+            {
+                Seat();
+                if (seated)
+                {
+                    relay = 3; relayAt = t;
+                    Log.Info("autotest vaztenue : relais, invite au volant de " + car.name + ", corps " + (rb != null && rb.isKinematic ? "CINEMATIQUE" : "simule ici") + ", braquage maxi " + MaxSteer().ToString("F1") + " deg");
+                }
+                else if (t > relayAt + 15f) { Log.Info("autotest vaztenue : relais, pas au volant (" + (driveFsm != null ? driveFsm.ActiveStateName : "?") + ")"); relay = 9; }
+            }
+            if (relay == 3 && t > relayAt + 2f)
+            {
+                relay = 4;
+                speeds = new[] { 100f, 150f };
+                phase = 10; phaseAt = t; Reset();
+                Log.Info("autotest vaztenue : relais, banc avec la voiture de l'hote (100, 150 km/h, slalom, freinage)");
+            }
+        }
+
+        static void Move(Vector3 p)
+        {
+            GameObject pl = Game.PlayerGo; if (pl == null) return;
+            var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+            pl.transform.position = p;
+            if (cc != null) cc.enabled = true;
         }
 
         static void Run(float t)
@@ -175,8 +268,8 @@ namespace MWCoop
         {
             if (car == null || rb == null) return;
             rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
-            car.position = Start; car.rotation = Quaternion.identity;
-            rb.position = Start; rb.rotation = Quaternion.identity;
+            car.position = StartPos; car.rotation = Quaternion.identity;
+            rb.position = StartPos; rb.rotation = Quaternion.identity;
             foreach (Rigidbody r in car.GetComponentsInChildren<Rigidbody>()) { r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
         }
 
