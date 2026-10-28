@@ -10,7 +10,9 @@ namespace MWCoop
     //  - et un interrupteur par ajout (demande de JD, 13/10 : garder le drone mais retirer la boutique et le musee...) :
     //    [Coop] AjoutDrone, AjoutSacs, AjoutBoutique, AjoutMusee, AjoutVaz, AjoutKino, AjoutOsat (1 par defaut ; VAZ-2108 du F10 : demande de JD, 18/10).
     // En partie, les choix de l'HOTE valent pour tous ses invites (JD, 13/10) : il les annonce (@ajouts, toutes les 10 s et a
-    // chaque arrivee) ; un invite garde les siens en plus (il peut couper pour lui, pas rallumer ce que l'hote a coupe).
+    // chaque arrivee). Depuis le 28/10 (JD : « Le deux oui change la regle », cas #20 de Markos : SansAjouts=1 chez un invite,
+    // cinema et boutique s21 absents chez lui seul), l'invite les suit TELS QUELS et ignore les siens, sur MWC et MSC ; avant,
+    // il gardait les siens en plus (couper pour lui seul). Tant que l'annonce n'est pas arrivee : les siens. [Test] AjoutsLesMiens=1 : avant.
     // La boutique et le musee (construits 12 s apres le chargement) et le defrichage attendent l'annonce de l'hote (Ready ;
     // 30 s au plus : hote d'une version plus ancienne).
     // Tout nouvel ajout de ce genre doit avoir son interrupteur ici et dans le lanceur (et, s'il vaut pour My Summer Car, son
@@ -41,7 +43,15 @@ namespace MWCoop
             }
         }
         static bool Guest { get { return Session.Active && !Session.IsHost; } }
-        static int Bits { get { int b = LocalBits; return Guest && hostBits >= 0 ? b & hostBits : b; } }
+        static int Bits
+        {
+            get
+            {
+                if (!Guest || hostBits < 0) return LocalBits;
+                if (Config.GetInt("Test", "AjoutsLesMiens", 0) != 0) return LocalBits & hostBits;
+                return Game.Msc ? hostBits & B_Msc : hostBits;
+            }
+        }
 
         public static bool Drone { get { return (Bits & B_Drone) != 0; } }
         public static bool LocalDrone { get { return (LocalBits & B_Drone) != 0; } }
@@ -74,7 +84,7 @@ namespace MWCoop
         public static void OnHost(int bits)
         {
             if (bits != hostBits)
-                Log.Info("ajouts : ceux de l'hote " + Names(bits) + (hostBits < 0 ? "" : " (avant " + Names(hostBits) + ")") + ", les miens " + Names(LocalBits));
+                Log.Info("ajouts : ceux de l'hote " + Names(bits) + (hostBits < 0 ? "" : " (avant " + Names(hostBits) + ")") + ", suivis ici (les miens " + Names(LocalBits) + ", ignores)");
             hostBits = bits;
         }
 
