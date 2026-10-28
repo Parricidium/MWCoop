@@ -1068,6 +1068,8 @@ namespace MWCoop
                 foreach (Transform lp in jb.GetComponentsInChildren<Transform>(true))
                     if (lp.name == "Pivot" && lp.parent != null && (lp.parent.name == "Throttle" || lp.parent.name == "Brake" || lp.parent.name == "Clutch"))
                         sb3.Append(lp.parent.name).Append(' ').Append(lp.localEulerAngles.ToString("F0")).Append(" ; ");
+                    else if (lp.parent != null && lp.parent.name == "Pedals" && (lp.name == "Throttle" || lp.name == "Brake" || lp.name == "Clutch"))   // (pedales de la GIFU : l'objet lui-meme)
+                        sb3.Append("pedale ").Append(lp.name).Append(' ').Append(lp.localEulerAngles.ToString("F0")).Append(" ; ");
                 Log.Info("autotest : mscleviers t=" + t.ToString("F0") + " " + (sb3.Length > 0 ? sb3.ToString() : "aucun levier ") + (VehicleSync.RemotelyDriven(jb.transform) ? "(copie)" : ""));
             }
         }

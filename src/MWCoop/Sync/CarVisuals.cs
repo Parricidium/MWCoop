@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -70,6 +71,28 @@ namespace MWCoop
             return sb.ToString();
         }
         static bool HandLever(string parent) { string p = parent.ToLowerInvariant(); return p == "throttle" || p == "brake" || p == "clutch"; }
+        // Cibles des SetRotation des automates 'Angle' du vehicule (commandes tournees d'apres les entrees du conducteur).
+        static readonly HashSet<Transform> inputDriven = new HashSet<Transform>();
+        static void InputDriven(Transform root)
+        {
+            inputDriven.Clear();
+            foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (f == null || f.FsmName != "Angle" || f.Fsm == null) continue;
+                try
+                {
+                    foreach (FsmState st in f.Fsm.States)
+                        foreach (FsmStateAction a in st.Actions)
+                        {
+                            var sr = a as HutongGames.PlayMaker.Actions.SetRotation;
+                            if (sr == null) continue;
+                            GameObject go = f.Fsm.GetOwnerDefaultTarget(sr.gameObject);
+                            if (go != null && go.transform.IsChildOf(root)) inputDriven.Add(go.transform);
+                        }
+                }
+                catch { }
+            }
+        }
         static bool Has(string n, string[] words) { foreach (string w in words) if (n.Contains(w)) return true; return false; }
 
         static bool SeatbeltPart(Transform t, Transform root)
@@ -96,6 +119,7 @@ namespace MWCoop
                 if (rb == null) return 0;
                 var c = new Car { Name = VehicleSync.LocalKey(ci), Root = rb.transform };
                 var seen = new Dictionary<string, int>();
+                InputDriven(rb.transform);
                 foreach (Transform t in rb.GetComponentsInChildren<Transform>(true))
                 {
                     if (t == rb.transform || t.GetComponent<Rigidbody>() != null) continue;
@@ -104,10 +128,12 @@ namespace MWCoop
                     bool pose = Has(n, PoseWords), show = Has(n, ShowWords) || ShowNames.Contains(n) || t.GetComponent<Light>() != null;   // toute lampe
                     // Levier de vitesses de la SORBET : c'est Gearstick/Pivot qui tourne (son automate Movemement), pas Gearstick.
                     if (!pose && n == "pivot" && t.parent != null && t.parent.name.ToLowerInvariant().Contains("gear")) pose = true;
-                    // Leviers au guidon de la JONNEZ (SteeringPivot/Throttle, Brake, Clutch : leur automate 'Angle' tourne Pivot d'apres
-                    // throttleInput / brakeInput / clutchInput de l'AxisCarController -- a zero sur la copie) : la poignee d'accelerateur
-                    // ne tournait que chez celui qui conduisait (Markos, MSC, 28/10). Envoyes par le conducteur, comme les pedales.
-                    bool handLever = n == "pivot" && t.parent != null && HandLever(t.parent.name) && Config.GetInt("Test", "LevierAncien", 0) == 0;   // ([Test] LevierAncien=1 : regle d'avant)
+                    // Commandes animees d'apres les entrees du conducteur (automates 'Angle' : SetRotation d'apres throttleInput /
+                    // brakeInput / clutchInput de l'AxisCarController, a zero sur la copie) -- leviers au guidon de la JONNEZ
+                    // (SteeringPivot/Throttle/Pivot...), pedales de la GIFU (Pedals/Throttle, Brake, Clutch : l'objet lui-meme) :
+                    // ils ne bougeaient que chez celui qui conduisait (Markos, MSC, 28/10). Envoyes par le conducteur, comme les pedales.
+                    // (et, comme e99d94e, un Pivot sous Throttle / Brake / Clutch : pedale de frein du KEKMET, vue par [MWC])
+                    bool handLever = (inputDriven.Contains(t) || n == "pivot" && t.parent != null && HandLever(t.parent.name)) && Config.GetInt("Test", "LevierAncien", 0) == 0;   // ([Test] LevierAncien=1 : regle d'avant)
                     if (!pose && handLever) pose = true;
                     if (!pose && !show) continue;
                     // Ceintures : objets des automates du jeu (boucle, languette), a chaque joueur -- Seats montre celles des

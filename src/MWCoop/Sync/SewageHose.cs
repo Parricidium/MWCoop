@@ -168,25 +168,72 @@ namespace MWCoop
             if (self) selfHeld = held;
             Vector3 a = coupler.position;
             Vector3 b = self ? end.transform.position : Vector3.Lerp(segs[segs.Length - 1].position, rp, 0.5f);
-            float d = (b - a).magnitude, sag = Mathf.Max(0f, chainLen - d) * 0.5f;
-            // (le mou ne descend pas sous le plus bas des deux bouts : tuyau pose par terre, pas sous le sol -- essai MSC 27/10, chaine a
-            // 4,6 m du raccord chez l'invite pour 1,7 m chez celui qui la menait)
-            sag = Mathf.Min(sag, Mathf.Max(0f, (a.y + b.y) * 0.5f - Mathf.Min(a.y, b.y) + 0.05f));
             int n = segs.Length;
+            Vector3[] pts = Layout(a, b, chainLen, n);
             // (le bout est l'enfant du maillon d'avant tant que la main ne l'a pas repris : sa pose gardee et remise apres la passe)
             Vector3 ep = end.transform.position; Quaternion eq = end.transform.rotation;
             for (int i = 0; i < (self ? n - 1 : n); i++)
             {
-                float k = (i + 1f) / n;
-                Vector3 p = Vector3.Lerp(a, b, k) + Vector3.down * (sag * 4f * k * (1f - k));
-                float k2 = Mathf.Min(1f, (i + 2f) / n);
-                Vector3 q = Vector3.Lerp(a, b, k2) + Vector3.down * (sag * 4f * k2 * (1f - k2));
+                Vector3 p = pts[i + 1], q = i + 2 <= n ? pts[i + 2] : pts[n] + (pts[n] - pts[n - 1]);
                 Transform t = segs[i].transform;
                 t.position = p;
                 if (i == n - 1) t.rotation = Quaternion.Slerp(t.rotation, rq, 0.5f);
                 else if ((q - p).sqrMagnitude > 1e-6f) t.rotation = Quaternion.LookRotation(q - p, Vector3.up);
             }
             if (self) { end.transform.position = ep; end.transform.rotation = eq; }
+        }
+
+        // Pose de la chaine (n maillons, longueur L) du raccord a au bout b : pendante (parabole) si son mou tient au-dessus du sol ;
+        // sinon posee au sol -- descente sous le raccord, le long du sol, remontee au bout -- et la longueur en trop en boucle sur le
+        // cote. Avant (27/10) le mou etait seulement borne au sol : bout pres du raccord, les 24 maillons (~6 m) tasses sur une
+        // ligne courte, « tuyau replie en tube » chez le client (Markos, dossier #14, 28/10).
+        static Vector3[] Layout(Vector3 a, Vector3 b, float L, int n)
+        {
+            var pts = new Vector3[n + 1];
+            pts[0] = a;
+            float d = (b - a).magnitude, sag = Mathf.Max(0f, L - d) * 0.5f;
+            float floor = Mathf.Min(GroundY(a), GroundY(b)) + 0.05f;
+            Vector3 mid = (a + b) * 0.5f;
+            if (L <= d * 1.02f || mid.y - sag >= floor)
+            {
+                for (int i = 1; i <= n; i++) { float k = (float)i / n; pts[i] = Vector3.Lerp(a, b, k) + Vector3.down * (sag * 4f * k * (1f - k)); }
+                return pts;
+            }
+            Vector3 A = new Vector3(a.x, floor, a.z), B = new Vector3(b.x, floor, b.z);
+            float lp = Mathf.Max(0f, a.y - floor) + (B - A).magnitude + Mathf.Max(0f, b.y - floor);
+            var poly = new System.Collections.Generic.List<Vector3> { a, A };
+            float extra = L - lp;
+            if (extra > 0.05f)
+            {
+                Vector3 dir = B - A; dir.y = 0f;
+                Vector3 side = dir.sqrMagnitude > 1e-4f ? Vector3.Cross(Vector3.up, dir.normalized) : (Gifu() != null ? -Gifu().right : Vector3.right);
+                float w = extra * 0.5f;
+                poly.Add(A + side * w); poly.Add(B + side * w);
+            }
+            poly.Add(B); poly.Add(b);
+            float total = 0f;
+            for (int i = 1; i < poly.Count; i++) total += (poly[i] - poly[i - 1]).magnitude;
+            if (total < 1e-4f) { for (int i = 1; i <= n; i++) pts[i] = b; return pts; }
+            int seg = 1; float acc = 0f;
+            for (int i = 1; i <= n; i++)
+            {
+                float want = total * i / n;
+                while (seg < poly.Count - 1 && acc + (poly[seg] - poly[seg - 1]).magnitude < want) { acc += (poly[seg] - poly[seg - 1]).magnitude; seg++; }
+                float len = (poly[seg] - poly[seg - 1]).magnitude;
+                pts[i] = len > 1e-5f ? Vector3.Lerp(poly[seg - 1], poly[seg], (want - acc) / len) : poly[seg];
+            }
+            return pts;
+        }
+        // Sol sous un point (sans le tuyau ni les joueurs ; la GIFU compte : le tuyau peut reposer sur elle).
+        static float GroundY(Vector3 p)
+        {
+            float best = float.MaxValue, y = p.y - 1f;
+            foreach (RaycastHit h in Physics.RaycastAll(p + Vector3.up * 0.3f, Vector3.down, 6f, ~0))
+            {
+                if (h.collider == null || h.collider.isTrigger || (root != null && h.collider.transform.IsChildOf(root.transform)) || Game.UnderPlayer(h.collider.transform)) continue;
+                if (h.distance < best) { best = h.distance; y = h.point.y; }
+            }
+            return y;
         }
 
         // Bout lache ici sur une copie (chaine posee) : sur le premier sol sous lui, pas en l'air.
@@ -275,6 +322,9 @@ namespace MWCoop
                 nextTestLog = now + 4f;
                 float vmax = 0f, dmax = 0f;
                 if (segs != null && coupler != null) foreach (Rigidbody r in segs) if (r != null) { vmax = Mathf.Max(vmax, r.velocity.magnitude); dmax = Mathf.Max(dmax, (r.position - coupler.position).magnitude); }
+                float lsum = 0f, lmin = float.MaxValue, ymin = float.MaxValue; Vector3 lp = coupler != null ? coupler.position : Vector3.zero;
+                if (segs != null) foreach (Rigidbody r in segs) if (r != null) { float dd = (r.transform.position - lp).magnitude; lsum += dd; lmin = Mathf.Min(lmin, dd); lp = r.transform.position; ymin = Mathf.Min(ymin, lp.y); }
+                if (segs != null && segs.Length > 0) Log.Info("autotest : tuyau, maillons : ecart moyen " + (lsum / segs.Length).ToString("F2") + " m, min " + lmin.ToString("F2") + " m, longueur " + lsum.ToString("F1") + " m, plus bas " + ymin.ToString("F2") + (following ? " (suivi)" : ""));
                 Transform stt = Gifu() != null ? Gifu().Find("ShitTank") : null; Rigidbody stb = stt != null ? stt.GetComponent<Rigidbody>() : null;
                 if (stb != null) Log.Info("autotest : tuyau, ShitTank : corps a " + (stb.position - stt.position).magnitude.ToString("F2") + " m de son objet" + (stb.isKinematic ? " (cin)" : " (libre)") + ", raccord a " + (coupler != null ? (coupler.position - stt.position).magnitude.ToString("F2") : "?") + " m");
                 Log.Info("autotest : tuyau, maillons : vitesse max " + vmax.ToString("F1") + " m/s, ecart max au raccord " + dmax.ToString("F1") + " m" + (following ? " (suivi)" : "") + (ignoring ? " (chocs copie coupes)" : ""));

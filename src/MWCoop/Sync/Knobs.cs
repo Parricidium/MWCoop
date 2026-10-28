@@ -174,7 +174,19 @@ namespace MWCoop
         // [Test] Autotest=gifumain (MSC, 2 joueurs) : a 30 s l'invite tire l'accelerateur a main de la GIFU (LeverPos au maximum,
         // envoye comme au relachement du bouton) ; a 40 s, chacun note le levier, la valeur de l'automate Throttle, le ralenti
         // du moteur (Drivetrain.idlethrottle), le regime, l'etat de l'automate Throttle et si le tableau de bord (LOD) est actif.
-        static int tStep; static bool tNear;
+        static string KnobPose(Knob k)
+        {
+            foreach (FsmState st in k.F.Fsm.States)
+                foreach (FsmStateAction a in st.Actions)
+                {
+                    var sp = a as HutongGames.PlayMaker.Actions.SetPosition;
+                    if (sp == null) continue;
+                    GameObject go = k.F.Fsm.GetOwnerDefaultTarget(sp.gameObject);
+                    return go != null ? Recon.Path(go.transform) + " " + go.transform.localPosition.ToString("F3") : "?";
+                }
+            return "-";
+        }
+        static int tStep, tvStep; static bool tNear;
         public static void Test(string mode, float t)
         {
             // ([Test] GifuPres=1 : l'invite, 2=les deux, va a 8 s a 3 m de la GIFU -- tableau actif chez lui, pas chez l'hote loin)
@@ -186,12 +198,21 @@ namespace MWCoop
                 var cc = Game.PlayerGo != null ? Game.PlayerGo.GetComponent<CharacterController>() : null;
                 if (g != null && cc != null) { cc.enabled = false; Game.PlayerGo.transform.position = g.position + g.transform.right * -3f + Vector3.up; cc.enabled = true; Log.Info("autotest : gifumain, pres de la GIFU"); }
             }
+            // ([Test] GifuVolant=1 : l'invite au volant de la GIFU des 20 s ; GifuPassager=1 : l'hote assis en passager -- Markos 28/10)
+            if (!Session.IsHost && Config.GetInt("Test", "GifuVolant", 0) != 0)
+            {
+                if (tvStep == 0 && t > 20f) { tvStep = 1; Log.Info("autotest : gifumain, " + VehicleSync.TestEnter("GIFU(750/450psi)", false)); }
+                if (tvStep == 1 && t > 23f || tvStep == 2 && t > 25f) { tvStep++; Log.Info("autotest : gifumain, au volant : " + VehicleSync.TestEnter("GIFU(750/450psi)", true)); }
+            }
+            if (Session.IsHost && Config.GetInt("Test", "GifuPassager", 0) != 0 && tvStep == 0 && t > Config.GetFloat("Test", "GifuPassagerA", 100f))
+            { tvStep = 1; Log.Info("autotest : gifumain, passager : " + Seats.TestSit("GIFU", 1)); }
             Knob k = null;
             string want = Config.Get("Test", "TestMolette", "ButtonHandThrottle");   // (KEKMET : le levier du tracteur)
             foreach (Knob x in knobs) if (x.Key.Contains(want)) k = x;
             if (k == null) { if (t > 30f && tStep == 0) { tStep = 9; Log.Info("autotest : gifumain, accelerateur a main non suivi"); } return; }
             if (!Session.IsHost && t > 30f && tStep == 0) { tStep = 1; float max = Config.GetFloat("Test", "TestMoletteVal", 0.03f); k.Var.Value = max; Set(k, max, true); Send(k, true); Log.Info("autotest : gifumain, invite : levier tire (" + k.Var.Value + ")"); }
-            if (t > 40f && tStep < 2 || t > 55f && tStep == 2)
+            float r1 = Config.GetFloat("Test", "MoletteA", 40f), r2 = Config.GetFloat("Test", "MoletteB", 55f);   // (instants des releves, reglables : hote apres l'arrivee de l'invite)
+            if (t > r1 && tStep < 2 && (Session.IsHost || tStep == 1) || t > r2 && tStep == 2)
             {
                 tStep = tStep < 2 ? 2 : 3;
                 PlayMakerFSM th = Game.FsmOn(k.F.gameObject, "Throttle");
@@ -200,7 +221,8 @@ namespace MWCoop
                 Log.Info("autotest : gifumain, " + (Session.IsHost ? "hote" : "invite") + " : levier " + k.Var.Value.ToString("F3") + ", Throttle " + (tv != null ? tv.Value.ToString("F3") : "?")
                     + ", ralenti " + (dt != null ? dt.idlethrottle.ToString("F3") + " min " + dt.minRPM.ToString("F0") + " regime " + dt.rpm.ToString("F0") + (dt.enabled ? "" : " coupe") : "?")
                     + ", automate Throttle [" + (th != null ? th.ActiveStateName + (th.enabled ? "" : " desactive") : "?") + "], tableau " + (k.F.gameObject.activeInHierarchy ? "actif" : "inactif")
-                    + (PlayerSync.LocalCamera != null ? ", " + Vector3.Distance(PlayerSync.LocalCamera.position, k.F.transform.position).ToString("F0") + " m" : ""));
+                    + (PlayerSync.LocalCamera != null ? ", " + Vector3.Distance(PlayerSync.LocalCamera.position, k.F.transform.position).ToString("F0") + " m" : "")
+                    + ", bouton " + KnobPose(k));
             }
         }
 
