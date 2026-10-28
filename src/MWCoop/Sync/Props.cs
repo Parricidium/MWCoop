@@ -517,6 +517,8 @@ namespace MWCoop
                 held = h;
             }
 
+            if (held != null) HeldRunaway(held, now);
+
             if (now >= nextSend)
             {
                 nextSend = now + 1f / 15f;
@@ -702,6 +704,38 @@ namespace MWCoop
             foreach (Prop p in props.Values)
                 if (p.Body != null && p.RemoteBy == id) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); p.Vel = Vector3.zero; SetKinematic(p, false); n++; }
             if (back.Count > 0 || n > 0) Log.Info("objets : joueur #" + id + " parti, " + back.Count + " objet(s) ranges ressortis, " + n + " relache(s)");
+        }
+
+        // Objet tenu ici qui s'emballe (dossiers #17/#18, 28/10 : hote et invite, « les objets s'envolent de mes mains » / « il
+        // disparait » -- chez l'invite la pose de la caisse de biere tenue arrivait a des millions de metres, de plus en plus loin,
+        // chez l'hote les articles du cinema et la batterie finissaient a 15-40 km). Le jeu tient l'objet par un joint de la main
+        // (PickUp : SetJointConnectedBody sur Hand, objet sous ItemPivot) : jamais a plus de 3 m d'elle. Au-dela, ou pose / vitesse
+        // non finie : remis dans la main sans vitesse, et ce qu'on sait relve (joint, parent, cinematique, vitesse, calque).
+        // [Coop] GardeTenu=0 : sans.
+        static float runawayLog;
+        static void HeldRunaway(Prop p, float now)
+        {
+            Rigidbody b = p.Body;
+            if (b == null || b.isKinematic || hand == null || Config.GetInt("Coop", "GardeTenu", 1) == 0) return;
+            Transform ht = hand.transform;
+            Vector3 at = b.position, v = b.velocity;
+            float d2 = (at - ht.position).sqrMagnitude;
+            bool finite = !float.IsNaN(at.x + at.y + at.z + v.x + v.y + v.z) && !float.IsInfinity(at.x + at.y + at.z + v.x + v.y + v.z);
+            if (finite && d2 < 9f) return;
+            if (now >= runawayLog)
+            {
+                runawayLog = now + 2f;
+                Joint j = ht.GetComponent<Joint>();
+                Log.Warn("objet tenu " + p.Id + " emballe : a " + (finite ? Mathf.Sqrt(d2).ToString("F1") + " m de la main" : "pose non finie") + ", vitesse " + (finite ? v.magnitude.ToString("F0") : "?") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F0")
+                         + ", parent " + (b.transform.parent != null ? b.transform.parent.name : "aucun") + ", joint de la main " + (j == null ? "absent" : (j.connectedBody == b ? "sur lui" : j.connectedBody != null ? "sur " + j.connectedBody.name : "libre") + " (" + j.GetType().Name + ")")
+                         + ", calque " + b.gameObject.layer + ", masse " + b.mass.ToString("F1") + ", main " + hand.ActiveStateName + ", recu " + (p.RemoteAt > 0f ? (now - p.RemoteAt).ToString("F1") + " s" : "jamais") + " : remis dans la main");
+            }
+            b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero;
+            b.position = ht.position; b.transform.position = ht.position;
+            // (joint de la main plus sur lui alors que la main le tient : raccroche, comme a la prise -- SetJointConnectedBody)
+            string hs = hand.ActiveStateName;
+            Joint hj = ht.GetComponent<Joint>();
+            if (hj != null && hj.connectedBody != b && (hs == "Item picked" || hs == "Part picked" || hs == "Tool picked")) { hj.connectedBody = b; Log.Info("objet tenu " + p.Id + " : joint de la main raccroche"); }
         }
 
         // Objet au repos dont l'hote fait foi (ni tenu, ni deplace par un autre, ni transporte par un autre).

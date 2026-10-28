@@ -325,6 +325,7 @@ namespace MWCoop
         static int mmStep, mmPush, mmSave, mmAround; static float mmBoltsAt;
         static int psStep; static float psLogAt;
         static int prStep; static float prLogAt; static Quaternion prLastRot;
+        static bool prFlung;
         static int caStep, caBuy, caSacStep; static float caLogAt, caMoney, caSacLog; static string caSac;
         static int bgStep; static float bgLogAt;
         static void MscMontage(float t)
@@ -1537,6 +1538,18 @@ namespace MWCoop
                         if (rh != null) { rh.Value = ob.gameObject; Game.SetState(hf, "State 1"); }
                         prStep = 1; Log.Info("autotest prise : " + key + " pris par l'invite, main " + before + " -> " + (hf != null ? hf.ActiveStateName : "introuvable") + (rh == null ? " (pas de RaycastHitObject)" : "") + " ; etats : " + sts);
                     }
+                }
+                // ([Test] PriseEmballe=s : a s secondes, l'objet tenu lance a 400 m/s, comme l'objet qui s'emballe des dossiers #17/#18 --
+                // Props.HeldRunaway doit le remettre dans la main)
+                float pe = Config.GetFloat("Test", "PriseEmballe", 0f);
+                if (tenant && prStep == 1 && pe > 0f && t > pe && !prFlung && ob != null && !ob.isKinematic) {
+                    // (le joint de la main le retient d'un coup : decroche d'abord, comme un joint qui n'est plus sur l'objet)
+                    prFlung = true;
+                    GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                    Joint hj = hg != null ? hg.GetComponent<Joint>() : null;
+                    if (hj != null && Config.GetInt("Test", "PriseSansJoint", 1) != 0) hj.connectedBody = null;
+                    ob.velocity = new Vector3(0f, 400f, 300f);
+                    Log.Info("autotest prise : " + key + " lance a 500 m/s" + (hj != null ? ", joint de la main (" + hj.GetType().Name + ") decroche" : ", pas de joint"));
                 }
                 if (tenant && t > 75f && prStep == 1) { prStep = 2; Log.Info("autotest prise : fin du tour"); }
                 if (t > 40f && t < (tenant ? 85f : 200f) && t > prLogAt && ob != null)
