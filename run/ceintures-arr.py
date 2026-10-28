@@ -1,25 +1,19 @@
 """Ceintures arriere de la SORBET (modele de Menos, v2 du 26/10 : assets/ceintures/rear_seatbelts_sorbett-menos-v2.obj) -> maillages
 du mod (assets/ceintures/*.mwm, embarques par build.cmd). Repere Unity (x oppose, obj2mwm.py) ; g = x < 0, d = x > 0.
-v2 (JD 28/10 : « mettre a jour la ceinture de Menor ») : un seul cote (g, x < 0), le cote d en miroir ; meme modele que la v1 dans
-un repere 25 cm plus bas et 6 cm plus en avant (ecart mesure piece par piece, a 1 cm pres sauf l'ancrage haut, 3 cm) : remis dans
-celui de la v1, ou le mod fait ses recalages (BuildRearModel). Deux matieres : sous-maillage 0 la sangle (Seatbelt, Material.003),
-1 le metal et le plastique (Atlas, Material.002 -- texture ATLAS_MOTOR_MWC du jeu, Seats.RearAtlas).
-Le mod (Sync/Seats.cs, BuildRearModel) recale boucles et ancrages bas sur la pliure des sieges du jeu et fait lui-meme la
-sangle rangee le long du dossier (JD, 25/10 : « la sangle doit suivre le fauteuil, la boucle dans la pliure »).
-  arr-ancres-haut.mwm  : ancrages de la plage arriere (les deux)               -- toujours
-  arr-boucles.mwm      : boucles du milieu (les deux)                          -- toujours, recalees dans la pliure
-  arr-ancre-bas-g/d    : ancrage bas cote portiere                              -- toujours, recale au bas du dossier
-  arr-languette-g/d    : languette rangee                                       -- place libre (posee en haut du dossier)
-  arr-sangle-haut-g/d  : sangle de l'ancrage haut a l'epaule                    -- place bouclee
-  arr-bouclee-g/d      : ceinture bouclee                                       -- place bouclee (son bas suit la pliure)
+Systeme de la ceinture du conducteur (Menor et JD, 28/10 : « supprime ce systeme, refais-le sur celui du conducteur ») : les trois
+objets de Menos tels quels, deja dans le repere de la voiture -- aucun recalage ni sangle faite par le mod. Un seul cote (g), le
+cote d en miroir. Deux matieres : sous-maillage 0 la sangle (Seatbelt, Material.003 : matiere de la ceinture avant du jeu), 1 le
+metal et le plastique (Atlas, Material.002 -- texture ATLAS_MOTOR_MWC du jeu, Seats.RearAtlas).
+  arr-pieces-g/d     : seatbelts_parts -- ancrages, boucle, sangle rangee de la plage arriere a l'ancrage bas -- toujours
+  arr-languette-g/d  : seatbelts_handle -- languette pendue sur la sangle rangee                              -- place libre
+  arr-bouclee-g/d    : seatbelts_fastened -- ceinture bouclee                                                 -- place bouclee
 Usage : python -I ceintures-arr.py   (depuis la racine du depot)"""
 import os, sys, glob, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import obj2mwm
 
 SRC = 'assets/ceintures/rear_seatbelts_sorbett-menos-v2.obj'
-SHOULDER = 0.84   # (y du haut de la languette rangee : au-dessus, la sangle va a l'epaule -- repere de la v1)
-SHIFT = (0.0, 0.251, -0.063)   # (v2 -> repere de la v1)
+SHIFT = (0.0, 0.0, 0.0)   # (v2 telle quelle : repere de la voiture)
 STRAP = {'Seatbelt', 'Seatbeltt', 'Material.003'}   # (le reste : Atlas, ATLAS, Material.002)
 
 # Faces avec leur matiere (obj2mwm.load ne la garde pas)
@@ -32,10 +26,20 @@ for l in open(SRC, encoding='utf-8', errors='replace'):
     if p[0] == 'o': cur = l[2:].strip(); k[cur] = 0
     elif p[0] == 'usemtl': mat = p[1]
     elif p[0] == 'f': mats[(cur, k[cur])] = mat; k[cur] += 1
+# Haut de la languette (la ou passe la sangle, pendue ou bouclee) : quelques faces du metal de Menos tombent sur des zones rouges et
+# orange de l'atlas du jeu (JD 28/10 : « bug de texture » sur le haut noir) -> sur le plastique noir de l'atlas (texel (0,586 ; 0,87),
+# le noir de ses autres faces). Seulement dans cette bande (y 0,585..0,62, |x| 0,52..0,61 : boucles rouges et ancrages restent).
+vt.append((0.586, 0.87)); NOIR = len(vt) - 1
+def noircir(n, i, f):
+    if mats.get((n, i)) in STRAP: return f
+    cx = sum(abs(v[a][0]) for (a, b, c) in f) / len(f); cy = sum(v[a][1] for (a, b, c) in f) / len(f)
+    if 0.585 < cy < 0.62 and 0.52 <= cx <= 0.61: return [(a, NOIR, c) for (a, b, c) in f]   # (pas les ancrages hauts, y 0,75)
+    return f
 def faces(names, keep=None):
     out = []
     for n in names:
         for i, f in enumerate(groups[n]):
+            f = noircir(n, i, f)
             cx = sum(-v[a][0] for (a, b, c) in f) / len(f) + SHIFT[0]; cy = sum(v[a][1] for (a, b, c) in f) / len(f) + SHIFT[1]
             if keep is not None and not keep(cx, cy): continue
             out.append((f, mats.get((n, i)) in STRAP))
@@ -63,13 +67,9 @@ def out(name, fl, sides):
             o.write(struct.pack('<fff', 1.0, 1.0, 1.0))
     print(name, len(pos), 'sommets', len(subs[0]) // 3, '+', len(subs[1]) // 3, 'triangles (sangle + metal)')
 for f in glob.glob('assets/ceintures/*.mwm'): os.remove(f)
-P = ['seatbelts_parts']
-out('arr-ancres-haut.mwm', [q for q in faces(P, lambda x, y: y > 0.9) if not q[1]], 'gd')
-out('arr-boucles.mwm', [q for q in faces(P, lambda x, y: abs(x) < 0.35 and y <= 0.9) if not q[1]], 'gd')
 for s in 'gd':
-    out('arr-ancre-bas-%s.mwm' % s, [q for q in faces(P, lambda x, y: abs(x) >= 0.35 and y <= 0.9) if not q[1]], s)
+    out('arr-pieces-%s.mwm' % s, faces(['seatbelts_parts']), s)
     out('arr-languette-%s.mwm' % s, faces(['seatbelts_handle']), s)
-    out('arr-sangle-haut-%s.mwm' % s, [q for q in faces(P, lambda x, y: y >= SHOULDER) if q[1]], s)
     out('arr-bouclee-%s.mwm' % s, faces(['seatbelts_fastened']), s)
 
 # MACHTWAGEN (taxi, modele de Menos du 25/10 : assets/ceintures/machtwagen_rear_seatbelts-menos.obj) : modele tourne d'un

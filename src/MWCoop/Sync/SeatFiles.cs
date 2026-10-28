@@ -16,8 +16,11 @@ namespace MWCoop
     //   corps <n|conducteur> <x y z>             (decalage du corps, repere de la voiture)
     //   pose <n|conducteur> <volant|camion>      (pose de base, sinon celle de la voiture)
     // Ceinture d'une place (outil des places, JD 26/10 : « Tout me vas », idee de Menos) -- lue ici, dessinee par Seats :
-    //   ceinture <n|conducteur> <sangle|menos|jeu>  (sangle : ruban sur les points ; menos : pieces de son modele aux points ;
-    //                                              jeu : ce que fait le mod sans fichier)
+    //   ceinture <n|conducteur> <sangle|menos|modele|jeu>  (sangle : ruban sur les points ; menos : pieces de son modele aux
+    //                                              points ; modele : son modele entier deplace d'un bloc, ligne modele ; jeu : ce que fait
+    //                                              le mod sans fichier)
+    //   modele <n> <x y z> <rx ry rz>               (ceinture « modele » : decalage du modele de Menos du cote de la place, repere de la
+    //                                              voiture, tourne autour du centre de ses pieces -- SORBET, JD 28/10)
     //   ancrage <n|conducteur> <haut|bas> <x y z>
     //   boucle <n|conducteur> <x y z> <rx ry rz>    (aussi le point vise pour s'attacher ; angles d'Euler du jeu, en degres)
     //   languette <n|conducteur> <x y z> <rx ry rz> (ceinture rangee)
@@ -62,6 +65,7 @@ namespace MWCoop
             public bool HasTop, HasBottom, HasBuckle, HasTongue;
             public readonly List<Vector3> Stowed = new List<Vector3>(), Fastened = new List<Vector3>();
             public float Width = 0.045f;
+            public Vector3 ModelPos; public Quaternion ModelRot = Quaternion.identity; public bool HasModel;   // (ceinture « modele »)
             // Trajets complets (avec les ancrages quand ils y sont) : rangee bas -> haut, bouclee haut -> bas.
             public List<Vector3> StowedPath()
             {
@@ -222,11 +226,18 @@ namespace MWCoop
                     case "rangee":
                     case "bouclee":
                     case "largeur":
+                    case "modele":
                         {
                             Place t = w.Length > 2 ? (w[1] == "conducteur" ? f.Driver : f.Places.Find(x => x.N.ToString(ci) == w[1])) : null;
                             if (t == null) break;
                             Belt b = t.Belt ?? (t.Belt = new Belt());   // (pas de Lines : une ceinture seule ne change pas la pose)
-                            if (w[0] == "ceinture") b.Kind = w[2] == "menos" || w[2] == "jeu" ? w[2] : "sangle";
+                            if (w[0] == "ceinture") b.Kind = w[2] == "menos" || w[2] == "jeu" || w[2] == "modele" ? w[2] : "sangle";
+                            else if (w[0] == "modele" && w.Length >= 5)
+                            {
+                                b.ModelPos = new Vector3(F(w[2]), F(w[3]), F(w[4]));
+                                b.ModelRot = w.Length >= 8 ? Quaternion.Euler(F(w[5]), F(w[6]), F(w[7])) : Quaternion.identity;
+                                b.HasModel = true;
+                            }
                             else if (w[0] == "ancrage" && w.Length >= 6)
                             {
                                 var v = new Vector3(F(w[3]), F(w[4]), F(w[5]));
