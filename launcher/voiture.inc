@@ -1094,10 +1094,18 @@ static const Addon *AddonCur() { return g_addonSel >= 0 && g_addonSel < (int)g_a
 static std::wstring AddonDir(const Addon &a) { return a.dir; }
 static std::wstring AddonLiveryFile(const Addon &a) { return LocalDir() + a.key + L"-livree.jpg"; }
 static std::string AddonCfgKey(const Addon &a) { return a.key == L"evo3" ? "EvoLivree" : "Livree_" + Narrow(a.key); }
+static Bitmap *LoadPngRes(int id);   // (launcher.cpp)
 static Bitmap *AddonPic(const Addon &a)
 {
     auto it = g_addonPics.find(a.key);
     if (it != g_addonPics.end()) return it->second;
+    // (apercus integres au lanceur, launcher.rc 40-46 -- JD 28/10 : « bien centrer et cadrer ces images ... pour les deux
+    // versions MSC et MWC » : avant ceux du paquet et du catalogue, sur les deux jeux)
+    static const struct { const wchar_t *key; int res; } kAddonPicRes[] = {
+        { L"vaz", 40 }, { L"r5maxi", 41 }, { L"evo3", 42 }, { L"t16", 43 }, { L"t16e2", 44 }, { L"imp96", 45 }, { L"sq84", 46 } };
+    for (const auto &e : kAddonPicRes)
+        if (a.key == e.key)
+            if (Bitmap *b = LoadPngRes(e.res)) return g_addonPics[a.key] = b;
     if (!a.installed) {   // (pas encore installee : l'apercu du catalogue, quand il est arrive)
         std::wstring f = AddonPicCache(a.key, a.remoteVer);
         Bitmap *b = FileExists(f) ? LoadAnyImage(f, NULL) : NULL;
