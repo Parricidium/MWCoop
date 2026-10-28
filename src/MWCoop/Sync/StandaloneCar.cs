@@ -15,13 +15,17 @@ namespace MWCoop
     // racine : Wheel.Awake remonte les parents) ; Axles.SetWheels appele avant l'allumage (CarDynamics.Awake et Drivetrain.Awake lisent
     // les roues des essieux, sans ordre garanti entre les Awake) ; objet CoG a nous ; puis allumee. Les reglages de tenue de route
     // sont ensuite ceux de la R5 Maxi copie (VazHandling : base de la Satsuma, Spec, rallye) pour que JD compare a l'identique.
-    public static class StandaloneCar
+    public static partial class StandaloneCar
     {
         public static bool On { get { return Game.Msc && Config.GetInt("Test", "AddonStandalone", 0) != 0; } }
         public const string Prefix = "R5MAXI_STANDALONE";
         static readonly List<VazCar.Built> cars = new List<VazCar.Built>();
         // (par voiture : sa tenue de route lue, son centre de gravite, ses echeances)
-        class State { public StandaloneTenue T; public Transform Cog; public float NextGrip, NextFile; }
+        class State
+        {
+            public StandaloneTenue T; public Transform Cog; public float NextGrip, NextFile;
+            public Transform Pivot; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
+        }
         static readonly Dictionary<VazCar.Built, State> states = new Dictionary<VazCar.Built, State>();
         // Course de suspension au-dessus du moyeu (m) : Wheel pose son modele a (compression - course) sous son objet ; ~0,10 au repos
         // avec les ressorts de la R5 (rallye : 25 000 x 905 / 507,6 N/m, course 0,15) -> moyeux du modele a la hauteur de infos.txt.
@@ -147,7 +151,10 @@ namespace MWCoop
             tune.Apply(b, cog, true);
             if (!Sane(b)) { Log.Warn("standalone : valeurs invalides apres reglage, voiture retiree"); UnityEngine.Object.Destroy(go); return null; }
             cars.Add(b);
-            states[b] = new State { T = tune, Cog = cog };
+            Axis("Throttle");   // (journal des touches du jeu, une fois)
+            var stNew = new State { T = tune, Cog = cog };
+            states[b] = stNew;
+            SetupDrive(b, stNew, inf);
             Rigidbody trb2 = tpl.GetComponent<Rigidbody>();
             Log.Info("standalone : inertie " + rb.inertiaTensor.ToString("F0") + " (Ruscko " + (trb2 != null ? trb2.inertiaTensor.ToString("F0") + " pour " + trb2.mass.ToString("F0") + " kg" : "?") + "), centre " + rb.centerOfMass.ToString("F2"));
             Log.Info("standalone : " + name + " construite en " + pos.ToString("F1") + " (" + n + " valeurs reprises de " + tpl.name + ", roues rayon " + radius.ToString("F3") + " largeur " + wb.size.x.ToString("F3")
@@ -230,6 +237,7 @@ namespace MWCoop
         public static void Remove(VazCar.Built b)
         {
             if (b == null) return;
+            if (driving == b) Exit(b, true);   // (jamais detruire la voiture avec le joueur dedans : le PLAYER partirait avec)
             cars.Remove(b); states.Remove(b);
             if (b.Car != null) UnityEngine.Object.Destroy(b.Car);
         }
@@ -248,7 +256,7 @@ namespace MWCoop
             {
                 VazCar.Built b = cars[i];
                 State st;
-                if (b.Car == null || !states.TryGetValue(b, out st)) { cars.RemoveAt(i); states.Remove(b); continue; }
+                if (b.Car == null || !states.TryGetValue(b, out st)) { if (driving == b) Exit(b, true); cars.RemoveAt(i); states.Remove(b); continue; }
                 if (key || (now >= st.NextFile && st.T.Changed())) { Reload(b, st, key ? "touche " + reloadKey : "fichier enregistre"); }
                 if (now >= st.NextFile) st.NextFile = now + 1f;
                 b.Dt.engineOrientation = b.Car.transform.forward;
@@ -257,6 +265,7 @@ namespace MWCoop
                 st.T.Tick(b, hb);
                 if (hb != b.Handbraking || now >= st.NextGrip) { b.Handbraking = hb; st.NextGrip = now + 0.25f; st.T.Grip(b, hb); }
                 if (dr != null && b.Dt.rpm > 300f && (dr.handbrakeInput > 0.05f || (dr.brakeInput > 0.2f && b.Dt.rpm < 2000f))) Disengage(b.Dt);
+                Drive(b, st);
             }
         }
 
@@ -315,7 +324,25 @@ namespace MWCoop
 
         public static void LateUpdate()
         {
-            foreach (VazCar.Built b in cars) if (b.Car != null) VazHandling.Idle(b);
+            foreach (VazCar.Built b in cars) if (b.Car != null) { VazHandling.Idle(b); State st; if (states.TryGetValue(b, out st)) DriveLate(b, st); }
+        }
+
+        // Entree du F10 (VazPanel) : la R5 standalone posee a 6 m devant le joueur, sur le sol ; ou retiree.
+        public static bool Spawned { get { return cars.Count > 0; } }
+        public static void Toggle()
+        {
+            if (cars.Count > 0) { foreach (VazCar.Built x in new List<VazCar.Built>(cars)) Remove(x); Log.Info("standalone : retiree (F10)"); return; }
+            Transform p = Game.PlayerT;
+            if (p == null) return;
+            Vector3 fw = Vector3.ProjectOnPlane(p.forward, Vector3.up).normalized;
+            if (fw.sqrMagnitude < 0.5f) fw = Vector3.forward;
+            Vector3 at = p.position + fw * 6f;
+            float gy;
+            at.y = Ground(at + Vector3.up * 4f, p, null, out gy) ? gy + 0.6f : p.position.y + 0.5f;
+            if (at.y < -4f) { HudMsg("Trop bas (eau) : pas de voiture ici", "Too low (water): no car here"); return; }
+            Quaternion rot = Quaternion.LookRotation(Quaternion.Euler(0f, 90f, 0f) * fw);   // (de profil : portiere conducteur vers le joueur)
+            if (Build(Prefix, 7, Vaz.ColorOf(7), at, rot, VazCar.R5) == null) HudMsg("R5 standalone : construction impossible (journal)", "Standalone R5: could not build (log)");
+            else Log.Info("standalone : posee depuis le F10");
         }
 
         // [Test] Autotest=vaztenue + StandaloneEssai=1 : a 19 s, la R5 standalone posee a 6 m devant le joueur ; le banc la prend avec
@@ -363,7 +390,7 @@ namespace MWCoop
             float e = t - rollAt;
             if (e < 6f) { d.Handbrake = 1f; return; }
             d.Handbrake = 0f; d.Brake = 0f; d.Steer = 0f; d.Throttle = 0f;
-            if (b.Dt.rpm < 400f) b.Dt.startEngine = true; else b.Dt.startEngine = false;
+            if (!EngineRunning(b)) SetEngine(b, true);
             if (e < 18f)
             {
                 d.Throttle = 1f;
@@ -408,10 +435,22 @@ namespace MWCoop
         public float Throttle, Brake, Steer, Handbrake = 1f, Clutch;
         public bool StartEngine;
         public int Gear = -1;   // (rapport voulu ; -1 : celui de la boite)
+        public bool Keys;       // (au volant d'ici : touches du jeu par cInput, axes et rapports comme l'AxisCarController de la Ruscko)
 
         protected override void GetInput(out float throttleInput, out float brakeInput, out float steerInput, out float handbrakeInput, out float clutchInput, out bool startEngineInput, out int targetGear)
         {
-            throttleInput = Throttle; brakeInput = Brake; steerInput = Steer; handbrakeInput = Handbrake; clutchInput = Clutch; startEngineInput = StartEngine;
+            startEngineInput = StartEngine;
+            if (Keys)
+            {
+                throttleInput = Mathf.Clamp01(StandaloneCar.Axis("Throttle")); brakeInput = Mathf.Clamp01(StandaloneCar.Axis("Brake")); steerInput = StandaloneCar.Axis("Horizontal");
+                handbrakeInput = Mathf.Clamp01(StandaloneCar.Axis("Handbrake")); clutchInput = Mathf.Clamp01(StandaloneCar.Axis("Clutch"));
+                int g = drivetrain != null ? drivetrain.gear : 0;
+                if (StandaloneCar.Down("ShiftUp")) g++;
+                if (StandaloneCar.Down("ShiftDown")) g--;
+                targetGear = drivetrain != null && drivetrain.gearRatios != null ? Mathf.Clamp(g, 0, drivetrain.gearRatios.Length - 1) : 0;
+                return;
+            }
+            throttleInput = Throttle; brakeInput = Brake; steerInput = Steer; handbrakeInput = Handbrake; clutchInput = Clutch;
             targetGear = Gear >= 0 && drivetrain != null && drivetrain.gearRatios != null && Gear < drivetrain.gearRatios.Length ? Gear : drivetrain != null ? drivetrain.gear : 0;
         }
     }

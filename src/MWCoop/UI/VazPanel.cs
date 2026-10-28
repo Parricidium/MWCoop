@@ -381,6 +381,13 @@ namespace MWCoop
             string line = note != null && Time.realtimeSinceStartup < noteUntil ? note : Vaz.Mine != 0 && !mine && owner == null ? Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + Vaz.Mine + Lang.T("", " first") : null;
             if (line != null) Style.Text(new Rect(r.x, cy, r.width, P(32)), line, 12, TextAnchor.UpperLeft, note != null && noteBad ? Kit.Amber : note != null ? Kit.Green : Kit.Muted, false, true);
             cy += P(34);
+            // (pilote « addon standalone », [Test] AddonStandalone=1 sur My Summer Car : la R5 Maxi construite par notre code, a cote de
+            // la copie ; essai solo, rien chez les autres joueurs pour l'instant)
+            if (StandaloneCar.On && sm == VazCar.ModelR5)
+            {
+                if (Kit.Button(new Rect(r.x, cy, r.width, P(28)), StandaloneCar.Spawned ? Lang.T("Retirer la R5 standalone", "Remove the standalone R5") : VazCar.R5.Name + " (standalone)", 0, false)) StandaloneCar.Toggle();
+                cy += P(34);
+            }
             if (cy + P(16) > r.yMax) return;
             if (!evo) Style.Text(new Rect(r.x, r.yMax - P(16), r.width, P(14)), Lang.T("Mod\u00E8le : matthew0451, CC BY-NC 4.0", "Model: matthew0451, CC BY-NC 4.0"), 10, TextAnchor.LowerLeft, Kit.Faint, false);
         }

@@ -326,6 +326,7 @@ namespace MWCoop
             load = Mathf.MoveTowards(load, thr, Time.deltaTime * 6f);
             bool on = rpm > 300f;
             Starter();
+            if (starterFsm == null) FadeStart();
             float duck = Mathf.Clamp01((Time.time - catchTime - 0.7f) / 0.9f);
             // (enregistrement de la 205 : ralenti vers 1 850 tr/min, le moteur du jeu vers 900 -> sous 2 556 tr/min le regime
             // entendu est 0,55 x regime + 1 150)
@@ -379,6 +380,36 @@ namespace MWCoop
                 if (!crank.isPlaying) crank.Play();
             }
             else if (crank.isPlaying) crank.Stop();
+        }
+
+        // Voiture standalone (pas d'automate Starter) : notre demarreur appelle ceci -- cranking : demarreur tenu ; caught : le moteur
+        // vient de prendre. Son « demarrage » de l'addon joue depuis le debut a l'appui, coupe si on lache avant la prise, sinon
+        // s'eteint en 0,4 s, 0,6 s apres la prise (comme Starter) ; boucle « demarreur » tant qu'on tient.
+        public void ExternalStarter(bool cranking, bool caught)
+        {
+            if (startSrc == null && dt != null && starter.Count > 0)
+            {
+                var go = new GameObject("VAZ_demarreur");
+                go.transform.SetParent(dt.transform, false);
+                crank = go.AddComponent<AudioSource>(); oneShot = go.AddComponent<AudioSource>(); startSrc = go.AddComponent<AudioSource>();
+                foreach (AudioSource a in new[] { crank, oneShot, startSrc }) { a.spatialBlend = 1f; a.minDistance = 1f; a.maxDistance = 60f; a.playOnAwake = false; a.dopplerLevel = 0f; }
+                AudioClip c;
+                if (starter.TryGetValue("demarrage", out c)) startSrc.clip = c;
+                if (starter.TryGetValue("demarreur", out c)) { crank.clip = c; crank.loop = true; }
+            }
+            if (startSrc == null) return;
+            if (caught) { catchTime = Time.time; if (crank.isPlaying) crank.Stop(); AudioClip p; if (starter.TryGetValue("prise", out p)) oneShot.PlayOneShot(p, 1f); }
+            if (cranking && !wasCranking) { if (startSrc.clip != null) { startSrc.Stop(); startSrc.volume = 1f; startSrc.Play(); } if (crank.clip != null && !crank.isPlaying) crank.Play(); }
+            if (!cranking && !caught) { if (startSrc.isPlaying) startSrc.Stop(); if (crank.isPlaying) crank.Stop(); }
+            wasCranking = cranking;
+        }
+
+        // (son de demarrage apres la prise : s'eteint en 0,4 s, 0,6 s apres -- appele a chaque image par Update)
+        void FadeStart()
+        {
+            if (startSrc == null || !startSrc.isPlaying || wasCranking || Time.time - catchTime < 0.6f || Time.time - catchTime > 30f) return;
+            startSrc.volume = Mathf.MoveTowards(startSrc.volume, 0f, Time.deltaTime / 0.4f);
+            if (startSrc.volume <= 0f) startSrc.Stop();
         }
 
         // fondu a puissance constante entre les deux boucles (charge ou frein) qui encadrent le regime
