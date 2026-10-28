@@ -87,10 +87,11 @@ namespace MWCoop
             st.Pivot.localPosition = m.Head;
             Bounds cb; st.HalfWidth = VazCar.ModelBounds(m, "carrosserie.p205", out cb) ? Mathf.Max(Mathf.Abs(cb.min.x), Mathf.Abs(cb.max.x)) : 0.85f;
             // boutons visibles du tableau de bord (cylindres colores, comme sur la copie)
-            if (m.Knobs != null)
-                for (int i = 0; i < m.Knobs.Length; i++)
+            VazCar.Knob[] kns = KnobsOf(m);
+            if (kns != null)
+                for (int i = 0; i < kns.Length; i++)
                 {
-                    VazCar.Knob kn = m.Knobs[i];
+                    VazCar.Knob kn = kns[i];
                     GameObject g = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                     UnityEngine.Object.DestroyImmediate(g.GetComponent<Collider>());
                     g.name = "bouton_" + i;
@@ -132,13 +133,142 @@ namespace MWCoop
                 VazCar.AddModel(b, inner, dd[i][0]);
                 Bounds db; st.DoorCenter[i] = VazCar.ModelBounds(m, dd[i][0], out db) ? db.center : h;
                 st.Doors[i] = piv;
+                // (portiere conducteur : elle ferme l'habitacle pour le joueur et tourne avec la portiere -- ouverte, on passe)
+                if (i == 0 && buildPlayerLayer >= 0 && db.size.y > 0.3f)
+                {
+                    st.DriverDoor = db;
+                    var dc = new GameObject("joueur_portiere"); dc.layer = buildPlayerLayer;
+                    dc.transform.SetParent(inner, false);
+                    var bc = dc.AddComponent<BoxCollider>(); bc.center = db.center; bc.size = db.size;
+                }
             }
+            Shell(b, st);
             // son moteur de l'addon (boucles + demarrage) au moteur du modele
             var eng = new GameObject("moteur_son").transform;
             eng.SetParent(b.Body, false); eng.localPosition = m.Engine;
             b.Sound = VazSound.Create(b.Car, eng, m);
             st.EngineOn = false;
             Lamps(b, st);
+            st.Speedo = Gauge.Make(b, inf, "v", "cadran_vitesse.png");
+            st.Tacho = Gauge.Make(b, inf, "r", "cadran_regime.png");
+        }
+
+        // Boutons du tableau de bord : ceux du modele (copie), sauf la R5 standalone -- JD 28/10, capture annotee : en ligne sur le dessus
+        // de la console centrale, sous la barre blanche, de gauche a droite contact (rouge), starter (bleu), phares (blanc), warning
+        // (orange) ; points releves par rayons de la camera du conducteur sur le modele (dessus de console a y 0,619, face vers le haut).
+        static readonly Vector3 ConsoleUp = new Vector3(0f, 1f, -0.06f).normalized;
+        static readonly VazCar.Knob[] R5Knobs = {
+            new VazCar.Knob { At = new Vector3(0.036f, 0.623f, 0.494f), Normal = ConsoleUp, Col = new Color(0.80f, 0.06f, 0.05f) },
+            new VazCar.Knob { At = new Vector3(0.085f, 0.623f, 0.494f), Normal = ConsoleUp, Col = new Color(0.10f, 0.25f, 0.85f) },
+            new VazCar.Knob { At = new Vector3(0.137f, 0.623f, 0.490f), Normal = ConsoleUp, Col = new Color(0.92f, 0.92f, 0.90f) },
+            new VazCar.Knob { At = new Vector3(0.183f, 0.623f, 0.485f), Normal = ConsoleUp, Col = new Color(0.95f, 0.45f, 0.05f) } };
+        static VazCar.Knob[] KnobsOf(VazCar.Model m) { return m == VazCar.R5 ? R5Knobs : m.Knobs; }
+
+        // ---------------------------------------------------------------- compteurs
+        // Compteurs fonctionnels (JD 28/10 : « importer les compteurs et qu'ils soient fonctionnels ») : comme le mod rFactor, une
+        // aiguille (aiguille.png) tournee sur la face du cadran (cadran_vitesse.png / cadran_regime.png) autour de son centre ;
+        // reperes et angles dans infos.txt (outils/rf1/r5maxi_cadrans.py) : cadran_<v|r>_centre, _haut, _droite (demi-cote de la
+        // texture), _angles (degres depuis le haut, sens horaire), _valeurs. Face et aiguille sans eclairage (lisibles la nuit).
+        public class Gauge
+        {
+            public Transform Needle; public Vector3 Axis; public float A0, A1, V0, V1, Shown = -1f;
+
+            public static Gauge Make(VazCar.Built b, Dictionary<string, Vector3> inf, string k, string faceFile)
+            {
+                Vector3 c, up, right, ang, val;
+                if (!inf.TryGetValue("cadran_" + k + "_centre", out c) || !inf.TryGetValue("cadran_" + k + "_haut", out up) || !inf.TryGetValue("cadran_" + k + "_droite", out right)
+                    || !inf.TryGetValue("cadran_" + k + "_angles", out ang) || !inf.TryGetValue("cadran_" + k + "_valeurs", out val)) return null;
+                Texture2D face = Png(b.M, faceFile), needle = Png(b.M, "aiguille.png");
+                if (face == null || needle == null) return null;
+                Vector3 n = Vector3.Cross(right, up).normalized;   // (vers l'avant : le conducteur regarde le cadran dans ce sens)
+                Shader unlit = Shader.Find("Unlit/Texture"), transp = Shader.Find("Unlit/Transparent") ?? Shader.Find("Unlit/Transparent Cutout");
+                var fq = Quad("cadran_" + k, b.Body, c - n * 0.001f, Vector3.zero, up, right);
+                fq.GetComponent<MeshRenderer>().sharedMaterial = new Material(unlit) { mainTexture = face, color = new Color(0.85f, 0.85f, 0.85f) };
+                var pivot = new GameObject("aiguille_" + k).transform;
+                pivot.SetParent(b.Body, false); pivot.localPosition = c - n * 0.003f;
+                var nq = Quad("pieces", pivot, Vector3.zero, Vector3.zero, up, right);
+                nq.GetComponent<MeshRenderer>().sharedMaterial = new Material(transp) { mainTexture = needle };
+                Log.Info("standalone : compteur " + (k == "v" ? "vitesse" : "regime") + " pose (" + val.x + "-" + val.y + ", " + ang.x + "-" + ang.y + " degres)");
+                return new Gauge { Needle = pivot, Axis = n, A0 = ang.x, A1 = ang.y, V0 = val.x, V1 = val.y };
+            }
+
+            public void Set(float value)
+            {
+                if (Needle == null) return;
+                float v = Mathf.Clamp(value, V0, V1 + (V1 - V0) * 0.05f);
+                if (Mathf.Abs(v - Shown) < 0.002f * (V1 - V0)) return;
+                Shown = v;
+                // (sens horaire vu par le conducteur, qui regarde le long d'Axis : angle NEGATIF autour d'Axis -- capture de pres du 28/10,
+                // aiguilles a 100 km/h et 4 000 tr/min pointees a droite au lieu de la gauche avec l'angle positif)
+                Needle.localRotation = Quaternion.AngleAxis(-(A0 + (A1 - A0) * (v - V0) / (V1 - V0)), Axis);
+            }
+
+            // carre plat centre en c (repere du parent), cotes 2 x up et 2 x right, texture entiere (haut de l'image vers up)
+            static GameObject Quad(string name, Transform parent, Vector3 c, Vector3 unused, Vector3 up, Vector3 right)
+            {
+                var g = new GameObject(name);
+                g.transform.SetParent(parent, false); g.transform.localPosition = c;
+                var m = new Mesh { name = name };
+                m.vertices = new[] { -right - up, right - up, right + up, -right + up };
+                m.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+                // (face visible depuis le conducteur, cote -Cross(right, up) : triangles tournes vers lui)
+                m.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+                m.RecalculateNormals(); m.RecalculateBounds();
+                g.AddComponent<MeshFilter>().sharedMesh = m;
+                g.AddComponent<MeshRenderer>();
+                return g;
+            }
+
+            static Texture2D Png(VazCar.Model m, string file)
+            {
+                string f = System.IO.Path.Combine(m.Dir, file);
+                if (!System.IO.File.Exists(f)) { Log.Info("standalone : " + file + " absent (compteurs du modele)"); return null; }
+                var t = new Texture2D(2, 2, TextureFormat.RGBA32, true) { name = "standalone_" + file, wrapMode = TextureWrapMode.Clamp, anisoLevel = 4 };
+                t.LoadImage(System.IO.File.ReadAllBytes(f));
+                return t;
+            }
+        }
+
+        // [Test] StandaloneSonde=x,y|x,y|... (pixels d'une capture 1280 x 720, depuis le haut a gauche) : rayons de la camera du
+        // conducteur sur le modele (colliders de maillage poses le temps du releve) -> point et normale, repere de la voiture.
+        // (colliders poses a un appel, rayons a l'appel suivant : la physique ne les connait qu'apres son pas ; vrai quand c'est fini)
+        static List<MeshCollider> probeCols; static bool probeDone;
+        static bool Probe(VazCar.Built b)
+        {
+            string spec = Config.Get("Test", "StandaloneSonde", "");
+            Transform ct = PlayerCam(); Camera cam = ct != null ? ct.GetComponent<Camera>() : null;
+            if (probeDone || spec.Length == 0 || cam == null) return true;
+            if (probeCols == null)
+            {
+                probeCols = new List<MeshCollider>();
+                foreach (MeshFilter mf in b.Body.GetComponentsInChildren<MeshFilter>()) { var mc = mf.gameObject.AddComponent<MeshCollider>(); mc.sharedMesh = mf.sharedMesh; probeCols.Add(mc); }
+                return false;
+            }
+            var added = probeCols;
+            Log.Info("standalone : sonde, camera " + cam.pixelWidth + " x " + cam.pixelHeight + " en " + b.Car.transform.InverseTransformPoint(ct.position).ToString("F3") + " vers " + b.Car.transform.InverseTransformDirection(ct.forward).ToString("F2") + ", champ " + cam.fieldOfView.ToString("F0"));
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (string pt in spec.Split('|'))
+            {
+                string[] xy = pt.Split(',');
+                if (xy.Length != 2) continue;
+                float px = float.Parse(xy[0], ci) * cam.pixelWidth / 1280f, py = cam.pixelHeight - float.Parse(xy[1], ci) * cam.pixelHeight / 720f;
+                Ray r = cam.ScreenPointToRay(new Vector3(px, py, 0f));
+                float best = 9f; RaycastHit bh = new RaycastHit(); bool any = false;
+                foreach (MeshCollider mc in added) { RaycastHit h; if (mc.Raycast(r, out h, 3f) && h.distance < best) { best = h.distance; bh = h; any = true; } }
+                Log.Info("standalone : sonde " + pt + " -> " + (any ? bh.collider.name + " " + b.Car.transform.InverseTransformPoint(bh.point).ToString("F3") + " normale " + b.Car.transform.InverseTransformDirection(bh.normal).ToString("F2") : "rien"));
+            }
+            foreach (MeshCollider mc in added) UnityEngine.Object.Destroy(mc);
+            probeCols = new List<MeshCollider>();   // (fait : plus de releve)
+            probeDone = true;
+            return true;
+        }
+
+        static bool gaugeFreeze; static Vector3 eyesSaved;   // (essai standalonemonte)
+        static void Gauges(VazCar.Built b, State st)
+        {
+            if (gaugeFreeze) return;
+            if (st.Speedo != null) st.Speedo.Set(Mathf.Abs(b.Car.transform.InverseTransformDirection(b.Rb.velocity).z) * 3.6f);
+            if (st.Tacho != null) st.Tacho.Set(st.EngineOn ? b.Dt.rpm : 0f);
         }
 
         // ---------------------------------------------------------------- chaque image
@@ -150,11 +280,14 @@ namespace MWCoop
             if (b.Sound != null) b.Sound.Update();
             Lamps(b, st);
             DoorAnim(b, st);
+            Gauges(b, st);
             GameObject pl = Game.PlayerGo;
             if (pl == null || !PlayerSync.InGame) return;
+            WheelMask(b, st);
             if (driving == null)
             {
                 Doors(b, st);
+                CabinPresence(b, st, pl.transform);
                 bool zone = InZone(b, st, pl.transform) && b.Rb.velocity.magnitude < 2f && Vector3.Angle(b.Car.transform.up, Vector3.up) < 45f;
                 if (zone)
                 {
@@ -214,15 +347,79 @@ namespace MWCoop
             }
         }
 
-        // Zone d'entree (le « trigger » des voitures du jeu) : contre la portiere conducteur, en face du siege -- tenue.ini [Poste]
-        // EntreeZ (avance du centre de la zone, depart : celle du siege) et EntreeLongueur (de l'avant a l'arriere) ; du flanc de la
-        // caisse a 1,1 m dehors. (JD 28/10 : « la place pilote est mal centree par rapport a son vrai siege » -- l'ancienne zone
-        // courait sur 2 m, de l'aile arriere au montant avant, et commencait 30 cm dans la caisse.)
+        // Habitacle ou l'on entre a pied (JD 28/10 : « je ne peux pas rentrer dans la voiture, comme dans les voitures du jeu, apres avoir
+        // ouvert la porte ») -- comme les voitures du jeu : coque creuse pour le joueur (couche PlayerColl) -- plancher, toit, avant
+        // (planche), arriere, flanc droit, morceau derriere la portiere, et la portiere conducteur elle-meme qui tourne avec elle --,
+        // bornes tirees de la portiere conducteur du modele (habitacle de son arriere -13 cm jusqu'a 27 cm avant sa charniere, entre
+        // son bas et son haut, largeur a son bord interieur).
+        static void Shell(VazCar.Built b, State st)
+        {
+            Bounds bb, db = st.DriverDoor;
+            if (buildPlayerLayer < 0 || db.size.y < 0.3f || !VazCar.ModelBounds(b.M, "carrosserie.p205", out bb)) { Log.Warn("standalone : pas d'habitacle creux (couche joueur ou portiere absente)"); return; }
+            int L = buildPlayerLayer; Transform ct = b.Car.transform;
+            float zMin = db.min.z - 0.13f, zMax = db.max.z - 0.27f, fl = db.min.y + 0.02f, rf = db.max.y + 0.02f, ix = Mathf.Min(Mathf.Abs(db.max.x), Mathf.Abs(db.min.x)) + 0.01f;
+            float x0 = bb.min.x, x1 = bb.max.x;
+            // (rien sur la course des roues : le rayon d'une roue prenait le plancher pour le sol -- essai du 28/10, voiture envolee ;
+            // plancher sous l'habitacle seulement, blocs avant / arriere au-dessus des roues, et cette couche retiree du rayon : WheelMask)
+            float wheelTop = 0f; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>(true)) wheelTop = Mathf.Max(wheelTop, w.transform.localPosition.y - StandaloneCar.HubDrop + w.radius + 0.03f);
+            float fb = Mathf.Max(fl, wheelTop);
+            Box(ct, L, "joueur_plancher", new Vector3(0f, fl - 0.08f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, 0.16f, zMax - zMin));
+            Box(ct, L, "joueur_toit", new Vector3(0f, (rf + bb.max.y + 0.02f) * 0.5f, bb.center.z), new Vector3(bb.size.x, bb.max.y + 0.02f - rf, bb.size.z));
+            Box(ct, L, "joueur_avant", new Vector3(0f, (fb + rf) * 0.5f, (zMax + bb.max.z) * 0.5f), new Vector3(bb.size.x, rf - fb, bb.max.z - zMax));
+            Box(ct, L, "joueur_arriere", new Vector3(0f, (fb + rf) * 0.5f, (bb.min.z + zMin) * 0.5f), new Vector3(bb.size.x, rf - fb, zMin - bb.min.z));
+            Box(ct, L, "joueur_flanc_d", new Vector3((ix + x1) * 0.5f, (fl + rf) * 0.5f, (zMin + zMax) * 0.5f), new Vector3(x1 - ix, rf - fl, zMax - zMin));
+            Box(ct, L, "joueur_flanc_g_ar", new Vector3((x0 - ix) * 0.5f, (fl + rf) * 0.5f, (zMin + db.min.z) * 0.5f), new Vector3(-ix - x0, rf - fl, db.min.z - zMin));
+            st.Cabin = new Bounds(); st.Cabin.SetMinMax(new Vector3(-ix, fl, zMin), new Vector3(ix, rf, zMax));
+            st.HasCabin = true;
+            Log.Info("standalone : habitacle creux " + st.Cabin.min.ToString("F2") + " - " + st.Cabin.max.ToString("F2") + ", couche " + LayerMask.LayerToName(L));
+        }
+
+        // Couche des colliders du joueur retiree du rayon des roues (pose par Wheel.Start, apres l'allumage)
+        static FieldInfo wheelMaskField;
+        static void WheelMask(VazCar.Built b, State st)
+        {
+            if (st.MaskDone || buildPlayerLayer < 0) return;
+            if (wheelMaskField == null) wheelMaskField = typeof(Wheel).GetField("layerMask", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (wheelMaskField == null) { st.MaskDone = true; return; }
+            int n = 0;
+            foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>(true))
+            {
+                object v = wheelMaskField.GetValue(w);
+                int m = v is LayerMask ? ((LayerMask)v).value : v is int ? (int)v : 0;
+                if (m == 0) return;   // (Start pas encore passe)
+                int nm = m & ~(1 << buildPlayerLayer);
+                if (nm != m) { if (v is LayerMask) wheelMaskField.SetValue(w, (LayerMask)nm); else wheelMaskField.SetValue(w, nm); n++; }
+            }
+            st.MaskDone = true;
+            Log.Info("standalone : couche joueur retiree du rayon de " + n + " roue(s)");
+        }
+
+        // Joueur dans l'habitacle ou devant la portiere conducteur ouverte : PlayerInCar de l'automate Crouch (le jeu le rend petit,
+        // camera basse -- ce que fait le PlayerTrigger autour de l'habitacle des voitures du jeu), rendu a la sortie de la zone.
+        static VazCar.Built cabinCar;
+        static void CabinPresence(VazCar.Built b, State st, Transform pl)
+        {
+            if (!st.HasCabin) return;
+            Vector3 lp = b.Car.transform.InverseTransformPoint(pl.position);
+            Bounds c = st.Cabin, d = st.DriverDoor;
+            bool inside = Mathf.Abs(lp.x) < c.max.x + 0.05f && lp.z > c.min.z && lp.z < c.max.z && lp.y > -0.8f && lp.y < 1.8f;
+            bool atDoor = st.DoorOpen[0] && lp.x < -c.max.x && lp.x > -(st.HalfWidth + 0.6f) && lp.z > d.min.z && lp.z < d.max.z - 0.1f && lp.y > -0.8f && lp.y < 1.8f;
+            bool want = inside || atDoor;
+            if (want && cabinCar != b) { cabinCar = b; InCar(true); Log.Info("standalone : joueur dans l'habitacle" + (inside ? "" : " (devant la portiere ouverte)")); }
+            else if (!want && cabinCar == b) { cabinCar = null; InCar(false); Log.Info("standalone : joueur sorti de l'habitacle"); }
+        }
+
+        // Zone d'entree en conduite (le « trigger » des voitures du jeu) : sur le siege conducteur, dans l'habitacle -- tenue.ini [Poste]
+        // EntreeZ (centre, depart : le siege) et EntreeLongueur ; et, portiere ouverte, devant elle dehors (si l'on ne passe pas).
+        // (JD 28/10 : la zone d'avant, dehors le long du flanc, etait mal centree par rapport au vrai siege)
         static bool InZone(VazCar.Built b, State st, Transform pl)
         {
             Vector3 lp = b.Car.transform.InverseTransformPoint(pl.position);
+            bool alongSeat = Mathf.Abs(lp.z - st.T.EntreeZ) < st.T.EntreeLongueur * 0.5f && lp.y > -1.0f && lp.y < 2.0f;
+            if (!alongSeat) return false;
+            if (Mathf.Abs(lp.x - b.M.Head.x) < 0.32f) return true;
             float side = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f, flank = st.HalfWidth > 0.3f ? st.HalfWidth : 0.85f;
-            return lp.x * side > flank - 0.12f && lp.x * side < flank + 1.1f && Mathf.Abs(lp.z - st.T.EntreeZ) < st.T.EntreeLongueur * 0.5f && lp.y > -1.0f && lp.y < 2.0f;
+            return st.DoorOpen != null && st.DoorOpen[0] && lp.x * side > flank - 0.12f && lp.x * side < flank + 1.1f;
         }
 
         static void Enter(VazCar.Built b, State st)
@@ -258,7 +455,7 @@ namespace MWCoop
                 {
                     float side = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
                     State es; float ez = states.TryGetValue(b, out es) ? es.T.EntreeZ : b.M.Head.z, ew = es != null && es.HalfWidth > 0.3f ? es.HalfWidth : 0.85f;
-                    Vector3 at = ct.TransformPoint(new Vector3(side * (ew + 0.6f), 0.4f, ez));
+                    Vector3 at = ct.TransformPoint(new Vector3(side * (ew + 0.75f), 0.4f, ez));
                     float gy;
                     if (Ground(at + Vector3.up * 2f, pl.transform, ct, out gy)) at.y = gy + (footHeight > 0f ? footHeight : 1f);
                     pl.transform.position = at;
@@ -268,7 +465,7 @@ namespace MWCoop
             }
             Game.SetGlobalBool("PlayerStop", false);
             Game.SetGlobal("PlayerCurrentVehicle", "");
-            InCar(false);
+            InCar(false); cabinCar = null;
             GearHud(false, b);
             ClearHover();
             var d = b.Axis as StandaloneDriver;
@@ -361,7 +558,7 @@ namespace MWCoop
         static void Knobs(VazCar.Built b, State st)
         {
             Transform cam = PlayerCam();
-            VazCar.Knob[] ks = b.M.Knobs;
+            VazCar.Knob[] ks = KnobsOf(b.M);
             if (cam == null || ks == null) return;
             int hit = -1; float bestPerp = 0.035f;
             foreach (int i in new[] { KIgnition, KLights })
@@ -413,7 +610,7 @@ namespace MWCoop
         // StandaloneEssai=1) : sur la piste plate du banc, 20 cycles (voiture tournee de 0 / 120 / 240 degres) : joueur pose dans la zone
         // d'entree (texte du jeu verifie), monte (Enter : la touche du jeu ne se simule pas), yeux au point de vue, 2 s de gaz en 1re
         // puis frein, descend ; au sol a cote, CharacterController et PlayerStop rendus. Bilan : cycles reussis.
-        static int mStep = -1, mCycle, mOk; static float mAt; static string mWhy;
+        static int mStep = -1, mCycle, mOk; static float mAt; static string mWhy; static bool mShot;
         public static void MountTest(float t)
         {
             Test(t);
@@ -437,20 +634,30 @@ namespace MWCoop
                     ct.position = p0; ct.rotation = r; b.Rb.position = p0; b.Rb.rotation = r;
                     var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
                     pl.transform.position = ct.TransformPoint(new Vector3(-(st.HalfWidth + 0.45f), 0.6f, st.T.EntreeZ));
+                    pl.transform.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(ct.right, Vector3.up));   // (face a la portiere)
                     if (cc != null) cc.enabled = true;
+                    // (portiere conducteur ouverte : on entre par elle)
+                    st.DoorOpen[0] = true; st.DoorAngle[0] = 70f; st.Doors[0].localRotation = Quaternion.Euler(0f, 70f, 0f);
                     mWhy = ""; mStep = 1; mAt = t;
                     break;
                 }
                 case 1:
-                    // (le joueur avance vers le centre de la voiture pendant 1 s : la caisse doit l'arreter au flanc)
-                    if (e < 1.0f) { var cm = pl.GetComponent<CharacterController>(); if (cm != null && cm.enabled) cm.Move((ct.position - pl.transform.position).normalized * 3f * Time.deltaTime + Vector3.down * 0.05f); break; }
+                    // 1er cycle : le joueur marche de dehors jusqu'au siege, a travers la portiere ouverte (3 s au plus) ; il doit passer dans
+                    // l'habitacle (PlayerInCar : petit) et etre dans la zone d'entree ; les autres cycles : devant la portiere ouverte
+                    if (mCycle == 0 && e < 3.2f)
+                    {
+                        var cm = pl.GetComponent<CharacterController>();
+                        Vector3 goal = ct.TransformPoint(new Vector3(b.M.Head.x, 0f, st.T.EntreeZ)), d0 = Vector3.ProjectOnPlane(goal - pl.transform.position, Vector3.up);
+                        if (cm != null && cm.enabled && d0.magnitude > 0.08f) cm.Move(d0.normalized * Mathf.Min(1.5f * Time.deltaTime, d0.magnitude) + Vector3.down * 0.2f * Time.deltaTime);
+                        if (e > 0.9f && e < 1.0f && !mShot) { mShot = true; Autotest.CaptureSoon("standalone-portiere", 0f); }
+                        break;
+                    }
                     if (e < 1.5f) break;
                     if (mCycle == 0)
                     {
                         Vector3 lq = ct.InverseTransformPoint(pl.transform.position);
-                        Log.Info("standalone : monte, joueur pousse vers la caisse : arrete a " + lq.ToString("F2") + " (flanc a " + st.HalfWidth.ToString("F2") + ")");
-                        if (Mathf.Abs(lq.x) < st.HalfWidth - 0.1f) mWhy += " joueur dans la caisse";
-                        st.DoorOpen[0] = true;
+                        Log.Info("standalone : monte, joueur entre par la portiere : arrive a " + lq.ToString("F2") + (cabinCar == b ? ", dans l'habitacle (PlayerInCar)" : ", PAS dans l'habitacle"));
+                        if (cabinCar != b) mWhy += " pas entre dans l'habitacle";
                     }
                     FsmString gi = FsmVariables.GlobalVariables.FindFsmString("GUIinteraction");
                     if (!InZone(b, st, pl.transform)) mWhy += " hors zone (" + ct.InverseTransformPoint(pl.transform.position).ToString("F2") + ")";
@@ -459,6 +666,7 @@ namespace MWCoop
                     break;
                 case 2:
                     if (e < 1.5f) break;
+                    if (mCycle == 1 && !Probe(b)) break;
                     {
                         FsmBool ps = FsmVariables.GlobalVariables.FindFsmBool("PlayerStop"); FsmString cv = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle");
                         Transform cam = PlayerCam();
@@ -467,7 +675,13 @@ namespace MWCoop
                         if (cv == null || cv.Value != VehicleName) mWhy += " vehicule '" + (cv != null ? cv.Value : "?") + "'";
                         if (pl.transform.parent != st.Pivot) mWhy += " pas sous le pivot";
                         if (eyeErr > 0.05f) mWhy += " yeux a " + eyeErr.ToString("F2") + " m";
-                        if (mCycle == 0) { st.LightsOn = true; Autotest.CaptureSoon("standalone-volant", 0.2f); }
+                        if (mCycle == 0)
+                        {
+                            // (cadrans de pres, aiguilles tenues a 100 km/h et 4 000 tr/min : sens et graduations verifiables)
+                            st.LightsOn = true; gaugeFreeze = true; st.Speedo.Set(100f); st.Tacho.Set(4000f);
+                            eyesSaved = st.T.Yeux; st.T.Yeux = new Vector3(-0.295f, 0.735f, 0.36f);
+                            Autotest.CaptureSoon("standalone-cadrans", 0.4f);
+                        }
                         FsmString gg = FsmVariables.GlobalVariables.FindFsmString("GUIgear");
                         if (gg == null || gg.Value != "N") mWhy += " rapport affiche '" + (gg != null ? gg.Value : "?") + "'";
                         if (gearGui == null || !gearGui.activeSelf) mWhy += " indicateur de rapport eteint";
@@ -477,6 +691,7 @@ namespace MWCoop
                     break;
                 case 3:
                     if (e < 2f) break;
+                    if (mCycle == 0) { st.T.Yeux = eyesSaved; gaugeFreeze = false; Autotest.CaptureSoon("standalone-compteurs", 0f); Log.Info("standalone : monte, compteurs a " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, " + b.Dt.rpm.ToString("F0") + " tr/min"); }
                     d.Throttle = 0f; d.Brake = 1f; d.Gear = 1; mStep = 4; mAt = t;
                     if (b.Rb.velocity.magnitude < 1f) mWhy += " n'a pas roule";
                     if (pl.transform.parent != st.Pivot) mWhy += " ejecte en roulant";

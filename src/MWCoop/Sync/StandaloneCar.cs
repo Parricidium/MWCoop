@@ -26,6 +26,8 @@ namespace MWCoop
             public StandaloneTenue T; public Transform Cog; public float NextGrip, NextFile;
             public Transform Pivot; public float HalfWidth; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
             public Transform[] Doors; public Vector3[] DoorCenter; public bool[] DoorOpen; public float[] DoorAngle;
+            public Gauge Speedo, Tacho;
+            public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;   // (habitacle creux : StandaloneDrive.Shell)
         }
         static readonly Dictionary<VazCar.Built, State> states = new Dictionary<VazCar.Built, State>();
         // Course de suspension au-dessus du moyeu (m) : Wheel pose son modele a (compression - course) sous son objet ; ~0,10 au repos
@@ -133,15 +135,11 @@ namespace MWCoop
                 float floor = Mathf.Max(bb.min.y, inf["wheel_lf"].y - radius * 0.4f), belt = bb.min.y + bb.size.y * 0.55f;
                 Box(ct, bodyLayer, "boite_caisse", new Vector3(bb.center.x, (floor + belt) * 0.5f, bb.center.z), new Vector3(bb.size.x * 0.97f, belt - floor, bb.size.z * 0.97f));
                 Box(ct, bodyLayer, "boite_habitacle", new Vector3(bb.center.x, (belt + bb.max.y) * 0.5f, bb.center.z - bb.size.z * 0.08f), new Vector3(bb.size.x * 0.8f, bb.max.y - belt, bb.size.z * 0.5f));
-                // (le joueur traversait la caisse -- JD 28/10, capture : il ne heurte pas cette couche ; les voitures du jeu ont pour lui
-                // des colliders a part, Colliders/PlayerColl : memes boites sur leur couche)
-                int pl = PlayerLayer(tpl);
-                if (pl >= 0 && pl != bodyLayer)
-                {
-                    Box(ct, pl, "joueur_caisse", new Vector3(bb.center.x, (floor + belt) * 0.5f, bb.center.z), new Vector3(bb.size.x * 0.97f, belt - floor, bb.size.z * 0.97f));
-                    Box(ct, pl, "joueur_habitacle", new Vector3(bb.center.x, (belt + bb.max.y) * 0.5f, bb.center.z - bb.size.z * 0.08f), new Vector3(bb.size.x * 0.8f, bb.max.y - belt, bb.size.z * 0.5f));
-                }
             }
+            // (le joueur ne heurte pas ces boites -- JD 28/10, capture : il traversait la caisse ; les voitures du jeu ont pour lui des
+            // colliders a part, Colliders/PlayerColl : coque creuse de l'habitacle sur leur couche, posee avec les portieres, SetupDrive)
+            buildPlayerLayer = PlayerLayer(tpl);
+            if (buildPlayerLayer == bodyLayer) buildPlayerLayer = -1;
 
             // 5. Centre de gravite : objet a nous (CarDynamics.Start le recopie dans le corps), entre les essieux, 0,3 m au-dessus
             //    des moyeux (VazHandling le recale ensuite d'apres la Spec)
@@ -351,6 +349,7 @@ namespace MWCoop
 
         // Entree du F10 (VazPanel) : la R5 standalone posee a 6 m devant le joueur, sur le sol ; ou retiree.
         public static bool Spawned { get { return cars.Count > 0; } }
+        static int buildPlayerLayer = -1;
         public static void Toggle()
         {
             if (cars.Count > 0) { foreach (VazCar.Built x in new List<VazCar.Built>(cars)) Remove(x); Log.Info("standalone : retiree (F10)"); return; }
