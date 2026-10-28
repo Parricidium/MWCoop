@@ -55,6 +55,14 @@ namespace MWCoop
                 departDone = true; string[] v = Config.Get("Test", "VazTenueDepart", "").Split(','); var ci = System.Globalization.CultureInfo.InvariantCulture;
                 if (v.Length == 3) { Move(new Vector3(float.Parse(v[0], ci), float.Parse(v[1], ci), float.Parse(v[2], ci))); Log.Info("autotest vaztenue : joueur pose en " + Game.PlayerT.position.ToString("F1")); }
             }
+            // [Test] VazTenueRusckoNoyee=1 : contact de la Ruscko de la partie mis a InWater vrai avant la demande (Ruscko noyee : la
+            // copie ne doit pas en heriter)
+            if (phase == 0 && t > 18f && !rusckoWet && Config.GetInt("Test", "VazTenueRusckoNoyee", 0) != 0)
+            {
+                rusckoWet = true; Transform rk = Find("RCO_RUSCKO12(270)");
+                if (rk != null) foreach (PlayMakerFSM f in rk.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Use" && f.gameObject.name == "Ignition") { FsmBool w = f.FsmVariables.FindFsmBool("InWater"); if (w != null) w.Value = true; }
+                Log.Info("autotest vaztenue : Ruscko de la partie noyee (InWater) ; " + WaterState(rk));
+            }
             if (phase == 0 && t > 20f)
             {
                 phase = 1;
@@ -84,6 +92,7 @@ namespace MWCoop
                 if (car == null) { Log.Info("autotest vaztenue : voiture introuvable (" + (other.Length > 0 ? other : "F10") + ")"); phase = 99; return; }
                 rb = car.GetComponent<Rigidbody>(); ax = car.GetComponent<AxisCarController>(); dt = car.GetComponent<Drivetrain>();
                 Dump();
+                Log.Info("autotest vaztenue : a l'apparition, " + WaterState(car));
                 Seat();
             }
             if (phase == 2 && t > 31f) Seat();
@@ -345,7 +354,7 @@ namespace MWCoop
             Log.Info("autotest vaztenue : entree, automate " + st + " -> " + driveFsm.ActiveStateName);
         }
 
-        static bool drowned, dried, departDone; static Vector3 dryPos;
+        static bool drowned, dried, departDone, rusckoWet; static Vector3 dryPos;
         public static string WaterState(Transform c)
         {
             if (c == null) return "pas de voiture";

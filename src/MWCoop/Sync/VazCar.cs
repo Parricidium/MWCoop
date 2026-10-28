@@ -595,6 +595,10 @@ namespace MWCoop
             {
                 string on = f.transform.name;
                 if ((f.FsmName == "Angle" && f.GetComponent<Wheel>() != null) || (on == "ParkingBrake" && f.FsmName == "Brake") || (f.FsmName == "Cooling" && on == "Cooling")) { f.enabled = false; n++; continue; }
+                // (moteur noye herite : la Ruscko de la partie restee dans l'eau a InWater vrai sur son contact -- sa copie ne
+                // demarrerait jamais ; l'automate InWater de la prise d'air, repart de son etat de depart sur la copie, garde le vrai
+                // noyage quand on roule dans l'eau)
+                if (f.FsmName == "Use" && on == "Ignition") { FsmBool w = f.FsmVariables.FindFsmBool("InWater"); if (w != null && w.Value) { w.Value = false; n++; } }
                 if (f.FsmName == "Use" && on == "Ignition")
                     foreach (FsmState st in f.FsmStates)
                         if (st.Name == "Check key")
@@ -624,7 +628,7 @@ namespace MWCoop
                                 if (sp != null && !ac.Enabled && sp.targetProperty != null && sp.targetProperty.PropertyName == "handbrakeAxis") { ac.Enabled = true; n++; }
                             }
             }
-            Log.Info("vaz : Ruscko copiee : " + n + " correction(s) (guepes, roues arriere, tirette, refroidissement, contact sans cle, demarreur, touche du frein a main)");
+            Log.Info("vaz : Ruscko copiee : " + n + " correction(s) (guepes, roues arriere, tirette, refroidissement, contact sans cle, demarreur, touche du frein a main, moteur pas noye)");
         }
 
         // Voiture du rallye du jeu (RACES/.../RALLYCAR3 ; chez l'invite, Races la sort de son parent) : recherche parmi tous les
