@@ -5363,7 +5363,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
             Pill(g, RectF(right - 60, y + 7, 60, 22), mode == 2 ? TH(toggleOff) : WithA(kAcc, 0.22f), mode == 0 ? T(L"Tous", L"All") : mode == 2 ? T(L"Aucun", L"None") : b, kInk, 10.5f);
         }
         // (resume des ajouts, a jour du 25/10 : sur MSC aussi la boutique, le musee, la VAZ et le cinema ; coupe s'il ne tient pas)
-        if (!pick) Text(g, FitText(g_game == GAME_MSC ? T(L"Drone, sacs, s21, musée, VAZ, cinéma", L"Drone, bags, s21, museum, VAZ, cinema") : T(L"Drone, sacs, s21, musée, VAZ, cinéma, CARDINAL", L"Drone, bags, s21, museum, VAZ, cinema, CARDINAL"), 10.5f, FontStyleRegular, w), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        if (!pick) Text(g, FitText((AjoutsParHote() ? std::wstring(T(L"Réglé par l'hôte", L"Set by the host")) + L" · " : std::wstring()) + (g_game == GAME_MSC ? T(L"Drone, sacs, s21, musée, VAZ, cinéma", L"Drone, bags, s21, museum, VAZ, cinema") : T(L"Drone, sacs, s21, musée, VAZ, cinéma, CARDINAL", L"Drone, bags, s21, museum, VAZ, cinema, CARDINAL")), 10.5f, FontStyleRegular, w), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         y += pick ? rh : rh2;
         g.DrawLine(&sp, x, y - 0.5f, right, y - 0.5f);
         if (mode == 1) for (const char *k : kAjoutKeys) row(k, false);
@@ -8311,6 +8311,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)
         else if (st == L"reglages-cle") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-lanceur"); g_setContentH = 2000; g_scroll[g_tab] = 2000; }   // (carte Acces reserve, en bas de la colonne de gauche)
         else if (st == L"reglages-triches") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-coop"); g_gfxVal["Triches"] = 1; g_gfxVal["TrichesHote"] = 1; }   // (carte Regles, triches autorisees)
+        else if (st == L"reglages-coop-invite") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-coop"); g_lobby = LB_GUEST; }   // (ajouts : « Réglé par l'hôte », JD 28/10)
         else if (!wcsncmp(st.c_str(), L"reglages-", 9)) { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(st); }   // reglages-jeu|image|son|coop|touches|theme|lanceur|recherche
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
         else if (st == L"guide-recherche") { g_tab = TAB_WIKI; g_wikiSearch = L"mods"; g_wikiFocus = true; }   // (champ Chercher de l'en-tete)

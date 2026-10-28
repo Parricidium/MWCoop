@@ -2434,6 +2434,8 @@ static const wchar_t *const kRu[][2] = {
     { L"MEDIA & HELP", L"МЕДИА И ПОМОЩЬ" },
     { L"s21 shop", L"Магазин s21" },
     { L"1 km", L"1 км" },
+    { L"Set by the host · as a guest, you get the additions of their lobby", L"Задаёт хост · как гость ты получаешь дополнения его лобби" },
+    { L"Set by the host", L"Задаёт хост" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
@@ -3247,4 +3249,5 @@ static const wchar_t *const kRu[][2] = {
     { L"Download VxKex NEXT from its official GitHub page: github.com/YuZhouRen86/VxKex-NEXT (the launcher downloads and installs nothing).", L"Скачай VxKex NEXT с его официальной страницы GitHub: github.com/YuZhouRen86/VxKex-NEXT (лаунчер ничего не скачивает и не устанавливает)." },
     { L"With Steam closed: right-click steamwebhelper.exe (in the Steam folder) → Properties → VxKex tab → turn it on. ONLY this file: not the game, not MWCoop.exe.", L"При закрытом Steam: правый клик по steamwebhelper.exe (в папке Steam) → Свойства → вкладка VxKex → включи. ТОЛЬКО этот файл: не игру и не MWCoop.exe." },
     { L"Start Steam, then pick STEAM in the launcher.", L"Запусти Steam, затем выбери STEAM в лаунчере." },
+    { L"MWCoop additions always follow the host: as a guest, you get the ones of their lobby (Settings > Co-op shows them greyed out, \"Set by the host\"); your choice only counts when you host.", L"Дополнения MWCoop всегда следуют за хостом: как гость ты получаешь те, что в его лобби (Настройки > Кооп показывают их серыми, «Задаёт хост»); твой выбор важен, только когда ты хостишь." },
 };

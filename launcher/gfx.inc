@@ -1211,6 +1211,9 @@ struct AjoutList {
     const char *operator[](int i) const { return kAjoutAll[i]; }
 };
 static const AjoutList kAjoutKeys = {};
+// Les ajouts suivent toujours l'hote (JD 28/10 : la regle du 13/10, ou un invite pouvait les couper pour lui, est annulee ;
+// le mod ne lit plus que les bits de l'hote) : en invite, le choix des Reglages est grise, « Réglé par l'hôte ».
+static bool AjoutsParHote() { return g_lobby == LB_GUEST || g_lobby == LB_CONNECTING; }
 #define kAjoutN (AjoutCount())
 static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse", L"VAZ-2108 (F10)", L"Cinéma", L"Pièces CARDINAL" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica", L"VAZ-2108 (F10)", L"Cinema", L"CARDINAL parts" };
 static_assert(sizeof(kAjoutFr) / sizeof(kAjoutFr[0]) == sizeof(kAjoutAll) / sizeof(kAjoutAll[0]) && sizeof(kAjoutEn) / sizeof(kAjoutEn[0]) == sizeof(kAjoutAll) / sizeof(kAjoutAll[0]), "un nom FR/EN par ajout (1.10.0 : le 6e plantait la page Co-op)");
@@ -1364,13 +1367,15 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             bool none = GfxGet("SansAjouts") == 1;
             bool all = true;
             for (const char *a : kAjoutKeys) all = all && GfxGet(a) == 1;
-            SetSegRow(g, it, row, { T(L"Tous", L"All"), T(L"Choisir", L"Choose"), T(L"Aucun", L"None") }, none ? 2 : all ? 0 : 1, UI_SET_AJOUTS);
+            SetItem gi = it;
+            if (AjoutsParHote()) { gi.dFr = L"Réglé par l'hôte · en invité, tu as les ajouts de son salon"; gi.dEn = L"Set by the host · as a guest, you get the additions of their lobby"; }
+            SetSegRow(g, gi, row, { T(L"Tous", L"All"), T(L"Choisir", L"Choose"), T(L"Aucun", L"None") }, none ? 2 : all ? 0 : 1, UI_SET_AJOUTS, !AjoutsParHote());
         } else if (!strcmp(k, "ajoutchips")) {   // un jeton par ajout, cliquable (grise quand tout est coupe)
-            bool none = GfxGet("SansAjouts") == 1;
+            bool none = GfxGet("SansAjouts") == 1, host = AjoutsParHote();
             SetChipLines(w);
             float cx = x, ly = y + 7;
             for (int i = 0; i < kAjoutN; i++) {
-                bool on = GfxGet(kAjoutKeys[i]) == 1 && !none, hot = !none && g_uiHot == UI_SET_AJOUT + i;
+                bool on = GfxGet(kAjoutKeys[i]) == 1 && !none, hot = !none && !host && g_uiHot == UI_SET_AJOUT + i;
                 std::wstring s = T(kAjoutFr[i], kAjoutEn[i]);
                 float cw = PillW(s, 11) + 22;
                 if (cx > x && cx + cw > x + w) { cx = x; ly += 32; }
@@ -1378,10 +1383,10 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
                 GraphicsPath p; RoundRect(p, r, 13);
                 SolidBrush b(on ? WithA(kAcc, 0.2f) : hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
                 Pen pen(on ? WithA(kAcc, 0.7f) : TH(fieldBorder), 1.0f); g.DrawPath(&pen, &p);
-                Color ink = WithA(on ? kAcc : kInk, none ? 0.4f : 1.0f);
+                Color ink = WithA(on ? kAcc : kInk, none || host ? 0.4f : 1.0f);
                 if (on) Icon(g, IC_CHECK, r.X + 14, r.Y + 13, 13, ink, 2.4f);
                 Text(g, s, RectF(r.X + (on ? 22.0f : 8.0f), r.Y, r.Width - (on ? 26.0f : 12.0f), r.Height), 11, FontStyleBold, ink);
-                if (!none) HotZone(r, UI_SET_AJOUT + i);
+                if (!none && !host) HotZone(r, UI_SET_AJOUT + i);
                 cx += cw + 6;
             }
         } else if (!strcmp(k, "max")) {
@@ -2076,6 +2081,7 @@ static bool SetClick(int id)
     if (id >= UI_SET_SESS && id < UI_SET_SESS + 3) { static const int n[] = { 3, 10, 30 }; WritePrivateProfileStringW(L"Lanceur", L"Sessions", n[id - UI_SET_SESS] == 30 ? NULL : std::to_wstring(n[id - UI_SET_SESS]).c_str(), g_iniLauncher.c_str()); return true; }
     if (id >= UI_SET_PORTSEG && id < UI_SET_PORTSEG + 8) { if (const Opt *o = OptByKey("Port")) if (id - UI_SET_PORTSEG < (int)o->vals.size()) OptSet(*o, o->vals[id - UI_SET_PORTSEG]); return true; }
     if (id >= UI_SET_MAXP && id < UI_SET_MAXP + 4) { static const int m[] = { 4, 8, 12, 16 }; WritePrivateProfileStringW(L"Lanceur", L"SalonMax", std::to_wstring(m[id - UI_SET_MAXP]).c_str(), g_iniLauncher.c_str()); return true; }
+    if (((id >= UI_SET_AJOUTS && id < UI_SET_AJOUTS + 3) || (id >= UI_SET_AJOUT && id < UI_SET_AJOUT + kAjoutN)) && AjoutsParHote()) return true;   // (reglé par l'hôte)
     if (id >= UI_SET_AJOUTS && id < UI_SET_AJOUTS + 3) {
         int k = id - UI_SET_AJOUTS;
         GfxSet("SansAjouts", k == 2 ? 1 : 0);
