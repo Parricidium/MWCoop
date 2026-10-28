@@ -185,6 +185,48 @@ namespace MWCoop
             return true;
         }
 
+        // Sortir une voiture du F10 a une place donnee (CoopApi.ShowF10Car : showroom de JD, 28/10) : la sienne deplacee si c'est
+        // deja ce modele, sinon rendue puis redemandee au meme numero (l'hote tout de suite ; un invite redemande des que l'hote
+        // a rendu la sienne, 10 s au plus). Faux : refus connu d'avance (message a l'ecran).
+        static int atModel = -1, atNumber; static Vector3 atPos; static float atYaw, atUntil;
+        public static bool RequestAt(int model, Vector3 pos, float yaw)
+        {
+            if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coupée (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
+            if (!PlayerSync.InGame || !VazCar.Has(model)) return false;
+            atModel = -1;
+            Slot s; int n = 0;
+            if (wanted.TryGetValue(Me, out s))
+            {
+                if (s.Model == model && CarOf(Me) != null)
+                {
+                    if (Host) Move(Me, pos, yaw); else Session.SendToHost(new NetWriter(Msg.Race).U8(V_CALL).Vec(pos).F32(yaw), true);
+                    return true;
+                }
+                n = s.Number;
+                Release();
+                if (!Host) { atModel = model; atNumber = n; atPos = pos; atYaw = yaw; atUntil = Time.realtimeSinceStartup + 10f; return true; }
+            }
+            if (!IsFree(n)) { n = 0; for (int i = 1; i <= Count && n == 0; i++) if (IsFree(i)) n = i; }
+            if (n == 0) { Deny(1, 1); return false; }
+            string liv = EvoLivery.MyHash(model);
+            Log.Info("vaz : " + VazCar.ModelOf(model).Name + " demandee en " + pos.ToString("F1") + " (n " + n + ", mod)");
+            if (Host) { Assign(Me, new Slot { Number = n, Model = model, Livery = liv, Pos = pos, Yaw = yaw }); return true; }
+            Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(n).Vec(pos).F32(yaw).U8(model).Str(liv), true);
+            return true;
+        }
+
+        // (invite : la sienne rendue, la demande de RequestAt part)
+        static void RequestAtStep(float now)
+        {
+            if (atModel < 0 || wanted.ContainsKey(Me)) { if (atModel >= 0 && now > atUntil) { Log.Warn("vaz : voiture pas rendue par l'hote en 10 s, demande abandonnee"); atModel = -1; } return; }
+            int m = atModel; atModel = -1;
+            if (!IsFree(atNumber)) atNumber = 0;
+            for (int i = 1; i <= Count && atNumber == 0; i++) if (IsFree(i)) atNumber = i;
+            if (atNumber == 0) return;
+            Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(atNumber).Vec(atPos).F32(atYaw).U8(m).Str(EvoLivery.MyHash(m)), true);
+            Log.Info("vaz : " + VazCar.ModelOf(m).Name + " demandee a l'hote en " + atPos.ToString("F1") + " (mod)");
+        }
+
         // Rendre la sienne (toujours possible, meme l'ajout coupe).
         public static void Release()
         {
@@ -248,6 +290,7 @@ namespace MWCoop
             if (now < nextTick) return;
             nextTick = now + 0.5f;
             if (EvoLivery.Poll(MineModel)) MyLiveryChanged();
+            RequestAtStep(now);
             if (Host) HostStep(now);
             Reconcile(now);
             // numero de course sur les portieres (course sur glace : celui de la voiture IA remplacee), sinon celui de la place

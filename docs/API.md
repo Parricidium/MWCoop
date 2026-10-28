@@ -38,7 +38,7 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 
 | Member | Description |
 |---|---|
-| `const int Version` | API version (3). Raised when members are added. |
+| `const int Version` | API version (4). Raised when members are added. |
 | `const int MaxReliableBytes` | Largest reliable payload: 64 KB (split into packets and rebuilt for you). |
 | `const int MaxUnreliableBytes` | Largest unreliable payload: 1000 bytes (one packet). |
 | `string GameName` | "My Winter Car" or "My Summer Car" (since 1.1.0). |
@@ -61,6 +61,8 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 | `void RemoveShopItem(string id)` | **v2.** Takes it off the shelves. |
 | `void AddMapPlace(string key, string alias, string nameFr, string nameEn, Vector3 at, Vector3 face)` | **v3.** Adds a place of your mod to the M map and to the `/place` cheat (`key` and `alias`: one lower-case word each; `at`: where the player is put, the ground below is found; `face`: a point he looks at). Same key again: replaced. Call it after each game load. |
 | `void RemoveMapPlace(string key)` | **v3.** Removes it. |
+| `string[] F10Cars()` | **v4.** Cars of the F10 menu installed here (the VAZ-2108 and the add-on cars), as `"id|name"`. Empty when the VAZ-2108 add-on is off. |
+| `bool ShowF10Car(int carId, Vector3 position, float yaw)` | **v4.** Takes the local player's F10 car `carId` and puts it at `position` (0.8 m above the ground), heading `yaw` degrees. The player's current F10 car is moved if it is the same model, else given back first. Solo and co-op. False when refused (a message is shown). |
 
 Notes:
 
@@ -189,3 +191,4 @@ if (api != null && (int)api.GetField("Version").GetValue(null) >= 2)
 - **1** (MWCoop 0.43.0): first version.
 - **2** (MWCoop 1.11.0): parts shop: `ShopAvailable`, `AddShopItem`, `RemoveShopItem`.
 - **3** (MWCoop 1.15.5): map places: `AddMapPlace`, `RemoveMapPlace`.
+- **4** (MWCoop msc-1.15.25): F10 cars: `F10Cars`, `ShowF10Car`.

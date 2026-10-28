@@ -17,7 +17,7 @@ namespace MWCoop
     public static class CoopApi
     {
         /// <summary>API version: raised when something is added. Check it if you use a newer member.</summary>
-        public const int Version = 3;
+        public const int Version = 4;
 
         /// <summary>Largest payload of <see cref="Send"/> (reliable; it is split in packets and rebuilt on the other side).</summary>
         public const int MaxReliableBytes = 64 * 1024;
@@ -134,6 +134,25 @@ namespace MWCoop
 
         /// <summary>v3. Removes a place added with <see cref="AddMapPlace"/>.</summary>
         public static void RemoveMapPlace(string key) { Cheats.RemovePlace(key); }
+
+        // ------------------------------------------------------------ cars of the F10 menu (version 4)
+        // (showroom de JD, 28/10 : un mod a part sort la voiture choisie au milieu de sa salle)
+
+        /// <summary>v4. Cars of the F10 menu installed in this game: the VAZ-2108 and the add-on cars, as "id|name" (id: the
+        /// number to give <see cref="ShowF10Car"/>). Empty when the VAZ-2108 add-on is off.</summary>
+        public static string[] F10Cars()
+        {
+            var l = new List<string>();
+            if (!Vaz.Enabled) return l.ToArray();
+            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i)) l.Add(i + "|" + VazCar.ModelOf(i).Name);
+            return l.ToArray();
+        }
+
+        /// <summary>v4. Takes the local player's F10 car (the VAZ-2108 or an add-on car, <paramref name="carId"/> from
+        /// <see cref="F10Cars"/>) and puts it at <paramref name="position"/> (0.8 m above the ground), heading <paramref name="yaw"/>
+        /// (degrees). The car the player already has is moved if it is the same model, else given back first. Works in solo and in
+        /// co-op (a guest asks the host). False when refused (add-on off, unknown car, no free number: a message is shown).</summary>
+        public static bool ShowF10Car(int carId, Vector3 position, float yaw) { return Vaz.RequestAt(carId, position, yaw); }
 
         // ------------------------------------------------------------ dessous (MWCoop)
         static class To { public const int All = 255; }
