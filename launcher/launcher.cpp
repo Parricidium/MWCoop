@@ -75,6 +75,7 @@ using std::max;
 #include <vector>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <set>
 #include <array>
 #include <atomic>
@@ -263,11 +264,28 @@ static void SteamDown();
 // Russe : la traduction du texte anglais (ru.inc, generee par ru_gen.py), l'anglais s'il n'y est pas.
 #include "ru.inc"
 #include "ar.inc"
+// Releve des textes sans traduction (essais : MWCOOP_TRAD_MANQUE=<fichier>) : chaque anglais demande en russe ou en arabe
+// sans ligne est ecrit une fois, « RU<TAB>texte ». Rien sans la variable.
+static void TradManque(const char *lang, const wchar_t *en)
+{
+    static int on = -1; static wchar_t path[MAX_PATH]; static std::unordered_set<std::wstring> seen;
+    if (on < 0) on = GetEnvironmentVariableW(L"MWCOOP_TRAD_MANQUE", path, MAX_PATH) > 0 ? 1 : 0;
+    if (!on || !en || !*en) return;
+    std::wstring k = std::wstring(lang[0] == 'R' ? L"RU\t" : L"AR\t") + en;
+    if (!seen.insert(k).second) return;
+    int n = WideCharToMultiByte(CP_UTF8, 0, k.c_str(), -1, NULL, 0, NULL, NULL); std::string u(n > 0 ? n - 1 : 0, 0);
+    if (n > 1) WideCharToMultiByte(CP_UTF8, 0, k.c_str(), -1, &u[0], n, NULL, NULL);
+    for (auto &c : u) if (c == '\n') c = ' ';
+    u += "\n";
+    HANDLE f = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, u.data(), (DWORD)u.size(), &w, NULL); CloseHandle(f); }
+}
 static const wchar_t *Ru(const wchar_t *en)
 {
     static std::unordered_map<std::wstring, const wchar_t *> m;
     if (m.empty()) for (const auto &p : kRu) m[p[0]] = p[1];
     auto it = m.find(en);
+    if (it == m.end()) TradManque("RU", en);
     return it != m.end() ? it->second : en;
 }
 // Arabe : chaque texte traduit est entoure (dans ar.inc) d'un debut et d'une fin d'incorporation droite-a-gauche
@@ -277,6 +295,7 @@ static const wchar_t *Ar(const wchar_t *en)
     static std::unordered_map<std::wstring, const wchar_t *> m;
     if (m.empty()) for (const auto &p : kAr) m[p[0]] = p[1];
     auto it = m.find(en);
+    if (it == m.end()) TradManque("AR", en);
     return it != m.end() ? it->second : en;
 }
 // Notes de version en arabe : meme incorporation droite-a-gauche, ligne par ligne (pas les lignes d'image, \x01).
