@@ -2639,6 +2639,26 @@ namespace MWCoop
                     if (da > 0f && dmKey == 1 && t > da + dt) { dmKey = 2; Log.Info("autotest : mscdemarre, cle relachee : " + VehicleSync.TestKey(dcar, "Shut off")); }
                     if (da > 0f && t > da - 2f && t < da + 12f && Time.realtimeSinceStartup >= dmLog) { dmLog = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : mscdemarre t=" + t.ToString("F1") + " " + VehicleSync.StartProbe(dcar)); }
                 }
+                // ([Test] Autotest=mscralenti, 2 joueurs, dossier #19 Markos 28/10 : « quand l'hote ne coupe pas le moteur, chez moi la voiture est
+                // coupee ») : l'hote prend le volant de RalentiVoiture (SATSUMA) a RalentiA s (150), tourne la cle a +5 (relachee a +9), sort a +20, prend
+                // le volant de RalentiAutre (HAYOSIKO) a +30 ; chacun note toutes les 3 s de RalentiA a RalentiA+90 : role de la voiture, cle, demarreur,
+                // regime (StartProbe). Attendu chez l'invite : SATSUMA « copie, moteur tournant chez #0 », regime > 0, jusqu'au bout.
+                if (mode == "mscralenti")
+                {
+                    string rv = Config.Get("Test", "RalentiVoiture", "SATSUMA(557kg, 248)"), ro = Config.Get("Test", "RalentiAutre", "HAYOSIKO(1500kg, 250)");
+                    float ra = Config.GetFloat("Test", "RalentiA", 150f);
+                    if (Net.Session.IsHost)
+                    {
+                        if (dmStep == 0 && t > ra) { dmStep = 1; Log.Info("autotest : mscralenti, " + VehicleSync.TestEnter(rv, false)); }
+                        if (dmStep == 1 && t > ra + 2f) { dmStep = 2; Log.Info("autotest : mscralenti, au volant : " + VehicleSync.TestEnter(rv, true)); }
+                        if (dmStep == 2 && t > ra + 5f) { dmStep = 3; Log.Info("autotest : mscralenti, cle tournee : " + VehicleSync.TestKey(rv, "Test")); }
+                        if (dmStep == 3 && t > ra + 9f) { dmStep = 4; Log.Info("autotest : mscralenti, cle relachee : " + VehicleSync.TestKey(rv, "Shut off")); }
+                        if (dmStep == 4 && t > ra + 20f) { dmStep = 5; Log.Info("autotest : mscralenti, sortie : " + VehicleSync.TestExit(rv)); }
+                        if (dmStep == 5 && t > ra + 30f) { dmStep = 6; Log.Info("autotest : mscralenti, vers l'autre : " + VehicleSync.TestEnter(ro, false)); }
+                        if (dmStep == 6 && t > ra + 32f) { dmStep = 7; Log.Info("autotest : mscralenti, au volant de l'autre : " + VehicleSync.TestEnter(ro, true)); }
+                    }
+                    if (t > ra && t < ra + 90f && Time.realtimeSinceStartup >= dmLog) { dmLog = Time.realtimeSinceStartup + 3f; Log.Info("autotest : mscralenti t=" + t.ToString("F0") + " " + VehicleSync.Describe(rv) + " ; " + VehicleSync.StartProbe(rv)); }
+                }
                 // ([Test] Autotest=mscradio : RadioGestes=t:voiture:geste;... -- geste=volume=0.5, station=0.071, mode, canal, suivante, ejecte --
                 // simules ici comme la molette / le bouton ; RadioReleves=t,t : etat des postes au journal + instantane mscetat)
                 if (mode == "mscradio")

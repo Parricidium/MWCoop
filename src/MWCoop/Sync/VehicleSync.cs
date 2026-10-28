@@ -181,6 +181,12 @@ namespace MWCoop
         static float bumpUntil, nextBumpLook;
         public static string LocalDrivingKey { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Key : null; } }
         static int owned = -1, ownedTick;        // voiture quittee moteur tournant : on en garde la main
+        // Voiture laissee moteur tournant quand on prend le volant d'une autre (dossier #19, Markos 28/10 : l'hote quitte la SATSUMA
+        // au ralenti pour le KEKMET ; elle etait rendue moteur en marche -- chez l'invite elle repassait a l'arret, contact sur ACC,
+        // radio muette, alors qu'elle tournait toujours chez l'hote, 9 minutes durant). Gardee et envoyee comme 'owned' (5 fois/s)
+        // jusqu'a ce que son moteur s'arrete, qu'un autre la prenne ou qu'on revienne a son volant.
+        static int idling = -1, idlingTick;
+        static bool Kept(Car c) { return c.Index == owned || c.Index == idling; }
         // Voiture garee poussee par le joueur local (main "Hand Push") : on en prend la main (owned) tant qu'on pousse et
         // qu'elle roule encore (8 s au plus apres la poussee), puis on la rend. Avant : seul l'hote pouvait pousser ; chez
         // un invite, l'hote la recalait toutes les 2 s (voiture qui se teleporte en arriere ; retour d'un joueur, 08/10).
@@ -305,7 +311,7 @@ namespace MWCoop
         {
             cars.Clear(); under.Clear(); byNet.Clear(); netKeys.Clear(); missingLogged.Clear(); proposedAt.Clear(); proposalLog.Clear(); nextPropose = 0;
             scanned = false; tableSeen = false; inCarWas = false; curVehicle = null; curVehicleLooked = false;
-            LocalDriving = -1; owned = -1; moving = null; bumped = -1;
+            LocalDriving = -1; owned = -1; idling = -1; moving = null; bumped = -1;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
             tStep = 0; tRec = 0;
         }
@@ -548,6 +554,7 @@ namespace MWCoop
                     cars[car.Index] = car;
                     if (car.Net >= 0 && car.Net < byNet.Count) byNet[car.Net] = car;
                     if (owned == car.Index) owned = -1;
+                    if (idling == car.Index) idling = -1;
                     added.Add(car.Key + " (nouveau corps)");
                     continue;
                 }
@@ -900,8 +907,19 @@ namespace MWCoop
                 // Voiture gardee (moteur laisse tournant, poussee) quand on prend le volant d'une autre : rendue proprement
                 // (derniere pose, etat 0). Avant : lachee d'un coup -- chez les autres la copie repassait brutalement sous la
                 // physique et le jeu arrachait toutes ses pieces (CORRIS demontee « toute seule », retour de HowardCS, 11/10).
-                if (driving >= 0 && owned >= 0 && owned != driving && owned < cars.Count) { Release(cars[owned], now); Log.Info("au volant d'une autre : " + cars[owned].Key + " rendue"); pushCar = -1; }
+                if (driving >= 0 && owned >= 0 && owned != driving && owned < cars.Count)
+                {
+                    Car o = cars[owned];
+                    if (o.Index != pushCar && EngineRunning(o) && Config.GetInt("Coop", "GardeRalenti", 1) != 0)
+                    {
+                        if (idling >= 0 && idling != owned && idling != driving && idling < cars.Count) { Release(cars[idling], now); Log.Info("au volant d'une autre : " + cars[idling].Key + " rendue"); }
+                        idling = owned; Log.Info("au volant d'une autre : " + o.Key + " laissee moteur tournant, reste a nous");
+                    }
+                    else { Release(o, now); Log.Info("au volant d'une autre : " + o.Key + " rendue"); }
+                    pushCar = -1;
+                }
                 if (driving >= 0) owned = -1;
+                if (driving >= 0 && driving == idling) idling = -1;
                 LocalDriving = driving;
             }
             if (LocalDriving >= 0 && now >= nextSeatCheck) { nextSeatCheck = now + 0.5f; SeatGuard(cars[LocalDriving]); }
@@ -939,6 +957,13 @@ namespace MWCoop
                     else if ((o.Index == pushCar ? EngineRunningStrict(o) : EngineRunning(o)) || pushed) Send(o, 2);
                     else { Release(o, now); Log.Info((o.Index == pushCar ? "poussee finie : " : "moteur coupe : ") + o.Key + " rendue"); owned = -1; pushCar = -1; }
                 }
+                if (idling >= 0 && idling < cars.Count && (++idlingTick & 3) == 0)   // 5 fois/s
+                {
+                    Car o = cars[idling];
+                    if (o.Body == null || (o.RemoteBy >= 0 && o.RemoteBy != Session.LocalId)) idling = -1;   // (un autre l'a prise)
+                    else if (EngineRunning(o)) Send(o, 2);
+                    else { Release(o, now); Log.Info("moteur coupe : " + o.Key + " rendue (laissee tournant)"); idling = -1; }
+                }
             }
             // Effets (particules, glisse des roues) de ce qu'on fait rouler : 4 fois/s et a chaque changement.
             if (LocalDriving >= 0) FxTick(cars[LocalDriving], now);
@@ -949,19 +974,20 @@ namespace MWCoop
                 nextSim = now + 1f;
                 if (LocalDriving >= 0) SendSim(cars[LocalDriving], 0, false);
                 if (owned >= 0) SendSim(cars[owned], 0, false);
+                if (idling >= 0 && idling < cars.Count) SendSim(cars[idling], 0, false);
             }
             if (Session.IsHost && now >= nextSlow)
             {
                 nextSlow = now + 2f;
                 foreach (Car c in cars)
-                    if (c.Index != LocalDriving && c.Index != owned && c.Index != bumped && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy && !Tow.Carries(c.Index) && !hitchSent.Contains(c.Index)) Send(c, 0);
+                    if (c.Index != LocalDriving && !Kept(c) && c.Index != bumped && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy && !Tow.Carries(c.Index) && !hitchSent.Contains(c.Index)) Send(c, 0);
             }
             // Hote : etat de la simulation des voitures garees (personne ne les fait rouler), toutes les 10 s.
             if (Session.IsHost && now >= nextParkedSim && Session.RemoteCount > 0)
             {
                 nextParkedSim = now + 10f;
                 foreach (Car c in cars)
-                    if (c.Index != LocalDriving && c.Index != owned && c.Index != bumped && !Remote(c, now) && c.Body != null && c.Body.gameObject.activeInHierarchy) SendSim(c, SimParked, false);
+                    if (c.Index != LocalDriving && !Kept(c) && c.Index != bumped && !Remote(c, now) && c.Body != null && c.Body.gameObject.activeInHierarchy) SendSim(c, SimParked, false);
             }
 
             HotTick();
@@ -1077,7 +1103,7 @@ namespace MWCoop
         public static void OnRemotePush(int who, int net, Vector3 lp, Vector3 ld)
         {
             Car c = ByNet(net);
-            if (c == null || c.Body == null || (c.Index != LocalDriving && c.Index != owned)) return;   // (celui qui la mene seul applique)
+            if (c == null || c.Body == null || (c.Index != LocalDriving && !Kept(c))) return;   // (celui qui la mene seul applique)
             float now = Time.realtimeSinceStartup;
             c.PushUntil = now + 0.2f; c.PushPoint = lp; c.PushDir = ld;
             if (now >= pushRecvLog) { pushRecvLog = now + 5f; Log.Info("poussee : " + c.Key + " poussee par #" + who); }
@@ -1211,7 +1237,7 @@ namespace MWCoop
             foreach (Car c in cars)
             {
                 if (c == our || c.Body == null || c.Kinematic || !c.Body.gameObject.activeInHierarchy || c.Net < 0) continue;
-                if (c.Index == owned || c.RemoteBy >= 0 || Tow.Carries(c.Index) || hitchSent.Contains(c.Index)) continue;
+                if (Kept(c) || c.RemoteBy >= 0 || Tow.Carries(c.Index) || hitchSent.Contains(c.Index)) continue;
                 if (c.Body.velocity.sqrMagnitude < 0.16f) continue;
                 if (!TouchesCarrier(c)) continue;   // (la voiture conduite, ou une remorque tiree d'ici)
                 if (Hitched(c)) continue;   // (remorque : l'attelage la mene)
@@ -1283,7 +1309,7 @@ namespace MWCoop
         // Copie conduite ailleurs (cinematique ici, suit les messages de celui qui la fait rouler).
         static bool Remote(Car c, float now)
         {
-            if (c.RemoteBy < 0 || c.Index == LocalDriving || c.Index == owned || c.Index == bumped) return false;
+            if (c.RemoteBy < 0 || c.Index == LocalDriving || Kept(c) || c.Index == bumped) return false;
             float silent = now - c.LastRemote;
             if (silent < 1.5f) return true;
             // Flux coupe mais joueur toujours dans la partie (coupure reseau ; chaos S3 sur MSC, 27/10 : apres 1,5 s de silence la copie
@@ -1432,7 +1458,7 @@ namespace MWCoop
             int n = r.U8();
             var want = new Dictionary<uint, FxState>();
             for (int i = 0; i < n; i++) { uint h = (uint)r.I32(); r.U8(); float mn = r.F32(), mx = r.F32(); want[h] = new FxState { Min = mn, Max = mx }; }
-            if (c == null || c.Body == null || c.Index == LocalDriving || c.Index == owned || c.Index == bumped) return;
+            if (c == null || c.Body == null || c.Index == LocalDriving || Kept(c) || c.Index == bumped) return;
             c.FxWant = want; c.SkidWant = skid; c.SmokeWant = smoke; c.FxAt = Time.realtimeSinceStartup; c.FxFrom = who;
             if (c.SkidLast == null || c.SkidLast.Length != nw) { c.SkidLast = new int[nw]; for (int i = 0; i < nw; i++) c.SkidLast[i] = -1; }
             if (!c.FxLogged) { c.FxLogged = true; Log.Info("particules : " + c.Key + " menee par #" + who + " : " + n + " emetteur(s) allume(s), " + nw + " roue(s)"); }
@@ -1546,7 +1572,7 @@ namespace MWCoop
             if (c == null) return name + " inconnue ici";
             float now = Time.realtimeSinceStartup;
             if (now >= c.FxScanAt) FxScan(c, now);
-            bool mine = c.Index == LocalDriving || c.Index == owned;
+            bool mine = c.Index == LocalDriving || Kept(c);
             var sb = new System.Text.StringBuilder(c.Key);
             sb.Append(mine ? " menee ici" : Remote(c, now) ? " copie de #" + c.RemoteBy + (c.FxWant != null ? ", " + c.FxWant.Count + " voulu(s) recu(s) il y a " + (now - c.FxAt).ToString("F1") + " s" : ", rien recu") : " garee");
             sb.Append(" ; emettent :");
@@ -1611,7 +1637,7 @@ namespace MWCoop
 
         // Conduite ici, ou quittee moteur tournant (on en garde la main) : on fait autorite dessus.
         // (+ voiture tiree a la corde par nous, Tow.Carries : son contenu est transporte par nous, pas par l'hote -- relecture du 15/10)
-        public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)); }   // (remorque tiree d'ici comprise)
+        public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || Kept(c) || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)); }   // (remorque tiree d'ici comprise)
 
         // Copie ici d'une voiture qu'un autre fait rouler.
         public static bool IsCopy(int index) { Car c = ByNet(index); return c != null && Remote(c, Time.realtimeSinceStartup); }
@@ -1624,7 +1650,7 @@ namespace MWCoop
             if (c == null) return 0;
             // (remorque attelee au vehicule qu'on conduit : a nous aussi -- benne, bois, compteur ; avant : a l'hote, et quand un
             // invite tirait le plateau, personne n'avait la benne ni le compteur de bois)
-            if (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)) return Session.LocalId;
+            if (c.Index == LocalDriving || Kept(c) || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)) return Session.LocalId;
             return Remote(c, Time.realtimeSinceStartup) ? c.RemoteBy : 0;
         }
         public static int Authority(Rigidbody car) { return Authority(CarIndex(car)); }
@@ -1655,7 +1681,7 @@ namespace MWCoop
         {
             Car c = CarOf(t);
             if (c == null) return Session.IsHost;
-            if (c.Index == LocalDriving || c.Index == owned) return true;
+            if (c.Index == LocalDriving || Kept(c)) return true;
             if (Remote(c, Time.realtimeSinceStartup)) return false;
             return Session.IsHost;
         }
@@ -1799,7 +1825,7 @@ namespace MWCoop
         static Rigidbody UnderFor(Under u)
         {
             Car o = u.Own;
-            if (o != null && (ReferenceEquals(o, moving) || o.Index == LocalDriving || o.Index == owned)) return null;
+            if (o != null && (ReferenceEquals(o, moving) || o.Index == LocalDriving || Kept(o))) return null;
             return u.Car;
         }
 
@@ -3156,7 +3182,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             // On fait autorite (conduite ici, moteur tournant a nous) ; ou instantane de l'hote d'une voiture qu'un
             // autre fait rouler ici, ou qu'on vient de rendre (notre derniere valeur est en route).
-            bool skip = c == null || c.Index == LocalDriving || c.Index == owned || c.Index == bumped
+            bool skip = c == null || c.Index == LocalDriving || Kept(c) || c.Index == bumped
                         || ((flags & SimParked) != 0 && (Remote(c, now) || now < c.AuthorityUntil));
             for (int i = 0; i < n; i++)
             {
@@ -3327,8 +3353,8 @@ namespace MWCoop
             Car c = ByNet(idx);
             if (c == null || c.Body == null) { if (driven) Missing(idx, true); return; }
             if (c.Index == LocalDriving) return;              // je la conduis : je garde la main
-            if (c.Index == owned && mode != 1) return;        // mon moteur tourne : je garde la main
-            if (c.Index == owned) { owned = -1; Log.Info(c.Key + " prise par #" + who); }
+            if (Kept(c) && mode != 1) return;        // mon moteur tourne : je garde la main
+            if (Kept(c)) { if (c.Index == owned) owned = -1; else idling = -1; Log.Info(c.Key + " prise par #" + who); }
             if (c.Index == bumped && !driven) return;         // je la pousse avec ma voiture : je garde la main
             if (hitchSent.Contains(c.Index) && mode != 1) { if (now0 >= hitchClaimLog) { hitchClaimLog = now0 + 5f; Log.Info("attelage : " + c.Key + " tiree d'ici, prise de #" + who + " ignoree"); } return; }   // (la remorque qu'on tire : a nous)
             if (c.Index == bumped) { bumped = -1; Log.Info("poussee en voiture : " + c.Key + " prise par #" + who); }
@@ -3627,7 +3653,7 @@ namespace MWCoop
             Car c = Named(name);
             if (c == null) return name + " inconnue ici (" + cars.Count + " voitures, table " + netKeys.Count + (tableSeen || Session.IsHost ? "" : ", pas encore recue") + ")";
             float now = Time.realtimeSinceStartup;
-            string role = c.Index == LocalDriving ? "conduite ici" : c.Index == owned ? "moteur tournant a nous" : Remote(c, now) ? (c.RemoteDriver >= 0 ? "copie, conduite par #" + c.RemoteDriver : "copie, moteur tournant chez #" + c.RemoteBy) : "garee";
+            string role = c.Index == LocalDriving ? "conduite ici" : Kept(c) ? "moteur tournant a nous" : Remote(c, now) ? (c.RemoteDriver >= 0 ? "copie, conduite par #" + c.RemoteDriver : "copie, moteur tournant chez #" + c.RemoteBy) : "garee";
             return c.Key + " rang " + c.Index + " numero " + c.Net + (c.Body == null ? " (corps detruit)" : (c.Body.gameObject.activeInHierarchy ? "" : " (inactive)") + " en " + c.Body.position.ToString("F1") + " rot " + c.Body.rotation.eulerAngles.y.ToString("F0"))
                    + ", " + role + ", conduite " + (c.Drive != null ? c.Drive.ActiveStateName : "?") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?")
                    + ", PlayerCurrentVehicle '" + (curVehicle != null ? curVehicle.Value : "?") + "'"
