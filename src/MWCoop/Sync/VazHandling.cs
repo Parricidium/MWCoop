@@ -66,6 +66,15 @@ namespace MWCoop
         // addons (adherence arriere, frein a main qui fait pivoter, barres, lacet) par-dessus, comme sur My Winter Car.
         static bool Msc { get { return Game.Msc; } }
         const float SatMass = 495f, SatSpring = 25000f, SatDamp = 1400f, SatTravel = 0.15f, SatSteer = 33f, SatComAbove = 0.3f, SatDrag = 0.02f;
+        // Satsuma montee en rallye de JD (sauvegarde du 28/10, releve Autotest=vaztenue) : direction au clavier sans lissage (braquage
+        // et retour immediats, l'angle maxi se reduisant avec la vitesse : SteerBySpeed), ressorts 25 000 et amortisseurs 4 000 pour
+        // 507,6 kg (roues), resistance au roulement 0,018. Les addons (copie de la Ruscko) lissaient la direction (0,03 s + 0,03 s par
+        // m/s : ~0,9 s pour braquer a 100 km/h, autant pour revenir -- JD 28/10 : « a partir de la 2e elle tourne trop doucement »),
+        // amortissaient trois fois moins et freinaient au roulement (0,12). Moteur, boite et masse : ceux de chaque addon.
+        // ([Test] VazSatsumaRallye=0 : les reglages d'avant)
+        const float RallyMass = 507.6f, RallySpring = 25000f, RallyDamp = 4000f, RallyRolling = 0.018f;
+        static bool Rally { get { return Msc && Config.GetInt("Test", "VazSatsumaRallye", 1) != 0; } }
+        static FieldInfo smoothField;
         static readonly Dictionary<string, float> MscGrip = new Dictionary<string, float> { { "Track", 0.95f }, { "Offroad", 1.25f }, { "Grass", 1.15f }, { "Swamp", 1.0f } };
 
         static GameObject Source(out string name)
@@ -175,6 +184,7 @@ namespace MWCoop
             bool evo = sp != null;
             float wantMass = evo ? sp.Mass : mass, steer = evo ? sp.Steer : SteerDeg, spring = evo ? sp.Spring : SpringRate, damp = evo ? sp.Damp : Damp, travel = SpringTravel;
             if (Msc) { steer = SatSteer; spring = SatSpring * wantMass / SatMass; damp = SatDamp * wantMass / SatMass; travel = SatTravel; }
+            if (Rally) { spring = RallySpring * wantMass / RallyMass; damp = RallyDamp * wantMass / RallyMass; }
             Drivetrain.Transmissions tr = evo ? Drivetrain.Transmissions.AWD : Drivetrain.Transmissions.RWD;
             float[] gears = evo ? sp.Gears : Gears;
             if (b.Rb != null && !Mathf.Approximately(b.Rb.mass, wantMass)) { b.Rb.mass = wantMass; n++; }
@@ -231,6 +241,15 @@ namespace MWCoop
                     if (w.wheelPos.ToString().StartsWith("REAR")) n += SetF(w, "handbrakeFrictionTorque", sp.Handbrake);
             foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", Msc ? (w.wheelPos.ToString().StartsWith("FRONT") ? Config.GetFloat("Test", "VazInertieAV", 1.3f) : Config.GetFloat("Test", "VazInertieAR", 0.8f)) : 0.753f); }
             if (Msc && b.Rb != null && !Mathf.Approximately(b.Rb.drag, SatDrag)) { b.Rb.drag = SatDrag; n++; }
+            if (Rally)
+            {
+                foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) n += SetF(w, "rollingFrictionCoefficient", RallyRolling);
+                if (b.Axis != null)
+                {
+                    if (smoothField == null) smoothField = b.Axis.GetType().GetField("smoothInput");
+                    if (smoothField != null && smoothField.FieldType == typeof(bool) && (bool)smoothField.GetValue(b.Axis)) { smoothField.SetValue(b.Axis, false); n++; }
+                }
+            }
             if (cd != null) n += SetF(cd, "frontRearBrakeBalance", 0.6f);
             // retour de force coupe : le couple d'auto-alignement (Wheel.CalcAligningForce, qui ne sert qu'a lui) divise par la
             // charge de la roue -- roue avant en l'air sur les bosses de la glace : 0/0 = NaN, 48 fois en 15 min de course (JD 21/10)
