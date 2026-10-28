@@ -27,7 +27,9 @@ namespace MWCoop
             public Transform Pivot; public float HalfWidth; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
             public Transform[] Doors; public Vector3[] DoorCenter; public bool[] DoorOpen; public float[] DoorAngle;
             public Gauge Speedo, Tacho;
-            public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;   // (habitacle creux : StandaloneDrive.Shell)
+            public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;
+            public Bounds[] DoorBox = new Bounds[2]; public float WheelVis;   // (portieres : boites ; volant visible lisse)
+            public readonly Queue<KeyValuePair<float, Vector3>> Vel = new Queue<KeyValuePair<float, Vector3>>();   // (choc mortel)   // (habitacle creux : StandaloneDrive.Shell)
         }
         static readonly Dictionary<VazCar.Built, State> states = new Dictionary<VazCar.Built, State>();
         // Course de suspension au-dessus du moyeu (m) : Wheel pose son modele a (compression - course) sous son objet ; ~0,10 au repos

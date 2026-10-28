@@ -134,9 +134,10 @@ namespace MWCoop
                 Bounds db; st.DoorCenter[i] = VazCar.ModelBounds(m, dd[i][0], out db) ? db.center : h;
                 st.Doors[i] = piv;
                 // (portiere conducteur : elle ferme l'habitacle pour le joueur et tourne avec la portiere -- ouverte, on passe)
-                if (i == 0 && buildPlayerLayer >= 0 && db.size.y > 0.3f)
+                if (buildPlayerLayer >= 0 && db.size.y > 0.3f)
                 {
-                    st.DriverDoor = db;
+                    if (i == 0) st.DriverDoor = db;
+                    st.DoorBox[i] = db;
                     var dc = new GameObject("joueur_portiere"); dc.layer = buildPlayerLayer;
                     dc.transform.SetParent(inner, false);
                     var bc = dc.AddComponent<BoxCollider>(); bc.center = db.center; bc.size = db.size;
@@ -299,6 +300,7 @@ namespace MWCoop
                 return;
             }
             if (driving != b) return;
+            if (Crash(b, st)) return;
             Knobs(b, st);
             if (hovered < 0) Doors(b, st);
             GearText(b);
@@ -367,11 +369,36 @@ namespace MWCoop
             Box(ct, L, "joueur_toit", new Vector3(0f, (rf + bb.max.y + 0.02f) * 0.5f, bb.center.z), new Vector3(bb.size.x, bb.max.y + 0.02f - rf, bb.size.z));
             Box(ct, L, "joueur_avant", new Vector3(0f, (fb + rf) * 0.5f, (zMax + bb.max.z) * 0.5f), new Vector3(bb.size.x, rf - fb, bb.max.z - zMax));
             Box(ct, L, "joueur_arriere", new Vector3(0f, (fb + rf) * 0.5f, (bb.min.z + zMin) * 0.5f), new Vector3(bb.size.x, rf - fb, zMin - bb.min.z));
-            Box(ct, L, "joueur_flanc_d", new Vector3((ix + x1) * 0.5f, (fl + rf) * 0.5f, (zMin + zMax) * 0.5f), new Vector3(x1 - ix, rf - fl, zMax - zMin));
+            // (cote passager : comme le conducteur si sa portiere est la -- JD 28/10 : « pas cote passager, le passage est toujours
+            // bloque, porte ouverte » --, sinon flanc plein)
+            Bounds pd = st.DoorBox[1];
+            if (pd.size.y > 0.3f) Box(ct, L, "joueur_flanc_d_ar", new Vector3((ix + x1) * 0.5f, (fl + rf) * 0.5f, (zMin + pd.min.z) * 0.5f), new Vector3(x1 - ix, rf - fl, pd.min.z - zMin));
+            else Box(ct, L, "joueur_flanc_d", new Vector3((ix + x1) * 0.5f, (fl + rf) * 0.5f, (zMin + zMax) * 0.5f), new Vector3(x1 - ix, rf - fl, zMax - zMin));
             Box(ct, L, "joueur_flanc_g_ar", new Vector3((x0 - ix) * 0.5f, (fl + rf) * 0.5f, (zMin + db.min.z) * 0.5f), new Vector3(-ix - x0, rf - fl, db.min.z - zMin));
             st.Cabin = new Bounds(); st.Cabin.SetMinMax(new Vector3(-ix, fl, zMin), new Vector3(ix, rf, zMax));
             st.HasCabin = true;
             Log.Info("standalone : habitacle creux " + st.Cabin.min.ToString("F2") + " - " + st.Cabin.max.ToString("F2") + ", couche " + LayerMask.LayerToName(L));
+        }
+
+        // Choc mortel (JD 28/10 : « je ne sais pas s'il est possible de mourir en ayant un accident avec cette voiture ») : les voitures
+        // du jeu tuent par la liaison du pivot de tete du conducteur, qui casse a 300 N (500 casque) ; ici, l'equivalent par la caisse :
+        // vitesse perdue en moins de 0,1 s au-dela de tenue.ini [Poste] ChocMortel km/h (40 ; x1,6 casque mis), puis la mort du jeu
+        // par accident (Systems/Death, cause Crash : sang, ecran, reapparition en co-op -- Respawn.TestDie).
+        static bool Crash(VazCar.Built b, State st)
+        {
+            float now = Time.time; Vector3 v = b.Rb.velocity;
+            st.Vel.Enqueue(new KeyValuePair<float, Vector3>(now, v));
+            while (st.Vel.Count > 2 && now - st.Vel.Peek().Key > 0.1f) st.Vel.Dequeue();
+            if (b.Rb.isKinematic || Time.realtimeSinceStartup - enteredAt < 1f) return false;
+            float dv = (st.Vel.Peek().Value - v).magnitude * 3.6f, lim = st.T.ChocMortel;
+            FsmBool helmet = FsmVariables.GlobalVariables.FindFsmBool("PlayerHelmet");
+            if (helmet != null && helmet.Value) lim *= 1.6f;
+            if (dv < lim) return false;
+            Log.Info("standalone : choc mortel, " + dv.ToString("F0") + " km/h perdus en " + (now - st.Vel.Peek().Key).ToString("F2") + " s (limite " + lim.ToString("F0") + ")");
+            st.Vel.Clear();
+            Exit(b, true);
+            Log.Info("standalone : " + Respawn.TestDie("Crash"));
+            return true;
         }
 
         // Couche des colliders du joueur retiree du rayon des roues (pose par Wheel.Start, apres l'allumage)
@@ -403,7 +430,9 @@ namespace MWCoop
             Vector3 lp = b.Car.transform.InverseTransformPoint(pl.position);
             Bounds c = st.Cabin, d = st.DriverDoor;
             bool inside = Mathf.Abs(lp.x) < c.max.x + 0.05f && lp.z > c.min.z && lp.z < c.max.z && lp.y > -0.8f && lp.y < 1.8f;
-            bool atDoor = st.DoorOpen[0] && lp.x < -c.max.x && lp.x > -(st.HalfWidth + 0.6f) && lp.z > d.min.z && lp.z < d.max.z - 0.1f && lp.y > -0.8f && lp.y < 1.8f;
+            bool atDoor = st.DoorOpen[0] && lp.x < -c.max.x && lp.x > -(st.HalfWidth + 0.45f) && lp.z > d.min.z && lp.z < d.max.z - 0.1f && lp.y > -0.8f && lp.y < 1.8f;
+            Bounds p = st.DoorBox[1];
+            if (!atDoor && p.size.y > 0.3f && st.DoorOpen[1]) atDoor = lp.x > c.max.x && lp.x < st.HalfWidth + 0.45f && lp.z > p.min.z && lp.z < p.max.z - 0.1f && lp.y > -0.8f && lp.y < 1.8f;
             bool want = inside || atDoor;
             if (want && cabinCar != b) { cabinCar = b; InCar(true); Log.Info("standalone : joueur dans l'habitacle" + (inside ? "" : " (devant la portiere ouverte)")); }
             else if (!want && cabinCar == b) { cabinCar = null; InCar(false); Log.Info("standalone : joueur sorti de l'habitacle"); }
@@ -448,10 +477,28 @@ namespace MWCoop
         {
             GameObject pl = Game.PlayerGo;
             Transform ct = b.Car != null ? b.Car.transform : null;
+            State xs; bool cabin = !force && ct != null && states.TryGetValue(b, out xs) && xs.HasCabin;
             if (pl != null)
             {
                 pl.transform.SetParent(null, true);
-                if (ct != null)
+                // (descente normale : on reste a sa place, dans l'habitacle, petit comme dans les voitures du jeu -- JD 28/10 : « quand je
+                // sors du mode conducteur, que ca me laisse dans la voiture, et non pas la teleportation a l'exterieur » ; sortie forcee
+                // ou sans habitacle creux : a cote de la portiere, comme avant)
+                if (cabin)
+                {
+                    // (bas de la capsule du joueur pose 3 cm au-dessus du plancher de l'habitacle : rallume dans le plancher, il en etait
+                    // expulse et partait a 12 m -- essai du 28/10)
+                    pl.transform.rotation = Quaternion.Euler(0f, ct.eulerAngles.y, 0f);
+                    var cc0 = pl.GetComponent<CharacterController>();
+                    State cs; states.TryGetValue(b, out cs);
+                    if (cc0 != null && cs != null)
+                    {
+                        float bottom = pl.transform.position.y + (cc0.center.y - cc0.height * 0.5f) * pl.transform.lossyScale.y;
+                        float floorW = ct.TransformPoint(new Vector3(0f, cs.Cabin.min.y, 0f)).y + 0.03f;
+                        if (bottom < floorW) pl.transform.position += Vector3.up * (floorW - bottom);
+                    }
+                }
+                else if (ct != null)
                 {
                     float side = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
                     State es; float ez = states.TryGetValue(b, out es) ? es.T.EntreeZ : b.M.Head.z, ew = es != null && es.HalfWidth > 0.3f ? es.HalfWidth : 0.85f;
@@ -465,7 +512,7 @@ namespace MWCoop
             }
             Game.SetGlobalBool("PlayerStop", false);
             Game.SetGlobal("PlayerCurrentVehicle", "");
-            InCar(false); cabinCar = null;
+            if (cabin) { InCar(true); cabinCar = b; } else { InCar(false); cabinCar = null; }
             GearHud(false, b);
             ClearHover();
             var d = b.Axis as StandaloneDriver;
@@ -520,7 +567,13 @@ namespace MWCoop
         static void DriveLate(VazCar.Built b, State st)
         {
             var d = b.Axis as CarController;
-            if (b.SteerPivot != null && d != null) b.SteerPivot.localRotation = Quaternion.AngleAxis(-Mathf.Clamp(d.steering, -1f, 1f) * (b.M.SteerDeg > 0f ? b.M.SteerDeg : 270f), b.SteerAxis);
+            // (volant visible : vers la direction a 3,5 unites/s -- au clavier la direction passe de 0 a 1 d'un coup, le volant
+            // sautait d'un quart de tour, JD 28/10 ; les roues, elles, gardent la direction du jeu)
+            if (b.SteerPivot != null && d != null)
+            {
+                st.WheelVis = Mathf.MoveTowards(st.WheelVis, Mathf.Clamp(d.steering, -1f, 1f), 3.5f * Time.deltaTime);
+                b.SteerPivot.localRotation = Quaternion.AngleAxis(-st.WheelVis * (b.M.SteerDeg > 0f ? b.M.SteerDeg : 270f), b.SteerAxis);
+            }
             if (driving != b) return;
             GameObject pl = Game.PlayerGo;
             Transform cam = PlayerCam();
@@ -610,7 +663,7 @@ namespace MWCoop
         // StandaloneEssai=1) : sur la piste plate du banc, 20 cycles (voiture tournee de 0 / 120 / 240 degres) : joueur pose dans la zone
         // d'entree (texte du jeu verifie), monte (Enter : la touche du jeu ne se simule pas), yeux au point de vue, 2 s de gaz en 1re
         // puis frein, descend ; au sol a cote, CharacterController et PlayerStop rendus. Bilan : cycles reussis.
-        static int mStep = -1, mCycle, mOk; static float mAt; static string mWhy; static bool mShot;
+        static int mStep = -1, mCycle, mOk, mSide; static float mAt, mLog; static string mWhy; static bool mShot;
         public static void MountTest(float t)
         {
             Test(t);
@@ -702,8 +755,8 @@ namespace MWCoop
                     d.Brake = 0f; d.Gear = -1;
                     Exit(b, false); mStep = 5; mAt = t;
                     break;
-                case 5:
-                    if (e < 1.5f) break;
+                case 5:   // descendu : assis dans l'habitacle, petit
+                    if (e < 1.0f) break;
                     {
                         FsmBool ps = FsmVariables.GlobalVariables.FindFsmBool("PlayerStop");
                         var cc = pl.GetComponent<CharacterController>();
@@ -711,15 +764,60 @@ namespace MWCoop
                         if (pl.transform.parent != null) mWhy += " encore range";
                         if (ps != null && ps.Value) mWhy += " PlayerStop vrai";
                         if (cc != null && !cc.enabled) mWhy += " CharacterController coupe";
+                        if (cabinCar != b || Mathf.Abs(lp.x) > st.Cabin.max.x + 0.05f) mWhy += " pas reste dans l'habitacle (" + lp.ToString("F2") + ")";
+                        // sortie a pied : un cycle sur deux par la portiere passager (ouverte), sinon par celle du conducteur
+                        mSide = mCycle % 2 == 1 ? 1 : 0;
+                        if (mSide == 1) { st.DoorOpen[1] = true; st.DoorAngle[1] = 70f; st.Doors[1].localRotation = Quaternion.Euler(0f, -70f, 0f); }
+                        mStep = 6; mAt = t;
+                    }
+                    break;
+                case 6:   // marche vers dehors, 3 s au plus
+                    if (e < 3f)
+                    {
+                        var cm = pl.GetComponent<CharacterController>();
+                        Bounds db = st.DoorBox[mSide];
+                        Vector3 goal = ct.TransformPoint(new Vector3((mSide == 0 ? -1f : 1f) * (st.HalfWidth + 1.0f), 0f, db.center.z - 0.15f));
+                        Vector3 d0 = Vector3.ProjectOnPlane(goal - pl.transform.position, Vector3.up);
+                        if (cm != null && cm.enabled && d0.magnitude > 0.08f) cm.Move(d0.normalized * Mathf.Min(1.5f * Time.deltaTime, d0.magnitude) + Vector3.down * 0.2f * Time.deltaTime);
+                        break;
+                    }
+                    {
+                        Vector3 lp = ct.InverseTransformPoint(pl.transform.position);
+                        if (Mathf.Abs(lp.x) < st.HalfWidth + 0.1f) mWhy += " pas sorti par la portiere " + (mSide == 0 ? "conducteur" : "passager") + " (" + lp.ToString("F2") + ")";
+                        if (cabinCar == b) mWhy += " PlayerInCar encore vrai dehors";
                         if (pl.transform.position.y < VazTenue.TrackY - 0.2f || pl.transform.position.y > VazTenue.TrackY + 3f) mWhy += " hauteur " + (pl.transform.position.y - VazTenue.TrackY).ToString("F2");
-                        if (lp.x > -0.8f) mWhy += " pas a cote de la portiere (" + lp.ToString("F2") + ")";
+                        if (mSide == 1) { st.DoorOpen[1] = false; st.DoorAngle[1] = 0f; st.Doors[1].localRotation = Quaternion.identity; }
                         bool ok = mWhy.Length == 0;
                         if (ok) mOk++;
-                        Log.Info("standalone : monte " + (mCycle + 1) + "/20 (cap " + ((mCycle % 3) * 120) + ") " + (ok ? "OK" : "ECHEC :" + mWhy) + ", joueur a " + lp.ToString("F2") + " de la voiture, " + (pl.transform.position.y - VazTenue.TrackY).ToString("F2") + " m au-dessus de la piste");
+                        Log.Info("standalone : monte " + (mCycle + 1) + "/20 (cap " + ((mCycle % 3) * 120) + ", sortie " + (mSide == 0 ? "conducteur" : "passager") + ") " + (ok ? "OK" : "ECHEC :" + mWhy) + ", joueur dehors a " + lp.ToString("F2") + " de la voiture");
                         mCycle++;
-                        if (mCycle >= 20) { mStep = 99; Log.Info("standalone : monte fini, " + mOk + "/20 reussis"); }
+                        if (mCycle >= Config.GetInt("Test", "StandaloneCycles", 20)) { Log.Info("standalone : monte fini, " + mOk + "/" + mCycle + " reussis"); mStep = Config.GetInt("Test", "StandaloneChoc", 1) != 0 ? 10 : 99; mAt = t; }
                         else { mStep = 0; mAt = t; }
                     }
+                    break;
+                case 10:   // choc : mur devant, au volant, plein gaz en 2e
+                {
+                    Quaternion r = Quaternion.identity;
+                    Vector3 p0 = new Vector3(-200f, VazTenue.TrackY + 0.6f, -200f);
+                    b.Rb.velocity = Vector3.zero; b.Rb.angularVelocity = Vector3.zero;
+                    ct.position = p0; ct.rotation = r; b.Rb.position = p0; b.Rb.rotation = r;
+                    var wall = GameObject.CreatePrimitive(PrimitiveType.Cube); wall.name = "MWCoop-MurEssai";
+                    int tl = LayerMask.NameToLayer("Terrain"); if (tl >= 0) wall.layer = tl;   // (la caisse ne heurte pas la couche Default)
+                    wall.transform.position = p0 + new Vector3(0f, 1f, 45f); wall.transform.localScale = new Vector3(60f, 3f, 1f);
+                    st.DoorOpen[0] = false; st.DoorAngle[0] = 0f; st.Doors[0].localRotation = Quaternion.identity;
+                    var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                    pl.transform.position = ct.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
+                    if (cc != null) cc.enabled = true;
+                    Enter(b, st);
+                    d.Keys = false; d.Handbrake = 0f; d.Gear = 3; d.Throttle = 1f; d.Brake = 0f;
+                    mStep = 11; mAt = t;
+                    Log.Info("standalone : choc, mur de 60 m a 45 m devant");
+                    break;
+                }
+                case 11:
+                    if (t >= mLog) { mLog = t + 1f; GameObject mw = GameObject.Find("MWCoop-MurEssai"); Log.Info("standalone : choc, voiture a " + (mw != null ? (mw.transform.position - ct.position).ToString("F1") : "?") + " du mur, " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, rapport " + b.Dt.gear + ", couches caisse/mur heurtent : " + (mw != null ? (!Physics.GetIgnoreLayerCollision(mw.layer, LayerMask.NameToLayer("Collider"))).ToString() : "?")); }
+                    if (driving != b) { Log.Info("standalone : choc fini, conducteur mort (" + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h apres le choc)"); mStep = 99; break; }
+                    if (e > 15f) { Log.Info("standalone : choc fini, PAS de mort (" + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h)"); mStep = 99; }
                     break;
             }
         }
