@@ -66,6 +66,12 @@ namespace MWCoop
             end = t != c ? t.GetComponent<Rigidbody>() : null;
             coupler = c; segs = l.ToArray(); cols = root.GetComponentsInChildren<Collider>(true);
             couplerRb = c.GetComponent<Rigidbody>(); couplerParent = c.parent; couplerPos = c.localPosition; couplerRot = c.localRotation;
+            // (longueur de la chaine au repos, mesuree une fois ici -- tuyau range, maillons a leur pose d'origine. Mesuree au debut du
+            // suivi, sur une chaine deja etiree par la prise en main, elle doublait : 18,6 m pour 9,1 m chez l'invite qui tenait le bout,
+            // maillons espaces de 0,93 m -- [MWC] 28/10)
+            restLen = 0f; Vector3 rprev = c.position;
+            foreach (Rigidbody rb in segs) { restLen += (rb.transform.position - rprev).magnitude; rprev = rb.transform.position; }
+            if (!(restLen > 1f && restLen < 50f)) restLen = segs.Length * 0.38f;
             if (end != null) Log.Info("tuyau de la GIFU : bout " + t.name + " (" + Recon.Path(t).Split('/').Length + " niveaux)");
             return end != null;
         }
@@ -140,7 +146,7 @@ namespace MWCoop
         // ShitTank cinematique de la copie, explosait chez celui qui tenait le bout (essai MSC 27/10 : maillons a 15 000 m/s, a 800 km ;
         // GG chez JD : « il partait dans tous les sens comme un serpent ») et ses poses folles partaient chez les autres. Posee comme
         // chez les autres, du raccord au bout que la main tient (le bout reste au jeu).
-        static bool endKin, selfHeld, couplerKin;
+        static bool endKin, selfHeld, couplerKin, dropSet; static float restLen; static Vector3 dropPos; static Quaternion dropRot;
         // Raccord (corps soude au ShitTank) : sur une copie du camion, sa pose physique restait en arriere de la voiture deplacee
         // (Unity 5.0 : corps enfant en retard -- [MWC] 27/10, raccord a ~20 m chez l'invite, poses du bout fausses et refusees chez
         // l'hote au-dela de 30 m). Pendant le suivi : cinematique, a sa pose de repos sous HOSE.
@@ -153,10 +159,7 @@ namespace MWCoop
             {
                 following = true; selfMode = self; endKin = end.isKinematic; selfHeld = held;
                 if (couplerRb != null) { couplerKin = couplerRb.isKinematic; couplerRb.isKinematic = true; }
-                chainLen = 0f;
-                Vector3 prev = coupler.position;
-                foreach (Rigidbody r in segs) { chainLen += (r.position - prev).magnitude; prev = r.position; }
-                if (!(chainLen > 1f && chainLen < 50f)) chainLen = segs.Length * 0.25f;
+                chainLen = restLen > 1f ? restLen : segs.Length * 0.38f;
                 foreach (Rigidbody r in segs) { if (!r.isKinematic) { r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; } r.isKinematic = true; }   // (le bout aussi : tenu, il suit la main -- son parent -- ; lache, il reste ou il est pose)
                 foreach (Collider c in cols) if (c != null && !(self && c.attachedRigidbody == end)) c.enabled = false;
             }
@@ -164,8 +167,14 @@ namespace MWCoop
             if (couplerRb != null && coupler.parent == couplerParent) { coupler.localPosition = couplerPos; coupler.localRotation = couplerRot; }
             if (self) { end.transform.position = ep0; end.transform.rotation = eq0; }
             if (self && !end.isKinematic) { end.isKinematic = true; end.velocity = Vector3.zero; }   // (la main ou le jeu l'ont rendu physique : la chaine posee ne le tire plus)
-            if (self && selfHeld && !held) Ground();   // (lache ici : pose au sol)
-            if (self) selfHeld = held;
+            // (lache ici : pose au sol, puis tenu a cette pose -- redevenu l'enfant du maillon d'avant, il suivait la chaine que l'on
+            // replace a chaque image et derivait : 30 m du raccord, sous le sol, essai MSC 28/10)
+            if (self && !held)
+            {
+                if (selfHeld || !dropSet) { Ground(); dropPos = end.transform.position; dropRot = end.transform.rotation; dropSet = true; }
+                end.transform.position = dropPos; end.transform.rotation = dropRot;
+            }
+            if (self) { if (held) dropSet = false; selfHeld = held; }
             Vector3 a = coupler.position;
             Vector3 b = self ? end.transform.position : Vector3.Lerp(segs[segs.Length - 1].position, rp, 0.5f);
             int n = segs.Length;
@@ -253,7 +262,7 @@ namespace MWCoop
         {
             if (!following) return;
             following = false; ignoring = false;
-            bool wasSelf = selfMode; selfMode = false;
+            bool wasSelf = selfMode; selfMode = false; dropSet = false;
             if (couplerRb != null) couplerRb.isKinematic = couplerKin;   // (colliders rallumes : IgnoreCollision a refaire)
             if (segs != null) foreach (Rigidbody r in segs) if (r != null) { if (wasSelf && r == end) { r.isKinematic = endKin; continue; } r.isKinematic = false; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
             if (cols != null) foreach (Collider c in cols) if (c != null) c.enabled = true;
