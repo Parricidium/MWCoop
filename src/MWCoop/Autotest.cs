@@ -1046,6 +1046,31 @@ namespace MWCoop
         static float etatAt, frNext;
         static int radioStep, radioLog, dmStep, dmKey;
         static float dmLog, lvLog; static bool dmTuyau, liqDone; static int liqLog, lvStep;
+
+        // [Test] Autotest=mscleviers (MWC et MSC) : voiture [Test] LeviersVoiture (JONNEZ ES(Clone) ; KEKMET(350-400psi) : pedales du
+        // tracteur) ; ses Pivot sous Throttle / Brake / Clutch, ou qu'ils soient (MSC : SteeringPivot, MWC : SteeringPivotJonnez)
+        static void Leviers(float t)
+        {
+            string car = Config.Get("Test", "LeviersVoiture", "JONNEZ ES(Clone)");
+            Rigidbody jb = VehicleSync.Body(car);
+            if (jb != null && Config.GetInt("Test", "LeviersPilote", 0) != 0)
+            {
+                if (lvStep == 0 && t > 30f) { lvStep = 1; Log.Info("autotest : mscleviers, " + VehicleSync.TestEnter(car, false)); }
+                if (lvStep == 1 && t > 33f || lvStep == 2 && t > 35f) { lvStep++; Log.Info("autotest : mscleviers, au guidon : " + VehicleSync.TestEnter(car, true)); }
+                AxisCarController ax = jb.GetComponent<AxisCarController>();
+                if (ax != null && t > 40f && t < 70f) { ax.enabled = false; ax.throttleInput = 0.8f; ax.brakeInput = 0.5f; ax.clutchInput = 0.6f; }
+                if (ax != null && t >= 70f && lvStep == 3) { lvStep = 4; ax.throttleInput = ax.brakeInput = ax.clutchInput = 0f; ax.enabled = true; Log.Info("autotest : mscleviers, gaz relaches"); }
+            }
+            if (jb != null && t > 35f && Time.realtimeSinceStartup >= lvLog)
+            {
+                lvLog = Time.realtimeSinceStartup + 5f;
+                var sb3 = new System.Text.StringBuilder();
+                foreach (Transform lp in jb.GetComponentsInChildren<Transform>(true))
+                    if (lp.name == "Pivot" && lp.parent != null && (lp.parent.name == "Throttle" || lp.parent.name == "Brake" || lp.parent.name == "Clutch"))
+                        sb3.Append(lp.parent.name).Append(' ').Append(lp.localEulerAngles.ToString("F0")).Append(" ; ");
+                Log.Info("autotest : mscleviers t=" + t.ToString("F0") + " " + (sb3.Length > 0 ? sb3.ToString() : "aucun levier ") + (VehicleSync.RemotelyDriven(jb.transform) ? "(copie)" : ""));
+            }
+        }
         static string EtatArray(GameObject go)
         {
             PlayMakerArrayListProxy best = null;
@@ -2516,29 +2541,7 @@ namespace MWCoop
                 if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
                 // ([Test] Autotest=mscleviers, Markos 28/10 : LeviersPilote=1 (l'invite) monte sur la JONNEZ a 30 s, coupe son AxisCarController a 40 s
                 // et tient gaz 0,8 / frein 0,5 / embrayage 0,6 comme la manette, jusqu'a 70 s ; chacun releve l'angle des trois leviers toutes les 5 s)
-                if (mode == "mscleviers")
-                {
-                    Rigidbody jb = VehicleSync.Body("JONNEZ ES(Clone)");
-                    if (jb != null && Config.GetInt("Test", "LeviersPilote", 0) != 0)
-                    {
-                        if (lvStep == 0 && t > 30f) { lvStep = 1; Log.Info("autotest : mscleviers, " + VehicleSync.TestEnter("JONNEZ ES(Clone)", false)); }
-                        if (lvStep == 1 && t > 33f || lvStep == 2 && t > 35f) { lvStep++; Log.Info("autotest : mscleviers, au guidon : " + VehicleSync.TestEnter("JONNEZ ES(Clone)", true)); }
-                        AxisCarController ax = jb.GetComponent<AxisCarController>();
-                        if (ax != null && t > 40f && t < 70f) { ax.enabled = false; ax.throttleInput = 0.8f; ax.brakeInput = 0.5f; ax.clutchInput = 0.6f; }
-                        if (ax != null && t >= 70f && lvStep == 3) { lvStep = 4; ax.throttleInput = ax.brakeInput = ax.clutchInput = 0f; ax.enabled = true; Log.Info("autotest : mscleviers, gaz relaches"); }
-                    }
-                    if (jb != null && t > 35f && Time.realtimeSinceStartup >= lvLog)
-                    {
-                        lvLog = Time.realtimeSinceStartup + 5f;
-                        var sb3 = new System.Text.StringBuilder();
-                        foreach (string ln in new[] { "Throttle", "Brake", "Clutch" })
-                        {
-                            Transform lp = jb.transform.Find("LOD/Suspension/Steering/SteeringPivot/" + ln + "/Pivot");
-                            sb3.Append(ln).Append(' ').Append(lp != null ? lp.localEulerAngles.ToString("F0") : "?").Append(" ; ");
-                        }
-                        Log.Info("autotest : mscleviers t=" + t.ToString("F0") + " " + sb3 + (VehicleSync.RemotelyDriven(jb.transform) ? "(copie)" : ""));
-                    }
-                }
+                if (mode == "mscleviers") Leviers(t);
                 // ([Test] Autotest=hierarchie, HierVoiture=JONNEZ, HierMots=handle,throttle,grip,brake,lever,gas : objets de la voiture dont le nom
                 // contient un mot (chemin, actif, composants Animation / automates), puis ce que CarVisuals en suit)
                 if (mode == "hierarchie" && step == 0 && t > 40f)
@@ -2829,6 +2832,7 @@ namespace MWCoop
             if (mode == "conduite") Conduite(t);
             if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
             if (mode == "mscphares") { LightsGuard.TestKey(mode, t); return; }   // (touche des phares, Jobs commun : [Test] PharesTouche=LightsDrive sur MWC, 27/10)
+            if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
