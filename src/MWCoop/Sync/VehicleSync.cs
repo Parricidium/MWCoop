@@ -1765,13 +1765,18 @@ namespace MWCoop
             // MONDE (Hoist::Hook 'State 1', connectedBody vide) -- ancree la ou il etait. Voiture poussee depuis (copie deplacee
             // par l'autre joueur) : a la reprise, cette ancre la ramenait d'un coup en arriere. Ancre remise a la pose actuelle.
             var linked = new HashSet<Rigidbody>();
+            bool handToo = Config.GetInt("Test", "MainAncree", 0) != 0;   // (essais : comme avant le 28/10)
+            // (jamais la main du joueur, assis dans la voiture donc sous elle : son joint de prise (Hand, FixedJoint) est ancre au monde quand
+            // elle ne tient rien ; « remis a sa pose », il gardait cette position du monde comme point d'attache (autoConfigureConnectedAnchor
+            // coupe) et chaque objet pris ensuite etait tire vers elle : objets « qui s'envolent des mains », a des km chez l'invite puis
+            // chez l'hote -- dossiers #17/#18, Markos 28/10 : « Hand ancre au monde remise a sa pose, ecart 1655 m »)
             foreach (Joint j in all)
-                if (j != null && j.connectedBody != null && j.connectedBody.transform.IsChildOf(c.T) && j.GetComponent<Rigidbody>() != null) linked.Add(j.GetComponent<Rigidbody>());
+                if (j != null && j.connectedBody != null && j.connectedBody.transform.IsChildOf(c.T) && j.GetComponent<Rigidbody>() != null && (handToo || !Game.UnderPlayer(j.transform))) linked.Add(j.GetComponent<Rigidbody>());
             foreach (Joint j in all)
             {
                 if (j == null || j.connectedBody != null) continue;
                 Rigidbody a = j.GetComponent<Rigidbody>();
-                if (a == null || !(a.transform.IsChildOf(c.T) || linked.Contains(a))) continue;
+                if (a == null || !(a.transform.IsChildOf(c.T) || linked.Contains(a)) || (!handToo && Game.UnderPlayer(a.transform))) continue;
                 Vector3 now = j.transform.TransformPoint(j.anchor);
                 float off = (now - j.connectedAnchor).magnitude;
                 if (!Finite(off) || off < 0.02f) continue;

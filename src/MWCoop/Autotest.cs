@@ -2658,6 +2658,41 @@ namespace MWCoop
                         if (dmStep == 6 && t > ra + 32f) { dmStep = 7; Log.Info("autotest : mscralenti, au volant de l'autre : " + VehicleSync.TestEnter(ro, true)); }
                     }
                     if (t > ra && t < ra + 90f && Time.realtimeSinceStartup >= dmLog) { dmLog = Time.realtimeSinceStartup + 3f; Log.Info("autotest : mscralenti t=" + t.ToString("F0") + " " + VehicleSync.Describe(rv) + " ; " + VehicleSync.StartProbe(rv)); }
+                    // ([Test] RalentiInviteA=s, dossier #17 : l'invite prend le volant de la voiture laissee tournant a s (la copie reprend sous lui :
+                    // VehicleSync.AlignExternalJoints), en sort a s+12, prend RalentiObjet (sausagesx0) a s+18 ; puis note chaque seconde 25 s
+                    // l'ecart objet-main et l'attache du joint de la main)
+                    float ria = Config.GetFloat("Test", "RalentiInviteA", 0f);
+                    if (!Net.Session.IsHost && ria > 0f)
+                    {
+                        if (dmKey == 0 && t > ria) { dmKey = 1; Log.Info("autotest : mscralenti, invite : " + VehicleSync.TestEnter(rv, false)); }
+                        if (dmKey == 1 && t > ria + 2f) { dmKey = 2; Log.Info("autotest : mscralenti, invite au volant : " + VehicleSync.TestEnter(rv, true)); }
+                        if (dmKey == 2 && t > ria + 12f) { dmKey = 3; Log.Info("autotest : mscralenti, invite sort : " + VehicleSync.TestExit(rv)); }
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM hf = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        Joint hj = hg != null ? hg.GetComponent<Joint>() : null;
+                        Rigidbody ob = null;
+                        foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                        {
+                            PlayMakerFSM uf = Game.FsmOn(r.gameObject, "Use");
+                            HutongGames.PlayMaker.FsmString iv = uf != null ? uf.FsmVariables.FindFsmString("ID") : null;
+                            if (iv != null && iv.Value == Config.Get("Test", "RalentiObjet", "sausagesx0")) { ob = r; break; }
+                        }
+                        if (dmKey == 3 && t > ria + 18f && ob != null && hf != null && PlayerSync.LocalCamera != null)
+                        {
+                            dmKey = 4;
+                            Transform cam = PlayerSync.LocalCamera;
+                            ob.transform.position = cam.position + cam.forward * 0.6f;
+                            HutongGames.PlayMaker.FsmGameObject rh = hf.FsmVariables.FindFsmGameObject("RaycastHitObject");
+                            if (rh != null) { rh.Value = ob.gameObject; Game.SetState(hf, "State 1"); }
+                            Log.Info("autotest : mscralenti, invite prend " + ob.name + ", main " + hf.ActiveStateName);
+                        }
+                        if (dmKey >= 3 && t > ria + 12f && t < ria + 45f && Time.realtimeSinceStartup >= lvLog)
+                        {
+                            lvLog = Time.realtimeSinceStartup + 1f;
+                            Log.Info("autotest : mscralenti, main " + (hf != null ? hf.ActiveStateName : "?") + (hj == null ? ", pas de joint" : ", joint sur " + (hj.connectedBody != null ? hj.connectedBody.name : "monde") + " attache " + hj.connectedAnchor.ToString("F1") + " auto " + hj.autoConfigureConnectedAnchor)
+                                     + (ob != null && hg != null ? ", objet a " + Vector3.Distance(ob.position, hg.transform.position).ToString("F2") + " m de la main, v " + ob.velocity.magnitude.ToString("F1") : ", objet introuvable"));
+                        }
+                    }
                 }
                 // ([Test] Autotest=mscradio : RadioGestes=t:voiture:geste;... -- geste=volume=0.5, station=0.071, mode, canal, suivante, ejecte --
                 // simules ici comme la molette / le bouton ; RadioReleves=t,t : etat des postes au journal + instantane mscetat)
