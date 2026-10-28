@@ -115,6 +115,20 @@ namespace MWCoop
             wasOut = true;
             bool held = FireTools.Held() == end.gameObject || testHeld;
             if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) Release(); } }
+            // Bout lache ici (camion en copie), puis le camion s'en va : la pose figee d'ici etirait la chaine chez tous (15,7 m quand le
+            // camion avait roule 24 m, [MWC] 28/10). Au-dela de sa longueur, la main est rendue : celui qui mene la GIFU reprend la pose
+            // (sa chaine physique suit le camion), les autres la suivent.
+            Transform gtr = Gifu();
+            if (mine && !held && selfMode && dropSet && gtr != null && !VehicleSync.SimAuthority(gtr) && coupler != null && restLen > 1f
+                && (end.transform.position - coupler.position).magnitude > restLen * 1.05f)
+            {
+                // (en suivi, sans physique, vers la derniere pose, en attendant celles de l'autorite -- 3 s au plus : sa reprise apres le silence)
+                Rigidbody gb = gtr.GetComponent<Rigidbody>();
+                int auth = gb != null ? VehicleSync.Authority(gb) : 0;
+                mine = false; Release();
+                remoteBy = auth; rp = end.transform.position; rq = end.transform.rotation; lastRemote = Time.realtimeSinceStartup + 3f;
+                if (logs++ < 10) Log.Info("tuyau de la GIFU : camion parti, bout lache trop loin (" + (end.transform.position - coupler.position).magnitude.ToString("F1") + " m) : pose rendue a celui qui mene la GIFU");
+            }
             // Personne ne l'a encore eu en main (sorti, pas tenu) : celui qui mene la GIFU fait foi et envoie la pose du bout. Avant,
             // personne n'envoyait : chez les autres la chaine restait physique, accrochee au raccord de la COPIE cinematique du camion
             // (moteur tournant, recalee a chaque message), percutee a 15-80 km/h et projetee dans tous les sens (JD et GG, MSC,
@@ -299,6 +313,14 @@ namespace MWCoop
             }
             if (tStep == 0 && Jobs.OtherInGame(40f)) { tStep = 1; tAt = now; }
             if (tStep == 0) return;
+            // (TuyauDepart=1 : l'hote, au volant, roule 6 s a +22 s -- apres le lacher de l'invite a +12 s ; [MWC] 28/10)
+            if (Session.IsHost && Config.GetInt("Test", "TuyauDepart", 0) != 0 && tvStep == 6 && now - tAt > 22f) { tvStep = 7; tvAt = now; Log.Info("autotest : tuyau, la GIFU part (6 s)"); }
+            if (tvStep == 7)
+            {
+                Rigidbody gb2 = VehicleSync.Body("GIFU(750/450psi)");
+                if (gb2 != null && now - tvAt < 6f) { Vector3 f = gb2.transform.forward; f.y = 0f; gb2.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(gb2.velocity.y, 0f); }
+                if (now - tvAt >= 6f) { tvStep = 8; if (gb2 != null) gb2.velocity = Vector3.zero; Log.Info("autotest : tuyau, la GIFU s'arrete"); }
+            }
             Transform gt = Gifu(), at = gt != null ? gt.Find("ActivateHose") : null;
             GameObject ah = at != null ? at.gameObject : null;
             PlayMakerFSM use = ah != null ? Game.FsmOn(ah, "Use") : null;
