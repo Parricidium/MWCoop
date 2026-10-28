@@ -419,17 +419,30 @@ namespace MWCoop
         // [Test] Autotest=porteappart (MWC, 2 joueurs, dossier de Донской 28/10 : « l'hote ne peut plus ouvrir les portes de l'appartement ») :
         // l'invite ouvre PorteObjet (HOMENEW/LOD/DoorWC) a 60 s, la ferme a 70 s, la rouvre a 80 s ; chacun note toutes les 2 s de 55 a 110 s
         // l'etat de son automate (Wait player = cliquable), DoorOpen, l'angle du pivot et son Animation (active, en cours, temps, culling).
-        static int paStep; static float paLog;
+        // [Test] PorteLoin=1 : l'hote part a 300 m a 30 s (l'appartement s'eteint chez lui, comme au taxi du dossier), revient devant la porte
+        // a 90 s ; l'invite la joue encore a 100 et 110 s ; releves jusqu'a 125 s. PorteSauve=1 : sauvegarde en jeu de l'hote a 94 s.
+        // PorteInvite=60,70,80,100,110 : moments des coups de l'invite (liste) ; PorteHote=120 : coups de l'hote lui-meme (comme un clic).
+        static int paStep, paHost, paHostStep; static float paLog;
         static void PorteAppart(float t)
         {
             string obj = Config.Get("Test", "PorteObjet", "HOMENEW/LOD/DoorWC");
-            if (!Net.Session.IsHost)
+            bool loin = Config.GetInt("Test", "PorteLoin", 0) != 0;
+            string[] coups = Config.Get("Test", Net.Session.IsHost ? "PorteHote" : "PorteInvite", Net.Session.IsHost ? "" : (loin ? "60,70,80,100,110" : "60,70,80")).Split(',');
+            int k = Net.Session.IsHost ? paHostStep : paStep;
+            float at;
+            if (k < coups.Length && float.TryParse(coups[k].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out at) && t > at)
             {
-                if (t > 60f && paStep == 0) { paStep = 1; Log.Info("autotest : porteappart, " + Interactions.TestNamed(obj)); }
-                if (t > 70f && paStep == 1) { paStep = 2; Log.Info("autotest : porteappart, " + Interactions.TestNamed(obj)); }
-                if (t > 80f && paStep == 2) { paStep = 3; Log.Info("autotest : porteappart, " + Interactions.TestNamed(obj)); }
+                if (Net.Session.IsHost) paHostStep++; else paStep++;
+                Log.Info("autotest : porteappart, coup " + (k + 1) + " : " + Interactions.TestNamed(obj));
             }
-            if (t > 55f && t < 110f && Time.realtimeSinceStartup >= paLog)
+            if (Net.Session.IsHost && loin)
+            {
+                GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                if (t > 30f && paHost == 0 && cc != null) { paHost = 1; cc.enabled = false; pl.transform.position = new Vector3(-1512f, 6.5f, 1312f); cc.enabled = true; Log.Info("autotest : porteappart, hote parti a 300 m"); }
+                if (t > 90f && paHost == 1) { paHost = 2; Teleport(obj, new Vector3(1.2f, 0.2f, 0f)); Log.Info("autotest : porteappart, hote revenu devant la porte"); }
+                if (t > 94f && paHost == 2 && Config.GetInt("Test", "PorteSauve", 0) != 0) { paHost = 3; Game.SaveInPlace(); Log.Info("autotest : porteappart, sauvegarde en jeu"); }
+            }
+            if (t > 55f && t < (loin ? 125f : 110f) && Time.realtimeSinceStartup >= paLog)
             {
                 paLog = Time.realtimeSinceStartup + 2f;
                 PlayMakerFSM door = Game.FindFsm(obj + "/Pivot/Handle", "Use");
@@ -437,7 +450,7 @@ namespace MWCoop
                 GameObject piv = Game.FindAny(obj + "/Pivot");
                 Animation an = piv != null ? piv.GetComponent<Animation>() : null;
                 string clip = "";
-                if (an != null) foreach (AnimationState st in an) clip += " " + st.name + (st.enabled ? " joue t=" + st.time.ToString("F2") + "/" + st.length.ToString("F2") : "");
+                if (an != null) foreach (AnimationState st in an) clip += " " + st.name + (st.enabled ? " joue t=" + st.time.ToString("F2") + "/" + st.length.ToString("F2") + " v" + st.speed.ToString("F1") + " p" + st.weight.ToString("F1") + " " + st.wrapMode : "");
                 Log.Info("autotest : porteappart (" + (Net.Session.IsHost ? "hote" : "invite") + ") [" + (door != null ? door.ActiveStateName : "?") + "] porte " + (open != null ? (open.Value ? "ouverte" : "fermee") : "?")
                          + (piv != null ? " angle " + piv.transform.localEulerAngles.ToString("F0") + (piv.activeInHierarchy ? "" : " (inactif)") : " pivot ?")
                          + (an != null ? " ; Animation " + (an.enabled ? "active" : "coupee") + ", culling " + an.cullingType + ", en cours " + an.isPlaying + clip : " ; pas d'Animation")

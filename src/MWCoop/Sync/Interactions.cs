@@ -43,7 +43,7 @@ namespace MWCoop
         static string Pat(int i) { int n = Allowed.GetLength(0); return i < n ? Allowed[i, 0] : AllowedMsc[i - n, 0]; }
         static string Tgt(int i) { int n = Allowed.GetLength(0); return i < n ? Allowed[i, 1] : AllowedMsc[i - n, 1]; }
 
-        class Entry { public string Id; public PlayMakerFSM Fsm; public int DoorKind; public FsmBool Door; }   // DoorKind : 0 a lire, 1 porte (Open door / Close door), -1 non
+        class Entry { public string Id; public PlayMakerFSM Fsm; public int DoorKind; public FsmBool Door; public bool WasActive, Seen; public float StuckSince = -1f, StuckTime; }   // DoorKind : 0 a lire, 1 porte (Open door / Close door), -1 non
         static readonly Dictionary<string, Entry> byId = new Dictionary<string, Entry>();
         static readonly HashSet<PlayMakerFSM> tracked = new HashSet<PlayMakerFSM>();
         static bool applying;
@@ -116,12 +116,107 @@ namespace MWCoop
             return false;
         }
 
+        // Portes figees (dossier de Донской, MWC 28/10 : « l'hote ne peut plus ouvrir les portes de l'appartement »). Quand la piece
+        // s'eteint de loin puis se rallume (HOMENEW/LOD : l'hote au taxi, puis de retour), l'Animation de ses portes reste figee : chaque
+        // PlayAnimation suivant reste « en cours » a t=0 (vitesse 1, poids 1), la porte ne bouge plus et son automate reste dans
+        // Open door / Close door, ou aucun clic n'est lu -- pour nos clics comme pour les coups rejoues des autres. Essai porteappart
+        // (hote a 300 m puis devant la porte des WC) : figee a chaque coup ; couper puis rallumer l'Animation la remet en marche.
+        // Donc : 1) porte suivie qui redevient active -> son Animation est relancee ainsi ; 2) garde : porte active dans Open door /
+        // Close door dont l'animation ne joue pas ou n'avance plus depuis 2,5 s -> pose de fin, Animation relancee, automate a Wait player.
+        // [Coop] PorteDebloque=0 : ni l'un ni l'autre.
+        static float doorWatchAt;
+        const float StuckAfter = 2.5f;
+
         // Porte d'ici mise ouverte (true) ou fermee comme chez un autre joueur (resultat de son clic, ou etat de l'hote a l'arrivee).
+        // Objet inactif ici (piece eteinte) : pas par l'etat anime (PlayAnimation sur un objet inactif : rien ne bouge, l'automate
+        // reste dans l'etat anime) ; on pose DoorOpen et la fin de l'animation. [Coop] PorteInactive=0 : comme avant.
         static void SetDoor(Entry e, bool open)
         {
+            if (!e.Fsm.gameObject.activeInHierarchy && Config.GetInt("Coop", "PorteInactive", 1) != 0)
+            {
+                e.Door.Value = open;
+                PoseDoor(e, open);
+                return;
+            }
             applying = true; Replay.Depth++;
             try { Game.SetState(e.Fsm, open ? "Open door" : "Close door"); }
             finally { applying = false; Replay.Depth--; }
+        }
+
+        // Animation (et clip) que joue l'etat Open door / Close door de la porte (son PlayAnimation).
+        static Animation DoorAnim(Entry e, bool open, out AnimationClip clip)
+        {
+            clip = null;
+            FsmState st = e.Fsm.Fsm.GetState(open ? "Open door" : "Close door");
+            if (st == null) return null;
+            foreach (FsmStateAction a in st.Actions)
+            {
+                var pa = a as HutongGames.PlayMaker.Actions.PlayAnimation;
+                if (pa == null || pa.animName == null) continue;
+                GameObject go = e.Fsm.Fsm.GetOwnerDefaultTarget(pa.gameObject);
+                Animation an = go != null ? go.GetComponent<Animation>() : null;
+                clip = an != null ? an.GetClip(pa.animName.Value) : null;
+                return clip != null ? an : null;
+            }
+            return null;
+        }
+
+        // Pose finale de l'animation, sans la jouer. Faux si rien a poser.
+        static bool PoseDoor(Entry e, bool open)
+        {
+            AnimationClip clip;
+            Animation an = DoorAnim(e, open, out clip);
+            if (an == null) return false;
+            an.Stop();
+            clip.SampleAnimation(an.gameObject, clip.length);
+            return true;
+        }
+
+        // Animation de la porte coupee puis rallumee (la remet en marche apres l'extinction de la piece).
+        static void Revive(Entry e)
+        {
+            AnimationClip clip;
+            Animation an = DoorAnim(e, true, out clip);
+            if (an == null || !an.enabled) return;
+            an.enabled = false; an.enabled = true;
+        }
+
+        static void Unstick(Entry e)
+        {
+            string s = e.Fsm.ActiveStateName;
+            if (!PoseDoor(e, s == "Open door")) return;
+            Revive(e);
+            applying = true; Replay.Depth++;
+            try { Game.SetState(e.Fsm, "Wait player"); }
+            finally { applying = false; Replay.Depth--; }
+            Log.Info("interaction " + e.Id + " : porte figee dans " + s + ", debloquee");
+        }
+
+        // 2 fois/s : portes suivies rallumees (Revive) et portes figees (Unstick).
+        static void WatchDoors()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < doorWatchAt) return;
+            doorWatchAt = now + 0.5f;
+            if (Config.GetInt("Coop", "PorteDebloque", 1) == 0) return;
+            foreach (Entry e in byId.Values)
+            {
+                if (e.Fsm == null || e.DoorKind < 0) continue;
+                bool act = e.Fsm.gameObject.activeInHierarchy;
+                if (!act) { e.WasActive = false; e.Seen = true; e.StuckSince = -1f; continue; }
+                if (!IsDoor(e)) continue;
+                if (e.Seen && !e.WasActive) Revive(e);
+                e.WasActive = true; e.Seen = true;
+                string s = e.Fsm.ActiveStateName;
+                if (s != "Open door" && s != "Close door") { e.StuckSince = -1f; continue; }
+                // (figee = son animation ne joue pas, ou son temps n'avance plus ; une porte qui s'anime encore, meme lente, est laissee)
+                AnimationClip clip;
+                Animation an = DoorAnim(e, s == "Open door", out clip);
+                AnimationState ast = an != null ? an[clip.name] : null;
+                float at = ast != null && ast.enabled ? ast.time : -1f;
+                if (e.StuckSince < 0f || at != e.StuckTime) { e.StuckSince = now; e.StuckTime = at; continue; }
+                if (now - e.StuckSince > StuckAfter) { e.StuckSince = -1f; Unstick(e); }
+            }
         }
 
         public static void Update()
@@ -144,6 +239,7 @@ namespace MWCoop
                 Log.Info("interaction " + c.Id + " : etat " + c.Fsm.ActiveStateName + (open != null ? ", DoorOpen " + open.Value : "")
                          + ", angle " + c.Fsm.transform.parent.localEulerAngles.ToString("F0"));
             }
+            WatchDoors();
             // Nouveau passage toutes les 20 s : les objets lointains (inactifs) ne peuvent etre suivis
             // qu'une fois actives (leur automate n'est pas charge avant).
             if (scanAt < 0 || Time.realtimeSinceStartup < scanAt) return;
