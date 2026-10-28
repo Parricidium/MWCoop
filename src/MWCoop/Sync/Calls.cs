@@ -98,7 +98,7 @@ namespace MWCoop
             step = step2 = 0; testCall = null; testKeypad = null; testLogged = false;
             for (int i = 0; i < phones.Length; i++) phones[i] = null;
             nextPhone = 0; nextPhoneSend = 0; phoneSig = ""; farStep = 0; farLog = 0;
-            weekSent.Clear(); nextWeekCheck = 0; weekStep = 0;
+            weekSent.Clear(); nextWeekCheck = 0; weekStep = 0; postLogged = false;
             // Avant le releve du monde (16 s apres le chargement) : les createurs de commandes sont a nous.
             resolveAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
             // Avant la premiere image (les automates demarrent a leur Start) : limite de boucle relevee, voir Arm.
@@ -1056,7 +1056,25 @@ namespace MWCoop
                 if (weekStep == 1 && t > week) { weekStep = 2; if (Session.IsHost) { PlayMakerFSM.BroadcastEvent("GENERATELIST"); Log.Info("autotest : semaine, GENERATELIST chez l'hote"); } }
                 if (weekStep == 2 && t > week + 15f) { weekStep = 3; Log.Info("autotest : semaine, apres : " + ListingsState()); }
             }
+            // ([Test] AppelPoste=s : listes de la poste -- CARPARTS/PARTSYSTEM/PostSystem, ActiveOrders... -- a s secondes, des deux cotes)
+            float post = Config.GetFloat("Test", "AppelPoste", 0f);
+            if (post > 0f && !postLogged && t > post)
+            {
+                postLogged = true;
+                GameObject ps = Game.FindAny("CARPARTS/PARTSYSTEM/PostSystem");
+                var sb = new System.Text.StringBuilder("autotest : poste,");
+                if (ps != null)
+                    foreach (PlayMakerArrayListProxy pr in ps.GetComponents<PlayMakerArrayListProxy>())
+                    {
+                        sb.Append(' ').Append(pr.referenceName).Append(" (").Append(pr._arrayList != null ? pr._arrayList.Count : -1).Append(") :");
+                        if (pr._arrayList != null) foreach (object o in pr._arrayList) sb.Append(' ').Append(o is GameObject ? ((GameObject)o).name : o == null ? "null" : o.ToString());
+                    }
+                PlayMakerFSM lg = ps != null ? Game.FsmOn(ps, "Logic") : null;
+                sb.Append(" ; Logic ").Append(lg != null ? lg.ActiveStateName + (lg.enabled ? "" : " (arrete)") : "?");
+                Log.Info(sb.ToString());
+            }
         }
+        static bool postLogged;
         static int weekStep;
 
         // Petites annonces (Generate) : nom d'origine -> nom de l'objet (le numero ; un autre nom = plus appelable), etat de Generate.

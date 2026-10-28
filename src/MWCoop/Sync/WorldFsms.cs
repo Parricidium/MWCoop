@@ -1134,6 +1134,7 @@ namespace MWCoop
                     var sig = new System.Text.StringBuilder();
                     foreach (object o in a) { items.Add(o); sig.Append(o).Append('|'); }
                     string name = pr.referenceName ?? "", old;
+                    if (name.Length > 0 && name == Config.Get("Test", "ListeCoupee", "")) continue;   // (essais : liste jamais envoyee, comme une trop grosse)
                     if (!all && j.SentLists.TryGetValue(name, out old) && old == sig.ToString()) continue;
                     if (!all) j.SentLists[name] = sig.ToString();   // instantane d'un arrivant : les autres ne l'ont pas recu
                     if (Config.GetInt("Test", "JournalListes", 0) != 0) Log.Info("liste envoyee " + j.Key + " / " + name + " : " + Short(sig.ToString()));
