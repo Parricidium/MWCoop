@@ -2140,6 +2140,14 @@ namespace MWCoop
                     if (rb != null && !rb.isKinematic) { Vector3 f = rb.transform.forward; f.y = 0f; rb.velocity = f.normalized * roule + Vector3.up * Mathf.Min(rb.velocity.y, 0f); }
                     if (Time.frameCount % 60 == 0) Log.Info("autotest : mscmort, " + moto + " poussee a " + roule + " m/s, en " + (rb != null ? rb.position.ToString("F1") : "?"));
                 }
+                // ([Test] MortSonde=1 : tete du conducteur, DeadBody et profondeur de la voiture et du joueur a 27, 34, 40 et 50 s --
+                // crash RemapPPtrTransfer apres une mort dans un addon, 28/10)
+                if (Config.GetInt("Test", "MortSonde", 0) != 0 && mscSonde < 4 && tm > (mscSonde == 0 ? 27f : mscSonde == 1 ? 34f : mscSonde == 2 ? 40f : 50f))
+                {
+                    mscSonde++; GameObject mc = Game.FindAny(moto);
+                    int pd = 0; string chain = ""; for (Transform x = Game.PlayerT; x != null && pd < 200; x = x.parent) { pd++; if (pd <= 8) chain = x.name + (chain.Length > 0 ? " > " : "") + chain; }
+                    Log.Info("autotest : mscmort, sonde " + mscSonde + " : " + (mc != null ? VazTenue.HeadProbe(mc.transform) : "voiture introuvable") + " ; joueur profondeur " + pd + " (" + chain + ")");
+                }
                 if (tm > 18f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscmort, " + VehicleSync.TestEnter(moto, false)); }
                 if (tm > 22f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscmort, guidon -> " + VehicleSync.TestEnter(moto, true)); }
                 if (tm > 26f && mscStep == 2) { mscStep = 3; DumpFsms(Config.Get("Test", "Automate", "")); Log.Info("autotest : mscmort, conduite " + VehicleSync.TestDriveDump(moto)); Log.Info("autotest : mscmort, posture au guidon : " + PoseInfo()); Log.Info("autotest : mscmort, " + Respawn.ProbeBlood()); }
@@ -5490,6 +5498,7 @@ namespace MWCoop
             Log.Info(ms.ToString().Replace("NL", ((char)10).ToString()));
         }
 
+        static int mscSonde;
         static bool done, teleported, hourSet, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
         static bool rivNear; static int attVoisin, attAir; static float rivLog, cabGap, holdLog, attTry, attExitAt = 1e9f;

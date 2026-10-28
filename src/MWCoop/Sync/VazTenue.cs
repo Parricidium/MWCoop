@@ -93,6 +93,8 @@ namespace MWCoop
                 rb = car.GetComponent<Rigidbody>(); ax = car.GetComponent<AxisCarController>(); dt = car.GetComponent<Drivetrain>();
                 Dump();
                 Log.Info("autotest vaztenue : a l'apparition, " + WaterState(car));
+                Log.Info("autotest vaztenue : tete, copie : " + HeadProbe(car));
+                Transform rk = Find("RCO_RUSCKO12(270)"); if (rk != null) Log.Info("autotest vaztenue : tete, Ruscko du jeu : " + HeadProbe(rk));
                 Seat();
             }
             if (phase == 2 && t > 31f) Seat();
@@ -355,6 +357,31 @@ namespace MWCoop
         }
 
         static bool drowned, dried, departDone, rusckoWet; static Vector3 dryPos;
+        // Tete du conducteur (crash RemapPPtrTransfer apres une mort dans un addon, [MSC] 28/10) : pivot DriverHeadPivot, sa liaison, et
+        // le DeadBody vise par l'automate Death -- dans cette voiture ou ailleurs (la copie viserait-elle le mannequin de la Ruscko ?).
+        public static string HeadProbe(Transform c)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Transform t in c.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name != "DriverHeadPivot") continue;
+                sb.Append(Recon.Path(t)).Append(" liaison ").Append(t.GetComponent<ConfigurableJoint>() != null ? "oui" : "non");
+                foreach (PlayMakerFSM f in t.GetComponents<PlayMakerFSM>())
+                {
+                    if (f.FsmName != "Death") continue;
+                    FsmGameObject db = f.FsmVariables.FindFsmGameObject("DeadBody");
+                    GameObject g = db != null ? db.Value : null;
+                    sb.Append(", Death [").Append(f.ActiveStateName).Append("] DeadBody ").Append(g == null ? "aucun" : Recon.Path(g.transform) + (g.transform.IsChildOf(c) ? " (dans cette voiture)" : " (AILLEURS)") + (g.activeSelf ? " allume" : " eteint"));
+                    foreach (FsmGameObject v in f.FsmVariables.GameObjectVariables)
+                        if (v.Value != null && v.Name != "DeadBody") sb.Append(", ").Append(v.Name).Append("=").Append(Recon.Path(v.Value.transform)).Append(v.Value.transform.IsChildOf(c) ? "" : " (AILLEURS)");
+                }
+                sb.Append(" ; ");
+            }
+            // profondeur maxi de la hierarchie (une boucle ou une chaine tres longue ferait deborder la pile au clonage)
+            int deep = 0; foreach (Transform t in c.GetComponentsInChildren<Transform>(true)) { int d = 0; for (Transform p = t; p != null && d < 10000; p = p.parent) d++; if (d > deep) deep = d; }
+            sb.Append("profondeur maxi ").Append(deep).Append(", ").Append(c.GetComponentsInChildren<Transform>(true).Length).Append(" objets");
+            return sb.ToString();
+        }
         public static string WaterState(Transform c)
         {
             if (c == null) return "pas de voiture";
