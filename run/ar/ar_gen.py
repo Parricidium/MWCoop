@@ -6,12 +6,15 @@ import glob, io, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 spec = lambda s: sorted(re.findall(r"%[-+0-9.]*l?[dsSfxXuc%]|\{\d+[^}]*\}|\\n", s))
-en_by_id = {}
+en_by_id, id_file = {}, {}
 for p in sorted(glob.glob(os.path.join(HERE, "ar_in_*.tsv"))):
     for line in io.open(p, encoding="utf-8-sig"):
         line = line.rstrip("\r\n")
         if "\t" in line:
-            i, en = line.split("\t", 1); en_by_id[i.strip()] = en
+            i, en = line.split("\t", 1); i = i.strip()
+            # (un identifiant dans deux lots : le dernier gagnait et l'arabe partait sur le mauvais texte -- 28/10, lots 24/78 et 81/82)
+            if i in id_file and id_file[i] != os.path.basename(p): sys.exit("ID %s dans %s ET %s : prefixe-le par son lot (L<n>-...)" % (i, id_file[i], os.path.basename(p)))
+            id_file[i] = os.path.basename(p); en_by_id[i] = en
 rows, seen, errs = [], set(), 0
 for p in sorted(glob.glob(os.path.join(HERE, "ar_out_*.tsv"))):
     for n, line in enumerate(io.open(p, encoding="utf-8-sig"), 1):

@@ -1167,9 +1167,9 @@ Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the 
 On Linux: put the Steam launch option from the GUIDE (Linux and Steam Deck) and start MWCoop from Steam	على Linux: ضع خيار تشغيل Steam من الدليل (Linux وSteam Deck) وشغّل MWCoop من Steam
 MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% in the game's Steam launch options (GUIDE: Linux and Steam Deck)	لم يُحمَّل MWCoop: على Linux، ضع WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% في خيارات تشغيل اللعبة في Steam (الدليل: Linux وSteam Deck)
 \n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.	\n\nعلى Linux، تبقى نسخ التشغيل (مع روابط إلى اللعبة): احذفها يدويًا دون اتباع الروابط.
-as is	الداعمون
-old PC	داعم
-60 fps	لتقديمه تبرعًا.
+Supporters	الداعمون
+Supporter	داعم
+For making a donation.	لتقديمه تبرعًا.
 Players' VAZ-2108 (F10)	سيارات VAZ-2108 للاعبين (F10)
 Drone, sleeping bags, s21 shop, museum, VAZ-2108	الطائرة المسيّرة، أكياس النوم، متجر s21، المتحف، VAZ-2108
 The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).	سيارات VAZ-2108 للاعبين (F10)، عن نموذج \"VAZ-2108 Rally\" من matthew0451 على Sketchfab: sketchfab.com/matthew0451، ترخيص CC BY-NC 4.0. مخففة، بدون الطلاء الأصلي (لكل لاعب لون ورقم).
@@ -2442,9 +2442,11 @@ Strong contrast, mint accent	تباين قوي، تمييز نعناعي
 Wood, amber, oil lamp	خشب وكهرمان ومصباح زيت
 Press	ضغطة
 Window	النافذة
+as is	كما هي
+old PC	حاسوب قديم
+60 fps	60 إطارًا/ث
 shadows, HDR	ظلال، HDR
 Open Discord	فتح Discord
-Supporters	الداعمون
 Mic	الميكروفون
 Ventti: stakes for the whole group	فينتي: الرهانات باسم المجموعة كلها
 Car CD player	مشغّل الأقراص في السيارات
@@ -2625,9 +2627,9 @@ The new one (Soft UI), or the previous one · the launcher restarts	الجديد
 New interface	واجهة جديدة
 The bug icon at the top right, next to the Logs: your reports and the form, right here in the launcher. Sign in with a code (once), then New report: the game session's logs are ticked right there.	أيقونة الحشرة في الأعلى يمينًا، بجانب السجلات: تقاريرك والنموذج هنا في المشغّل مباشرة. تسجيل الدخول برمز (مرة واحدة)، ثم «تقرير جديد»: سجلات جلسة اللعب تُحدَّد في مكانها.
 Free window (maximize, F11 full screen), light or dark, colour by game, Ctrl+K to search a page or a setting, status bar at the bottom. The previous one is still there: Settings > Launcher > Launcher window.	نافذة حرة (تكبير، F11 ملء الشاشة)، فاتحة أو داكنة، لون حسب اللعبة، Ctrl+K للبحث عن صفحة أو إعداد، شريط حالة في الأسفل. الواجهة السابقة ما زالت موجودة: الإعدادات > المشغّل > نافذة المشغّل.
-Optional method, at your own risk: Guide ›	المشغّل
 Before the streams	قبل تقسيم القنوات
  (the mod)	 (المود)
+Optional method, at your own risk: Guide ›	طريقة اختيارية، على مسؤوليتك: الدليل ›
 Different version (you %s, host %s)	نسخة مختلفة (لديك %s، لدى المضيف %s)
 The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n
 ⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?	⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟
