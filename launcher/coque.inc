@@ -375,8 +375,9 @@ static void PalBuild()
         for (int i = 0; i < kSetItemN && (int)g_palItems.size() < 40; i++) {
             const SetItem &it = kSetItems[i];
             if (!it.fr || !SetItemOn(it)) continue;
+            if (it.kind == SI_X && it.key && !strcmp(it.key, "footer")) continue;   // (pied de page : dFr = codes de boutons « DE », pas une description, et dEn vide -- la recherche plantait hors du francais, JD 28/10)
             std::wstring lab = T(it.fr, it.en);
-            if (!match(lab) && !(it.dFr && match(T(it.dFr, it.dEn)))) continue;
+            if (!match(lab) && !(it.dFr && it.dEn && match(T(it.dFr, it.dEn)))) continue;
             int tab = kSetCards[it.card].tab;
             g_palItems.push_back({ 1, tab, i, IC_SLIDERS, lab, std::wstring(T(L"Réglages · ", L"Settings · ")) + T(kSetTabFr[tab], kSetTabEn[tab]) });
         }
@@ -390,6 +391,7 @@ static void PalBuild()
     if (g_palSel >= (int)g_palItems.size()) g_palSel = max(0, (int)g_palItems.size() - 1);
 }
 static void PalOpen() { g_palOpen = true; g_palText.clear(); g_palSel = 0; g_focus = -1; PalBuild(); InvalidateAll(); }
+void PalOpenForCapture(const wchar_t *text) { PalOpen(); g_palText = text; PalBuild(); }   // (/capture palette*, launcher.cpp)
 static void PalClose() { g_palOpen = false; InvalidateAll(); }
 static void PalActivate(int i)
 {

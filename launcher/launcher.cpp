@@ -311,7 +311,8 @@ static std::wstring ArNote(const std::wstring &s)
     }
     return o;
 }
-static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return GameSwap(g_fr ? fr : g_ru ? Ru(en) : g_ar ? Ar(en) : en); }
+// (jamais NULL : un texte absent dans une langue prend celui de l'autre, sinon vide -- JD 28/10, la recherche de l'en-tete plantait hors du francais sur un T(x, NULL))
+static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { if (!en) en = fr ? fr : L""; if (!fr) fr = en; return GameSwap(g_fr ? fr : g_ru ? Ru(en) : g_ar ? Ar(en) : en); }
 static std::wstring T(const std::wstring &fr, const std::wstring &en) { std::wstring t = g_fr ? fr : g_ru ? std::wstring(Ru(en.c_str())) : g_ar ? std::wstring(Ar(en.c_str())) : en; if (g_game != GAME_MWC && t.find(L"My Summer Car") == std::wstring::npos) GameSwapIn(t); return t; }
 static const wchar_t *LangCode() { return g_fr ? L"fr" : g_ru ? L"ru" : g_ar ? L"ar" : L"en"; }
 static void SetLang(const wchar_t *code)   // fr, en, ru : gardee dans [Lanceur] Langue
@@ -8314,6 +8315,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
         else if (st == L"guide-recherche") { g_tab = TAB_WIKI; g_wikiSearch = L"mods"; g_wikiFocus = true; }   // (champ Chercher de l'en-tete)
         else if (st == L"guide-credits") g_tab = TAB_CREDITS;   // (pilule Credits du Guide)
+        else if (st == L"palette" || !wcsncmp(st.c_str(), L"palette:", 8)) { void PalOpenForCapture(const wchar_t *); PalOpenForCapture(st.size() > 8 ? st.c_str() + 8 : L""); }   // (recherche de l'en-tete, nouvelle interface)
+        else if (st == L"guide-recherche-vide") { g_tab = TAB_WIKI; g_wikiSearch.clear(); g_wikiFocus = true; }   // (champ Chercher du Guide, ouvert vide)
         else if (st == L"accueil-win7") { g_tab = TAB_HOME; g_steamNet = true; }   // (Windows 7 avec MWCOOP_WIN7=1 : la ligne sous STEAM et son lien vers le Guide)
         else if (st == L"guide-reseau-win7") { g_tab = TAB_WIKI; g_wikiSel = WA_NET; g_scroll[TAB_WIKI] = 270; }   // (article Reseau, section Windows 7 / VxKex)
         else if (st == L"album-partie" || st == L"album-favoris") {   // (Album : Par partie, Favoris -- les deux premieres photos, en memoire)
