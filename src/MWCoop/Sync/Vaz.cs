@@ -99,8 +99,13 @@ namespace MWCoop
             return false;
         }
 
+        // Au-dessus de l'eau : la copie de la Ruscko (My Summer Car) garde l'automate InWater de sa prise d'air -- sous y = -4,5 (loin
+        // de MAP/WaterCheck1), le contact est coupe et le moteur ne repart plus tant qu'elle y reste. Une VAZ posee en contrebas d'un
+        // lac (sol a -5,1 : essai de [MSC], 28/10) etait noyee des son apparition. Sol plus bas que -3,5 : place refusee.
+        static bool Dry(Vector3 p) { return !Game.Msc || p.y >= -3.5f; }
+
         // Place a cote du joueur d'ici : 4 m a sa droite, meme cap, posee sur le sol.
-        static void SpotNearMe(out Vector3 pos, out float yaw)
+        static bool SpotNearMe(out Vector3 pos, out float yaw)
         {
             GameObject pl = GameObject.Find("PLAYER");
             Transform t = pl != null ? pl.transform : null;
@@ -118,15 +123,17 @@ namespace MWCoop
             // degres en partant de sa droite) ; la premiere ou la voiture tient sans toucher de mur ni d'objet fixe, sous le ciel.
             Vector3 dir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
             Vector3 p;
-            if (FreeSpot(first, me.y, dir, out p)) { pos = p; return; }
-            foreach (float r in new[] { 4f, 7f, 10f, 14f, 20f, 28f })
+            if (FreeSpot(first, me.y, dir, out p) && Dry(p)) { pos = p; return true; }
+            foreach (float r in new[] { 4f, 7f, 10f, 14f, 20f, 28f, 40f, 60f })
                 for (int k = 0; k < 12; k++)
                 {
                     Vector3 o = Quaternion.Euler(0f, k * 30f, 0f) * right * r;
-                    if (FreeSpot(me + o, me.y, dir, out p)) { pos = p; Log.Info("vaz : place libre a " + r + " m du joueur (la place habituelle " + (Roofed(first) ? "est sous un toit" : "est encombree") + ")"); return; }
+                    if (FreeSpot(me + o, me.y, dir, out p) && Dry(p)) { pos = p; Log.Info("vaz : place libre a " + r + " m du joueur (la place habituelle " + (Roofed(first) ? "est sous un toit" : Dry(first) ? "est encombree" : "est trop basse, sous le niveau de l'eau") + ")"); return true; }
                 }
             Ground(first, me.y, out pos);
-            Log.Warn("vaz : aucune place libre a moins de 28 m, voiture posee a cote du joueur");
+            if (!Dry(pos)) { Log.Warn("vaz : aucune place au sec a moins de 60 m (sol sous le niveau de l'eau : moteur noye par le jeu) -- voiture pas posee"); return false; }
+            Log.Warn("vaz : aucune place libre a moins de 60 m, voiture posee a cote du joueur");
+            return true;
         }
 
         // sol sous ce point (premier collider fixe depuis 2 m au-dessus des pieds : un auvent ou un toit plus haut n'est pas le
@@ -170,7 +177,7 @@ namespace MWCoop
             if (!VazCar.Has(model)) model = VazCar.ModelVaz;
             if (wanted.ContainsKey(Me)) { Deny(2, n); return false; }
             if (!IsFree(n)) { Deny(1, n); return false; }
-            Vector3 pos; float yaw; SpotNearMe(out pos, out yaw);
+            Vector3 pos; float yaw; if (!SpotNearMe(out pos, out yaw)) { WetToast(); return false; }
             string liv = EvoLivery.MyHash(model);
             if (Host) { Assign(Me, new Slot { Number = n, Model = model, Livery = liv, Pos = pos, Yaw = yaw }); return true; }
             Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(n).Vec(pos).F32(yaw).U8(model).Str(liv), true);
@@ -185,11 +192,13 @@ namespace MWCoop
             if (wanted.ContainsKey(Me)) Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(0).Vec(Vector3.zero).F32(0f).U8(0).Str(""), true);
         }
 
+        static void WetToast() { Hud.Toast(Lang.T("Pas de place au sec pour ta voiture près de toi : éloigne-toi de l'eau", "No dry spot for your car near you: move away from the water")); }
+
         // Faire venir la sienne a cote de soi.
         public static void Call()
         {
             if (!wanted.ContainsKey(Me)) return;
-            Vector3 pos; float yaw; SpotNearMe(out pos, out yaw);
+            Vector3 pos; float yaw; if (!SpotNearMe(out pos, out yaw)) { WetToast(); return; }
             if (Host) Move(Me, pos, yaw);
             else Session.SendToHost(new NetWriter(Msg.Race).U8(V_CALL).Vec(pos).F32(yaw), true);
         }

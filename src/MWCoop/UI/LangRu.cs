@@ -964,6 +964,7 @@ namespace MWCoop
             { "fps", "к/с" },
             { "level ", "уровень " },
             { "off", "выкл." },
+            { "No dry spot for your car near you: move away from the water", "Рядом с тобой нет сухого места для машины: отойди от воды" },
         };
     }
 }

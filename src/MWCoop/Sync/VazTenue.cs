@@ -49,10 +49,33 @@ namespace MWCoop
             if (mode != "vaztenue" || !Mine) return;
             string other = Config.Get("Test", "VazTenueVoiture", "");
             if (phase == -1 && t > 15f) { phase = 0; MakeTrack(); }
+            // [Test] VazTenueDepart=x,y,z : joueur pose la a 17 s, avant la demande (place de la voiture pres d'un point bas : [MSC] 28/10)
+            if (phase == 0 && t > 17f && !departDone && Config.Get("Test", "VazTenueDepart", "").Length > 0)
+            {
+                departDone = true; string[] v = Config.Get("Test", "VazTenueDepart", "").Split(','); var ci = System.Globalization.CultureInfo.InvariantCulture;
+                if (v.Length == 3) { Move(new Vector3(float.Parse(v[0], ci), float.Parse(v[1], ci), float.Parse(v[2], ci))); Log.Info("autotest vaztenue : joueur pose en " + Game.PlayerT.position.ToString("F1")); }
+            }
             if (phase == 0 && t > 20f)
             {
                 phase = 1;
                 if (other.Length == 0) Log.Info("autotest vaztenue : demande -> " + Vaz.Request(Guest ? 4 : 3, Config.GetInt("Test", "VazModele", 0)));
+            }
+            // [Test] VazTenueNoyer=1 (rapport de [MSC], 28/10) : de 23 a 27 s la VAZ tenue sous l'eau (prise d'air sous -4,5 :
+            // automate InWater de la Ruscko), puis remise a sa place ; etat du contact et du demarreur au journal ensuite.
+            if (phase == 1 && t > 23f && t < 27f && Config.GetInt("Test", "VazTenueNoyer", 0) != 0)
+            {
+                Transform c = Vaz.CarOf(Vaz.MeId); Rigidbody r = c != null ? c.GetComponent<Rigidbody>() : null;
+                if (c != null && r != null)
+                {
+                    if (!drowned) { drowned = true; dryPos = c.position; r.isKinematic = true; Log.Info("autotest vaztenue : noyee (y -8)"); }
+                    c.position = new Vector3(dryPos.x, -8f, dryPos.z); r.position = c.position;
+                }
+            }
+            if (phase == 1 && t >= 27f && drowned && !dried)
+            {
+                dried = true; Transform c = Vaz.CarOf(Vaz.MeId); Rigidbody r = c != null ? c.GetComponent<Rigidbody>() : null;
+                if (c != null && r != null) { c.position = dryPos + Vector3.up * 0.5f; r.position = c.position; r.isKinematic = false; r.velocity = Vector3.zero; }
+                Log.Info("autotest vaztenue : sortie de l'eau, " + WaterState(c));
             }
             if (phase == 1 && t > 30f)
             {
@@ -322,6 +345,22 @@ namespace MWCoop
             Log.Info("autotest vaztenue : entree, automate " + st + " -> " + driveFsm.ActiveStateName);
         }
 
+        static bool drowned, dried, departDone; static Vector3 dryPos;
+        public static string WaterState(Transform c)
+        {
+            if (c == null) return "pas de voiture";
+            var sb = new System.Text.StringBuilder();
+            foreach (PlayMakerFSM f in c.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (f.FsmName == "InWater") sb.Append("prise d'air ").Append(f.ActiveStateName).Append(" y ").Append(f.transform.position.y.ToString("F1")).Append(", ");
+                if (f.FsmName == "Use" && f.gameObject.name == "Ignition") { FsmBool w = f.FsmVariables.FindFsmBool("InWater"); sb.Append("contact ").Append(f.ActiveStateName).Append(" InWater ").Append(w != null ? w.Value.ToString() : "?").Append(", "); }
+                if (f.FsmName == "Starter") sb.Append("demarreur ").Append(f.ActiveStateName).Append(", ");
+            }
+            Drivetrain d = c.GetComponent<Drivetrain>();
+            sb.Append("regime ").Append(d != null ? d.rpm.ToString("F0") : "?");
+            return sb.ToString();
+        }
+
         static void Starter(bool on)
         {
             if (car == null) return;
@@ -333,7 +372,7 @@ namespace MWCoop
             FsmBool acc = f.FsmVariables.GetFsmBool("ACC"), s = f.FsmVariables.GetFsmBool("Starting");
             if (acc != null) acc.Value = true;
             if (s != null) s.Value = on;
-            if (!on) Log.Info("autotest vaztenue : demarreur " + f.ActiveStateName + ", regime " + (dt != null ? dt.rpm.ToString("F0") : "?"));
+            if (!on) Log.Info("autotest vaztenue : demarreur " + f.ActiveStateName + ", regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + " ; " + WaterState(car));
         }
 
         static void MakeTrack()
