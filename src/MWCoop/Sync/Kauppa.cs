@@ -46,7 +46,9 @@ namespace MWCoop
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             offers.Clear(); vitriinit.Clear(); videoCab = konsoliCab = null; script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
-            buildAt = Active && Game.LevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
+            // (programmee meme coupee : chez un invite, les ajouts suivent l'hote depuis le 28/10, et son annonce arrive APRES le chargement --
+            // decide dans Update une fois connue, Ajouts.Ready ; avant, un invite en SansAjouts=1 n'avait jamais ni boutique, ni musee, ni cinema)
+            buildAt = Game.LevelName == "GAME" && Config.GetInt("Boutique", "Active", 1) != 0 ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
 
         public static void OnGameSave() { OnGameSaveVideo(); OnGameSaveBags(); OnGameSaveKino(); OnGameSaveOsat(); }
@@ -58,6 +60,7 @@ namespace MWCoop
             if (!built)
             {
                 if (now < buildAt || !Ajouts.Ready) return;   // (invite : les choix de l'hote d'abord)
+                if (!Active) { buildAt = -1f; L("ajouts COOP coupes (lanceur, ou choix de l'hote) : rien a construire"); return; }
                 built = true;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 if (ShopOn) try { Build(); } catch (Exception e) { L("construction : " + e); }
