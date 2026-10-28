@@ -85,6 +85,7 @@ namespace MWCoop
             st.Pivot = new GameObject("DriverPivot").transform;
             st.Pivot.SetParent(b.Car.transform, false);
             st.Pivot.localPosition = m.Head;
+            Bounds cb; st.HalfWidth = VazCar.ModelBounds(m, "carrosserie.p205", out cb) ? Mathf.Max(Mathf.Abs(cb.min.x), Mathf.Abs(cb.max.x)) : 0.85f;
             // boutons visibles du tableau de bord (cylindres colores, comme sur la copie)
             if (m.Knobs != null)
                 for (int i = 0; i < m.Knobs.Length; i++)
@@ -115,6 +116,23 @@ namespace MWCoop
                 heads.Add(l);
             }
             st.Heads = heads.ToArray();
+            // portieres sur charniere (JD 28/10 : « les portes ne s'ouvrent pas ») : pivot au point de charniere du modele (infos.txt
+            // door_dside_f / door_pside_f, arete avant), axe vertical, la portiere du modele accrochee dessous ; clic pour ouvrir (Doors)
+            st.Doors = new Transform[2]; st.DoorCenter = new Vector3[2]; st.DoorOpen = new bool[2]; st.DoorAngle = new float[2];
+            string[][] dd = { new[] { "portiere_g.p205", "door_dside_f" }, new[] { "portiere_d.p205", "door_pside_f" } };
+            for (int i = 0; i < 2; i++)
+            {
+                if (!System.IO.File.Exists(System.IO.Path.Combine(m.Dir, dd[i][0]))) continue;
+                Vector3 h;
+                if (!inf.TryGetValue(dd[i][1], out h)) { VazCar.AddModel(b, b.Body, dd[i][0]); continue; }   // (sans charniere : portiere fixe)
+                var piv = new GameObject("portiere_" + i).transform;
+                piv.SetParent(b.Body, false); piv.localPosition = h;
+                var inner = new GameObject("pieces").transform;
+                inner.SetParent(piv, false); inner.localPosition = -h;
+                VazCar.AddModel(b, inner, dd[i][0]);
+                Bounds db; st.DoorCenter[i] = VazCar.ModelBounds(m, dd[i][0], out db) ? db.center : h;
+                st.Doors[i] = piv;
+            }
             // son moteur de l'addon (boucles + demarrage) au moteur du modele
             var eng = new GameObject("moteur_son").transform;
             eng.SetParent(b.Body, false); eng.localPosition = m.Engine;
@@ -131,11 +149,13 @@ namespace MWCoop
             Engine(b, st);
             if (b.Sound != null) b.Sound.Update();
             Lamps(b, st);
+            DoorAnim(b, st);
             GameObject pl = Game.PlayerGo;
             if (pl == null || !PlayerSync.InGame) return;
             if (driving == null)
             {
-                bool zone = InZone(b, pl.transform) && b.Rb.velocity.magnitude < 2f && Vector3.Angle(b.Car.transform.up, Vector3.up) < 45f;
+                Doors(b, st);
+                bool zone = InZone(b, st, pl.transform) && b.Rb.velocity.magnitude < 2f && Vector3.Angle(b.Car.transform.up, Vector3.up) < 45f;
                 if (zone)
                 {
                     prompted = b;
@@ -147,6 +167,10 @@ namespace MWCoop
             }
             if (driving != b) return;
             Knobs(b, st);
+            if (hovered < 0) Doors(b, st);
+            GearText(b);
+            // phares a la touche du jeu (HighBeam, L par defaut -- JD 28/10 : « je ne peux pas allumer ses phares avec L »)
+            if (Down("HighBeam")) { st.LightsOn = !st.LightsOn; Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints") + " (touche)"); }
             if (Time.realtimeSinceStartup - enteredAt > 0.5f && Down("DrivingMode"))
             {
                 if (b.Rb.velocity.magnitude < 0.5f) Exit(b, false);
@@ -154,12 +178,51 @@ namespace MWCoop
             }
         }
 
-        // Zone d'entree : le long de la portiere conducteur (cote gauche), a hauteur du siege, a moins de 1,4 m de la caisse.
-        static bool InZone(VazCar.Built b, Transform pl)
+        // Portieres : visee au centre de l'ecran (a moins de 35 cm du centre de la portiere, a moins de 2 m), texte du jeu, clic gauche
+        // ou touche Use : ouverte de 70 degres vers l'exterieur, ou refermee.
+        static int doorHover = -1;
+        static void Doors(VazCar.Built b, State st)
+        {
+            Transform cam = PlayerCam();
+            if (cam == null || st.Doors == null) return;
+            int hit = -1; float best = 0.35f;
+            for (int i = 0; i < 2; i++)
+            {
+                if (st.Doors[i] == null) continue;
+                Vector3 v = st.Doors[i].TransformPoint(st.DoorCenter[i] - st.Doors[i].localPosition) - cam.position;
+                float along = Vector3.Dot(v, cam.forward);
+                if (along < 0.1f || along > 2f) continue;
+                float perp = (v - cam.forward * along).magnitude;
+                if (perp < best) { best = perp; hit = i; }
+            }
+            if (hit < 0) { if (doorHover >= 0) { doorHover = -1; Game.SetGlobalBool("GUIuse", false); if (prompted == null) Game.SetGlobal("GUIinteraction", ""); } return; }
+            doorHover = hit;
+            Game.SetGlobalBool("GUIuse", true);
+            if (prompted == null) Game.SetGlobal("GUIinteraction", st.DoorOpen[hit] ? "CLOSE DOOR" : "OPEN DOOR");
+            if (Input.GetMouseButtonDown(0) || Down("Use")) { st.DoorOpen[hit] = !st.DoorOpen[hit]; Log.Info("standalone : portiere " + (hit == 0 ? "conducteur" : "passager") + (st.DoorOpen[hit] ? " ouverte" : " fermee")); }
+        }
+        static void DoorAnim(VazCar.Built b, State st)
+        {
+            if (st.Doors == null) return;
+            for (int i = 0; i < 2; i++)
+            {
+                if (st.Doors[i] == null) continue;
+                float want = st.DoorOpen[i] ? 70f : 0f;
+                if (Mathf.Approximately(st.DoorAngle[i], want)) continue;
+                st.DoorAngle[i] = Mathf.MoveTowards(st.DoorAngle[i], want, 220f * Time.deltaTime);
+                st.Doors[i].localRotation = Quaternion.Euler(0f, i == 0 ? st.DoorAngle[i] : -st.DoorAngle[i], 0f);
+            }
+        }
+
+        // Zone d'entree (le « trigger » des voitures du jeu) : contre la portiere conducteur, en face du siege -- tenue.ini [Poste]
+        // EntreeZ (avance du centre de la zone, depart : celle du siege) et EntreeLongueur (de l'avant a l'arriere) ; du flanc de la
+        // caisse a 1,1 m dehors. (JD 28/10 : « la place pilote est mal centree par rapport a son vrai siege » -- l'ancienne zone
+        // courait sur 2 m, de l'aile arriere au montant avant, et commencait 30 cm dans la caisse.)
+        static bool InZone(VazCar.Built b, State st, Transform pl)
         {
             Vector3 lp = b.Car.transform.InverseTransformPoint(pl.position);
-            float side = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
-            return lp.x * side > 0.55f && lp.x * side < 2.0f && Mathf.Abs(lp.z - b.M.Head.z) < 1.0f && lp.y > -1.0f && lp.y < 2.0f;
+            float side = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f, flank = st.HalfWidth > 0.3f ? st.HalfWidth : 0.85f;
+            return lp.x * side > flank - 0.12f && lp.x * side < flank + 1.1f && Mathf.Abs(lp.z - st.T.EntreeZ) < st.T.EntreeLongueur * 0.5f && lp.y > -1.0f && lp.y < 2.0f;
         }
 
         static void Enter(VazCar.Built b, State st)
@@ -179,6 +242,7 @@ namespace MWCoop
             var d = (StandaloneDriver)b.Axis;
             d.Keys = true; d.Handbrake = 0f;
             driving = b; enteredAt = Time.realtimeSinceStartup;
+            GearHud(true, b);
             Log.Info("standalone : joueur au volant de " + b.Car.name + " (pied a " + footHeight.ToString("F2") + " m)");
         }
 
@@ -193,7 +257,8 @@ namespace MWCoop
                 if (ct != null)
                 {
                     float side = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
-                    Vector3 at = ct.TransformPoint(new Vector3(side * 1.45f, 0.4f, b.M.Head.z));
+                    State es; float ez = states.TryGetValue(b, out es) ? es.T.EntreeZ : b.M.Head.z, ew = es != null && es.HalfWidth > 0.3f ? es.HalfWidth : 0.85f;
+                    Vector3 at = ct.TransformPoint(new Vector3(side * (ew + 0.6f), 0.4f, ez));
                     float gy;
                     if (Ground(at + Vector3.up * 2f, pl.transform, ct, out gy)) at.y = gy + (footHeight > 0f ? footHeight : 1f);
                     pl.transform.position = at;
@@ -204,11 +269,31 @@ namespace MWCoop
             Game.SetGlobalBool("PlayerStop", false);
             Game.SetGlobal("PlayerCurrentVehicle", "");
             InCar(false);
+            GearHud(false, b);
             ClearHover();
             var d = b.Axis as StandaloneDriver;
             if (d != null) { d.Keys = false; d.Throttle = 0f; d.Brake = 0f; d.Steer = 0f; d.Clutch = 0f; d.Handbrake = 1f; }
             driving = null; exitBlock = Time.realtimeSinceStartup + 0.6f;
             Log.Info("standalone : joueur descendu" + (force ? " (force)" : "") + (pl != null ? " en " + pl.transform.position.ToString("F1") : ""));
+        }
+
+        // Rapport en bas a droite (HUD du jeu) : GUI/Indicators/Gear allume au volant, texte GUIgear (R, N, 1-6) -- ce que font
+        // l'automate PlayerTrigger et le GearIndicator des voitures du jeu (JD 28/10 : « pas d'indication de vitesse en bas a droite »)
+        static GameObject gearGui; static int gearShown = -99;
+        static void GearHud(bool on, VazCar.Built b)
+        {
+            if (gearGui == null) gearGui = Game.FindAny("GUI/Indicators/Gear");
+            if (gearGui != null) gearGui.SetActive(on);
+            gearShown = -99;
+            if (on) GearText(b); else Game.SetGlobal("GUIgear", "");
+        }
+        static void GearText(VazCar.Built b)
+        {
+            Drivetrain dt = b.Dt;
+            if (dt == null || dt.gearRatios == null || dt.gear == gearShown) return;
+            gearShown = dt.gear;
+            int n = Array.IndexOf(dt.gearRatios, 0f);
+            Game.SetGlobal("GUIgear", dt.gear == n ? "N" : dt.gear < n ? "R" : (dt.gear - n).ToString());
         }
 
         static void InCar(bool on)
@@ -243,7 +328,7 @@ namespace MWCoop
             GameObject pl = Game.PlayerGo;
             Transform cam = PlayerCam();
             if (pl == null || cam == null || pl.transform.parent != st.Pivot) return;
-            Vector3 eye = b.Car.transform.TransformPoint(b.M.Head + Seats.EyeFromPivot);
+            Vector3 eye = b.Car.transform.TransformPoint(st.T.Yeux);
             Vector3 delta = eye - cam.position;
             if (delta.sqrMagnitude > 1e-6f && delta.sqrMagnitude < 9f) pl.transform.position += delta;
         }
@@ -351,15 +436,24 @@ namespace MWCoop
                     b.Rb.velocity = Vector3.zero; b.Rb.angularVelocity = Vector3.zero;
                     ct.position = p0; ct.rotation = r; b.Rb.position = p0; b.Rb.rotation = r;
                     var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
-                    pl.transform.position = ct.TransformPoint(new Vector3(-1.25f, 0.6f, b.M.Head.z));
+                    pl.transform.position = ct.TransformPoint(new Vector3(-(st.HalfWidth + 0.45f), 0.6f, st.T.EntreeZ));
                     if (cc != null) cc.enabled = true;
                     mWhy = ""; mStep = 1; mAt = t;
                     break;
                 }
                 case 1:
+                    // (le joueur avance vers le centre de la voiture pendant 1 s : la caisse doit l'arreter au flanc)
+                    if (e < 1.0f) { var cm = pl.GetComponent<CharacterController>(); if (cm != null && cm.enabled) cm.Move((ct.position - pl.transform.position).normalized * 3f * Time.deltaTime + Vector3.down * 0.05f); break; }
                     if (e < 1.5f) break;
+                    if (mCycle == 0)
+                    {
+                        Vector3 lq = ct.InverseTransformPoint(pl.transform.position);
+                        Log.Info("standalone : monte, joueur pousse vers la caisse : arrete a " + lq.ToString("F2") + " (flanc a " + st.HalfWidth.ToString("F2") + ")");
+                        if (Mathf.Abs(lq.x) < st.HalfWidth - 0.1f) mWhy += " joueur dans la caisse";
+                        st.DoorOpen[0] = true;
+                    }
                     FsmString gi = FsmVariables.GlobalVariables.FindFsmString("GUIinteraction");
-                    if (!InZone(b, pl.transform)) mWhy += " hors zone (" + ct.InverseTransformPoint(pl.transform.position).ToString("F2") + ")";
+                    if (!InZone(b, st, pl.transform)) mWhy += " hors zone (" + ct.InverseTransformPoint(pl.transform.position).ToString("F2") + ")";
                     else if (gi == null || gi.Value != "ENTER DRIVING MODE") mWhy += " texte '" + (gi != null ? gi.Value : "?") + "'";
                     Enter(b, st); mStep = 2; mAt = t;
                     break;
@@ -368,12 +462,15 @@ namespace MWCoop
                     {
                         FsmBool ps = FsmVariables.GlobalVariables.FindFsmBool("PlayerStop"); FsmString cv = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle");
                         Transform cam = PlayerCam();
-                        float eyeErr = cam != null ? (cam.position - ct.TransformPoint(b.M.Head + Seats.EyeFromPivot)).magnitude : 9f;
+                        float eyeErr = cam != null ? (cam.position - ct.TransformPoint(st.T.Yeux)).magnitude : 9f;
                         if (ps == null || !ps.Value) mWhy += " PlayerStop faux";
                         if (cv == null || cv.Value != VehicleName) mWhy += " vehicule '" + (cv != null ? cv.Value : "?") + "'";
                         if (pl.transform.parent != st.Pivot) mWhy += " pas sous le pivot";
                         if (eyeErr > 0.05f) mWhy += " yeux a " + eyeErr.ToString("F2") + " m";
                         if (mCycle == 0) { st.LightsOn = true; Autotest.CaptureSoon("standalone-volant", 0.2f); }
+                        FsmString gg = FsmVariables.GlobalVariables.FindFsmString("GUIgear");
+                        if (gg == null || gg.Value != "N") mWhy += " rapport affiche '" + (gg != null ? gg.Value : "?") + "'";
+                        if (gearGui == null || !gearGui.activeSelf) mWhy += " indicateur de rapport eteint";
                         d.Keys = false; d.Handbrake = 0f; d.Gear = 2; d.Throttle = 0.5f; d.Brake = 0f;
                         mStep = 3; mAt = t;
                     }

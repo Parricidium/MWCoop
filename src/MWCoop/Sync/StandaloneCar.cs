@@ -24,7 +24,8 @@ namespace MWCoop
         class State
         {
             public StandaloneTenue T; public Transform Cog; public float NextGrip, NextFile;
-            public Transform Pivot; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
+            public Transform Pivot; public float HalfWidth; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
+            public Transform[] Doors; public Vector3[] DoorCenter; public bool[] DoorOpen; public float[] DoorAngle;
         }
         static readonly Dictionary<VazCar.Built, State> states = new Dictionary<VazCar.Built, State>();
         // Course de suspension au-dessus du moyeu (m) : Wheel pose son modele a (compression - course) sous son objet ; ~0,10 au repos
@@ -105,7 +106,7 @@ namespace MWCoop
             var body = new GameObject("VAZ").transform;
             body.SetParent(ct, false);
             b.Body = body;
-            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "hayon.p205" })
+            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "hayon.p205" })   // (portieres : sur charniere, SetupDrive)
                 if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, f))) VazCar.AddModel(b, body, f);
             Vector3 sc;
             if (inf.TryGetValue("volant_centre", out sc))
@@ -132,6 +133,14 @@ namespace MWCoop
                 float floor = Mathf.Max(bb.min.y, inf["wheel_lf"].y - radius * 0.4f), belt = bb.min.y + bb.size.y * 0.55f;
                 Box(ct, bodyLayer, "boite_caisse", new Vector3(bb.center.x, (floor + belt) * 0.5f, bb.center.z), new Vector3(bb.size.x * 0.97f, belt - floor, bb.size.z * 0.97f));
                 Box(ct, bodyLayer, "boite_habitacle", new Vector3(bb.center.x, (belt + bb.max.y) * 0.5f, bb.center.z - bb.size.z * 0.08f), new Vector3(bb.size.x * 0.8f, bb.max.y - belt, bb.size.z * 0.5f));
+                // (le joueur traversait la caisse -- JD 28/10, capture : il ne heurte pas cette couche ; les voitures du jeu ont pour lui
+                // des colliders a part, Colliders/PlayerColl : memes boites sur leur couche)
+                int pl = PlayerLayer(tpl);
+                if (pl >= 0 && pl != bodyLayer)
+                {
+                    Box(ct, pl, "joueur_caisse", new Vector3(bb.center.x, (floor + belt) * 0.5f, bb.center.z), new Vector3(bb.size.x * 0.97f, belt - floor, bb.size.z * 0.97f));
+                    Box(ct, pl, "joueur_habitacle", new Vector3(bb.center.x, (belt + bb.max.y) * 0.5f, bb.center.z - bb.size.z * 0.08f), new Vector3(bb.size.x * 0.8f, bb.max.y - belt, bb.size.z * 0.5f));
+                }
             }
 
             // 5. Centre de gravite : objet a nous (CarDynamics.Start le recopie dans le corps), entre les essieux, 0,3 m au-dessus
@@ -163,6 +172,19 @@ namespace MWCoop
         }
 
         // Couche du plus gros collider plein de la voiture modele (hors roues), journal des couches que le terrain heurte
+        static int PlayerLayer(GameObject tpl)
+        {
+            foreach (Collider c in tpl.GetComponentsInChildren<Collider>(true))
+                if (!c.isTrigger && c.name == "PlayerColl")
+                {
+                    int l = c.gameObject.layer; GameObject pl = Game.PlayerGo;
+                    Log.Info("standalone : collision joueur sur la couche " + LayerMask.LayerToName(l) + (pl != null ? ", le joueur (" + LayerMask.LayerToName(pl.layer) + ") la heurte : " + !Physics.GetIgnoreLayerCollision(l, pl.layer) : ""));
+                    return l;
+                }
+            Log.Warn("standalone : PlayerColl de la Ruscko introuvable : pas de collision pour le joueur");
+            return -1;
+        }
+
         static int BodyLayer(GameObject tpl, int wheelLayer)
         {
             Collider best = null; float vol = 0f;

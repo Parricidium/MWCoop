@@ -28,6 +28,8 @@ namespace MWCoop
         public Essieu Ar = new Essieu { Ressort = 44573f, Course = 0.15f, Compression = 7132f, Detente = 7132f, AntiRoulis = 12000f, Carrossage = 0f, Adherence = 1.15f, AdherenceFreinAMain = 0.45f };
         public Dictionary<string, float> Sols = new Dictionary<string, float> { { "Track", 0.95f }, { "Offroad", 1.25f }, { "Grass", 1.15f }, { "Swamp", 1.0f } };
         public float SolInconnu = 1.0f;
+        public Vector3 Yeux;
+        public float EntreeZ, EntreeLongueur = 1.0f;   // (zone d'entree : centre en avance -- depart : le siege --, longueur)   // (point de vue du conducteur, repere du modele ; depart : pivot de tete, centre sur le volant)
 
         public string File;
         public DateTime Stamp;
@@ -36,7 +38,9 @@ namespace MWCoop
         // ---------------------------------------------------------------- lecture
         public static StandaloneTenue Load(VazCar.Model m)
         {
-            var t = new StandaloneTenue { File = Path.Combine(m.Dir, "tenue.ini") };
+            // (yeux : pivot de tete + hauteur et avance de EyeFromPivot du jeu, sans son decalage lateral -- 7 cm vers le centre sur
+            // MSC : JD 28/10, « la place conducteur est mal centree par rapport a son vrai siege »)
+            var t = new StandaloneTenue { File = Path.Combine(m.Dir, "tenue.ini"), Yeux = m.Head + new Vector3(0f, Seats.EyeFromPivot.y, Seats.EyeFromPivot.z), EntreeZ = m.Head.z };
             try
             {
                 if (!System.IO.File.Exists(t.File)) { System.IO.File.WriteAllText(t.File, t.Text(), new UTF8Encoding(true)); Log.Info("standalone : " + t.File + " cree (valeurs de la " + m.Name + " copie)"); }
@@ -101,6 +105,9 @@ namespace MWCoop
                 e.Adherence = F(v, s + "Adherence", e.Adherence, 0.3f, 2f);
                 e.AdherenceFreinAMain = F(v, s + "AdherenceFreinAMain", e.AdherenceFreinAMain, 0.1f, 1.5f);
             }
+            EntreeZ = F(v, "Poste.EntreeZ", EntreeZ, -1.5f, 1.5f);
+            EntreeLongueur = F(v, "Poste.EntreeLongueur", EntreeLongueur, 0.3f, 2.5f);
+            Yeux = new Vector3(F(v, "Poste.YeuxX", Yeux.x, -1f, 1f), F(v, "Poste.YeuxY", Yeux.y, 0.3f, 1.6f), F(v, "Poste.YeuxZ", Yeux.z, -1.5f, 1.5f));
             foreach (string k in new List<string>(v.Keys))
             {
                 if (!k.StartsWith("Sols.")) continue;
@@ -143,6 +150,7 @@ namespace MWCoop
         void Fix(string key, string was, string now) { fixes++; Log.Warn("standalone : tenue.ini " + key + " = " + was + " hors borne -> " + now); }
 
         // ---------------------------------------------------------------- fichier de depart
+        const string NL = "\r\n";
         static string N(float f) { return f.ToString("0.###", CultureInfo.InvariantCulture); }
         string Text()
         {
@@ -192,6 +200,10 @@ namespace MWCoop
                 sb.Append("Adherence=").Append(N(e.Adherence)).Append("               ; multiplie l'adherence du sol (0,3 - 2)\r\n");
                 sb.Append("AdherenceFreinAMain=").Append(N(e.AdherenceFreinAMain)).Append("     ; adherence laterale pendant le frein a main, x (0,1 - 1,5)\r\n\r\n");
             }
+            sb.Append("[Poste]\r\n; yeux du conducteur (m, repere de la voiture : x vers la droite, y vers le haut, z vers l'avant)\r\n");
+            sb.Append("EntreeZ=").Append(N(EntreeZ)).Append("          ; centre de la zone d'entree (le long de la portiere conducteur), m vers l'avant").Append(NL);
+            sb.Append("EntreeLongueur=").Append(N(EntreeLongueur)).Append("    ; longueur de la zone d'entree, m").Append(NL);
+            sb.Append("YeuxX=").Append(N(Yeux.x)).Append("\r\nYeuxY=").Append(N(Yeux.y)).Append("\r\nYeuxZ=").Append(N(Yeux.z)).Append("\r\n\r\n");
             sb.Append("[Sols]\r\n; adherence par matiere du sol (nom de la matiere du jeu)\r\n");
             foreach (KeyValuePair<string, float> kv in Sols) sb.Append(kv.Key).Append("=").Append(N(kv.Value)).Append("\r\n");
             sb.Append("Autres=").Append(N(SolInconnu)).Append("        ; sol absent de la liste\r\n");
