@@ -25,6 +25,8 @@ namespace MWCoop
         static int phase = -1, sub;
         static float phaseAt, maxRoll, maxYaw, steerAt90, speedAtTurn, maxRearHb, maxSteerDeg;
         static bool notDriving, launched;
+        static float subLog;
+        static bool phaseRamp;
         static float yawAt, yawKmh;
         static List<FsmFloat> knobs;
         static bool rolled, seated;
@@ -179,16 +181,25 @@ namespace MWCoop
             if (sub == 0)
             {
                 // acceleration pour de vrai, boite automatique (45 s au plus) ; sinon (moteur qui ne tourne pas) : lancee, posee 1,5 s
-                // sur ses ressorts puis vitesse donnee d'un coup, virage au point mort (un moteur au ralenti en prise avec des roues
+                // sur ses ressorts puis montee en vitesse au point mort, virage au point mort (un moteur au ralenti en prise avec des roues
                 // a 100 km/h bloquerait les roues arriere : tete-a-queue du banc, pas de la voiture)
                 bool engine = dt.rpm > 300f;
-                if (engine && dtp < 45f && kmh < target) { Keys(1f, 0f, 0f); return; }
+                if (t >= subLog) { subLog = t + 5f; Log.Info("autotest vaztenue : mise en vitesse, " + kmh.ToString("F0") + " km/h vises " + target + ", regime " + dt.rpm.ToString("F0") + ", rapport " + dt.gear + ", depuis " + dtp.ToString("F0") + " s"); }
+                if (engine && dtp < 45f && kmh < target && !(dtp > 8f && kmh < 10f)) { Keys(1f, 0f, 0f); return; }   // (8 s sans avancer : moteur sans effet, lancee)
                 if (!engine && dtp < 1.5f) { Keys(0f, 0f, 0f); return; }
                 launched = !(engine && kmh >= target - 3f);
-                if (launched)
+                phaseRamp = launched && kmh < target - 1f;
+                if (phaseRamp)
                 {
-                    rb.velocity = car.forward * (target / 3.6f); rb.angularVelocity = Vector3.zero;
-                    foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) if (w.radius > 0.05f) w.angularVelocity = target / 3.6f / w.radius;
+                    // (montee en vitesse progressive, 40 km/h par seconde au point mort : la vitesse donnee d'un coup a 150 km/h
+                    // faisait mourir le conducteur « d'accident » -- le mod serrait alors le frein a main de la voiture garee et elle
+                    // partait en tete-a-queue : essai de [MSC], 28/10)
+                    dt.gear = 1;
+                    float v = Mathf.Min(target, kmh + 40f * Time.deltaTime) / 3.6f;
+                    rb.velocity = car.forward * v; rb.angularVelocity = Vector3.zero;
+                    foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) if (w.radius > 0.05f) w.angularVelocity = v / w.radius;
+                    Keys(0f, 0f, 0f);
+                    return;
                 }
                 sub = 1; phaseAt = t; maxRoll = roll; maxYaw = 0f; rolled = false; steerAt90 = -1f; speedAtTurn = launched ? target : kmh;
                 maxRearHb = 0f; maxSteerDeg = 0f; notDriving = false; yawAt = -1f; yawKmh = 0f;
@@ -250,17 +261,27 @@ namespace MWCoop
             foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) if (w.wheelPos.ToString().StartsWith("REAR")) w.handbrake = 0f;
         }
 
+        // Boite : passee par le banc (la boite automatique du jeu ne monte pas les rapports sur la copie de la Ruscko : elle
+        // restait en 1re puis repassait au point mort) -- rapport superieur au-dela de 85 % du regime maxi, inferieur sous 2 500
+        // tr/min ; point mort pendant la montee en vitesse et le virage lances.
+        static float shiftAt;
         static void Auto()
         {
             if (dt == null) return;
             if (autoField == null) autoField = dt.GetType().GetField("automatic");
-            if (autoField != null && autoField.FieldType == typeof(bool)) autoField.SetValue(dt, true);
+            if (autoField != null && autoField.FieldType == typeof(bool)) autoField.SetValue(dt, false);
+            bool neutral = launched && (sub == 1 || (sub == 0 && phaseRamp));
+            if (neutral) { dt.gear = 1; return; }
             if (dt.gear < 2) dt.gear = 2;
+            float now = Time.realtimeSinceStartup;
+            if (now < shiftAt || dt.gearRatios == null) return;
+            if (dt.rpm > dt.maxRPM * 0.85f && dt.gear < dt.gearRatios.Length - 1) { dt.gear++; shiftAt = now + 0.6f; }
+            else if (dt.rpm < 2500f && dt.gear > 2) { dt.gear--; shiftAt = now + 0.6f; }
         }
 
         static void Reset()
         {
-            sub = 0; Keys(0f, 1f, 0f);
+            sub = 0; launched = false; phaseRamp = false; Keys(0f, 1f, 0f);
             Place();
         }
 
