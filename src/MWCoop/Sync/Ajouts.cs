@@ -66,7 +66,9 @@ namespace MWCoop
         public static bool Osat { get { return (Bits & B_Osat) != 0; } }
 
         // Choix de l'hote connus (ou pas besoin) : la boutique, le musee et le defrichage peuvent se faire.
-        public static bool Ready { get { return !Guest || hostBits >= 0 || Time.realtimeSinceStartup - loadedAt > 30f; } }
+        // (repli sans annonce : 120 s -- 30 s jusqu'au 28/10 ; un invite « tous » chez un hote « aucun » dont l'annonce arrivait plus
+        // tard construisait boutique, musee et cinema d'apres ses propres choix, et on ne les retire pas. [Coop] AjoutsAttente=s)
+        public static bool Ready { get { return !Guest || hostBits >= 0 || Time.realtimeSinceStartup - loadedAt > Config.GetFloat("Coop", "AjoutsAttente", 120f); } }
 
         // (au menu : choix d'un ancien hote oublies ; la prochaine partie attend ceux du sien)
         public static void OnLevelLoaded() { loadedAt = Time.realtimeSinceStartup; if (Game.LevelName != "GAME") hostBits = -1; }
