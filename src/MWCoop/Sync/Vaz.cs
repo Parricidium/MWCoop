@@ -59,6 +59,7 @@ namespace MWCoop
         static bool Solo { get { return !Session.Active; } }
         static bool Host { get { return !Session.Active || Session.IsHost; } }
         static int Me { get { return Session.Active ? Session.LocalId : 0; } }
+        public static int MeId { get { return Me; } }
         public static bool Enabled { get { return Ajouts.Vaz && VazCar.HasFiles; } }
 
         // ---------------------------------------------------------------- interface (F10)

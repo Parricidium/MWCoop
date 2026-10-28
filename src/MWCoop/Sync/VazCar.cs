@@ -311,6 +311,8 @@ namespace MWCoop
             public Component Axis;
             public Drivetrain Dt;
             public Rigidbody Rb;
+            public Wheel[] FrontWheels;   // (My Summer Car : braquage selon la vitesse, VazHandling.SteerBySpeed)
+            public object FrontAxle;
             public readonly List<Renderer> Hidden = new List<Renderer>();
             public readonly List<KeyValuePair<MeshRenderer, string>> Lamps = new List<KeyValuePair<MeshRenderer, string>>();
             public readonly Dictionary<string, Material> Mats = new Dictionary<string, Material>(), Lit = new Dictionary<string, Material>(), Dim = new Dictionary<string, Material>();

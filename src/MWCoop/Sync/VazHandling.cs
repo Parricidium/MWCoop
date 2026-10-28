@@ -187,7 +187,7 @@ namespace MWCoop
                 n += pw + SetF(dt, "originalMaxPower", sp.Power) + SetF(dt, "maxTorqueRPM", sp.TorqueRpm) + SetF(dt, "maxRPM", sp.MaxRpm) + SetF(dt, "revLimiter", sp.MaxRpm)
                    + SetF(dt, "engineInertia", sp.Inertia) + SetF(dt, "drivetrainInertia", 1.0f) + SetF(dt, "engineFrictionFactor", 0.2f)
                    + SetF(dt, "disengageRPM", 1400f) + SetF(dt, "engageRPM", 2000f) + SetF(dt, "clutchMaxTorque", sp.Clutch)
-                   + SetF(dt, "powerMultiplier", 1f) + SetF(dt, "finalDriveRatio", sp.Final) + SetF(dt, "differentialLockCoefficient", 49f);
+                   + SetF(dt, "powerMultiplier", 1f) + SetF(dt, "finalDriveRatio", sp.Final) + SetF(dt, "differentialLockCoefficient", Config.GetFloat("Test", "VazBlocage", 49f));
             }
             else if (dt != null)
             {
@@ -196,7 +196,7 @@ namespace MWCoop
                 if (pw > 0 || first) { try { dt.CalcValues(1f, false); } catch (System.Exception e) { Log.Warn("vaz : CalcValues : " + e.Message); } }
                 n += pw + SetF(dt, "maxTorqueRPM", 4800f) + SetF(dt, "maxRPM", 8000f) + SetF(dt, "revLimiter", 8000f)
                    + SetF(dt, "engineInertia", 0.072f) + SetF(dt, "powerMultiplier", PowerMul)
-                   + SetF(dt, "finalDriveRatio", 4.44f) + SetF(dt, "differentialLockCoefficient", 49f);
+                   + SetF(dt, "finalDriveRatio", 4.44f) + SetF(dt, "differentialLockCoefficient", Config.GetFloat("Test", "VazBlocage", 49f));
             }
             if (dt != null)
             {
@@ -219,6 +219,8 @@ namespace MWCoop
                     n += SetF(axl, "suspensionRate", spring) + SetF(axl, "suspensionTravel", travel) + SetF(axl, "bumpRate", damp) + SetF(axl, "reboundRate", damp);
                     float ar = evo ? (an == "frontAxle" && sp.AntiRollFront > 0f ? sp.AntiRollFront : an == "rearAxle" && sp.AntiRollRear > 0f ? sp.AntiRollRear : sp.AntiRoll) : 0f;
                     if (ar > 0f) n += SetF(axl, "antiRollBarRate", ar);
+                    float tb = Msc ? Config.GetFloat("Test", an == "frontAxle" ? "VazBarreAV" : "VazBarreAR", -1f) : -1f;   // (essais de tenue de route, 28/10)
+                    if (tb >= 0f) n += SetF(axl, "antiRollBarRate", tb);
                     if (an == "frontAxle") n += SetF(axl, "maxSteeringAngle", steer);
                 }
             Component cd = car.GetComponent("CarDynamics");
@@ -227,7 +229,7 @@ namespace MWCoop
             if (evo && sp.Handbrake > 0f)
                 foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true))
                     if (w.wheelPos.ToString().StartsWith("REAR")) n += SetF(w, "handbrakeFrictionTorque", sp.Handbrake);
-            foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", Msc ? (w.wheelPos.ToString().StartsWith("FRONT") ? 1.3f : 0.8f) : 0.753f); }
+            foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", Msc ? (w.wheelPos.ToString().StartsWith("FRONT") ? Config.GetFloat("Test", "VazInertieAV", 1.3f) : Config.GetFloat("Test", "VazInertieAR", 0.8f)) : 0.753f); }
             if (Msc && b.Rb != null && !Mathf.Approximately(b.Rb.drag, SatDrag)) { b.Rb.drag = SatDrag; n++; }
             if (cd != null) n += SetF(cd, "frontRearBrakeBalance", 0.6f);
             // retour de force coupe : le couple d'auto-alignement (Wheel.CalcAligningForce, qui ne sert qu'a lui) divise par la
@@ -350,6 +352,35 @@ namespace MWCoop
                 Log.Info("vaz : ralenti " + b.Car.name + " regime " + dt.rpm.ToString("F0") + " gaz " + dt.throttle.ToString("F3") + " ralenti " + dt.idlethrottle.ToString("F3") + (dt.enabled ? "" : " coupe") + " base " + IdleBase + " vise " + IdleRpm + (Game.Msc ? " appris " + b.IdleTrim.ToString("F3") : ""));
         }
 
+        // My Summer Car : braquage maxi selon la vitesse, la formule des voitures du jeu (automate 'SteerLimit' de la SATSUMA, de la
+        // Ruscko... : MaxAngle / (vitesse en m/s / 3,3), entre 2 degres et MaxAngle -- 33 a l'arret, ~8 a 50 km/h, ~4 a 100, ~2,6 a
+        // 150). Sur la copie de la Ruscko cet automate est coupe : l'addon braquait de 33 degres a toute vitesse, et au clavier
+        // (direction tout ou rien en 0,03 s, comme la SATSUMA) un coup de touche a 100 km/h le mettait sur le toit (JD 28/10 :
+        // « ca met un coup de volant et a haute vitesse elles partent en tonneau »). Pose a chaque image sur la voiture simulee ici.
+        static void SteerBySpeed(VazCar.Built b)
+        {
+            if (!Msc || b.Rb == null || b.Rb.isKinematic) return;
+            if (b.FrontWheels == null)
+            {
+                var l = new List<Wheel>();
+                foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>(true)) if (w.wheelPos.ToString().StartsWith("FRONT")) l.Add(w);
+                b.FrontWheels = l.ToArray();
+            }
+            float max = Config.GetFloat("Test", "VazBraquageMax", SatSteer);
+            float a = Mathf.Clamp(max * Config.GetFloat("Test", "VazBraquageVitesse", 3.3f) / Mathf.Max(b.Rb.velocity.magnitude, 0.01f), 2f, max);
+            foreach (Wheel w in b.FrontWheels) if (w != null) w.maxSteeringAngle = a;
+            // (et sur l'essieu avant : CarDynamics.SetWheelsParams recopie les essieux dans les roues)
+            if (b.FrontAxle == null)
+            {
+                Component ax = b.Car.GetComponent("Axles");
+                FieldInfo af = ax != null ? ax.GetType().GetField("frontAxle") : null;
+                b.FrontAxle = af != null ? af.GetValue(ax) : null;
+                if (b.FrontAxle != null) frontAxleSteer = b.FrontAxle.GetType().GetField("maxSteeringAngle");
+            }
+            if (b.FrontAxle != null && frontAxleSteer != null) frontAxleSteer.SetValue(b.FrontAxle, a);
+        }
+        static FieldInfo frontAxleSteer;
+
         public static void Tick(VazCar.Built b, float now)
         {
             Drivetrain dt = b.Dt;
@@ -365,6 +396,7 @@ namespace MWCoop
             // scripts, chez l'invite d'essai le leur passait apres le notre et le regulateur ne servait a rien).
             float pm = Sp(b) != null ? 1f : PowerMul;
             if (!Mathf.Approximately(dt.powerMultiplier, pm)) dt.powerMultiplier = pm;
+            SteerBySpeed(b);
             if (now >= b.NextGrip) { b.NextGrip = now + 0.25f; Grip(b); }
             if (b.Axis == null || dt.rpm < 300f) return;
             if (hbField == null) { hbField = b.Axis.GetType().GetField("handbrakeInput"); brField = b.Axis.GetType().GetField("brakeInput"); }
