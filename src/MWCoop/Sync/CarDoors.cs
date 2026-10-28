@@ -63,6 +63,9 @@ namespace MWCoop
             public int PendingOwn;                     // invite : evenements envoyes dont le retour de l'hote manque
             public float LastAngle; public bool Sent;
             public bool Showing; public float TargetAngle; public float LastRemote;
+            public readonly Dictionary<long, KeyValuePair<Collider, Collider>> PartIgnored = new Dictionary<long, KeyValuePair<Collider, Collider>>();   // capot / pieces figees de la copie
+            public float NextPartCheck;
+            public bool ZeroAxis;                      // charniere d'axe (0, 0, 0) a l'origine (capot de la SATSUMA) : angles comptes autour de -X
             public bool Springing;                     // menee vers TargetAngle (Follow)
             public float NextCheck;                    // suivie : paires joueur/portiere et verrous revus (0,5 s)
             public Collider[] Colls;                   // collisionneurs de la portiere
@@ -179,6 +182,13 @@ namespace MWCoop
                     if (d.Body != null && d.Body.transform == car.transform) d.Body = null;
                     d.Hinge = d.Body != null ? d.Body.GetComponent<HingeJoint>() : null;
                     d.State = OpenVar(d) ? DoorState.Open : DoorState.Closed;
+                    // Axe de charniere nul du capot de la SATSUMA : angles comptes autour de -X, et la charniere recoit l'axe X (celui qu'Unity prend),
+                    // capot ferme -- voir HingeAxis.
+                    if (d.Hinge != null && d.Hinge.axis.sqrMagnitude < 1e-6f && open == "Open hood 2")
+                    {
+                        d.ZeroAxis = true;
+                        if (d.State == DoorState.Closed && Config.GetInt("Test", "AxeNul", 0) == 0) { d.Hinge.axis = Vector3.right; Log.Info("portieres : " + d.Key + " : axe de charniere nul, pose a X"); }
+                    }
                     if (!Inject(d, open, K_OPEN) || !Inject(d, close, K_CLOSED)) continue;
                     if (grab != null) Inject(d, grab, K_GRAB);
                     if (isDoor)
@@ -279,6 +289,13 @@ namespace MWCoop
             d.RestSet = true; d.RestRot = d.Body.transform.localRotation; d.RestPos = d.Body.transform.localPosition;
         }
 
+        // Axe de la charniere (repere du corps). Celle du capot de la SATSUMA (My Summer Car) a un axe (0, 0, 0) -- Unity
+        // la fait tourner autour de X, mais AngleAxis(a, zero) ne tourne rien et Follow n'y appliquait aucun couple (le coffre, meme cas, n'est pas touche) : chez l'invite, le
+        // capot ouvert par l'hote ne bougeait pas (dossier #22, Markos 28/10). Axe nul : -X, pour que l'angle d'ouverture reste positif
+        // comme l'envoyaient les versions d'avant (Angle lisait alors l'angle sans signe). La charniere du capot recoit aussi l'axe X au
+        // releve, capot ferme, celui qu'Unity lui donnait deja ([Test] AxeNul=1 : laissee a zero).
+        static Vector3 HingeAxis(Door d) { return d.ZeroAxis ? Vector3.left : d.Hinge.axis; }
+
         // Angle (degres) autour de l'axe de la charniere depuis la pose fermee : le repere des butees du jeu.
         static float Angle(Door d)
         {
@@ -287,7 +304,7 @@ namespace MWCoop
             float a; Vector3 ax;
             rel.ToAngleAxis(out a, out ax);
             if (a > 180f) a -= 360f;
-            return Vector3.Dot(ax, d.Hinge.axis) < 0f ? -a : a;
+            return Vector3.Dot(ax, HingeAxis(d)) < 0f ? -a : a;
         }
 
         public static void Update()
@@ -400,7 +417,7 @@ namespace MWCoop
         static void HoldOpen(Door d)
         {
             bool hold = d.RestSet && d.State != DoorState.Closed && !d.Closing && !d.Mine && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform)
-                        && Config.GetInt("Test", "PortiereOuverteLibre", 0) == 0;
+                        && Config.GetInt("Test", "PortiereOuverteLibre", 0) == 0 && !NoHoldOpen(d);
             if (hold != d.HeldOpen)
             {
                 if (hold)
@@ -422,7 +439,7 @@ namespace MWCoop
             if (!d.HeldOpen || d.Mine || d.LastRemote <= 0f) return;
             // (angle de l'autre : rotation autour de l'axe de la charniere, l'attache restant a sa place sous la caisse)
             float a = Mathf.MoveTowardsAngle(Angle(d), d.TargetAngle, ServoMax * Time.deltaTime);
-            Quaternion r = d.RestRot * Quaternion.AngleAxis(a, d.Hinge.axis);
+            Quaternion r = d.RestRot * Quaternion.AngleAxis(a, HingeAxis(d));
             Vector3 anchorRest = d.RestPos + d.RestRot * Vector3.Scale(d.Hinge.anchor, d.Body.transform.localScale);
             Transform b = d.Body.transform;
             b.localRotation = r;
@@ -432,6 +449,7 @@ namespace MWCoop
         static void Hold(Door d)
         {
             if (d.Body == null || d.Hinge == null) { d.Held = false; d.HeldOpen = false; return; }
+            if (NoHoldOpen(d)) PartIgnore(d, d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform));
             HoldOpen(d);
             if (d.HeldOpen) return;
             bool hold = d.RestSet && d.State != DoorState.Open && !d.Closing && !d.Mine && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform);
@@ -458,6 +476,53 @@ namespace MWCoop
 
         static int holdLogs;
 
+        // Capot de la SATSUMA sur la copie : il ignore les pieces montees de la voiture figees avec elle (ailes, batterie : cinematiques,
+        // reposees a chaque image). Referme physiquement par un autre, il restait legerement enfonce contre elles, et un corps cinematique ne
+        // cede jamais : coince a 1-2 degres, l'invite ne pouvait plus l'ouvrir (dossier #22, Markos 28/10 -- contacts relevees : aile droite,
+        // aile gauche, batterie). Ses butees l'empechent deja de passer sous sa pose fermee. Paires rendues des que la voiture n'est plus
+        // une copie. [Test] CapotContreAiles=1 : comme avant.
+        static int partIgnoreLogs;
+        static void PartIgnore(Door d, bool on)
+        {
+            if (!on || Config.GetInt("Test", "CapotContreAiles", 0) != 0)
+            {
+                if (d.PartIgnored.Count == 0) return;
+                foreach (KeyValuePair<Collider, Collider> kv in d.PartIgnored.Values)
+                    if (Solid(kv.Key) && Solid(kv.Value)) Physics.IgnoreCollision(kv.Key, kv.Value, false);
+                d.PartIgnored.Clear();
+                return;
+            }
+            float now = Time.realtimeSinceStartup;
+            if (now < d.NextPartCheck) return;
+            d.NextPartCheck = now + 0.5f;
+            Transform car = VehicleSync.CarRoot(d.Fsm.transform);
+            if (car == null) return;
+            if (d.Colls == null) d.Colls = d.Body.GetComponentsInChildren<Collider>(true);
+            int before = d.PartIgnored.Count;
+            foreach (Collider c in car.GetComponentsInChildren<Collider>())
+            {
+                Rigidbody r = c.attachedRigidbody;
+                if (r == null || !r.isKinematic || r == d.Body || r.transform == car || c.transform.IsChildOf(d.Body.transform) || !Solid(c)) continue;
+                foreach (Collider dc in d.Colls)
+                {
+                    if (!Solid(dc)) continue;
+                    long k = ((long)dc.GetInstanceID() << 32) | (uint)c.GetInstanceID();
+                    if (d.PartIgnored.ContainsKey(k)) continue;
+                    Physics.IgnoreCollision(dc, c, true);
+                    d.PartIgnored[k] = new KeyValuePair<Collider, Collider>(dc, c);
+                }
+            }
+            if (d.PartIgnored.Count > before && partIgnoreLogs++ < 10) Log.Info("portieres : " + d.Key + " ignore " + (d.PartIgnored.Count - before) + " paire(s) avec les pieces figees de la copie");
+        }
+
+        // Capot de la SATSUMA (« Open hood 2 », My Summer Car) : ouvert par un autre, jamais fige ouvert sur la copie (HoldOpen). Ses butees
+        // sont reposees par le jeu a chaque ouverture et fermeture, et dans ce Unity la charniere est alors recreee sur la pose du moment
+        // pour zero ; fige ouvert puis referme par nous (corps cinematique deplace a la main), il gardait une charniere faussee : apres une
+        // ouverture et une fermeture par l'hote, le capot de l'invite restait coince a 1-2 degres et il ne pouvait plus l'ouvrir (dossier
+        // #22, Markos 28/10). Ouvert par un autre, il est mene comme sur une voiture menee ici : couple du jeu (« Open hood 2 ») et Follow ;
+        // ferme, il reste fige sur la copie (Hold). [Test] CapotFige=1 : comme avant.
+        static bool NoHoldOpen(Door d) { return d.Open == "Open hood 2" && Config.GetInt("Test", "CapotFige", 0) == 0; }
+
         // Menee vers TargetAngle : sa vitesse autour de l'axe de la charniere (par rapport a la voiture) est
         // corrigee a chaque image, proportionnelle a l'ecart et bornee ; le joueur local ne la bloque pas.
         const float ServoGain = 12f, ServoMax = 360f;   // (1/s, degres/s)
@@ -475,7 +540,7 @@ namespace MWCoop
                 IgnorePlayer(d);
                 if (!d.Mine && d.Locks.Count > 0) DropLocks(d, "suivie");
             }
-            Vector3 axis = d.Body.transform.TransformDirection(d.Hinge.axis).normalized;
+            Vector3 axis = d.Body.transform.TransformDirection(HingeAxis(d)).normalized;
             Rigidbody car = d.Hinge.connectedBody;
             Vector3 rel = d.Body.angularVelocity - (car != null ? car.angularVelocity : Vector3.zero);
             float w = Vector3.Dot(rel, axis) * Mathf.Rad2Deg;
@@ -882,6 +947,38 @@ namespace MWCoop
             return d.Key + (open ? " -> " + d.Open : " -> " + d.Close);
         }
 
+        // Essais : contacts en cours du corps d'un ouvrant (OnCollisionStay), pour voir ce qui le retient.
+        public class ContactProbe : MonoBehaviour
+        {
+            public readonly Dictionary<string, int> Seen = new Dictionary<string, int>();
+            void OnCollisionStay(Collision c)
+            {
+                if (c == null || c.collider == null) return;
+                string k = Recon.Path(c.collider.transform) + (c.rigidbody == null ? " (fixe)" : c.rigidbody.isKinematic ? " (cin)" : "") + " [" + c.collider.GetType().Name + (c.collider.isTrigger ? " trig" : "") + " calque " + c.collider.gameObject.layer + "]";
+                int n; Seen.TryGetValue(k, out n); Seen[k] = n + 1;
+            }
+        }
+        public static string TestContacts(string car, string part, bool start)
+        {
+            Door d = First(car, part);
+            if (d == null || d.Body == null) return "(pas suivie)";
+            ContactProbe cp = d.Body.GetComponent<ContactProbe>();
+            if (start) { if (cp == null) cp = d.Body.gameObject.AddComponent<ContactProbe>(); cp.Seen.Clear(); return "sonde posee"; }
+            if (cp == null) return "pas de sonde";
+            var sb = new System.Text.StringBuilder(cp.Seen.Count + " contact(s) :");
+            foreach (KeyValuePair<string, int> kv in cp.Seen) sb.Append(" | ").Append(kv.Key).Append(" x").Append(kv.Value);
+            return sb.ToString();
+        }
+
+        // Essais : etat de la premiere portiere de 'car' ('part' dans sa cle) : angle, etat, main, automate, butees.
+        public static string TestDiag(string car, string part)
+        {
+            Door d = First(car, part);
+            if (d == null) return "(pas suivie)";
+            return "suivi " + d.State + " angle " + (d.RestSet && d.Hinge != null && d.Body != null ? Angle(d).ToString("F0") : "?") + " main #" + d.Owner + (d.Mine ? " (ici)" : "") + (d.Held ? " figee" : "") + (d.HeldOpen ? " figee ouverte" : "") + (d.Closing ? " fermeture" : "") + " vise " + d.TargetAngle.ToString("F0") + (d.LastRemote > 0f ? " recu il y a " + (Time.realtimeSinceStartup - d.LastRemote).ToString("F1") + " s" : " jamais recu") + (d.Showing ? " montre" : "")
+                   + (d.Hinge != null ? " charniere " + d.Hinge.angle.ToString("F0") + " ancre " + d.Hinge.connectedAnchor.ToString("F2") + " auto " + d.Hinge.autoConfigureConnectedAnchor + " axe " + d.Hinge.axis.ToString("F2") : "") + (d.Body != null ? " pose " + d.Body.transform.localPosition.ToString("F2") + (d.RestSet ? " repos " + d.RestPos.ToString("F2") : "") : "") + (d.Body != null ? " w " + d.Body.angularVelocity.magnitude.ToString("F2") + (d.Body.IsSleeping() ? " dort" : "") + (d.Body.useGravity ? " grav" : " sans grav") + " drag " + d.Body.drag.ToString("F1") + "/" + d.Body.angularDrag.ToString("F1") + " cdm " + d.Body.centerOfMass.ToString("F2") + " inertie " + d.Body.inertiaTensor.ToString("F2") + " contraintes " + d.Body.constraints + " interp " + d.Body.interpolation : "") + " " + Diag(d);
+        }
+
         // Essais : les cles des portieres suivies de 'car'.
         public static string Keys(string car)
         {
@@ -920,7 +1017,7 @@ namespace MWCoop
             GameObject pl = Game.PlayerGo;
             if (pl == null) return "pas de joueur";
             Transform b = d.Body.transform, carT = VehicleSync.CarRoot(d.Fsm.transform) ?? d.Fsm.transform.root;
-            Vector3 axis = b.TransformDirection(d.Hinge.axis).normalized;
+            Vector3 axis = b.TransformDirection(HingeAxis(d)).normalized;
             Vector3 hinge = b.TransformPoint(d.Hinge.anchor);
             Bounds bb = new Bounds(b.position, Vector3.zero);
             foreach (Renderer rr in b.GetComponentsInChildren<Renderer>()) bb.Encapsulate(rr.bounds);

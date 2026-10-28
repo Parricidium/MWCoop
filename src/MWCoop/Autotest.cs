@@ -1088,6 +1088,7 @@ namespace MWCoop
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
         static float etatAt, frNext;
         static int radioStep, radioLog, dmStep, dmKey;
+        static bool capRel, capProbe; static int capHote;
         static float dmLog, lvLog; static bool dmTuyau, liqDone; static int liqLog, lvStep;
 
         // [Test] Autotest=mscleviers (MWC et MSC) : voiture [Test] LeviersVoiture (JONNEZ ES(Clone) ; KEKMET(350-400psi) : pedales du
@@ -1763,8 +1764,47 @@ namespace MWCoop
             if (mode == "msccapot")
             {
                 float ca = Config.GetFloat("Test", "CapotA", 150f);
-                if (Net.Session.IsHost && t > ca && step == 0) { step = 1; Log.Info("autotest capot : ouvre -> " + CarDoors.TestOpen("SATSUMA", true, "hood")); }
-                if (Net.Session.IsHost && t > ca + 25f && step == 1) { step = 2; Log.Info("autotest capot : ferme -> " + CarDoors.TestOpen("SATSUMA", false, "hood")); }
+                // ([Test] CapotActeur=invite, dossier #22 Markos 28/10 : « l'invite ne peut pas ouvrir le capot » -- l'invite tire la manette
+                // (HoodLocking/Trigger::Use « State 1 », comme le clic) a CapotA-3, ouvre a CapotA, referme a CapotA+25)
+                bool capAct = (Config.Get("Test", "CapotActeur", "hote") == "invite") != Net.Session.IsHost;
+                // ([Test] CapotMoteur=1 : l'hote tient le moteur de la SATSUMA en marche des CapotA-60 sans etre au volant, comme un moteur laisse
+                // tournant -- chez l'invite la voiture est alors une copie menee par l'hote, le cas du dossier #22)
+                if (Net.Session.IsHost && Config.GetInt("Test", "CapotMoteur", 0) != 0 && t > ca - 60f && t < ca + 40f) { VehicleSync.TestKeepRunning("SATSUMA(557kg, 248)"); VehicleSync.TestOwn("SATSUMA(557kg, 248)"); }
+                // ([Test] CapotHoteA=s : avant, l'HOTE tire la manette a s-3, ouvre a s, referme a s+9 -- comme Markos a 20:16:29-42 avant les essais de
+                // son invite)
+                float cha = Config.GetFloat("Test", "CapotHoteA", 0f);
+                if (Net.Session.IsHost && cha > 0f)
+                {
+                    if (capHote == 0 && t > cha - 3f) { capHote = 1; Log.Info("autotest capot : hote, manette " + CapotLatch()); }
+                    if (capHote == 1 && t > cha) { capHote = 2; Log.Info("autotest capot : hote ouvre -> " + CarDoors.TestOpen("SATSUMA", true, "hood")); }
+                    if (capHote == 2 && t > cha + 1f) { capHote = 3; Log.Info("autotest capot : hote relache -> " + CapotRelease()); }
+                    if (capHote == 3 && t > cha + 9f) { capHote = 4; Log.Info("autotest capot : hote ferme -> " + CarDoors.TestState("SATSUMA", "State 2", "hood")); }
+                }
+                if (capAct && t > ca - 3f && step == 0)
+                {
+                    step = 1;
+                    Rigidbody cb0 = VehicleSync.Body("SATSUMA");
+                    PlayMakerFSM lk = null;
+                    if (cb0 != null) foreach (PlayMakerFSM f in cb0.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Use" && f.gameObject.name == "Trigger" && f.transform.parent != null && f.transform.parent.name == "HoodLocking") { lk = f; break; }
+                    if (lk != null) Game.SetState(lk, "State 1");
+                    Log.Info("autotest capot : manette " + (lk != null ? "tiree [" + lk.ActiveStateName + "]" : "introuvable"));
+                }
+                if (capAct && t > ca && step == 1) { step = 2; Log.Info("autotest capot : sonde " + CarDoors.TestContacts("SATSUMA", "hood", true)); Log.Info("autotest capot : ouvre -> " + CarDoors.TestOpen("SATSUMA", true, "hood")); }
+                if (capAct && t > ca + 0.9f && step == 2 && !capProbe) { capProbe = true; Log.Info("autotest capot : contacts " + CarDoors.TestContacts("SATSUMA", "hood", false)); }
+                // ([Test] CapotRelache=s : bouton relache s apres l'ouverture, comme la souris -- « Open hood 2 » -FINISHED-> « Mouse off 2 » s'il y est
+                // encore : le capot ne reste ouvert que s'il a passe ~70 degres, sinon il retombe)
+                float crel = Config.GetFloat("Test", "CapotRelache", 0f);
+                if (capAct && crel > 0f && t > ca + crel && step == 2 && !capRel)
+                {
+                    capRel = true;
+                    Rigidbody cb1 = VehicleSync.Body("SATSUMA");
+                    PlayMakerFSM hu1 = null;
+                    if (cb1 != null) foreach (PlayMakerFSM f in cb1.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Use" && f.gameObject.name == "hood(Clone)") { hu1 = f; break; }
+                    string was = hu1 != null ? hu1.ActiveStateName : "?";
+                    if (hu1 != null && was == "Open hood 2") Game.SetState(hu1, "Mouse off 2");
+                    Log.Info("autotest capot : bouton relache (" + was + ") " + CarDoors.TestDiag("SATSUMA", "hood"));
+                }
+                if (capAct && t > ca + 25f && step == 2) { step = 3; Log.Info("autotest capot : ferme -> " + CarDoors.TestOpen("SATSUMA", false, "hood")); }
                 if (t > 30f && t > psLogAt)
                 {
                     psLogAt = t + 2f;
@@ -1772,7 +1812,7 @@ namespace MWCoop
                     Transform hd = null; if (cb != null) foreach (Transform x in cb.GetComponentsInChildren<Transform>(true)) if (x.name == "hood(Clone)") { hd = x; break; }
                     PlayMakerFSM hu = hd != null ? Game.FsmOn(hd.gameObject, "Use") : null;
                     HutongGames.PlayMaker.FsmBool op = hu != null ? hu.FsmVariables.FindFsmBool("Open") : null;
-                    Log.Info("autotest capot : " + (hd == null ? "capot introuvable" : "capot rot locale " + hd.localEulerAngles.ToString("F0") + ", Use [" + (hu != null ? hu.ActiveStateName : "?") + "] Open=" + (op != null ? op.Value.ToString() : "?") + ", parent " + (hd.parent != null ? hd.parent.name : "aucun")));
+                    Log.Info("autotest capot : " + (hd == null ? "capot introuvable" : "capot rot locale " + hd.localEulerAngles.ToString("F0") + ", Use [" + (hu != null ? hu.ActiveStateName : "?") + "] Open=" + (op != null ? op.Value.ToString() : "?") + ", parent " + (hd.parent != null ? hd.parent.name : "aucun") + " " + CarDoors.TestDiag("SATSUMA", "hood")));
                 }
                 return;
             }
@@ -2393,6 +2433,21 @@ namespace MWCoop
                 spyLast[f] = st;
                 Log.Info("autotest : espion t=" + t.ToString("F2") + " " + kv.Key + " -> " + st);
             }
+        }
+
+        // Essais msccapot : manette du capot de la SATSUMA tiree (HoodLocking/Trigger::Use « State 1 », comme le clic).
+        static string CapotLatch()
+        {
+            Rigidbody cb = VehicleSync.Body("SATSUMA");
+            if (cb != null) foreach (PlayMakerFSM f in cb.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Use" && f.gameObject.name == "Trigger" && f.transform.parent != null && f.transform.parent.name == "HoodLocking") { Game.SetState(f, "State 1"); return "tiree [" + f.ActiveStateName + "]"; }
+            return "introuvable";
+        }
+        // Essais msccapot : bouton relache sur le capot (« Open hood 2 » -FINISHED-> « Mouse off 2 »).
+        static string CapotRelease()
+        {
+            Rigidbody cb = VehicleSync.Body("SATSUMA");
+            if (cb != null) foreach (PlayMakerFSM f in cb.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Use" && f.gameObject.name == "hood(Clone)") { string w = f.ActiveStateName; if (w == "Open hood 2") Game.SetState(f, "Mouse off 2"); return w + " -> " + f.ActiveStateName + " " + CarDoors.TestDiag("SATSUMA", "hood"); }
+            return "capot introuvable";
         }
 
         static void DumpFsms(string specs)
