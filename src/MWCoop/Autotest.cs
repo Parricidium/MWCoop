@@ -2583,6 +2583,7 @@ namespace MWCoop
                 foreach (string s in found) { if (specs.Count >= 2) break; specs.Add(s.Substring(0, s.IndexOf(" ("))); }
                 DumpFsms(string.Join(";", specs.ToArray()));
             }
+            if (mode == "unitycardump" && t > 35f && !done) { done = true; UnityCarDump.Run(); }   // (pilote standalone, 28/10 : champs UnityCar des voitures, les deux jeux)
             if (Game.Msc)   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC ; vidage d'automates : les deux jeux)
             {
                 if (mode == "kupladump" && t > 25f && !done) { done = true; KuplaDump(); }   // (Kupla : les deux jeux)
