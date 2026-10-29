@@ -2583,13 +2583,7 @@ namespace MWCoop
                 c.SanComps = keep.ToArray();
                 c.SanGood = null;
             }
-            object cl = ClutchOf(c);
-            if (cl != null)
-            {
-                System.Reflection.FieldInfo[] cf = ClutchFloats(cl);
-                if (c.ClutchGood == null || c.ClutchGood.Length != cf.Length) { c.ClutchGood = new float[cf.Length]; for (int k = 0; k < cf.Length; k++) c.ClutchGood[k] = float.NaN; }
-                for (int k = 0; k < cf.Length; k++) { float v = (float)cf[k].GetValue(cl); if (Finite(v)) c.ClutchGood[k] = v; }
-            }
+            ClutchNote(c);
             bool first = c.SanGood == null;
             if (first) c.SanGood = new float[c.SanComps.Length][];
             int nan = 0; string names = "";
@@ -2655,6 +2649,7 @@ namespace MWCoop
             // Embrayage du Drivetrain (Clutch : objet simple, pas un composant -- jamais releve) : un speedDiff ou un clutch_position
             // NaN apres un choc refaisait NaN a chaque pas le Drivetrain et les roues motrices (dossier #24, Markos 29/10 : SATSUMA
             // garee chez l'hote, 10 valeurs NaN corrigees a chaque releve pendant 30 min apres son accident). [Test] SansEmbrayage=1 : comme avant.
+            if (Config.GetInt("Test", "SansEmbrayage", 0) == 0) ClutchNote(c);   // (releve a chaque passage : couple de marche connu des le demarrage)
             object cl = Config.GetInt("Test", "SansEmbrayage", 0) == 0 ? ClutchOf(c) : null;
             if (cl != null)
             {
@@ -2663,7 +2658,9 @@ namespace MWCoop
                 {
                     float v = (float)cf[k].GetValue(cl);
                     if (Finite(v)) continue;
-                    float to = c.ClutchGood != null && k < c.ClutchGood.Length && Finite(c.ClutchGood[k]) ? c.ClutchGood[k] : 0f;
+                    bool known = c.ClutchGood != null && k < c.ClutchGood.Length && Finite(c.ClutchGood[k]);
+                    if (!known && ClutchKeepNonZero(cf[k].Name)) continue;   // (couple de l'embrayage inconnu : pas remis a 0, laisse tel quel comme avant)
+                    float to = known ? c.ClutchGood[k] : 0f;
                     cf[k].SetValue(cl, to); fixedF++;
                     string fk = c.Key + ":Clutch." + cf[k].Name;
                     if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " Drivetrain.clutch." + cf[k].Name + " = " + v + ", remis a " + to);
@@ -2708,6 +2705,18 @@ namespace MWCoop
                 if (badV) { sb.Append(' ').Append(where).Append('.').Append(fi.Name); n++; }
             }
         }
+        // Dernieres valeurs finies de Drivetrain.clutch (maxTorque : seulement non nulles -- il vaut 0 moteur
+        // coupe, 120 en marche sur la SATSUMA, pose au demarrage et pas recalcule : un releve moteur coupe aurait remis 0, embrayage
+        // sans couple jusqu'au demarrage suivant ; question de [MWC] sur 78a6dc7).
+        static void ClutchNote(Car c)
+        {
+            object cl = ClutchOf(c);
+            if (cl == null) return;
+            System.Reflection.FieldInfo[] cf = ClutchFloats(cl);
+            if (c.ClutchGood == null || c.ClutchGood.Length != cf.Length) { c.ClutchGood = new float[cf.Length]; for (int k = 0; k < cf.Length; k++) c.ClutchGood[k] = float.NaN; }
+            for (int k = 0; k < cf.Length; k++) { float v = (float)cf[k].GetValue(cl); if (Finite(v) && (v != 0f || !ClutchKeepNonZero(cf[k].Name))) c.ClutchGood[k] = v; }
+        }
+        static bool ClutchKeepNonZero(string n) { return n == "maxTorque"; }   // (impulseLimit : recalcule en roulant, 0 au repos -- 0 lui va)
         static System.Reflection.FieldInfo clutchField; static System.Reflection.FieldInfo[] clutchFloats; static bool clutchLooked;
         static object ClutchOf(Car c)
         {
@@ -2740,7 +2749,8 @@ namespace MWCoop
             }
             // ([Test] NaNEmbrayage=<voiture> : de 40 a 41 s, Drivetrain.clutch.speedDiff mis a NaN a chaque image)
             if (nanClutch == null) nanClutch = Config.Get("Test", "NaNEmbrayage", "");
-            if (nanClutch.Length > 0 && Time.timeSinceLevelLoad > 40f && Time.timeSinceLevelLoad < 41f)
+            float nca = Config.GetFloat("Test", "NaNEmbrayageA", 40f);   // ([Test] NaNEmbrayageA=s : debut, 40 par defaut, pendant 1 s)
+            if (nanClutch.Length > 0 && Time.timeSinceLevelLoad > nca && Time.timeSinceLevelLoad < nca + 1f)
             {
                 Car tc = cars.Find(x => x.Key.StartsWith(nanClutch));
                 object cl = tc != null ? ClutchOf(tc) : null;
@@ -3823,6 +3833,28 @@ namespace MWCoop
             a.Body.position = to; a.Body.rotation = b.T.rotation; a.T.position = to; a.T.rotation = b.T.rotation;
             a.Body.velocity = Vector3.zero; a.Body.angularVelocity = Vector3.zero;
             return a.Key + " posee a " + gap + " m derriere " + b.Key;
+        }
+        // Essais (question de [MWC] sur 78a6dc7) : valeurs de Drivetrain.clutch ; conduite sans le controleur du jeu (gaz, rapport).
+        public static string TestClutch(string name)
+        {
+            Car c = Named(name);
+            object cl = c != null ? ClutchOf(c) : null;
+            if (cl == null) return name + " : pas d'embrayage";
+            var sb = new System.Text.StringBuilder("embrayage");
+            foreach (System.Reflection.FieldInfo fi in ClutchFloats(cl)) sb.Append(' ').Append(fi.Name).Append('=').Append(((float)fi.GetValue(cl)).ToString("G6"));
+            sb.Append(" ; regime ").Append(c.Dt.rpm.ToString("F0")).Append(", rapport ").Append(c.Dt.GetType().GetField("gear") != null ? c.Dt.GetType().GetField("gear").GetValue(c.Dt) : "?").Append(", vitesse ").Append(c.Body != null ? (c.Body.velocity.magnitude * 3.6f).ToString("F1") : "?").Append(" km/h");
+            return sb.ToString();
+        }
+        public static void TestDrive(string name, float thr, int gear)
+        {
+            Car c = Named(name);
+            if (c == null || c.Dt == null) return;
+            // (controleur du jeu garde : ses entrees forcees a chaque image -- [Test] ConduiteSansControleur=1 : coupe, gaz dans le Drivetrain)
+            System.Reflection.FieldInfo ft = c.Dt.GetType().GetField("throttle"), fg = c.Dt.GetType().GetField("gear");
+            if (fg != null) fg.SetValue(c.Dt, gear);
+            if (Config.GetInt("Test", "ConduiteSansControleur", 0) != 0) { if (c.Axis != null && c.Axis.enabled) c.Axis.enabled = false; if (ft != null) ft.SetValue(c.Dt, thr); return; }
+            AxisCarController ax = c.Axis;
+            if (ax != null) { ax.throttleInput = thr; ax.clutchInput = 0f; ax.brakeInput = 0f; ax.handbrakeInput = 0f; }
         }
         public static string TestShift(string car, Vector3 by)
         {

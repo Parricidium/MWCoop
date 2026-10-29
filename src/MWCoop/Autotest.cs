@@ -1147,7 +1147,7 @@ namespace MWCoop
         static float etatAt, frNext;
         static int radioStep, radioLog, dmStep, dmKey, dmPush;
         static bool capRel, capProbe; static int capHote;
-        static float dmLog, lvLog, dmPushLog; static bool dmMoved; static bool dmTuyau, liqDone; static int liqLog, lvStep;
+        static float dmLog, lvLog, dmPushLog; static bool dmMoved; static int dmRoule; static bool dmTuyau, liqDone; static int liqLog, lvStep;
 
         // [Test] Autotest=mscleviers (MWC et MSC) : voiture [Test] LeviersVoiture (JONNEZ ES(Clone) ; KEKMET(350-400psi) : pedales du
         // tracteur) ; ses Pivot sous Throttle / Brake / Clutch, ou qu'ils soient (MSC : SteeringPivot, MWC : SteeringPivotJonnez)
@@ -2851,6 +2851,17 @@ namespace MWCoop
                         if (dmStep == 1 && t > ra + 2f) { dmStep = 2; Log.Info("autotest : mscralenti, au volant : " + VehicleSync.TestEnter(rv, true)); }
                         if (dmStep == 2 && t > ra + 5f) { dmStep = 3; Log.Info("autotest : mscralenti, cle tournee : " + VehicleSync.TestKey(rv, "Test")); }
                         if (dmStep == 3 && t > ra + 9f) { dmStep = 4; Log.Info("autotest : mscralenti, cle relachee : " + VehicleSync.TestKey(rv, "Shut off")); }
+                        // ([Test] RalentiRoule=1 : au lieu de sortir, embrayage releve a ra+10 et ra+13 -- NaNEmbrayage pour l'injecter entre --
+                        // puis gaz 0,8 en premiere (rapport RalentiRapport, 2) de ra+14 a ra+24 sans le controleur du jeu, vitesse notee)
+                        if (Config.GetInt("Test", "RalentiRoule", 0) != 0)
+                        {
+                            if (dmRoule == 0 && t > ra + 10f) { dmRoule = 1; Log.Info("autotest : mscralenti, avant : " + VehicleSync.TestClutch(rv)); }
+                            if (dmRoule == 1 && t > ra + 13f) { dmRoule = 2; Log.Info("autotest : mscralenti, apres : " + VehicleSync.TestClutch(rv)); }
+                            if (dmRoule >= 2 && t > ra + 14f && t < ra + 24f) VehicleSync.TestDrive(rv, 0.8f, Config.GetInt("Test", "RalentiRapport", 2));
+                            if (dmRoule >= 2 && dmRoule < 6 && t > ra + 16f + (dmRoule - 2) * 2.5f) { dmRoule++; Log.Info("autotest : mscralenti, roule : " + VehicleSync.TestClutch(rv)); }
+                            if (dmRoule == 6 && t > ra + 24f) { dmRoule = 7; VehicleSync.TestDrive(rv, 0f, 1); Log.Info("autotest : mscralenti, fin : " + VehicleSync.TestClutch(rv)); }
+                            if (dmStep == 4) return;
+                        }
                         if (dmStep == 4 && t > ra + 20f) { dmStep = 5; Log.Info("autotest : mscralenti, sortie : " + VehicleSync.TestExit(rv)); }
                         if (dmStep == 5 && t > ra + 30f) { dmStep = 6; Log.Info("autotest : mscralenti, vers l'autre : " + VehicleSync.TestEnter(ro, false)); }
                         if (dmStep == 6 && t > ra + 32f) { dmStep = 7; Log.Info("autotest : mscralenti, au volant de l'autre : " + VehicleSync.TestEnter(ro, true)); }
