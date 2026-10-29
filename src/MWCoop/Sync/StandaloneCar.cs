@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
@@ -124,6 +124,27 @@ namespace MWCoop
             b.Body = body;
             foreach (string f in new[] { "carrosserie.p205", "capot.p205", "hayon.p205" })   // (portieres : sur charniere, SetupDrive)
                 if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, f))) VazCar.AddModel(b, body, f);
+            // bavettes souples (bavette_*.p205, VazFlaps une fois le corps physique pose) et levier du frein a main (frein.p205 sur
+            // son pivot, penche par la tirette dans Update) -- JD 29/10 : « pourquoi n'a-t-elle pas les bavettes ? » (205 Ebo 2)
+            var flaps = new List<Transform>();
+            foreach (string bn in new[] { "bavette_ag", "bavette_ad", "bavette_vg", "bavette_vd" })
+            {
+                if (!System.IO.File.Exists(System.IO.Path.Combine(m.Dir, bn + ".p205"))) continue;
+                var bg = new GameObject("VAZ_" + bn).transform;
+                bg.SetParent(body, false);
+                VazCar.AddModel(b, bg, bn + ".p205");
+                flaps.Add(bg);
+            }
+            if (m.BrakePivot != Vector3.zero && System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "frein.p205")))
+            {
+                b.BrakePivot = new GameObject("VAZ_frein").transform;
+                b.BrakePivot.SetParent(body, false);
+                b.BrakePivot.localPosition = m.BrakePivot;
+                var hbInner = new GameObject("pieces").transform;
+                hbInner.SetParent(b.BrakePivot, false);
+                hbInner.localPosition = -m.BrakePivot;
+                VazCar.AddModel(b, hbInner, "frein.p205");
+            }
             Vector3 sc;
             if (inf.TryGetValue("volant_centre", out sc))
             {
@@ -167,6 +188,7 @@ namespace MWCoop
             //    par-dessus -- avant le Start d'UnityCar, qui passe essieux et freins aux roues
             go.SetActive(true);
             b.Rb = rb; b.Dt = dt; b.Axis = ac;
+            foreach (Transform bg in flaps) { if (b.Flaps == null) b.Flaps = new VazFlaps(body, rb); b.Flaps.Add(bg); }
             VazHandling.Apply(b, true);
             StandaloneTenue tune = StandaloneTenue.Load(m);
             tune.Apply(b, cog, true);
@@ -303,6 +325,8 @@ namespace MWCoop
                 bool hb = dr != null && dr.handbrakeInput > 0.3f;
                 st.T.Tick(b, hb);
                 if (hb != b.Handbraking || now >= st.NextGrip) { b.Handbraking = hb; st.NextGrip = now + 0.25f; st.T.Grip(b, hb); }
+                if (b.Flaps != null) b.Flaps.Update();
+                if (b.BrakePivot != null && dr != null) b.BrakePivot.localRotation = Quaternion.AngleAxis(-Mathf.Clamp01(dr.handbrakeInput) * 20f * b.M.BrakeAngle, Vector3.right);
                 if (dr != null && b.Dt.rpm > 300f && (dr.handbrakeInput > 0.05f || (dr.brakeInput > 0.2f && b.Dt.rpm < 2000f))) Disengage(b.Dt);
                 Drive(b, st);
             }
