@@ -2659,8 +2659,12 @@ namespace MWCoop
                     float v = (float)cf[k].GetValue(cl);
                     if (Finite(v)) continue;
                     bool known = c.ClutchGood != null && k < c.ClutchGood.Length && Finite(c.ClutchGood[k]);
-                    if (!known && ClutchKeepNonZero(cf[k].Name)) continue;   // (couple de l'embrayage inconnu : pas remis a 0, laisse tel quel comme avant)
-                    float to = known ? c.ClutchGood[k] : 0f;
+                    // (couple de l'embrayage inconnu : moteur arrete, 0 -- sa vraie valeur, le jeu pose celle de marche au demarrage ;
+                    // moteur tournant, laisse tel quel comme avant -- suggestion de [MWC] 29/10 : SORBET garee NaN jusqu'au demarrage.
+                    // [Test] EmbrayageArretZero=0 : toujours laisse)
+                    bool stopped = Finite(c.Dt.rpm) && c.Dt.rpm < 1f && !EngineRunningStrict(c) && Config.GetInt("Test", "EmbrayageArretZero", 1) != 0;
+                    if (!known && ClutchKeepNonZero(cf[k].Name) && !stopped) continue;
+                    float to = stopped && ClutchKeepNonZero(cf[k].Name) ? 0f : known ? c.ClutchGood[k] : 0f;   // (moteur arrete : 0 meme si la valeur de marche est connue)
                     cf[k].SetValue(cl, to); fixedF++;
                     string fk = c.Key + ":Clutch." + cf[k].Name;
                     if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " Drivetrain.clutch." + cf[k].Name + " = " + v + ", remis a " + to);

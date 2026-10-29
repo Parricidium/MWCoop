@@ -1150,7 +1150,7 @@ namespace MWCoop
         static float etatAt, frNext;
         static int radioStep, radioLog, dmStep, dmKey, dmPush;
         static bool capRel, capProbe; static int capHote;
-        static float dmLog, lvLog, dmPushLog; static bool dmMoved; static int dmRoule; static bool dmTuyau, liqDone; static int liqLog, lvStep;
+        static float dmLog, lvLog, dmPushLog; static bool dmMoved, dmArret; static int dmRoule; static bool dmTuyau, liqDone; static int liqLog, lvStep;
 
         // [Test] Autotest=mscleviers (MWC et MSC) : voiture [Test] LeviersVoiture (JONNEZ ES(Clone) ; KEKMET(350-400psi) : pedales du
         // tracteur) ; ses Pivot sous Throttle / Brake / Clutch, ou qu'ils soient (MSC : SteeringPivot, MWC : SteeringPivotJonnez)
@@ -2858,6 +2858,7 @@ namespace MWCoop
                         // puis gaz 0,8 en premiere (rapport RalentiRapport, 2) de ra+14 a ra+24 sans le controleur du jeu, vitesse notee)
                         if (Config.GetInt("Test", "RalentiRoule", 0) != 0)
                         {
+                            if (!dmArret && t > ra + 3f) { dmArret = true; Log.Info("autotest : mscralenti, moteur arrete : " + VehicleSync.TestClutch(rv)); }
                             if (dmRoule == 0 && t > ra + 10f) { dmRoule = 1; Log.Info("autotest : mscralenti, avant : " + VehicleSync.TestClutch(rv)); }
                             if (dmRoule == 1 && t > ra + 13f) { dmRoule = 2; Log.Info("autotest : mscralenti, apres : " + VehicleSync.TestClutch(rv)); }
                             if (dmRoule >= 2 && t > ra + 14f && t < ra + 24f) VehicleSync.TestDrive(rv, 0.8f, Config.GetInt("Test", "RalentiRapport", 2));
