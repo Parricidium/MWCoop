@@ -406,7 +406,8 @@ static DWORD WINAPI PlacesExportThread(void *)
             if (field(s, "fini") == "1") { done = true; failed = field(s, "etape") == "erreur"; last = txt; break; }
             if (txt != last) { last = txt; SetStatus(K_NORMAL, T(L"Export des voitures : %s…", L"Exporting the cars: %s…"), txt.c_str()); }
         }
-        if (GameProcessRunning(NULL)) goneT = 0;
+        long long etatT = FileUnixTime(dir + L"\\etat.txt");   // (etat.txt ecrit il y a moins de 60 s : le jeu exporte encore)
+        if (GameProcessRunning(NULL) || (etatT > 0 && (long long)_time64(NULL) - etatT < 60)) goneT = 0;
         else if (!goneT) goneT = GetTickCount();
         else if (GetTickCount() - goneT > 20000) break;   // (jeu ferme sans fini=1 : arret brutal, ou ferme a la main)
     }

@@ -3619,6 +3619,10 @@ static bool GameProcessRunning(DWORD *pidOut)
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe = { sizeof(pe) };
     std::wstring mine = g_gameDir + GM().exe, mirror = GameExe(), guest = GuestCopyDir() + GM().exe, own = MscCopyDir() + GM().exe;
+    // Copie de lancement sans MSCLoader aussi : GameExe() donne celle de MSCLoader quand il est actif, mais l'export des
+    // places (/exportplaces, g_mscOn = false) part de MirrorDir() -- le lanceur qui attendait le croyait ferme au bout
+    // de 20 s et un 2e clic relancait un jeu (JD, 29/10).
+    std::wstring copy = MirrorDir().empty() ? L"" : MirrorDir() + GM().exe;
     bool found = false;
     for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
         if (_wcsicmp(pe.szExeFile, GM().exe)) continue;
@@ -3626,7 +3630,7 @@ static bool GameProcessRunning(DWORD *pidOut)
         if (!h) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; break; }   // inconnu : prudence
         wchar_t path[MAX_PATH];
         DWORD n = MAX_PATH;
-        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str()) || !_wcsicmp(path, own.c_str())) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; }
+        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str()) || !_wcsicmp(path, own.c_str()) || (!copy.empty() && !_wcsicmp(path, copy.c_str()))) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; }
         else {
             // Jeu d'un autre dossier (autre installation, relance par Steam ailleurs...) : note une fois. Retour d'un joueur
             // (08/10) : « Game over » aussitot, le jeu ouvert sans MWCoop -- il tournait d'un dossier inconnu du lanceur.
@@ -8058,6 +8062,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             }
         }
         return 0;
+    }
+    // Essai : /testjeuencours <journal> -- le jeu en cours vu d'ici (GameProcessRunning) et les copies de lancement suivies.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testjeuencours")) {
+        g_launcherLog = argv[2];
+        DWORD pid = 0;
+        bool on = GameProcessRunning(&pid);
+        LaunchLog("testjeuencours : %s pid=%lu (jeu %s, copie %s, GameExe %s)", on ? "EN COURS" : "aucun", pid, Narrow(g_gameDir, CP_UTF8).c_str(), Narrow(MirrorDir(), CP_UTF8).c_str(), Narrow(GameExe(), CP_UTF8).c_str());
+        return on ? 0 : 1;
     }
     // Essai : /testtuto <journal> <ini d'essai> -- bulles des nouveautes : 1er demarrage avec l'ancienne valeur (TutoVersion =
     // version du mod, 1.15.8), visite passee (Echap), 2e demarrage : plus aucune bulle ; puis meme chose sur l'autre jeu.
