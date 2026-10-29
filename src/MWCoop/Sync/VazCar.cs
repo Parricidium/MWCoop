@@ -29,9 +29,12 @@ namespace MWCoop
             string name; bool nameRead;
             public string Name
             {
-                get { Read(); return name; }
+                get { Read(); return Tag != null ? name + Tag : name; }
                 set { name = value; }
             }
+            public string Tag;   // (suffixe du nom affiche : « (standalone) »)
+            // meme modele (dossier, poste, tenue) sous un autre numero : la R5 standalone (StandaloneCar)
+            public Model CloneAs(int id, string tag) { var m = (Model)MemberwiseClone(); m.Id = id; m.Tag = tag; return m; }
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
             public KeyValuePair<string, Vector3>[] Controls;
             public Knob[] Knobs;              // boutons visibles poses sur le modele (commande du jeu dessous)
@@ -106,7 +109,7 @@ namespace MWCoop
             public float RearGrip = 1f, HandbrakeSlide = 1f, AntiRollFront, AntiRollRear, YawDamp;
             public bool Rwd;                  // propulsion (false : integrale, comme les autres addons) -- Rihno 5 Maxi, JD 28/10
         }
-        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5, ModelR5 = 6;
+        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5, ModelR5 = 6, ModelR5S = 7;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
@@ -284,10 +287,13 @@ namespace MWCoop
             Sp = new Spec { Name = "R5 Maxi Turbo Gr. B", Power = 355f, PowerRpm = 6750f, Torque = 398f, TorqueRpm = 5500f, MaxRpm = 7000f,
                             Mass = 905f, Com = 0.49f, Steer = 36f, Spring = 33000f, Damp = 2150f, Handbrake = 6000f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f },
                             Rwd = true, RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 24000f, AntiRollRear = 12000f, YawDamp = 0.6f, ComDrop = 0.04f } };
-        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5 };   // (rempli : Vaz2108 au constructeur statique)
+        // R5 standalone (pilote, spec du 28/10, lot 4) : numero de modele a elle dans la table des voitures du F10 ; construite par
+        // StandaloneCar la ou [Test] AddonStandalone=1, ailleurs la R5 copie (n 6) de la meme couleur et du meme numero (Vaz.BuildModel).
+        public static readonly Model R5S = R5.CloneAs(ModelR5S, " (standalone)");
+        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles); }
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles && (id != ModelR5S || StandaloneCar.On)); }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
 
         public static string Dir { get { return Vaz2108.Dir; } }
@@ -1557,6 +1563,7 @@ namespace MWCoop
         public static void Destroy(Built b)
         {
             if (b == null || b.Car == null) return;
+            if (StandaloneCar.Owns(b)) { StandaloneCar.Remove(b); return; }   // (standalone : joueur sorti proprement d'abord)
             Transform ct = b.Car.transform;
             if (VehicleSync.LocalDrivingRoot == ct) VehicleSync.ExitLocal();
             GameObject mirrors = Game.FindAny("Systems/Mirrors/Disable");

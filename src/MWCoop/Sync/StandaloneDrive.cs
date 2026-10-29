@@ -90,7 +90,8 @@ namespace MWCoop
         static void SetupDrive(VazCar.Built b, State st, Dictionary<string, Vector3> inf)
         {
             VazCar.Model m = b.M;
-            var head = new GameObject("DriverPivot").transform;
+            // (nom du jeu : Seats en tire la place du passager avant en miroir, l'avatar d'un conducteur distant s'y assoit)
+            var head = new GameObject("DriverHeadPivot").transform;
             head.SetParent(b.Car.transform, false);
             head.localPosition = m.Head;
             st.Pivot = LeanRig(b, st, head);
@@ -159,6 +160,17 @@ namespace MWCoop
             b.Sound = VazSound.Create(b.Car, eng, m);
             st.EngineOn = false;
             Lamps(b, st);
+            // klaxon : le son du CarHorn de la voiture du jeu (Ruscko : LOD/Dashboard/Knobs/ButtonHorn/CarHorn, Satsuma :
+            // CarSimulation/CarHorn -- le jeu l'allume tant que le clic est tenu sur le bouton), a l'avant de la voiture
+            GameObject tpl = VazCar.Template(); AudioSource th = null;
+            foreach (string hp in new[] { "LOD/Dashboard/Knobs/ButtonHorn/CarHorn", "CarSimulation/CarHorn" }) { Transform x = tpl != null ? tpl.transform.Find(hp) : null; if (x != null && x.GetComponent<AudioSource>() != null) { th = x.GetComponent<AudioSource>(); break; } }
+            if (th != null && th.clip != null)
+            {
+                var hg = new GameObject("CarHorn"); hg.transform.SetParent(b.Body, false); hg.transform.localPosition = new Vector3(0f, 0.5f, 1.5f);
+                st.Horn = hg.AddComponent<AudioSource>();
+                st.Horn.clip = th.clip; st.Horn.loop = true; st.Horn.playOnAwake = false; st.Horn.spatialBlend = 1f; st.Horn.minDistance = th.minDistance > 0f ? th.minDistance : 3f; st.Horn.maxDistance = th.maxDistance > 0f ? th.maxDistance : 150f; st.Horn.volume = th.volume > 0f ? th.volume : 1f; st.Horn.outputAudioMixerGroup = th.outputAudioMixerGroup;
+            }
+            else Log.Warn("standalone : son du klaxon de la voiture du jeu introuvable");
             st.Speedo = Gauge.Make(b, inf, "v", "cadran_vitesse.png");
             st.Tacho = Gauge.Make(b, inf, "r", "cadran_regime.png");
         }
@@ -277,7 +289,15 @@ namespace MWCoop
         static void Gauges(VazCar.Built b, State st)
         {
             if (gaugeFreeze) return;
-            if (st.Speedo != null) st.Speedo.Set(Mathf.Abs(b.Car.transform.InverseTransformDirection(b.Rb.velocity).z) * 3.6f);
+            // (voiture menee ailleurs : corps cinematique sans vitesse -- vitesse tiree du deplacement, lissee)
+            float now = Time.time;
+            if (b.Rb.isKinematic && now > st.LastPosT)
+            {
+                if (st.LastPosT > 0f && now - st.LastPosT < 0.5f) st.RemoteKmh = Mathf.Lerp(st.RemoteKmh, Mathf.Abs(b.Car.transform.InverseTransformDirection(b.Car.transform.position - st.LastPos).z) / (now - st.LastPosT) * 3.6f, 0.3f);
+                st.LastPos = b.Car.transform.position; st.LastPosT = now;
+            }
+            float kmh = b.Rb.isKinematic ? st.RemoteKmh : Mathf.Abs(b.Car.transform.InverseTransformDirection(b.Rb.velocity).z) * 3.6f;
+            if (st.Speedo != null) st.Speedo.Set(kmh);
             if (st.Tacho != null) st.Tacho.Set(st.EngineOn ? b.Dt.rpm : 0f);
         }
 
@@ -315,7 +335,9 @@ namespace MWCoop
             if (hovered < 0) Doors(b, st);
             GearText(b);
             // phares a la touche du jeu (HighBeam, L par defaut -- JD 28/10 : « je ne peux pas allumer ses phares avec L »)
-            if (Down("HighBeam")) { st.LightsOn = !st.LightsOn; Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints") + " (touche)"); }
+            if (Down("HighBeam")) { st.LightsOn = !st.LightsOn; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints") + " (touche)"); }
+            // (etat renvoye toutes les 3 s par le conducteur : un joueur arrive en cours l'a aussi)
+            if (Time.realtimeSinceStartup >= st.NextState) SendState(b, st);
             if (Time.realtimeSinceStartup - enteredAt > 0.5f && Down("DrivingMode"))
             {
                 if (b.Rb.velocity.magnitude < 0.5f) Exit(b, false);
@@ -344,7 +366,7 @@ namespace MWCoop
             doorHover = hit;
             Game.SetGlobalBool("GUIuse", true);
             if (prompted == null) Game.SetGlobal("GUIinteraction", st.DoorOpen[hit] ? "CLOSE DOOR" : "OPEN DOOR");
-            if (Input.GetMouseButtonDown(0) || Down("Use")) { st.DoorOpen[hit] = !st.DoorOpen[hit]; Log.Info("standalone : portiere " + (hit == 0 ? "conducteur" : "passager") + (st.DoorOpen[hit] ? " ouverte" : " fermee")); }
+            if (Input.GetMouseButtonDown(0) || Down("Use")) { st.DoorOpen[hit] = !st.DoorOpen[hit]; SendState(b, st); Log.Info("standalone : portiere " + (hit == 0 ? "conducteur" : "passager") + (st.DoorOpen[hit] ? " ouverte" : " fermee")); }
         }
         static void DoorAnim(VazCar.Built b, State st)
         {
@@ -431,8 +453,9 @@ namespace MWCoop
             if (h > crashMaxH) crashMaxH = h; if (v > crashMaxV) crashMaxV = v;
             if (h < lim) return false;
             Log.Info("standalone : choc mortel, " + h.ToString("F0") + " km/h perdus a l'horizontale en un pas (" + v.ToString("F0") + " a la verticale, limite " + lim.ToString("F0") + ")");
-            Exit(b, true);
+            // (mort AVANT de sortir le joueur : le jeu lit la voiture conduite pour faire mourir ses passagers -- Respawn, @accident)
             Log.Info("standalone : " + Respawn.TestDie("Crash"));
+            Exit(b, true);
             return true;
         }
         static float crashMaxH, crashMaxV;   // (plus grands chocs vus au volant : essais)
@@ -714,12 +737,13 @@ namespace MWCoop
             if (!states.TryGetValue(b, out st)) return;
             st.EngineOn = on; st.CrankT = -1f;
             if (on) b.Dt.StartEngine();
+            SendState(b, st);
             Log.Info("standalone : moteur " + (on ? "demarre" : "coupe"));
         }
 
         static void Engine(VazCar.Built b, State st)
         {
-            if (st.EngineOn) return;
+            if (st.EngineOn || b.Rb.isKinematic) return;
             // (moteur coupe : Drivetrain.Start le demarre a la naissance, et le ralenti le relancerait -- regime tenu a zero)
             if (b.Dt.rpm > 1f)
             {
@@ -729,28 +753,68 @@ namespace MWCoop
             b.Dt.idlethrottle = 0f;
         }
 
+        // ---------------------------------------------------------------- co-op : etat de la voiture (Vaz V_STD)
+        // Moteur, phares, portieres : envoyes a tous par celui qui les change (et toutes les 3 s par le conducteur) ; chacun les
+        // pose sur sa voiture du meme numero (Built.Number : MWCoop-VAZ-<n> partout). Le mouvement, le regime et le conducteur
+        // passent par VehicleSync comme pour les autres voitures du F10.
+        static void SendState(VazCar.Built b, State st)
+        {
+            st.NextState = Time.realtimeSinceStartup + 3f;
+            if (!Net.Session.Active || b.Number < 1) return;
+            int f = (st.EngineOn ? 1 : 0) | (st.LightsOn ? 2 : 0) | (st.DoorOpen != null && st.DoorOpen[0] ? 4 : 0) | (st.DoorOpen != null && st.DoorOpen[1] ? 8 : 0) | (st.HornOn ? 16 : 0);
+            Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f), true);
+        }
+
+        public static void OnState(Net.Peer from, Net.NetReader r)
+        {
+            int n = r.U8(), f = r.U8();
+            foreach (VazCar.Built b in cars)
+            {
+                State st;
+                if (b.Number != n || !states.TryGetValue(b, out st)) continue;
+                bool eng = (f & 1) != 0;
+                if (eng && !st.EngineOn && !b.Rb.isKinematic) b.Dt.StartEngine();
+                if (eng != st.EngineOn) Log.Info("standalone : n " + n + " moteur " + (eng ? "demarre" : "coupe") + " chez un autre joueur");
+                st.EngineOn = eng; st.LightsOn = (f & 2) != 0;
+                if (st.DoorOpen != null) { st.DoorOpen[0] = (f & 4) != 0; st.DoorOpen[1] = (f & 8) != 0; }
+                SetHorn(b, st, (f & 16) != 0, false);
+                st.NextState = Time.realtimeSinceStartup + 3f;
+            }
+        }
+
         // ---------------------------------------------------------------- tableau de bord
-        const int KIgnition = 0, KLights = 2;
+        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99;
+        static void SetHorn(VazCar.Built b, State st, bool on, bool send)
+        {
+            if (on == st.HornOn) return;
+            st.HornOn = on;
+            if (st.Horn != null) { if (on) st.Horn.Play(); else st.Horn.Stop(); }
+            if (send) SendState(b, st);
+        }
         static void Knobs(VazCar.Built b, State st)
         {
             Transform cam = PlayerCam();
             VazCar.Knob[] ks = KnobsOf(b.M);
             if (cam == null || ks == null) return;
             int hit = -1; float bestPerp = 0.035f;
-            foreach (int i in new[] { KIgnition, KLights })
+            foreach (int i in new[] { KIgnition, KLights, KHorn, KWheelHub })
             {
-                if (i >= ks.Length) continue;
-                Vector3 v = b.Car.transform.TransformPoint(ks[i].At) - cam.position;
+                if (i != KWheelHub && i >= ks.Length) continue;
+                if (i == KWheelHub && b.SteerPivot == null) continue;
+                Vector3 v = (i == KWheelHub ? b.SteerPivot.position : b.Car.transform.TransformPoint(ks[i].At)) - cam.position;
                 float along = Vector3.Dot(v, cam.forward);
                 if (along < 0.15f || along > 1.3f) continue;
                 float perp = (v - cam.forward * along).magnitude;
-                if (perp < bestPerp) { bestPerp = perp; hit = i; }
+                if (perp < (i == KWheelHub ? 0.07f : bestPerp) && (hit < 0 || perp < bestPerp)) { bestPerp = Mathf.Min(bestPerp, perp); hit = i; }
             }
-            if (hit < 0) { ClearHover(); CrankStop(b, st); return; }
+            if (hit < 0) { ClearHover(); CrankStop(b, st); SetHorn(b, st, false, true); return; }
             hovered = hit;
             Game.SetGlobalBool("GUIuse", true);
-            Game.SetGlobal("GUIinteraction", hit == KIgnition ? (st.EngineOn ? "ENGINE OFF" : "START ENGINE") : st.LightsOn ? "LIGHTS OFF" : "LIGHTS ON");
-            if (hit == KLights) { if (Input.GetMouseButtonDown(0)) { st.LightsOn = !st.LightsOn; Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints")); } return; }
+            Game.SetGlobal("GUIinteraction", hit == KIgnition ? (st.EngineOn ? "ENGINE OFF" : "START ENGINE") : hit == KLights ? (st.LightsOn ? "LIGHTS OFF" : "LIGHTS ON") : "HORN");
+            // klaxon : bouton orange ou moyeu du volant, tant que le clic est tenu (comme le bouton du jeu)
+            if (hit == KHorn || hit == KWheelHub) { SetHorn(b, st, Input.GetMouseButton(0), true); return; }
+            SetHorn(b, st, false, true);
+            if (hit == KLights) { if (Input.GetMouseButtonDown(0)) { st.LightsOn = !st.LightsOn; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints")); } return; }
             // contact : clic moteur tournant = arret ; moteur coupe, clic tenu = demarreur, le moteur prend apres 0,9 s
             if (st.EngineOn) { if (Input.GetMouseButtonDown(0)) SetEngine(b, false); return; }
             if (Input.GetMouseButton(0))
@@ -1000,6 +1064,71 @@ namespace MWCoop
                     if (e > 6f) { Log.Info("standalone : choc fini, mur : PAS de mort (plus grand choc " + crashMaxH.ToString("F0") + " km/h, vitesse " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + ")"); mStep = 99; }
                     break;
             }
+        }
+
+        // ---------------------------------------------------------------- [Test] Autotest=standalonecoop (2 joueurs, MSC, les deux avec
+        // AddonStandalone=1 et TestReapparition=1) : piste plate chez les deux ; l'hote prend la R5 standalone (n 3) au F10, monte,
+        // demarre, phares ; l'invite s'assoit a la place du passager ; l'hote roule 5 s ; l'invite releve sa copie (standalone ?
+        // cinematique ? vitesse, moteur, phares recus, toujours assis -- l'invite charge ~20 s apres l'hote : l'hote roule a 78 s) ; puis
+        // choc contre un mur a 60 km/h : morts et reapparition
+        // chez les deux (plantage RemapPPtrTransfer a surveiller, JD 29/10).
+        static int cStep; static float cAt, cLog;
+        public static void CoopTest(float t)
+        {
+            if (!Net.Session.Active) return;
+            bool host = Net.Session.IsHost;
+            GameObject pl = Game.PlayerGo;
+            if (pl == null) return;
+            Transform car = Vaz.CarOf(host ? Vaz.MeId : Vaz.OwnerOf(3));
+            VazCar.Built b = null; State st = null;
+            foreach (VazCar.Built x in cars) if (car != null && x.Car == car.gameObject) { b = x; states.TryGetValue(x, out st); }
+            if (cStep == 0 && t > 22f)
+            {
+                cStep = 1; VazTenue.MakeTrack();
+                var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = new Vector3(host ? 0f : 4f, VazTenue.TrackY + 1.2f, 0f); pl.transform.rotation = Quaternion.identity;
+                if (cc != null) cc.enabled = true;
+                Log.Info("standalone : coop, sur la piste (" + (host ? "hote" : "invite") + ")");
+            }
+            if (host && cStep == 1 && t > 26f) { cStep = 2; Log.Info("standalone : coop, demande -> " + Vaz.Request(3, VazCar.ModelR5S)); }
+            if (host && cStep == 2 && t > 36f && b != null)
+            {
+                cStep = 3;
+                var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = car.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
+                if (cc != null) cc.enabled = true;
+                Enter(b, st); SetEngine(b, true); st.LightsOn = true; SendState(b, st);
+                Log.Info("standalone : coop, hote au volant de " + car.name + ", moteur, phares");
+            }
+            if (!host && cStep == 1 && t > 44f && car != null)
+            {
+                cStep = 3;
+                Log.Info("standalone : coop, invite : copie " + car.name + (b != null ? " standalone" : " PAS standalone") + ", passager -> " + Seats.TestSit(car.name, 0));
+            }
+            if (host && cStep == 3 && t > 75f && t < 76.5f) SetHorn(b, st, true, true);
+            if (host && cStep == 3 && t > 78f) { cStep = 4; cAt = t; SetHorn(b, st, false, true); var d = (StandaloneDriver)b.Axis; d.Keys = false; d.Handbrake = 0f; d.Gear = 2; d.Throttle = 0.6f; Log.Info("standalone : coop, hote roule"); }
+            if (host && cStep == 4 && t > cAt + 5f) { cStep = 5; var d = (StandaloneDriver)b.Axis; d.Throttle = 0f; d.Brake = 1f; Log.Info("standalone : coop, hote freine (" + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h)"); }
+            if (!host && cStep == 3 && t > 46f && t < 100f && (t >= cLog || (st != null && st.HornOn && t >= cLog - 1f)) && car != null)
+            {
+                cLog = t + 1.5f;
+                Log.Info("standalone : coop, invite voit " + car.name + " en " + car.position.ToString("F1") + ", " + (car.GetComponent<Rigidbody>().isKinematic ? "cinematique" : "PHYSIQUE ICI")
+                         + (st != null ? ", compteur " + st.RemoteKmh.ToString("F0") + " km/h, moteur " + (st.EngineOn ? "oui" : "non") + ", phares " + (st.LightsOn ? "oui" : "non") + ", klaxon " + (st.HornOn ? (st.Horn != null && st.Horn.isPlaying ? "JOUE" : "vrai sans son") : "non") : "")
+                         + ", regime " + (b != null ? b.Dt.rpm.ToString("F0") : "?") + ", joueur " + (pl.transform.IsChildOf(car) ? "dans la voiture" : "DEHORS"));
+            }
+            if (host && cStep == 5 && t > 90f && b != null)
+            {
+                cStep = 6;
+                Vector3 p0 = car.position;
+                var wall = GameObject.CreatePrimitive(PrimitiveType.Cube); wall.name = "MWCoop-MurEssai";
+                int tl = LayerMask.NameToLayer("Terrain"); if (tl >= 0) wall.layer = tl;
+                wall.transform.position = p0 + car.forward * 9f + Vector3.up; wall.transform.rotation = Quaternion.LookRotation(car.forward); wall.transform.localScale = new Vector3(20f, 3f, 1f);
+                var d = (StandaloneDriver)b.Axis; d.Brake = 0f; d.Handbrake = 0f; d.Gear = 4; d.Throttle = 1f;
+                b.Rb.velocity = car.forward * 17.5f; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>()) w.angularVelocity = 17.5f / Mathf.Max(0.1f, w.radius); if (st.Sensor != null) st.Sensor.Reset();
+                enteredAt = Time.realtimeSinceStartup - 2f;
+                Log.Info("standalone : coop, choc a 60 km/h contre un mur");
+            }
+            if (cStep >= 1 && cStep < 9 && t > (host ? 120f : 105f)) { cStep = 9; Log.Info("standalone : coop, " + (host ? "hote" : "invite") + " vivant apres la reapparition (" + pl.transform.position.ToString("F0") + ")"); }
+            if (cStep == 9 && t > (host ? 125f : 110f)) { cStep = 10; Log.Info("standalone : coop fini"); }
         }
     }
 }

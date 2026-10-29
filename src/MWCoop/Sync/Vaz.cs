@@ -33,7 +33,8 @@ namespace MWCoop
         //  34 V_ROOF  trappe de toit : invite -> hote (couleur, ouverte ?), hote -> tous (meme contenu, applique)
         //  35 V_LIV   invite -> hote : empreinte de sa livree (changee au lanceur pendant la partie)
         // (V_ASK et V_SET portent aussi le modele et l'empreinte de la livree : Session.NetVersion 43)
-        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33, V_ROOF = 34, V_LIV = 35;
+        //  36 V_STD   tous -> tous : voiture standalone n, etat (moteur, phares, portieres) -- StandaloneCar.SendState
+        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33, V_ROOF = 34, V_LIV = 35, V_STD = 36;
 
         static readonly string[] NamesFr = { "Rouge", "Bleu", "Jaune", "Vert", "Blanc", "Noir", "Orange", "Violet", "Bleu ciel", "Rose", "Gris", "Bordeaux", "Turquoise", "Vert pomme", "Marron", "Bleu nuit" };
         static readonly string[] NamesEn = { "Red", "Blue", "Yellow", "Green", "White", "Black", "Orange", "Purple", "Sky blue", "Pink", "Grey", "Burgundy", "Turquoise", "Lime", "Brown", "Navy" };
@@ -278,7 +279,7 @@ namespace MWCoop
         public static void LateUpdate()
         {
             if (!PlayerSync.InGame) return;
-            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) { VazHandling.Idle(r.Car); VazCar.MscBrakeLate(r.Car); }
+            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null && !StandaloneCar.Owns(r.Car)) { VazHandling.Idle(r.Car); VazCar.MscBrakeLate(r.Car); }
             StandaloneCar.LateUpdate();   // (pilote standalone, [Test] AddonStandalone : rien sans voiture construite)
         }
 
@@ -288,7 +289,7 @@ namespace MWCoop
             StandaloneCar.Update();
             if (!Enabled && rents.Count == 0 && wanted.Count == 0) return;   // (VAZ coupee, aucune sortie : rien a chaque image -- demande de Menor 25/10)
             float now = Time.realtimeSinceStartup;
-            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) VazCar.Tick(r.Car, now);
+            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null && !StandaloneCar.Owns(r.Car)) VazCar.Tick(r.Car, now);   // (standalone : StandaloneCar.Update)
             if (now < nextTick) return;
             nextTick = now + 0.5f;
             if (EvoLivery.Poll(MineModel)) MyLiveryChanged();
@@ -409,6 +410,7 @@ namespace MWCoop
                 if (wanted.TryGetValue(from.Id, out s) && s.Livery != h) { s.Livery = h ?? ""; HostChanged("livree de " + NameOf(from.Id)); }
                 return;
             }
+            if (kind == V_STD) { StandaloneCar.OnState(from, r); return; }
             if (kind == V_ROOF)
             {
                 int n = r.U8(); bool open = r.Bool();
@@ -443,8 +445,13 @@ namespace MWCoop
                 {
                     r.NextBuild = now + 2f; r.Tries++;
                     r.Model = BuildModel(kv.Value); r.LiveryGen = -1;
-                    if (kv.Value.Model != r.Model) Log.Info("vaz : n " + r.Number + " de " + NameOf(kv.Key) + " : modele " + kv.Value.Model + " sans son extension ici -> VAZ a la place");
-                    try { r.Car = VazCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, Quaternion.Euler(0f, kv.Value.Yaw, 0f), VazCar.ModelOf(r.Model)); }
+                    if (kv.Value.Model != r.Model) Log.Info("vaz : n " + r.Number + " de " + NameOf(kv.Key) + " : modele " + kv.Value.Model + " pas ici -> " + VazCar.ModelOf(r.Model).Name + " a la place");
+                    try
+                    {
+                        Quaternion rot = Quaternion.Euler(0f, kv.Value.Yaw, 0f);
+                        r.Car = r.Model == VazCar.ModelR5S ? StandaloneCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, rot, VazCar.R5)
+                                                            : VazCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, rot, VazCar.ModelOf(r.Model));
+                    }
                     catch (System.Exception e) { Log.Error("vaz : construction de la n " + r.Number + " : " + e); if (r.Car != null) VazCar.Destroy(r.Car); r.Car = null; }
                     if (r.Car != null && Changed != null) Changed();
                 }
@@ -453,7 +460,13 @@ namespace MWCoop
         }
 
         // Modele construit ici pour cette place : l'Evo si l'extension est la, sinon la VAZ.
-        static int BuildModel(Slot s) { return VazCar.Has(s.Model) ? s.Model : VazCar.ModelVaz; }
+        // (R5 standalone sans le reglage de test ici : la R5 copie, meme couleur et meme numero)
+        static int BuildModel(Slot s)
+        {
+            if (VazCar.Has(s.Model)) return s.Model;
+            if (s.Model == VazCar.ModelR5S && VazCar.Has(VazCar.ModelR5)) return VazCar.ModelR5;
+            return VazCar.ModelVaz;
+        }
 
         // Livree de la place sur la voiture d'ici (Evo seulement ; image pas encore recue : couleur du joueur, reprise a son
         // arrivee -- EvoLivery.Generation).
