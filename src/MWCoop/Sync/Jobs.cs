@@ -107,6 +107,7 @@ namespace MWCoop
             public HashSet<string> Quiet = new HashSet<string>();                            // ... qui bouclent : plus envoyees
             public float LoopStart, LastClick = -100f;
             public float KeyClickAt = -100f;                                                 // cle : dernier clic d'ici
+            public float CrankSince;                                                         // cle rejouee : sur « Motor starting » depuis
             public NetWriter PauseMsg; public string PauseState;                              // garde-fou : dernier changement garde pendant la pause (recalage)
             public float PauseSentAt = -100f, PauseLogAt = -100f; public int PauseSends;      // ... dernier renvoi, derniere note au journal
         }
@@ -260,6 +261,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
             SpecialUpdate(now);
+            IgnitionLatch(now);
             IdleStep(now);
             PauseStep(now);
             // [Test] JournalUsine=1 : toutes les 10 s, etat et variables (entiers, reels, booleens) des automates de l'usine
@@ -775,6 +777,30 @@ namespace MWCoop
             WriteVars(j.F, w);
             Log.Info("cle : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + ev + "-> " + state);
             Session.SendAll(w, true);
+        }
+
+        // Cle rejouee restee sur le demarreur : le relachement de l'autre (« Shut off ») n'est jamais arrive -- dans le journal de Markos
+        // (#19, 28/10), deux « Motor starting » de l'hote sans le relachement qui suit. Chez l'invite le demarreur tournait alors jusqu'a son
+        // prochain clic (la cle du jeu attend le relachement de SA souris), et vidait la batterie de la SATSUMA. Au-dela de 6 s : relachee ici.
+        // (VehicleSync.StarterLatch fait deja de meme a 10 s, mais seulement sur une copie conduite ailleurs.) [Test] SansRelacheCle=1 : sans.
+        static float nextLatch;
+        static void IgnitionLatch(float now)
+        {
+            if (now < nextLatch) return;
+            nextLatch = now + 0.5f;
+            if (Config.GetInt("Test", "SansRelacheCle", 0) != 0) return;
+            foreach (Job j in jobs.Values)
+            {
+                if (j.Kind != K_IGNITION || j.F == null) continue;
+                if (!j.FromReplay || j.F.ActiveStateName != "Motor starting") { j.CrankSince = 0f; continue; }
+                if (j.CrankSince <= 0f) { j.CrankSince = now; continue; }
+                if (now - j.CrankSince < 6f || j.F.Fsm.GetState("Shut off") == null) continue;
+                j.CrankSince = 0f;
+                applying = true; Replay.Depth++;
+                try { Game.SetState(j.F, "Shut off"); if (j.F.ActiveStateName == "Wait button") Game.SetState(j.F, "Wait player"); }   // (au repos comme ApplyIgnitionMsc)
+                finally { applying = false; Replay.Depth--; }
+                Log.Info("cle : " + j.Key + " restee sur le demarreur 6 s (relachement pas recu), relachee ici -> " + j.F.ActiveStateName);
+            }
         }
 
         // VehicleSync : la cle de cette voiture a ete tournee ici (pas rejouee d'un autre) depuis moins de 'within' s.

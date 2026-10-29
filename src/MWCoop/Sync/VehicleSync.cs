@@ -3024,6 +3024,16 @@ namespace MWCoop
                 { Game.SetState(f, state); return "cle " + Recon.Path(f.transform) + " -> " + state + ", demarreur " + (c.Starter != null ? c.Starter.ActiveStateName : "?"); }
             return "pas de cle";
         }
+        // Essais : evenement 'ev' envoye a la cle de 'name' (FINISHED sur « Motor starting » = la souris relachee).
+        public static string TestKeyEvent(string name, string ev)
+        {
+            Car c = Named(name);
+            if (c == null) return "?";
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                if ((f.FsmName == "UseNew" || f.FsmName == "Use") && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState("Motor starting") != null)
+                { string was = f.ActiveStateName; f.SendEvent(ev); return "cle " + was + " -" + ev + "-> " + f.ActiveStateName; }
+            return "pas de cle";
+        }
         // Essais (mscdemarre) : cle, demarreur (etat, Starting, ACC), Electrics (actif, ElectricsOK, Charge), regime, copie.
         public static string StartProbe(string name)
         {
