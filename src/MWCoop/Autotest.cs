@@ -458,6 +458,23 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=cledemarreur (MWC, 2 joueurs ; 23a21df, journal de Markos #19) : l'hote met la cle de CleVoiture (SORBET) sur
+        // « Motor starting » a 60 s puis la pose sur « Shut off » a 63 s par SetState (relachement PERDU : rien d'envoye) ; de nouveau a 80 s,
+        // relachee a 82 s par FINISHED comme la souris (relachement NORMAL, envoye). Chacun note l'etat de la cle toutes les secondes de 58 a 95 s.
+        static int cdStep; static float cdLogAt;
+        static void CleDemarreur(float t)
+        {
+            string car = Config.Get("Test", "CleVoiture", "SORBET(190-200psi)");
+            if (Net.Session.IsHost)
+            {
+                if (cdStep == 0 && t > 60f) { cdStep = 1; VehicleSync.TestKey(car, "Wait2"); Log.Info("autotest : cledemarreur, " + VehicleSync.TestKeyEvent(car, "START")); }
+                if (cdStep == 1 && t > 63f) { cdStep = 2; Log.Info("autotest : cledemarreur, relachement perdu : " + VehicleSync.TestKey(car, "Shut off")); }
+                if (cdStep == 2 && t > 80f) { cdStep = 3; VehicleSync.TestKey(car, "Wait2"); Log.Info("autotest : cledemarreur, " + VehicleSync.TestKeyEvent(car, "START")); }
+                if (cdStep == 3 && t > 82f) { cdStep = 4; Log.Info("autotest : cledemarreur, relachement normal : " + VehicleSync.TestKeyEvent(car, "FINISHED")); }
+            }
+            if (t > 58f && t < 95f && Time.realtimeSinceStartup >= cdLogAt) { cdLogAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : cledemarreur t=" + t.ToString("F0") + " " + VehicleSync.StartProbe(car)); }
+        }
+
         // [Test] Autotest=mscporte (19/10, retour de Vaydon : portes de la maison et du garage) -- l'hote : 60 s ouvre la porte
         // d'entree, 66 s allume la cuisine, 72 s pousse la porte gauche du garage (2 s), 85 s referme la porte d'entree. Chacun note
         // toutes les 5 s : porte d'entree (DoorOpen), portes du garage (angle).
@@ -3015,6 +3032,7 @@ namespace MWCoop
             if (mode == "mscphares") { LightsGuard.TestKey(mode, t); return; }   // (touche des phares, Jobs commun : [Test] PharesTouche=LightsDrive sur MWC, 27/10)
             if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)
             if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)
+            if (mode == "cledemarreur") { CleDemarreur(t); return; }   // (cle rejouee restee sur le demarreur, 23a21df, essai MWC 29/10)
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
