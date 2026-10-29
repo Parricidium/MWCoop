@@ -380,25 +380,63 @@ namespace MWCoop
             Log.Info("standalone : habitacle creux " + st.Cabin.min.ToString("F2") + " - " + st.Cabin.max.ToString("F2") + ", couche " + LayerMask.LayerToName(L));
         }
 
-        // Choc mortel (JD 28/10 : « je ne sais pas s'il est possible de mourir en ayant un accident avec cette voiture ») : les voitures
-        // du jeu tuent par la liaison du pivot de tete du conducteur, qui casse a 300 N (500 casque) ; ici, l'equivalent par la caisse :
-        // vitesse perdue en moins de 0,1 s au-dela de tenue.ini [Poste] ChocMortel km/h (40 ; x1,6 casque mis), puis la mort du jeu
-        // par accident (Systems/Death, cause Crash : sang, ecran, reapparition en co-op -- Respawn.TestDie).
+        // Choc mortel. Les voitures du jeu tuent par la liaison du pivot de tete du conducteur (releve 29/10 sur la Satsuma : tete de
+        // 0,5 kg, liaison bloquee sur les trois axes, rupture a 300 N au volant, 500 avec le casque -- automate HelmetSim) : ~43 km/h
+        // perdus en un pas de physique (0,02 s) au point de la tete. Ici la meme mesure (CrashSensor, a chaque pas), mais seulement a
+        // l'horizontale : un vrai choc contre un obstacle, pas une bosse prise vite, la suspension qui talonne ni la reception d'un saut
+        // (JD 29/10 : « je suis mort trop facilement en passant vite sur une bosse » -- la 1re version comptait toute vitesse perdue en
+        // 0,1 s, verticale comprise, des 40 km/h). Seuil : tenue.ini [Poste] ChocMortel (45 km/h a 50 pas/s ; x1,6 casque mis). Puis la
+        // mort du jeu par accident (Systems/Death, cause Crash : sang, ecran, reapparition en co-op -- Respawn.TestDie).
+        public class CrashSensor : MonoBehaviour
+        {
+            public Rigidbody Rb; public Vector3 Head;   // (tete, repere de la voiture)
+            public float MaxH, MaxV;                    // (plus grandes vitesses perdues en un pas depuis la derniere lecture, m/s)
+            Vector3 prev; bool has;
+            public void Reset() { has = false; MaxH = MaxV = 0f; }   // (vitesse posee a la main : essais, teleportation)
+            void FixedUpdate()
+            {
+                if (Rb == null || Rb.isKinematic) { has = false; return; }
+                Vector3 v = Rb.GetPointVelocity(transform.TransformPoint(Head));
+                if (has)
+                {
+                    Vector3 d = v - prev, vert = Vector3.Project(d, Vector3.up);
+                    MaxH = Mathf.Max(MaxH, (d - vert).magnitude); MaxV = Mathf.Max(MaxV, vert.magnitude);
+                }
+                prev = v; has = true;
+            }
+        }
+
         static bool Crash(VazCar.Built b, State st)
         {
-            float now = Time.time; Vector3 v = b.Rb.velocity;
-            st.Vel.Enqueue(new KeyValuePair<float, Vector3>(now, v));
-            while (st.Vel.Count > 2 && now - st.Vel.Peek().Key > 0.1f) st.Vel.Dequeue();
+            CrashSensor s = st.Sensor;
+            if (s == null) { s = st.Sensor = b.Car.AddComponent<CrashSensor>(); s.Rb = b.Rb; s.Head = b.M.Head; }
+            float h = s.MaxH * 3.6f, v = s.MaxV * 3.6f;
+            s.MaxH = s.MaxV = 0f;
             if (b.Rb.isKinematic || Time.realtimeSinceStartup - enteredAt < 1f) return false;
-            float dv = (st.Vel.Peek().Value - v).magnitude * 3.6f, lim = st.T.ChocMortel;
+            float lim = st.T.ChocMortel * Time.fixedDeltaTime / 0.02f;   // (meme force sur la tete : la vitesse perdue en un pas suit la duree du pas)
             FsmBool helmet = FsmVariables.GlobalVariables.FindFsmBool("PlayerHelmet");
             if (helmet != null && helmet.Value) lim *= 1.6f;
-            if (dv < lim) return false;
-            Log.Info("standalone : choc mortel, " + dv.ToString("F0") + " km/h perdus en " + (now - st.Vel.Peek().Key).ToString("F2") + " s (limite " + lim.ToString("F0") + ")");
-            st.Vel.Clear();
+            if (h > crashMaxH) crashMaxH = h; if (v > crashMaxV) crashMaxV = v;
+            if (h < lim) return false;
+            Log.Info("standalone : choc mortel, " + h.ToString("F0") + " km/h perdus a l'horizontale en un pas (" + v.ToString("F0") + " a la verticale, limite " + lim.ToString("F0") + ")");
             Exit(b, true);
             Log.Info("standalone : " + Respawn.TestDie("Crash"));
             return true;
+        }
+        static float crashMaxH, crashMaxV;   // (plus grands chocs vus au volant : essais)
+
+        // Releve de la liaison du pivot de tete des voitures du jeu (comment le jeu decide la mort au volant)
+        static void HeadJointProbe()
+        {
+            foreach (ConfigurableJoint j in UnityEngine.Object.FindObjectsOfType<ConfigurableJoint>())
+            {
+                if (j.name != "DriverHeadPivot") continue;
+                Rigidbody r = j.GetComponent<Rigidbody>();
+                Log.Info("standalone : tete " + Recon.Path(j.transform) + " : masse " + (r != null ? r.mass.ToString("F1") : "?") + ", drag " + (r != null ? r.drag.ToString("F1") : "?")
+                         + ", axes x/y/z " + j.xMotion + "/" + j.yMotion + "/" + j.zMotion + ", rotations " + j.angularXMotion + "/" + j.angularYMotion + "/" + j.angularZMotion
+                         + ", limite " + j.linearLimit.limit.ToString("F3") + ", ressort x " + j.xDrive.positionSpring.ToString("F0") + " y " + j.yDrive.positionSpring.ToString("F0") + " z " + j.zDrive.positionSpring.ToString("F0")
+                         + ", rupture " + j.breakForce.ToString("F0") + " / " + j.breakTorque.ToString("F0") + ", ancre " + j.anchor.ToString("F2") + ", relie a " + (j.connectedBody != null ? j.connectedBody.name : "monde"));
+            }
         }
 
         // Couche des colliders du joueur retiree du rayon des roues (pose par Wheel.Start, apres l'allumage)
@@ -663,7 +701,24 @@ namespace MWCoop
         // StandaloneEssai=1) : sur la piste plate du banc, 20 cycles (voiture tournee de 0 / 120 / 240 degres) : joueur pose dans la zone
         // d'entree (texte du jeu verifie), monte (Enter : la touche du jeu ne se simule pas), yeux au point de vue, 2 s de gaz en 1re
         // puis frein, descend ; au sol a cote, CharacterController et PlayerStop rendus. Bilan : cycles reussis.
-        static int mStep = -1, mCycle, mOk, mSide; static float mAt, mLog; static string mWhy; static bool mShot;
+        static int mStep = -1, mCycle, mOk, mSide; static float mAt, mLog; static float mFly;
+        // (essai : voiture posee en p0, cap +z, joueur au volant ; entree remise a plus d'1 s pour que le choc compte tout de suite)
+        static void PlaceSeated(VazCar.Built b, State st, GameObject pl, Vector3 p0)
+        {
+            Transform ct = b.Car.transform;
+            b.Rb.velocity = Vector3.zero; b.Rb.angularVelocity = Vector3.zero;
+            ct.position = p0; ct.rotation = Quaternion.identity; b.Rb.position = p0; b.Rb.rotation = Quaternion.identity;
+            st.DoorOpen[0] = st.DoorOpen[1] = false; st.DoorAngle[0] = st.DoorAngle[1] = 0f;
+            if (st.Doors[0] != null) st.Doors[0].localRotation = Quaternion.identity; if (st.Doors[1] != null) st.Doors[1].localRotation = Quaternion.identity;
+            if (driving != b)
+            {
+                var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = ct.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
+                if (cc != null) cc.enabled = true;
+                Enter(b, st);
+            }
+            enteredAt = Time.realtimeSinceStartup - 2f;
+        } static string mWhy; static bool mShot;
         public static void MountTest(float t)
         {
             Test(t);
@@ -795,29 +850,59 @@ namespace MWCoop
                         else { mStep = 0; mAt = t; }
                     }
                     break;
-                case 10:   // choc : mur devant, au volant, plein gaz en 2e
+                case 10:   // bosses et saut a 100 km/h, au volant : pas de mort attendue
                 {
-                    Quaternion r = Quaternion.identity;
-                    Vector3 p0 = new Vector3(-200f, VazTenue.TrackY + 0.6f, -200f);
-                    b.Rb.velocity = Vector3.zero; b.Rb.angularVelocity = Vector3.zero;
-                    ct.position = p0; ct.rotation = r; b.Rb.position = p0; b.Rb.rotation = r;
-                    var wall = GameObject.CreatePrimitive(PrimitiveType.Cube); wall.name = "MWCoop-MurEssai";
-                    int tl = LayerMask.NameToLayer("Terrain"); if (tl >= 0) wall.layer = tl;   // (la caisse ne heurte pas la couche Default)
-                    wall.transform.position = p0 + new Vector3(0f, 1f, 45f); wall.transform.localScale = new Vector3(60f, 3f, 1f);
-                    st.DoorOpen[0] = false; st.DoorAngle[0] = 0f; st.Doors[0].localRotation = Quaternion.identity;
-                    var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
-                    pl.transform.position = ct.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
-                    if (cc != null) cc.enabled = true;
-                    Enter(b, st);
-                    d.Keys = false; d.Handbrake = 0f; d.Gear = 3; d.Throttle = 1f; d.Brake = 0f;
+                    HeadJointProbe();
+                    int tl = LayerMask.NameToLayer("Terrain");
+                    Vector3 p0 = new Vector3(-200f, VazTenue.TrackY + 0.6f, -400f);
+                    // (bosses arrondies : cylindres couches en travers, 15 cm hors du sol ; tremplin : 7 m a 12 degres)
+                    for (int k = 0; k < 6; k++)
+                    {
+                        var bump = GameObject.CreatePrimitive(PrimitiveType.Cylinder); bump.name = "MWCoop-BosseEssai";
+                        if (tl >= 0) bump.layer = tl;
+                        bump.transform.position = new Vector3(p0.x, VazTenue.TrackY - 0.20f, p0.z + 40f + k * 6f);
+                        bump.transform.rotation = Quaternion.Euler(0f, 0f, 90f); bump.transform.localScale = new Vector3(0.7f, 6f, 0.7f);
+                    }
+                    var ramp = GameObject.CreatePrimitive(PrimitiveType.Cube); ramp.name = "MWCoop-TremplinEssai";
+                    if (tl >= 0) ramp.layer = tl;
+                    ramp.transform.rotation = Quaternion.Euler(-12f, 0f, 0f); ramp.transform.localScale = new Vector3(10f, 0.4f, 7f);
+                    ramp.transform.position = new Vector3(p0.x, VazTenue.TrackY + 0.53f, p0.z + 95f);
+                    PlaceSeated(b, st, pl, p0);
+                    d.Keys = false; d.Handbrake = 0f; d.Gear = 6; d.Throttle = 1f; d.Brake = 0f;
+                    b.Rb.velocity = ct.forward * 27.8f; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>()) w.angularVelocity = 27.8f / Mathf.Max(0.1f, w.radius);
+                    if (st.Sensor != null) st.Sensor.Reset();
+                    crashMaxH = crashMaxV = 0f; mFly = 0f;
                     mStep = 11; mAt = t;
-                    Log.Info("standalone : choc, mur de 60 m a 45 m devant");
+                    Log.Info("standalone : choc, bosses (6 x 15 cm) et tremplin a 100 km/h");
                     break;
                 }
                 case 11:
-                    if (t >= mLog) { mLog = t + 1f; GameObject mw = GameObject.Find("MWCoop-MurEssai"); Log.Info("standalone : choc, voiture a " + (mw != null ? (mw.transform.position - ct.position).ToString("F1") : "?") + " du mur, " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, rapport " + b.Dt.gear + ", couches caisse/mur heurtent : " + (mw != null ? (!Physics.GetIgnoreLayerCollision(mw.layer, LayerMask.NameToLayer("Collider"))).ToString() : "?")); }
-                    if (driving != b) { Log.Info("standalone : choc fini, conducteur mort (" + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h apres le choc)"); mStep = 99; break; }
-                    if (e > 15f) { Log.Info("standalone : choc fini, PAS de mort (" + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h)"); mStep = 99; }
+                    if (b.Car.transform.position.y > VazTenue.TrackY + 1.6f) mFly = Mathf.Max(mFly, b.Car.transform.position.y - VazTenue.TrackY);
+                    if (driving != b) { Log.Info("standalone : choc, ECHEC : mort sur les bosses ou le saut"); mStep = 12; mAt = t; break; }
+                    if (e < 7f) break;
+                    Log.Info("standalone : choc, bosses et saut OK, pas de mort (vitesse " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, saut jusqu'a " + mFly.ToString("F1") + " m, plus grand choc " + crashMaxH.ToString("F0") + " km/h a l'horizontale / " + crashMaxV.ToString("F0") + " a la verticale)");
+                    mStep = 12; mAt = t;
+                    break;
+                case 12:   // mur a 60 km/h, de face : mort attendue
+                {
+                    if (driving == b) { d.Throttle = 0f; d.Brake = 1f; }
+                    if (e < 1f) break;
+                    Vector3 p0 = new Vector3(200f, VazTenue.TrackY + 0.6f, -400f);
+                    var wall = GameObject.CreatePrimitive(PrimitiveType.Cube); wall.name = "MWCoop-MurEssai";
+                    int tl = LayerMask.NameToLayer("Terrain"); if (tl >= 0) wall.layer = tl;   // (la caisse ne heurte pas la couche Default)
+                    wall.transform.position = p0 + new Vector3(0f, 1f, 18f); wall.transform.localScale = new Vector3(20f, 3f, 1f);
+                    PlaceSeated(b, st, pl, p0);
+                    d.Keys = false; d.Handbrake = 0f; d.Gear = 4; d.Throttle = 0.3f; d.Brake = 0f;
+                    b.Rb.velocity = ct.forward * 16.7f; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>()) w.angularVelocity = 16.7f / Mathf.Max(0.1f, w.radius);
+                    if (st.Sensor != null) st.Sensor.Reset();
+                    crashMaxH = crashMaxV = 0f;
+                    mStep = 13; mAt = t;
+                    Log.Info("standalone : choc, mur a 18 m, 60 km/h");
+                    break;
+                }
+                case 13:
+                    if (driving != b) { Log.Info("standalone : choc fini, mur : conducteur mort"); mStep = 99; break; }
+                    if (e > 6f) { Log.Info("standalone : choc fini, mur : PAS de mort (plus grand choc " + crashMaxH.ToString("F0") + " km/h, vitesse " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + ")"); mStep = 99; }
                     break;
             }
         }

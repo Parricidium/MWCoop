@@ -30,7 +30,7 @@ namespace MWCoop
         public float SolInconnu = 1.0f;
         public Vector3 Yeux;   // (point de vue du conducteur, repere du modele ; depart : pivot de tete, centre sur le volant)
         public float EntreeZ, EntreeLongueur = 1.0f;   // (zone d'entree : centre en avance -- depart : le siege --, longueur)
-        public float ChocMortel = 40f;   // (km/h perdus en moins de 0,1 s : mort du conducteur, StandaloneCar.Crash)
+        public float ChocMortel = 45f;   // (km/h perdus a l'horizontale en un pas de physique, a la tete : mort du conducteur, StandaloneCar.Crash)
 
         public string File;
         public DateTime Stamp;
@@ -205,7 +205,7 @@ namespace MWCoop
             sb.Append("[Poste]\r\n; yeux du conducteur (m, repere de la voiture : x vers la droite, y vers le haut, z vers l'avant)\r\n");
             sb.Append("EntreeZ=").Append(N(EntreeZ)).Append("          ; centre de la zone d'entree (le long de la portiere conducteur), m vers l'avant").Append(NL);
             sb.Append("EntreeLongueur=").Append(N(EntreeLongueur)).Append("    ; longueur de la zone d'entree, m").Append(NL);
-            sb.Append("ChocMortel=").Append(N(ChocMortel)).Append("        ; km/h perdus d'un coup (moins de 0,1 s) qui tuent le conducteur ; x1,6 avec le casque (15 - 300)").Append(NL);
+            sb.Append("ChocMortel=").Append(N(ChocMortel)).Append("        ; km/h perdus d'un coup contre un obstacle (a l'horizontale, en un pas de physique) qui tuent le conducteur ; le jeu tue vers 43 ; x1,6 avec le casque (15 - 300)").Append(NL);
             sb.Append("YeuxX=").Append(N(Yeux.x)).Append("\r\nYeuxY=").Append(N(Yeux.y)).Append("\r\nYeuxZ=").Append(N(Yeux.z)).Append("\r\n\r\n");
             sb.Append("[Sols]\r\n; adherence par matiere du sol (nom de la matiere du jeu)\r\n");
             foreach (KeyValuePair<string, float> kv in Sols) sb.Append(kv.Key).Append("=").Append(N(kv.Value)).Append("\r\n");

@@ -29,7 +29,7 @@ namespace MWCoop
             public Gauge Speedo, Tacho;
             public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;
             public Bounds[] DoorBox = new Bounds[2]; public float WheelVis;   // (portieres : boites ; volant visible lisse)
-            public readonly Queue<KeyValuePair<float, Vector3>> Vel = new Queue<KeyValuePair<float, Vector3>>();   // (choc mortel)   // (habitacle creux : StandaloneDrive.Shell)
+            public CrashSensor Sensor;   // (choc mortel, mesure a chaque pas de physique)   // (habitacle creux : StandaloneDrive.Shell)
         }
         static readonly Dictionary<VazCar.Built, State> states = new Dictionary<VazCar.Built, State>();
         // Course de suspension au-dessus du moyeu (m) : Wheel pose son modele a (compression - course) sous son objet ; ~0,10 au repos
