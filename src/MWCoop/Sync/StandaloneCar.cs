@@ -261,6 +261,7 @@ namespace MWCoop
 
         public static VazCar.Built Find(GameObject car) { foreach (VazCar.Built b in cars) if (b.Car == car) return b; return null; }
         public static bool Owns(VazCar.Built b) { return b != null && states.ContainsKey(b); }
+        public static bool IsCar(GameObject g) { if (g == null) return false; foreach (VazCar.Built b in cars) if (b.Car == g) return true; return false; }
 
         public static void Remove(VazCar.Built b)
         {

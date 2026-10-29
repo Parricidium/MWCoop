@@ -102,8 +102,10 @@ namespace MWCoop
                 {
                     int n = 0;
                     foreach (HutongGames.PlayMaker.Actions.GetDistance gd in dists) if (gd.target.Value != want) { gd.target.Value = want; n++; }
-                    string veh = mine ? "Ruscko" : "Satsuma";   // (vehicule du joueur au volant d'une copie de la Ruscko : son automate PlayerTrigger)
-                    foreach (HutongGames.PlayMaker.Actions.StringCompare sc in crimes) if ((sc.compareTo.Value == "Satsuma" || sc.compareTo.Value == "Ruscko") && sc.compareTo.Value != veh) { sc.compareTo.Value = veh; n++; }
+                    // (vehicule du joueur au volant d'une copie de la Ruscko : son automate PlayerTrigger ; d'une voiture standalone : le
+                    // nom qu'elle pose elle-meme -- 29/10, R5 standalone : « Ruscko » ici, un spectateur renverse en speciale = crime)
+                    string veh = !mine ? "Satsuma" : StandaloneCar.IsCar(want) ? StandaloneCar.VehicleName : "Ruscko";
+                    foreach (HutongGames.PlayMaker.Actions.StringCompare sc in crimes) if ((sc.compareTo.Value == "Satsuma" || sc.compareTo.Value == "Ruscko" || sc.compareTo.Value == StandaloneCar.VehicleName) && sc.compareTo.Value != veh) { sc.compareTo.Value = veh; n++; }
                     if (want.name != pointed)
                     {
                         pointed = want.name;
@@ -153,7 +155,9 @@ namespace MWCoop
                 testStep = 4;
                 GameObject form = Game.FindAny(Forms[0]);
                 Transform car = Vaz.CarOf(0);
-                Log.Info("autotest vazrallye : feuille " + (form != null ? (form.activeInHierarchy ? "active" : "eteinte") : "absente") + ", voiture du rallye " + pointed + ", " + dists.Count + " distances, " + crimes.Count + " spectateurs"
+                var cmps = new List<string>(); foreach (HutongGames.PlayMaker.Actions.StringCompare sc in crimes) if (!cmps.Contains(sc.compareTo.Value)) cmps.Add(sc.compareTo.Value);
+                string cmp = string.Join("', '", cmps.ToArray());
+                Log.Info("autotest vazrallye : feuille " + (form != null ? (form.activeInHierarchy ? "active" : "eteinte") : "absente") + ", voiture du rallye " + pointed + ", " + dists.Count + " distances, " + crimes.Count + " spectateurs (vehicule compare '" + cmp + "')"
                          + (car != null && form != null ? ", ma voiture a " + Vector3.Distance(car.position, form.transform.position).ToString("F1") + " m de la feuille" : ""));
                 Autotest.CaptureSoon("vazrallye-place", 0.5f);
             }
