@@ -451,7 +451,7 @@ namespace MWCoop
                     try
                     {
                         Quaternion rot = Quaternion.Euler(0f, kv.Value.Yaw, 0f);
-                        r.Car = r.Model == VazCar.ModelR5S ? StandaloneCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, rot, VazCar.R5)
+                        r.Car = VazCar.ModelOf(r.Model).Standalone ? StandaloneCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, rot, VazCar.ModelOf(VazCar.CopyOf(r.Model)))
                                                             : VazCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, rot, VazCar.ModelOf(r.Model));
                     }
                     catch (System.Exception e) { Log.Error("vaz : construction de la n " + r.Number + " : " + e); if (r.Car != null) VazCar.Destroy(r.Car); r.Car = null; }
@@ -467,7 +467,7 @@ namespace MWCoop
         {
             int m = VazCar.Current(s.Model);
             if (VazCar.Has(m)) return m;
-            if (m == VazCar.ModelR5S && VazCar.Has(VazCar.ModelR5)) return VazCar.ModelR5;
+            if (VazCar.ModelOf(m).Standalone && VazCar.Has(VazCar.CopyOf(m))) return VazCar.CopyOf(m);
             return VazCar.ModelVaz;
         }
 

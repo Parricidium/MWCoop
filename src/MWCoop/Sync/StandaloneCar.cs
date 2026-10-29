@@ -20,6 +20,13 @@ namespace MWCoop
         // Sortie publique (JD 29/10) : sur My Summer Car la standalone REMPLACE la R5 copie, sans interrupteur (« seulement les addons
         // vont etre la, les anciennes disparaitront ») ; My Winter Car garde la copie jusqu'au portage.
         public static bool On { get { return Game.Msc; } }
+        // copie remplacee par sa standalone ici : la R5 (publiee) ; les autres addons derriere [Test] StandaloneTous=1 tant que JD ne
+        // les a pas validees en jeu (JD 29/10 : « quand je te les validerai, on les publie »)
+        public static bool Ready(int copy)
+        {
+            if (!On || VazCar.StandaloneOf(copy) < 0) return false;
+            return copy == VazCar.ModelR5 || Config.GetInt("Test", "StandaloneTous", 0) != 0;
+        }
         public const string Prefix = "R5MAXI_STANDALONE";
         static readonly List<VazCar.Built> cars = new List<VazCar.Built>();
         // (par voiture : sa tenue de route lue, son centre de gravite, ses echeances)

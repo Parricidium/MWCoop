@@ -33,7 +33,8 @@ namespace MWCoop
                 set { name = value; }
             }
             public string Tag;   // (suffixe du nom affiche)
-            public bool Standalone { get { return Id == ModelR5S; } }   // (etiquette « Standalone » au F10)
+            public bool Standalone { get { return Id >= ModelR5S; } }   // (etiquette « Standalone » au F10)
+            public int Copy { get { return CopyOf(Id); } }                // (standalone : numero de la copie dont elle reprend le modele)
             // meme modele (dossier, poste, tenue) sous un autre numero : la R5 standalone (StandaloneCar)
             public Model CloneAs(int id, string tag) { var m = (Model)MemberwiseClone(); m.Id = id; m.Tag = tag; return m; }
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
@@ -111,6 +112,10 @@ namespace MWCoop
             public bool Rwd;                  // propulsion (false : integrale, comme les autres addons) -- Rihno 5 Maxi, JD 28/10
         }
         public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5, ModelR5 = 6, ModelR5S = 7;
+        // standalones des autres addons (JD 29/10 : « on va faire les autres en standalone, memes criteres ») : 8 a 12, copies 1 a 5
+        public const int ModelEvoS = 8, ModelT16S = 9, ModelImpS = 10, ModelSqS = 11, ModelT16bS = 12;
+        public static int StandaloneOf(int copy) { return copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
+        public static int CopyOf(int id) { return id == ModelR5S ? ModelR5 : id >= ModelEvoS && id <= ModelT16bS ? id - ModelR5S : id; }
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
@@ -291,13 +296,14 @@ namespace MWCoop
         // R5 standalone (pilote, spec du 28/10, lot 4) : numero de modele a elle dans la table des voitures du F10 ; construite par
         // StandaloneCar la ou [Test] AddonStandalone=1, ailleurs la R5 copie (n 6) de la meme couleur et du meme numero (Vaz.BuildModel).
         public static readonly Model R5S = R5.CloneAs(ModelR5S, null);
-        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S };   // (rempli : Vaz2108 au constructeur statique)
+        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
+                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null) };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles && (id != ModelR5S || StandaloneCar.On) && (id != ModelR5 || !StandaloneCar.On)); }
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles && (!Models[id].Standalone || StandaloneCar.Ready(CopyOf(id))) && !StandaloneCar.Ready(id)); }
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
-        public static int Current(int id) { return id == ModelR5 && StandaloneCar.On ? ModelR5S : id; }
+        public static int Current(int id) { return StandaloneCar.Ready(id) ? StandaloneOf(id) : id; }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
 
         public static string Dir { get { return Vaz2108.Dir; } }
