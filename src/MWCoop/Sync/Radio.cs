@@ -165,7 +165,17 @@ namespace MWCoop
                 FsmString cd = c.Upd.FsmVariables.FindFsmString("CurrentCD");
                 FsmInt idx = c.Upd.FsmVariables.FindFsmInt("Index");
                 bool playing = c.A.clip != null && c.A.isPlaying && c.A.gameObject.activeInHierarchy;
-                w.Str(c.Name).Str(cd != null ? cd.Value ?? "" : "").I32(idx != null ? idx.Value : -1).F32(playing ? c.A.time : 0f).Bool(playing);
+                int rank = idx != null ? idx.Value : -1;
+                // (rang du morceau qui joue vraiment, pas la variable : sur la DERNIERE piste du disque, l'automate du jeu passe Index a -1
+                // (« Reset ») avant de la jouer -- l'invite ne la trouvait pas et n'entendait pas la meme chose, dossier #21 рома 28/10)
+                if (playing && cd != null && Config.GetInt("Test", "CdRangVariable", 0) == 0)
+                {
+                    if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
+                    System.Collections.ArrayList l = ArrayListOf(cdRoot, cd.Value);
+                    int k = l != null ? l.IndexOf(c.A.clip) : -1;
+                    if (k >= 0) rank = k;
+                }
+                w.Str(c.Name).Str(cd != null ? cd.Value ?? "" : "").I32(rank).F32(playing ? c.A.time : 0f).Bool(playing);
             }
         }
 
