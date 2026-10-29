@@ -487,7 +487,8 @@ namespace MWCoop
             string car2 = Config.Get("Test", "PousseCible2", car);   // (cible du 2e coup : [Test] PousseCible2, garee)
             if (Net.Session.IsHost)
             {
-                if (mpStep == 0 && t > 56f) { mpStep = 1; mpSeatAt = t + 2f; Log.Info("autotest : mwcpousse, hote " + VehicleSync.TestEnter(car, false)); }
+                // ([Test] PousseHoteA=s : l'hote monte a s au lieu de 56 -- 30 : cible deja une copie conduite chez l'invite a ses 40 s, NaNEmbrayage)
+                if (mpStep == 0 && t > Config.GetFloat("Test", "PousseHoteA", 56f)) { mpStep = 1; mpSeatAt = t + 2f; Log.Info("autotest : mwcpousse, hote " + VehicleSync.TestEnter(car, false)); }
                 if (mpStep == 1 && t > mpSeatAt)
                 {
                     mpSeatAt = t + 2f;
