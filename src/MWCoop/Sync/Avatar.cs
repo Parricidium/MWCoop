@@ -953,6 +953,14 @@ namespace MWCoop
                 Log.Info("avatar " + Player.Name + " : mains au volant (" + (steerT != null ? steerT.name + " a " + Root.transform.InverseTransformPoint(steerT.position).ToString("F2") + ", prises D " + (shR != null ? (steerT.TransformPoint(gripR) - shR.position).magnitude.ToString("F2") : "?") + " m G " + (shL != null ? (steerT.TransformPoint(gripL) - shL.position).magnitude.ToString("F2") : "?") + " m de l'epaule, tete " + Root.transform.InverseTransformPoint(headBone.position).ToString("F2") : "volant introuvable") + ", levier " + (gearT != null ? "oui" : "non") + ")");
             }
             float now = Time.realtimeSinceStartup;
+            // (My Summer Car : jante pas encore montee sur la copie a l'arrivee -- le pied de la colonne, sans rendu : cherchee de nouveau
+            // toutes les 2 s, prises refaites quand elle est la)
+            if (Game.Msc && steerT != null && steerT.GetComponent<Renderer>() == null && now >= steerRetryAt)
+            {
+                steerRetryAt = now + 2f;
+                Transform s2 = SteerOf(car);
+                if (s2 != steerT) { steerT = s2; gripsStraight = false; steerStillAt = -1f; Grips(car); Log.Info("avatar " + Player.Name + " : jante trouvee (" + steerT.name + ")"); }
+            }
             // (prises du jeu reprises une fois le volant droit -- braquage recu nul, volant immobile 0,3 s : a la premiere image, celui de la
             // copie avait encore son angle d'avant (sauvegarde), les mains restaient tournees d'autant)
             if (steerT != null && !gripsStraight)
@@ -996,7 +1004,7 @@ namespace MWCoop
         // Prises du volant : le 10 h 10 du jeu vu du poste du conducteur (DriverHeadPivot, comme l'export de l'outil des places -- avant :
         // de la tete de l'avatar a sa premiere image au volant, parfois encore debout a cote), puis celles du fichier des places (outil
         // des places : prises choisies sur la jante, repere du volant -- JD 29/10).
-        Transform steerHead; bool gripsStraight; float steerStillAt = -1f; Quaternion steerStill;
+        Transform steerHead; bool gripsStraight; float steerStillAt = -1f, steerRetryAt; Quaternion steerStill;
         void Grips(Transform car)
         {
             DefaultGrips(car, steerT, steerHead != null ? steerHead.position : headBone.position, out gripR, out gripL);
