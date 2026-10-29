@@ -816,6 +816,7 @@ namespace MWCoop
 
         // Languette prise : rattachee a la camera, a la pose ou elle est (le jeu : SetParent sans remise a zero).
         static bool testHold;   // (essais : clic maintenu simule)
+        static int testAim = -1;   // (essais, place arriere : regard vers la languette (0) ou la boucle (1))
         static Transform heldHandle, heldPivot;
         static Vector3 heldPos, heldScale; static Quaternion heldRot;   // (echelle comprise : rattachee a la camera puis reposee, elle revenait aplatie)
         static void Grab(Belt b)
@@ -824,6 +825,12 @@ namespace MWCoop
             Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
             if (h == null || view == null) return;
             if (!b.Open.activeSelf) { b.Open.SetActive(true); b.OpenHidden = false; }
+            Hold(h);
+        }
+        static void Hold(Transform h)
+        {
+            Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
+            if (h == null || view == null) return;
             heldHandle = h; heldPivot = h.parent; heldPos = h.localPosition; heldRot = h.localRotation; heldScale = h.localScale;
             h.SetParent(view, true);
             beltHold = 0.01f;
@@ -831,8 +838,10 @@ namespace MWCoop
         static void Drop(Belt b)
         {
             beltHold = 0f;
+            if (pulledStrap != null && pulledStrap.activeSelf) pulledStrap.SetActive(false);
             if (heldHandle == null) return;
-            if (heldPivot != null) heldHandle.SetParent(heldPivot, false);
+            if (heldPivot == null) { Object.Destroy(heldHandle.gameObject); heldHandle = null; return; }   // (son modele detruit pendant qu'on la tenait)
+            heldHandle.SetParent(heldPivot, false);
             heldHandle.localPosition = heldPos; heldHandle.localRotation = heldRot; heldHandle.localScale = heldScale;
             heldHandle = null; heldPivot = null;
         }
@@ -880,8 +889,8 @@ namespace MWCoop
         // Montre la ceinture bouclee (copie en miroir) des voitures dont le passager avant est attache, ici ou ailleurs.
         // Ceintures arriere (Menor, liste du 12/10, point 3) : le jeu n'en a pas ; le modele de la ceinture bouclee du
         // conducteur, porte a chaque place arriere laterale -- deplace de la place du conducteur a celle-ci, en miroir du
-        // cote passager. Bouclee d'un clic sur sa boucle (pas de languette a tirer), vue par tous (avec la place). Place du
-        // milieu : pas de ceinture.
+        // cote passager. Bouclee d'un clic sur sa boucle (pas de languette a tirer ; SORBET : languette a tirer, RearPullInput),
+        // vue par tous (avec la place). Place du milieu : pas de ceinture.
         static bool RearPlace(Transform car, int index, out Vector3 offset, out bool mirror)
         {
             offset = Vector3.zero; mirror = false;
@@ -911,6 +920,8 @@ namespace MWCoop
             if (b == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return;
             Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
             if (view == null) return;
+            RearModel rm = RearPullModel();
+            if (rm != null) { RearPullInput(rm, current.Head.x < 0f ? 0 : 1, view); return; }
             SeatFiles.Belt fb = SeatFiles.BeltFor(current.Car, current.Index);   // (outil des places : boucle du fichier = point vise)
             Vector3 at = current.CarT.TransformPoint(fb != null && fb.HasBuckle ? fb.Buckle : RearBuckle(b, off, mir));
             Vector3 d = at - view.position;
@@ -922,6 +933,98 @@ namespace MWCoop
             Foley(beltOn ? "seatbelt_fasten" : "seatbelt_unfasten", at);
             Log.Info("ceinture arriere : " + (beltOn ? "attachee" : "detachee") + " (" + current.Car + ", place " + current.Index + ")");
             SendSeat(current.Car, current.Index, headLocal);
+        }
+
+        // Ceinture arriere de la SORBET comme celle du conducteur et du passager avant (JD 29/10 : « la meme animation de bouclage
+        // que le conducteur, comme on a fait pour le passager ») : viser la languette pendue sur la sangle : "TAKE SEATBELT" ; clic
+        // tenu : prise, rattachee a la camera (comme Grab), la sangle tiree de l'ancrage haut a la languette puis a l'ancrage bas ;
+        // en la tenant, viser la boucle : "FASTEN SEATBELT" ; lachee : bouclee (seatbelt_fasten) ; lachee ailleurs, ou tiree a plus
+        // de 1,5 m de l'ancrage haut : rangee (seatbelt_retract) ; bouclee, viser la boucle : "UNFASTEN SEATBELT" ; clic : detachee.
+        static RearModel RearPullModel()
+        {
+            RearModel m;
+            if (current == null || current.CarT == null || !HasRearModel(current.CarT) || !rearModels.TryGetValue(current.CarT, out m)) return null;
+            return m != null && m.Pull && m.Root != null && m.Root.activeSelf ? m : null;
+        }
+        static Transform RearTongue(RearModel m, int k) { return heldHandle ?? (m.Open[k] != null ? m.Open[k].transform.Find("Languette") : null); }
+        static Vector3 RearTongueAt(Transform t) { Renderer r = t != null ? t.GetComponent<Renderer>() : null; return r != null ? r.bounds.center : t != null ? t.position : Vector3.zero; }
+        static void RearPullInput(RearModel m, int k, Transform view)
+        {
+            Transform ct = m.Closed[k].transform;
+            Vector3 buckle = ct.TransformPoint(m.Buckle[k]), top = ct.TransformPoint(m.Top[k]);
+            Transform tongue = RearTongue(m, k);
+            Vector3 d = buckle - view.position;
+            // (essais : le jeu replace la camera a chaque image -- regard vise par TestBeltLook)
+            Vector3 fwd = testAim == 1 ? d : testAim == 0 && tongue != null ? RearTongueAt(tongue) - view.position : view.forward;
+            bool aimBuckle = d.magnitude < 1.3f && Vector3.Angle(fwd, d) < 16f, aimHandle = false;
+            if (!beltOn && beltHold <= 0f && tongue != null && tongue.gameObject.activeInHierarchy)
+            {
+                Vector3 hd = RearTongueAt(tongue) - view.position;
+                aimHandle = hd.magnitude < 1.3f && Vector3.Angle(fwd, hd) < 14f;
+            }
+            bool holding = beltHold > 0f;
+            BlockHandle(aimHandle || aimBuckle || holding);
+            BeltHint(beltOn ? (aimBuckle ? "UNFASTEN SEATBELT" : null) : holding ? (aimBuckle ? "FASTEN SEATBELT" : null) : aimHandle ? "TAKE SEATBELT" : null);
+            if (beltOn)
+            {
+                if (heldHandle != null) Drop(null);   // (bouclee autrement : languette reposee)
+                if (aimBuckle && Input.GetMouseButtonDown(0))
+                {
+                    beltOn = false;
+                    Foley("seatbelt_unfasten", buckle);
+                    Log.Info("ceinture arriere : detachee (" + current.Car + ", place " + current.Index + ")");
+                    SendSeat(current.Car, current.Index, headLocal);
+                }
+                beltHold = 0f;
+                return;
+            }
+            if (!holding && aimHandle && Input.GetMouseButtonDown(0)) { Hold(tongue); Log.Info("ceinture arriere : prise (" + current.Car + ", place " + current.Index + ")"); return; }
+            if (!holding) return;
+            if (heldHandle == null) { Drop(null); return; }   // (modele refait pendant qu'on la tenait)
+            Vector3 at = RearTongueAt(heldHandle);
+            bool tooFar = (at - top).magnitude > 1.5f;
+            if ((Input.GetMouseButton(0) || testHold) && !tooFar) { beltHold += Time.deltaTime; PullStrap(m, k, at); return; }
+            bool fasten = aimBuckle && !tooFar;
+            Drop(null);
+            if (fasten)
+            {
+                beltOn = true;
+                Foley("seatbelt_fasten", buckle);
+                Log.Info("ceinture arriere : attachee (" + current.Car + ", place " + current.Index + ")");
+                SendSeat(current.Car, current.Index, headLocal);
+            }
+            else
+            {
+                Foley("seatbelt_retract", at);
+                Log.Info("ceinture arriere : lachee " + (tooFar ? "trop loin de l'ancrage" : "hors de la boucle") + ", rangee");
+            }
+        }
+
+        // Sangle tiree (languette tenue) : ruban de l'ancrage haut a la languette puis a l'ancrage bas, dans le cote de la place
+        // (repere de la voiture, decalage « modele » compris), matiere et teinte de la sangle de Menos ; cachee quand on la lache.
+        static GameObject pulledStrap;
+        static void PullStrap(RearModel m, int k, Vector3 at)
+        {
+            Transform side = m.Closed[k].transform.parent;
+            if (side == null || m.StrapUv[k] == null) return;
+            if (pulledStrap == null || pulledStrap.transform.parent != side)
+            {
+                if (pulledStrap != null) Object.Destroy(pulledStrap);
+                pulledStrap = new GameObject("SangleTiree");
+                pulledStrap.layer = m.Open[k].layer;
+                pulledStrap.transform.parent = side;
+                pulledStrap.transform.localPosition = Vector3.zero; pulledStrap.transform.localRotation = Quaternion.identity; pulledStrap.transform.localScale = Vector3.one;
+                pulledStrap.AddComponent<MeshFilter>();
+                Renderer[] sr = m.Closed[k].GetComponentsInChildren<Renderer>(true);   // (bouclee souvent cachee ici)
+                pulledStrap.AddComponent<MeshRenderer>().sharedMaterial = sr.Length > 0 ? sr[0].sharedMaterials[0] : null;
+            }
+            if (!pulledStrap.activeSelf) pulledStrap.SetActive(true);
+            Transform ct = m.Closed[k].transform;
+            Vector3 tLoc = side.InverseTransformPoint(at);
+            var path = new List<Vector3> { side.InverseTransformPoint(ct.TransformPoint(m.Top[k])), tLoc, side.InverseTransformPoint(ct.TransformPoint(m.Low[k])) };
+            MeshFilter mf = pulledStrap.GetComponent<MeshFilter>();
+            Mesh old = mf.sharedMesh;
+            if (StrapTo(side, "SangleTiree", path, 0.045f, m.StrapUv[k]) && old != null && old != mf.sharedMesh) Object.Destroy(old);
         }
 
         // (appelee par reflexion depuis SeatExport -- ne pas renommer sans prevenir [Addons et Tools])
@@ -977,7 +1080,8 @@ namespace MWCoop
         // attache (ici ou chez lui). Sangle et metal : les matieres de la ceinture du conducteur. Pas de recalage ; le fichier des
         // places peut deplacer chaque cote d'un bloc (ceinture « modele »). Toujours la avec l'option CeinturesArriere. Les autres voitures
         // gardent la copie en miroir de la ceinture du conducteur. [Test] CeinturesArriereCopie=1 : la copie aussi sur la SORBET.
-        class RearModel { public GameObject Root; public GameObject[] Open = new GameObject[2], Closed = new GameObject[2]; public int State = -1, Gen; }
+        class RearModel { public GameObject Root; public GameObject[] Open = new GameObject[2], Closed = new GameObject[2]; public int State = -1, Gen;
+                          public bool Pull; public Vector3[] Top = new Vector3[2], Low = new Vector3[2], Buckle = new Vector3[2]; public Mesh[] StrapUv = new Mesh[2]; }   // (Pull : languette a tirer, SORBET)
         static readonly Dictionary<Transform, RearModel> rearModels = new Dictionary<Transform, RearModel>();
         static readonly string[] RearNames = { "arr-pieces-g", "arr-languette-g", "arr-bouclee-g", "arr-pieces-d", "arr-languette-d", "arr-bouclee-d" };   // (par cote, 3 k)
         static Mesh[] rearMeshes; static bool rearMeshTried;
@@ -1288,6 +1392,7 @@ namespace MWCoop
                 Mesh fast = Object.Instantiate(ms[3 * k + 2]);
                 BulgeRear(fast, bulge, reach);   // (bombee devant la poitrine : l'avatar ne la traverse pas)
                 part("Ceinture", fast, m.Closed[k].transform);
+                RearPullPoints(m, k, ms[3 * k + 2]);
                 // decalage du fichier : la place arriere de ce cote, ceinture « modele » ; rotation autour du centre des pieces
                 float sx = k == 0 ? -1f : 1f;
                 Seat s = null;
@@ -1300,9 +1405,40 @@ namespace MWCoop
                     diag.Append(" ; ").Append(sd).Append(" decale de ").Append(fb.ModelPos.ToString("F3")).Append(" tourne de ").Append(fb.ModelRot.eulerAngles.ToString("F1")).Append(" (place ").Append(s.Index).Append(")");
                 }
             }
+            m.Pull = true;
             Log.Info("ceintures arriere : modele de Menos pose sur " + car.name + " (systeme du conducteur : pieces, languette rangee, ceinture bouclee ; matiere "
                      + (strapMat != null ? strapMat.name : "?") + ", metal " + (atlas != strapMat && atlas != null ? atlas.name + " / " + atlas.shader.name : "matiere de la sangle (atlas introuvable)") + ")" + diag);
             return m;
+        }
+
+        // Attaches de la ceinture bouclee de Menos (repere de Bouclee<G|D>, donc avec le decalage « modele ») : en haut l'ancrage de
+        // l'epaule, en bas l'ancrage cote portiere et la boucle (cote interieur) -- les memes que BulgeRear. Coordonnees de texture de
+        // sa sangle (sous-maillage 0) pour la sangle tiree.
+        static void RearPullPoints(RearModel m, int k, Mesh fast)
+        {
+            Vector3[] v = fast.vertices;
+            if (v.Length == 0) return;
+            Vector3 top = v[0], inner = v[0], outer = v[0];
+            float minY = float.MaxValue, maxY = float.MinValue;
+            foreach (Vector3 p in v) { minY = Mathf.Min(minY, p.y); maxY = Mathf.Max(maxY, p.y); if (p.y > top.y) top = p; }
+            float low = minY + 0.2f * (maxY - minY);
+            bool lowSet = false;
+            foreach (Vector3 p in v)
+                if (p.y <= low)
+                {
+                    if (!lowSet) { inner = outer = p; lowSet = true; }
+                    if (Mathf.Abs(p.x) < Mathf.Abs(inner.x)) inner = p;
+                    if (Mathf.Abs(p.x) > Mathf.Abs(outer.x)) outer = p;
+                }
+            m.Top[k] = top; m.Low[k] = outer; m.Buckle[k] = inner;
+            int[] t = fast.GetTriangles(0);
+            Vector2[] uv = fast.uv;
+            if (t.Length == 0 || uv.Length != v.Length) return;
+            var su = new List<Vector2>();
+            foreach (int i in t) su.Add(uv[i]);
+            var u = new Mesh { name = "MWCoop-SangleArriereUv" };
+            u.vertices = new Vector3[su.Count]; u.uv = su.ToArray();
+            m.StrapUv[k] = u;
         }
 
         // Moyenne glissante sur trois points, les bouts gardes, 'passes' fois.
@@ -1697,6 +1833,17 @@ namespace MWCoop
         public static string TestBeltAim()
         {
             if (current == null || cam == null) return "pas assis";
+            RearModel rm = current.Index > 0 ? RearPullModel() : null;
+            if (rm != null)
+            {
+                int k = current.Head.x < 0f ? 0 : 1;
+                Transform rc = current.CarT, ct = rm.Closed[k].transform;
+                Vector3 rb = ct.TransformPoint(rm.Buckle[k]), tp = RearTongueAt(RearTongue(rm, k));
+                return "ceinture arriere : camera " + rc.InverseTransformPoint(cam.position).ToString("F2")
+                       + ", languette " + rc.InverseTransformPoint(tp).ToString("F2") + " a " + (tp - cam.position).magnitude.ToString("F2") + " m " + Vector3.Angle(cam.forward, tp - cam.position).ToString("F0") + " deg"
+                       + ", boucle " + rc.InverseTransformPoint(rb).ToString("F2") + " a " + (rb - cam.position).magnitude.ToString("F2") + " m " + Vector3.Angle(cam.forward, rb - cam.position).ToString("F0") + " deg"
+                       + ", ancrages haut " + rc.InverseTransformPoint(ct.TransformPoint(rm.Top[k])).ToString("F2") + " bas " + rc.InverseTransformPoint(ct.TransformPoint(rm.Low[k])).ToString("F2");
+            }
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             if (b == null) return "pas de ceinture ici";
             Transform car = current.CarT;
@@ -1732,6 +1879,13 @@ namespace MWCoop
         public static bool TestBeltTarget(int what, out Vector3 target)
         {
             target = Vector3.zero;
+            RearModel rm = current != null && current.Index > 0 ? RearPullModel() : null;
+            if (rm != null)
+            {
+                int k = current.Head.x < 0f ? 0 : 1;
+                target = what == 0 ? RearTongueAt(RearTongue(rm, k)) : what == 2 ? current.CarT.TransformPoint(current.Head + new Vector3(0f, -0.75f, 0.12f)) : rm.Closed[k].transform.TransformPoint(rm.Buckle[k]);
+                return true;
+            }
             if (current == null || current.Index != 0) return false;
             Belt b = BeltOf(current.CarT);
             if (b == null) return false;
@@ -1744,6 +1898,15 @@ namespace MWCoop
         public static string TestBeltLook(int what)
         {
             if (current == null || cam == null) return "pas assis";
+            RearModel rm = current.Index > 0 ? RearPullModel() : null;
+            if (rm != null)
+            {
+                int k = current.Head.x < 0f ? 0 : 1;
+                Vector3 rt = what == 0 ? RearTongueAt(RearTongue(rm, k)) : rm.Closed[k].transform.TransformPoint(rm.Buckle[k]);
+                cam.rotation = Quaternion.LookRotation(rt - cam.position);
+                testAim = what;
+                return "regard vers " + (what == 0 ? "la languette arriere" : "la boucle arriere");
+            }
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             if (b == null) return "pas de ceinture";
             Renderer or = b.Open != null ? b.Open.GetComponentInChildren<Renderer>() : null;
@@ -1755,6 +1918,14 @@ namespace MWCoop
         // Essais : la ceinture tenue (comme un clic maintenu sur la ceinture rangee) ; hold=false : lachee.
         public static string TestPull(bool hold)
         {
+            RearModel rm = current != null && current.Index > 0 ? RearPullModel() : null;
+            if (rm != null)
+            {
+                testHold = hold;
+                if (!hold) return "ceinture arriere lachee";
+                if (beltHold <= 0f) Hold(RearTongue(rm, current.Head.x < 0f ? 0 : 1));
+                return "ceinture arriere tenue" + (heldHandle != null ? " : languette en " + current.CarT.InverseTransformPoint(RearTongueAt(heldHandle)).ToString("F2") + ", sangle tiree " + (pulledStrap != null && pulledStrap.activeInHierarchy) : " : pas de languette");
+            }
             if (current == null || current.Index != 0) return "pas assis a l'avant";
             Belt b = BeltOf(current.CarT);
             testHold = hold;
@@ -1764,6 +1935,17 @@ namespace MWCoop
                 return "ceinture tenue" + (heldHandle != null ? " : languette " + Recon.Path(heldHandle) + " en " + heldHandle.position.ToString("F2") : " : pas de languette");
             }
             return "ceinture lachee";   // (BeltInput la lache a l'image suivante : bouclee si on vise la boucle)
+        }
+
+        // Essais : etat de la ceinture (sans la changer) et du modele arriere de la voiture.
+        public static string TestBeltState()
+        {
+            if (current == null) return "pas assis";
+            RearModel rm; rearModels.TryGetValue(current.CarT, out rm);
+            var sb = new System.Text.StringBuilder("ceinture " + (beltOn ? "attachee" : "detachee") + " (place " + current.Index + ", tenue " + (heldHandle != null) + ")");
+            if (rm != null && rm.Root != null)
+                for (int k = 0; k < 2; k++) sb.Append(k == 0 ? ", G " : ", D ").Append(rm.Closed[k].activeSelf ? "bouclee" : "rangee").Append(rm.Open[k].transform.Find("Languette") != null ? " (languette en place)" : " (languette absente)");
+            return sb.ToString();
         }
 
         public static string TestBelt()

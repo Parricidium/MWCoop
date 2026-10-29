@@ -5046,13 +5046,17 @@ namespace MWCoop
                 if (step == 3 && t > 44f) { step = 4; CaptureSoon("ceinture-boucle", 0.1f); }
             }
             // [Test] CeintureTenue=1 : ceinture tenue de 36 a 44 s (regard vers la boucle), capture ecran-ceinture-tenue, puis bouclee.
-            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureTenue", 0) != 0 && step >= 1 && step < 5 && t > 36f)
+            // (place arriere : camera d'essai vers la languette tenue puis vers la boucle, capture ecran-ceinture-bouclee-arriere)
+            bool tenueArr = Config.GetInt("Test", "CeinturePlace", 0) > 0;
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureTenue", 0) != 0 && step >= 1 && step < (tenueArr ? 7 : 5) && t > 36f)
             {
                 if (Config.GetInt("Test", "CeintureRegard", 0) != 0) Seats.TestBeltLook(1);
+                if (tenueArr) BeltLookLate = t < 44f ? 0 : 1;
+                if (tenueArr && step == 5 && t > 47f) { step = 6; CaptureSoon("ceinture-bouclee-arriere", 0.05f); }
                 if (t < 44f) { string tenue = Seats.TestPull(true); if (Time.frameCount % 120 == 0) Log.Info("autotest : " + tenue); }
                 if (step == 1 && t > 41f) { step = 3; CaptureSoon("ceinture-tenue", 0.05f); }
                 if (step == 3 && t > 44f) { step = 4; Log.Info("autotest : " + Seats.TestPull(false)); }
-                if (step == 4 && t > 45f) { step = 5; Log.Info("autotest : " + Seats.TestBelt()); }
+                if (step == 4 && t > 45f) { step = 5; Log.Info("autotest : " + (Config.GetInt("Test", "CeinturePlace", 0) > 0 ? Seats.TestBeltState() : Seats.TestBelt())); }   // (arriere : bouclee en lachant sur la boucle)
                 if (step == 4 && t > 47f) { step = 5; CaptureSoon("ceinture-bouclee-invite", 0.05f); }
             }
             if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && Config.GetInt("Test", "CeintureTenue", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
