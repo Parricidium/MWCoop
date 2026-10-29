@@ -44,6 +44,7 @@ namespace MWCoop
             public Vector3 Dome; public bool HasDome;   // plafonnier (Functions/InteriorLight) pose ici
             public float BrakeAngle = 1f;     // amplitude du levier (KnobPos 0-20 degres x ceci)
             public float EyeDrop;             // yeux (DriverHeadPivot) plus bas que Head, sans bouger l'assise (zone d'entree, SpawnPlayer)
+            public float SoloEyeDrop;         // standalone : yeux de depart (tenue.ini) plus bas -- habitacle detaille du mod, pavillon plus bas (JD 29/10)
             public bool SeatEyes;             // vue de conduite recalee sur le pivot de tete a l'entree (SeatView)
             public float SteerDeg;            // volant : degres a fond de braquage, fixes (0 : rapport releve sur la SORBET)
             public float ControlSize;         // taille maxi (m) des zones cliquables des commandes deplacees (0 : celles du jeu)
@@ -158,7 +159,7 @@ namespace MWCoop
         // prive de JD validee en jeu (46 % sur l'avant, braquage 40, boite et pont), moteur et masse de l'Evo 1 (JD : « c'est
         // l'Evo 1 ») : 350 ch a 7 500 tr/min, 450 Nm a 5 000, rupteur 8 000, 940 kg (Mass du .hdv rFactor).
         public static readonly Model T16 = new Model { Id = ModelT16, Folder = "t16", Name = "205 Ebo 1",
-            Head = new Vector3(-0.32f, 0.969f, -0.291f), SeatEyes = true, EyeDrop = -0.10f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.85f),
+            Head = new Vector3(-0.32f, 0.969f, -0.291f), SeatEyes = true, EyeDrop = -0.10f, SoloEyeDrop = 0.06f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.02f, 0.335f, 0.123f), BrakeGrip = new Vector3(-0.045f, 0.66f, 0.165f), BrakeAngle = 1.4f,
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.03f, 0.665f, 0.530f)),
@@ -185,7 +186,7 @@ namespace MWCoop
         // 470 Nm a 4 000, rupteur 7 500, 1 130 kg (Mass du .hdv rFactor), 60 % sur l'avant, braquage 35.
         static readonly Vector3 ImpFace = new Vector3(0f, 0.50f, -0.87f).normalized;
         public static readonly Model Imp96 = new Model { Id = ModelImp, Folder = "imp96", Name = "Imprezza 95",
-            Head = new Vector3(-0.306f, 1.023f, -0.278f), SeatEyes = true, EyeDrop = -0.10f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.55f),
+            Head = new Vector3(-0.306f, 1.023f, -0.278f), SeatEyes = true, EyeDrop = -0.10f, SoloEyeDrop = 0.06f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.55f),
             BrakePivot = new Vector3(0f, 0.36f, -0.10f), BrakeGrip = new Vector3(0f, 0.47f, 0.10f),
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.065f, 0.653f, 0.424f)),

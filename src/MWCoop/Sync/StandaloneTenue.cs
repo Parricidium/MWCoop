@@ -43,6 +43,7 @@ namespace MWCoop
             // MSC : JD 28/10, « la place conducteur est mal centree par rapport a son vrai siege »)
             var t = new StandaloneTenue { File = Path.Combine(m.Dir, "tenue.ini"), Yeux = m.Head + new Vector3(0f, Seats.EyeFromPivot.y, Seats.EyeFromPivot.z), EntreeZ = m.Head.z };
             t.FromSpec(m.Sp);
+            t.Yeux.y -= m.SoloEyeDrop;
             try
             {
                 if (!System.IO.File.Exists(t.File)) { System.IO.File.WriteAllText(t.File, t.Text(), new UTF8Encoding(true)); Log.Info("standalone : " + t.File + " cree (valeurs de la " + m.Name + " copie)"); }
