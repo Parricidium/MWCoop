@@ -185,7 +185,25 @@ namespace MWCoop
             new VazCar.Knob { At = new Vector3(0.085f, 0.623f, 0.494f), Normal = ConsoleUp, Col = new Color(0.10f, 0.25f, 0.85f) },
             new VazCar.Knob { At = new Vector3(0.137f, 0.623f, 0.490f), Normal = ConsoleUp, Col = new Color(0.92f, 0.92f, 0.90f) },
             new VazCar.Knob { At = new Vector3(0.183f, 0.623f, 0.485f), Normal = ConsoleUp, Col = new Color(0.95f, 0.45f, 0.05f) } };
-        static VazCar.Knob[] KnobsOf(VazCar.Model m) { return m == VazCar.R5 ? R5Knobs : m.Knobs; }
+        // boutons poses par JD dans l'atelier 3D (infos.txt : bouton_<role> point, bouton_<role>_n normale -- outils/rf1/edition.py),
+        // sinon ceux d'ici ; dans l'ordre contact, starter, phares, warning (klaxon sur la standalone)
+        static readonly string[] KnobRoles = { "contact", "starter", "phares", "warning" };
+        static VazCar.Knob[] KnobsOf(VazCar.Model m)
+        {
+            VazCar.Knob[] def = m == VazCar.R5 ? R5Knobs : m.Knobs;
+            Dictionary<string, Vector3> inf = VazCar.ModelInfo(m);
+            if (def == null || inf == null || !inf.ContainsKey("bouton_" + KnobRoles[0])) return def;
+            var ks = new VazCar.Knob[Mathf.Max(def.Length, KnobRoles.Length)];
+            for (int i = 0; i < ks.Length; i++)
+            {
+                VazCar.Knob d = i < def.Length ? def[i] : def[def.Length - 1];
+                Vector3 p, n;
+                if (i < KnobRoles.Length && inf.TryGetValue("bouton_" + KnobRoles[i], out p))
+                    ks[i] = new VazCar.Knob { Path = d.Path, Choke = d.Choke, Col = d.Col, At = p, Normal = inf.TryGetValue("bouton_" + KnobRoles[i] + "_n", out n) && n.sqrMagnitude > 0.01f ? n.normalized : d.Normal };
+                else ks[i] = d;
+            }
+            return ks;
+        }
 
         // ---------------------------------------------------------------- compteurs
         // Compteurs fonctionnels (JD 28/10 : « importer les compteurs et qu'ils soient fonctionnels ») : comme le mod rFactor, une
