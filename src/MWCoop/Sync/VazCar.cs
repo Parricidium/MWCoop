@@ -352,6 +352,7 @@ namespace MWCoop
             public VazSound Sound;
             public float IdleTrim;   // (My Summer Car : gaz de ralenti appris par le regulateur, VazHandling.Idle)
             public VazFlaps Flaps;
+            public VazAntennas Antennas;   // (antennes souples, sans collision : antenne_1 / antenne_2.p205)
             public FsmFloat BrakeKnob;
             public PlayMakerFSM DriveFsm;     // (My Summer Car : PlayerTrigger de la zone conducteur, MscDriven)
             public int Number, Shown;   // (Shown : numero sur les portieres -- celui de la course s'il y en a un, SetNumber)
@@ -1103,6 +1104,17 @@ namespace MWCoop
                 b.Flaps.Add(bg);
             }
             if (b.Flaps != null) Log.Info("vaz : " + b.Flaps.Count + " bavette(s) souple(s)");
+            // antennes souples (antenne_1 / antenne_2.p205, VazAntennas ; hors de la carrosserie, donc sans collision -- JD 29/10)
+            foreach (string an in new[] { "antenne_1", "antenne_2" })
+            {
+                if (!File.Exists(Path.Combine(cur.Dir, an + ".p205"))) continue;
+                var ag = new GameObject("VAZ_" + an).transform;
+                ag.SetParent(body.transform, false);
+                AddParts(b, ag, an + ".p205", basePaint, paint, number);
+                if (b.Antennas == null) b.Antennas = new VazAntennas(body.transform, b.Rb);
+                b.Antennas.Add(ag);
+            }
+            if (b.Antennas != null) Log.Info("vaz : " + b.Antennas.Count + " antenne(s) souple(s)");
             if (b.Axis == null) b.Axis = car.GetComponent("AxisCarController");
             Transform tank = ct.Find(PTank);
             PlayMakerFSM tf = tank != null ? Game.FsmOn(tank.gameObject, "Data") : null;
@@ -1251,6 +1263,7 @@ namespace MWCoop
             Roof(b);
             if (b.Sound != null) b.Sound.Update();
             if (b.Flaps != null) b.Flaps.Update();
+            if (b.Antennas != null) b.Antennas.Update();
             Lamps(b, now);
             VazHandling.Tick(b, now);
             if (now >= b.NextMask) { b.NextMask = now + 1f; WheelMask(b); }
@@ -1608,7 +1621,7 @@ namespace MWCoop
             var b = new Built { M = cur, Paint = paint };
             var root = new GameObject("MWCoop-VazApercu-" + number);
             b.Car = root;
-            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205", "bavette_ag.p205", "bavette_ad.p205", "bavette_vg.p205", "bavette_vd.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
+            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205", "bavette_ag.p205", "bavette_ad.p205", "bavette_vg.p205", "bavette_vd.p205", "antenne_1.p205", "antenne_2.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
             Dictionary<string, Vector3> inf = Info();
             // (My Summer Car : roue.p205 du modele, sinon les roues de la Ruscko -- pas de RALLYCAR3)
             List<Part> rp = Msc ? Load("roue.p205") : new List<Part>();

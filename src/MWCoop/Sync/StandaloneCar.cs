@@ -20,12 +20,12 @@ namespace MWCoop
         // Sortie publique (JD 29/10) : sur My Summer Car la standalone REMPLACE la R5 copie, sans interrupteur (« seulement les addons
         // vont etre la, les anciennes disparaitront ») ; My Winter Car garde la copie jusqu'au portage.
         public static bool On { get { return Game.Msc; } }
-        // copie remplacee par sa standalone ici : la R5 (publiee) ; les autres addons derriere [Test] StandaloneTous=1 tant que JD ne
-        // les a pas validees en jeu (JD 29/10 : « quand je te les validerai, on les publie »)
+        // copie remplacee par sa standalone ici : toutes (la R5 depuis le 29/10 midi, les autres validees par JD en jeu le 29/10 soir)
         public static bool Ready(int copy)
         {
             if (!On || VazCar.StandaloneOf(copy) < 0) return false;
-            return copy == VazCar.ModelR5 || Config.GetInt("Test", "StandaloneTous", 0) != 0;
+            // ([Test] StandaloneCopies=1 : les copies, sauf la R5)
+            return copy == VazCar.ModelR5 || Config.GetInt("Test", "StandaloneCopies", 0) == 0;
         }
         public const string Prefix = "R5MAXI_STANDALONE";
         static readonly List<VazCar.Built> cars = new List<VazCar.Built>();
@@ -135,6 +135,17 @@ namespace MWCoop
                 VazCar.AddModel(b, bg, bn + ".p205");
                 flaps.Add(bg);
             }
+            // antennes souples (antenne_1 / antenne_2.p205, VazAntennas) : hors de la carrosserie, donc hors des boites de collision --
+            // JD 29/10, capture : la voiture retournee tenait sur la pointe de son antenne
+            var ants = new List<Transform>();
+            foreach (string an in new[] { "antenne_1", "antenne_2" })
+            {
+                if (!System.IO.File.Exists(System.IO.Path.Combine(m.Dir, an + ".p205"))) continue;
+                var ag = new GameObject("VAZ_" + an).transform;
+                ag.SetParent(body, false);
+                VazCar.AddModel(b, ag, an + ".p205");
+                ants.Add(ag);
+            }
             if (m.BrakePivot != Vector3.zero && System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "frein.p205")))
             {
                 b.BrakePivot = new GameObject("VAZ_frein").transform;
@@ -189,6 +200,8 @@ namespace MWCoop
             go.SetActive(true);
             b.Rb = rb; b.Dt = dt; b.Axis = ac;
             foreach (Transform bg in flaps) { if (b.Flaps == null) b.Flaps = new VazFlaps(body, rb); b.Flaps.Add(bg); }
+            foreach (Transform ag in ants) { if (b.Antennas == null) b.Antennas = new VazAntennas(body, rb); b.Antennas.Add(ag); }
+            if (b.Flaps != null || b.Antennas != null) Log.Info("standalone : " + (b.Flaps != null ? b.Flaps.Count : 0) + " bavette(s), " + (b.Antennas != null ? b.Antennas.Count : 0) + " antenne(s) souple(s)");
             VazHandling.Apply(b, true);
             StandaloneTenue tune = StandaloneTenue.Load(m);
             tune.Apply(b, cog, true);
@@ -326,6 +339,7 @@ namespace MWCoop
                 st.T.Tick(b, hb);
                 if (hb != b.Handbraking || now >= st.NextGrip) { b.Handbraking = hb; st.NextGrip = now + 0.25f; st.T.Grip(b, hb); }
                 if (b.Flaps != null) b.Flaps.Update();
+                if (b.Antennas != null) b.Antennas.Update();
                 if (b.BrakePivot != null && dr != null) b.BrakePivot.localRotation = Quaternion.AngleAxis(-Mathf.Clamp01(dr.handbrakeInput) * 20f * b.M.BrakeAngle, Vector3.right);
                 if (dr != null && b.Dt.rpm > 300f && (dr.handbrakeInput > 0.05f || (dr.brakeInput > 0.2f && b.Dt.rpm < 2000f))) Disengage(b.Dt);
                 Drive(b, st);
