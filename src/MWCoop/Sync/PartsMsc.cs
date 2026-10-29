@@ -692,6 +692,7 @@ namespace MWCoop
         {
             string partKey = Config.Get("Test", "Piece", "db:Database/DatabaseBody/Fender_Left"), pointEnd = Config.Get("Test", "Point", "trigger_fender_left");
             bool me = Session.LocalId == Config.GetInt("Test", "Monteur", 0);
+            t -= Config.GetFloat("Test", "RemonteA", 40f) - 40f;   // ([Test] RemonteA=s : demontage a s secondes, 40 par defaut ; remontage 10 s apres)
             if (remStep == 0 && t > 40f)
             {
                 remStep = 1;

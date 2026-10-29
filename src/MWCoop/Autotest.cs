@@ -856,7 +856,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -1294,6 +1294,38 @@ namespace MWCoop
                     }
                     if (k == 0) Log.Info("autotest : objet " + on.Trim() + " introuvable");
                 }
+            }
+            // ([Test] SondeRendu=nom;nom... : a SondeRenduA s (60), rendu de chaque objet de ce nom -- maillage, matieres, textures,
+            // pose de chaque Renderer par rapport a l'objet ; dossier #23 : carburateur double « detruit » chez l'invite, 29/10)
+            // ([Test] PeintureRejoue=nom;nom... : 10 s avant la sonde, evenement de peinture rejoue sur ces pieces, Paint.TestRepaint)
+            if (Config.Get("Test", "PeintureRejoue", "").Length > 0 && t > Config.GetFloat("Test", "SondeRenduA", 60f) - 10f && !repaintDone)
+            {
+                repaintDone = true;
+                foreach (string on in Config.Get("Test", "PeintureRejoue", "").Split(';')) Log.Info("autotest : peinture rejouee " + Paint.TestRepaint(on.Trim()));
+            }
+            if (Config.Get("Test", "SondeRendu", "").Length > 0 && t > Config.GetFloat("Test", "SondeRenduA", 60f) && !renderProbeDone)
+            {
+                renderProbeDone = true;
+                foreach (string on in Config.Get("Test", "SondeRendu", "").Split(';'))
+                    foreach (Transform x in Resources.FindObjectsOfTypeAll<Transform>())
+                    {
+                        if (x.name != on.Trim() || x.gameObject.hideFlags != HideFlags.None) continue;
+                        Log.Info("autotest : rendu " + Recon.Path(x) + (x.gameObject.activeInHierarchy ? "" : " (inactif)") + " echelle " + x.lossyScale.ToString("F3"));
+                        foreach (Renderer r in x.GetComponentsInChildren<Renderer>(true))
+                        {
+                            var sb = new System.Text.StringBuilder();
+                            MeshFilter mf = r.GetComponent<MeshFilter>();
+                            Mesh m = mf != null ? mf.sharedMesh : (r is SkinnedMeshRenderer ? ((SkinnedMeshRenderer)r).sharedMesh : null);
+                            sb.Append(r.enabled ? "" : " (eteint)").Append(r.gameObject.activeInHierarchy ? "" : " (inactif)")
+                              .Append(" maillage ").Append(m != null ? m.name + " " + m.vertexCount + " sommets" : "aucun")
+                              .Append(" pos ").Append(x.InverseTransformPoint(r.transform.position).ToString("F3"))
+                              .Append(" rot ").Append((Quaternion.Inverse(x.rotation) * r.transform.rotation).eulerAngles.ToString("F1"))
+                              .Append(" echelle ").Append(r.transform.lossyScale.ToString("F3"));
+                            foreach (Material mt in r.sharedMaterials)
+                                sb.Append(" | ").Append(mt == null ? "matiere nulle" : mt.name + " [" + (mt.shader != null ? mt.shader.name : "?") + "] tex " + (mt.mainTexture != null ? mt.mainTexture.name + " " + mt.mainTexture.width + "x" + mt.mainTexture.height : "aucune") + " couleur " + (mt.HasProperty("_Color") ? mt.color.ToString() : "-"));
+                            Log.Info("autotest : rendu   " + (r.transform == x ? "." : r.transform.name + " (" + Recon.Path(r.transform.parent) + ")") + sb);
+                        }
+                    }
             }
             // ([Test] Autotest=trichesonglets : onglets du F7 captures, comme sur MWC ; Autotest=mscvoitures : /voiture pour chaque voiture
             // de l'onglet Voitures de MSC, une toutes les 6 s a partir de 30 s -- resultat et distance au joueur, capture voiture-<nom>)

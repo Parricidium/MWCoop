@@ -235,6 +235,21 @@ namespace MWCoop
             return id + " peinte en " + c;
         }
 
+        // Essais (dossier #23) : rejoue ici l'evenement de peinture des pieces de ce nom, variables inchangees -- ce que fait
+        // l'invite a la reception d'une piece « accrochee en cours de partie » chez l'hote.
+        public static string TestRepaint(string name)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (PlayMakerFSM h in hooked)
+            {
+                if (h == null || h.gameObject.name != name) continue;
+                string before = h.ActiveStateName;
+                h.SendEvent(RepaintOf(h));
+                sb.Append(KeyOf(h)).Append(" (").Append(Describe(h)).Append(") ").Append(RepaintOf(h)).Append(" : ").Append(before).Append(" -> ").Append(h.ActiveStateName).Append(" ; ");
+            }
+            return sb.Length > 0 ? sb.ToString() : name + " : pas d'automate Paint suivi";
+        }
+
         public static string State(string part)
         {
             PlayMakerFSM f = Find(part);
