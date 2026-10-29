@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using HutongGames.PlayMaker;
 using UnityEngine;
@@ -96,6 +96,7 @@ namespace MWCoop
                 }
             }
             public bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
+            public bool Retired;   // (retiree de la liste meme installee : ni F10 ni demande ; un ancien client qui la demande montre une VAZ)
         }
         public class Knob { public string Path; public Vector3 At, Normal; public Color Col; public bool Choke; }
         // Tenue de route d'un addon (VazHandling.Spec) : moteur, boite, masse, repartition (part sur l'avant), ressorts.
@@ -158,7 +159,9 @@ namespace MWCoop
         // a 0,70) ; le reste du tableau de bord coupe. Tenue de route : base de la 2052 du mod
         // prive de JD validee en jeu (46 % sur l'avant, braquage 40, boite et pont), moteur et masse de l'Evo 1 (JD : « c'est
         // l'Evo 1 ») : 350 ch a 7 500 tr/min, 450 Nm a 5 000, rupteur 8 000, 940 kg (Mass du .hdv rFactor).
-        public static readonly Model T16 = new Model { Id = ModelT16, Folder = "t16", Name = "205 Ebo 1",
+        // (JD 29/10 : « la Ebo 1 on va la supprimer, l'interieur et tout bug, on va l'enlever de la liste tout court » -- retiree,
+        // copie et standalone ; numeros 2 et 9 gardes pour ne decaler aucun autre modele)
+        public static readonly Model T16 = new Model { Id = ModelT16, Folder = "t16", Name = "205 Ebo 1", Retired = true,
             Head = new Vector3(-0.32f, 0.969f, -0.291f), SeatEyes = true, EyeDrop = -0.10f, SoloEyeDrop = 0.06f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.02f, 0.335f, 0.123f), BrakeGrip = new Vector3(-0.045f, 0.66f, 0.165f), BrakeAngle = 1.4f,
             Controls = new[] {
@@ -302,7 +305,7 @@ namespace MWCoop
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles && (!Models[id].Standalone || StandaloneCar.Ready(CopyOf(id))) && !StandaloneCar.Ready(id)); }
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || StandaloneCar.Ready(CopyOf(id))) && !StandaloneCar.Ready(id)); }
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
         public static int Current(int id) { return StandaloneCar.Ready(id) ? StandaloneOf(id) : id; }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
