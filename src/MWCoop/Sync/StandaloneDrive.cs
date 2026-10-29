@@ -1076,7 +1076,30 @@ namespace MWCoop
         // cinematique ? vitesse, moteur, phares recus, toujours assis -- l'invite charge ~20 s apres l'hote : l'hote roule a 78 s) ; puis
         // choc contre un mur a 60 km/h : morts et reapparition
         // chez les deux (plantage RemapPPtrTransfer a surveiller, JD 29/10).
-        static int cStep; static float cAt, cLog;
+        static int cStep; static float cAt, cLog; static bool cPhotos;
+        static void Photo(VazCar.Built b, string name, Vector3 local)
+        {
+            var go = new GameObject("standalone_photo");
+            try
+            {
+                var cam = go.AddComponent<Camera>(); cam.enabled = false;
+                Transform pc = PlayerCam(); Camera main = pc != null ? pc.GetComponent<Camera>() : null;
+                if (main != null) cam.CopyFrom(main);
+                cam.fieldOfView = 45f; cam.nearClipPlane = 0.05f; cam.farClipPlane = 500f;
+                go.transform.position = b.Car.transform.TransformPoint(local);
+                go.transform.LookAt(b.Car.transform.TransformPoint(new Vector3(0f, 0.6f, 0f)));
+                var rt = new RenderTexture(1280, 720, 24); cam.targetTexture = rt; cam.Render();
+                RenderTexture.active = rt; var tex = new Texture2D(1280, 720, TextureFormat.RGB24, false); tex.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); tex.Apply();
+                RenderTexture.active = null; cam.targetTexture = null;
+                string png = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "photo-" + name + ".png");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(png));
+                System.IO.File.WriteAllBytes(png, tex.EncodeToPNG());
+                UnityEngine.Object.Destroy(tex); rt.Release(); UnityEngine.Object.Destroy(rt);
+                Log.Info("standalone : photo " + png);
+            }
+            catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
+            UnityEngine.Object.Destroy(go);
+        }
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -1095,6 +1118,13 @@ namespace MWCoop
                 Log.Info("standalone : coop, sur la piste (" + (host ? "hote" : "invite") + ")");
             }
             if (host && cStep == 1 && t > 26f) { cStep = 2; Log.Info("standalone : coop, demande -> " + Vaz.Request(3, Config.GetInt("Test", "StandaloneModele", VazCar.ModelR5S))); }   // ([Test] StandaloneModele=6 : l'ancienne R5, remplacee sur MSC)
+            // ([Test] StandalonePhotos=1 : la voiture vue de dehors avant de monter -- dumps\photo-<vue>.png, modeles 3D des addons)
+            if (host && cStep == 2 && t > 32f && b != null && !cPhotos && Config.GetInt("Test", "StandalonePhotos", 0) != 0)
+            {
+                cPhotos = true;
+                Photo(b, "34av", new Vector3(-3.2f, 1.6f, 3.6f)); Photo(b, "34ar", new Vector3(3.0f, 1.8f, -3.8f));
+                Photo(b, "cote", new Vector3(-4.6f, 0.9f, 0.2f)); Photo(b, "dessus", new Vector3(-1.5f, 4.5f, -3.0f));
+            }
             if (host && cStep == 2 && t > 36f && b != null)
             {
                 cStep = 3;
