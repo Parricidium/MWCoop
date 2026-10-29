@@ -480,11 +480,14 @@ namespace MWCoop
         // (BACHGLOTZ : volant jamais pris en essai, « Wait for player »),
         // se pose 5,5 m derriere la cible a 76 s et la pousse a 3 m/s de 78 a 82 s (cible menee par l'hote, au volant), s'ecarte a 86 s ;
         // de nouveau a 120 s, poussee de 122 a 126 s (cible rendue, moteur coupe), ecart a 130 s. Chacun note les deux voitures toutes les 0,5 s.
-        static int mpStep; static float mpLogAt, mpSeatAt;
+        static int mpStep, mpClutchLog; static float mpLogAt, mpSeatAt;
         static void MwcPousse(float t)
         {
             string car = Config.Get("Test", "PousseCible", "KEKMET(350-400psi)"), rp = Config.Get("Test", "PousseVoiture", "SORBET(190-200psi)");
             string car2 = Config.Get("Test", "PousseCible2", car);   // (cible du 2e coup : [Test] PousseCible2, garee)
+            // ([Test] NaNEmbrayage=<voiture> : son embrayage note de 38 a 125 s -- avant et apres le NaN de 40-41 s du niveau (~65 s ici), f3444cb)
+            string ne = Config.Get("Test", "NaNEmbrayage", "");
+            if (ne.Length > 0 && mpClutchLog < 8 && t > new float[] { 38f, 42f, 47f, 60f, 75f, 90f, 110f, 125f }[mpClutchLog]) { mpClutchLog++; Log.Info("autotest : mwcpousse t=" + t.ToString("F0") + " " + ne + " " + VehicleSync.TestClutch(ne)); }
             if (Net.Session.IsHost)
             {
                 // ([Test] PousseHoteA=s : l'hote monte a s au lieu de 56 -- 30 : cible deja une copie conduite chez l'invite a ses 40 s, NaNEmbrayage)
