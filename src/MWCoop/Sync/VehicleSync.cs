@@ -92,8 +92,10 @@ namespace MWCoop
             public float NextLog;
             public Drivetrain Dt;
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
+            public float NanSince = -1f; public int NanHits; public bool NanDumped;   // garde-fou : corrections rapprochees (releve complet une fois)
             public float BadAt = -10f; public int BadN;                                 // garde-fou : derniere remise, remises rapprochees
             public MonoBehaviour[] SanComps; public float SanNext, SanSlow;             // garde-fou : Drivetrain, roues..., releve suivant (SanSlow : voiture garee, toutes les 2 s)
+            public float[] ClutchGood;                                                   // garde-fou : dernieres valeurs finies de Drivetrain.clutch (objet simple, dossier #24)
             public float[][] SanGood; public float SanRefresh;                          // garde-fou : leurs dernieres valeurs flottantes finies (restituees a la place de 0), releve toutes les 5 s
             public Wheel[] Wheels;
             public AxisCarController Axis;
@@ -2581,6 +2583,13 @@ namespace MWCoop
                 c.SanComps = keep.ToArray();
                 c.SanGood = null;
             }
+            object cl = ClutchOf(c);
+            if (cl != null)
+            {
+                System.Reflection.FieldInfo[] cf = ClutchFloats(cl);
+                if (c.ClutchGood == null || c.ClutchGood.Length != cf.Length) { c.ClutchGood = new float[cf.Length]; for (int k = 0; k < cf.Length; k++) c.ClutchGood[k] = float.NaN; }
+                for (int k = 0; k < cf.Length; k++) { float v = (float)cf[k].GetValue(cl); if (Finite(v)) c.ClutchGood[k] = v; }
+            }
             bool first = c.SanGood == null;
             if (first) c.SanGood = new float[c.SanComps.Length][];
             int nan = 0; string names = "";
@@ -2643,10 +2652,83 @@ namespace MWCoop
                     if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " " + m.GetType().Name + "." + fi.Name + " (" + m.name + ") = " + v + ", remis a " + to);
                 }
             }
+            // Embrayage du Drivetrain (Clutch : objet simple, pas un composant -- jamais releve) : un speedDiff ou un clutch_position
+            // NaN apres un choc refaisait NaN a chaque pas le Drivetrain et les roues motrices (dossier #24, Markos 29/10 : SATSUMA
+            // garee chez l'hote, 10 valeurs NaN corrigees a chaque releve pendant 30 min apres son accident). [Test] SansEmbrayage=1 : comme avant.
+            object cl = Config.GetInt("Test", "SansEmbrayage", 0) == 0 ? ClutchOf(c) : null;
+            if (cl != null)
+            {
+                System.Reflection.FieldInfo[] cf = ClutchFloats(cl);
+                for (int k = 0; k < cf.Length; k++)
+                {
+                    float v = (float)cf[k].GetValue(cl);
+                    if (Finite(v)) continue;
+                    float to = c.ClutchGood != null && k < c.ClutchGood.Length && Finite(c.ClutchGood[k]) ? c.ClutchGood[k] : 0f;
+                    cf[k].SetValue(cl, to); fixedF++;
+                    string fk = c.Key + ":Clutch." + cf[k].Name;
+                    if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " Drivetrain.clutch." + cf[k].Name + " = " + v + ", remis a " + to);
+                }
+            }
             return fixedF;
+        }
+        // Champs non finis de tous types (flottants, tableaux, vecteurs, rotations, objets simples imbriques comme Clutch / Axle)
+        // des composants releves et des transforms des roues.
+        static string NanDump(Car c)
+        {
+            var sb = new System.Text.StringBuilder();
+            int n = 0;
+            if (c.SanComps != null)
+                foreach (MonoBehaviour m in c.SanComps)
+                {
+                    if (m == null) continue;
+                    NanFields(m, m.GetType().Name + "@" + m.name, sb, ref n, 1);
+                    if (m is Wheel)
+                    {
+                        Transform t = m.transform; Quaternion q = t.localRotation; Vector3 lp = t.localPosition;
+                        if (!Finite(q.x + q.y + q.z + q.w) || !Finite(lp)) { sb.Append(' ').Append(m.name).Append(".transform"); n++; }
+                    }
+                }
+            return n == 0 ? "aucun champ non fini trouve en plus" : n + " champ(s) :" + sb;
+        }
+        static void NanFields(object o, string where, System.Text.StringBuilder sb, ref int n, int depth)
+        {
+            foreach (System.Reflection.FieldInfo fi in o.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+            {
+                if (n >= 40) return;
+                System.Type ft = fi.FieldType; object v;
+                try { v = fi.GetValue(o); } catch { continue; }
+                if (v == null) continue;
+                bool badV = false;
+                if (ft == typeof(float)) badV = !Finite((float)v);
+                else if (ft == typeof(Vector3)) badV = !Finite((Vector3)v);
+                else if (ft == typeof(Quaternion)) { Quaternion q = (Quaternion)v; badV = !Finite(q.x + q.y + q.z + q.w); }
+                else if (ft == typeof(float[])) { foreach (float f in (float[])v) if (!Finite(f)) { badV = true; break; } }
+                else if (ft == typeof(float[,])) { foreach (float f in (float[,])v) if (!Finite(f)) { badV = true; break; } }
+                else if (depth > 0 && ft.IsClass && !typeof(Object).IsAssignableFrom(ft) && ft != typeof(string) && !ft.IsArray) NanFields(v, where + "." + fi.Name, sb, ref n, depth - 1);
+                if (badV) { sb.Append(' ').Append(where).Append('.').Append(fi.Name); n++; }
+            }
+        }
+        static System.Reflection.FieldInfo clutchField; static System.Reflection.FieldInfo[] clutchFloats; static bool clutchLooked;
+        static object ClutchOf(Car c)
+        {
+            if (c.Dt == null) return null;
+            if (!clutchLooked) { clutchLooked = true; clutchField = c.Dt.GetType().GetField("clutch", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance); }
+            return clutchField != null ? clutchField.GetValue(c.Dt) : null;
+        }
+        static System.Reflection.FieldInfo[] ClutchFloats(object cl)
+        {
+            if (clutchFloats == null)
+            {
+                var l = new List<System.Reflection.FieldInfo>();
+                foreach (System.Reflection.FieldInfo fi in cl.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                    if (fi.FieldType == typeof(float)) l.Add(fi);
+                clutchFloats = l.ToArray();
+            }
+            return clutchFloats;
         }
         static bool TireField(string n) { return n == "pressure" || n == "optimalPressure" || n == "tireDampingRate" || n == "criticalDamping" || n.EndsWith("TireStiffness"); }
 
+        static string nanClutch;
         static void Sanitize()
         {
             // ([Test] NaNVoiture=<voiture> : de 40 a 41 s de jeu, sa vitesse mise a NaN a chaque image -- source qui revient)
@@ -2655,6 +2737,19 @@ namespace MWCoop
             {
                 Car tc = cars.Find(x => x.Key.StartsWith(nanTest));
                 if (tc != null && tc.Body != null && !tc.Body.isKinematic) tc.Body.velocity = new Vector3(float.NaN, 0f, 0f);
+            }
+            // ([Test] NaNEmbrayage=<voiture> : de 40 a 41 s, Drivetrain.clutch.speedDiff mis a NaN a chaque image)
+            if (nanClutch == null) nanClutch = Config.Get("Test", "NaNEmbrayage", "");
+            if (nanClutch.Length > 0 && Time.timeSinceLevelLoad > 40f && Time.timeSinceLevelLoad < 41f)
+            {
+                Car tc = cars.Find(x => x.Key.StartsWith(nanClutch));
+                object cl = tc != null ? ClutchOf(tc) : null;
+                if (cl != null)
+                    foreach (string fn in Config.Get("Test", "NaNEmbrayageChamps", "speedDiff").Split(','))   // ([Test] NaNEmbrayageChamps=a,b : champs de Clutch)
+                    {
+                        System.Reflection.FieldInfo sd = cl.GetType().GetField(fn.Trim(), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (sd != null) sd.SetValue(cl, float.NaN);
+                    }
             }
             foreach (Car c in cars)
             {
@@ -2710,6 +2805,13 @@ namespace MWCoop
                     if (c.BadN >= 2 && c.BadN < 8) Log.Warn("voitures : " + c.Key + " encore non finie (" + c.BadN + "e fois en 3 s) : posee " + Mathf.Min(0.8f * (c.BadN - 1), 2.4f).ToString("F1") + " m plus haut, a plat");
                 }
                 else if (calm) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; }
+                // (valeurs non finies qui reviennent : 3 corrections en 30 s -> releve complet une fois, tous types de champs, pour en
+                // trouver la source -- dossier #24, SATSUMA de Markos corrigee 30 min sans que la source soit connue)
+                if (fixedF > 0 || bad)
+                {
+                    if (now0 - c.NanSince > 30f) { c.NanSince = now0; c.NanHits = 0; }
+                    if (++c.NanHits >= 3 && !c.NanDumped) { c.NanDumped = true; Log.Warn("voitures : " + c.Key + " valeurs non finies qui reviennent, releve : " + NanDump(c)); }
+                }
                 if ((bad || fixedF > 0) && now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : " + c.Key + " valeurs non finies corrigees (" + fixedF + " reglages" + (bad ? ", corps remis a sa derniere pose valide" : "") + ")"); }
             }
         }
