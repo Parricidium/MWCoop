@@ -1076,6 +1076,46 @@ namespace MWCoop
         }
         static bool Fin(float f) { return !float.IsNaN(f) && !float.IsInfinity(f); }
 
+        // Essais (Autotest=mwctrafic, 0110f6b sur MWC) : vitesse et rotation les plus fortes des voitures de la circulation physiques ici
+        // (celles que Runaway garde), relevees a chaque image (TestSample) et notees puis remises a zero (TestPeak) ; trains a part.
+        static float tsV, tsW, tsTrain; static string tsVKey, tsWKey; static int tsN;
+        public static void TestSample()
+        {
+            int n = 0;
+            foreach (Ent e in ents)
+            {
+                if (e.T == null || e.Walker || e.Body == null || e.Body.isKinematic || !e.T.gameObject.activeInHierarchy) continue;
+                float v = e.Body.velocity.magnitude, w = e.Body.angularVelocity.magnitude;
+                if (e.Train) { if (v > tsTrain) tsTrain = v; continue; }
+                if (!e.Traffic || (Session.IsHost ? e.Owner >= 0 : e.Owner != Session.LocalId)) continue;
+                n++;
+                if (v > tsV) { tsV = v; tsVKey = e.Key; }
+                if (w > tsW) { tsW = w; tsWKey = e.Key; }
+            }
+            if (n > tsN) tsN = n;
+        }
+        // (le joueur pose a 'side' m a droite d'une voiture active de 'container', a tour de role -- celles de la nationale ne sont
+        // physiques que pres d'un joueur)
+        static int tsTurn;
+        public static string TestBeside(string container, float side)
+        {
+            List<Ent> l = ents.FindAll(x => x.T != null && x.Traffic && !x.Walker && !x.Train && x.Key.StartsWith(container) && x.T.gameObject.activeInHierarchy);
+            if (l.Count == 0 || Game.PlayerGo == null)
+                return "aucune voiture active dans " + container + " (suivies :" + string.Join("", ents.FindAll(x => x.Traffic).ConvertAll(x => " " + x.Key + (x.T != null && x.T.gameObject.activeInHierarchy ? "" : " (inactive)")).ToArray()) + ")";
+            Ent e = l[tsTurn++ % l.Count];
+            var cc = Game.PlayerGo.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            Game.PlayerGo.transform.position = e.T.position + e.T.right * side + Vector3.up * 2f;
+            if (cc != null) cc.enabled = true;
+            return "joueur pose a cote de " + e.Key + " (" + (l.Count) + " actives)" + (e.Body != null && e.Body.isKinematic ? ", cinematique" : "");
+        }
+        public static string TestPeak()
+        {
+            string s = tsN + " physiques ici, v max " + tsV.ToString("F1") + " m/s (" + tsVKey + "), w max " + tsW.ToString("F2") + " rad/s (" + tsWKey + "), train " + tsTrain.ToString("F1") + " m/s";
+            tsV = tsW = tsTrain = 0f; tsN = 0; tsVKey = tsWKey = null;
+            return s;
+        }
+
         // Envol d'une voiture de la circulation (retours de Menor et HowardCS, 08-11/10 : « the npc jumps and flips » ; pas
         // reproduit par les essais frontal et choc) : physique ici (hote, ou invite qui l'a prise), elle monte a plus de 5 m/s
         // ou tourne a plus de 3 rad/s -- note ce qui la touche (corps a moins de 5 m : cinematique ou non, voiture de qui) et

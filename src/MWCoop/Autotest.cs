@@ -3131,6 +3131,17 @@ namespace MWCoop
             if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)
             if (mode == "cledemarreur") { CleDemarreur(t); return; }   // (cle rejouee restee sur le demarreur, 23a21df, essai MWC 29/10)
             if (mode == "mwcpousse") { MwcPousse(t); return; }   // (poussee en voiture d'une voiture menee par l'autre, 255d2e0, essai MWC 29/10)
+            // ([Test] Autotest=mwctrafic, 0110f6b : circulation normale jamais ramenee a tort -- chacun note toutes les 10 s, des 30 s, les pointes
+            // de vitesse et de rotation des voitures de la circulation physiques chez lui ; « trafic : ... emballee » = garde declenchee)
+            if (mode == "mwctrafic")
+            {
+                // ([Test] TraficSuivre=s : toutes les s secondes (8), le joueur pose a cote d'une voiture de TraficConteneur (la nationale), a tour de role)
+                float ts = Config.GetFloat("Test", "TraficSuivre", 0f);
+                if (ts > 0f && t > 40f && Time.realtimeSinceStartup >= mpSeatAt) { mpSeatAt = Time.realtimeSinceStartup + ts; Log.Info("autotest : mwctrafic, " + Traffic.TestBeside(Config.Get("Test", "TraficConteneur", "TRAFFIC/VehiclesHighway"), 12f)); }
+                if (t > 30f) Traffic.TestSample();
+                if (t > 40f && Time.realtimeSinceStartup >= mpLogAt) { mpLogAt = Time.realtimeSinceStartup + 10f; Log.Info("autotest : mwctrafic t=" + t.ToString("F0") + " " + Traffic.TestPeak()); }
+                return;
+            }
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
