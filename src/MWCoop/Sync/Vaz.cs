@@ -194,7 +194,8 @@ namespace MWCoop
         // deja ce modele, sinon rendue puis redemandee au meme numero (l'hote tout de suite ; un invite redemande des que l'hote
         // a rendu la sienne, 10 s au plus). Faux : refus connu d'avance (message a l'ecran).
         static int atModel = -1, atNumber; static Vector3 atPos; static float atYaw, atUntil;
-        public static bool RequestAt(int model, Vector3 pos, float yaw)
+        // number : couleur voulue (AUTOSALONKI, 29/10), prise si libre ; 0 : la sienne ou la premiere libre
+        public static bool RequestAt(int model, Vector3 pos, float yaw, int number = 0)
         {
             if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coupée (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
             if (!PlayerSync.InGame || !VazCar.Has(model)) return false;
@@ -202,7 +203,7 @@ namespace MWCoop
             Slot s; int n = 0;
             if (wanted.TryGetValue(Me, out s))
             {
-                if (s.Model == model && CarOf(Me) != null)
+                if (s.Model == model && CarOf(Me) != null && (number == 0 || number == s.Number))
                 {
                     if (Host) Move(Me, pos, yaw); else Session.SendToHost(new NetWriter(Msg.Race).U8(V_CALL).Vec(pos).F32(yaw), true);
                     return true;
@@ -211,6 +212,7 @@ namespace MWCoop
                 Release();
                 if (!Host) { atModel = model; atNumber = n; atPos = pos; atYaw = yaw; atUntil = Time.realtimeSinceStartup + 10f; return true; }
             }
+            if (number > 0 && (IsFree(number) || number == n)) n = number;
             if (!IsFree(n)) { n = 0; for (int i = 1; i <= Count && n == 0; i++) if (IsFree(i)) n = i; }
             if (n == 0) { Deny(1, 1); return false; }
             string liv = EvoLivery.MyHash(model);

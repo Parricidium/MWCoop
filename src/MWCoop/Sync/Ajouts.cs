@@ -19,7 +19,7 @@ namespace MWCoop
     // bit dans B_Msc et sa cle dans les premiers de kAjoutKeys, launcher/gfx.inc).
     public static class Ajouts
     {
-        const int B_Drone = 1, B_Bags = 2, B_Shop = 4, B_Museum = 8, B_Vaz = 16, B_Kino = 32, B_Osat = 64;
+        const int B_Drone = 1, B_Bags = 2, B_Shop = 4, B_Museum = 8, B_Vaz = 16, B_Kino = 32, B_Osat = 64, B_Salonki = 128;
         static int hostBits = -1;
         static float nextSend, loadedAt;
         static int lastRemote;
@@ -28,7 +28,8 @@ namespace MWCoop
         // fonctionnalites ... au launcher MSC ») aussi les sacs de couchage, la boutique s21 (coin video, KARTTURI, casques) et
         // le musee, au meme endroit (la carte de Perajarvi est la meme), et les voitures (VAZ et addons, sur la Ruscko).
         // Cinema KINO TAHTI aussi depuis le 25/10 (meme champ au nord de la route, la carte est la meme). Magasin de pieces : coupe.
-        const int B_Msc = B_Drone | B_Bags | B_Shop | B_Museum | B_Vaz | B_Kino;
+        // Salle d'exposition et de location AUTOSALONKI (JD 29/10), a cote du cinema : My Summer Car seulement pour l'instant.
+        const int B_Msc = B_Drone | B_Bags | B_Shop | B_Museum | B_Vaz | B_Kino | B_Salonki;
         public static bool On { get { return Config.GetInt("Coop", "SansAjouts", 0) == 0; } }
         static int LocalBits
         {
@@ -38,7 +39,7 @@ namespace MWCoop
                 int b = (Config.GetInt("Coop", "AjoutDrone", 1) != 0 ? B_Drone : 0) | (Config.GetInt("Coop", "AjoutSacs", 1) != 0 ? B_Bags : 0)
                       | (Config.GetInt("Coop", "AjoutBoutique", 1) != 0 ? B_Shop : 0) | (Config.GetInt("Coop", "AjoutMusee", 1) != 0 ? B_Museum : 0)
                       | (Config.GetInt("Coop", "AjoutVaz", 1) != 0 ? B_Vaz : 0) | (Config.GetInt("Coop", "AjoutKino", 1) != 0 ? B_Kino : 0)
-                      | (Config.GetInt("Coop", "AjoutOsat", 1) != 0 ? B_Osat : 0);
+                      | (Config.GetInt("Coop", "AjoutOsat", 1) != 0 ? B_Osat : 0) | (Config.GetInt("Coop", "AjoutSalonki", 1) != 0 ? B_Salonki : 0);
                 return Game.Msc ? b & B_Msc : b;
             }
         }
@@ -64,6 +65,8 @@ namespace MWCoop
         public static bool Kino { get { return (Bits & B_Kino) != 0; } }
         // magasin de pieces CARDINAL VARAOSAT (JD, 23/10)
         public static bool Osat { get { return (Bits & B_Osat) != 0; } }
+        // salle d'exposition et de location AUTOSALONKI (JD, 29/10 ; hote d'une version sans elle : pas de bit -> coupee chez l'invite aussi)
+        public static bool Salonki { get { return (Bits & B_Salonki) != 0; } }
 
         // Choix de l'hote connus (ou pas besoin) : la boutique, le musee et le defrichage peuvent se faire.
         // (repli sans annonce : 120 s -- 30 s jusqu'au 28/10 ; un invite « tous » chez un hote « aucun » dont l'annonce arrivait plus
@@ -95,7 +98,7 @@ namespace MWCoop
         static string Names(int b)
         {
             if (b == 0) return "aucun";
-            return (((b & B_Drone) != 0 ? "drone " : "") + ((b & B_Bags) != 0 ? "sacs " : "") + ((b & B_Shop) != 0 ? "boutique " : "") + ((b & B_Museum) != 0 ? "musee " : "") + ((b & B_Vaz) != 0 ? "vaz " : "") + ((b & B_Kino) != 0 ? "cinema " : "") + ((b & B_Osat) != 0 ? "pieces" : "")).TrimEnd();
+            return (((b & B_Drone) != 0 ? "drone " : "") + ((b & B_Bags) != 0 ? "sacs " : "") + ((b & B_Shop) != 0 ? "boutique " : "") + ((b & B_Museum) != 0 ? "musee " : "") + ((b & B_Vaz) != 0 ? "vaz " : "") + ((b & B_Kino) != 0 ? "cinema " : "") + ((b & B_Osat) != 0 ? "pieces " : "") + ((b & B_Salonki) != 0 ? "salon" : "")).TrimEnd();
         }
 
     }

@@ -24,7 +24,7 @@ namespace MWCoop
         public const int SleepingBagPrice = 149;
 
         // Coin s21 a construire : la boutique ou le musee (chacun son interrupteur, Ajouts) ; [Boutique] Active=0 : rien.
-        public static bool Active { get { return (Ajouts.Shop || Ajouts.Museum || Ajouts.Kino || Ajouts.Osat) && Config.GetInt("Boutique", "Active", 1) != 0; } }
+        public static bool Active { get { return (Ajouts.Shop || Ajouts.Museum || Ajouts.Kino || Ajouts.Osat || SalonkiOn) && Config.GetInt("Boutique", "Active", 1) != 0; } }
         public static bool ShopOn { get { return Active && Ajouts.Shop; } }
 
         // Sacs poses d'office au debut de partie (sans boutique : oui).
@@ -45,6 +45,9 @@ namespace MWCoop
             ResetMuseo();
             ResetKino();
             ResetOsat();
+            ResetSalonki();
+            releveDone = false;
+            saTest = -1; saTestStand = null;
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             offers.Clear(); vitriinit.Clear(); videoCab = konsoliCab = null; script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
@@ -75,6 +78,9 @@ namespace MWCoop
                 // magasin de pieces CARDINAL VARAOSAT (JD, 23/10)
                 if (OsatOn) try { if (!ShopOn && !Ajouts.Museum && !KinoOn) Materials(); BuildOsat(); } catch (Exception e) { L("magasin de pieces : " + e); }
                 else L("magasin de pieces coupe (ajouts COOP : lanceur, ou choix de l'hote)");
+                // salle d'exposition et de location AUTOSALONKI (JD, 29/10)
+                if (SalonkiOn) try { if (!ShopOn && !Ajouts.Museum && !KinoOn && !OsatOn) Materials(); BuildSalonki(); } catch (Exception e) { L("salon : " + e); }
+                else L("salon coupe (ajouts COOP : lanceur, ou choix de l'hote ; My Summer Car seulement)");
                 L("construite en " + sw.ElapsedMilliseconds + " ms");
                 t0 = now;
                 LoadScript();
@@ -85,6 +91,10 @@ namespace MWCoop
             TickMuseo();
             TickKino(now);
             TickOsat(now);
+            TickSalonki(now);
+            SalonkiKeys();
+            SalonkiTest(now);
+            ReleveTick(now);
             if (root == null)
             {
                 // (cinema ou magasin de pieces sans boutique : leurs objets -- popcorn, bobines... -- et les sous-titres des vendeurs)

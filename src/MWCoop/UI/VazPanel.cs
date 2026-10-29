@@ -124,6 +124,8 @@ namespace MWCoop
         static void Act(int n)
         {
             if (Vaz.Mine == n) { Vaz.Release(); Note(Lang.T("VAZ n\u00B0 ", "VAZ no. ") + n + Lang.T(" rendue", " given back"), false); return; }
+            // (My Summer Car, AUTOSALONKI : les voitures se louent a la salle, a cote du cinema -- JD 29/10 ; rendre reste ici)
+            if (Kauppa.SalonkiOn) { Note(Lang.T("Les voitures se louent \u00E0 l'AUTOSALONKI, \u00E0 c\u00F4t\u00E9 du cin\u00E9ma", "Cars are rented at the AUTOSALONKI, next to the cinema"), true); return; }
             if (!Vaz.Enabled) { Note(Lang.T("VAZ-2108 coup\u00E9e dans cette partie (lanceur, Ajouts)", "VAZ-2108 is off in this game (launcher, Add-ons)"), true); return; }
             if (Vaz.Mine != 0) { Note(Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + Vaz.Mine + Lang.T("", " first"), true); return; }
             if (!Vaz.IsFree(n)) { Note(Lang.T("La n\u00B0 ", "No. ") + n + Lang.T(" est d\u00E9j\u00E0 prise", " is already taken"), true); return; }
