@@ -26,19 +26,21 @@ namespace MWCoop
             if (now < saTestAt) return;
             string dir = Path.Combine(Log.DataDir, "dumps");
             Transform t = salonki.transform;
-            float len = saLen;
             switch (saTest)
             {
                 case 0:
-                    SaShot(t.TransformPoint(new Vector3(len * 0.45f, 5f, -30f)), t.TransformPoint(new Vector3(len * 0.5f, 3f, 6f)), Path.Combine(dir, "salonki-facade.png"), 55f);
-                    SaShot(t.TransformPoint(new Vector3(1.5f, 2.2f, 1.5f)), t.TransformPoint(new Vector3(len * 0.6f, 1.2f, 12f)), Path.Combine(dir, "salonki-hall.png"), 70f);
-                    SaShot(t.TransformPoint(new Vector3(len - 2f, 2.4f, 1.5f)), t.TransformPoint(new Vector3(len * 0.4f, 1.2f, 12f)), Path.Combine(dir, "salonki-hall2.png"), 70f);
-                    foreach (Stand s in stands)
-                        if (s.Folder != "vaz") { saTestStand = s; break; }
-                    if (saTestStand == null) saTestStand = stands[0];
-                    foreach (Stand s in stands) if (s.Folder == "r5maxi") saTestStand = s;
-                    SaShot(t.TransformPoint(new Vector3(saTestStand.U - 4f, 1.75f, 1.2f)), t.TransformPoint(new Vector3(saTestStand.U, 1.2f, SaDiscZ)), Path.Combine(dir, "salonki-stand.png"), 60f);
-                    SaShot(t.TransformPoint(new Vector3(saTestStand.U, 1.65f, SaSignZ - 1.1f)), t.TransformPoint(new Vector3(saTestStand.U, 0.95f, SaSignZ)), Path.Combine(dir, "salonki-pancarte.png"), 45f);
+                    {
+                        float W = SaW, mid = (saMat0 + saMat1) / 2f;
+                        SaShot(t.TransformPoint(new Vector3(W * 0.5f, 5f, -26f)), t.TransformPoint(new Vector3(W * 0.5f, 2.5f, 8f)), Path.Combine(dir, "salonki-facade.png"), 55f);
+                        SaShot(t.TransformPoint(new Vector3(1.2f, SaH - 0.5f, 1.2f)), t.TransformPoint(new Vector3(W / 2f, 0f, mid)), Path.Combine(dir, "salonki-hall.png"), 70f);
+                        SaShot(t.TransformPoint(new Vector3(W - 1.2f, SaH - 0.5f, saDepth - 1.2f)), t.TransformPoint(new Vector3(W / 2f, 0f, mid)), Path.Combine(dir, "salonki-hall2.png"), 70f);
+                        SaShot(t.TransformPoint(new Vector3(W / 2f - 1f, 3.2f, stands[0].Z - 7f)), t.TransformPoint(new Vector3(W / 2f, SaH - 1.2f, stands[0].Z - 1.4f)), Path.Combine(dir, "salonki-banniere.png"), 50f);
+                        foreach (Stand st in stands) if (st.Folder == "r5maxi") saTestStand = st;
+                        if (saTestStand == null) saTestStand = stands[stands.Count - 1];
+                        float side = saTestStand.Right ? 1f : -1f;
+                        SaShot(t.TransformPoint(new Vector3(W / 2f + side * (SaHalf + 3.2f), 1.8f, saTestStand.Z - 3f)), t.TransformPoint(new Vector3(W / 2f + side * SaRowX, 0.7f, saTestStand.Z)), Path.Combine(dir, "salonki-stand.png"), 60f);
+                        SaShot(t.TransformPoint(new Vector3(W / 2f + side * (SaHalf + 2.3f), 1.65f, saTestStand.Z)), t.TransformPoint(new Vector3(W / 2f + side * (SaHalf + 1.2f), 0.95f, saTestStand.Z)), Path.Combine(dir, "salonki-pancarte.png"), 45f);
+                    }
                     if (money == null) money = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
                     if (money != null) money.Value = 5000f;
                     OpenSalonki(saTestStand);
@@ -57,7 +59,7 @@ namespace MWCoop
                     SalonkiOpen = false;
                     Transform car = Vaz.CarOf(Session.Active ? Session.LocalId : 0);
                     L("salonki essai : voiture " + (car != null ? car.name + " en " + car.transform.position.ToString("F1") : "ABSENTE") + ", argent " + (money != null ? money.Value.ToString("F0") : "?"));
-                    SaShot(t.TransformPoint(new Vector3(SaBay0 - 6f, 4f, -20f)), t.TransformPoint(new Vector3(SaBay0 + 8f, 0.5f, -6f)), Path.Combine(dir, "salonki-livraison.png"), 60f);
+                    SaShot(t.TransformPoint(new Vector3(SaBay0 - 4f, 4f, -19f)), t.TransformPoint(new Vector3(SaBay0 + 8f, 0.5f, -6f)), Path.Combine(dir, "salonki-livraison.png"), 60f);
                     saTest = 99; L("salonki essai : fin"); break;
             }
         }
