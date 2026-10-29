@@ -389,7 +389,8 @@ namespace MWCoop
             Vector3 fw = Vector3.ProjectOnPlane(p.forward, Vector3.up).normalized;
             Vector3 at = p.position + fw * 6f + Vector3.up * 1f;
             if (at.y < -4f) at.y = -3f;
-            Build(Prefix, 7, new Color(0.9f, 0.9f, 0.92f), at, Quaternion.LookRotation(fw), VazCar.R5);
+            VazCar.Built tb = Build(Prefix, 7, new Color(0.9f, 0.9f, 0.92f), at, Quaternion.LookRotation(fw), VazCar.R5);
+            if (tb != null) SetEngine(tb, true);   // (moteur tournant : le banc compare en prise, comme la copie)
         }
 
         // [Test] Autotest=standaloneroule (sans le banc) : la R5 standalone a 19 s, posee au milieu de la piste plate du banc (6 x 6 km a

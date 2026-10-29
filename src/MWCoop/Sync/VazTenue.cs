@@ -32,7 +32,8 @@ namespace MWCoop
         static bool rolled, seated;
         static float[] speeds;
         static FieldInfo autoField;
-        static readonly Vector3 Start = new Vector3(0f, 1501.2f, -2600f);
+        // (depart a 2 km du bord de la piste : a z -2 600, 400 m du bord, les voitures en sortaient -- essai du 28/10, lot 5 du pilote)
+        static readonly Vector3 Start = new Vector3(0f, 1501.2f, -1000f);
         internal const float TrackY = 1500f;
 
         static bool Mine { get { return !Net.Session.Active || Net.Session.IsHost || Two; } }
@@ -192,6 +193,15 @@ namespace MWCoop
             }
         }
 
+        static FieldInfo loadedField;
+        static float LoadedRadius(Wheel w)
+        {
+            if (loadedField == null) loadedField = typeof(Wheel).GetField("radiusLoaded", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            object v = loadedField != null ? loadedField.GetValue(w) : null;
+            float r = v is float ? (float)v : 0f;
+            return r > w.radius * 0.5f && r <= w.radius * 1.01f ? r : w.radius;
+        }
+
         static void Move(Vector3 p)
         {
             GameObject pl = Game.PlayerGo; if (pl == null) return;
@@ -233,7 +243,9 @@ namespace MWCoop
                     dt.gear = 1;
                     float v = Mathf.Min(target, kmh + 40f * Time.deltaTime) / 3.6f;
                     rb.velocity = car.forward * v; rb.angularVelocity = Vector3.zero;
-                    foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) if (w.radius > 0.05f) w.angularVelocity = v / w.radius;
+                    // (au rayon CHARGE de la roue : au rayon nominal elle tournait ~3 % trop lentement, le pneu freinait a fond et la montee
+                    // restait bloquee vers 15 km/h, toutes voitures -- lot 5 du pilote, 29/10)
+                    foreach (Wheel w in car.GetComponentsInChildren<Wheel>()) if (w.radius > 0.05f) w.angularVelocity = v / LoadedRadius(w);
                     Keys(0f, 0f, 0f);
                     return;
                 }
