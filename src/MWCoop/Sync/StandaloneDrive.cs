@@ -206,7 +206,10 @@ namespace MWCoop
                 Vector3 n = Vector3.Cross(right, up).normalized;   // (vers l'avant : le conducteur regarde le cadran dans ce sens)
                 Shader unlit = Shader.Find("Unlit/Texture"), transp = Shader.Find("Unlit/Transparent") ?? Shader.Find("Unlit/Transparent Cutout");
                 var fq = Quad("cadran_" + k, b.Body, c - n * 0.001f, Vector3.zero, up, right);
-                fq.GetComponent<MeshRenderer>().sharedMaterial = new Material(unlit) { mainTexture = face, color = new Color(0.85f, 0.85f, 0.85f) };
+                // (face ronde a coins transparents -- 205 T16 : decoupee, la planche se voit autour)
+                bool round = face.GetPixel(1, 1).a < 0.5f && face.GetPixel(face.width - 2, face.height - 2).a < 0.5f;
+                Shader cut = round ? Shader.Find("Unlit/Transparent Cutout") : null;
+                fq.GetComponent<MeshRenderer>().sharedMaterial = new Material(cut ?? unlit) { mainTexture = face, color = new Color(0.85f, 0.85f, 0.85f) };
                 var pivot = new GameObject("aiguille_" + k).transform;
                 pivot.SetParent(b.Body, false); pivot.localPosition = c - n * 0.003f;
                 var nq = Quad("pieces", pivot, Vector3.zero, Vector3.zero, up, right);
