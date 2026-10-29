@@ -1090,7 +1090,7 @@ namespace MWCoop
                 if (cc != null) cc.enabled = true;
                 Log.Info("standalone : coop, sur la piste (" + (host ? "hote" : "invite") + ")");
             }
-            if (host && cStep == 1 && t > 26f) { cStep = 2; Log.Info("standalone : coop, demande -> " + Vaz.Request(3, VazCar.ModelR5S)); }
+            if (host && cStep == 1 && t > 26f) { cStep = 2; Log.Info("standalone : coop, demande -> " + Vaz.Request(3, Config.GetInt("Test", "StandaloneModele", VazCar.ModelR5S))); }   // ([Test] StandaloneModele=6 : l'ancienne R5, remplacee sur MSC)
             if (host && cStep == 2 && t > 36f && b != null)
             {
                 cStep = 3;

@@ -175,6 +175,7 @@ namespace MWCoop
             if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coup\u00E9e (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
             if (!PlayerSync.InGame) return false;
             if (n < 1 || n > Count) return false;
+            model = VazCar.Current(model);
             if (!VazCar.Has(model)) model = VazCar.ModelVaz;
             if (wanted.ContainsKey(Me)) { Deny(2, n); return false; }
             if (!IsFree(n)) { Deny(1, n); return false; }
@@ -393,6 +394,7 @@ namespace MWCoop
                 int n = r.U8(); Vector3 pos = r.Vec(); float yaw = r.F32();
                 int model = r.More ? r.U8() : VazCar.ModelVaz; string liv = r.More ? r.Str() : "";
                 if (model <= VazCar.ModelVaz || model >= 64) { model = VazCar.ModelVaz; liv = ""; }   // (modele inconnu ici : garde, construit en VAZ)
+                model = VazCar.Current(model);   // (R5 copie demandee sur My Summer Car : la standalone)
                 if (n == 0) { if (wanted.Remove(from.Id)) { HostChanged("rendue par " + NameOf(from.Id)); } return; }
                 int why = !Enabled ? 4 : n < 1 || n > Count ? 3 : wanted.ContainsKey(from.Id) ? 2 : !IsFree(n) ? 1 : 0;
                 if (why != 0)
@@ -463,8 +465,9 @@ namespace MWCoop
         // (R5 standalone sans le reglage de test ici : la R5 copie, meme couleur et meme numero)
         static int BuildModel(Slot s)
         {
-            if (VazCar.Has(s.Model)) return s.Model;
-            if (s.Model == VazCar.ModelR5S && VazCar.Has(VazCar.ModelR5)) return VazCar.ModelR5;
+            int m = VazCar.Current(s.Model);
+            if (VazCar.Has(m)) return m;
+            if (m == VazCar.ModelR5S && VazCar.Has(VazCar.ModelR5)) return VazCar.ModelR5;
             return VazCar.ModelVaz;
         }
 

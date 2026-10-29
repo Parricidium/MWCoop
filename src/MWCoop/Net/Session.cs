@@ -28,7 +28,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 43;   // 43 : voitures des joueurs a modele et livree (Vaz V_ASK / V_SET, V_LIV) ; 42 : refonte (cles Recon.Twin des evenements et molettes, acquittements groupes) ; 38 : moteur en marche (bit 15 du masque des sons d'une voiture) ; 39 : klaxon (bit 14) ; 40 : pose d'un PNJ dans sa voiture (Npcs, drapeau 4) ; 41 : objet range (Props, etat 4)
+        public const int NetVersion = 44;   // 44 : R5 standalone (modele 7 de la table Vaz, etat V_STD) -- un ancien mod ne rejoint plus une partie ou elle est ; 43 : voitures des joueurs a modele et livree (Vaz V_ASK / V_SET, V_LIV) ; 42 : refonte (cles Recon.Twin des evenements et molettes, acquittements groupes) ; 38 : moteur en marche (bit 15 du masque des sons d'une voiture) ; 39 : klaxon (bit 14) ; 40 : pose d'un PNJ dans sa voiture (Npcs, drapeau 4) ; 41 : objet range (Props, etat 4)
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;

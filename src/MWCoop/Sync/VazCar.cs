@@ -32,7 +32,8 @@ namespace MWCoop
                 get { Read(); return Tag != null ? name + Tag : name; }
                 set { name = value; }
             }
-            public string Tag;   // (suffixe du nom affiche : « (standalone) »)
+            public string Tag;   // (suffixe du nom affiche)
+            public bool Standalone { get { return Id == ModelR5S; } }   // (etiquette « Standalone » au F10)
             // meme modele (dossier, poste, tenue) sous un autre numero : la R5 standalone (StandaloneCar)
             public Model CloneAs(int id, string tag) { var m = (Model)MemberwiseClone(); m.Id = id; m.Tag = tag; return m; }
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
@@ -289,11 +290,14 @@ namespace MWCoop
                             Rwd = true, RearGrip = 1.15f, HandbrakeSlide = 0.45f, AntiRollFront = 24000f, AntiRollRear = 12000f, YawDamp = 0.6f, ComDrop = 0.04f } };
         // R5 standalone (pilote, spec du 28/10, lot 4) : numero de modele a elle dans la table des voitures du F10 ; construite par
         // StandaloneCar la ou [Test] AddonStandalone=1, ailleurs la R5 copie (n 6) de la meme couleur et du meme numero (Vaz.BuildModel).
-        public static readonly Model R5S = R5.CloneAs(ModelR5S, " (standalone)");
+        public static readonly Model R5S = R5.CloneAs(ModelR5S, null);
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles && (id != ModelR5S || StandaloneCar.On)); }
+        // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles && (id != ModelR5S || StandaloneCar.On) && (id != ModelR5 || !StandaloneCar.On)); }
+        // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
+        public static int Current(int id) { return id == ModelR5 && StandaloneCar.On ? ModelR5S : id; }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
 
         public static string Dir { get { return Vaz2108.Dir; } }

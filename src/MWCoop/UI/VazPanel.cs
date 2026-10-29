@@ -303,7 +303,10 @@ namespace MWCoop
             int sm; string sl;
             Shown(hi, out sm, out sl);
             bool evo = sm != VazCar.ModelVaz;
-            Style.Title(new Rect(r.x, cy, r.width, P(26)), VazCar.ModelOf(sm).Name + "  n\u00B0 " + hi, Kit.Ink, TextAnchor.MiddleLeft, 17);
+            string title = VazCar.ModelOf(sm).Name + "  n\u00B0 " + hi;
+            Style.Title(new Rect(r.x, cy, r.width, P(26)), title, Kit.Ink, TextAnchor.MiddleLeft, 17);
+            // (voiture construite par notre code, plus une copie : etiquette « Standalone », JD 29/10)
+            if (VazCar.ModelOf(sm).Standalone) Kit.Pill(r.x + Style.Width(title, 17, true) + P(10), cy + P(13), "Standalone", Kit.Ice);
             cy += P(26);
             string desc = evo ? VazCar.ModelOf(sm).Desc : Game.Msc ? Lang.T("r\u00E9glages de la Satsuma rallye", "set up like the rally Satsuma") : Lang.T("r\u00E9glages de la Rivett rallye", "set up like the rally Rivett");
             if (Style.Width(Vaz.ColorName(hi) + "  \u00B7  " + desc, 12, false) <= r.width)
