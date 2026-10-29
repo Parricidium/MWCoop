@@ -475,6 +475,46 @@ namespace MWCoop
             if (t > 58f && t < 95f && Time.realtimeSinceStartup >= cdLogAt) { cdLogAt = Time.realtimeSinceStartup + 1f; Log.Info("autotest : cledemarreur t=" + t.ToString("F0") + " " + VehicleSync.StartProbe(car)); }
         }
 
+        // [Test] Autotest=mwcpousse (MWC, 2 joueurs ; 255d2e0, dossier #24 de [MSC] -- les moteurs ne demarrent pas en essai sur MWC) :
+        // l'hote prend le volant de PousseCible (KEKMET) a 56 s, en sort a 110 s ; l'invite monte dans PousseVoiture (SORBET) a 64 s
+        // (BACHGLOTZ : volant jamais pris en essai, « Wait for player »),
+        // se pose 5,5 m derriere la cible a 76 s et la pousse a 3 m/s de 78 a 82 s (cible menee par l'hote, au volant), s'ecarte a 86 s ;
+        // de nouveau a 120 s, poussee de 122 a 126 s (cible rendue, moteur coupe), ecart a 130 s. Chacun note les deux voitures toutes les 0,5 s.
+        static int mpStep; static float mpLogAt, mpSeatAt;
+        static void MwcPousse(float t)
+        {
+            string car = Config.Get("Test", "PousseCible", "KEKMET(350-400psi)"), rp = Config.Get("Test", "PousseVoiture", "SORBET(190-200psi)");
+            string car2 = Config.Get("Test", "PousseCible2", car);   // (cible du 2e coup : [Test] PousseCible2, garee)
+            if (Net.Session.IsHost)
+            {
+                if (mpStep == 0 && t > 56f) { mpStep = 1; mpSeatAt = t + 2f; Log.Info("autotest : mwcpousse, hote " + VehicleSync.TestEnter(car, false)); }
+                if (mpStep == 1 && t > mpSeatAt)
+                {
+                    mpSeatAt = t + 2f;
+                    if (VehicleSync.TestMotion(car).Contains("(conduite ici)")) { mpStep = 2; Log.Info("autotest : mwcpousse, hote au volant"); }
+                    else Log.Info("autotest : mwcpousse, hote, volant : " + VehicleSync.TestEnter(car, true));
+                }
+                if (mpStep == 2 && t > 110f) { mpStep = 3; Log.Info("autotest : mwcpousse, hote sort : " + VehicleSync.TestExit(car)); }
+            }
+            else
+            {
+                // (automate de conduite inactif a l'arrivee, voiture loin : volant redemande toutes les 2 s jusqu'a y etre)
+                if (mpStep == 0 && t > 64f) { mpStep = 1; mpSeatAt = t + 2f; Log.Info("autotest : mwcpousse, pousseur " + VehicleSync.TestEnter(rp, false)); }
+                if (mpStep == 1 && t > mpSeatAt)
+                {
+                    mpSeatAt = t + 2f;
+                    if (VehicleSync.TestMotion(rp).Contains("(conduite ici)")) { mpStep = 2; Log.Info("autotest : mwcpousse, pousseur au volant"); }
+                    else Log.Info("autotest : mwcpousse, pousseur, volant : " + VehicleSync.TestEnter(rp, true));
+                }
+                if ((mpStep == 2 && t > 76f) || (mpStep == 4 && t > 120f)) { mpStep++; Log.Info("autotest : mwcpousse, " + VehicleSync.TestPlaceBehind(rp, mpStep == 3 ? car : car2, 5.5f)); }
+                if (mpStep == 3 && t > 78f && t < 82f) VehicleSync.TestRam(rp, car, 3f);
+                if (mpStep == 5 && t > 122f && t < 126f) VehicleSync.TestRam(rp, car2, 3f);
+                if ((mpStep == 3 && t > 86f) || (mpStep == 5 && t > 130f)) { mpStep++; Log.Info("autotest : mwcpousse, pousseur ecarte : " + VehicleSync.TestShift(rp, new Vector3(0f, 0.2f, 8f))); }
+            }
+            if ((t > 74f && t < 92f || t > 118f && t < 136f) && Time.realtimeSinceStartup >= mpLogAt)
+            { mpLogAt = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : mwcpousse t=" + t.ToString("F1") + " " + VehicleSync.TestMotion(t > 118f ? car2 : car) + " | " + VehicleSync.TestMotion(rp)); }
+        }
+
         // [Test] Autotest=mscporte (19/10, retour de Vaydon : portes de la maison et du garage) -- l'hote : 60 s ouvre la porte
         // d'entree, 66 s allume la cuisine, 72 s pousse la porte gauche du garage (2 s), 85 s referme la porte d'entree. Chacun note
         // toutes les 5 s : porte d'entree (DoorOpen), portes du garage (angle).
@@ -3090,6 +3130,7 @@ namespace MWCoop
             if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)
             if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)
             if (mode == "cledemarreur") { CleDemarreur(t); return; }   // (cle rejouee restee sur le demarreur, 23a21df, essai MWC 29/10)
+            if (mode == "mwcpousse") { MwcPousse(t); return; }   // (poussee en voiture d'une voiture menee par l'autre, 255d2e0, essai MWC 29/10)
             if (mode == "gifulevier") GifuLevier(t);
             if (mode == "freinmain") FreinMain(t);
             if (mode == "freinpente") FreinPente(t);
