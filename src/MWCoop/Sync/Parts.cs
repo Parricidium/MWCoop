@@ -799,7 +799,7 @@ namespace MWCoop
         // de deux joueurs, 16/10 : conducteur avec toutes ses pieces, l'autre sans portieres, sieges, capot ni coffre).
         class Burst { public float Since; public int N; }
         static readonly Dictionary<string, Burst> bursts = new Dictionary<string, Burst>();
-        const int BurstCalm = 3, BurstCrash = 8;
+        const int BurstCalm = 3, BurstCrash = 8, MscBurstCrash = 16;   // (MSC : une SATSUMA qui percute perd capot, ailes, portes, pare-chocs, batterie... d'un coup)
         const float WindowCalm = 1f, WindowCrash = 2f;
         static bool TooMany(string carKey, float now, int limit, float window)
         {

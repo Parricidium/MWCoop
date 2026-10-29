@@ -1150,7 +1150,7 @@ namespace MWCoop
         static float etatAt, frNext;
         static int radioStep, radioLog, dmStep, dmKey, dmPush;
         static bool capRel, capProbe; static int capHote;
-        static float dmLog, lvLog, dmPushLog; static bool dmMoved, dmArret; static int dmRoule; static bool dmTuyau, liqDone; static int liqLog, lvStep;
+        static float dmLog, lvLog, dmPushLog; static bool dmMoved, dmArret; static int dmRoule, dmCrash; static float dmCrashLog; static bool dmCrashEtat; static bool dmTuyau, liqDone; static int liqLog, lvStep;
 
         // [Test] Autotest=mscleviers (MWC et MSC) : voiture [Test] LeviersVoiture (JONNEZ ES(Clone) ; KEKMET(350-400psi) : pedales du
         // tracteur) ; ses Pivot sous Throttle / Brake / Clutch, ou qu'ils soient (MSC : SteeringPivot, MWC : SteeringPivotJonnez)
@@ -2871,6 +2871,23 @@ namespace MWCoop
                         if (dmStep == 6 && t > ra + 32f) { dmStep = 7; Log.Info("autotest : mscralenti, au volant de l'autre : " + VehicleSync.TestEnter(ro, true)); }
                     }
                     if (t > ra && t < ra + 90f && Time.realtimeSinceStartup >= dmLog) { dmLog = Time.realtimeSinceStartup + 3f; Log.Info("autotest : mscralenti t=" + t.ToString("F0") + " " + VehicleSync.Describe(rv) + " ; " + VehicleSync.StartProbe(rv)); }
+                    // ([Test] RalentiCrashA=s, dossier #25 : l'invite prend le volant de la voiture a s, la sort de 10 m a s+3, la lance a
+                    // RalentiCrashVitesse m/s (12) vers l'avant (mur du garage) de s+6 a s+6,3, sort a s+16 ; chacun note la voiture toutes les 2 s)
+                    float rca = Config.GetFloat("Test", "RalentiCrashA", 0f);
+                    if (rca > 0f)
+                    {
+                        if (!Net.Session.IsHost)
+                        {
+                            if (dmCrash == 0 && t > rca) { dmCrash = 1; Log.Info("autotest : mscralenti, crash : " + VehicleSync.TestEnter(rv, false)); }
+                            if (dmCrash == 1 && t > rca + 2f) { dmCrash = 2; Log.Info("autotest : mscralenti, crash, au volant : " + VehicleSync.TestEnter(rv, true)); }
+                            if (dmCrash == 2 && t > rca + 3f) { dmCrash = 3; Log.Info("autotest : mscralenti, crash, " + VehicleSync.TestShift(rv, new Vector3(0f, 0.3f, 10f))); }
+                            if (dmCrash == 3 && t > rca + 6f && t < rca + 6.3f) VehicleSync.TestLaunch(rv, Config.GetFloat("Test", "RalentiCrashVitesse", 12f));
+                            if (dmCrash == 3 && t > rca + 16f) { dmCrash = 4; Log.Info("autotest : mscralenti, crash, sortie : " + VehicleSync.TestExit(rv)); }
+                        }
+                        float hs = Net.Session.IsHost ? Config.GetFloat("Test", "RalentiDecalage", 70f) : 0f;
+                        if (!dmCrashEtat && t > rca + hs + Config.GetFloat("Test", "RalentiCrashEtat", 60f)) { dmCrashEtat = true; MscEtat(); }   // (etat complet pour etat-diff.py)
+                        if (t > rca + hs + 5f && t < rca + hs + 70f && Time.realtimeSinceStartup >= dmCrashLog) { dmCrashLog = Time.realtimeSinceStartup + 2f; Log.Info("autotest : mscralenti, crash t=" + t.ToString("F0") + " " + VehicleSync.TestMotion(rv)); }
+                    }
                     // ([Test] RalentiPousseA=s, dossier #24 : l'invite monte dans RalentiPousseur (HAYOSIKO) a s, la pose RalentiEcart m (5,5) derriere la voiture
                     // laissee tournant par l'hote a s+4 et la pousse a RalentiPousseVitesse m/s (3) pendant RalentiPousseDuree s (4) a partir de s+6 -- RalentiEcart negatif : posee devant ; chacun note les deux voitures toutes les 0,5 s)
                     float rpa = Config.GetFloat("Test", "RalentiPousseA", 0f);

@@ -3860,6 +3860,13 @@ namespace MWCoop
             AxisCarController ax = c.Axis;
             if (ax != null) { ax.throttleInput = thr; ax.clutchInput = 0f; ax.brakeInput = 0f; ax.handbrakeInput = 0f; }
         }
+        public static void TestLaunch(string car, float speed)
+        {
+            Car a = cars.Find(x => x.Key.StartsWith(car));
+            if (a == null || a.Body == null || a.Body.isKinematic) return;
+            Vector3 f = a.T.forward; f.y = 0f;
+            a.Body.velocity = f.normalized * speed + Vector3.up * Mathf.Min(a.Body.velocity.y, 0f);
+        }
         public static string TestShift(string car, Vector3 by)
         {
             Car a = cars.Find(x => x.Key.StartsWith(car));

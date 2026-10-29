@@ -575,7 +575,12 @@ namespace MWCoop
                              + (rem.transform.parent != null ? rem.transform.parent.name : "aucun") + (prb != null ? ", corps " + (prb.isKinematic ? "cinematique" : "libre") + " v " + prb.velocity.magnitude.ToString("F1") : "") + ")");
                     return;
                 }
-                if (TooMany(car != null ? car.name : key, Time.realtimeSinceStartup, BurstCalm, WindowCalm)) { Log.Warn("piece " + id + " cassee : trop de casses, pas envoyee"); return; }
+                // (choc il y a moins de 2 s : 16 casses en 2 s -- avant, 3 par seconde meme dans un accident : la 4e casse n'etait jamais
+                // envoyee et restait cassee ici seulement -- dossier #25, reponts 29/10 : batterie tombee chez l'invite, montee chez l'hote.
+                // [Test] CasseRafaleAncienne=1 : comme avant)
+                bool crash = CarHits.ImpactAgo(car) < WindowCrash && Config.GetInt("Test", "CasseRafaleAncienne", 0) == 0;
+                if (TooMany(car != null ? car.name : key, Time.realtimeSinceStartup, crash ? MscBurstCrash : BurstCalm, crash ? WindowCrash : WindowCalm))
+                { Log.Warn("piece " + id + " cassee : trop de casses" + (crash ? " malgre le choc" : "") + ", pas envoyee"); return; }
             }
             // (echange : la nouvelle piece libre n'existe qu'apres les actions de 'Remove part' -- envoye a l'image suivante, MscTick)
             if (rem.FsmVariables.FindFsmGameObject("SpawnPart") != null) { mscOut.Add(new MscOut { Rem = rem, Key = key, Id = id, Flags = breakoff ? 1 : 0 }); return; }
