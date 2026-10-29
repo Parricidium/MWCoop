@@ -1104,9 +1104,9 @@ namespace MWCoop
         // sauvegarde ou qui tient dans le temps : entrees Database (booleens, flottants, entiers de 'Data'), serrage et crans de chaque
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
         static float etatAt, frNext;
-        static int radioStep, radioLog, dmStep, dmKey;
+        static int radioStep, radioLog, dmStep, dmKey, dmPush;
         static bool capRel, capProbe; static int capHote;
-        static float dmLog, lvLog; static bool dmTuyau, liqDone; static int liqLog, lvStep;
+        static float dmLog, lvLog, dmPushLog; static bool dmMoved; static bool dmTuyau, liqDone; static int liqLog, lvStep;
 
         // [Test] Autotest=mscleviers (MWC et MSC) : voiture [Test] LeviersVoiture (JONNEZ ES(Clone) ; KEKMET(350-400psi) : pedales du
         // tracteur) ; ses Pivot sous Throttle / Brake / Clutch, ou qu'ils soient (MSC : SteeringPivot, MWC : SteeringPivotJonnez)
@@ -2799,6 +2799,13 @@ namespace MWCoop
                     float ra = Config.GetFloat("Test", "RalentiA", 150f);
                     if (Net.Session.IsHost)
                     {
+                        // ([Test] RalentiDeplace=x,y,z : la voiture deplacee d'autant 5 s avant, garage de la maison trop etroit pour la pousser)
+                        if (dmStep == 0 && t > ra - 5f && !dmMoved && Config.Get("Test", "RalentiDeplace", "").Length > 0)
+                        {
+                            dmMoved = true; string[] mv = Config.Get("Test", "RalentiDeplace", "").Split(',');
+                            var ic = System.Globalization.CultureInfo.InvariantCulture;
+                            Log.Info("autotest : mscralenti, " + VehicleSync.TestShift(rv, new Vector3(float.Parse(mv[0], ic), float.Parse(mv[1], ic), float.Parse(mv[2], ic))));
+                        }
                         if (dmStep == 0 && t > ra) { dmStep = 1; Log.Info("autotest : mscralenti, " + VehicleSync.TestEnter(rv, false)); }
                         if (dmStep == 1 && t > ra + 2f) { dmStep = 2; Log.Info("autotest : mscralenti, au volant : " + VehicleSync.TestEnter(rv, true)); }
                         if (dmStep == 2 && t > ra + 5f) { dmStep = 3; Log.Info("autotest : mscralenti, cle tournee : " + VehicleSync.TestKey(rv, "Test")); }
@@ -2808,6 +2815,24 @@ namespace MWCoop
                         if (dmStep == 6 && t > ra + 32f) { dmStep = 7; Log.Info("autotest : mscralenti, au volant de l'autre : " + VehicleSync.TestEnter(ro, true)); }
                     }
                     if (t > ra && t < ra + 90f && Time.realtimeSinceStartup >= dmLog) { dmLog = Time.realtimeSinceStartup + 3f; Log.Info("autotest : mscralenti t=" + t.ToString("F0") + " " + VehicleSync.Describe(rv) + " ; " + VehicleSync.StartProbe(rv)); }
+                    // ([Test] RalentiPousseA=s, dossier #24 : l'invite monte dans RalentiPousseur (HAYOSIKO) a s, la pose RalentiEcart m (5,5) derriere la voiture
+                    // laissee tournant par l'hote a s+4 et la pousse a RalentiPousseVitesse m/s (3) pendant RalentiPousseDuree s (4) a partir de s+6 -- RalentiEcart negatif : posee devant ; chacun note les deux voitures toutes les 0,5 s)
+                    float rpa = Config.GetFloat("Test", "RalentiPousseA", 0f);
+                    if (rpa > 0f)
+                    {
+                        string rp = Config.Get("Test", "RalentiPousseur", "HAYOSIKO(1500kg, 250)");
+                        if (!Net.Session.IsHost)
+                        {
+                            if (dmPush == 0 && t > rpa) { dmPush = 1; Log.Info("autotest : mscralenti, pousseur : " + VehicleSync.TestEnter(rp, false)); }
+                            if (dmPush == 1 && t > rpa + 2f) { dmPush = 2; Log.Info("autotest : mscralenti, pousseur au volant : " + VehicleSync.TestEnter(rp, true)); }
+                            if (dmPush == 2 && t > rpa + 4f) { dmPush = 3; Log.Info("autotest : mscralenti, " + VehicleSync.TestPlaceBehind(rp, rv, Config.GetFloat("Test", "RalentiEcart", 5.5f))); }
+                            if (dmPush == 3 && t > rpa + 14f && Config.GetInt("Test", "RalentiEcarte", 1) != 0) { dmPush = 4; Log.Info("autotest : mscralenti, pousseur ecarte : " + VehicleSync.TestShift(rp, new Vector3(0f, 0.2f, 8f))); }
+                            if (dmPush == 3 && t > rpa + 6f && t < rpa + 6f + Config.GetFloat("Test", "RalentiPousseDuree", 4f)) VehicleSync.TestRam(rp, rv, Config.GetFloat("Test", "RalentiPousseVitesse", 3f));
+                        }
+                        float hostShift = Net.Session.IsHost ? Config.GetFloat("Test", "RalentiDecalage", 70f) : 0f;   // (l'hote est en jeu ~70 s avant l'invite)
+                        if (t > rpa + hostShift + 3f && t < rpa + hostShift + 30f && Time.realtimeSinceStartup >= dmPushLog)
+                        { dmPushLog = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : mscralenti, pousse t=" + t.ToString("F1") + " " + VehicleSync.TestMotion(rv) + " | " + VehicleSync.TestMotion(rp)); }
+                    }
                     // ([Test] RalentiInviteA=s, dossier #17 : l'invite prend le volant de la voiture laissee tournant a s (la copie reprend sous lui :
                     // VehicleSync.AlignExternalJoints), en sort a s+12, prend RalentiObjet (sausagesx0) a s+18 ; puis note chaque seconde 25 s
                     // l'ecart objet-main et l'attache du joint de la main)
