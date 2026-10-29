@@ -55,6 +55,25 @@ namespace MWCoop
                 var m = new Mirror { Glass = g.transform, Up = up, Right = right, Rt = rt, Mr = mr, Key = k,
                     Live = new Material(unlit) { mainTexture = rt }, Dark = new Material(unlit) { mainTexture = dt } };
                 mr.sharedMaterial = m.Dark;
+                // modele sans retroviseur (Ebo III : retroviseur interieur, retro_<k>_boitier) : boitier noir derriere la glace et
+                // tige jusqu'au pavillon
+                Vector3 bx;
+                if (inf.TryGetValue("retro_" + k + "_boitier", out bx) && bx.x > 0f)
+                {
+                    Vector3 fwd = Vector3.Cross(right, up).normalized;
+                    var bm = new Material(unlit) { mainTexture = dt };
+                    foreach (int part in new[] { 0, 1 })
+                    {
+                        var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        Object.Destroy(box.GetComponent<Collider>());
+                        box.name = "retro_" + k + (part == 0 ? "_boitier" : "_tige");
+                        box.transform.SetParent(parent, false);
+                        box.transform.localRotation = Quaternion.LookRotation(fwd, up.normalized);
+                        if (part == 0) { box.transform.localPosition = c + fwd * 0.0135f; box.transform.localScale = new Vector3(right.magnitude * 2f + 0.012f, up.magnitude * 2f + 0.012f, 0.025f); }
+                        else { box.transform.localPosition = c + fwd * 0.02f + up.normalized * (up.magnitude + 0.03f); box.transform.localScale = new Vector3(0.012f, 0.06f, 0.012f); }
+                        box.GetComponent<MeshRenderer>().sharedMaterial = bm;
+                    }
+                }
                 var cg = new GameObject("retro_camera_" + k);
                 cg.transform.SetParent(b.Car.transform, false);
                 m.Cam = cg.AddComponent<Camera>();
