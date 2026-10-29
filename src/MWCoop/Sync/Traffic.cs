@@ -51,6 +51,7 @@ namespace MWCoop
             public List<Behaviour> HostOff;  // hote : logique coupee pendant que l'invite l'a
             public bool Traffic;             // voiture de TRAFFIC/Vehicles* (seules celles-ci passent a l'invite)
             public float GuardUntil = -1f; public Vector3 GuardVel;   // hote : figee pres d'une voiture d'invite (HostGuard)
+            public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose calme (Runaway)
             public float TraceUntil = -1f; public string Trace;       // invite : premieres images apres la prise (journal)
         }
 
@@ -242,6 +243,7 @@ namespace MWCoop
                         if (!e.Walker && !e.Train && e.Body != null && !e.Body.isKinematic && e.Owner < 0 && e.T != null && e.T.gameObject.activeInHierarchy)
                             RunOver.Check(e.T, e.Body, e.Key);
                 }
+                Runaway(now);
                 Envols(now);
                 if (now < nextSend || Session.RemoteCount == 0) return;
                 nextSend = now + 0.2f;
@@ -270,6 +272,7 @@ namespace MWCoop
             }
             Perf.Mark("[trafic suivi]");
             GuestContacts(now);
+            Runaway(now);
             Envols(now);
             Perf.Mark("[trafic contacts]");
             if (now >= nextLog)
@@ -1004,6 +1007,74 @@ namespace MWCoop
                 if (oldAv != null) oldAv.SetValue(w, av);   // (prive)
             }
         }
+
+        // Physique emballee d'une voiture de la circulation, physique ici (dossier #24, Markos 29/10 : LAMORE rendue par l'invite,
+        // puis 45 s plus tard 1e11 m/s chez l'hote, figee ainsi plusieurs minutes -- aucune garde, contrairement aux voitures de
+        // VehicleSync.Sanitize) : valeur non finie, plus de 120 m/s ou de 40 rad/s -> remise a sa derniere pose calme, a l'arret,
+        // roues a l'arret ; champs non finis de ses roues notes (origine a trouver). [Test] TraficGarde=0 : comme avant ;
+        // TraficEnvolA=s / TraficEnvolB=s (hote) : la voiture de la circulation physique la plus proche lancee a 1e11 m/s / en NaN.
+        static float runLog;
+        static int envolShots;
+        static int runLogs;
+        static void Runaway(float now)
+        {
+            // (TraficEnvolA=s : 1e11 m/s ; TraficEnvolB=s : une seconde fois, en NaN)
+            float ea = Config.GetFloat("Test", "TraficEnvolA", 0f), eb = Config.GetFloat("Test", "TraficEnvolB", 0f), tl = Time.timeSinceLevelLoad;
+            int shot = envolShots == 0 && ea > 0f && tl > ea ? 1 : envolShots == 1 && eb > 0f && tl > eb ? 2 : 0;
+            if (Session.IsHost && shot > 0)
+            {
+                envolShots = shot;
+                Ent best = null; float bd = float.MaxValue;
+                Vector3 me = Game.MainCam != null ? Game.MainCam.transform.position : Vector3.zero;
+                foreach (Ent x in ents)
+                {
+                    if (x.T == null || !x.Traffic || x.Body == null || x.Body.isKinematic || x.Owner >= 0 || !x.T.gameObject.activeInHierarchy) continue;
+                    float dd = (x.T.position - me).sqrMagnitude;
+                    if (dd < bd) { bd = dd; best = x; }
+                }
+                if (best != null)
+                {
+                    best.Body.velocity = shot == 2 ? new Vector3(float.NaN, 0f, 0f) : new Vector3(0f, 1.1e11f, 0f);
+                    Log.Info("autotest : trafic, " + best.Key + " lancee (" + best.Body.velocity + ") a " + Mathf.Sqrt(bd).ToString("F0") + " m");
+                }
+                else Log.Info("autotest : trafic, aucune voiture de la circulation physique ici");
+            }
+            if (Config.GetInt("Test", "TraficGarde", 1) == 0) return;
+            foreach (Ent e in ents)
+            {
+                if (e.T == null || !e.Traffic || e.Walker || e.Train || e.Body == null || e.Body.isKinematic || !e.T.gameObject.activeInHierarchy) continue;
+                if (Session.IsHost ? e.Owner >= 0 : e.Owner != Session.LocalId) continue;
+                Rigidbody b = e.Body;
+                Vector3 v = b.velocity, w = b.angularVelocity, p = b.position; Quaternion r = b.rotation;
+                bool fin = Fin(v.x + v.y + v.z) && Fin(w.x + w.y + w.z) && Fin(p.x + p.y + p.z) && Fin(r.x + r.y + r.z + r.w);
+                bool bad = !fin || v.sqrMagnitude > 120f * 120f || w.sqrMagnitude > 40f * 40f;
+                if (!bad)
+                {
+                    if (v.sqrMagnitude < 60f * 60f && w.sqrMagnitude < 15f * 15f) { e.GoodPos = p; e.GoodRot = r; e.GoodSet = true; }
+                    continue;
+                }
+                Vector3 to = e.GoodSet ? e.GoodPos : (Fin(p.x + p.y + p.z) ? p : e.T.position);
+                Quaternion tr = e.GoodSet ? e.GoodRot : Quaternion.Euler(0f, e.T.eulerAngles.y, 0f);
+                b.position = to; b.rotation = tr; e.T.position = to; e.T.rotation = tr;
+                b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero;
+                SpinWheels(e, Vector3.zero);
+                if (now >= runLog && runLogs < 30)
+                {
+                    runLog = now + 5f; runLogs++;
+                    var sb = new System.Text.StringBuilder();
+                    if (e.Wheels != null)
+                        foreach (Wheel wh in e.Wheels)
+                        {
+                            if (wh == null) continue;
+                            foreach (System.Reflection.FieldInfo fi in typeof(Wheel).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                                if (fi.FieldType == typeof(float) && !Fin((float)fi.GetValue(wh)) && sb.Length < 300) sb.Append(' ').Append(wh.name).Append('.').Append(fi.Name);
+                        }
+                    Log.Warn("trafic : " + e.Key + " emballee (" + (fin ? v.magnitude.ToString("F0") + " m/s, " + w.magnitude.ToString("F0") + " rad/s" : "valeurs non finies") + ") : remise a sa derniere pose calme, a l'arret"
+                             + (sb.Length > 0 ? " ; roues non finies :" + sb : ""));
+                }
+            }
+        }
+        static bool Fin(float f) { return !float.IsNaN(f) && !float.IsInfinity(f); }
 
         // Envol d'une voiture de la circulation (retours de Menor et HowardCS, 08-11/10 : « the npc jumps and flips » ; pas
         // reproduit par les essais frontal et choc) : physique ici (hote, ou invite qui l'a prise), elle monte a plus de 5 m/s
