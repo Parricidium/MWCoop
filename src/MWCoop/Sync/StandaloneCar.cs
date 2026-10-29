@@ -24,7 +24,7 @@ namespace MWCoop
         class State
         {
             public StandaloneTenue T; public Transform Cog; public float NextGrip, NextFile;
-            public Transform Pivot; public float HalfWidth; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
+            public Transform Pivot; public Animation Lean; public Matrix4x4 RestCarFromPivot; public string LeanOut, LeanIn, LeanBackOut, LeanBackIn; public int LeanState; public float HalfWidth; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
             public Transform[] Doors; public Vector3[] DoorCenter; public bool[] DoorOpen; public float[] DoorAngle;
             public Gauge Speedo, Tacho;
             public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;
@@ -425,7 +425,8 @@ namespace MWCoop
             else if (e < 24f) d.Steer = -0.5f;
             else if (e < 28f) d.Brake = 1f;
             else if (e < 29f) { d.Gear = 1; d.Handbrake = 1f; }
-            if (Time.realtimeSinceStartup >= nextLog) { nextLog = Time.realtimeSinceStartup + 1f; float fx = 0f; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>()) fx += w.Fx; Log.Info("standalone : roule " + e.ToString("F0") + " s, somme Fx " + fx.ToString("F0") + " N, cap " + b.Car.transform.eulerAngles.y.ToString("F0") + " deg, vers " + Vector3.Angle(b.Rb.velocity, b.Car.transform.forward).ToString("F0") + " deg"); Journal(b.Car); }
+            if (Time.realtimeSinceStartup >= nextLog) { nextLog = Time.realtimeSinceStartup + 1f; float fx = 0f; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>()) fx += w.Fx; State rs; if (states.TryGetValue(b, out rs) && b.FrontWheels != null) { float wa = 0f; foreach (Wheel w in b.FrontWheels) wa += w.steering * w.maxSteeringAngle; Log.Info("standalone : roule, roues avant " + (wa / b.FrontWheels.Length).ToString("F1") + " deg, volant " + rs.WheelVis.ToString("F0") + " deg (x" + rs.T.Demultiplication + ")"); }
+                Log.Info("standalone : roule " + e.ToString("F0") + " s, somme Fx " + fx.ToString("F0") + " N, cap " + b.Car.transform.eulerAngles.y.ToString("F0") + " deg, vers " + Vector3.Angle(b.Rb.velocity, b.Car.transform.forward).ToString("F0") + " deg"); Journal(b.Car); }
             // relecture : tenue.ini modifiee a 29 s (masse 1200, ressort avant fou, puissance illisible), releve a 32 s, remise a 33 s
             State st;
             if (e >= 29f && rollEdit == 0 && states.TryGetValue(b, out st))

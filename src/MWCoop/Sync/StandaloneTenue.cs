@@ -22,7 +22,7 @@ namespace MWCoop
         public float Pont = 4.4f, Blocage = 49f, Embrayage = 420f;
         public string Transmission = "propulsion";
         public float FreinAvant = 500f, FreinArriere = 250f, FreinRepartition = 0.6f, FreinAMain = 6000f;
-        public float BraquageMax = 33f, BraquageVitesse = 3.3f, BraquageMin = 2f;
+        public float BraquageMax = 33f, BraquageVitesse = 3.3f, BraquageMin = 2f, Demultiplication = 14f;
         public class Essieu { public float Ressort, Course, Compression, Detente, AntiRoulis, Carrossage, Adherence, AdherenceFreinAMain; }
         public Essieu Av = new Essieu { Ressort = 44573f, Course = 0.15f, Compression = 7132f, Detente = 7132f, AntiRoulis = 24000f, Carrossage = -1.4f, Adherence = 1f, AdherenceFreinAMain = 1f };
         public Essieu Ar = new Essieu { Ressort = 44573f, Course = 0.15f, Compression = 7132f, Detente = 7132f, AntiRoulis = 12000f, Carrossage = 0f, Adherence = 1.15f, AdherenceFreinAMain = 0.45f };
@@ -94,6 +94,7 @@ namespace MWCoop
             BraquageMax = F(v, "Direction.BraquageMax", BraquageMax, 5f, 60f);
             BraquageVitesse = F(v, "Direction.BraquageVitesse", BraquageVitesse, 0.5f, 20f);
             BraquageMin = F(v, "Direction.BraquageMin", BraquageMin, 0f, BraquageMax);
+            Demultiplication = F(v, "Direction.Demultiplication", Demultiplication, 5f, 30f);
             foreach (KeyValuePair<string, Essieu> kv in new[] { new KeyValuePair<string, Essieu>("EssieuAvant", Av), new KeyValuePair<string, Essieu>("EssieuArriere", Ar) })
             {
                 Essieu e = kv.Value; string s = kv.Key + ".";
@@ -188,7 +189,8 @@ namespace MWCoop
             sb.Append("[Direction]\r\n");
             sb.Append("BraquageMax=").Append(N(BraquageMax)).Append("                ; degres a l'arret (5 - 60)\r\n");
             sb.Append("BraquageVitesse=").Append(N(BraquageVitesse)).Append("           ; braquage = BraquageMax x BraquageVitesse / vitesse en m/s (0,5 - 20) : plus bas = moins de braquage a haute vitesse\r\n");
-            sb.Append("BraquageMin=").Append(N(BraquageMin)).Append("                  ; degres mini a haute vitesse\r\n\r\n");
+            sb.Append("BraquageMin=").Append(N(BraquageMin)).Append("                  ; degres mini a haute vitesse\r\n");
+            sb.Append("Demultiplication=").Append(N(Demultiplication)).Append("            ; volant : degres de volant par degre de roue (5 - 30 ; voiture de serie ~14-16)\r\n\r\n");
             foreach (KeyValuePair<string, Essieu> kv in new[] { new KeyValuePair<string, Essieu>("EssieuAvant", Av), new KeyValuePair<string, Essieu>("EssieuArriere", Ar) })
             {
                 Essieu e = kv.Value;

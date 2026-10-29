@@ -54,6 +54,7 @@ namespace MWCoop
             if (t == null) { Log.Warn("standalone : cInput introuvable (clavier de secours)"); return; }
             axisRaw = t.GetMethod("GetAxisRaw", new[] { typeof(string) });
             buttonDown = t.GetMethod("GetButtonDown", new[] { typeof(string) });
+            buttonHeld = t.GetMethod("GetButton", new[] { typeof(string) });
             // (noms des touches et axes du jeu que lit la standalone : definis dans cInput ?)
             MethodInfo ax = t.GetMethod("IsAxisDefined", new[] { typeof(string) }), kd = t.GetMethod("IsKeyDefined", new[] { typeof(string) });
             var sb = new System.Text.StringBuilder("standalone : cInput");
@@ -71,6 +72,13 @@ namespace MWCoop
             if (axisRaw == null) return 0f;
             try { float v = (float)axisRaw.Invoke(null, new object[] { n }); return float.IsNaN(v) ? 0f : Mathf.Clamp(v, -1f, 1f); } catch { return 0f; }
         }
+        static MethodInfo buttonHeld;
+        public static bool Held(string n)
+        {
+            Cin();
+            if (buttonHeld == null) return false;
+            try { return (bool)buttonHeld.Invoke(null, new object[] { n }); } catch { return false; }
+        }
         public static bool Down(string n)
         {
             Cin();
@@ -82,9 +90,10 @@ namespace MWCoop
         static void SetupDrive(VazCar.Built b, State st, Dictionary<string, Vector3> inf)
         {
             VazCar.Model m = b.M;
-            st.Pivot = new GameObject("DriverPivot").transform;
-            st.Pivot.SetParent(b.Car.transform, false);
-            st.Pivot.localPosition = m.Head;
+            var head = new GameObject("DriverPivot").transform;
+            head.SetParent(b.Car.transform, false);
+            head.localPosition = m.Head;
+            st.Pivot = LeanRig(b, st, head);
             Bounds cb; st.HalfWidth = VazCar.ModelBounds(m, "carrosserie.p205", out cb) ? Mathf.Max(Mathf.Abs(cb.min.x), Mathf.Abs(cb.max.x)) : 0.85f;
             // boutons visibles du tableau de bord (cylindres colores, comme sur la copie)
             VazCar.Knob[] kns = KnobsOf(m);
@@ -302,6 +311,7 @@ namespace MWCoop
             if (driving != b) return;
             if (Crash(b, st)) return;
             Knobs(b, st);
+            Lean(b, st);
             if (hovered < 0) Doors(b, st);
             GearText(b);
             // phares a la touche du jeu (HighBeam, L par defaut -- JD 28/10 : « je ne peux pas allumer ses phares avec L »)
@@ -365,7 +375,9 @@ namespace MWCoop
             // plancher sous l'habitacle seulement, blocs avant / arriere au-dessus des roues, et cette couche retiree du rayon : WheelMask)
             float wheelTop = 0f; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>(true)) wheelTop = Mathf.Max(wheelTop, w.transform.localPosition.y - StandaloneCar.HubDrop + w.radius + 0.03f);
             float fb = Mathf.Max(fl, wheelTop);
-            Box(ct, L, "joueur_plancher", new Vector3(0f, fl - 0.08f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, 0.16f, zMax - zMin));
+            // (plancher du joueur 8 cm sous le bas de la portiere : marche de 24 cm depuis le sol -- a 32 cm le joueur restait parfois
+            // bloque sur le seuil, essai du 29/10)
+            Box(ct, L, "joueur_plancher", new Vector3(0f, fl - 0.16f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, 0.16f, zMax - zMin));
             Box(ct, L, "joueur_toit", new Vector3(0f, (rf + bb.max.y + 0.02f) * 0.5f, bb.center.z), new Vector3(bb.size.x, bb.max.y + 0.02f - rf, bb.size.z));
             Box(ct, L, "joueur_avant", new Vector3(0f, (fb + rf) * 0.5f, (zMax + bb.max.z) * 0.5f), new Vector3(bb.size.x, rf - fb, bb.max.z - zMax));
             Box(ct, L, "joueur_arriere", new Vector3(0f, (fb + rf) * 0.5f, (bb.min.z + zMin) * 0.5f), new Vector3(bb.size.x, rf - fb, zMin - bb.min.z));
@@ -437,6 +449,73 @@ namespace MWCoop
                          + ", limite " + j.linearLimit.limit.ToString("F3") + ", ressort x " + j.xDrive.positionSpring.ToString("F0") + " y " + j.yDrive.positionSpring.ToString("F0") + " z " + j.zDrive.positionSpring.ToString("F0")
                          + ", rupture " + j.breakForce.ToString("F0") + " / " + j.breakTorque.ToString("F0") + ", ancre " + j.anchor.ToString("F2") + ", relie a " + (j.connectedBody != null ? j.connectedBody.name : "monde"));
             }
+        }
+
+        // Se pencher au volant (JD 29/10 : « je ne peux pas me pencher en conducteur comme dans les autres voitures ») -- comme les
+        // voitures du jeu (automate Strafe de DriverHeadPivot/CameraPivot, releve sur la Satsuma) : joueur range sous
+        // DriverHeadPivot/CameraPivot/Pivot, CameraPivot porte les animations car_strafe_left1/2 et right1/2 du jeu (clips repris de
+        // la voiture du jeu, rien de recopie), touches ReachLeft / ReachRight tenues (cInput) ; vers la portiere seulement si elle est
+        // ouverte de plus de 20 degres (la Satsuma : porte absente, vitre baissee ou porte ouverte). Positions de repos de CameraPivot
+        // et Pivot reprises de la voiture du jeu ; sens de chaque clip mesure sur nos objets (fin du clip : Pivot a gauche ou a droite).
+        static Transform LeanRig(VazCar.Built b, State st, Transform head)
+        {
+            Transform srcHead = null;
+            foreach (string pth in new[] { "SATSUMA(557kg, 248)/DriverHeadPivot", "RCO_RUSCKO12(270)/LOD/DriverHeadPivot" }) { GameObject g = Game.FindAny(pth); if (g != null && g.transform.Find("CameraPivot/Pivot") != null) { srcHead = g.transform; break; } }
+            Transform cp = new GameObject("CameraPivot").transform; cp.SetParent(head, false);
+            Transform pv = new GameObject("Pivot").transform; pv.SetParent(cp, false);
+            if (srcHead != null)
+            {
+                Transform scp = srcHead.Find("CameraPivot"), spv = scp.Find("Pivot");
+                Transform root = srcHead.root;
+                head.localRotation = Quaternion.Inverse(root.rotation) * srcHead.rotation;
+                cp.localPosition = scp.localPosition; cp.localRotation = scp.localRotation;
+                pv.localPosition = spv.localPosition; pv.localRotation = spv.localRotation;
+                Animation sa = scp.GetComponent<Animation>();
+                if (sa != null)
+                {
+                    Animation an = cp.gameObject.AddComponent<Animation>(); an.playAutomatically = false; an.cullingType = AnimationCullingType.AlwaysAnimate;   // (aucun rendu sous le pivot : sinon jamais animee)
+                    foreach (string c in new[] { "car_strafe_left1", "car_strafe_left2", "car_strafe_right1", "car_strafe_right2" }) { AnimationClip clip = sa.GetClip(c); if (clip != null) { an.AddClip(clip, c); an[c].wrapMode = c.EndsWith("1") ? WrapMode.ClampForever : WrapMode.Once; } }   // (penche tenu tant que la touche l'est)
+                    st.Lean = an;
+                }
+            }
+            st.RestCarFromPivot = b.Car.transform.worldToLocalMatrix * pv.localToWorldMatrix;
+            // sens des clips : Pivot en fin de « 1 », repere de la voiture, puis retour au repos
+            if (st.Lean != null && st.Lean.GetClip("car_strafe_left1") != null && st.Lean.GetClip("car_strafe_right1") != null)
+            {
+                Vector3 rest = b.Car.transform.InverseTransformPoint(pv.position), cpPos = cp.localPosition; Quaternion cpRot = cp.localRotation;
+                float lx = LeanEnd(st.Lean, "car_strafe_left1", b.Car.transform, pv) - rest.x; cp.localPosition = cpPos; cp.localRotation = cpRot;
+                float rx = LeanEnd(st.Lean, "car_strafe_right1", b.Car.transform, pv) - rest.x; cp.localPosition = cpPos; cp.localRotation = cpRot;
+                float doorSide = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
+                bool leftIsOut = Mathf.Sign(lx) == doorSide;
+                st.LeanOut = leftIsOut ? "car_strafe_left1" : "car_strafe_right1"; st.LeanBackOut = leftIsOut ? "car_strafe_left2" : "car_strafe_right2";
+                st.LeanIn = leftIsOut ? "car_strafe_right1" : "car_strafe_left1"; st.LeanBackIn = leftIsOut ? "car_strafe_right2" : "car_strafe_left2";
+                Log.Info("standalone : se pencher, animations de " + (srcHead != null ? srcHead.root.name : "?") + " : left1 " + lx.ToString("F2") + " m, right1 " + rx.ToString("F2") + " m (x de la voiture) ; vers la portiere = " + st.LeanOut);
+            }
+            else Log.Warn("standalone : animations pour se pencher introuvables (voiture du jeu absente)");
+            return pv;
+        }
+        static float LeanEnd(Animation an, string clip, Transform car, Transform pv)
+        {
+            AnimationState s = an[clip];
+            s.enabled = true; s.weight = 1f; s.time = s.length; an.Sample(); s.enabled = false;
+            return car.InverseTransformPoint(pv.position).x;
+        }
+
+        // 0 droit, 1 penche vers la portiere, 2 vers l'interieur ; touche ReachLeft / ReachRight tenue (gauche = cote conducteur ici)
+        static int leanForce = -1;   // (essai : penche impose, les touches ne se simulent pas)
+        static void Lean(VazCar.Built b, State st)
+        {
+            if (st.Lean == null || st.LeanOut == null) return;
+            float doorSide = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
+            bool outKey = Held(doorSide < 0f ? "ReachLeft" : "ReachRight"), inKey = Held(doorSide < 0f ? "ReachRight" : "ReachLeft");
+            bool doorOpen = st.DoorAngle != null && st.DoorAngle[0] > 20f;
+            int want = leanForce >= 0 ? leanForce : outKey && doorOpen ? 1 : inKey ? 2 : 0;
+            if (want == st.LeanState) return;
+            if (st.LeanState == 1) st.Lean.Play(st.LeanBackOut, PlayMode.StopAll);
+            else if (st.LeanState == 2) st.Lean.Play(st.LeanBackIn, PlayMode.StopAll);
+            if (want == 1) st.Lean.Play(st.LeanOut, PlayMode.StopAll);
+            else if (want == 2) st.Lean.Play(st.LeanIn, PlayMode.StopAll);
+            st.LeanState = want;
         }
 
         // Couche des colliders du joueur retiree du rayon des roues (pose par Wheel.Start, apres l'allumage)
@@ -605,18 +684,24 @@ namespace MWCoop
         static void DriveLate(VazCar.Built b, State st)
         {
             var d = b.Axis as CarController;
-            // (volant visible : vers la direction a 3,5 unites/s -- au clavier la direction passe de 0 a 1 d'un coup, le volant
-            // sautait d'un quart de tour, JD 28/10 ; les roues, elles, gardent la direction du jeu)
-            if (b.SteerPivot != null && d != null)
+            // (volant visible d'apres l'angle REEL des roues avant -- braquage selon la vitesse compris --, x tenue.ini [Direction]
+            // Demultiplication (14 : comme une voiture de serie), et lisse a 720 degres de volant par seconde : JD 29/10, « l'animation
+            // du volant doit suivre la rotation des roues pour etre coherente » -- avant, la touche : un tour complet a toute vitesse)
+            if (b.SteerPivot != null && b.FrontWheels != null)
             {
-                st.WheelVis = Mathf.MoveTowards(st.WheelVis, Mathf.Clamp(d.steering, -1f, 1f), 3.5f * Time.deltaTime);
-                b.SteerPivot.localRotation = Quaternion.AngleAxis(-st.WheelVis * (b.M.SteerDeg > 0f ? b.M.SteerDeg : 270f), b.SteerAxis);
+                float wa = 0f; int nw = 0;
+                foreach (Wheel w in b.FrontWheels) if (w != null) { wa += w.steering * w.maxSteeringAngle; nw++; }
+                float want = nw > 0 ? wa / nw * st.T.Demultiplication : 0f;
+                st.WheelVis = Mathf.MoveTowards(st.WheelVis, want, 720f * Time.deltaTime);
+                b.SteerPivot.localRotation = Quaternion.AngleAxis(-st.WheelVis, b.SteerAxis);
             }
+            else if (b.SteerPivot != null && b.FrontWheels == null && b.Car.GetComponent<Axles>() != null) b.FrontWheels = b.Car.GetComponent<Axles>().frontAxle.wheels;
             if (driving != b) return;
             GameObject pl = Game.PlayerGo;
             Transform cam = PlayerCam();
             if (pl == null || cam == null || pl.transform.parent != st.Pivot) return;
-            Vector3 eye = b.Car.transform.TransformPoint(st.T.Yeux);
+            // (yeux portes par le pivot, anime quand on se penche : point de vue au repos ramene dans le repere du pivot)
+            Vector3 eye = st.Pivot.TransformPoint(st.RestCarFromPivot.inverse.MultiplyPoint3x4(st.T.Yeux));
             Vector3 delta = eye - cam.position;
             if (delta.sqrMagnitude > 1e-6f && delta.sqrMagnitude < 9f) pl.transform.position += delta;
         }
@@ -701,7 +786,7 @@ namespace MWCoop
         // StandaloneEssai=1) : sur la piste plate du banc, 20 cycles (voiture tournee de 0 / 120 / 240 degres) : joueur pose dans la zone
         // d'entree (texte du jeu verifie), monte (Enter : la touche du jeu ne se simule pas), yeux au point de vue, 2 s de gaz en 1re
         // puis frein, descend ; au sol a cote, CharacterController et PlayerStop rendus. Bilan : cycles reussis.
-        static int mStep = -1, mCycle, mOk, mSide; static float mAt, mLog; static float mFly;
+        static int mStep = -1, mCycle, mOk, mSide; static float mAt, mLog; static float mFly, mLeanAt;
         // (essai : voiture posee en p0, cap +z, joueur au volant ; entree remise a plus d'1 s pour que le choc compte tout de suite)
         static void PlaceSeated(VazCar.Built b, State st, GameObject pl, Vector3 p0)
         {
@@ -783,6 +868,7 @@ namespace MWCoop
                         if (cv == null || cv.Value != VehicleName) mWhy += " vehicule '" + (cv != null ? cv.Value : "?") + "'";
                         if (pl.transform.parent != st.Pivot) mWhy += " pas sous le pivot";
                         if (eyeErr > 0.05f) mWhy += " yeux a " + eyeErr.ToString("F2") + " m";
+                        if (mCycle == 2 && st.Lean != null && st.LeanIn != null) { leanForce = 2; Autotest.CaptureSoon("standalone-penche", 0.8f); mLeanAt = t; }
                         if (mCycle == 0)
                         {
                             // (cadrans de pres, aiguilles tenues a 100 km/h et 4 000 tr/min : sens et graduations verifiables)
@@ -799,6 +885,15 @@ namespace MWCoop
                     break;
                 case 3:
                     if (e < 2f) break;
+                    if (mCycle == 2 && mLeanAt > 0f)
+                    {
+                        Transform cm2 = PlayerCam();
+                        Vector3 off = cm2 != null ? ct.InverseTransformPoint(cm2.position) - st.T.Yeux : Vector3.zero;
+                        AnimationState ls = st.Lean[st.LeanIn];
+                        Log.Info("standalone : monte, penche vers l'interieur : yeux deplaces de " + off.ToString("F2") + " (repere de la voiture) ; animation " + (st.Lean.isPlaying ? "en cours" : "arretee") + ", t " + (ls != null ? ls.time.ToString("F2") + "/" + ls.length.ToString("F2") + " " + ls.wrapMode : "?") + ", CameraPivot " + st.Lean.transform.localPosition.ToString("F2") + " " + st.Lean.transform.localEulerAngles.ToString("F0") + ", parent du joueur " + (pl.transform.parent != null ? pl.transform.parent.name : "-"));
+                        if (off.magnitude < 0.08f) mWhy += " ne se penche pas";
+                        leanForce = -1; mLeanAt = 0f;
+                    }
                     if (mCycle == 0) { st.T.Yeux = eyesSaved; gaugeFreeze = false; Autotest.CaptureSoon("standalone-compteurs", 0f); Log.Info("standalone : monte, compteurs a " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, " + b.Dt.rpm.ToString("F0") + " tr/min"); }
                     d.Throttle = 0f; d.Brake = 1f; d.Gear = 1; mStep = 4; mAt = t;
                     if (b.Rb.velocity.magnitude < 1f) mWhy += " n'a pas roule";
