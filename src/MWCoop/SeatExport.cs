@@ -209,6 +209,7 @@ namespace MWCoop
             sb.Append(']');
             Transform head = FindDeep(car, "DriverHeadPivot");
             if (head != null) sb.Append(",\"tete\":{\"p\":").Append(V(car.InverseTransformPoint(head.position))).Append(",\"q\":").Append(Q(Quaternion.Inverse(car.rotation) * head.rotation)).Append('}');
+            sb.Append(Controls(car, head));
             Transform zone = FindDeep(car, "DriveTrigger");
             Collider zc = zone != null ? zone.GetComponent<Collider>() : null;
             if (zc != null) sb.Append(",\"zone\":{\"c\":").Append(V(car.InverseTransformPoint(zc.bounds.center))).Append(",\"s\":").Append(V(zc.bounds.size)).Append('}');
@@ -217,6 +218,56 @@ namespace MWCoop
             cars.Add(new CarEntry { Key = key, Name = name, Kind = kind, File = file + ".json" });
             Log.Info("export des places : " + name + " (" + key + ") : " + nObj + " objets, " + nBelt + " de ceintures" + (att != null ? " (attaches)" : "") + ", " + mats.Count + " matieres" + (unreadable > 0 ? ", " + unreadable + " illisibles" : "") + (head != null ? "" : ", PAS de pivot de tete"));
         }
+
+        // Volant et levier du conducteur (Avatar.SteerOf / GearOf, comme en jeu) pour choisir les prises des mains dans l'outil (JD 29/10) :
+        // matrice volant -> voiture (lignes), chemin de l'objet (ses maillages tournent avec lui), axe de rotation (repere du volant : celui
+        // de l'addon standalone, sinon l'axe du volant le plus proche de la colonne), prises a 10 h 10 du jeu ; levier : matrice, chemin,
+        // haut du pommeau (repere du levier).
+        static string Controls(Transform car, Transform head)
+        {
+            var sb = new StringBuilder();
+            Vector3 hp = head != null ? head.position : car.TransformPoint(new Vector3(-0.35f, 1.1f, 0f));
+            Transform steer = Avatar.SteerOf(car);
+            if (steer != null)
+            {
+                Vector3 gr, gl;
+                Avatar.DefaultGrips(car, steer, hp, out gr, out gl);
+                Vector3 ax;
+                if (steer.name == "VAZ_volant") ax = AddonSteerAxis(car);   // (addon : l'axe de son modele, volant_axe d'infos.txt)
+                else
+                {
+                    Vector3 la = steer.InverseTransformDirection(steer.position - hp);
+                    float x = Mathf.Abs(la.x), y = Mathf.Abs(la.y), z = Mathf.Abs(la.z);
+                    ax = x >= y && x >= z ? new Vector3(Mathf.Sign(la.x), 0, 0) : y >= z ? new Vector3(0, Mathf.Sign(la.y), 0) : new Vector3(0, 0, Mathf.Sign(la.z));
+                }
+                sb.Append(",\"volant\":{\"m\":").Append(Mx(car.worldToLocalMatrix * steer.localToWorldMatrix)).Append(",\"chemin\":").Append(S(Recon.Path(steer).Substring(Recon.Path(car).Length)))
+                  .Append(",\"axe\":").Append(V(ax)).Append(",\"prises\":{\"droite\":").Append(V(gr)).Append(",\"gauche\":").Append(V(gl)).Append("}}");
+            }
+            Transform gear = Avatar.GearOf(car);
+            if (gear != null)
+                sb.Append(",\"levier\":{\"m\":").Append(Mx(car.worldToLocalMatrix * gear.localToWorldMatrix)).Append(",\"chemin\":").Append(S(Recon.Path(gear).Substring(Recon.Path(car).Length)))
+                  .Append(",\"pommeau\":").Append(V(gear.InverseTransformPoint(Avatar.DefaultKnob(car, gear)))).Append('}');
+            Log.Info("export des places : " + car.name + " volant " + (steer != null ? steer.name : "-") + ", levier " + (gear != null ? gear.name : "-"));
+            return sb.ToString();
+        }
+        // Axe du volant d'un addon (VazCar.Built.SteerAxis : standalone, sinon la copie louee -- champ prive Vaz.rents)
+        static Vector3 AddonSteerAxis(Transform car)
+        {
+            VazCar.Built b = StandaloneCar.Find(car.gameObject);
+            if (b == null)
+            {
+                FieldInfo f = typeof(Vaz).GetField("rents", BindingFlags.NonPublic | BindingFlags.Static);
+                var d = f != null ? f.GetValue(null) as IDictionary : null;
+                if (d != null)
+                    foreach (object r in d.Values)
+                    {
+                        var rb = Get<VazCar.Built>(r, r.GetType(), "Car");
+                        if (rb != null && rb.Car == car.gameObject) { b = rb; break; }
+                    }
+            }
+            return b != null ? b.SteerAxis : Vector3.forward;
+        }
+        static string Mx(Matrix4x4 m) { var sb = new StringBuilder("["); for (int k = 0; k < 16; k++) sb.Append(k > 0 ? "," : "").Append(F(m[k / 4, k % 4])); return sb.Append(']').ToString(); }
 
         // allume jusqu'a la voiture, sauf un « LOD » eteint par la distance (voiture garee loin du joueur)
         static bool Shown(Transform t, Transform car)

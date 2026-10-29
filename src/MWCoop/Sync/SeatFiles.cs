@@ -13,7 +13,10 @@ namespace MWCoop
     //   conducteur                               (sa place reste celle du jeu : posture et decalage seulement)
     //   place <n> <passager|couchette|debout|ridelle> <yeux x y z> <cap> <zone dx dz> [maxx=<m>] [sansceinture] [nom=<texte>]
     //   os <n|conducteur> <os> <qx qy qz qw>     (rotation locale ; conducteur : colonne, cou et tete seulement)
-    //   corps <n|conducteur> <x y z>             (decalage du corps, repere de la voiture)
+    //   corps <n|conducteur> <x y z> [rx ry rz]  (decalage du corps, repere de la voiture ; rotation en plus : angles d'Euler du jeu, en
+    //                                              degres, autour des yeux -- la tete reste a la place, le corps tourne dessous)
+    //   prise conducteur <gauche|droite> <x y z> (main sur le volant, repere du volant : elle tourne avec lui ; JD 29/10)
+    //   levier conducteur <x y z>                (main au levier de vitesse, repere du levier ; sinon le haut du pommeau)
     //   pose <n|conducteur> <volant|camion>      (pose de base, sinon celle de la voiture)
     // Ceinture d'une place (outil des places, JD 26/10 : « Tout me vas », idee de Menos) -- lue ici, dessinee par Seats :
     //   ceinture <n|conducteur> <sangle|menos|modele|jeu>  (sangle : ruban sur les points ; menos : pieces de son modele aux
@@ -38,6 +41,9 @@ namespace MWCoop
             public int N = -1;                       // (-1 : conducteur)
             public string Kind = "passager", Name = "", Pose;
             public Vector3 Eyes, Body;
+            public Quaternion BodyRot = Quaternion.identity;
+            public Vector3 GripL, GripR, Knob;       // (conducteur : prises sur le volant, main au levier -- Avatar.DriverHands)
+            public bool HasGripL, HasGripR, HasKnob;
             public float Yaw, ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f;
             public bool NoBelt, Lines;               // (Lines : le fichier dit quelque chose de cette place)
             public readonly Dictionary<string, Quaternion> Bones = new Dictionary<string, Quaternion>();
@@ -215,8 +221,25 @@ namespace MWCoop
                                 if (l.Contains("collar") || l.Contains("shoulder") || l.Contains("arm") || l.Contains("hand") || l.Contains("finger"))
                                 { if (l.Contains("right")) t.ArmRight = true; else if (l.Contains("left")) t.ArmLeft = true; }
                             }
-                            else if (w[0] == "corps" && w.Length >= 5) t.Body = new Vector3(F(w[2]), F(w[3]), F(w[4]));
+                            else if (w[0] == "corps" && w.Length >= 5)
+                            {
+                                t.Body = new Vector3(F(w[2]), F(w[3]), F(w[4]));
+                                if (w.Length >= 8) t.BodyRot = Quaternion.Euler(F(w[5]), F(w[6]), F(w[7]));
+                            }
                             else if (w[0] == "pose" && w.Length >= 3) t.Pose = w[2] == "camion" ? "camion" : "volant";
+                            break;
+                        }
+                    case "prise":
+                    case "levier":
+                        {
+                            Place t = w.Length > 1 && w[1] == "conducteur" ? f.Driver : null;   // (conducteur seulement)
+                            if (t == null) break;
+                            if (w[0] == "prise" && w.Length >= 6)
+                            {
+                                var v = new Vector3(F(w[3]), F(w[4]), F(w[5]));
+                                if (w[2] == "gauche") { t.GripL = v; t.HasGripL = true; } else if (w[2] == "droite") { t.GripR = v; t.HasGripR = true; }
+                            }
+                            else if (w[0] == "levier" && w.Length >= 5) { t.Knob = new Vector3(F(w[2]), F(w[3]), F(w[4])); t.HasKnob = true; }
                             break;
                         }
                     case "ceinture":

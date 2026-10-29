@@ -941,36 +941,30 @@ namespace MWCoop
         {
             Transform car = VehicleSync.RemoteCarTransform(Player.Id);
             if (car == null || headBone == null) return;
-            if (car != steerCar)
+            if (car != steerCar || gripGen != SeatFiles.Generation)
             {
-                steerCar = car; steerT = gearT = null;
-                foreach (MonoBehaviour m in car.GetComponentsInChildren<MonoBehaviour>(true))
-                    if (m != null && m.GetType().Name == "SteeringWheel") { steerT = m.transform; break; }
-                // (My Summer Car : le composant SteeringWheel est au pied de la colonne (CarSteeringPivot, pres du plancher) ; la jante, c'est
-                // la piece « stock steering wheel » montee au bout -- les prises visaient 1,5 m sous le tableau de bord, 21/10)
-                if (Game.Msc && steerT != null)
-                    foreach (Transform w in steerT.GetComponentsInChildren<Transform>(true))
-                        if (w.name.ToLowerInvariant().Contains("steering wheel") && w.GetComponent<Renderer>() != null) { steerT = w; break; }
-                foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
-                {
-                    if (t.name == "GearLever" || t.name == "gearlever") { gearT = t; break; }
-                    // SORBET : Gearstick/Pivot (qui tourne), le pommeau au bout de sa tige
-                    if (t.name == "Pivot" && t.parent != null && t.parent.name == "Gearstick") { gearT = t; break; }
-                }
-                if (steerT != null)
-                {
-                    Vector3 axis = (steerT.position - headBone.position).normalized;   // colonne : du conducteur vers le tableau de bord
-                    Vector3 right = Vector3.ProjectOnPlane(car.right, axis).normalized, up = Vector3.Cross(axis, right).normalized;
-                    if (Vector3.Dot(up, car.up) < 0f) up = -up;
-                    const float R = 0.17f;
-                    gripR = steerT.InverseTransformPoint(steerT.position + right * R * 0.9f + up * R * 0.42f);
-                    gripL = steerT.InverseTransformPoint(steerT.position - right * R * 0.9f + up * R * 0.42f);
-                }
+                steerCar = car; gripGen = SeatFiles.Generation;
+                steerT = SteerOf(car); gearT = GearOf(car);
+                steerHead = null; gripsStraight = false; steerStillAt = -1f;
+                foreach (Transform t in car.GetComponentsInChildren<Transform>(true)) if (t.name == "DriverHeadPivot") { steerHead = t; break; }
+                if (steerT != null) Grips(car);
                 if (gearT != null) gearLast = gearT.localRotation;
                 Transform shR = Bone("shoulder_right"), shL = Bone("shoulder_left");
                 Log.Info("avatar " + Player.Name + " : mains au volant (" + (steerT != null ? steerT.name + " a " + Root.transform.InverseTransformPoint(steerT.position).ToString("F2") + ", prises D " + (shR != null ? (steerT.TransformPoint(gripR) - shR.position).magnitude.ToString("F2") : "?") + " m G " + (shL != null ? (steerT.TransformPoint(gripL) - shL.position).magnitude.ToString("F2") : "?") + " m de l'epaule, tete " + Root.transform.InverseTransformPoint(headBone.position).ToString("F2") : "volant introuvable") + ", levier " + (gearT != null ? "oui" : "non") + ")");
             }
             float now = Time.realtimeSinceStartup;
+            // (prises du jeu reprises une fois le volant droit -- braquage recu nul, volant immobile 0,3 s : a la premiere image, celui de la
+            // copie avait encore son angle d'avant (sauvegarde), les mains restaient tournees d'autant)
+            if (steerT != null && !gripsStraight)
+            {
+                float s = SteeringOf(car);
+                if (!float.IsNaN(s) && Mathf.Abs(s) < 0.02f)
+                {
+                    if (steerStillAt < 0f || Quaternion.Angle(steerT.localRotation, steerStill) > 0.2f) { steerStill = steerT.localRotation; steerStillAt = now + 0.3f; }
+                    else if (now >= steerStillAt) { gripsStraight = true; Grips(car); }
+                }
+                else steerStillAt = -1f;
+            }
             if (gearT != null && Quaternion.Angle(gearT.localRotation, gearLast) > 1.5f) { gearLast = gearT.localRotation; gearUntil = Mathf.Max(gearUntil, now + 0.6f); }
             // Passage recu (CarVisuals) : la main part vers le pommeau avant que le levier ne bouge (0,15 s), y reste le temps
             // du passage, puis revient au volant.
@@ -999,14 +993,81 @@ namespace MWCoop
             if (gearT != null && wShift > 0.001f) ArmTo(true, KnobPoint(car), wShift);
         }
 
+        // Prises du volant : le 10 h 10 du jeu vu du poste du conducteur (DriverHeadPivot, comme l'export de l'outil des places -- avant :
+        // de la tete de l'avatar a sa premiere image au volant, parfois encore debout a cote), puis celles du fichier des places (outil
+        // des places : prises choisies sur la jante, repere du volant -- JD 29/10).
+        Transform steerHead; bool gripsStraight; float steerStillAt = -1f; Quaternion steerStill;
+        void Grips(Transform car)
+        {
+            DefaultGrips(car, steerT, steerHead != null ? steerHead.position : headBone.position, out gripR, out gripL);
+            SeatFiles.Place sf = SeatFiles.For(carName, -1);
+            if (sf != null && sf.HasGripR) gripR = sf.GripR;
+            if (sf != null && sf.HasGripL) gripL = sf.GripL;
+            if (gripLogs++ < 6) Log.Info("avatar " + Player.Name + " : prises " + (gripsStraight ? "" : "(volant pas encore droit) ") + "D " + car.InverseTransformPoint(steerT.TransformPoint(gripR)).ToString("F3") + (sf != null && sf.HasGripR ? " (fichier)" : "") + ", G " + car.InverseTransformPoint(steerT.TransformPoint(gripL)).ToString("F3") + (sf != null && sf.HasGripL ? " (fichier)" : ""));
+        }
+        int gripLogs;
+        // Braquage du controleur de la voiture (CarController.steering : copie, le recu ; NaN sans controleur).
+        static System.Reflection.FieldInfo fCarSteer; static bool fCarSteerTried;
+        static float SteeringOf(Transform car)
+        {
+            if (!fCarSteerTried) { fCarSteerTried = true; fCarSteer = typeof(CarController).GetField("steering", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance); }
+            CarController cc = car.GetComponent<CarController>();
+            if (cc == null || fCarSteer == null) return float.NaN;
+            try { return (float)fCarSteer.GetValue(cc); } catch { return float.NaN; }
+        }
+
         // Pommeau : le haut du maillage du levier (GIFU : levier haut sous GearLever/Pivot/Lever ; SORBET : le pommeau au bout
-        // de Gearstick/Pivot) -- avant, 10 cm au-dessus du pivot, trop bas pour le camion (Menor, 21/10).
+        // de Gearstick/Pivot) -- avant, 10 cm au-dessus du pivot, trop bas pour le camion (Menor, 21/10). Outil des places : le point
+        // choisi sur le levier, repere du levier (JD 29/10).
         Vector3 KnobPoint(Transform car)
         {
-            Vector3 knob = gearT.position + car.up * 0.1f;
-            Renderer kr = gearT.GetComponentInChildren<Renderer>();
+            SeatFiles.Place sf = SeatFiles.For(carName, -1);
+            if (sf != null && sf.HasKnob) return gearT.TransformPoint(sf.Knob);
+            return DefaultKnob(car, gearT);
+        }
+        public static Vector3 DefaultKnob(Transform car, Transform gear)
+        {
+            Vector3 knob = gear.position + car.up * 0.1f;
+            Renderer kr = gear.GetComponentInChildren<Renderer>();
             if (kr != null) knob = kr.bounds.center + car.up * kr.bounds.extents.y;
             return knob;
+        }
+
+        // Volant d'une voiture : addon (copie ou standalone) : son volant a lui, VAZ_volant (celui de la voiture de base est cache --
+        // les mains visaient la jante cachee de la SORBET) ; sinon le composant SteeringWheel du jeu ; My Summer Car : la jante montee au
+        // bout de la colonne. Aussi pour l'export de l'outil des places (SeatExport).
+        public static Transform SteerOf(Transform car)
+        {
+            Transform steer = null;
+            foreach (Transform t in car.GetComponentsInChildren<Transform>(true)) if (t.name == "VAZ_volant") return t;
+            foreach (MonoBehaviour m in car.GetComponentsInChildren<MonoBehaviour>(true))
+                if (m != null && m.GetType().Name == "SteeringWheel") { steer = m.transform; break; }
+            // (My Summer Car : le composant SteeringWheel est au pied de la colonne (CarSteeringPivot, pres du plancher) ; la jante, c'est
+            // la piece « stock steering wheel » montee au bout -- les prises visaient 1,5 m sous le tableau de bord, 21/10)
+            if (Game.Msc && steer != null)
+                foreach (Transform w in steer.GetComponentsInChildren<Transform>(true))
+                    if (w.name.ToLowerInvariant().Contains("steering wheel") && w.GetComponent<Renderer>() != null) { steer = w; break; }
+            return steer;
+        }
+        public static Transform GearOf(Transform car)
+        {
+            foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name == "GearLever" || t.name == "gearlever") return t;
+                // SORBET : Gearstick/Pivot (qui tourne), le pommeau au bout de sa tige
+                if (t.name == "Pivot" && t.parent != null && t.parent.name == "Gearstick") return t;
+            }
+            return null;
+        }
+        // Prises a 10 h 10 sur la jante (rayon 17 cm), repere du volant, vues depuis 'head' (tete du conducteur).
+        public static void DefaultGrips(Transform car, Transform steer, Vector3 head, out Vector3 gripR, out Vector3 gripL)
+        {
+            Vector3 axis = (steer.position - head).normalized;   // colonne : du conducteur vers le tableau de bord
+            Vector3 right = Vector3.ProjectOnPlane(car.right, axis).normalized, up = Vector3.Cross(axis, right).normalized;
+            if (Vector3.Dot(up, car.up) < 0f) up = -up;
+            const float R = 0.17f;
+            gripR = steer.InverseTransformPoint(steer.position + right * R * 0.9f + up * R * 0.42f);
+            gripL = steer.InverseTransformPoint(steer.position - right * R * 0.9f + up * R * 0.42f);
         }
         public float ShiftWeight { get { return wShift; } }
         // Essais : chevilles dans le repere de la voiture et plancher sous chacune (rayon vers le bas sur les collisions de la voiture) :
@@ -1039,6 +1100,7 @@ namespace MWCoop
         }
 
         float handErrR = -1f, handErrL = -1f, leanDeg, wStalk;
+        int gripGen = -1;
 
         // ---------------------------------------------------------------- Jonnez (mobylette)
         // Demande de JD (10/10) : sur la Jonnez, l'avatar etait assis comme en voiture (jambes en avant a travers la moto, bras
@@ -1441,7 +1503,9 @@ namespace MWCoop
         {
             return Player.Name + " : volant " + (steerT != null ? steerT.name : "-") + ", main D a " + handErrR.ToString("F2") + " m de sa prise, G a " + handErrL.ToString("F2")
                    + " m, penche " + leanDeg.ToString("F0") + " deg, levier " + (gearT != null ? gearT.parent.name + "/" + gearT.name : "-") + ", main au levier " + wShift.ToString("F2")
-                   + (gearT != null && steerCar != null && Bone("hand_right") != null ? " (main D a " + (Bone("hand_right").position - KnobPoint(steerCar)).magnitude.ToString("F2") + " m du pommeau)" : "");
+                   + (gearT != null && steerCar != null && Bone("hand_right") != null ? " (main D a " + (Bone("hand_right").position - KnobPoint(steerCar)).magnitude.ToString("F2") + " m du pommeau)" : "")
+                   + (steerT != null && steerCar != null ? ", prises G " + steerCar.InverseTransformPoint(steerT.TransformPoint(gripL)).ToString("F3") + " D " + steerCar.InverseTransformPoint(steerT.TransformPoint(gripR)).ToString("F3") : "")
+                   + (Root != null && steerCar != null ? ", corps " + (Quaternion.Inverse(steerCar.rotation) * Root.transform.rotation).eulerAngles.ToString("F0") : "");
         }
 
         // Dosage selon la portee : 1 jusqu'a 105 % de la longueur du bras, 0 au-dela de 130 % (le bras, tendu, s'arrete a
@@ -1820,6 +1884,8 @@ namespace MWCoop
                 vehicleT = pCar;
                 float seatYaw = Seats.RemoteSeatYaw(pi.Id);   // (ridelle d'une remorque : face a l'interieur)
                 Quaternion seatQ = pCar.rotation * Quaternion.Euler(0f, seatYaw, 0f);
+                SeatFiles.Place sfp = SeatFiles.For(pName, Seats.RemoteSeatIndex(pi.Id));
+                if (sfp != null) seatQ = seatQ * sfp.BodyRot;   // (outil des places : corps tourne autour des yeux)
                 Root.transform.rotation = seatQ;
                 leanOff = Vector3.zero;
                 // (place debout -- coins de la cabine du tracteur, dessin de JD du 22/10 : debout a demi plie, appuye, la tete a la vitre
@@ -1828,7 +1894,6 @@ namespace MWCoop
                 if (standing) seatCrouch = Mathf.Clamp01(Config.GetFloat("Test", "DeboutPli", 0.5f));
                 // (place de l'outil des places : le corps aux yeux de la place, comme dans l'outil -- la camera du joueur assis est ~15 cm
                 // derriere, le bassin rentrait dans le dossier, Bachglotz de JD 25/10 ; puis son decalage, pas les reglages par voiture ci-dessous)
-                SeatFiles.Place sfp = SeatFiles.For(pName, Seats.RemoteSeatIndex(pi.Id));
                 if (sfp != null) pHead = sfp.Eyes;
                 pos = pCar.TransformPoint(pHead) - seatQ * (standing ? new Vector3(0f, Config.GetFloat("Test", "DeboutYeux", 0.85f), 0.05f) : eyesRest);
                 if (sfp != null) pos += pCar.TransformDirection(sfp.Body);
@@ -1860,8 +1925,10 @@ namespace MWCoop
                 // Au volant : oriente comme la voiture locale. Le corps est ancre sur le siege (la tete au
                 // repos, apprise quand elle bouge peu) ; quand la camera s'en ecarte (se pencher avec E,
                 // tourner la tete), c'est le buste qui se penche, pas tout le corps qui glisse.
-                Root.transform.rotation = seatRot;
                 Transform carT = VehicleSync.RemoteCarTransform(pi.Id);
+                SeatFiles.Place sfd = carT != null ? SeatFiles.For(carName, -1) : null;   // (conducteur dans l'outil des places : decalage et rotation du corps)
+                Quaternion bodyQ = sfd != null ? seatRot * sfd.BodyRot : seatRot;   // (rotation autour des yeux : la tete reste au poste)
+                Root.transform.rotation = bodyQ;
                 vehicleT = carT;
                 // (tete envoyee avec la voiture, repere voiture : exacte ; sinon celle de PlayerSync, decalee en roulant)
                 Vector3 sentHead;
@@ -1886,8 +1953,7 @@ namespace MWCoop
                 if (Config.GetInt("Test", "SuivreConducteur", 0) != 0 && Time.frameCount % 30 == 0)
                     Log.Info("autotest : conducteur " + Player.Name + " penche " + leanSmooth.magnitude.ToString("F2") + " m (ecart " + off.magnitude.ToString("F2") + ", ancien calcul " + (carT != null ? (carT.InverseTransformPoint(seatPos) - seatAnchor).magnitude.ToString("F2") : "?") + ", " + (exact ? "tete envoyee avec la voiture" : "tete de PlayerSync") + ", " + (speed * 3.6f).ToString("F0") + " km/h)");
                 Vector3 anchorWorld = carT != null ? carT.TransformPoint(seatAnchor) : seatPos;
-                pos = anchorWorld - seatRot * eyesRest;
-                SeatFiles.Place sfd = carT != null ? SeatFiles.For(carName, -1) : null;   // (conducteur dans l'outil des places : decalage du corps)
+                pos = anchorWorld - bodyQ * eyesRest;
                 if (sfd != null) pos += carT.TransformDirection(sfd.Body);
                 yaw = seatRot.eulerAngles.y;
                 placed = true;

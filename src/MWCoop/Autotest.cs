@@ -3782,7 +3782,7 @@ namespace MWCoop
                                     if (!cabAv) { cabAv = true; cabMin = cabMax = lp; } else { cabMin = Vector3.Min(cabMin, lp); cabMax = Vector3.Max(cabMax, lp); }
                                     if (Time.realtimeSinceStartup >= cabLogAt) { cabLogAt = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : passager, avatar " + lp.ToString("F2") + ", voiture v " + VehicleSync.RemoteSpeed(a.Player.Id).ToString("F1")); }
                                 }
-                        if (t > 17f && t < 26f && Time.realtimeSinceStartup >= cabWheelAt)
+                        if (t > 17f && t < Config.GetFloat("Test", "CabineJournalFin", 26f) && Time.realtimeSinceStartup >= cabWheelAt)   // ([Test] CabineJournalFin : plus longtemps, braquage de l'hote vu tard)
                         {
                             cabWheelAt = Time.realtimeSinceStartup + 1f;
                             string hands = ""; foreach (Avatar a in PlayerSync.Avatars) hands = a.HandsState();
