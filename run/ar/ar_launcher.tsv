@@ -2646,6 +2646,7 @@ Mouse 5	زر الفأرة 5
 Set by the host · as a guest, you get the additions of their lobby	يضبطها المضيف · كضيف، تحصل على إضافات ردهته
 Set by the host	يضبطها المضيف
 MWCoop additions always follow the host: as a guest, you get the ones of their lobby (Settings > Co-op shows them greyed out, \"Set by the host\"); your choice only counts when you host.	إضافات MWCoop تتبع المضيف دائمًا: كضيف، تحصل على إضافات ردهته (الإعدادات > اللعب الجماعي تعرضها باهتة، «يضبطها المضيف»)؛ اختيارك لا يُحتسب إلا حين تستضيف.
+Built by MWCoop, no longer a copy of a game car	بناها MWCoop، ولم تعد نسخة من سيارة اللعبة
 Different version (you %s, host %s)	نسخة مختلفة (لديك %s، لدى المضيف %s)
 The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n
 ⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?	⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟

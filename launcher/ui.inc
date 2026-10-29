@@ -1678,6 +1678,7 @@ static bool UiClick(int id)
     if (id >= UI_ADDON_VIEW && id < UI_ADDON_VIEW + 2) { AddonsSetView(id - UI_ADDON_VIEW); return true; }
     if (id >= UI_ADDON_FILTER && id < UI_ADDON_FILTER + 8) { AddonsSetFilter(id - UI_ADDON_FILTER); return true; }
     if (id >= UI_ADDON_GET && id < UI_ADDON_GET + 20) { int i = id - UI_ADDON_GET; if (i < (int)g_addonList.size()) AddonDownload(g_addonList[i].key); return true; }   // (catalogue : Telecharger / Mettre a jour)
+    if (id >= UI_ADDON_TAG && id < UI_ADDON_TAG + 20) { int i = id - UI_ADDON_TAG; if (i < (int)g_addonList.size() && g_addonList[i].installed) { g_addonSel = i; g_addonThumbOf.clear(); } return true; }   // (etiquette : comme la carte)
     if (id >= UI_ADDON_CARD && id < UI_ADDON_CARD + 20) { g_addonSel = id - UI_ADDON_CARD; g_addonThumbOf.clear(); return true; }   // (onglet Addons : carte -> son volet ; 1.5.2, clic oublie en 1.5.0)
     if (id >= UI_PAL_ROW && id < UI_PAL_ROW + kPalRows) return ShellClick(id);   // (coque.inc : palette)
     if (id >= UI_NAV && id < UI_NAV + TAB_COUNT) { int p = id - UI_NAV; if (PageEnabled(p)) GoPage(p); return true; }

@@ -754,7 +754,7 @@ static void DrawPaintView(Graphics &g, RectF card)
 // Depuis 1.8.0 (JD, 21/10 : « mettre les voitures a part comme l'editeur de carte ») : les addons se telechargent ici
 // (catalogue plus bas) ; une carte pas encore installee porte « Telecharger », une installee plus ancienne que le
 // catalogue « Mettre a jour ».
-struct Addon { std::wstring key, dir, name, nameShort, desc, descEn, ver, remoteVer, group; bool livery = false; bool builtin = false; bool installed = true; };   // (builtin : la VAZ, livree avec le mod ; ver : Version= de addon.ini ; remoteVer : celle du catalogue)
+struct Addon { std::wstring key, dir, name, nameShort, desc, descEn, ver, remoteVer, group, tag, tagMsc; bool livery = false; bool builtin = false; bool installed = true; };   // (builtin : la VAZ, livree avec le mod ; ver : Version= de addon.ini ; remoteVer : celle du catalogue)
 static std::vector<Addon> g_addonList;
 static ULONGLONG g_addonScanT;
 static int g_addonSel = -1;          // carte ouverte (-1 : la liste)
@@ -787,7 +787,9 @@ static void AddonsLeave() { g_addonsTab = false; }
 // My Summer Car (JD 24/10 : « l'onglet addons sur MSC avec leurs versions MSC ») : le meme paquet sert aux deux jeux (le mod
 // pose la voiture sur la Ruscko, avec les roues de terre du modele) ; cles facultatives : Jeux= (mwc, msc ou les deux ; absent :
 // les deux), ApercuMsc= (image prise dans MSC ; absente : vignette provisoire au nom de la voiture, AddonDrawPic), ModMinMsc=.
-struct AddonCat { std::wstring key, ver, name, nameShort, desc, descEn, url, pic, modMin, group, games, picMsc, modMinMsc; long long size = 0; bool livery = false; };
+// Etiquette= (les deux jeux) et EtiquetteMsc= (My Summer Car, prime sur Etiquette=), aussi dans addon.ini : un badge neutre sur
+// la carte (« Standalone » : la voiture construite par MWCoop, plus une copie -- [Addons et Tools], 29/10), texte tel quel.
+struct AddonCat { std::wstring key, ver, name, nameShort, desc, descEn, url, pic, modMin, group, games, picMsc, modMinMsc, tag, tagMsc; long long size = 0; bool livery = false; };
 static std::wstring g_addonsRepo = L"Parricidium/MWCoop-Addons";   // (/depotaddons : autre depot, pour les essais)
 static std::vector<AddonCat> g_addonCat;                           // (sous g_cs)
 static volatile bool g_addonCatBusy;
@@ -833,6 +835,7 @@ static std::vector<AddonCat> AddonCatParse(const std::string &src)
         else if (k == "Categorie") c.group = val;
         else if (k == "Jeux") { c.games = val; for (wchar_t &ch : c.games) ch = towlower(ch); }
         else if (k == "ApercuMsc") c.picMsc = val; else if (k == "ModMinMsc") c.modMinMsc = val;
+        else if (k == "Etiquette") c.tag = val; else if (k == "EtiquetteMsc") c.tagMsc = val;
     }
     std::vector<AddonCat> o;
     for (const AddonCat &c : v)
@@ -1041,6 +1044,7 @@ static void AddonsScan()
                     else if (k == "Description") a.desc = val; else if (k == "DescriptionEn") a.descEn = val;
                     else if (k == "Livree") a.livery = val == L"1"; else if (k == "Version") a.ver = val;
                     else if (k == "Categorie") a.group = val;
+                    else if (k == "Etiquette") a.tag = val; else if (k == "EtiquetteMsc") a.tagMsc = val;
                 }
                 if (a.nameShort.empty()) a.nameShort = a.name;
                 v.push_back(a);
@@ -1054,9 +1058,9 @@ static void AddonsScan()
         for (const AddonCat &c : g_addonCat) {
             Addon *in = NULL;
             for (Addon &x : v) if (!_wcsicmp(x.key.c_str(), c.key.c_str())) in = &x;
-            if (in) { in->remoteVer = c.ver; if (in->group.empty()) in->group = c.group; continue; }   // (installee avant les categories : celle du catalogue)
+            if (in) { in->remoteVer = c.ver; if (in->group.empty()) in->group = c.group; if (!c.tag.empty()) in->tag = c.tag; if (!c.tagMsc.empty()) in->tagMsc = c.tagMsc; continue; }   // (etiquettes : celles du catalogue, plus recentes)   // (installee avant les categories : celle du catalogue)
             Addon a; a.key = c.key; a.name = c.name; a.nameShort = c.nameShort; a.desc = c.desc; a.descEn = c.descEn; a.livery = c.livery; a.group = c.group;
-            a.remoteVer = c.ver; a.installed = false;
+            a.remoteVer = c.ver; a.installed = false; a.tag = c.tag; a.tagMsc = c.tagMsc;
             v.push_back(a);
         }
         LeaveCriticalSection(&g_cs);
@@ -1123,6 +1127,9 @@ static Bitmap *AddonPic(const Addon &a)
 }
 // Etiquettes : NEW (pas installee, apparue au catalogue depuis la derniere visite d'avant cette session), UPDATE (installee,
 // plus ancienne que le catalogue).
+// Etiquette montree : EtiquetteMsc= sur My Summer Car (sinon Etiquette=), Etiquette= sur My Winter Car ; 24 caracteres au plus.
+static void SoftTooltip(Graphics &g, RectF anchor, const std::wstring &s);   // (soft.inc)
+static std::wstring AddonTag(const Addon &a) { std::wstring t = CarMsc() && !a.tagMsc.empty() ? a.tagMsc : a.tag; return t.size() > 24 ? t.substr(0, 24) : t; }
 static bool AddonIsNew(const Addon &a) { AddonSeenLoad(); return !a.installed && !g_addonSeenStart.count(a.key); }
 static bool AddonHasUpdate(const Addon &a) { return a.installed && !a.builtin && !a.remoteVer.empty() && AddonCmpVer(a.remoteVer, a.ver) > 0; }
 // Barre (ui.inc) : NEW tant qu'une voiture du catalogue n'a pas ete vue, UPDATE si une installee a une mise a jour.
@@ -1408,15 +1415,27 @@ static void DrawAddonList(Graphics &g)
             if (!liv.empty() && !get) Text(g, liv, RectF(r.X + 16, r.Y + 232, r.Width - 32, 22), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
             br = RectF(r.X + 16, r.Y + 228, r.Width - 32, 34);
         }
-        // etiquettes NEW / UPDATE, en haut a gauche de l'image
+        // etiquettes NEW / UPDATE (et celle de l'addon), en haut a gauche de l'image
+        RectF tagR(0, 0, 0, 0);
         {
             float px = list ? r.X + 14 : r.X + 18, py = list ? r.Y + 14 : r.Y + 18;
             if (AddonIsNew(a)) { const wchar_t *s = L"NEW"; float w = PillW(s, 10); Pill(g, RectF(px, py, w, 20), kAcc, s, kOnAcc, 10); px += w + 6; }
-            if (upd) { const wchar_t *s = L"UPDATE"; float w = PillW(s, 10); Pill(g, RectF(px, py, w, 20), kWarn, s, Color(255, 255, 255, 255), 10); }
+            if (upd) { const wchar_t *s = L"UPDATE"; float w = PillW(s, 10); Pill(g, RectF(px, py, w, 20), kWarn, s, Color(255, 255, 255, 255), 10); px += w + 6; }
+            std::wstring tag = AddonTag(a);
+            if (!tag.empty()) {   // (neutre : sombre et translucide sur l'image ; texte tel quel, pas traduit)
+                float w = PillW(tag, 10); RectF tr(px, py, w, 20);
+                Pill(g, tr, Color(190, 24, 26, 32), tag, Color(255, 240, 240, 240), 10);
+                tagR = tr;
+            }
         }
         // (zone cliquable : la partie visible de la carte seulement ; une carte pas installee n'ouvre rien)
         RectF hz = r; float top = max(hz.Y, ar.Y), bot = min(hz.Y + hz.Height, ar.Y + ar.Height);
         if (bot - top > 12 && a.installed) { hz.Y = top; hz.Height = bot - top; HotZone(hz, UI_ADDON_CARD + i); }
+        if (tagR.Width > 0 && i < 20 && tagR.Y >= ar.Y && tagR.Y + tagR.Height <= ar.Y + ar.Height) {   // (etiquette : info-bulle ; un clic ouvre la carte, comme ailleurs)
+            HotZone(tagR, UI_ADDON_TAG + i);
+            if (g_newUi && g_uiHot == UI_ADDON_TAG + i && !_wcsicmp(AddonTag(a).c_str(), L"Standalone"))
+                SoftTooltip(g, tagR, T(L"Construite par MWCoop, plus une copie d'une voiture du jeu", L"Built by MWCoop, no longer a copy of a game car"));
+        }
         if (get) {
             if (br.Y >= ar.Y && br.Y + br.Height <= ar.Y + ar.Height) UiButton(g, br, btn, UI_ADDON_GET + i, true, g_addonDlBusy ? -1 : IC_DOWNLOAD, btnOn, 10);
             else {   // (a moitie hors du cadre : dessine sans zone cliquable)

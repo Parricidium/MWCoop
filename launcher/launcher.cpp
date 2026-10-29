@@ -8325,6 +8325,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (g_albView == 2) { for (size_t i = 0; i < g_alb.size() && i < 2; i++) g_albFav.insert(g_alb[i].name); if (!g_alb.empty()) g_albSel = 0; }
         }
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
+        else if (st == L"addons-etiquette" || st == L"addons-etiquette-bulle") {   // etiquettes (29/10) : Standalone sur sq84 et r5maxi (EtiquetteMsc=), Beta sur evo3 (Etiquette=) ; -bulle : info-bulle de la premiere Standalone
+            g_tab = TAB_CAR; g_addonsTab = true; g_addonsPage = 1;
+            g_addonCatT = g_addonCatGoT = ~0ull;
+            AddonCatThread(NULL);
+            EnterCriticalSection(&g_cs);
+            for (AddonCat &c : g_addonCat) { if (c.key == L"sq84" || c.key == L"r5maxi") c.tagMsc = L"Standalone"; if (c.key == L"evo3") c.tag = L"Beta"; }
+            LeaveCriticalSection(&g_cs);
+            g_addonScanT = 0; AddonsScan();
+            if (st == L"addons-etiquette-bulle") for (int i = 0; i < (int)g_addonList.size(); i++) if (AddonTag(g_addonList[i]) == L"Standalone") { g_uiHot = UI_ADDON_TAG + i; break; }
+        }
         else if (st == L"addons" || st == L"addons-dl" || st == L"addons-voitures") {   // onglet Addons (avec /kupla : l'accueil Voitures / Mods ; addons-voitures : les voitures, retour compris) ; catalogue lu tout de suite
             g_tab = TAB_CAR; g_addonsTab = true; g_addonsPage = st == L"addons" ? 0 : 1;
             g_addonCatT = g_addonCatGoT = ~0ull;
