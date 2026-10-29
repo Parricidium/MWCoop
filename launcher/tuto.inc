@@ -143,6 +143,10 @@ static const TutoStep kTuto[] = {
     // lanceur-1.16.0 (27/10) : la nouvelle interface, par defaut (61 ; bulle au centre)
     { L"Nouvelle interface", L"Fenêtre libre (agrandir, F11 plein écran), clair ou sombre, couleur selon le jeu, Ctrl+K pour chercher une page ou un réglage, barre d'état en bas. L'ancienne reste là : Réglages > Lanceur > Fenêtre du lanceur.",
       L"New interface", L"Free window (maximize, F11 full screen), light or dark, colour by game, Ctrl+K to search a page or a setting, status bar at the bottom. The previous one is still there: Settings > Launcher > Launcher window.", "1.16.0" },
+    // lanceur-1.16.7 (29/10) : le bouton Discord menait sur GitHub (lanceurs compiles sans discord.local.h), repare (62 ;
+    // apres une mise a jour seulement, pas dans la visite complete : l'etape 15 presente deja le bouton)
+    { L"Le Discord est de retour", L"Le bouton Discord ouvre de nouveau le serveur MWCoop : il menait sur GitHub depuis quelques versions. Viens nous dire bonjour !",
+      L"Discord is back", L"The Discord button opens the MWCoop server again: it led to GitHub for a few versions. Come and say hi!", "1.16.7" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -244,6 +248,8 @@ static RectF TutoTarget(int i)
     // 1.15.17
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
+    // 1.16.7
+    case 62: return g_btn[B_DISCORD].r;                      // le Discord est de retour (bouton de la barre)
     }
     return RectF(0, 0, 0, 0);
 }
@@ -293,7 +299,7 @@ static void TutoStart(bool all)
     char seen[32] = "0.0.0";
     GetPrivateProfileStringA("Lanceur", "TutoVersion", "0.0.0", seen, sizeof(seen), Narrow(g_iniLauncher).c_str());
     g_tutoList.clear();
-    for (int i = 0; i < kTutoN; i++) if (!TutoSkip(i) && (all || VerCmp(kTuto[i].since, seen) > 0)) g_tutoList.push_back(i);
+    for (int i = 0; i < kTutoN; i++) if (!TutoSkip(i) && !(all && i == 62) && (all || VerCmp(kTuto[i].since, seen) > 0)) g_tutoList.push_back(i);   // (62 : apres une mise a jour seulement)
     if (!all && !g_tutoList.empty() && g_tutoList[0] == 0) g_tutoList.erase(g_tutoList.begin());   // (bienvenue : visite complete seulement)
     g_tutoAll = all;
     if (g_tutoList.empty()) { WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", TutoSeenVer().c_str(), g_iniLauncher.c_str()); return; }

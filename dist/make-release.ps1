@@ -63,6 +63,9 @@ if ($Publier) {
     # (fichiers non suivis ignores, sauf sous src\ et launcher\, qui seraient compiles dans le paquet)
     $nonSuivis = @(git -C $root ls-files --others --exclude-standard -- src launcher)
     if ($nonSuivis.Count -gt 0) { throw "fichiers non suivis compiles dans le paquet : $($nonSuivis -join ', ')" }
+    # Lien du bouton Discord (fichier local ignore par git, jamais sur GitHub) : sans lui, le lanceur ouvre GitHub (JD, 29/10 :
+    # lanceur-1.16.x compiles depuis un worktree qui ne l'avait pas).
+    if ($Jeu -in 'lanceur', 'tout' -and -not (Test-Path "$root\launcher\discord.local.h")) { throw "launcher\discord.local.h absent : le bouton Discord ouvrirait GitHub (copie-le depuis le depot principal)" }
     gh release view $tag --repo $repo 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) { throw "la release $tag existe deja sur GitHub" }
     "Releases GitHub (les 8 dernieres) :"
