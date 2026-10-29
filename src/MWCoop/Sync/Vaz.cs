@@ -76,10 +76,13 @@ namespace MWCoop
         public static int OwnerOf(int n) { foreach (KeyValuePair<int, Slot> kv in wanted) if (kv.Value.Number == n) return kv.Key; return -1; }
         public static Transform CarOf(int playerId) { Rent r; return rents.TryGetValue(playerId, out r) && r.Car != null && r.Car.Car != null ? r.Car.Car.transform : null; }
         public static bool IsVaz(Transform carRoot) { return carRoot != null && carRoot.name.StartsWith(Prefix); }
-        // Cle de l'outil des places pour une copie (« modele-<dossier> » : par son modele, son numero change d'une partie a l'autre)
+        // Cle de l'outil des places pour une copie (« modele-<dossier> » : par son modele, son numero change d'une partie a l'autre) ;
+        // standalone : « standalone-<dossier> » (son habitacle detaille n'est pas celui de la copie -- JD 29/10)
         public static string SeatKey(string carName)
         {
-            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null && r.Car.Car.name == carName) return "modele-" + VazCar.ModelOf(r.Model).Folder;
+            foreach (Rent r in rents.Values)
+                if (r.Car != null && r.Car.Car != null && r.Car.Car.name == carName)
+                    return (StandaloneCar.Owns(r.Car) ? "standalone-" : "modele-") + VazCar.ModelOf(r.Model).Folder;
             return null;
         }
         // Modele choisi par ce joueur (VazCar.ModelVaz / ModelEvo) et son nom ; Evo disponible ici (extension installee).

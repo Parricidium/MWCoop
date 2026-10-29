@@ -304,6 +304,19 @@ namespace MWCoop
         public static VazCar.Built Find(GameObject car) { foreach (VazCar.Built b in cars) if (b.Car == car) return b; return null; }
         public static bool Owns(VazCar.Built b) { return b != null && states.ContainsKey(b); }
         public static bool IsCar(GameObject g) { if (g == null) return false; foreach (VazCar.Built b in cars) if (b.Car == g) return true; return false; }
+        // Yeux du conducteur au repos, repere de la voiture : ceux de tenue.ini (Poste.Yeux*), la ou StandaloneDrive pose la camera --
+        // Seats.DriverHead (avatar d'un conducteur distant, outil des places) ; faux si ce n'est pas une standalone
+        public static bool DriverEyes(Transform car, out Vector3 local)
+        {
+            local = Vector3.zero;
+            if (car == null || cars.Count == 0) return false;
+            foreach (VazCar.Built b in cars)
+            {
+                State st;
+                if (b.Car == car.gameObject && states.TryGetValue(b, out st) && st.T != null) { local = st.T.Yeux; return true; }
+            }
+            return false;
+        }
 
         public static void Remove(VazCar.Built b)
         {

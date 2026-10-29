@@ -248,12 +248,14 @@ namespace MWCoop
         static readonly Vector3 EyeFromPivotMwc = new Vector3(0f, -0.03f, 0.27f), EyeFromPivotMsc = new Vector3(0.07f, 0.03f, 0.10f);
         public static Vector3 EyeFromPivot { get { return Game.Msc ? EyeFromPivotMsc : EyeFromPivotMwc; } }
 
-        // Yeux du conducteur au repos (repere de la voiture 'car'), d'apres son DriverHeadPivot ; faux sans pivot.
+        // Yeux du conducteur au repos (repere de la voiture 'car'), d'apres son DriverHeadPivot ; faux sans pivot. Standalone : ses yeux
+        // de tenue.ini (la camera du conducteur, pas le pivot + EyeFromPivot du jeu).
         static readonly Dictionary<Transform, Transform> headPivots = new Dictionary<Transform, Transform>();
         public static bool DriverHead(Transform car, out Vector3 local)
         {
             local = Vector3.zero;
             if (car == null) return false;
+            if (StandaloneCar.DriverEyes(car, out local)) return true;
             Transform dhp;
             if (!headPivots.TryGetValue(car, out dhp) || (dhp == null && !ReferenceEquals(dhp, null))) { dhp = Find(car, "DriverHeadPivot"); headPivots[car] = dhp; }
             if (dhp == null) return ModDriverHead(car, out local);

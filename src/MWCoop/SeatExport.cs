@@ -114,7 +114,9 @@ namespace MWCoop
                 if (car == null) { Log.Warn("export des places : " + m.Name + " pas construite"); continue; }
                 Wait(6f); yield return true;
                 Rescan();   // (places de la copie)
-                try { ExportCar(car, "modele-" + m.Folder, m.Name, "addon"); } catch (Exception e) { Log.Warn("export des places : " + m.Name + " : " + e.Message); }
+                // (standalone, My Summer Car : cle « standalone-<dossier> », Vaz.SeatKey -- son habitacle n'est pas celui de la copie)
+                bool solo = StandaloneCar.IsCar(car.gameObject);
+                try { ExportCar(car, Vaz.SeatKey(car.name) ?? "modele-" + m.Folder, m.Name, solo ? "standalone" : "addon"); } catch (Exception e) { Log.Warn("export des places : " + m.Name + " : " + e.Message); }
                 Vaz.Release();
                 until = Time.realtimeSinceStartup + 10f;
                 while (Vaz.CarOf(Session.Active ? Session.LocalId : 0) != null && Time.realtimeSinceStartup < until) { Wait(0.5f); yield return true; }
@@ -209,6 +211,9 @@ namespace MWCoop
             sb.Append(']');
             Transform head = FindDeep(car, "DriverHeadPivot");
             if (head != null) sb.Append(",\"tete\":{\"p\":").Append(V(car.InverseTransformPoint(head.position))).Append(",\"q\":").Append(Q(Quaternion.Inverse(car.rotation) * head.rotation)).Append('}');
+            // (yeux du conducteur au repos, comme Seats.DriverHead : pivot + EyeFromPivot, standalone : ceux de tenue.ini)
+            Vector3 eyes;
+            if (Seats.DriverHead(car, out eyes)) sb.Append(",\"yeux\":").Append(V(eyes));
             sb.Append(Controls(car, head));
             Transform zone = FindDeep(car, "DriveTrigger");
             Collider zc = zone != null ? zone.GetComponent<Collider>() : null;
