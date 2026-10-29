@@ -173,6 +173,7 @@ namespace MWCoop
             else Log.Warn("standalone : son du klaxon de la voiture du jeu introuvable");
             st.Speedo = Gauge.Make(b, inf, "v", "cadran_vitesse.png");
             st.Tacho = Gauge.Make(b, inf, "r", "cadran_regime.png");
+            MakeMirrors(b, st, inf);
         }
 
         // Boutons du tableau de bord : ceux du modele (copie), sauf la R5 standalone -- JD 28/10, capture annotee : en ligne sur le dessus

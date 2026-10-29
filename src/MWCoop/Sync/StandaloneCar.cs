@@ -29,6 +29,7 @@ namespace MWCoop
             public Transform Pivot; public Animation Lean; public Matrix4x4 RestCarFromPivot; public string LeanOut, LeanIn, LeanBackOut, LeanBackIn; public int LeanState; public float HalfWidth; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
             public Transform[] Doors; public Vector3[] DoorCenter; public bool[] DoorOpen; public float[] DoorAngle;
             public Gauge Speedo, Tacho;
+            public Mirror[] Mirrors; public int MirrorNext; public bool MirrorsLive;   // (retroviseurs fonctionnels, StandaloneMirror)
             public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;
             public Bounds[] DoorBox = new Bounds[2]; public float WheelVis;   // (portieres : boites ; volant visible lisse)
             public CrashSensor Sensor;   // (choc mortel, mesure a chaque pas de physique)
@@ -265,6 +266,8 @@ namespace MWCoop
         {
             if (b == null) return;
             if (driving == b) Exit(b, true);   // (jamais detruire la voiture avec le joueur dedans : le PLAYER partirait avec)
+            State st;
+            if (states.TryGetValue(b, out st)) FreeMirrors(st);
             cars.Remove(b); states.Remove(b);
             if (b.Car != null) UnityEngine.Object.Destroy(b.Car);
         }
@@ -283,7 +286,8 @@ namespace MWCoop
             {
                 VazCar.Built b = cars[i];
                 State st;
-                if (b.Car == null || !states.TryGetValue(b, out st)) { if (driving == b) Exit(b, true); cars.RemoveAt(i); states.Remove(b); continue; }
+                bool has = states.TryGetValue(b, out st);
+                if (b.Car == null || !has) { if (driving == b) Exit(b, true); cars.RemoveAt(i); if (has) FreeMirrors(st); states.Remove(b); continue; }
                 if (key || (now >= st.NextFile && st.T.Changed())) { Reload(b, st, key ? "touche " + reloadKey : "fichier enregistre"); }
                 if (now >= st.NextFile) st.NextFile = now + 1f;
                 b.Dt.engineOrientation = b.Car.transform.forward;
@@ -351,7 +355,7 @@ namespace MWCoop
 
         public static void LateUpdate()
         {
-            foreach (VazCar.Built b in cars) if (b.Car != null) { VazHandling.Idle(b); State st; if (states.TryGetValue(b, out st)) DriveLate(b, st); }
+            foreach (VazCar.Built b in cars) if (b.Car != null) { VazHandling.Idle(b); State st; if (states.TryGetValue(b, out st)) { DriveLate(b, st); Mirrors(b, st); } }
         }
 
         // Entree du F10 (VazPanel) : la R5 standalone posee a 6 m devant le joueur, sur le sol ; ou retiree.
