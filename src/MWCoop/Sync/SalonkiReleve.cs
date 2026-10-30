@@ -22,6 +22,7 @@ namespace MWCoop
         // dans la liste, location (argent a 5000), vue du parking -> dumps/salonki-*.png ; « salonki essai : fin »
         static void SalonkiTest(float now)
         {
+            InspectionProbe(now);
             if (salonki == null || Config.GetInt("Test", "SalonkiEssai", 0) == 0 || saTest >= 99) return;
             if (saTest < 0) { saTest = 0; saTestAt = now + 4f; return; }
             if (now < saTestAt) return;
@@ -66,6 +67,41 @@ namespace MWCoop
                     SaShot(t.TransformPoint(new Vector3(-3f, 4f, -20f)), t.TransformPoint(new Vector3(9f, 0.5f, -6f)), Path.Combine(dir, "salonki-livraison.png"), 60f);
                     saTest = 99; L("salonki essai : fin"); break;
             }
+        }
+
+        // releve de l'inspection du jeu ([Test] SalonkiInspection=1, JD 31/10 : le garage dans le style de ce batiment) : tous les rendus a
+        // moins de 40 m, chemin, maillage, bornes, matieres (shader, texture, couleur, echelle) -> dumps/salonki-inspection.txt + vues
+        static bool inspDone;
+        static void InspectionProbe(float now)
+        {
+            if (inspDone || Config.GetInt("Test", "SalonkiInspection", 0) == 0 || now < 30f) return;
+            inspDone = true;
+            string dir = Path.Combine(Log.DataDir, "dumps");
+            Vector3 c = new Vector3(-1531.7f, 4.5f, 1281.6f);
+            var sb = new StringBuilder();
+            foreach (Renderer r in Object.FindObjectsOfType<Renderer>())
+            {
+                if ((r.bounds.center - c).sqrMagnitude > 40f * 40f) continue;
+                MeshFilter mf = r.GetComponent<MeshFilter>();
+                sb.Append(ObjPath(r.transform)).Append(" | ").Append(mf != null && mf.sharedMesh != null ? mf.sharedMesh.name + " v" + mf.sharedMesh.vertexCount : r.GetType().Name)
+                  .Append(" | ").Append(r.bounds.center.ToString("F1")).Append(" ").Append(r.bounds.size.ToString("F1")).Append(" | ");
+                foreach (Material m in r.sharedMaterials)
+                {
+                    if (m == null) { sb.Append("null; "); continue; }
+                    sb.Append(m.name).Append(" [").Append(m.shader != null ? m.shader.name : "?").Append("] ");
+                    if (m.HasProperty("_MainTex") && m.mainTexture != null) sb.Append("tex=").Append(m.mainTexture.name).Append(" ").Append(m.mainTextureScale.ToString("F2")).Append(" ");
+                    if (m.HasProperty("_Color")) sb.Append("col=").Append(m.color.ToString("F2"));
+                    sb.Append("; ");
+                }
+                sb.AppendLine();
+            }
+            File.WriteAllText(Path.Combine(dir, "salonki-inspection.txt"), sb.ToString());
+            Vector3 face = new Vector3(-1533.8f, 3f, 1269.8f), d = (face - c); d.y = 0f; d.Normalize();
+            SaShot(c + d * 22f + Vector3.up * 5f, c, Path.Combine(dir, "salonki-insp1.png"), 60f);
+            SaShot(c - d * 22f + Vector3.up * 5f, c, Path.Combine(dir, "salonki-insp2.png"), 60f);
+            SaShot(c + Vector3.up * 1.2f + d * 2f, c + Vector3.up * 1.5f - d * 6f, Path.Combine(dir, "salonki-insp3.png"), 75f);
+            SaShot(c + Vector3.up * 1.2f - d * 4f, c + Vector3.up * 2.5f + d * 6f, Path.Combine(dir, "salonki-insp4.png"), 75f);
+            L("salonki essai : inspection relevee");
         }
 
         static void SaShot(Vector3 from, Vector3 at, string file, float fov)

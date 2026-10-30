@@ -14,6 +14,10 @@ namespace MWCoop
     // suspensions industrielles, sol de beton), voitures du catalogue posees en vrac ou levees sur des ponts a deux colonnes,
     // pneus, servantes, etabli ; bureau vitre dans l'angle avant droit (porte sur la rue et porte sur l'atelier), vendeur derriere
     // son comptoir (visee + clic : menu de location, SalonkiMenu) ; parking de livraison devant les portes.
+    // Style (JD 31/10 : « en prenant exemple sur les textures et le design de l'inspection du jeu ») : les matieres du batiment
+    // INSPECTION de My Summer Car (releve SalonkiInspection) -- murs de dalles de beton (concrete_slabs), bandeau de toit en tole
+    // ondulee (wall_metal1), toit et plafond de bac acier (wall_metal2), sol (tiles4), brique (wall_brick2) pour le pylone de
+    // l'enseigne et les murets ; fenetres rectangulaires a menuiseries de metal clair, bandeaux vitres hauts, tubes fluorescents.
     // My Summer Car d'abord. A l'est du cinema KINO TAHTI, meme route, meme alignement : la prairie au nord de la route y est plate
     // (releve du 29/10 : 1,1 m de denivele sur 120 x 80 m, aucun objet, 200 m libres vers le nord).
     // Repere propre : x vers l'est (le long de la route), z vers le nord (le fond), y = 0 au sol de l'atelier ; facade a z = 0 sur
@@ -22,7 +26,7 @@ namespace MWCoop
     // [Salonki] Paikka=x,z,cap : place de l'angle sud-ouest (facade, cote cinema) et cap ; Active=0 : pas de garage.
     public static partial class Kauppa
     {
-        const float SaW = 24f, SaD = 22f, SaH = 7f, SaT = 0.35f, SaPark = 13f, SaLiftH = 1.75f;
+        const float SaW = 24f, SaD = 22f, SaH = 6f, SaT = 0.35f, SaPark = 13f, SaLiftH = 1.75f;
         // bureau vitre (angle avant droit) et son comptoir
         const float SaOx = 17.2f, SaOz = 8.5f, SaOh = 2.9f, SaDeskZ0 = 4.5f, SaDeskZ1 = 5.1f;
         static readonly Vector3 SaVendorSpot = new Vector3(20.9f, 0f, 6.0f);
@@ -110,11 +114,13 @@ namespace MWCoop
 
         static void SalonkiMaterials()
         {
-            Mat("sa_tiili", "wall_brick2", 2.4f, new Color(1.55f, 1.38f, 1.05f));      // briques claires (jaune paille ; teinte > 1 : la brique du jeu est rouge sombre)
-            Mat("sa_katto", "wall_brick2", 1.6f, new Color(1.0f, 0.66f, 0.46f));       // plafond de briques, terre cuite
-            Mat("sa_lattia", "paint_black_matte", 1f, new Color(0.44f, 0.44f, 0.45f));  // beton lisse
+            Mat("sa_tiili", "wall_brick2", 2.4f, new Color(1.0f, 0.92f, 0.92f));       // brique (teinte de l'inspection)
+            Mat("sa_laatat", "concrete_slabs", 3.6f, new Color(0.86f, 0.86f, 0.86f));   // dalles de beton des murs de l'inspection
+            Mat("sa_pelti", "wall_metal1", 2.0f, new Color(1.08f, 1.06f, 0.98f));       // tole ondulee du bandeau de toit
+            Mat("sa_katto", "wall_metal2", 2.5f, new Color(0.85f, 0.85f, 0.85f));       // bac acier (toit, plafond)
+            Mat("sa_kehys", "wall_metal2", 1.0f, new Color(0.80f, 0.81f, 0.82f));       // menuiseries de metal clair
+            Mat("sa_lattia", "paint_black_matte", 1f, new Color(0.50f, 0.50f, 0.50f));   // beton gris lisse (le carrelage tiles4 de l'inspection ressortait beige)
             Mat("sa_valkoinen", "paint_black_matte", 1f, new Color(0.93f, 0.93f, 0.91f));
-            Mat("sa_laatta", "tiles5", 0.6f, new Color(1.0f, 0.45f, 0.22f));            // carrelage orange du bas du mur gauche
             Mat("sa_tumma", "paint_black_matte", 1f, new Color(0.12f, 0.12f, 0.14f));   // menuiseries, bandeaux
             Mat("sa_teras", "paint_black_matte", 1f, new Color(0.24f, 0.25f, 0.27f));   // poutrelles
             Mat("sa_sininen", "paint_black_matte", 1f, new Color(0.10f, 0.22f, 0.58f)); // colonnes des ponts
@@ -229,12 +235,12 @@ namespace MWCoop
             float q0 = p - 0.04f, q1 = p + 0.04f;
             WBox(alongX, p - 0.01f, p + 0.01f, h.A, h.B, h.Sill, h.Top, "lasi");
             // cadre, montants (tous les ~45 cm), traverses (tous les ~55 cm), arretes par l'arc
-            WBox(alongX, q0, q1, h.A, h.B, h.Sill, h.Sill + 0.06f, "sa_tumma", false);
+            WBox(alongX, q0, q1, h.A, h.B, h.Sill, h.Sill + 0.06f, "sa_kehys", false);
             int nv = Mathf.Max(2, Mathf.RoundToInt((h.B - h.A) / 0.45f));
             for (int k = 0; k <= nv; k++)
             {
                 float u = h.A + (h.B - h.A) * k / nv, top = h.Arch ? ArchY(h, Mathf.Clamp(u, h.A + 0.03f, h.B - 0.03f)) : h.Top;
-                WBox(alongX, q0, q1, u - 0.025f, u + 0.025f, h.Sill, top, "sa_tumma", false);
+                WBox(alongX, q0, q1, u - 0.025f, u + 0.025f, h.Sill, top, "sa_kehys", false);
             }
             for (float y = h.Sill + 0.55f; y < (h.Arch ? ArchY(h, (h.A + h.B) / 2f) - 0.1f : h.Top); y += 0.55f)
             {
@@ -244,35 +250,35 @@ namespace MWCoop
                     float r = (h.B - h.A) / 2f, c = (h.A + h.B) / 2f, dy = y - h.Top, half = Mathf.Sqrt(Mathf.Max(0f, r * r - dy * dy));
                     a = c - half; b = c + half;
                 }
-                WBox(alongX, q0, q1, a, b, y - 0.025f, y + 0.025f, "sa_tumma", false);
+                WBox(alongX, q0, q1, a, b, y - 0.025f, y + 0.025f, "sa_kehys", false);
             }
-            if (!h.Arch) WBox(alongX, q0, q1, h.A, h.B, h.Top - 0.06f, h.Top, "sa_tumma", false);
+            if (!h.Arch) WBox(alongX, q0, q1, h.A, h.B, h.Top - 0.06f, h.Top, "sa_kehys", false);
         }
 
-        // coque : socle, sol, murs de briques (portes, fenetres cintrees), plafond de briques, toit, verriere, poutrelles, parking
+        // coque : socle, sol, murs de dalles de beton (portes, fenetres, bandeaux vitres hauts), plafond de bac acier, toit, poutrelles
         static void SalonkiShell(float down)
         {
             float W = SaW, D = SaD, H = SaH, T = SaT, top = H + 0.6f;
             Box(new Vector3(-T, -down, -0.4f), new Vector3(W + T, -0.02f, D + T), "sa_betoni");
             Box(new Vector3(0f, -0.02f, 0f), new Vector3(W, 0f, D), null, null, "sa_lattia", null, null, null);
             // facade : deux grandes portes d'atelier ouvertes, une fenetre cintree, porte et vitrine du bureau
-            SaWall(true, -T, 0f, -T, W + T, top, "sa_tiili",
+            SaWall(true, -T, 0f, -T, W + T, top, "sa_laatat",
                 new SaHole(2.4f, 7.0f, 0f, 4.4f, false, false), new SaHole(8.4f, 13.0f, 0f, 4.4f, false, false),
-                new SaHole(14.4f, 16.2f, 1.2f, 3.4f, true, true),
+                new SaHole(14.0f, 16.6f, 1.0f, 3.6f, false, true),
                 new SaHole(19.6f, 21.0f, 0f, 2.3f, false, false), new SaHole(21.6f, 23.4f, 0.9f, 2.4f, false, true));
-            // fond : trois hautes fenetres cintrees
-            SaWall(true, D, D + T, -T, W + T, top, "sa_tiili",
-                new SaHole(3.4f, 6.0f, 1.0f, 4.6f, true, true), new SaHole(9.9f, 12.5f, 1.0f, 4.6f, true, true), new SaHole(16.4f, 19.0f, 1.0f, 4.6f, true, true));
-            // pignon droit : deux fenetres derriere le bureau ; pignon gauche plein (servantes, affiches)
-            SaWall(false, W, W + T, 0f, D, top, "sa_tiili", new SaHole(11.0f, 13.4f, 1.0f, 4.4f, true, true), new SaHole(16.4f, 18.8f, 1.0f, 4.4f, true, true));
-            SaWall(false, -T, 0f, 0f, D, top, "sa_tiili");
-            // mur gauche, dedans : carrelage orange en bas, peinture blanche au-dessus (photo)
-            Box(new Vector3(0f, 0f, 0f), new Vector3(0.03f, 1.4f, D), "sa_laatta", false);
-            Box(new Vector3(0f, 1.4f, 0f), new Vector3(0.025f, H, D), "sa_valkoinen", false);
-            // plafond de briques, toit, verriere au milieu
+            // fond : trois grandes fenetres
+            SaWall(true, D, D + T, -T, W + T, top, "sa_laatat",
+                new SaHole(3.0f, 6.4f, 1.0f, 3.8f, false, true), new SaHole(9.5f, 12.9f, 1.0f, 3.8f, false, true), new SaHole(16.0f, 19.4f, 1.0f, 3.8f, false, true));
+            // pignons : bandeaux vitres hauts (comme l'atelier de l'inspection), deux fenetres derriere le bureau a droite
+            SaWall(false, W, W + T, 0f, D, top, "sa_laatat", new SaHole(9.6f, 14.4f, 1.0f, 3.6f, false, true), new SaHole(15.6f, 20.4f, 4.2f, 5.0f, false, true));
+            SaWall(false, -T, 0f, 0f, D, top, "sa_laatat", new SaHole(1.5f, 6.5f, 4.2f, 5.0f, false, true), new SaHole(8.5f, 13.5f, 4.2f, 5.0f, false, true), new SaHole(15.5f, 20.5f, 4.2f, 5.0f, false, true));
+            // plafond de bac acier, toit blanc, bandeau de tole ondulee tout autour
             Box(new Vector3(0f, H, 0f), new Vector3(W, H + 0.2f, D), "sa_tumma", "sa_tumma", "sa_tumma", "sa_katto", "sa_tumma", "sa_tumma", false);
-            Box(new Vector3(-T - 0.2f, top, -T - 0.4f), new Vector3(W + T + 0.2f, top + 0.25f, D + T + 0.2f), "sa_tumma");
-            Box(new Vector3(9.4f, H - 0.03f, 2f), new Vector3(14.6f, H, D - 2f), null, null, null, "sa_valo", null, null, false);
+            Box(new Vector3(-T - 0.25f, top, -T - 0.25f), new Vector3(W + T + 0.25f, top + 0.2f, D + T + 0.25f), "sa_pelti", "sa_pelti", "sa_katto", "sa_tumma", "sa_pelti", "sa_pelti");
+            Box(new Vector3(-T - 0.12f, top - 0.9f, -T - 0.12f), new Vector3(W + T + 0.12f, top, -T), "sa_pelti", false);
+            Box(new Vector3(-T - 0.12f, top - 0.9f, D + T), new Vector3(W + T + 0.12f, top, D + T + 0.12f), "sa_pelti", false);
+            Box(new Vector3(W + T, top - 0.9f, -T), new Vector3(W + T + 0.12f, top, D + T), "sa_pelti", false);
+            Box(new Vector3(-T - 0.12f, top - 0.9f, -T), new Vector3(-T, top, D + T), "sa_pelti", false);
             // poutrelles d'acier en travers, longrine de la verriere
             for (float z = 2.2f; z < D; z += 4.4f)
             {
@@ -280,18 +286,18 @@ namespace MWCoop
                 Box(new Vector3(0f, H - 0.46f, z - 0.15f), new Vector3(W, H - 0.42f, z + 0.15f), "sa_teras", false);
             }
             foreach (float x in new[] { 9.3f, 14.7f }) Box(new Vector3(x - 0.08f, H - 0.3f, 1.5f), new Vector3(x + 0.08f, H, D - 1.5f), "sa_teras", false);
-            // dehors (JD 30/10 : « bien structure a l'exterieur ») : soubassement de beton, pilastres de brique, corniche
+            // dehors (JD 30/10 : « bien structure a l'exterieur ») : soubassement de beton ; encadrements de metal des grandes portes
             float bandY = 0.55f, pr = 0.07f;
             foreach (float[] s in new[] { new[] { -T, 2.4f }, new[] { 7.0f, 8.4f }, new[] { 13.0f, 19.6f }, new[] { 21.0f, W + T } })
                 Box(new Vector3(s[0], -down, -T - pr), new Vector3(s[1], bandY, -T), "sa_betoni");
             Box(new Vector3(-T - pr, -down, D + T), new Vector3(W + T + pr, bandY, D + T + pr), "sa_betoni");
             Box(new Vector3(W + T, -down, -T - pr), new Vector3(W + T + pr, bandY, D + T + pr), "sa_betoni");
-            foreach (float z in new[] { 2.8f, 8.6f, 14.9f, 20.6f }) Box(new Vector3(W + T, bandY, z - 0.3f), new Vector3(W + T + 0.2f, top, z + 0.3f), "sa_tiili");
-            foreach (float x in new[] { 1.7f, 8.0f, 14.2f, 20.7f }) Box(new Vector3(x - 0.3f, bandY, D + T), new Vector3(x + 0.3f, top, D + T + 0.2f), "sa_tiili");
-            foreach (float x in new[] { -T, 7.7f, 13.7f, W + T - 0.6f }) Box(new Vector3(x, 4.5f, -T - 0.2f), new Vector3(x + 0.6f, top, -T), "sa_tiili");
-            Box(new Vector3(-T - 0.25f, top - 0.4f, -T - 0.3f), new Vector3(W + T + 0.3f, top, -T - 0.05f), "sa_betoni", false);
-            Box(new Vector3(W + T + 0.05f, top - 0.4f, -T - 0.3f), new Vector3(W + T + 0.3f, top, D + T + 0.3f), "sa_betoni", false);
-            Box(new Vector3(-T - 0.25f, top - 0.4f, D + T + 0.05f), new Vector3(W + T + 0.3f, top, D + T + 0.3f), "sa_betoni", false);
+            foreach (float[] dd in new[] { new[] { 2.4f, 7.0f }, new[] { 8.4f, 13.0f } })
+            {
+                Box(new Vector3(dd[0] - 0.14f, 0f, -T - 0.1f), new Vector3(dd[0], 4.54f, 0.02f), "sa_kehys", false);
+                Box(new Vector3(dd[1], 0f, -T - 0.1f), new Vector3(dd[1] + 0.14f, 4.54f, 0.02f), "sa_kehys", false);
+                Box(new Vector3(dd[0] - 0.14f, 4.4f, -T - 0.1f), new Vector3(dd[1] + 0.14f, 4.54f, 0.02f), "sa_kehys", false);
+            }
             // caissons des portes relevees (dedans, au-dessus des ouvertures)
             foreach (float[] dd in new[] { new[] { 2.4f, 7.0f }, new[] { 8.4f, 13.0f } })
                 Box(new Vector3(dd[0] - 0.2f, 4.45f, 0.02f), new Vector3(dd[1] + 0.2f, 5.0f, 0.6f), "sa_teras", false);
@@ -468,12 +474,12 @@ namespace MWCoop
         {
             Transform t = salonki.transform;
             Color gold = new Color(1f, 0.82f, 0.3f), dark = new Color(0.10f, 0.10f, 0.12f), red = new Color(0.68f, 0.07f, 0.05f), yellow = new Color(0.98f, 0.78f, 0.12f);
-            SaPanel(t, new Vector3(7.7f, 5.55f, -SaT - 0.06f), Quaternion.identity, 11.4f, 1.3f, dark, h =>
+            SaPanel(t, new Vector3(7.7f, 5.05f, -SaT - 0.16f), Quaternion.identity, 11.4f, 1.1f, dark, h =>
             {
                 SaText(h, "AUTOSALONKI", new Vector3(0, 0.17f, 0), Quaternion.identity, 0.08f, gold, TextAnchor.MiddleCenter);
                 SaText(h, "KORJAAMO · VUOKRAUS · LOCATION · RENTAL", new Vector3(0, -0.36f, 0), Quaternion.identity, 0.026f, Color.white, TextAnchor.MiddleCenter, FontStyle.Normal);
             }, 110f);
-            SaPanel(t, saSignAt, Quaternion.identity, 2.8f, 0.9f, dark, h =>
+            SaPanel(t, saSignAt, Quaternion.identity, 2.7f, 0.9f, dark, h =>
             {
                 SaText(h, "AUTOSALONKI", new Vector3(0, 0.12f, 0), Quaternion.identity, 0.04f, gold, TextAnchor.MiddleCenter);
                 SaText(h, "KORJAAMO · VUOKRAUS", new Vector3(0, -0.24f, 0), Quaternion.identity, 0.018f, Color.white, TextAnchor.MiddleCenter, FontStyle.Normal);
@@ -638,7 +644,7 @@ namespace MWCoop
             return null;
         }
 
-        // suspensions industrielles (abat-jour blancs) au-dessus de l'atelier, plafonnier du bureau
+        // reglettes de tubes fluorescents sous les poutrelles (comme l'inspection), plafonnier du bureau
         static void SalonkiLights()
         {
             Transform t = salonki.transform;
@@ -646,12 +652,12 @@ namespace MWCoop
             foreach (Vector3 p in new[] { new Vector3(4.5f, 0, 4.6f), new Vector3(11.5f, 0, 4.6f), new Vector3(4.5f, 0, 11.4f), new Vector3(11.5f, 0, 11.4f),
                                           new Vector3(4.5f, 0, 17.6f), new Vector3(11.5f, 0, 17.6f), new Vector3(19.5f, 0, 12.4f), new Vector3(19.5f, 0, 18.2f) })
             {
-                float drop = 1.7f + (Mathf.Abs((int)(p.x * 3 + p.z)) % 3) * 0.25f;
-                SaTube(t, new Vector3(p.x, SaH, p.z), new Vector3(p.x, SaH - drop, p.z), 0.02f, dark);
-                SaCyl(t, new Vector3(p.x, SaH - drop - 0.12f, p.z), 0.6f, 0.24f, white);
-                SaPrim(t, PrimitiveType.Sphere, new Vector3(p.x, SaH - drop, p.z), new Vector3(0.3f, 0.2f, 0.3f), white);
+                float y = SaH - 0.62f;
+                foreach (float dx in new[] { -0.7f, 0.7f }) SaTube(t, new Vector3(p.x + dx, SaH - 0.46f, p.z), new Vector3(p.x + dx, y, p.z), 0.015f, dark);
+                SaPrim(t, PrimitiveType.Cube, new Vector3(p.x, y, p.z), new Vector3(1.8f, 0.07f, 0.2f), mats["sa_kehys"]);
+                SaPrim(t, PrimitiveType.Cube, new Vector3(p.x, y - 0.05f, p.z), new Vector3(1.7f, 0.045f, 0.08f), mats["sa_valo"]);
                 var g = new GameObject("sa_valo"); g.transform.SetParent(t, false);
-                g.transform.localPosition = new Vector3(p.x, SaH - drop - 0.45f, p.z);
+                g.transform.localPosition = new Vector3(p.x, y - 0.4f, p.z);
                 var l = g.AddComponent<Light>(); l.type = LightType.Point; l.range = 11f; l.intensity = 1.15f; l.color = new Color(1f, 0.95f, 0.86f); l.shadows = LightShadows.None;
             }
             foreach (Vector3 p in saLampSpots)
@@ -725,10 +731,12 @@ namespace MWCoop
                 }
             KinoDriveway(new[] { from, best }, gy);
             L("salon : allee vers la route " + (bd < float.MaxValue ? "a " + Mathf.Sqrt(bd).ToString("F1") + " m" : ": pas de route trouvee"));
-            // poteaux du panneau de l'entree (le panneau : SalonkiSigns), tourne vers la route
+            // pylone de brique de l'enseigne a l'entree (comme la haute tour de brique de l'inspection), panneau entre ses deux piles
             float sg = gy(gate1 + 2.2f, mz - 0.8f);
-            foreach (float x in new[] { gate1 + 1.0f, gate1 + 3.4f }) Box(new Vector3(x - 0.06f, sg - 0.3f, mz - 0.86f), new Vector3(x + 0.06f, sg + 2.0f, mz - 0.74f), "sa_tumma");
-            saSignAt = new Vector3(gate1 + 2.2f, sg + 2.35f, mz - 0.9f);
+            foreach (float x in new[] { gate1 + 0.6f, gate1 + 3.8f }) Box(new Vector3(x - 0.25f, sg - 0.4f, mz - 1.05f), new Vector3(x + 0.25f, sg + 5.4f, mz - 0.55f), "sa_tiili");
+            Box(new Vector3(gate1 + 0.3f, sg + 5.4f, mz - 1.1f), new Vector3(gate1 + 4.1f, sg + 5.7f, mz - 0.5f), "sa_tiili");
+            Box(new Vector3(gate1 + 0.25f, sg + 5.7f, mz - 1.15f), new Vector3(gate1 + 4.15f, sg + 5.8f, mz - 0.45f), "sa_betoni", false);
+            saSignAt = new Vector3(gate1 + 2.2f, sg + 3.6f, mz - 1.08f);
             // lampadaires le long du muret, bras vers le garage
             saLampSpots.Clear();
             foreach (float x in new[] { 3.5f, 20.5f })
