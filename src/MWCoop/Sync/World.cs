@@ -53,6 +53,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             found = muted = phase = hostFast = false;
+            tvNoise = null; tvNoiseAudio = null; tvLooked = false;
             beds.Clear();
             passOut = null; passOutSince = -1;
             nextBedScan = 0;
@@ -499,6 +500,14 @@ namespace MWCoop
             if (cloudObjects != null) { cloudObjects.position = objPos; cloudObjects.rotation = objRot; }
             FsmFloat amb = FsmVariables.GlobalVariables.FindFsmFloat("AmbientTemperature");
             if (amb != null) amb.Value = temp;
+            // (Clouds :: Temperature, coupe ici, posait aussi ThermometerScale -- la barre rouge des thermometres, etat 'Thermometer' :
+            // (AmbientTemperature + 50) / 50, entre 0 et 2 ; restee a 0 chez l'invite, signalement de Донской 30/10 : « always no red line
+            // for a client ». [Test] ThermometreInvite=0 : comme avant.)
+            if (temperature != null && Config.GetInt("Test", "ThermometreInvite", 1) != 0)
+            {
+                FsmFloat ts = FsmVariables.GlobalVariables.FindFsmFloat("ThermometerScale");
+                if (ts != null) ts.Value = Mathf.Clamp((temp + 50f) / 50f, 0f, 2f);
+            }
             if (forecast != null) forecast.FsmVariables.GetFsmBool("Snowing").Value = snowing;
             // Ce que fait 'Fudge' (Forecast, coupe ici) avec Snowing : les nuages (CloudObjects) n'existent que les
             // jours de neige, et la neige qui tombe sur le joueur (PLAYER/Rain :: Rain, RainYes). Sans cela le ciel de
@@ -508,9 +517,35 @@ namespace MWCoop
                 cloudObjects.gameObject.SetActive(snowing);
                 Log.Info("monde : nuages " + (snowing ? "affiches" : "caches") + " (hote)");
             }
+            if (!snowing && forecast != null && Config.GetInt("Test", "TeleInvite", 1) != 0) TvQuiet();
             if (playerRain == null) { GameObject pr = Game.PlayerPart("Rain"); if (pr != null) playerRain = Game.FsmOn(pr, "Rain"); }
             FsmBool rainYes = playerRain != null ? playerRain.FsmVariables.FindFsmBool("RainYes") : null;
             if (rainYes != null) rainYes.Value = snowing;
+        }
+
+        // Bruit de la tele (Systems/TV/TVNoise :: Animate, Alpha : seuil de transparence, 1,1 = invisible ; son TVAudioNoise) : sans tempete,
+        // l'etat 'Reset TV' de Forecast :: Logic le pose a 1,1 et le son a 0 -- coupe chez l'invite, sa tele gresillait toujours (Alpha
+        // laisse a 1, son du bruit au volume de depart ; signalement de Донской 30/10 : « The TV's for client always got a noises »). Pendant
+        // une tempete, CloudObjects/Distance (local, allume avec les nuages) le regle selon la distance au mat radio : pas touche.
+        // [Test] TeleInvite=0 : comme avant.
+        static PlayMakerFSM tvNoise; static AudioSource tvNoiseAudio; static bool tvLooked;
+        static void TvQuiet()
+        {
+            if (!tvLooked)
+            {
+                tvLooked = true;
+                GameObject tn = Game.FindAny("Systems/TV/TVNoise");
+                tvNoise = tn != null ? Game.FsmOn(tn, "Animate") : null;
+                foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(AudioSource)))
+                {
+                    var a = o as AudioSource;
+                    if (a != null && a.hideFlags == HideFlags.None && a.gameObject.name == "TVAudioNoise") { tvNoiseAudio = a; break; }
+                }
+                Log.Info("monde : bruit de la tele " + (tvNoise != null ? "trouve" : "introuvable") + ", son " + (tvNoiseAudio != null ? Recon.Path(tvNoiseAudio.transform) : "introuvable") + " (calme sans tempete, comme Forecast 'Reset TV')");
+            }
+            FsmFloat al = tvNoise != null ? tvNoise.FsmVariables.FindFsmFloat("Alpha") : null;
+            if (al != null && al.Value != 1.1f) al.Value = 1.1f;
+            if (tvNoiseAudio != null && tvNoiseAudio.volume != 0f) tvNoiseAudio.volume = 0f;
         }
 
         public static float LocalScale { get { return GlobalFloat("GlobalTimeScale"); } }
