@@ -79,6 +79,9 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             Watch(now);
             Beat(now);
+            foreach (Cd c in cds) Nudge(c);
+            if (Session.IsHost) CdResume(now);
+            else if (now >= nextSend) { nextSend = now + 1f; ReportCds(now); }
             if (!Session.IsHost || now < nextSend || Session.RemoteCount == 0) return;
             nextSend = now + 1f;
             var w = new NetWriter(Msg.Radio).U8(ch.Length);
@@ -123,7 +126,13 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- lecteurs CD (voir l'en-tete)
-        class Cd { public string Name; public AudioSource A; public PlayMakerFSM Upd; public bool Muted; public string Last; }
+        // Lecteur loin de l'hote (dossier #26, Podpivas_70RUS 30/10 : « le CD s'arrete chez l'invite a ~300 m de l'hote, reprend au
+        // debut quand il revient ») : hors de portee chez l'hote, son objet est eteint (LOD de la voiture) -- l'hote, reference,
+        // envoyait « arrete » et l'invite coupait sa musique ; au retour, l'automate du lecteur de l'hote repartait de zero. Depuis le
+        // 30/10 : lecteur eteint chez l'hote -> rang -2 (« pas de reference ici ») ; l'invite qui l'a allume le rend a son jeu sans
+        // couper la piste (Leading) et envoie son etat a l'hote chaque seconde ; l'hote le recopie (Report) et, son lecteur rallume,
+        // reprend cette piste a cette position avant de redevenir la reference. [Test] CdLoinHote=0 : comme avant.
+        class Cd { public string Name; public AudioSource A; public PlayMakerFSM Upd; public bool Muted; public string Last; public bool Leading; public float ReportAt = -10f, ReportT; public int ReportWho; public string Nudge; }
         static readonly List<Cd> cds = new List<Cd>();
         static float nextCdFind; static GameObject cdRoot;
 
@@ -162,20 +171,142 @@ namespace MWCoop
             foreach (Cd c in cds)
             {
                 if (c.A == null || c.Upd == null || n-- <= 0) continue;
-                FsmString cd = c.Upd.FsmVariables.FindFsmString("CurrentCD");
-                FsmInt idx = c.Upd.FsmVariables.FindFsmInt("Index");
-                bool playing = c.A.clip != null && c.A.isPlaying && c.A.gameObject.activeInHierarchy;
-                int rank = idx != null ? idx.Value : -1;
-                // (rang du morceau qui joue vraiment, pas la variable : sur la DERNIERE piste du disque, l'automate du jeu passe Index a -1
-                // (« Reset ») avant de la jouer -- l'invite ne la trouvait pas et n'entendait pas la meme chose, dossier #21 рома 28/10)
-                if (playing && cd != null && Config.GetInt("Test", "CdRangVariable", 0) == 0)
+                WriteCd(w, c, !c.A.gameObject.activeInHierarchy && LoinHote);
+            }
+        }
+        static bool LoinHote { get { return Config.GetInt("Test", "CdLoinHote", 1) != 0; } }
+
+        // Un lecteur sur le fil : nom, disque, rang (-2 : eteint ici, pas de reference -- dossier #26), position, joue.
+        static void WriteCd(NetWriter w, Cd c, bool away)
+        {
+            FsmString cd = c.Upd.FsmVariables.FindFsmString("CurrentCD");
+            FsmInt idx = c.Upd.FsmVariables.FindFsmInt("Index");
+            bool playing = c.A.clip != null && c.A.isPlaying && c.A.gameObject.activeInHierarchy;
+            int rank = idx != null ? idx.Value : -1;
+            // (rang du morceau qui joue vraiment, pas la variable : sur la DERNIERE piste du disque, l'automate du jeu passe Index a -1
+            // (« Reset ») avant de la jouer -- l'invite ne la trouvait pas et n'entendait pas la meme chose, dossier #21 рома 28/10)
+            if (playing && cd != null && Config.GetInt("Test", "CdRangVariable", 0) == 0)
+            {
+                int k = RankOf(cd.Value, c.A.clip);
+                if (k >= 0) rank = k;
+            }
+            w.Str(c.Name).Str(cd != null ? cd.Value ?? "" : "").I32(away ? -2 : rank).F32(playing ? c.A.time : 0f).Bool(playing);
+        }
+        static int RankOf(string cd, AudioClip clip)
+        {
+            if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
+            System.Collections.ArrayList l = ArrayListOf(cdRoot, cd);
+            return l != null && clip != null ? l.IndexOf(clip) : -1;
+        }
+
+        // Invite : les lecteurs qu'il mene (eteints chez l'hote, dossier #26), a l'hote chaque seconde -- message Radio sans canaux
+        // (un hote plus ancien ignore un Radio d'invite).
+        static void ReportCds(float now)
+        {
+            int n = 0;
+            foreach (Cd c in cds) if (c.Leading && c.A != null && c.Upd != null && c.A.gameObject.activeInHierarchy && c.A.isPlaying) n++;
+            if (n == 0) return;
+            var w = new NetWriter(Msg.Radio).U8(0).U8(Mathf.Min(n, 255));
+            foreach (Cd c in cds)
+                if (c.Leading && c.A != null && c.Upd != null && c.A.gameObject.activeInHierarchy && c.A.isPlaying && n-- > 0) WriteCd(w, c, false);
+            Session.SendToHost(w, false);
+        }
+
+        // Rend le lecteur a l'automate du jeu SANS couper la piste qui joue : variables posees sur elle (Index, CurrentTrack, Audio, et
+        // MaxTracks -- 0 chez qui n'avait jamais lance le disque lui-meme : la meme piste revenait en boucle), automate rallume tel quel ;
+        // la piste finie, la suivante est lancee par 'Play track' (Nudge). ('Play track' tout de suite relancait la piste en cours : 20 s ->
+        // 6 s en essai.)
+        static void GiveBack(Cd c, string why)
+        {
+            AudioSource a = c.A;
+            AudioClip clip = a.clip; float t = a.time; bool was = a.isPlaying;
+            c.Muted = false; c.Last = null;
+            FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD");
+            int k = clip != null && cv != null ? RankOf(cv.Value, clip) : -1;
+            if (k >= 0)
+            {
+                if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
+                System.Collections.ArrayList l = ArrayListOf(cdRoot, cv.Value);
+                FsmInt iv = c.Upd.FsmVariables.FindFsmInt("Index"); if (iv != null) iv.Value = k;
+                FsmInt ct = c.Upd.FsmVariables.FindFsmInt("CurrentTrack"); if (ct != null) ct.Value = k + 1;
+                FsmInt mt = c.Upd.FsmVariables.FindFsmInt("MaxTracks"); if (mt != null && l != null) mt.Value = l.Count - 1;
+                FsmObject au = c.Upd.FsmVariables.FindFsmObject("Audio"); if (au != null) au.Value = clip;
+            }
+            c.Upd.enabled = true;
+            c.Nudge = was && k >= 0 ? c.Upd.ActiveStateName : null;
+            Log.Info("radio : lecteur " + c.Name + " rendu a ce joueur, " + why + (was ? " (piste " + (k + 1) + " a " + t.ToString("F0") + " s, " + (a.isPlaying ? "continue" : "ARRETEE") + ", automate [" + c.Upd.ActiveStateName + "])" : ""));
+        }
+
+        // Lecteur rendu au jeu en pleine piste : a sa fin, piste suivante ('Play track' sur elle ; l'automate enchaine ensuite) -- sauf s'il a bouge entre-temps
+        // (bouton, disque ejecte : il mene deja) ou s'il enchaine seul ('Play track').
+        static void Nudge(Cd c)
+        {
+            if (c.Nudge == null || c.Muted || c.A == null || c.Upd == null) return;
+            if (c.Nudge == "Play track" || c.Upd.ActiveStateName != c.Nudge || !c.Upd.enabled) { c.Nudge = null; return; }
+            if (c.A.isPlaying || !c.A.gameObject.activeInHierarchy) return;
+            c.Nudge = null;
+            // (piste suivante prise dans la liste du disque, Radio/CD, comme partout ici -- apres la derniere, la premiere, comme le jeu)
+            FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD");
+            if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
+            System.Collections.ArrayList l = cv != null ? ArrayListOf(cdRoot, cv.Value) : null;
+            int k = cv != null ? RankOf(cv.Value, c.A.clip) : -1;
+            if (l == null || l.Count == 0 || k < 0) { Game.SetState(c.Upd, "State 6"); Log.Info("radio : lecteur " + c.Name + " : piste finie, suivante par le jeu"); return; }
+            int next = k + 1 >= l.Count ? 0 : k + 1;
+            AudioClip nc = l[next] as AudioClip;
+            FsmInt iv = c.Upd.FsmVariables.FindFsmInt("Index"); if (iv != null) iv.Value = next;
+            FsmInt ct = c.Upd.FsmVariables.FindFsmInt("CurrentTrack"); if (ct != null) ct.Value = next + 1;
+            FsmInt mt = c.Upd.FsmVariables.FindFsmInt("MaxTracks"); if (mt != null) mt.Value = l.Count - 1;
+            FsmObject au = c.Upd.FsmVariables.FindFsmObject("Audio"); if (au != null) au.Value = nc;
+            Game.SetState(c.Upd, "Play track");
+            Log.Info("radio : lecteur " + c.Name + " : piste finie, suivante " + (next + 1) + "/" + l.Count + " (" + (c.A.clip != null ? c.A.clip.name : "-") + ", " + (c.A.isPlaying ? "joue" : "arretee") + ")");
+        }
+
+        // Hote : etat d'un lecteur mene par un invite (eteint ici) -- recopie sans le jouer ; rallume ici (l'hote revient), la piste
+        // de l'invite reprend a sa position et le lecteur est rendu au jeu (redevient la reference).
+        static void OnReport(Peer from, NetReader r)
+        {
+            if (!LoinHote) return;
+            int n = r.U8();
+            for (int i = 0; i < n && r.More; i++) { r.Str(); r.F32(); r.Bool(); }
+            if (!r.More) return;
+            FindCds(Time.realtimeSinceStartup);
+            int m = r.U8();
+            for (int i = 0; i < m; i++)
+            {
+                string name = r.Str(), cd = r.Str(); int idx = r.I32(); float t = r.F32(); bool playing = r.Bool();
+                Cd c = CdNamed(name);
+                if (c == null || c.A == null || c.Upd == null || !playing || c.A.gameObject.activeInHierarchy) continue;
+                AudioClip clip = CdClip(cd, idx);
+                if (clip == null) continue;
+                if (!c.Muted || c.ReportAt < Time.realtimeSinceStartup - 3f) Log.Info("radio : lecteur " + c.Name + " eteint ici, mene par #" + from.Id + " (" + cd + ":" + idx + ")");
+                c.Muted = true; if (c.Upd.enabled) c.Upd.enabled = false;
+                FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD"); if (cv != null && cd.Length > 0) cv.Value = cd;
+                FsmInt iv = c.Upd.FsmVariables.FindFsmInt("Index"); if (iv != null) iv.Value = idx;
+                c.A.clip = clip; c.ReportT = t; c.ReportAt = Time.realtimeSinceStartup; c.ReportWho = from.Id;
+            }
+        }
+
+        // Hote, chaque image : lecteur mene par un invite, rallume ici -> reprise de sa piste, rendu au jeu ; plus de nouvelles (3 s) et
+        // toujours eteint -> rendu au jeu tel quel.
+        static void CdResume(float now)
+        {
+            foreach (Cd c in cds)
+            {
+                if (c.A == null || c.Upd == null || c.ReportAt < 0f) continue;
+                bool on = c.A.gameObject.activeInHierarchy;
+                if (on && c.Muted)
                 {
-                    if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
-                    System.Collections.ArrayList l = ArrayListOf(cdRoot, cd.Value);
-                    int k = l != null ? l.IndexOf(c.A.clip) : -1;
-                    if (k >= 0) rank = k;
+                    float t = c.ReportT + (now - c.ReportAt);
+                    AudioClip clip = c.A.clip;
+                    if (clip != null && now - c.ReportAt < 3f && t < clip.length - 0.5f)
+                    {
+                        c.A.Play();
+                        if (clip.loadType != AudioClipLoadType.Streaming) c.A.time = Mathf.Clamp(t, 0f, clip.length - 0.05f);
+                    }
+                    c.ReportAt = -10f;
+                    GiveBack(c, "rallume ici, piste de #" + c.ReportWho + " reprise");
                 }
-                w.Str(c.Name).Str(cd != null ? cd.Value ?? "" : "").I32(rank).F32(playing ? c.A.time : 0f).Bool(playing);
+                else if (!on && c.Muted && now - c.ReportAt > 3f) { c.ReportAt = -10f; c.Muted = false; c.Upd.enabled = true; Log.Info("radio : lecteur " + c.Name + " : plus de nouvelles de #" + c.ReportWho + ", rendu au jeu"); }
             }
         }
 
@@ -200,6 +331,14 @@ namespace MWCoop
                 if (c.Muted) { c.Muted = false; c.Upd.enabled = true; c.Last = null; Log.Info("radio : lecteur " + c.Name + " rendu a ce joueur (celui de l'hote est arrete)"); }
                 return;
             }
+            // (rang -2 : lecteur eteint chez l'hote, loin de lui -- dossier #26 : il reste a ce joueur, piste en cours non coupee ; l'hote en
+            // recoit l'etat, ReportCds. Allume ici et qui joue : mene d'ici ; sinon rendu au jeu tel quel.)
+            if (idx == -2 && LoinHote)
+            {
+                if (!c.Leading) { c.Leading = true; if (c.Muted) GiveBack(c, "eteint chez l'hote (loin)"); }
+                return;
+            }
+            if (c.Leading) { c.Leading = false; Log.Info("radio : lecteur " + c.Name + " de nouveau suivi sur l'hote"); }
             // (prise en main par l'hote : la position est recalee meme sous le seuil -- le lecteur d'ici, lance avant, gardait ~1 s d'avance)
             bool taken = false;
             if (!c.Muted) { c.Muted = true; taken = true; if (c.Upd.enabled) c.Upd.enabled = false; Log.Info("radio : lecteur " + c.Name + " mene par l'hote (enchainement local coupe)"); }
@@ -602,7 +741,8 @@ namespace MWCoop
 
         public static void OnMessage(Peer from, NetReader r)
         {
-            if (Session.IsHost || !PlayerSync.InGame || !Find()) return;
+            if (Session.IsHost) { if (PlayerSync.InGame && Find()) OnReport(from, r); return; }   // (lecteurs menes par un invite, dossier #26)
+            if (!PlayerSync.InGame || !Find()) return;
             if (!muted)
             {
                 muted = true;
@@ -653,6 +793,58 @@ namespace MWCoop
                 try { ApplyCd(c, cd, idx, t, playing); }
                 catch (System.Exception e) { if (Time.realtimeSinceStartup >= nextLog) { nextLog = Time.realtimeSinceStartup + 30f; Log.Warn("radio : lecteur " + name + " : " + e.Message); } }
             }
+        }
+
+        // Essais (Autotest=mwccd, dossier #26) : 'n' pistes de 'len' s (son synthetique, memes noms chez tous) ajoutees au disque
+        // 'cd' (les copies d'essai n'ont pas de musique importee) ; lecture du disque par le lecteur 'name' comme le bouton (PLAY CD) ;
+        // etat d'un lecteur (piste, position, joue, allume ou non, mene par qui).
+        public static string TestCdFill(string cd, int n, float len)
+        {
+            if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
+            System.Collections.ArrayList l = ArrayListOf(cdRoot, cd);
+            if (l == null) return "disque " + cd + " introuvable";
+            for (int k = 0; k < n; k++)
+            {
+                int f = 22050, s = (int)(len * f);
+                AudioClip c = AudioClip.Create("essai-" + cd + "-" + k, s, 1, f, false);
+                float[] d = new float[s]; float hz = 220f * (k + 2);
+                for (int i = 0; i < s; i++) d[i] = 0.05f * Mathf.Sin(2f * Mathf.PI * hz * i / f);
+                c.SetData(d, 0);
+                l.Add(c);
+            }
+            return cd + " : " + l.Count + " pistes";
+        }
+        public static string TestCdPlay(string name, string cd)
+        {
+            FindCds(Time.realtimeSinceStartup);
+            Cd c = CdNamed(name);
+            if (c == null || c.Upd == null) return "lecteur " + name + " introuvable";
+            FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD"); if (cv != null) cv.Value = cd;
+            FsmInt iv = c.Upd.FsmVariables.FindFsmInt("Index"); if (iv != null) iv.Value = 0;
+            if (!c.Upd.enabled) c.Upd.enabled = true;   // (coupe par l'autoradio eteint)
+            // (PLAY CD laisse l'automate en 'State 1' en essai : piste 0 posee et 'Play track' directement, comme GiveBack)
+            AudioClip clip = CdClip(cd, 0);
+            FsmObject au = c.Upd.FsmVariables.FindFsmObject("Audio"); if (au != null) au.Value = clip;
+            FsmInt ct = c.Upd.FsmVariables.FindFsmInt("CurrentTrack"); if (ct != null) ct.Value = 1;
+            FsmInt mt = c.Upd.FsmVariables.FindFsmInt("MaxTracks"); System.Collections.ArrayList l = ArrayListOf(cdRoot, cd); if (mt != null && l != null) mt.Value = l.Count - 1;
+            Game.SetState(c.Upd, "Play track");
+            return "lecteur " + name + " : " + cd + " piste 1 [" + c.Upd.ActiveStateName + "] " + (c.A.isPlaying ? "joue" : "arrete");
+        }
+        public static string TestCdActive(string name, bool on)
+        {
+            Cd c = CdNamed(name);
+            if (c == null || c.A == null) return "lecteur " + name + " introuvable";
+            c.A.gameObject.SetActive(on);
+            return "lecteur " + name + (on ? " rallume" : " eteint") + " (comme le LOD de sa voiture)";
+        }
+        public static string TestCd(string name)
+        {
+            Cd c = CdNamed(name);
+            if (c == null || c.A == null || c.Upd == null) return name + " ?";
+            FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD");
+            return name + (c.A.gameObject.activeInHierarchy ? "" : " (ETEINT)") + " " + (c.A.clip != null ? c.A.clip.name + " a " + c.A.time.ToString("F1") + " s" : "-")
+                   + (c.A.isPlaying ? " joue" : " arrete") + (c.Muted ? " (suit)" : " [" + (c.Upd.enabled ? c.Upd.ActiveStateName : "coupe") + "]") + (c.Leading ? " (mene d'ici)" : "")
+                   + (cv != null ? " " + cv.Value : "") + " Index " + (c.Upd.FsmVariables.FindFsmInt("Index") != null ? c.Upd.FsmVariables.FindFsmInt("Index").Value.ToString() : "?") + "/" + (c.Upd.FsmVariables.FindFsmInt("MaxTracks") != null ? c.Upd.FsmVariables.FindFsmInt("MaxTracks").Value.ToString() : "?") + (Game.PlayerGo != null ? ", joueur a " + Vector3.Distance(Game.PlayerGo.transform.position, c.A.transform.position).ToString("F0") + " m" : "");
         }
 
         // Essai [Test] Autotest=boombox : l'hote allume la radio portable a 25 s par son bouton de marche comme un clic (Power :: Knob

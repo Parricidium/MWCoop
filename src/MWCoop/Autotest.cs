@@ -900,7 +900,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone, fsmProbeDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -1338,6 +1338,33 @@ namespace MWCoop
                     }
                     if (k == 0) Log.Info("autotest : objet " + on.Trim() + " introuvable");
                 }
+            }
+            // ([Test] SondeAutomates=mot;mot... : a SondeAutomatesA s (45), chaque automate dont le chemin ou le nom contient un mot :
+            // etat, variables simples -- dossier #27 : facture d'electricite, compteur, coupure)
+            if (Config.Get("Test", "SondeAutomates", "").Length > 0 && t > Config.GetFloat("Test", "SondeAutomatesA", 45f) && !fsmProbeDone)
+            {
+                fsmProbeDone = true;
+                string[] words = Config.Get("Test", "SondeAutomates", "").ToLowerInvariant().Split(';');
+                int shown = 0;
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                {
+                    if (f == null || f.gameObject.hideFlags != HideFlags.None || shown >= 120) continue;
+                    string path = Recon.Path(f.transform), lp = (path + "::" + f.FsmName).ToLowerInvariant();
+                    bool hit = false; foreach (string w in words) if (w.Length > 0 && lp.Contains(w)) { hit = true; break; }
+                    if (!hit) continue;
+                    shown++;
+                    var sb = new System.Text.StringBuilder();
+                    try
+                    {
+                        foreach (HutongGames.PlayMaker.FsmFloat v in f.FsmVariables.FloatVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value.ToString("G5"));
+                        foreach (HutongGames.PlayMaker.FsmInt v in f.FsmVariables.IntVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                        foreach (HutongGames.PlayMaker.FsmBool v in f.FsmVariables.BoolVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                        var st = new System.Text.StringBuilder(); foreach (HutongGames.PlayMaker.FsmState s in f.Fsm.States) st.Append(s.Name).Append('|');
+                        Log.Info("autotest : automate " + path + "::" + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (inactif)") + " etats " + st + " vars" + sb);
+                    }
+                    catch (System.Exception e) { Log.Info("autotest : automate " + path + " : " + e.GetType().Name); }
+                }
+                Log.Info("autotest : SondeAutomates, " + shown + " automate(s)");
             }
             // ([Test] SondeRendu=nom;nom... : a SondeRenduA s (60), rendu de chaque objet de ce nom -- maillage, matieres, textures,
             // pose de chaque Renderer par rapport a l'objet ; dossier #23 : carburateur double « detruit » chez l'invite, 29/10)
@@ -1851,6 +1878,7 @@ namespace MWCoop
             if (mode == "portemagasin") { PorteMagasin(t); return; }
             if (mode == "mscmontage") { MscMontage(t); return; }
             if (mode == "mscremonte") { Parts.TestRemount(t); return; }   // (aile arrachee au montage chez l'hote, WIGA 25/10)
+            if (mode == "fusibles") { Parts.TestFuses(t); return; }   // (tableau electrique, dossier #27 : montage d'un porte-fusible tenu ou monte ailleurs par l'autre)
             // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
             // (envoye), remontee a 50 s (message NON envoye) ; l'empreinte des 2 s doit la faire remonter chez l'invite en 6 s au plus ; etat a EtatA s)
             // ([Test] Autotest=msccapot, 2 joueurs, упердок 25/10 : « capot ouvert par l'hote, l'invite ne le voit pas ») : l'hote ouvre le capot de la
@@ -3163,7 +3191,103 @@ namespace MWCoop
             if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)
             if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)
             if (mode == "cledemarreur") { CleDemarreur(t); return; }   // (cle rejouee restee sur le demarreur, 23a21df, essai MWC 29/10)
-            if (mode == "mwcpousse") { MwcPousse(t); return; }   // (poussee en voiture d'une voiture menee par l'autre, 255d2e0, essai MWC 29/10)
+            if (mode == "mwcpousse") { MwcPousse(t); return; }
+            // ([Test] Autotest=mwcliste, signalements de Донской 30/10 : tele, thermometre) : a ListeA s (40), chaque automate dont le chemin ou
+            // le nom correspond a ListeMotif (regex, sans casse) : chemin, nom, etat, allume ou non, coupe ou non ; et ses variables si ListeVars=1.
+            if (mode == "mwcliste")
+            {
+                // ([Test] ListeTele=chemin : l'hote allume cette tele a 30 s, comme Autotest=teletexte -- YARD/Building/LIVINGROOM/TV/TVSwitch)
+                string lt = Config.Get("Test", "ListeTele", "");
+                if (lt.Length > 0 && Net.Session.IsHost && mpStep == 0 && t > 30f)
+                {
+                    mpStep = 1; GameObject sw = Game.FindAny(lt); PlayMakerFSM u = sw != null ? Game.FsmOn(sw, "Use") : null;
+                    if (u != null) Game.SetState(u, "Switch");
+                    Log.Info("autotest : mwcliste, tele " + lt + " -> " + (u != null ? u.ActiveStateName : "introuvable"));
+                }
+                // ([Test] ListeGlobales=a,b : variables globales PlayMaker (flottants, entiers, booleens) notees toutes les 5 s de 20 a 120 s ; '*' :
+                // toutes celles dont le nom contient ListeMotif)
+                string lg = Config.Get("Test", "ListeGlobales", "");
+                if (lg.Length > 0 && t > 20f && t < 120f && Time.realtimeSinceStartup >= mpLogAt)
+                {
+                    mpLogAt = Time.realtimeSinceStartup + 5f;
+                    var gv = FsmVariables.GlobalVariables; var sb = new System.Text.StringBuilder("autotest : mwcliste globales t=" + t.ToString("F0"));
+                    foreach (string gn in lg.Split(','))
+                    {
+                        FsmFloat gf = gv.FindFsmFloat(gn.Trim()); FsmInt gi = gv.FindFsmInt(gn.Trim()); FsmBool gb = gv.FindFsmBool(gn.Trim());
+                        sb.Append(" ").Append(gn.Trim()).Append("=").Append(gf != null ? gf.Value.ToString("G5") : gi != null ? gi.Value.ToString() : gb != null ? gb.Value.ToString() : "?");
+                    }
+                    Log.Info(sb.ToString());
+                }
+                if (cdStep == 0 && t > Config.GetFloat("Test", "ListeA", 40f))
+                {
+                    cdStep = 1;
+                    var rx = new System.Text.RegularExpressions.Regex(Config.Get("Test", "ListeMotif", "TV|thermo"), System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    int n = 0;
+                    foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                    {
+                        var f = o as PlayMakerFSM;
+                        if (f == null || f.hideFlags != HideFlags.None) continue;
+                        string pth = Recon.Path(f.transform);
+                        if (!rx.IsMatch(pth) && !rx.IsMatch(f.FsmName)) continue;
+                        if (++n > 150) break;
+                        var sb = new System.Text.StringBuilder("autotest : mwcliste " + pth + " :: " + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (eteint)"));
+                        if (Config.GetInt("Test", "ListeVars", 0) != 0)
+                        {
+                            foreach (var v in f.FsmVariables.FloatVariables) sb.Append(" ").Append(v.Name).Append("=").Append(v.Value.ToString("G4"));
+                            foreach (var v in f.FsmVariables.BoolVariables) sb.Append(" ").Append(v.Name).Append("=").Append(v.Value);
+                            foreach (var v in f.FsmVariables.IntVariables) sb.Append(" ").Append(v.Name).Append("=").Append(v.Value);
+                        }
+                        Log.Info(sb.ToString());
+                    }
+                    Log.Info("autotest : mwcliste, " + n + " automate(s)");
+                    // ([Test] ListeEcrit=nom : chaque etat d'automate dont une action cite ce nom -- qui ecrit une variable globale)
+                    string le = Config.Get("Test", "ListeEcrit", "");
+                    int scanned = 0, states = 0, fails = 0;
+                    if (le.Length > 0)
+                        foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                        {
+                            var f = o as PlayMakerFSM;
+                            if (f == null || f.hideFlags != HideFlags.None || f.Fsm == null || f.Fsm.States == null) continue;
+                            if (Config.GetInt("Test", "ListeEcritActifs", 1) != 0 && (!f.enabled || !f.gameObject.activeInHierarchy)) continue;
+                            scanned++;
+                            foreach (FsmState st in f.Fsm.States)
+                            {
+                                states++;
+                                string acts; try { acts = Jobs.DumpActions(f, st.Name); } catch { fails++; continue; }
+                                if (acts != null && acts.Contains(le))
+                                    Log.Info("autotest : mwcliste ecrit " + le + " : " + Recon.Path(f.transform) + " :: " + f.FsmName + " / " + st.Name + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (eteint)") + " : " + acts);
+                            }
+                        }
+                    if (le.Length > 0) Log.Info("autotest : mwcliste ecrit " + le + " : " + scanned + " automates, " + states + " etats lus, " + fails + " illisibles");
+                    var gn2 = new System.Text.StringBuilder("autotest : mwcliste globales correspondantes :");
+                    foreach (FsmFloat v in FsmVariables.GlobalVariables.FloatVariables) if (rx.IsMatch(v.Name)) gn2.Append(" ").Append(v.Name).Append("=").Append(v.Value.ToString("G5"));
+                    foreach (FsmBool v in FsmVariables.GlobalVariables.BoolVariables) if (rx.IsMatch(v.Name)) gn2.Append(" ").Append(v.Name).Append("=").Append(v.Value);
+                    foreach (FsmInt v in FsmVariables.GlobalVariables.IntVariables) if (rx.IsMatch(v.Name)) gn2.Append(" ").Append(v.Name).Append("=").Append(v.Value);
+                    Log.Info(gn2.ToString());
+                    string dump = Config.Get("Test", "Automate", ""); if (dump.Length > 0) DumpFsms(dump);
+                }
+                return;
+            }
+            // ([Test] Autotest=mwccd, dossier #26 : CD de l'invite coupe loin de l'hote) : chacun ajoute 3 pistes d'essai de 40 s a CD1 a 30 s ;
+            // chacun se pose pres de CdPres (SORBET) a 32 s ; l'hote lance CD1 dans CdLecteur (celui de la SORBET) a 40 s, l'eteint a 60 s et le
+            // rallume a 110 s (CdSimule=0 : part pres de CdLoin, KEKMET, et revient) ; l'invite reste pres de la voiture. Chacun note le lecteur toutes les 2 s de 35 a 150 s.
+            if (mode == "mwccd")
+            {
+                string lec = Config.Get("Test", "CdLecteur", "CDAudioSourceSorbett"), near = Config.Get("Test", "CdPres", "SORBET(190-200psi)"), far = Config.Get("Test", "CdLoin", "KEKMET(350-400psi)");
+                if (cdStep == 0 && t > 30f) { cdStep = 1; Log.Info("autotest : mwccd, " + Radio.TestCdFill("CD1", 3, 40f)); }
+                if (cdStep == 1 && t > 32f) { cdStep = 2; Log.Info("autotest : mwccd, pres de " + near + " : " + VehicleSync.TestEnter(near, false)); }
+                if (Net.Session.IsHost)
+                {
+                    if (cdStep == 2 && t > 40f) { cdStep = 3; Log.Info("autotest : mwccd, " + Radio.TestCdPlay(lec, "CD1")); }
+                    // ([Test] CdSimule=1 (defaut) : au lieu de partir, le lecteur de l'hote eteint comme par le LOD de sa voiture -- le taxi, seul eteint
+                    // au loin, ne s'allume pas en essai)
+                    bool sim = Config.GetInt("Test", "CdSimule", 1) != 0;
+                    if (cdStep == 3 && t > Config.GetFloat("Test", "CdPartA", 60f)) { cdStep = 4; Log.Info("autotest : mwccd, hote " + (sim ? Radio.TestCdActive(lec, false) : "part pres de " + far + " : " + VehicleSync.TestEnter(far, false))); }
+                    if (cdStep == 4 && t > Config.GetFloat("Test", "CdRevientA", 110f)) { cdStep = 5; Log.Info("autotest : mwccd, hote " + (sim ? Radio.TestCdActive(lec, true) : "revient pres de " + near + " : " + VehicleSync.TestEnter(near, false))); }
+                }
+                if (t > 35f && t < 150f && Time.realtimeSinceStartup >= cdLogAt) { cdLogAt = Time.realtimeSinceStartup + 2f; Log.Info("autotest : mwccd t=" + t.ToString("F0") + " " + Radio.TestCd(lec)); }
+                return;
+            }   // (poussee en voiture d'une voiture menee par l'autre, 255d2e0, essai MWC 29/10)
             // ([Test] Autotest=mwctrafic, 0110f6b : circulation normale jamais ramenee a tort -- chacun note toutes les 10 s, des 30 s, les pointes
             // de vitesse et de rotation des voitures de la circulation physiques chez lui ; « trafic : ... emballee » = garde declenchee)
             if (mode == "mwctrafic")
@@ -5106,7 +5230,7 @@ namespace MWCoop
                     if (t > 80f && Time.frameCount % 300 == 0 && t < 130f) Log.Info("autotest : " + Packages.State());
                 }
             }
-            if (mode == "monde_evt" && t > 35f && !done)
+            if (mode == "monde_evt" && t > Config.GetFloat("Test", "MondeEvtA", 35f) && !done)   // ([Test] MondeEvtA=s, 35 par defaut)
             {
                 done = true;
                 Log.Info("autotest : " + WorldFsms.TestEvent(Config.Get("Test", "TestQuete", "ElectricityBills1"), Config.Get("Test", "TestEvenement", "GLOBALEVENT")));
