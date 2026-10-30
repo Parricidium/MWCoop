@@ -3163,7 +3163,27 @@ namespace MWCoop
             if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)
             if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)
             if (mode == "cledemarreur") { CleDemarreur(t); return; }   // (cle rejouee restee sur le demarreur, 23a21df, essai MWC 29/10)
-            if (mode == "mwcpousse") { MwcPousse(t); return; }   // (poussee en voiture d'une voiture menee par l'autre, 255d2e0, essai MWC 29/10)
+            if (mode == "mwcpousse") { MwcPousse(t); return; }
+            // ([Test] Autotest=mwccd, dossier #26 : CD de l'invite coupe loin de l'hote) : chacun ajoute 3 pistes d'essai de 40 s a CD1 a 30 s ;
+            // chacun se pose pres de CdPres (SORBET) a 32 s ; l'hote lance CD1 dans CdLecteur (celui de la SORBET) a 40 s, l'eteint a 60 s et le
+            // rallume a 110 s (CdSimule=0 : part pres de CdLoin, KEKMET, et revient) ; l'invite reste pres de la voiture. Chacun note le lecteur toutes les 2 s de 35 a 150 s.
+            if (mode == "mwccd")
+            {
+                string lec = Config.Get("Test", "CdLecteur", "CDAudioSourceSorbett"), near = Config.Get("Test", "CdPres", "SORBET(190-200psi)"), far = Config.Get("Test", "CdLoin", "KEKMET(350-400psi)");
+                if (cdStep == 0 && t > 30f) { cdStep = 1; Log.Info("autotest : mwccd, " + Radio.TestCdFill("CD1", 3, 40f)); }
+                if (cdStep == 1 && t > 32f) { cdStep = 2; Log.Info("autotest : mwccd, pres de " + near + " : " + VehicleSync.TestEnter(near, false)); }
+                if (Net.Session.IsHost)
+                {
+                    if (cdStep == 2 && t > 40f) { cdStep = 3; Log.Info("autotest : mwccd, " + Radio.TestCdPlay(lec, "CD1")); }
+                    // ([Test] CdSimule=1 (defaut) : au lieu de partir, le lecteur de l'hote eteint comme par le LOD de sa voiture -- le taxi, seul eteint
+                    // au loin, ne s'allume pas en essai)
+                    bool sim = Config.GetInt("Test", "CdSimule", 1) != 0;
+                    if (cdStep == 3 && t > Config.GetFloat("Test", "CdPartA", 60f)) { cdStep = 4; Log.Info("autotest : mwccd, hote " + (sim ? Radio.TestCdActive(lec, false) : "part pres de " + far + " : " + VehicleSync.TestEnter(far, false))); }
+                    if (cdStep == 4 && t > Config.GetFloat("Test", "CdRevientA", 110f)) { cdStep = 5; Log.Info("autotest : mwccd, hote " + (sim ? Radio.TestCdActive(lec, true) : "revient pres de " + near + " : " + VehicleSync.TestEnter(near, false))); }
+                }
+                if (t > 35f && t < 150f && Time.realtimeSinceStartup >= cdLogAt) { cdLogAt = Time.realtimeSinceStartup + 2f; Log.Info("autotest : mwccd t=" + t.ToString("F0") + " " + Radio.TestCd(lec)); }
+                return;
+            }   // (poussee en voiture d'une voiture menee par l'autre, 255d2e0, essai MWC 29/10)
             // ([Test] Autotest=mwctrafic, 0110f6b : circulation normale jamais ramenee a tort -- chacun note toutes les 10 s, des 30 s, les pointes
             // de vitesse et de rotation des voitures de la circulation physiques chez lui ; « trafic : ... emballee » = garde declenchee)
             if (mode == "mwctrafic")
