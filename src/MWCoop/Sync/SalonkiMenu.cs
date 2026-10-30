@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 namespace MWCoop
 {
-    // Menu de location de l'AUTOSALONKI (JD 29/10 : « le menu serait la sur chaque pancarte concernant la voiture, choix des couleurs...
-    // avec une belle presentation ») : ouvert au clic sur la pancarte d'un stand. A gauche l'affiche de la voiture et sa fiche (puissance,
+    // Menu de location de l'AUTOSALONKI (JD 29/10 : « choix des couleurs... avec une belle presentation ») : ouvert en parlant au
+    // vendeur du bureau (3e version, JD 30/10 : « la liste des voitures, et quand on clique dessus on a le menu actuel de location,
+    // mais tout en gardant la liste a gauche »). Tout a gauche la liste du catalogue (vignette, nom, categorie, prix ; roulette si
+    // elle depasse), puis l'affiche de la voiture choisie et sa fiche (puissance,
     // poids, rapport puissance / poids, transmission) ; a droite la couleur (les 16 de MWCoop ; prises par d'autres : grisees), la
     // livree (celle du lanceur si le joueur en a une), le prix et LOUER : l'argent du joueur (PlayerMoney, une depense reste a lui),
     // la voiture garee sur une place de livraison devant la salle (Vaz.RequestAt, au numero choisi) ; louer remplace la sienne.
@@ -16,18 +18,19 @@ namespace MWCoop
         static int saColor;
         static float saOpenedAt;
         static string saNote; static float saNoteUntil; static bool saNoteBad;
+        static float saScroll;
 
         // un panneau du coop ouvert par la boutique (montage de cassette, location) : souris au menu, joueur immobile
         public static bool PanelOpen { get { return MontageOpen || SalonkiOpen; } }
 
         static void OpenSalonki(Stand s)
         {
-            saMenu = s; SalonkiOpen = true; saOpenedAt = Time.realtimeSinceStartup; saNote = null;
+            saMenu = s; SalonkiOpen = true; saOpenedAt = Time.realtimeSinceStartup; saNote = null; saScroll = 0f;
             int mine = Vaz.Mine;
             saColor = mine > 0 ? mine : s.Number;
             if (saColor < 1 || !Vaz.IsFree(saColor) && saColor != mine) { saColor = 0; for (int i = 1; i <= Vaz.Count && saColor == 0; i++) if (Vaz.IsFree(i)) saColor = i; }
             WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false;
-            L("salon : pancarte " + s.Name + " lue");
+            L("salon : menu ouvert sur " + s.Name);
         }
 
         static void SaNote(string s, bool bad) { saNote = s; saNoteBad = bad; saNoteUntil = Time.realtimeSinceStartup + 5f; }
@@ -71,7 +74,7 @@ namespace MWCoop
             Stand s = saMenu;
             VazCar.Model m = VazCar.ModelOf(s.Model);
             bool paint = e.type == EventType.Repaint;
-            float W = Mathf.Min(SP(1020), Screen.width - SP(32)), H = Mathf.Min(SP(600), Screen.height - SP(32));
+            float W = Mathf.Min(SP(1290), Screen.width - SP(32)), H = Mathf.Min(SP(620), Screen.height - SP(32));
             float x = Mathf.Round((Screen.width - W) / 2), y = Mathf.Round((Screen.height - H) / 2 + (1f - k) * SP(12));
             Kit.Frame(new Rect(x, y, W, H));
             float pad = SP(22);
@@ -79,6 +82,11 @@ namespace MWCoop
             var hr = new Rect(x + pad, y + SP(14), W - 2 * pad, SP(28));
             if (paint) Style.Text(new Rect(hr.x, hr.y, hr.width, hr.height), "AUTOSALONKI  ·  " + Lang.T("LOCATION", "RENTAL"), 12, TextAnchor.MiddleLeft, Kit.Ice);
             if (Kit.Button(new Rect(hr.xMax - SP(26), hr.center.y - SP(13), SP(26), SP(26)), "", 0, false, true, "croix")) { SalonkiOpen = false; return; }
+            // ---- liste du catalogue, tout a gauche
+            float listW = SP(250), listTop = y + SP(52), listH = H - SP(52) - pad;
+            DrawSalonkiList(e, new Rect(x + pad, listTop, listW, listH), paint);
+            if (saMenu != s) return;   // (autre voiture choisie : dessinee a l'image suivante)
+            x += listW + SP(18); W -= listW + SP(18);
             float top = y + SP(52), colGap = SP(22);
             float lw = Mathf.Round((W - 2 * pad - colGap) * 0.58f), rw = W - 2 * pad - colGap - lw;
             float lx = x + pad, rx = lx + lw + colGap;
@@ -160,6 +168,47 @@ namespace MWCoop
             if (mine > 0 && Kit.Button(new Rect(rx + bw + SP(10), by, rw - bw - SP(10), SP(40)), Lang.T("RENDRE LA MIENNE", "RETURN MINE"), 0, false, true, null, 13))
             { Vaz.Release(); SaNote(Lang.T("Voiture rendue", "Car returned"), false); }
             if (paint && mine > 0) Style.Text(new Rect(lx, y + H - pad - SP(18), lw, SP(18)), Lang.T("Louer remplace ta voiture actuelle (n° ", "Renting replaces your current car (no. ") + mine + ")", 11, TextAnchor.MiddleLeft, Kit.Faint, false);
+        }
+        // liste du catalogue : une ligne par voiture (vignette, nom, categorie, prix) ; clic : choisie ; roulette : defile
+        static void DrawSalonkiList(Event e, Rect r, bool paint)
+        {
+            float rowH = SP(62), gap = SP(6), total = stands.Count * (rowH + gap) - gap;
+            float maxScroll = Mathf.Max(0f, total - r.height);
+            if (e.type == EventType.ScrollWheel && r.Contains(e.mousePosition)) { saScroll = Mathf.Clamp(saScroll + e.delta.y * SP(20), 0f, maxScroll); e.Use(); }
+            saScroll = Mathf.Clamp(saScroll, 0f, maxScroll);
+            if (paint) Style.Round(new Rect(r.x - SP(6), r.y - SP(6), r.width + SP(12), r.height + SP(12)), SP(12), new Color(0f, 0f, 0f, 0.22f));
+            GUI.BeginGroup(r);
+            try
+            {
+                for (int i = 0; i < stands.Count; i++)
+                {
+                    Stand s = stands[i];
+                    var row = new Rect(0f, i * (rowH + gap) - saScroll, r.width, rowH);
+                    if (row.yMax < 0f || row.y > r.height) continue;
+                    bool sel = s == saMenu, over = row.Contains(e.mousePosition) && e.mousePosition.y >= 0f && e.mousePosition.y <= r.height;
+                    if (paint)
+                    {
+                        Style.Round(row, SP(10), sel ? Kit.A(Kit.Ice, 0.20f) : over ? Kit.A(Color.white, 0.07f) : Kit.A(Color.white, 0.03f));
+                        if (sel) Style.Ring(row, SP(10), Kit.Ice);
+                        var th = new Rect(row.x + SP(6), row.y + SP(6), SP(88), rowH - SP(12));
+                        Style.Round(th, SP(6), new Color(0f, 0f, 0f, 0.35f));
+                        if (s.Poster != null) { Color oc = GUI.color; GUI.color = new Color(1, 1, 1, Style.Alpha); GUI.DrawTexture(th, s.Poster, ScaleMode.ScaleAndCrop); GUI.color = oc; }
+                        float tx = th.xMax + SP(10), tw = row.xMax - tx - SP(6);
+                        Style.Text(new Rect(tx, row.y + SP(6), tw, SP(20)), s.Name, 13, TextAnchor.MiddleLeft, sel ? Kit.Ink : Kit.Soft);
+                        Style.Text(new Rect(tx, row.y + SP(25), tw, SP(16)), CategoryTitle(s.Group), 10, TextAnchor.MiddleLeft, Kit.Muted, false);
+                        Style.Text(new Rect(tx, row.y + SP(40), tw, SP(16)), s.Price + " mk", 12, TextAnchor.MiddleLeft, Kit.Amber);
+                    }
+                    if (over && e.type == EventType.MouseDown && e.button == 0) { if (saMenu != s) { saMenu = s; saNote = null; L("salon : " + s.Name + " choisie dans la liste"); } e.Use(); }
+                }
+            }
+            finally { GUI.EndGroup(); }
+        }
+
+        static string CategoryTitle(string g)
+        {
+            if (g == "MWCoop") return Lang.T("VOITURES DE SÉRIE", "PRODUCTION CARS");
+            if (g.StartsWith("Gr. ")) return Lang.T("GROUPE ", "GROUP ") + g.Substring(4).ToUpperInvariant();
+            return g.ToUpperInvariant();
         }
     }
 }

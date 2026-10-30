@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.IO;
 using System.Text;
 using HutongGames.PlayMaker;
@@ -17,8 +17,9 @@ namespace MWCoop
         static int saTest = -1; static float saTestAt;
         static Stand saTestStand;
 
-        // essai de la salle ([Test] SalonkiEssai=1) : vues rendues (facade, interieur, stand), menu ouvert sur la R5 (capture du jeu,
-        // interface comprise), location (argent a 5000), vue du parking de livraison -> dumps/salonki-*.png ; « salonki essai : fin »
+        // essai du garage ([Test] SalonkiEssai=1) : vues rendues (facade et parking, atelier depuis la porte, depuis le fond, ponts,
+        // bureau vu de l'atelier, vendeur), menu ouvert par le vendeur (capture du jeu, interface comprise), une autre voiture choisie
+        // dans la liste, location (argent a 5000), vue du parking -> dumps/salonki-*.png ; « salonki essai : fin »
         static void SalonkiTest(float now)
         {
             if (salonki == null || Config.GetInt("Test", "SalonkiEssai", 0) == 0 || saTest >= 99) return;
@@ -29,37 +30,40 @@ namespace MWCoop
             switch (saTest)
             {
                 case 0:
-                    {
-                        float W = SaW, mid = (saMat0 + saMat1) / 2f;
-                        SaShot(t.TransformPoint(new Vector3(W * 0.5f, 5f, -26f)), t.TransformPoint(new Vector3(W * 0.5f, 2.5f, 8f)), Path.Combine(dir, "salonki-facade.png"), 55f);
-                        SaShot(t.TransformPoint(new Vector3(1.2f, SaH - 0.5f, 1.2f)), t.TransformPoint(new Vector3(W / 2f, 0f, mid)), Path.Combine(dir, "salonki-hall.png"), 70f);
-                        SaShot(t.TransformPoint(new Vector3(W - 1.2f, SaH - 0.5f, saDepth - 1.2f)), t.TransformPoint(new Vector3(W / 2f, 0f, mid)), Path.Combine(dir, "salonki-hall2.png"), 70f);
-                        SaShot(t.TransformPoint(new Vector3(W / 2f - 1f, 3.2f, stands[0].Z - 7f)), t.TransformPoint(new Vector3(W / 2f, SaH - 1.2f, stands[0].Z - 1.4f)), Path.Combine(dir, "salonki-banniere.png"), 50f);
-                        foreach (Stand st in stands) if (st.Folder == "r5maxi") saTestStand = st;
-                        if (saTestStand == null) saTestStand = stands[stands.Count - 1];
-                        float side = saTestStand.Right ? 1f : -1f;
-                        SaShot(t.TransformPoint(new Vector3(W / 2f + side * (SaHalf + 3.2f), 1.8f, saTestStand.Z - 3f)), t.TransformPoint(new Vector3(W / 2f + side * SaRowX, 0.7f, saTestStand.Z)), Path.Combine(dir, "salonki-stand.png"), 60f);
-                        SaShot(t.TransformPoint(new Vector3(W / 2f + side * (SaHalf + 2.3f), 1.65f, saTestStand.Z)), t.TransformPoint(new Vector3(W / 2f + side * (SaHalf + 1.2f), 0.95f, saTestStand.Z)), Path.Combine(dir, "salonki-pancarte.png"), 45f);
-                    }
+                    SaShot(t.TransformPoint(new Vector3(9f, 4.5f, -24f)), t.TransformPoint(new Vector3(11f, 2.5f, 6f)), Path.Combine(dir, "salonki-facade.png"), 60f);
+                    SaShot(t.TransformPoint(new Vector3(-16f, 16f, -40f)), t.TransformPoint(new Vector3(8f, 0f, -4f)), Path.Combine(dir, "salonki-ensemble.png"), 60f);
+                    SaShot(t.TransformPoint(new Vector3(32f, 3.5f, -24f)), t.TransformPoint(new Vector3(12f, 0.5f, -8f)), Path.Combine(dir, "salonki-entree.png"), 60f);
+                    SaShot(t.TransformPoint(new Vector3(10.7f, 1.7f, -1.5f)), t.TransformPoint(new Vector3(9f, 1.6f, 16f)), Path.Combine(dir, "salonki-atelier.png"), 75f);
+                    SaShot(t.TransformPoint(new Vector3(13.5f, 2.2f, 20.8f)), t.TransformPoint(new Vector3(8f, 1.2f, 4f)), Path.Combine(dir, "salonki-atelier2.png"), 75f);
+                    SaShot(t.TransformPoint(new Vector3(8.5f, 1.7f, 11f)), t.TransformPoint(new Vector3(3.5f, 2.2f, 11.5f)), Path.Combine(dir, "salonki-ponts.png"), 70f);
+                    SaShot(t.TransformPoint(new Vector3(12.5f, 1.7f, 10.5f)), t.TransformPoint(new Vector3(19.5f, 1.4f, 4.5f)), Path.Combine(dir, "salonki-bureau.png"), 65f);
+                    SaShot(t.TransformPoint(new Vector3(19.4f, 1.65f, 2.2f)), t.TransformPoint(SaVendorSpot + new Vector3(0f, 1.3f, 0f)), Path.Combine(dir, "salonki-vendeur.png"), 65f);
                     if (money == null) money = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
                     if (money != null) money.Value = 5000f;
+                    saTestStand = stands[0];
                     OpenSalonki(saTestStand);
                     saTest = 1; saTestAt = now + 1.5f; break;
                 case 1:
                     Application.CaptureScreenshot(Path.Combine(dir, "salonki-menu.png"));
+                    foreach (Stand st in stands) if (st.Folder == "r5maxi") saTestStand = st;
+                    if (saTestStand == stands[0] && stands.Count > 1) saTestStand = stands[stands.Count - 1];
+                    saMenu = saTestStand;   // (comme un clic dans la liste)
                     saTest = 2; saTestAt = now + 1f; break;
                 case 2:
+                    Application.CaptureScreenshot(Path.Combine(dir, "salonki-menu2.png"));
+                    saTest = 3; saTestAt = now + 1f; break;
+                case 3:
                     RentSalonki(saTestStand);
                     L("salonki essai : location " + saTestStand.Name + ", note : " + saNote);
-                    saTest = 3; saTestAt = now + 1.2f; break;
-                case 3:
-                    Application.CaptureScreenshot(Path.Combine(dir, "salonki-menu2.png"));
-                    saTest = 4; saTestAt = now + 9f; break;
+                    saTest = 4; saTestAt = now + 1.2f; break;
                 case 4:
+                    Application.CaptureScreenshot(Path.Combine(dir, "salonki-menu3.png"));
+                    saTest = 5; saTestAt = now + 9f; break;
+                case 5:
                     SalonkiOpen = false;
                     Transform car = Vaz.CarOf(Session.Active ? Session.LocalId : 0);
                     L("salonki essai : voiture " + (car != null ? car.name + " en " + car.transform.position.ToString("F1") : "ABSENTE") + ", argent " + (money != null ? money.Value.ToString("F0") : "?"));
-                    SaShot(t.TransformPoint(new Vector3(SaBay0 - 4f, 4f, -19f)), t.TransformPoint(new Vector3(SaBay0 + 8f, 0.5f, -6f)), Path.Combine(dir, "salonki-livraison.png"), 60f);
+                    SaShot(t.TransformPoint(new Vector3(-3f, 4f, -20f)), t.TransformPoint(new Vector3(9f, 0.5f, -6f)), Path.Combine(dir, "salonki-livraison.png"), 60f);
                     saTest = 99; L("salonki essai : fin"); break;
             }
         }
