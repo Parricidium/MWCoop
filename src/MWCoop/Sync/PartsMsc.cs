@@ -341,6 +341,36 @@ namespace MWCoop
             GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("Part").Value;
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f || part == null) return;
             string id = MscPartKey(part);
+            // Montage ici d'une piece qu'un autre tient, ou qu'il vient de monter AILLEURS (moins de 1,5 s) : pas le notre -- dossier #27
+            // (Markos 30/10) : l'hote remontait les porte-fusibles du tableau electrique, la copie d'un porte-fusible qu'il tenait passait
+            // dans un autre emplacement chez l'invite, un clic de l'invite l'y montait (« montage : fuseholder07 sur Fuse7 » 86 ms apres
+            // « montee sur Fuse5 (joueur #0) ») : pieces sans courant chez l'un, pas chez l'autre. Defait ici (Removal), remise la ou
+            // l'autre l'a montee, rien d'envoye. [Test] MontageAutreLibre=1 : comme avant.
+            if (Config.GetInt("Test", "MontageAutreLibre", 0) == 0)
+            {
+                int holder = Props.RemoteHolder(part);
+                RemoteMount rmt;
+                bool elsewhere = remoteMounts.TryGetValue(part, out rmt) && Time.realtimeSinceStartup - rmt.At < 1.5f && rmt.Point != null && rmt.Point != p;
+                if (holder >= 0 || elsewhere)
+                {
+                    PlayMakerFSM rem = Game.FsmOn(part, "Removal");
+                    applying = true; Replay.Depth++;
+                    try
+                    {
+                        if (rem != null && rem.Fsm.GetState("Remove part") != null) { rem.enabled = true; Game.SetState(rem, "Remove part"); }
+                        // (et ce point-ci rendu vide : sinon il « tenait » encore la piece, et le controle de l'hote la retirait plus tard de
+                        // la ou elle avait ete remise -- essai Autotest=fusibles FusibleCas=B)
+                        FsmGameObject pp = p.Fsm.FsmVariables.FindFsmGameObject("Part");
+                        if (pp != null && pp.Value == part) pp.Value = null;
+                        if (!p.Fsm.gameObject.activeSelf) p.Fsm.gameObject.SetActive(true);
+                        if (elsewhere) { if (!rmt.Point.Fsm.gameObject.activeSelf) rmt.Point.Fsm.gameObject.SetActive(true); MscApplyMount(rmt.Point, part, id, rmt.Point.Key, rmt.Who); }
+                        else Props.HoldFromRemote(part, holder);
+                    }
+                    finally { applying = false; Replay.Depth--; }
+                    Log.Warn("montage : " + id + " sur " + p.Key + " ici refuse : " + (elsewhere ? "montee sur " + rmt.Point.Key + " par #" + rmt.Who + " a l'instant, remise la-bas" : "tenue par #" + holder) + ", rien d'envoye");
+                    return;
+                }
+            }
             Touch(H(p.Key));
             Log.Info("montage : " + id + " sur " + p.Key);
             VehicleSync.CalmAfterPart(p.Fsm.transform);
@@ -348,6 +378,33 @@ namespace MWCoop
             // ([Test] PerteMontage=1 : le premier montage d'ici n'est pas envoye -- message perdu -- pour voir l'empreinte le rattraper, Autotest=mscperte)
             if (Config.GetInt("Test", "PerteMontage", 0) != 0 && !mscLostOnce) { mscLostOnce = true; Log.Warn("montage : " + id + " sur " + p.Key + " : message NON envoye (essai de perte)"); return; }
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
+        }
+
+        // Montage recu (ou remis) : la piece posee sur son pivot puis l'automate du point mene au montage, comme le clic du joueur.
+        class RemoteMount { public MscPoint Point; public int Who; public float At; }
+        static readonly Dictionary<GameObject, RemoteMount> remoteMounts = new Dictionary<GameObject, RemoteMount>();
+        static void MscApplyMount(MscPoint p, GameObject part, string id, string key, int who)
+        {
+            p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
+            Props.ReleaseRemote(part);
+            // A sa place sur son pivot ({Parent} : SetParent de 'Assemble 2') AVANT le joint de 'Set joint 2' : posee au
+            // declencheur, le joint etait tendu au SetParent et cassait aussitot (force 1100 : portiere tombee chez l'invite).
+            FsmGameObject pv = p.Fsm.FsmVariables.FindFsmGameObject("Parent");
+            Transform at = pv != null && pv.Value != null ? pv.Value.transform : p.Fsm.transform;
+            part.transform.position = at.position; part.transform.rotation = at.rotation;
+            // Et cinematique, comme en main : 'Assemble 2' la rend libre (SetIsKinematic false). Libre pendant 'Wait 2', dans la
+            // caisse figee ('Freeze car'), elle etait repoussee et son joint cassait (0 joint, portiere retombee chez l'invite).
+            Rigidbody prb = part.GetComponent<Rigidbody>();
+            if (prb != null) { if (!prb.isKinematic) { prb.velocity = Vector3.zero; prb.angularVelocity = Vector3.zero; } prb.isKinematic = true; }
+            VehicleSync.CalmAfterPart(p.Fsm.transform);
+            mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
+            Trace.Watch(p.Fsm, "point " + key, 8f);
+            PlayMakerFSM prem = Game.FsmOn(part, "Removal");
+            if (prem != null) Trace.Watch(prem, "piece " + id, 8f);
+            string click = ClickFor(p, part);
+            Game.SetState(p.Fsm, click);
+            Freshen(part, p.Fsm, id);
+            Log.Info("piece " + id + " montee sur " + key + " (joueur #" + who + (click != p.Click ? ", branche " + click : "") + ")");
         }
 
         // ---------------------------------------------------------------- empreinte (lot D, JD 27/10 : « controle par empreinte toutes les 2 s, liste complete si ecart »)
@@ -630,6 +687,67 @@ namespace MWCoop
         // Essais ([Test] Autotest=mscmontage) : clic de montage comme celui du joueur -- la piece tenue (cinematique) au declencheur,
         // 'Wait for assembly', puis ASSEMBLE a l'image suivante.
         static PlayMakerFSM testClick; static int testClickFrame;
+        // Essais (Autotest=fusibles, dossier #27) : l'hote demonte les porte-fusibles FusibleA (07) et FusibleB (03) a FusibleT0 s (120) ;
+        // FusibleCas=A : il tient A en main de T0+4 a T0+12 et l'invite, des qu'il voit A tenu, le monte (clic) a la place de B ;
+        // FusibleCas=B : l'hote remonte A a sa place a T0+8 et l'invite, des qu'il recoit ce montage, monte A a la place de B.
+        // L'hote remonte A a sa place a T0+12 (cas A). Chacun note les 7 emplacements a T0+25 (invite : sa propre horloge, FusibleDecalage 70).
+        static int fStep, fGuest; static string fSlotA, fSlotB; static bool fLogged;
+        static string FuseSlot(string partKey, out bool installed)
+        {
+            installed = false;
+            GameObject part = MscFindPart(partKey);
+            PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+            FsmGameObject trig = rem != null ? rem.FsmVariables.FindFsmGameObject("Trigger") : null;
+            if (trig == null || trig.Value == null) return null;
+            installed = !trig.Value.activeSelf;
+            return MscPointKey(trig.Value.transform);
+        }
+        public static string FuseState()
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 1; i <= 7; i++)
+            {
+                bool inst; string s = FuseSlot("id:fuseholder0" + i, out inst);
+                sb.Append("0").Append(i).Append(inst && s != null ? "@" + s.Substring(s.LastIndexOf('/') + 1) : " libre").Append(' ');
+            }
+            return sb.ToString();
+        }
+        public static void TestFuses(float t)
+        {
+            string a = Config.Get("Test", "FusibleA", "id:fuseholder07"), b = Config.Get("Test", "FusibleB", "id:fuseholder03");
+            string cas = Config.Get("Test", "FusibleCas", "A");
+            float t0 = Config.GetFloat("Test", "FusibleT0", 120f) - (Session.IsHost ? 0f : Config.GetFloat("Test", "FusibleDecalage", 70f));
+            bool ia;
+            if (fSlotA == null && t > Mathf.Min(30f, t0 - 5f)) { fSlotA = FuseSlot(a, out ia); fSlotB = FuseSlot(b, out ia); Log.Info("autotest : fusibles, " + a + " sur " + fSlotA + ", " + b + " sur " + fSlotB + " ; " + FuseState()); }
+            if (Session.IsHost)
+            {
+                if (fStep == 0 && t > t0)
+                {
+                    fStep = 1;
+                    foreach (string k in new[] { a, b })
+                    {
+                        GameObject part = MscFindPart(k); PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                        if (rem != null) { rem.enabled = true; Game.SetState(rem, "Remove part"); }
+                    }
+                    Log.Info("autotest : fusibles, " + a + " et " + b + " demontes");
+                }
+                if (fStep == 1 && cas == "A" && t > t0 + 4f) { fStep = 2; Log.Info("autotest : fusibles, " + a + " en main : " + (Props.TestHold(Props.FindKey(a.Substring(a.IndexOf(':') + 1)), PlayerSync.LocalCamera) != null)); }
+                if ((fStep == 1 && cas == "B" && t > t0 + 8f) || (fStep == 2 && t > t0 + 12f))
+                {
+                    if (fStep == 2) Props.TestHold(Props.FindKey(a.Substring(a.IndexOf(':') + 1)), null);
+                    fStep = 3; Log.Info("autotest : fusibles, " + a + " remonte : " + MscTestClick(fSlotA, a));
+                }
+            }
+            else if (fGuest == 0 && fSlotB != null && t > t0)
+            {
+                GameObject pa = MscFindPart(a);
+                RemoteMount rmt;
+                bool go = cas == "A" ? pa != null && Props.RemoteHolder(pa) >= 0 : pa != null && remoteMounts.TryGetValue(pa, out rmt) && Time.realtimeSinceStartup - rmt.At < 0.3f;
+                if (go) { fGuest = 1; Log.Info("autotest : fusibles, invite monte " + a + " sur " + fSlotB + " (cas " + cas + ") : " + MscTestClick(fSlotB, a)); }
+            }
+            if (!fLogged && t > t0 + 25f) { fLogged = true; Log.Info("autotest : fusibles, etat final : " + FuseState()); }
+        }
+
         public static string MscTestClick(string pointKey, string partKey)
         {
             MscPoint p;
@@ -858,26 +976,8 @@ namespace MWCoop
                     if (part == null) { Log.Warn("piece " + id + " introuvable ici"); return; }
                     if (MscHolds(p.Fsm, part)) { Log.Info("piece " + id + " deja montee"); return; }
                     if (!p.Fsm.gameObject.activeInHierarchy) { Log.Warn("point " + key + " eteint ici (deja occupe ?) : " + id + " pas montee"); return; }
-                    p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
-                    Props.ReleaseRemote(part);
-                    // A sa place sur son pivot ({Parent} : SetParent de 'Assemble 2') AVANT le joint de 'Set joint 2' : posee au
-                    // declencheur, le joint etait tendu au SetParent et cassait aussitot (force 1100 : portiere tombee chez l'invite).
-                    FsmGameObject pv = p.Fsm.FsmVariables.FindFsmGameObject("Parent");
-                    Transform at = pv != null && pv.Value != null ? pv.Value.transform : p.Fsm.transform;
-                    part.transform.position = at.position; part.transform.rotation = at.rotation;
-                    // Et cinematique, comme en main : 'Assemble 2' la rend libre (SetIsKinematic false). Libre pendant 'Wait 2', dans la
-                    // caisse figee ('Freeze car'), elle etait repoussee et son joint cassait (0 joint, portiere retombee chez l'invite).
-                    Rigidbody prb = part.GetComponent<Rigidbody>();
-                    if (prb != null) { if (!prb.isKinematic) { prb.velocity = Vector3.zero; prb.angularVelocity = Vector3.zero; } prb.isKinematic = true; }
-                    VehicleSync.CalmAfterPart(p.Fsm.transform);
-                    mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
-                    Trace.Watch(p.Fsm, "point " + key, 8f);
-                    PlayMakerFSM prem = Game.FsmOn(part, "Removal");
-                    if (prem != null) Trace.Watch(prem, "piece " + id, 8f);
-                    string click = ClickFor(p, part);
-                    Game.SetState(p.Fsm, click);
-                    Freshen(part, p.Fsm, id);
-                    Log.Info("piece " + id + " montee sur " + key + " (joueur #" + who + (click != p.Click ? ", branche " + click : "") + ")");
+                    MscApplyMount(p, part, id, key, who);
+                    remoteMounts[part] = new RemoteMount { Point = p, Who = who, At = Time.realtimeSinceStartup };
                 }
                 else
                 {

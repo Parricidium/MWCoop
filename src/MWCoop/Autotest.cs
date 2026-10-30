@@ -900,7 +900,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone, fsmProbeDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -1338,6 +1338,33 @@ namespace MWCoop
                     }
                     if (k == 0) Log.Info("autotest : objet " + on.Trim() + " introuvable");
                 }
+            }
+            // ([Test] SondeAutomates=mot;mot... : a SondeAutomatesA s (45), chaque automate dont le chemin ou le nom contient un mot :
+            // etat, variables simples -- dossier #27 : facture d'electricite, compteur, coupure)
+            if (Config.Get("Test", "SondeAutomates", "").Length > 0 && t > Config.GetFloat("Test", "SondeAutomatesA", 45f) && !fsmProbeDone)
+            {
+                fsmProbeDone = true;
+                string[] words = Config.Get("Test", "SondeAutomates", "").ToLowerInvariant().Split(';');
+                int shown = 0;
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                {
+                    if (f == null || f.gameObject.hideFlags != HideFlags.None || shown >= 120) continue;
+                    string path = Recon.Path(f.transform), lp = (path + "::" + f.FsmName).ToLowerInvariant();
+                    bool hit = false; foreach (string w in words) if (w.Length > 0 && lp.Contains(w)) { hit = true; break; }
+                    if (!hit) continue;
+                    shown++;
+                    var sb = new System.Text.StringBuilder();
+                    try
+                    {
+                        foreach (HutongGames.PlayMaker.FsmFloat v in f.FsmVariables.FloatVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value.ToString("G5"));
+                        foreach (HutongGames.PlayMaker.FsmInt v in f.FsmVariables.IntVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                        foreach (HutongGames.PlayMaker.FsmBool v in f.FsmVariables.BoolVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                        var st = new System.Text.StringBuilder(); foreach (HutongGames.PlayMaker.FsmState s in f.Fsm.States) st.Append(s.Name).Append('|');
+                        Log.Info("autotest : automate " + path + "::" + f.FsmName + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)") + (f.gameObject.activeInHierarchy ? "" : " (inactif)") + " etats " + st + " vars" + sb);
+                    }
+                    catch (System.Exception e) { Log.Info("autotest : automate " + path + " : " + e.GetType().Name); }
+                }
+                Log.Info("autotest : SondeAutomates, " + shown + " automate(s)");
             }
             // ([Test] SondeRendu=nom;nom... : a SondeRenduA s (60), rendu de chaque objet de ce nom -- maillage, matieres, textures,
             // pose de chaque Renderer par rapport a l'objet ; dossier #23 : carburateur double « detruit » chez l'invite, 29/10)
@@ -1851,6 +1878,7 @@ namespace MWCoop
             if (mode == "portemagasin") { PorteMagasin(t); return; }
             if (mode == "mscmontage") { MscMontage(t); return; }
             if (mode == "mscremonte") { Parts.TestRemount(t); return; }   // (aile arrachee au montage chez l'hote, WIGA 25/10)
+            if (mode == "fusibles") { Parts.TestFuses(t); return; }   // (tableau electrique, dossier #27 : montage d'un porte-fusible tenu ou monte ailleurs par l'autre)
             // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
             // (envoye), remontee a 50 s (message NON envoye) ; l'empreinte des 2 s doit la faire remonter chez l'invite en 6 s au plus ; etat a EtatA s)
             // ([Test] Autotest=msccapot, 2 joueurs, упердок 25/10 : « capot ouvert par l'hote, l'invite ne le voit pas ») : l'hote ouvre le capot de la
@@ -5202,7 +5230,7 @@ namespace MWCoop
                     if (t > 80f && Time.frameCount % 300 == 0 && t < 130f) Log.Info("autotest : " + Packages.State());
                 }
             }
-            if (mode == "monde_evt" && t > 35f && !done)
+            if (mode == "monde_evt" && t > Config.GetFloat("Test", "MondeEvtA", 35f) && !done)   // ([Test] MondeEvtA=s, 35 par defaut)
             {
                 done = true;
                 Log.Info("autotest : " + WorldFsms.TestEvent(Config.Get("Test", "TestQuete", "ElectricityBills1"), Config.Get("Test", "TestEvenement", "GLOBALEVENT")));

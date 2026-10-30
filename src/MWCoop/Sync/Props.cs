@@ -655,6 +655,14 @@ namespace MWCoop
         }
         // Piece que l'autre vient de monter (Parts) : si elle etait tenue ou deplacee par lui ici (cinematique), liberee avant
         // que le jeu la fixe a la voiture (voir OnMessage).
+        // Joueur qui tient ou deplace cet objet ici (copie suivie d'apres ses poses, dernier message il y a moins de 1,5 s), sinon -1.
+        public static int RemoteHolder(GameObject go)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            Prop p;
+            if (rb == null || !byBody.TryGetValue(rb, out p) || p == held || p.RemoteBy < 0) return -1;
+            return Time.realtimeSinceStartup - p.LastRemote < 1.5f ? p.RemoteBy : -1;
+        }
         public static void ReleaseRemote(GameObject go)
         {
             Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
