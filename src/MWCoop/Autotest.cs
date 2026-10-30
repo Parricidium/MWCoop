@@ -1005,7 +1005,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone, fsmProbeDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone, fsmProbeDone, objCapDone; static Camera objCam; static float objCamAt; static int objCapN; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -1470,6 +1470,30 @@ namespace MWCoop
                     catch (System.Exception e) { Log.Info("autotest : automate " + path + " : " + e.GetType().Name); }
                 }
                 Log.Info("autotest : SondeAutomates, " + shown + " automate(s)");
+            }
+            // ([Test] CameraObjet=nom, CameraObjetDecal=dx,dy,dz (0.25,0.25,0.25, repere du monde), CameraObjetA=s (60) : camera d'essai
+            // qui vise l'objet, capture ecran-objet-<qualite du moteur>.png 1 s apres -- dossier #23 : carburateur double noir chez l'invite)
+            string camObj = Config.Get("Test", "CameraObjet", "");
+            if (camObj.Length > 0 && t > Config.GetFloat("Test", "CameraObjetA", 60f) && !objCapDone)
+            {
+                Transform ot = null;
+                foreach (Transform x in Resources.FindObjectsOfTypeAll<Transform>())
+                    if (x.name == camObj && x.gameObject.hideFlags == HideFlags.None && x.gameObject.activeInHierarchy) { ot = x; break; }
+                if (ot != null)
+                {
+                    if (objCam == null) { objCam = new GameObject("MWCoop-CameraObjet").AddComponent<Camera>(); objCam.depth = 100; objCam.nearClipPlane = 0.02f; objCam.fieldOfView = 50; objCamAt = t; }
+                    // (plusieurs decalages separes par « ; » : une capture chacun, toutes les 1,5 s)
+                    string[] offs = Config.Get("Test", "CameraObjetDecal", "0.25,0.25,0.25").Split(';');
+                    string[] dc = offs[Mathf.Min(objCapN, offs.Length - 1)].Split(',');
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    Vector3 off = new Vector3(float.Parse(dc[0], ci), float.Parse(dc[1], ci), float.Parse(dc[2], ci));
+                    if (capName == null) { objCam.transform.position = ot.position + off; objCam.transform.LookAt(ot.position); }   // (pas pendant une capture en attente)
+                    if (t > objCamAt + 1f + objCapN * 1.5f && capName == null)
+                    {
+                        CaptureSoon("objet" + objCapN + "-" + QualitySettings.names[QualitySettings.GetQualityLevel()].Split(' ')[0], 0.1f);
+                        if (++objCapN >= offs.Length) objCapDone = true;
+                    }
+                }
             }
             // ([Test] SondeRendu=nom;nom... : a SondeRenduA s (60), rendu de chaque objet de ce nom -- maillage, matieres, textures,
             // pose de chaque Renderer par rapport a l'objet ; dossier #23 : carburateur double « detruit » chez l'invite, 29/10)
