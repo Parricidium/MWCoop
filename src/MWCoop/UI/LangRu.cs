@@ -965,6 +965,7 @@ namespace MWCoop
             { "level ", "уровень " },
             { "off", "выкл." },
             { "No dry spot for your car near you: move away from the water", "Рядом с тобой нет сухого места для машины: отойди от воды" },
+            { "Rally: you are registered with the Rivett, this start only counts the Rivett. To race your own car, fill in the form with it within 40 m of Fleetari's tent.", "Ралли: ты записан на Rivett, этот старт ждёт только её. Чтобы ехать на своей машине, заполни бланк, когда она стоит ближе 40 м от палатки Флеетари." },
         };
     }
 }

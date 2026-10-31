@@ -487,16 +487,23 @@ namespace MWCoop
         // pilote (DepartPilote : 1 hote, 2 invite, 0 personne) s'inscrit a 40 s (Rally.TestRegister), monte dans DepartVoiture
         // (CORRIS) a 45 s, et la pose a DepartRecul m derriere CarCheck a 55 s. Toutes les 3 s, chacun note l'etat du depart et
         // ses variables.
-        static int depStep, depHour = -1; static float depLogAt, depHourAt;
+        static int depStep, depHour = -1, depVaz, depSaved; static float depLogAt, depHourAt;
         static void MwcDepart(float t)
         {
             int ss = Config.GetInt("Test", "DepartSS", 1);
             string root = "RACES/RALLY/SS" + ss + "/StartArea/StartLineObjects/RallyTree";
             // ([Test] DepartVaz=1 : inscription avec la VAZ par la feuille, comme Autotest=rallyevaz -- samedi 9 h, VAZ a la tente,
             // feuille confirmee a 43 s ; puis CarCheck devant la VAZ et l'heure qui avance des 60 s. Joueur Jani, 31/10.)
-            bool vazMode = Config.GetInt("Test", "DepartVaz", 0) != 0;
+            // (DepartVaz=2 : inscrit avec la Rivett -- REGISTER direct comme sans VAZ --, VAZ prise a 16 s, CarCheck devant la VAZ :
+            // attendu, le message « inscrit avec la Rivett » une fois, et pas de depart)
+            int vazOpt = Config.GetInt("Test", "DepartVaz", 0);
+            bool vazMode = vazOpt == 1, vazRivett = vazOpt == 2;
             if (vazMode && t < 58f) Rally.Test("rallyevaz", t);
             if (vazMode && depStep == 0 && t > 20f) depStep = 1;
+            // ([Test] DepartSauveA=s : sauvegarde en jeu a s secondes -- rechargement de l'inscription avec la VAZ)
+            float dsa = Config.GetFloat("Test", "DepartSauveA", 0f);
+            if (dsa > 0f && t > dsa && depSaved == 0 && Net.Session.IsHost) { depSaved = 1; Game.SaveInPlace(); Log.Info("autotest : mwcdepart, sauvegarde en jeu (inscrit " + Rally.MeRegistered + ", avec la VAZ " + Rally.MeWithVaz + ")"); }
+            if (vazRivett && depVaz == 0 && t > 16f) { depVaz = 1; Log.Info("autotest : mwcdepart, VAZ -> " + Vaz.Request(Net.Session.IsHost ? 3 : 5, 0)); }
             if (Net.Session.IsHost && depStep == 0 && t > 20f)
             {
                 depStep = 1;
@@ -546,7 +553,7 @@ namespace MWCoop
                     // a DepartEcart m devant elle ; [Test] DepartBougeVoiture=1 : la voiture va a la ligne)
                     depStep = 4;
                     GameObject c = Game.FindAny(car);
-                    if (vazMode) { Transform vz = Vaz.CarOf(Net.Session.LocalId); c = vz != null ? vz.gameObject : null; if (c != null) car = c.name; }
+                    if (vazMode || vazRivett) { Transform vz = Vaz.CarOf(Net.Session.LocalId); c = vz != null ? vz.gameObject : null; if (c != null) car = c.name; }
                     if (Config.GetInt("Test", "DepartBougeVoiture", 0) == 0 && c != null)
                     {
                         ct.position = c.transform.position + c.transform.forward * Config.GetFloat("Test", "DepartEcart", 3f);
@@ -587,6 +594,7 @@ namespace MWCoop
                 FsmGameObject cv = clock.FsmVariables.FindFsmGameObject("CAR");
                 PlayMakerFSM tmg = Game.FindFsm("RACES/RALLY/SS" + ss + "/TimingSS" + ss, "Timing"); FsmBool tst = tmg != null ? tmg.FsmVariables.FindFsmBool("Start") : null;
                 sb.Append(" Timing.Start ").Append(tst != null ? tst.Value.ToString() : "?").Append(" au volant ").Append(VehicleSync.LocalDriving >= 0);
+                sb.Append(" inscrit ").Append(Rally.MeRegistered).Append(" avecVAZ ").Append(Rally.MeWithVaz);
                 FsmInt h = FsmVariables.GlobalVariables.FindFsmInt("GlobalHour");
                 sb.Append(" heure ").Append(h != null ? h.Value : -1);
                 if (cv != null && cv.Value != null) sb.Append(" CORRIS ").Append(cv.Value.transform.position.ToString("F1"));
