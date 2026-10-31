@@ -478,6 +478,17 @@ namespace MWCoop
                     }
                 }
                 if (go != null && !go.activeInHierarchy) go = null;   // (eteint en main : range par un mod d'inventaire)
+                // Clic sur un objet sans etiquette prenable (cric rouleur leve : DontPickThis) : PickUp passe par 'State 1' (PickedObject =
+                // l'objet vise), ne trouve ni ITEM ni PART ni TOOL ni RAGDOLL et revient a 'Look for object' SANS vider PickedObject. Il
+                // etait pris pour tenu : sa pose envoyee, et la garde HeldRunaway le remettait dans la main a chaque fois (dossier #35,
+                // квазарик 31/10 : « le cric se teleporte sur moi »). Main vide (etat 'Look for object') et joint libre : pas tenu.
+                // [Test] PriseRegardAncienne=1 : comme avant.
+                if (go != null && hand.ActiveStateName == "Look for object" && Config.GetInt("Test", "PriseRegardAncienne", 0) == 0)
+                {
+                    Joint hj = hand.GetComponent<Joint>();
+                    Rigidbody grb = go.GetComponent<Rigidbody>();
+                    if (hj == null || grb == null || hj.connectedBody != grb) go = null;
+                }
                 Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
                 // Piece MONTEE sur une voiture (portiere, capot, coffre de la CORRIS : la main du jeu la prend pour l'ouvrir) :
                 // pas un objet tenu -- sa pose envoyee la tirait chez les autres, dont le jeu la demontait (« Bolted
@@ -1586,6 +1597,12 @@ namespace MWCoop
         }
 
         public static bool Holding { get { return held != null; } }
+        // Essais (Autotest=dossier35) : PickedObject de la main mis a la main, etat de PickUp inchange.
+        public static void TestSetPicked(GameObject g)
+        {
+            FsmGameObject v = hand != null ? hand.FsmVariables.FindFsmGameObject("PickedObject") : null;
+            if (v != null) v.Value = g;
+        }
         // Objet dans la main du joueur d'ici (PickedObject, tout objet, suivi ou non).
         public static bool HandFound { get { return hand != null; } }
         public static GameObject LocalHeld()

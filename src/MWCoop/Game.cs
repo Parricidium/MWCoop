@@ -41,6 +41,12 @@ namespace MWCoop
         // partie, reapparition), la chaine doit aller au bout comme avant.
         static List<KeyValuePair<PlayMakerFSM, string>> restore;
         static Dictionary<PlayMakerFSM, string> afterSave;   // etat atteint par SAVEGAME
+        // Etat d'avant terminal qui ALLUME un objet eteint avant la sauvegarde (dossier #35, квазарик 31/10 : frein a main en double).
+        // Database/.../Handbrake :: Data reste dans « Installed » depuis le chargement (ActivateGameObject de la piece montee) ; demonte
+        // ensuite (Removal l'eteint, piece libre creee), y revenir 2,5 s apres SAVEGAME rallumait la piece montee a cote de la libre --
+        // toute piece demontee depuis le chargement revenait ainsi. Laisse dans l'etat de la sauvegarde (terminal aussi : « Load
+        // transform »). [Test] SauveRallumeTout=1 : comme avant.
+        static Dictionary<PlayMakerFSM, List<GameObject>> wasOff;
         static float restoreAt;
         public static bool Saving { get { return restore != null; } }
         const string HoldState = "(MWCoop : sauvegarde en jeu)";   // nom d'etat absent : transition sans effet
@@ -63,6 +69,13 @@ namespace MWCoop
                 if (setup == null && f.FsmName == "WaitPlayer" && f.gameObject.name == "Setup Game" && (s == "Activate game" || s == "Save game")) setup = f;
                 else restore.Add(new KeyValuePair<PlayMakerFSM, string>(f, s));
             }
+            wasOff = new Dictionary<PlayMakerFSM, List<GameObject>>();
+            if (Config.GetInt("Test", "SauveRallumeTout", 0) == 0)
+                foreach (KeyValuePair<PlayMakerFSM, string> kv in restore)
+                {
+                    List<GameObject> off = OffTargets(kv.Key, kv.Value);
+                    if (off != null) wasOff[kv.Key] = off;
+                }
             HutongGames.PlayMaker.FsmTransition held = null;
             string heldTo = null;
             bool odd = false;
@@ -91,10 +104,17 @@ namespace MWCoop
         public static void Update()
         {
             if (restore == null || Time.realtimeSinceStartup < restoreAt) return;
-            int n = 0, kept = 0, deadly = 0;
+            int n = 0, kept = 0, deadly = 0, stale = 0;
+            var staleNames = new System.Text.StringBuilder();
             foreach (KeyValuePair<PlayMakerFSM, string> kv in restore)
             {
                 if (kv.Key == null || kv.Key.ActiveStateName == kv.Value) continue;
+                List<GameObject> off;
+                if (wasOff != null && wasOff.TryGetValue(kv.Key, out off) && off.Exists(g => g != null && !g.activeSelf))
+                {
+                    if (++stale <= 5) staleNames.Append(' ').Append(kv.Key.name).Append(" '").Append(kv.Value).Append("';");
+                    continue;
+                }
                 // Etat d'avant terminal et sans action par image (« State 1 » du numero de Reijo : renomme, etape 2,
                 // SELLCAR) : y revenir ne ferait que rejouer ses actions -- la vente de la Rivett relancee a chaque
                 // sauvegarde (retour d'un joueur, 10/10). Rester dans l'etat de sauvegarde (terminal aussi) revient au meme.
@@ -108,9 +128,29 @@ namespace MWCoop
                 try { SetState(kv.Key, kv.Value); n++; }
                 catch (System.Exception e) { Log.Warn("sauvegarde en jeu : " + kv.Key.name + " -> " + kv.Value + " : " + e.Message); }
             }
-            restore = null; afterSave = null;
+            restore = null; afterSave = null; wasOff = null;
             if (deadly > 0) Respawn.RestartNeeds("sauvegarde en jeu");
-            Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant" + (kept > 0 ? ", " + kept + " laisses (etat d'avant terminal : ses actions ne sont pas rejouees)" : ""));
+            Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant" + (kept > 0 ? ", " + kept + " laisses (etat d'avant terminal : ses actions ne sont pas rejouees)" : "")
+                     + (stale > 0 ? ", " + stale + " laisses (etat d'avant qui rallumerait un objet eteint depuis :" + staleNames + (stale > 5 ? " ..." : "") + ")" : ""));
+        }
+
+        // Objets ETEINTS maintenant qu'allumerait l'etat terminal 'state' (ActivateGameObject activate=true) ; null si aucun.
+        static List<GameObject> OffTargets(PlayMakerFSM f, string state)
+        {
+            HutongGames.PlayMaker.FsmState st;
+            try { st = f.Fsm.GetState(state); } catch { return null; }
+            if (st == null || st.Transitions == null || st.Transitions.Length > 0 || st.Actions == null) return null;
+            List<GameObject> off = null;
+            foreach (HutongGames.PlayMaker.FsmStateAction a in st.Actions)
+            {
+                var ag = a as HutongGames.PlayMaker.Actions.ActivateGameObject;
+                if (ag == null || ag.activate == null || !ag.activate.Value || ag.gameObject == null) continue;
+                GameObject g = f.Fsm.GetOwnerDefaultTarget(ag.gameObject);
+                if (g == null || g == f.gameObject || g.activeSelf) continue;
+                if (off == null) off = new List<GameObject>();
+                off.Add(g);
+            }
+            return off;
         }
 
         // Etat sans sortie qui allume la mort du joueur (SetFsmBool vers Systems/Death :: Activate Dead Body, comme les etats de
