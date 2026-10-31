@@ -2967,7 +2967,7 @@ namespace MWCoop
                 int n = 0;
                 foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
                     if (tr != null && (motif == "*" || tr.name.ToLowerInvariant().Contains(motif)) && tr.hideFlags == HideFlags.None && (sous.Length == 0 || Recon.Path(tr).ToLowerInvariant().Contains(sous)) && n++ < 80)
-                        Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1") + ", racine " + tr.root.InverseTransformPoint(tr.position).ToString("F2") + ", angles " + tr.localEulerAngles.ToString("F1"));
+                        Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1") + ", racine " + tr.root.InverseTransformPoint(tr.position).ToString("F2") + ", angles " + tr.localEulerAngles.ToString("F1") + ", couche " + LayerMask.LayerToName(tr.gameObject.layer) + " [" + string.Join(",", System.Array.ConvertAll(tr.GetComponents<Component>(), c => c == null ? "?" : c is Collider ? c.GetType().Name + ((Collider)c).isTrigger.ToString().Substring(0, 1) : c.GetType().Name)) + "]");
                 Log.Info("autotest : sonde '" + motif + "' : " + n + " objet(s)");
                 // ([Test] SondeSons=<texte du chemin> : sources de son dont le chemin contient le texte, clip et volume -- echappements de
                 // la Satsuma pour la Golf, 31/10)

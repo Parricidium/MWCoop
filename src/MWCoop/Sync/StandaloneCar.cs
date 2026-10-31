@@ -43,6 +43,11 @@ namespace MWCoop
             public AudioSource Horn; public bool HornOn;   // (klaxon : son du CarHorn de la voiture du jeu)
             public Transform Key; public Vector3 KeyAxis; public bool KeyIn, KeyWait; public int KeyPos; public float KeyAngle;   // (cle de contact du modele, StandaloneDrive)
             public Material ClockMat; public Texture2D ClockTex; public int ClockShown = -2; public bool ClockLit;   // (montre digitale, StandaloneDrive)
+            // (portieres libres comme celles du jeu : vitesse angulaire, boite joueur ; hayon et plage arriere sur charniere ; tete gardee
+            // ou elle etait en montant -- StandaloneDrive, JD 31/10)
+            public float[] DoorVel = new float[2]; public BoxCollider[] DoorCol = new BoxCollider[2]; public Vector3 LastVel; public float LastVelT;
+            public Transform Hatch, Shelf; public Vector3 HatchCenter, ShelfCenter; public bool HatchOpen, ShelfUp; public float HatchAngle, ShelfAngle;
+            public bool HasEyeHold; public Vector3 EyeHold;
             public Transform[] Glass = new Transform[2], Crank = new Transform[2]; public Vector3[] GlassDown = new Vector3[2], CrankAxis = new Vector3[2]; public float[] WinPos = new float[2];   // (vitres de portiere a manivelle, StandaloneDrive)
             public Vector3 LastPos; public float LastPosT, RemoteKmh, NextState;   // (co-op : compteur d'une voiture menee ailleurs, etat renvoye)   // (habitacle creux : StandaloneDrive.Shell)
         }
@@ -126,7 +131,7 @@ namespace MWCoop
             body.SetParent(ct, false);
             b.Body = body;
             foreach (string f in new[] { "carrosserie.p205", "capot.p205", "hayon.p205" })   // (portieres : sur charniere, SetupDrive)
-                if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, f))) VazCar.AddModel(b, body, f);
+                if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, f)) && !(f == "hayon.p205" && inf.ContainsKey("hayon_charniere"))) VazCar.AddModel(b, body, f);   // (hayon a charniere : SetupDrive)
             // bavettes souples (bavette_*.p205, VazFlaps une fois le corps physique pose) et levier du frein a main (frein.p205 sur
             // son pivot, penche par la tirette dans Update) -- JD 29/10 : « pourquoi n'a-t-elle pas les bavettes ? » (205 Ebo 2)
             var flaps = new List<Transform>();

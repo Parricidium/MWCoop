@@ -177,8 +177,25 @@ namespace MWCoop
                     st.DoorBox[i] = db;
                     var dc = new GameObject("joueur_portiere"); dc.layer = buildPlayerLayer;
                     dc.transform.SetParent(inner, false);
-                    var bc = dc.AddComponent<BoxCollider>(); bc.center = db.center; bc.size = db.size;
+                    var bc = dc.AddComponent<BoxCollider>(); bc.center = db.center; bc.size = db.size; st.DoorCol[i] = bc;
                 }
+            }
+
+            // hayon et plage arriere sur charniere (infos.txt hayon_charniere, plage_charniere -- Golf, JD 31/10) : clic pour ouvrir / relever
+            Vector3 hc;
+            if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "hayon.p205")) && inf.TryGetValue("hayon_charniere", out hc))
+            {
+                var hp = new GameObject("hayon").transform; hp.SetParent(b.Body, false); hp.localPosition = hc;
+                var hi = new GameObject("pieces").transform; hi.SetParent(hp, false); hi.localPosition = -hc;
+                VazCar.AddModel(b, hi, "hayon.p205");
+                Bounds hb; st.Hatch = hp; st.HatchCenter = VazCar.ModelBounds(m, "hayon.p205", out hb) ? hb.center : hc;
+            }
+            if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "plage.p205")) && inf.TryGetValue("plage_charniere", out hc))
+            {
+                var sp = new GameObject("plage").transform; sp.SetParent(b.Body, false); sp.localPosition = hc;
+                var si = new GameObject("pieces").transform; si.SetParent(sp, false); si.localPosition = -hc;
+                VazCar.AddModel(b, si, "plage.p205");
+                Bounds sb; st.Shelf = sp; st.ShelfCenter = VazCar.ModelBounds(m, "plage.p205", out sb) ? sb.center : hc;
             }
             Shell(b, st);
             // son moteur de l'addon (boucles + demarrage) au moteur du modele
@@ -486,17 +503,20 @@ namespace MWCoop
         }
 
         // Portieres : visee au centre de l'ecran (a moins de 35 cm du centre de la portiere, a moins de 2 m), texte du jeu, clic gauche
-        // ou touche Use : ouverte de 70 degres vers l'exterieur, ou refermee.
+        // ou touche Use : ouverte (elle part sur sa charniere) ou refermee (poussee jusqu'au pene). Hayon (2) et plage arriere (3) aussi.
         static int doorHover = -1;
         static void Doors(VazCar.Built b, State st)
         {
             Transform cam = PlayerCam();
             if (cam == null || st.Doors == null) return;
             int hit = -1; float best = 0.35f;
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < 4; i++)
             {
-                if (st.Doors[i] == null) continue;
-                Vector3 v = st.Doors[i].TransformPoint(st.DoorCenter[i] - st.Doors[i].localPosition) - cam.position;
+                Vector3 c;
+                if (i < 2) { if (st.Doors[i] == null) continue; c = st.Doors[i].TransformPoint(st.DoorCenter[i] - st.Doors[i].localPosition); }
+                else if (i == 2) { if (st.Hatch == null) continue; c = st.Hatch.TransformPoint(st.HatchCenter - st.Hatch.localPosition); }
+                else { if (st.Shelf == null) continue; c = st.Shelf.TransformPoint(st.ShelfCenter - st.Shelf.localPosition); }
+                Vector3 v = c - cam.position;
                 float along = Vector3.Dot(v, cam.forward);
                 if (along < 0.1f || along > 2f) continue;
                 float perp = (v - cam.forward * along).magnitude;
@@ -505,19 +525,84 @@ namespace MWCoop
             if (hit < 0) { if (doorHover >= 0) { doorHover = -1; Game.SetGlobalBool("GUIuse", false); if (prompted == null) Game.SetGlobal("GUIinteraction", ""); } return; }
             doorHover = hit;
             Game.SetGlobalBool("GUIuse", true);
-            if (prompted == null) Game.SetGlobal("GUIinteraction", st.DoorOpen[hit] ? "CLOSE DOOR" : "OPEN DOOR");
-            if (Input.GetMouseButtonDown(0) || Down("Use")) { st.DoorOpen[hit] = !st.DoorOpen[hit]; SendState(b, st); Log.Info("standalone : portiere " + (hit == 0 ? "conducteur" : "passager") + (st.DoorOpen[hit] ? " ouverte" : " fermee")); }
+            if (prompted == null) Game.SetGlobal("GUIinteraction", hit < 2 ? (st.DoorOpen[hit] ? "CLOSE DOOR" : "OPEN DOOR") : hit == 2 ? (st.HatchOpen ? "CLOSE TRUNK" : "OPEN TRUNK") : (st.ShelfUp ? "LOWER SHELF" : "LIFT SHELF"));
+            if (!Input.GetMouseButtonDown(0) && !Down("Use")) return;
+            if (hit == 2) { st.HatchOpen = !st.HatchOpen; SendState(b, st); Log.Info("standalone : hayon " + (st.HatchOpen ? "ouvert" : "ferme")); return; }
+            if (hit == 3) { st.ShelfUp = !st.ShelfUp; Log.Info("standalone : plage arriere " + (st.ShelfUp ? "relevee" : "baissee")); return; }
+            // (portiere : ouverte = lancee sur sa charniere ; fermee = poussee vers le pene -- elle se verrouille en y arrivant)
+            if (!st.DoorOpen[hit]) { st.DoorOpen[hit] = true; st.DoorVel[hit] = 260f; SendState(b, st); Log.Info("standalone : portiere " + (hit == 0 ? "conducteur" : "passager") + " ouverte"); }
+            else st.DoorVel[hit] = -420f;
         }
+        // Portieres comme celles du jeu (charniere physique, JD 31/10) : libres une fois ouvertes -- elles suivent l'inertie de la voiture
+        // (freinage : elles s'ouvrent, acceleration : elles se ferment), rebondissent en butee a 70 degres, se verrouillent en revenant
+        // a 1 degre ; le joueur a pied les pousse (il ne peut pas les traverser, la portiere s'ecarte devant lui). Voiture menee
+        // ailleurs (corps cinematique) : ouverte / fermee selon l'etat recu. Hayon et plage : animes vers leur position.
         static void DoorAnim(VazCar.Built b, State st)
         {
             if (st.Doors == null) return;
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+            bool phys = !b.Rb.isKinematic;
+            Vector3 acc = Vector3.zero;
+            if (phys)
+            {
+                Vector3 v = b.Car.transform.InverseTransformDirection(b.Rb.velocity);
+                if (st.LastVelT > 0f && Time.time - st.LastVelT < 0.2f) acc = (v - st.LastVel) / dt;
+                st.LastVel = v; st.LastVelT = Time.time;
+            }
+            GameObject pl = Game.PlayerGo;
+            bool afoot = pl != null && driving == null && !Seats.Seated;
             for (int i = 0; i < 2; i++)
             {
                 if (st.Doors[i] == null) continue;
-                float want = st.DoorOpen[i] ? 70f : 0f;
-                if (Mathf.Approximately(st.DoorAngle[i], want)) continue;
-                st.DoorAngle[i] = Mathf.MoveTowards(st.DoorAngle[i], want, 220f * Time.deltaTime);
-                st.Doors[i].localRotation = Quaternion.Euler(0f, i == 0 ? st.DoorAngle[i] : -st.DoorAngle[i], 0f);
+                float s = i == 0 ? 1f : -1f;
+                if (!phys)
+                {
+                    float want = st.DoorOpen[i] ? 70f : 0f;
+                    st.DoorAngle[i] = Mathf.MoveTowards(st.DoorAngle[i], want, 220f * dt);
+                }
+                else if (st.DoorOpen[i])
+                {
+                    float a = st.DoorAngle[i], vel = st.DoorVel[i];
+                    vel += -Mathf.Clamp(acc.z, -30f, 30f) * 22f * dt;
+                    vel *= Mathf.Exp(-2.2f * dt);
+                    a += vel * dt;
+                    if (a > 70f) { a = 70f; vel = -Mathf.Abs(vel) * 0.25f; }
+                    // (joueur a pied pres de la portiere : elle s'ecarte devant lui -- vers l'exterieur s'il est dedans, vers le pene s'il pousse
+                    // du dehors)
+                    if (afoot)
+                    {
+                        Vector3 hp = st.Doors[i].localPosition, pp = b.Body.InverseTransformPoint(pl.transform.position);
+                        float wx = pp.x - hp.x, wz = pp.z - hp.z, r = Mathf.Sqrt(wx * wx + wz * wz);
+                        if (r > 0.2f && r < 1.15f && Mathf.Abs(pp.y - hp.y) < 1.2f)
+                        {
+                            float pa = Mathf.Atan2(-s * wx, -wz) * Mathf.Rad2Deg, m = Mathf.Rad2Deg * 0.32f / r;
+                            if (pa > -10f && pa < a && a - pa < m) { a = Mathf.Min(70f, pa + m); vel = Mathf.Max(vel, 0f); }
+                            else if (pa >= a && pa - a < m) { a = Mathf.Max(0f, pa - m); vel = Mathf.Min(vel, 0f); }
+                        }
+                    }
+                    if (a <= 1f && vel <= 0f)
+                    {
+                        a = 0f; vel = 0f; st.DoorOpen[i] = false; SendState(b, st);
+                        Log.Info("standalone : portiere " + (i == 0 ? "conducteur" : "passager") + " fermee");
+                    }
+                    st.DoorAngle[i] = Mathf.Max(0f, a); st.DoorVel[i] = vel;
+                }
+                else { st.DoorAngle[i] = 0f; st.DoorVel[i] = 0f; }
+                // (boite joueur de la portiere : seulement fermee -- ouverte, c'est la portiere qui s'ecarte devant le joueur)
+                if (st.DoorCol[i] != null) st.DoorCol[i].enabled = st.DoorAngle[i] < 1f;
+                st.Doors[i].localRotation = Quaternion.Euler(0f, s * st.DoorAngle[i], 0f);
+            }
+            if (st.Hatch != null)
+            {
+                st.HatchAngle = Mathf.MoveTowards(st.HatchAngle, st.HatchOpen ? 78f : 0f, 110f * dt);
+                st.Hatch.localRotation = Quaternion.Euler(st.HatchAngle, 0f, 0f);
+            }
+            if (st.Shelf != null)
+            {
+                // (relevee a la main, ou soulevee par ses cordons quand le hayon s'ouvre)
+                float want = st.ShelfUp ? 80f : st.HatchAngle / 78f * 24f;
+                st.ShelfAngle = Mathf.MoveTowards(st.ShelfAngle, want, 120f * dt);
+                st.Shelf.localRotation = Quaternion.Euler(st.ShelfAngle, 0f, 0f);
             }
         }
 
@@ -737,6 +822,15 @@ namespace MWCoop
             float gy;
             footHeight = Ground(pl.transform.position + Vector3.up * 0.3f, pl.transform, b.Car.transform, out gy) ? pl.transform.position.y - gy : 1.0f;
             footHeight = Mathf.Clamp(footHeight, 0.2f, 2f);
+            // (comme les voitures du jeu : la tete reste ou elle etait en appuyant sur la touche -- a 30 cm au plus du point de vue du
+            // siege, JD 31/10 : levier hors d'atteinte depuis le point de vue fixe)
+            Transform cam0 = PlayerCam();
+            st.HasEyeHold = false;
+            if (cam0 != null)
+            {
+                Vector3 e = b.Car.transform.InverseTransformPoint(cam0.position), dv = e - st.T.Yeux;
+                if (dv.magnitude < 0.6f) { st.EyeHold = st.T.Yeux + Vector3.ClampMagnitude(dv, 0.30f); st.HasEyeHold = true; }
+            }
             var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
             Game.SetGlobalBool("GUIdrive", false); Game.SetGlobal("GUIinteraction", ""); prompted = null;
             Game.SetGlobalBool("PlayerStop", true);
@@ -864,7 +958,7 @@ namespace MWCoop
             Transform cam = PlayerCam();
             if (pl == null || cam == null || pl.transform.parent != st.Pivot) return;
             // (yeux portes par le pivot, anime quand on se penche : point de vue au repos ramene dans le repere du pivot)
-            Vector3 eye = st.Pivot.TransformPoint(st.RestCarFromPivot.inverse.MultiplyPoint3x4(st.T.Yeux));
+            Vector3 eye = st.Pivot.TransformPoint(st.RestCarFromPivot.inverse.MultiplyPoint3x4(st.HasEyeHold ? st.EyeHold : st.T.Yeux));
             Vector3 delta = eye - cam.position;
             if (delta.sqrMagnitude > 1e-6f && delta.sqrMagnitude < 9f) pl.transform.position += delta;
         }
@@ -902,7 +996,7 @@ namespace MWCoop
             st.NextState = Time.realtimeSinceStartup + 3f;
             if (!Net.Session.Active || b.Number < 1) return;
             int f = (st.EngineOn ? 1 : 0) | (st.LightsOn ? 2 : 0) | (st.DoorOpen != null && st.DoorOpen[0] ? 4 : 0) | (st.DoorOpen != null && st.DoorOpen[1] ? 8 : 0) | (st.HornOn ? 16 : 0)
-                  | (st.KeyIn ? 32 : 0) | (st.KeyPos > 0 ? 64 : 0);   // (cle mise, contact)
+                  | (st.KeyIn ? 32 : 0) | (st.KeyPos > 0 ? 64 : 0) | (st.HatchOpen ? 128 : 0);   // (cle mise, contact, hayon ouvert)
             Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f), true);
         }
 
@@ -917,9 +1011,16 @@ namespace MWCoop
                 if (eng && !st.EngineOn && !b.Rb.isKinematic) b.Dt.StartEngine();
                 if (eng != st.EngineOn) Log.Info("standalone : n " + n + " moteur " + (eng ? "demarre" : "coupe") + " chez un autre joueur");
                 st.EngineOn = eng; st.LightsOn = (f & 2) != 0;
-                if (st.DoorOpen != null) { st.DoorOpen[0] = (f & 4) != 0; st.DoorOpen[1] = (f & 8) != 0; }
+                if (st.DoorOpen != null)
+                    for (int k = 0; k < 2; k++)
+                    {
+                        // (portiere libre ici : ouverte ou fermee par un autre joueur -- lancee sur sa charniere, comme au clic)
+                        bool o = (f & (4 << k)) != 0;
+                        if (!b.Rb.isKinematic) { if (o && !st.DoorOpen[k]) st.DoorVel[k] = 260f; else if (!o && st.DoorOpen[k]) { st.DoorVel[k] = -420f; continue; } }
+                        st.DoorOpen[k] = o;
+                    }
                 SetHorn(b, st, (f & 16) != 0, false);
-                st.KeyIn = (f & 32) != 0; st.KeyPos = (f & 64) != 0 ? 1 : 0;
+                st.KeyIn = (f & 32) != 0; st.KeyPos = (f & 64) != 0 ? 1 : 0; st.HatchOpen = (f & 128) != 0;
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
@@ -949,7 +1050,7 @@ namespace MWCoop
                 float perp = (v - cam.forward * along).magnitude;
                 if (perp < (i == KWheelHub ? 0.07f : bestPerp) && (hit < 0 || perp < bestPerp)) { bestPerp = Mathf.Min(bestPerp, perp); hit = i; }
             }
-            // manivelles des vitres (les deux, du siege conducteur) : clic gauche tenu = vitre baissee, clic droit tenu = remontee
+            // manivelles des vitres (les deux, du siege conducteur) : molette, comme les voitures du jeu
             for (int w = 0; w < 2; w++)
             {
                 if (st.Crank[w] == null) continue;
@@ -963,8 +1064,9 @@ namespace MWCoop
             {
                 hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", "WINDOW");
-                int w = hit - KCrank0; float dw = (Input.GetMouseButton(0) ? 1f : 0f) - (Input.GetMouseButton(1) ? 1f : 0f);
-                if (dw != 0f) st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] + dw * Time.deltaTime / 2.2f);
+                // (molette comme les voitures du jeu : vers soi = vitre baissee ; un cran = 1/8 de la course)
+                int w = hit - KCrank0; float sc = Input.GetAxis("Mouse ScrollWheel");
+                if (sc != 0f) st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] - Mathf.Sign(sc) * 0.125f);
                 return;
             }
             if (hit < 0) { ClearHover(); CrankStop(b, st); SetHorn(b, st, false, true); return; }
@@ -1312,6 +1414,13 @@ namespace MWCoop
                 cPhotos = true;
                 // ([Test] StandaloneVitres=0.6 : vitres de portiere baissees pour les photos)
                 float wv = Config.GetFloat("Test", "StandaloneVitres", 0f); if (wv > 0f && st != null) { st.WinPos[0] = st.WinPos[1] = Mathf.Clamp01(wv); WindowAnim(b, st); }
+                // ([Test] StandaloneHayon=1 : hayon ouvert, plage relevee, portiere conducteur entrouverte a 40 degres pour les photos)
+                if (Config.GetInt("Test", "StandaloneHayon", 0) != 0 && st != null)
+                {
+                    st.HatchOpen = true; st.HatchAngle = 78f; st.ShelfUp = true; st.ShelfAngle = 80f;
+                    if (st.Doors[0] != null) { st.DoorOpen[0] = true; st.DoorAngle[0] = 40f; st.DoorVel[0] = 0f; }
+                    DoorAnim(b, st);
+                }
                 Photo(b, "34av", new Vector3(-3.2f, 1.6f, 3.6f)); Photo(b, "34ar", new Vector3(3.0f, 1.8f, -3.8f));
                 Photo(b, "cote", new Vector3(-4.6f, 0.9f, 0.2f)); Photo(b, "dessus", new Vector3(-1.5f, 4.5f, -3.0f));
             }
