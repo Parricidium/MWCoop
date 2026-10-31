@@ -24,12 +24,15 @@
 # -Nightly : version x.y.z-nightly.N, pre-release GitHub, paquet .<flux>-nightly (.nightly pour tout), branche courante
 # poussee (pas main), PAS d'annonce Discord ni de pont. Le lanceur ne la propose qu'en canal Nightly.
 # -SansPont : -Jeu lanceur sans republier le pont.
+# -SansAnnonce : pas d'annonce Discord, tout le reste pareil (release, versions.json, pont). Pour une version qui ne
+# concerne que la Golf privee de JD (JD, 31/10 : pas d'annonce Discord quand ca ne concerne que la Golf).
 param(
     [Parameter(Mandatory = $true)][ValidateSet('tout', 'mwc', 'msc', 'lanceur', 'outils')][string]$Jeu,
     [Parameter(Mandatory = $true)][string]$Version,
-    [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '', [switch]$Nightly, [switch]$Ping, [string]$Image = '', [switch]$SansPont)
+    [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '', [switch]$Nightly, [switch]$Ping, [string]$Image = '', [switch]$SansPont, [switch]$SansAnnonce)
 if ($Nightly -ne ($Version -match 'nightly')) { throw "-Nightly va avec une version 'x.y.z-nightly.N' (et seulement elle)" }
 if ($Version -notmatch '^\d+\.\d+\.\d+(-nightly\.\d+)?$') { throw "version attendue : X.Y.Z (ou X.Y.Z-nightly.N)" }
+if ($SansAnnonce -and ($Ping -or $Merci -or $Image)) { throw "-SansAnnonce : -Ping, -Merci et -Image ne servent qu'a l'annonce Discord" }
 $root = Split-Path $PSScriptRoot
 $repo = 'Parricidium/MWCoop'
 $kLastGlobal = '1.15.0'
@@ -236,6 +239,7 @@ function Publish-Pont($exe, $lancVersion, [switch]$Essai) {
     if ($rc -ne 0) { Write-Warning "pont v$pv : echec de la publication" } else { "Pont publie : v$pv (lanceur $lancVersion)" }
 }
 if (-not $Publier) {
+    if ($SansAnnonce) { "Annonce Discord : sautee (-SansAnnonce)" }
     if ($Jeu -eq 'lanceur' -and -not $Nightly -and -not $SansPont) { Publish-Pont "$root\build\MWCoop.exe" $Version -Essai }
     return
 }
@@ -340,6 +344,7 @@ if (-not (Test-Path $wf)) {
     if ($common) { $wf2 = Join-Path (Split-Path $common.Trim()) 'dist\discord-webhook.txt'; if (Test-Path $wf2) { $wf = $wf2 } }
 }
 if ($Nightly) { "Nightly : pas d'annonce Discord" }
+elseif ($SansAnnonce) { "Annonce Discord : sautee (-SansAnnonce)" }
 elseif (Test-Path $wf) {
     try {
         $w = @(Get-Content $wf -Encoding UTF8 | Where-Object { $_.Trim() })
