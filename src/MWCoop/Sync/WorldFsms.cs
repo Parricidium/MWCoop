@@ -52,6 +52,9 @@ namespace MWCoop
         static readonly string[] SkipParents = { "VideoPoker", "SlotMachine", "FuelPumps_",
                                                  "Ventti",   // ventti du cochon (maison de retraite) : Machines, meme modele que le poker (table verrouillee, cartes recopiees)
                                                  "ResultsWeekend", "RacingInspection", "TimingSS", "RallyTree", "ParcFerme", "LINEUPS",
+                                                 // My Summer Car : depart et chrono du rallye du samedi / dimanche (RALLY/Saturday/TimingSaturday, Sunday/TimingSunday :
+                                                 // zone de depart, compte a rebours, horloge) -- comme TimingSSn, a chaque pilote (Jani, 31/10 ; essai a deux a faire)
+                                                 "TimingSaturday", "TimingSunday",
                                                  // Menu d'options du jeu (Systems/OptionsMenu : commandes de conduite, souris, graphismes...) : a chacun
                                                  // les siennes. Rejoues, les clics d'un joueur changeaient les reglages des autres (retour de joueurs, 10/10).
                                                  "OptionsMenu" };
