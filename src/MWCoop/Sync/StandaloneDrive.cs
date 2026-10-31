@@ -106,12 +106,15 @@ namespace MWCoop
                 VazCar.AddModel(b, ki, "cle.p205");
                 st.Key = kp; st.KeyAxis = ka.normalized; kp.gameObject.SetActive(false);
             }
+            st.ModelButtons = inf.ContainsKey("boutons_modele");
+            SetupBrakeLamp(b, st, inf);
             // boutons visibles du tableau de bord (cylindres colores, comme sur la copie)
             VazCar.Knob[] kns = KnobsOf(m);
             if (kns != null)
                 for (int i = 0; i < kns.Length; i++)
                 {
                     if (i == KIgnition && st.Key != null) continue;
+                    if (st.ModelButtons) continue;   // (boutons du modele : rien a dessiner)
                     VazCar.Knob kn = kns[i];
                     GameObject g = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                     UnityEngine.Object.DestroyImmediate(g.GetComponent<Collider>());
@@ -196,6 +199,30 @@ namespace MWCoop
                 var si = new GameObject("pieces").transform; si.SetParent(sp, false); si.localPosition = -hc;
                 VazCar.AddModel(b, si, "plage.p205");
                 Bounds sb; st.Shelf = sp; st.ShelfCenter = VazCar.ModelBounds(m, "plage.p205", out sb) ? sb.center : hc;
+            }
+
+            // essuie-glaces et comodo (essuie_<av1|av2|ar>.p205, comodo.p205 ; infos.txt essuie_<k>_centre / _axe, comodo_centre / _axe --
+            // Golf, JD 31/10) : le balai arriere suit le hayon
+            string[] wk = { "av1", "av2", "ar" };
+            for (int i = 0; i < 3; i++)
+            {
+                Vector3 wc, wa;
+                string wf = "essuie_" + wk[i] + ".p205";
+                if (!System.IO.File.Exists(System.IO.Path.Combine(m.Dir, wf)) || !inf.TryGetValue("essuie_" + wk[i] + "_centre", out wc) || !inf.TryGetValue("essuie_" + wk[i] + "_axe", out wa)) continue;
+                Transform par = b.Body;
+                if (i == 2 && st.Hatch != null && st.Hatch.Find("pieces") != null) par = st.Hatch.Find("pieces");
+                var wp = new GameObject("essuie_" + wk[i]).transform; wp.SetParent(par, false); wp.localPosition = wc;
+                var wi = new GameObject("pieces").transform; wi.SetParent(wp, false); wi.localPosition = -wc;
+                VazCar.AddModel(b, wi, wf);
+                st.Wipers[i] = wp; st.WiperAxis[i] = wa.normalized; st.WiperMax[i] = i == 2 ? 115f : 88f;
+            }
+            Vector3 sc0, sa0;
+            if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "comodo.p205")) && inf.TryGetValue("comodo_centre", out sc0) && inf.TryGetValue("comodo_axe", out sa0))
+            {
+                var sp0 = new GameObject("comodo").transform; sp0.SetParent(b.Body, false); sp0.localPosition = sc0;
+                var si0 = new GameObject("pieces").transform; si0.SetParent(sp0, false); si0.localPosition = -sc0;
+                VazCar.AddModel(b, si0, "comodo.p205");
+                st.Stalk = sp0; st.StalkAxis = sa0.normalized;
             }
             Shell(b, st);
             // son moteur de l'addon (boucles + demarrage) au moteur du modele
@@ -377,12 +404,36 @@ namespace MWCoop
             if (st.Speedo != null) { st.Speedo.Set(kmh); st.Speedo.Light(st.LightsOn); }
             if (st.Tacho != null) { st.Tacho.Set(st.EngineOn ? b.Dt.rpm : 0f); st.Tacho.Light(st.LightsOn); }
             Clock(b, st);
+            if (st.BrakeLamp != null)
+            {
+                var cc = b.Axis as CarController;
+                bool on = cc != null && cc.handbrakeInput > 0.1f && (st.Key == null || st.KeyPos > 0 || st.EngineOn);
+                if (st.BrakeLamp.activeSelf != on) st.BrakeLamp.SetActive(on);
+            }
         }
 
         // ---------------------------------------------------------------- montre digitale (infos.txt montre_centre / haut / droite : ecran
         // du modele -- Golf, JD 31/10) : heure du jeu en 7 segments, ecran vert eclaire avec les phares. Heure : aiguilles de l'horloge de
         // la cour (YARD/.../SuomiClock/Clock/hour et minute, tournees autour de leur y : 30 degres par heure, 6 par minute) ; matin ou
         // apres-midi : la tranche de deux heures du soleil (MAP/SUN/Pivot/SUN::Color, Time) la plus proche.
+
+        // voyant du frein a main (infos.txt voyant_frein_centre / haut / droite, voyant_frein.png -- Golf, JD 31/10) : symbole rouge
+        // allume par-dessus celui du tableau de bord quand le frein a main est serre, contact mis
+        static void SetupBrakeLamp(VazCar.Built b, State st, Dictionary<string, Vector3> inf)
+        {
+            Vector3 c, up, right;
+            if (!inf.TryGetValue("voyant_frein_centre", out c) || !inf.TryGetValue("voyant_frein_haut", out up) || !inf.TryGetValue("voyant_frein_droite", out right)) return;
+            string f = System.IO.Path.Combine(b.M.Dir, "voyant_frein.png");
+            if (!System.IO.File.Exists(f)) return;
+            var t = new Texture2D(2, 2, TextureFormat.RGBA32, true) { name = "standalone_voyant_frein", wrapMode = TextureWrapMode.Clamp };
+            t.LoadImage(System.IO.File.ReadAllBytes(f));
+            Vector3 n = Vector3.Cross(right, up).normalized;
+            var q = Gauge.Quad("voyant_frein", b.Body, c - n * 0.0015f, Vector3.zero, up, right);
+            q.GetComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("Unlit/Texture")) { mainTexture = t, name = "standalone_voyant_frein" };
+            q.SetActive(false);
+            st.BrakeLamp = q;
+        }
+
         public static void SetupClock(VazCar.Built b, Dictionary<string, Vector3> inf)
         {
             State st; Vector3 c, up, right;
@@ -466,6 +517,7 @@ namespace MWCoop
             Lamps(b, st);
             KeyVisual(b, st);
             WindowAnim(b, st);
+            WiperAnim(b, st);
             DoorAnim(b, st);
             Gauges(b, st);
             GameObject pl = Game.PlayerGo;
@@ -1003,12 +1055,14 @@ namespace MWCoop
             if (!Net.Session.Active || b.Number < 1) return;
             int f = (st.EngineOn ? 1 : 0) | (st.LightsOn ? 2 : 0) | (st.DoorOpen != null && st.DoorOpen[0] ? 4 : 0) | (st.DoorOpen != null && st.DoorOpen[1] ? 8 : 0) | (st.HornOn ? 16 : 0)
                   | (st.KeyIn ? 32 : 0) | (st.KeyPos > 0 ? 64 : 0) | (st.HatchOpen ? 128 : 0);   // (cle mise, contact, hayon ouvert)
-            Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f), true);
+            // (octet de plus : warnings -- les anciennes versions lisent les deux premiers et ignorent le reste)
+            Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0)), true);
         }
 
         public static void OnState(Net.Peer from, Net.NetReader r)
         {
             int n = r.U8(), f = r.U8();
+            byte[] extra = r.Rest();   // (warnings ; absent chez les anciennes versions)
             foreach (VazCar.Built b in cars)
             {
                 State st;
@@ -1027,12 +1081,13 @@ namespace MWCoop
                     }
                 SetHorn(b, st, (f & 16) != 0, false);
                 st.KeyIn = (f & 32) != 0; st.KeyPos = (f & 64) != 0 ? 1 : 0; st.HatchOpen = (f & 128) != 0;
+                if (extra.Length > 0) { st.Hazard = (extra[0] & 1) != 0; st.WipersOn = (extra[0] & 2) != 0; }
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
 
         // ---------------------------------------------------------------- tableau de bord
-        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300;
+        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300, KStalk = 400;
         static void SetHorn(VazCar.Built b, State st, bool on, bool send)
         {
             if (on == st.HornOn) return;
@@ -1066,6 +1121,20 @@ namespace MWCoop
                 float perp = (v - cam.forward * along).magnitude;
                 if (perp < 0.05f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KCrank0 + w; }
             }
+            // comodo des essuie-glaces : vise, clic = marche / arret
+            if (st.Stalk != null)
+            {
+                Vector3 v = b.Body.TransformPoint(st.Stalk.localPosition + new Vector3(0.10f, 0f, 0f)) - cam.position;
+                float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
+                if (along > 0.15f && along < 1.3f && perp < 0.06f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KStalk; }
+            }
+            if (hit == KStalk)
+            {
+                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", st.WipersOn ? "WIPERS OFF" : "WIPERS ON");
+                if (Input.GetMouseButtonDown(0)) { st.WipersOn = !st.WipersOn; SendState(b, st); Log.Info("standalone : essuie-glaces " + (st.WipersOn ? "en marche" : "arretes")); }
+                return;
+            }
             // levier du frein a main (frein.p205) : vise, molette (vers l'avant : serre) ou clic (serre / desserre), comme les voitures du jeu
             var sdh = b.Axis as StandaloneDriver;
             if (b.BrakePivot != null && sdh != null)
@@ -1096,7 +1165,9 @@ namespace MWCoop
             hovered = hit;
             Game.SetGlobalBool("GUIuse", true);
             string ign = st.Key == null ? (st.EngineOn ? "ENGINE OFF" : "START ENGINE") : !st.KeyIn ? "INSERT KEY" : st.EngineOn ? "ENGINE OFF" : st.KeyPos == 0 ? "IGNITION" : "START ENGINE";
-            Game.SetGlobal("GUIinteraction", hit == KIgnition ? ign : hit == KLights ? (st.LightsOn ? "LIGHTS OFF" : "LIGHTS ON") : "HORN");
+            Game.SetGlobal("GUIinteraction", hit == KIgnition ? ign : hit == KLights ? (st.LightsOn ? "LIGHTS OFF" : "LIGHTS ON") : hit == KHorn && st.ModelButtons ? "HAZARD LIGHTS" : "HORN");
+            // (boutons du modele : le 4e est le bouton des warnings -- le klaxon reste au moyeu du volant)
+            if (hit == KHorn && st.ModelButtons) { SetHorn(b, st, false, true); if (Input.GetMouseButtonDown(0)) { st.Hazard = !st.Hazard; SendState(b, st); Log.Info("standalone : warnings " + (st.Hazard ? "allumes" : "eteints")); } return; }
             // klaxon : bouton orange ou moyeu du volant, tant que le clic est tenu (comme le bouton du jeu)
             if (hit == KHorn || hit == KWheelHub) { SetHorn(b, st, Input.GetMouseButton(0), true); return; }
             SetHorn(b, st, false, true);
@@ -1123,6 +1194,26 @@ namespace MWCoop
         static void CrankStop(VazCar.Built b, State st) { if (st.CrankT >= 0f) { st.CrankT = -1f; if (b.Sound != null) b.Sound.ExternalStarter(false, false); } }
         // cle : visible mise, tournee sur son axe (contact 40 degres, demarreur 70, retour au contact) ; moteur demarre d'ailleurs (autre
         // joueur, essais) : cle mise au contact
+        // essuie-glaces : aller-retour en 1,3 s (angle = maxi x (1 - cos) / 2), rangement en fin de course a l'arret ; comodo baisse en marche
+        static void WiperAnim(VazCar.Built b, State st)
+        {
+            if (st.Wipers[0] == null && st.Wipers[1] == null && st.Wipers[2] == null && st.Stalk == null) return;
+            float dt = Time.deltaTime;
+            if (st.WipersOn || st.WiperPhase % 1f > 0.0005f)
+            {
+                float ph = st.WiperPhase + dt / 1.3f;
+                if (!st.WipersOn && Mathf.Floor(ph) > Mathf.Floor(st.WiperPhase)) ph = Mathf.Floor(ph);   // (arret : balais ranges)
+                st.WiperPhase = ph % 1000f;
+            }
+            float k = (1f - Mathf.Cos(st.WiperPhase * 2f * Mathf.PI)) * 0.5f;
+            for (int i = 0; i < 3; i++)
+                if (st.Wipers[i] != null) st.Wipers[i].localRotation = Quaternion.AngleAxis((i == 2 ? -1f : 1f) * st.WiperMax[i] * k, st.WiperAxis[i]);
+            if (st.Stalk != null)
+            {
+                st.StalkAngle = Mathf.MoveTowards(st.StalkAngle, st.WipersOn ? 14f : 0f, 90f * dt);
+                st.Stalk.localRotation = Quaternion.AngleAxis(st.StalkAngle, st.StalkAxis);
+            }
+        }
         const float KeyOnDeg = 40f, KeyStartDeg = 70f;
         // vitres : position 0 (fermee) a 1 (baissee), manivelle 3 tours sur la course
         static void WindowAnim(VazCar.Built b, State st)
@@ -1149,15 +1240,16 @@ namespace MWCoop
         {
             var d = b.Axis as CarController;
             bool f = st.LightsOn, br = d != null && d.brake > 0.1f, rv = b.Dt != null && b.Dt.gearRatios != null && b.Dt.gear >= 0 && b.Dt.gear < b.Dt.gearRatios.Length && b.Dt.gearRatios[b.Dt.gear] < 0f;
-            if (b.LampsInit && f == b.FrontOn && br == b.BrakeOn && rv == b.ReverseOn) return;
-            b.LampsInit = true; b.FrontOn = f; b.RearOn = f; b.BrakeOn = br; b.ReverseOn = rv;
+            bool blink = st.Hazard && Time.time % 0.8f < 0.4f;   // (warnings : clignotants des deux cotes, 1,25 Hz)
+            if (b.LampsInit && f == b.FrontOn && br == b.BrakeOn && rv == b.ReverseOn && blink == st.BlinkShown) return;
+            b.LampsInit = true; b.FrontOn = f; b.RearOn = f; b.BrakeOn = br; b.ReverseOn = rv; st.BlinkShown = blink;
             if (st.Heads != null) foreach (Light l in st.Heads) if (l != null) l.enabled = f;
             foreach (KeyValuePair<MeshRenderer, string> kv in b.Lamps)
             {
                 if (kv.Key == null) continue;
                 string k = kv.Value; Material m = null;
                 if (k.EndsWith("_ar")) { if (br) b.Lit.TryGetValue(k, out m); else if (f && !b.Dim.TryGetValue(k, out m)) b.Lit.TryGetValue(k, out m); }
-                else if ((k.EndsWith("_av") && f) || (k.EndsWith("_re") && rv)) b.Lit.TryGetValue(k, out m);
+                else if ((k.EndsWith("_av") && f) || (k.EndsWith("_re") && rv) || ((k.EndsWith("_cg") || k.EndsWith("_cd")) && blink)) b.Lit.TryGetValue(k, out m);
                 Material basic; b.Mats.TryGetValue(k, out basic);
                 kv.Key.sharedMaterial = m ?? basic;
             }
@@ -1438,6 +1530,8 @@ namespace MWCoop
                 cPhotos = true;
                 // ([Test] StandaloneVitres=0.6 : vitres de portiere baissees pour les photos)
                 float wv = Config.GetFloat("Test", "StandaloneVitres", 0f); if (wv > 0f && st != null) { st.WinPos[0] = st.WinPos[1] = Mathf.Clamp01(wv); WindowAnim(b, st); }
+                // ([Test] StandaloneEssuie=0.25 : essuie-glaces figes a cette phase pour les photos, comodo baisse)
+                float we = Config.GetFloat("Test", "StandaloneEssuie", 0f); if (we > 0f && st != null) { st.WipersOn = false; st.WiperPhase = we; st.StalkAngle = 14f; WiperAnim(b, st); }
                 // ([Test] StandaloneHayon=1 : hayon ouvert, plage relevee, portiere conducteur entrouverte a 40 degres pour les photos)
                 if (Config.GetInt("Test", "StandaloneHayon", 0) != 0 && st != null)
                 {

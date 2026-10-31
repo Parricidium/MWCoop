@@ -48,6 +48,11 @@ namespace MWCoop
             public float[] DoorVel = new float[2]; public BoxCollider[] DoorCol = new BoxCollider[2]; public Vector3 LastVel; public float LastVelT;
             public Transform Hatch, Shelf; public Vector3 HatchCenter, ShelfCenter; public bool HatchOpen, ShelfUp; public float HatchAngle, ShelfAngle;
             public bool HasEyeHold; public Vector3 EyeHold;
+            // (boutons du modele -- infos.txt boutons_modele : pas de boutons de couleur, warning au lieu du klaxon ; voyant du frein a main)
+            public bool ModelButtons, Hazard, BlinkShown; public GameObject BrakeLamp;
+            // (essuie-glaces : av1, av2, ar -- pivot, axe, angle maxi ; comodo ; StandaloneDrive)
+            public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
+            public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
             public Transform[] Glass = new Transform[2], Crank = new Transform[2]; public Vector3[] GlassDown = new Vector3[2], CrankAxis = new Vector3[2]; public float[] WinPos = new float[2];   // (vitres de portiere a manivelle, StandaloneDrive)
             public Vector3 LastPos; public float LastPosT, RemoteKmh, NextState;   // (co-op : compteur d'une voiture menee ailleurs, etat renvoye)   // (habitacle creux : StandaloneDrive.Shell)
         }
@@ -118,7 +123,8 @@ namespace MWCoop
                 var rw = new GameObject("VAZ_roue").transform;
                 rw.SetParent(model.transform, false);
                 rw.localRotation = q; rw.localPosition = -(q * wb.center);
-                VazCar.AddModel(b, rw, "roue.p205");
+                if (!inf.ContainsKey("roues_jeu") || !GameWheel(b, model.transform, left, radius)) VazCar.AddModel(b, rw, "roue.p205");
+                else UnityEngine.Object.Destroy(rw.gameObject);
                 w.model = model; w.caliperModel = null;
                 if (fr) { if (left) front.leftWheel = w; else front.rightWheel = w; }
                 else { if (left) rear.leftWheel = w; else rear.rightWheel = w; }
@@ -308,6 +314,66 @@ namespace MWCoop
             return true;
         }
         static bool Bad(float f) { return float.IsNaN(f) || float.IsInfinity(f); }
+
+
+        // Roues du jeu (infos.txt roues_jeu -- Golf, JD 31/10 : « les jantes Octo en noir, avec le pneu du jeu ») : jante du lot Octo du
+        // magasin (STORE/Boxes/wheelset octo/Parts/wheel_octo1) teinte en noir, posee comme sur le point de fixation de la roue avant de
+        // la Satsuma du meme cote (TireF<L|R>/OFFSET/pivot_wheel_standard, la meme Satsuma montee ou demontee) ; pneu : le TireGobra du jeu
+        // (pneu route d'origine) monte sur la jante ; a l'echelle du rayon du modele.
+        // Maillages et matieres du jeu partages, rien d'embarque ; sans eux : roue.p205.
+        static Mesh tireMesh; static Material[] tireMats; static Matrix4x4 tireFromRim; static bool tireFound;
+        static bool GameWheel(VazCar.Built b, Transform model, bool left, float radius)
+        {
+            try
+            {
+                GameObject rimSrc = Game.FindAny("STORE/Boxes/wheelset octo(Clone)/Parts/wheel_octo1");
+                string s = left ? "L" : "R";
+                GameObject tf = Game.FindAny("SATSUMA(557kg, 248)/F" + s + "/AckerF" + s + "/wheelF" + s + "/TireF" + s);
+                Transform piv = tf != null ? tf.transform.Find("OFFSET/pivot_wheel_standard") : null;
+                if (!tireFound)
+                {
+                    // (modeles de pneus du jeu : objets racine inactifs TireGobra, TireStock13... ; monte, un pneu est l'enfant de sa jante sans
+                    // decalage -- wheel_regula/TireOld(Clone), releve du 31/10)
+                    var all = Resources.FindObjectsOfTypeAll<MeshFilter>();
+                    foreach (string tn in new[] { "TireGobra", "TireGobra2", "TireStock13", "TireOld" })
+                    {
+                        foreach (MeshFilter mf in all)
+                            if (mf != null && mf.sharedMesh != null && mf.name == tn && mf.GetComponent<MeshRenderer>() != null)
+                            { tireMesh = mf.sharedMesh; tireMats = mf.GetComponent<MeshRenderer>().sharedMaterials; tireFromRim = Matrix4x4.identity; tireFound = true; break; }
+                        if (tireFound) break;
+                    }
+                }
+                if (rimSrc == null || rimSrc.GetComponent<MeshFilter>() == null || piv == null || !tireFound)
+                {
+                    Log.Warn("standalone : roues du jeu indisponibles (jante Octo " + (rimSrc != null) + ", fixation Satsuma " + (piv != null) + ", pneu " + tireFound + ") : roue.p205");
+                    return false;
+                }
+                Matrix4x4 rimRel = tf.transform.worldToLocalMatrix * piv.localToWorldMatrix, tireRel = rimRel * tireFromRim;
+                Bounds tb = tireMesh.bounds;
+                float rs = Mathf.Max(tb.extents.x, tb.extents.y, tb.extents.z) * tireRel.GetColumn(0).magnitude;
+                var holder = new GameObject("roue_jeu").transform; holder.SetParent(model, false);
+                holder.localScale = Vector3.one * (rs > 0.05f ? radius / rs : 1f);
+                MeshRenderer rimMr = rimSrc.GetComponent<MeshRenderer>();
+                var black = new Material(rimMr.sharedMaterial) { name = "jante_octo_noire" };
+                if (black.HasProperty("_Color")) black.color = new Color(0.035f, 0.035f, 0.04f);
+                var rms = new Material[rimMr.sharedMaterials.Length]; for (int i = 0; i < rms.Length; i++) rms[i] = black;
+                Piece(holder, "jante", rimRel, rimSrc.GetComponent<MeshFilter>().sharedMesh, rms, model.gameObject.layer);
+                Piece(holder, "pneu", tireRel, tireMesh, tireMats, model.gameObject.layer);
+                Log.Info("standalone : roue " + (left ? "gauche" : "droite") + " du jeu (jante Octo noire, pneu " + tireMesh.name + ", echelle " + holder.localScale.x.ToString("F2") + ")");
+                return true;
+            }
+            catch (Exception e) { Log.Warn("standalone : roues du jeu : " + e.Message); return false; }
+        }
+        static void Piece(Transform parent, string name, Matrix4x4 rel, Mesh mesh, Material[] mats, int layer)
+        {
+            var g = new GameObject(name); g.layer = layer;
+            g.transform.SetParent(parent, false);
+            g.transform.localPosition = rel.MultiplyPoint3x4(Vector3.zero);
+            g.transform.localRotation = Quaternion.LookRotation(rel.GetColumn(2), rel.GetColumn(1));
+            g.transform.localScale = new Vector3(rel.GetColumn(0).magnitude, rel.GetColumn(1).magnitude, rel.GetColumn(2).magnitude);
+            g.AddComponent<MeshFilter>().sharedMesh = mesh;
+            g.AddComponent<MeshRenderer>().sharedMaterials = mats;
+        }
 
         public static VazCar.Built Find(GameObject car) { foreach (VazCar.Built b in cars) if (b.Car == car) return b; return null; }
         public static bool Owns(VazCar.Built b) { return b != null && states.ContainsKey(b); }
