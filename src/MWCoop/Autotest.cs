@@ -487,11 +487,23 @@ namespace MWCoop
         // pilote (DepartPilote : 1 hote, 2 invite, 0 personne) s'inscrit a 40 s (Rally.TestRegister), monte dans DepartVoiture
         // (CORRIS) a 45 s, et la pose a DepartRecul m derriere CarCheck a 55 s. Toutes les 3 s, chacun note l'etat du depart et
         // ses variables.
-        static int depStep, depHour = -1; static float depLogAt, depHourAt;
+        static int depStep, depHour = -1, depVaz, depSaved; static float depLogAt, depHourAt;
         static void MwcDepart(float t)
         {
             int ss = Config.GetInt("Test", "DepartSS", 1);
             string root = "RACES/RALLY/SS" + ss + "/StartArea/StartLineObjects/RallyTree";
+            // ([Test] DepartVaz=1 : inscription avec la VAZ par la feuille, comme Autotest=rallyevaz -- samedi 9 h, VAZ a la tente,
+            // feuille confirmee a 43 s ; puis CarCheck devant la VAZ et l'heure qui avance des 60 s. Joueur Jani, 31/10.)
+            // (DepartVaz=2 : inscrit avec la Rivett -- REGISTER direct comme sans VAZ --, VAZ prise a 16 s, CarCheck devant la VAZ :
+            // attendu, le message « inscrit avec la Rivett » une fois, et pas de depart)
+            int vazOpt = Config.GetInt("Test", "DepartVaz", 0);
+            bool vazMode = vazOpt == 1, vazRivett = vazOpt == 2;
+            if (vazMode && t < 58f) Rally.Test("rallyevaz", t);
+            if (vazMode && depStep == 0 && t > 20f) depStep = 1;
+            // ([Test] DepartSauveA=s : sauvegarde en jeu a s secondes -- rechargement de l'inscription avec la VAZ)
+            float dsa = Config.GetFloat("Test", "DepartSauveA", 0f);
+            if (dsa > 0f && t > dsa && depSaved == 0 && Net.Session.IsHost) { depSaved = 1; Game.SaveInPlace(); Log.Info("autotest : mwcdepart, sauvegarde en jeu (inscrit " + Rally.MeRegistered + ", avec la VAZ " + Rally.MeWithVaz + ")"); }
+            if (vazRivett && depVaz == 0 && t > 16f) { depVaz = 1; Log.Info("autotest : mwcdepart, VAZ -> " + Vaz.Request(Net.Session.IsHost ? 3 : 5, 0)); }
             if (Net.Session.IsHost && depStep == 0 && t > 20f)
             {
                 depStep = 1;
@@ -525,9 +537,11 @@ namespace MWCoop
             int pilot = Config.GetInt("Test", "DepartPilote", 1);
             bool me = (pilot == 1 && Net.Session.IsHost) || (pilot == 2 && !Net.Session.IsHost);
             string car = Config.Get("Test", "DepartVoiture", "CORRIS");
-            if (me && depStep == 2 && t > 40f) { depStep = 3; Log.Info("autotest : mwcdepart, inscription : " + Rally.TestRegister()); }
+            if (me && depStep == 2 && t > 40f && !vazMode) { depStep = 3; Log.Info("autotest : mwcdepart, inscription : " + Rally.TestRegister()); }
+            if (me && depStep == 2 && t > 56f && vazMode) { depStep = 3; Transform vz = Vaz.CarOf(Net.Session.LocalId); if (vz != null) car = vz.name; Log.Info("autotest : mwcdepart, inscrit " + Rally.MeRegistered + " avec la VAZ " + Rally.MeWithVaz + " (" + car + ")"); }
             if (me && depStep >= 3 && depStep <= 6 && tree != null)
             {
+                if (vazMode) { Transform vz = Vaz.CarOf(Net.Session.LocalId); if (vz != null) car = vz.name; }
                 Transform ct = null;
                 foreach (Transform x in tree.transform.parent.parent.GetComponentsInChildren<Transform>(true)) if (x.name == "CarCheck") { ct = x; break; }
                 Vector3 fw = ct != null ? Vector3.ProjectOnPlane(ct.forward, Vector3.up).normalized : Vector3.forward; if (fw.sqrMagnitude < 0.5f) fw = Vector3.forward;
@@ -539,6 +553,7 @@ namespace MWCoop
                     // a DepartEcart m devant elle ; [Test] DepartBougeVoiture=1 : la voiture va a la ligne)
                     depStep = 4;
                     GameObject c = Game.FindAny(car);
+                    if (vazMode || vazRivett) { Transform vz = Vaz.CarOf(Net.Session.LocalId); c = vz != null ? vz.gameObject : null; if (c != null) car = c.name; }
                     if (Config.GetInt("Test", "DepartBougeVoiture", 0) == 0 && c != null)
                     {
                         ct.position = c.transform.position + c.transform.forward * Config.GetFloat("Test", "DepartEcart", 3f);
@@ -557,7 +572,7 @@ namespace MWCoop
                 else if (depStep == 6 && t > 52f) { depStep = 7; Log.Info("autotest : mwcdepart, au volant : " + VehicleSync.TestEnter(car, true)); }
             }
             // (hote : l'heure avance d'une heure toutes les DepartPas s des 55 s, de DepartHeure + 1 a DepartHeureFin)
-            if (Net.Session.IsHost && t > Config.GetFloat("Test", "DepartHeureA", 58f) && Time.realtimeSinceStartup >= depHourAt)
+            if (Net.Session.IsHost && t > Config.GetFloat("Test", "DepartHeureA", vazMode ? 62f : 58f) && Time.realtimeSinceStartup >= depHourAt)
             {
                 int h0 = Config.GetInt("Test", "DepartHeure", 13), hEnd = Config.GetInt("Test", "DepartHeureFin", 18);
                 if (depHour < 0) depHour = h0;
@@ -579,6 +594,7 @@ namespace MWCoop
                 FsmGameObject cv = clock.FsmVariables.FindFsmGameObject("CAR");
                 PlayMakerFSM tmg = Game.FindFsm("RACES/RALLY/SS" + ss + "/TimingSS" + ss, "Timing"); FsmBool tst = tmg != null ? tmg.FsmVariables.FindFsmBool("Start") : null;
                 sb.Append(" Timing.Start ").Append(tst != null ? tst.Value.ToString() : "?").Append(" au volant ").Append(VehicleSync.LocalDriving >= 0);
+                sb.Append(" inscrit ").Append(Rally.MeRegistered).Append(" avecVAZ ").Append(Rally.MeWithVaz);
                 FsmInt h = FsmVariables.GlobalVariables.FindFsmInt("GlobalHour");
                 sb.Append(" heure ").Append(h != null ? h.Value : -1);
                 if (cv != null && cv.Value != null) sb.Append(" CORRIS ").Append(cv.Value.transform.position.ToString("F1"));
@@ -1054,7 +1070,7 @@ namespace MWCoop
         // [Test] Autotest=mscreprise (MSC, 2 joueurs ; упердок, Yunus, Markos 25/10 : la Satsuma roule seule des qu'une vitesse est
         // passee chez celui qui la prend en second) : au volant de TestVoiture a RepriseA (s), demarrage a +9 s (RepriseDemarre=0 :
         // non), premiere a +12 s, point mort a +20 s, sortie a +24 s (RepriseSortie=0 : non) ; etat de la voiture chaque seconde.
-        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone, fsmProbeDone; static FixedJoint hoistJ, blockJ; static int hoistLet;
+        static float repriseProbeAt, hoistLogAt, argentProbeAt; static bool objProbeDone, renderProbeDone, repaintDone, fsmProbeDone, objCapDone; static Camera objCam; static float objCamAt; static int objCapN; static FixedJoint hoistJ, blockJ; static int hoistLet;
         static void MscReprise(float t)
         {
             string car = Config.Get("Test", "TestVoiture", "SATSUMA");
@@ -1519,6 +1535,30 @@ namespace MWCoop
                     catch (System.Exception e) { Log.Info("autotest : automate " + path + " : " + e.GetType().Name); }
                 }
                 Log.Info("autotest : SondeAutomates, " + shown + " automate(s)");
+            }
+            // ([Test] CameraObjet=nom, CameraObjetDecal=dx,dy,dz (0.25,0.25,0.25, repere du monde), CameraObjetA=s (60) : camera d'essai
+            // qui vise l'objet, capture ecran-objet-<qualite du moteur>.png 1 s apres -- dossier #23 : carburateur double noir chez l'invite)
+            string camObj = Config.Get("Test", "CameraObjet", "");
+            if (camObj.Length > 0 && t > Config.GetFloat("Test", "CameraObjetA", 60f) && !objCapDone)
+            {
+                Transform ot = null;
+                foreach (Transform x in Resources.FindObjectsOfTypeAll<Transform>())
+                    if (x.name == camObj && x.gameObject.hideFlags == HideFlags.None && x.gameObject.activeInHierarchy) { ot = x; break; }
+                if (ot != null)
+                {
+                    if (objCam == null) { objCam = new GameObject("MWCoop-CameraObjet").AddComponent<Camera>(); objCam.depth = 100; objCam.nearClipPlane = 0.02f; objCam.fieldOfView = 50; objCamAt = t; }
+                    // (plusieurs decalages separes par « ; » : une capture chacun, toutes les 1,5 s)
+                    string[] offs = Config.Get("Test", "CameraObjetDecal", "0.25,0.25,0.25").Split(';');
+                    string[] dc = offs[Mathf.Min(objCapN, offs.Length - 1)].Split(',');
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    Vector3 off = new Vector3(float.Parse(dc[0], ci), float.Parse(dc[1], ci), float.Parse(dc[2], ci));
+                    if (capName == null) { objCam.transform.position = ot.position + off; objCam.transform.LookAt(ot.position); }   // (pas pendant une capture en attente)
+                    if (t > objCamAt + 1f + objCapN * 1.5f && capName == null)
+                    {
+                        CaptureSoon("objet" + objCapN + "-" + QualitySettings.names[QualitySettings.GetQualityLevel()].Split(' ')[0], 0.1f);
+                        if (++objCapN >= offs.Length) objCapDone = true;
+                    }
+                }
             }
             // ([Test] SondeRendu=nom;nom... : a SondeRenduA s (60), rendu de chaque objet de ce nom -- maillage, matieres, textures,
             // pose de chaque Renderer par rapport a l'objet ; dossier #23 : carburateur double « detruit » chez l'invite, 29/10)
@@ -2164,6 +2204,7 @@ namespace MWCoop
             }
             if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
             if (mode == "mscdrag") { DragMsc.Test(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10)
+            if (mode == "mscdepart") { RallyMsc.TestStart(t); return; }   // (chrono du depart du rallye, Jani 31/10)
             if (mode == "msctrophee") { RallyMsc.Test(t); return; }   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)
             if (mode == "mscpodium") { RallyMsc.TestPodium(t); return; }   // (podium du rallye qui attend les autres humains, 24/10)
             if (mode == "msclumieres") { Lights.Test(t); return; }   // (ombres des phares, halos, portee sur MSC, 24/10)
@@ -3092,8 +3133,8 @@ namespace MWCoop
                         {
                             if (dmCrash == 0 && t > rca) { dmCrash = 1; Log.Info("autotest : mscralenti, crash : " + VehicleSync.TestEnter(rv, false)); }
                             if (dmCrash == 1 && t > rca + 2f) { dmCrash = 2; Log.Info("autotest : mscralenti, crash, au volant : " + VehicleSync.TestEnter(rv, true)); }
-                            if (dmCrash == 2 && t > rca + 3f) { dmCrash = 3; Log.Info("autotest : mscralenti, crash, " + VehicleSync.TestShift(rv, new Vector3(0f, 0.3f, 10f))); }
-                            if (dmCrash == 3 && t > rca + 6f && t < rca + 6.3f) VehicleSync.TestLaunch(rv, Config.GetFloat("Test", "RalentiCrashVitesse", 12f));
+                            if (dmCrash == 2 && t > rca + 3f) { dmCrash = 3; if (Config.GetInt("Test", "RalentiCrashDeplace", 1) != 0) Log.Info("autotest : mscralenti, crash, " + VehicleSync.TestShift(rv, new Vector3(0f, 0.3f, 10f))); }   // ([Test] RalentiCrashDeplace=0 : sur place)
+                            if (dmCrash == 3 && t > rca + 6f && t < rca + 6.3f && Config.GetFloat("Test", "RalentiCrashVitesse", 12f) > 0f) VehicleSync.TestLaunch(rv, Config.GetFloat("Test", "RalentiCrashVitesse", 12f));
                             if (dmCrash == 3 && t > rca + 16f) { dmCrash = 4; Log.Info("autotest : mscralenti, crash, sortie : " + VehicleSync.TestExit(rv)); }
                         }
                         float hs = Net.Session.IsHost ? Config.GetFloat("Test", "RalentiDecalage", 70f) : 0f;

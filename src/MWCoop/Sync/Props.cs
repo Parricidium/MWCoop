@@ -186,6 +186,10 @@ namespace MWCoop
             if (t.parent == null && !t.name.Contains("(Clone)") && !Game.Msc) return false;
             if (rb.isKinematic) return false;   // (anime par le jeu, ou pas encore libre : revu au releve suivant)
             if (rb.GetComponent<Joint>() != null) return false;   // porte, ragdoll, chaine : sa physique est celle du joint
+            // Raccord du tuyau de la GIFU : tuyau sorti, le jeu le met a la racine de la scene, corps libre. Suivi ici comme un objet
+            // pose (« w:hose coupler », pose envoyee, transporte dans la GIFU), il etait deplace chez l'autre sous la chaine que
+            // SewageHose pose depuis lui : tuyau sous le sol ou disparu (Markos, dossier #29, 31/10). SewageHose s'en occupe.
+            if (t.name.StartsWith("hose coupler") && Config.GetInt("Test", "RaccordObjet", 0) == 0) return false;
             bool solid = false;
             foreach (Collider c in rb.GetComponentsInChildren<Collider>()) if (!c.isTrigger) { solid = true; break; }
             return solid;

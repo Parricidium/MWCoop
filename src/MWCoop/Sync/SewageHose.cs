@@ -185,6 +185,10 @@ namespace MWCoop
             }
             Vector3 ep0 = end.transform.position; Quaternion eq0 = end.transform.rotation;   // (le raccord est la racine de la chaine : le recaler deplace le bout)
             if (couplerRb != null && coupler.parent == couplerParent) { coupler.localPosition = couplerPos; coupler.localRotation = couplerRot; }
+            // (tuyau sorti, le jeu met le raccord a la racine de la scene : cinematique ici, il restait sur place quand le camion
+            // repartait -- a 12 m de la citerne chez l'hote, essai tuyau 31/10, Markos dossier #29 : « le tuyau passe sous le sol ».
+            // Pose de repos gardee sous HOSE, qui suit le camion.)
+            else if (couplerRb != null && couplerParent != null && Config.GetInt("Test", "TuyauEtire", 0) == 0) { coupler.position = couplerParent.TransformPoint(couplerPos); coupler.rotation = couplerParent.rotation * couplerRot; }
             if (self) { end.transform.position = ep0; end.transform.rotation = eq0; }
             if (self && !end.isKinematic) { end.isKinematic = true; end.velocity = Vector3.zero; }   // (la main ou le jeu l'ont rendu physique : la chaine posee ne le tire plus)
             // (lache ici : pose au sol, puis tenu a cette pose -- redevenu l'enfant du maillon d'avant, il suivait la chaine que l'on
@@ -283,6 +287,25 @@ namespace MWCoop
             if (!following) return;
             following = false; ignoring = false;
             bool wasSelf = selfMode; selfMode = false; dropSet = false;
+            // (chaine etiree au-dela de sa longueur -- bout recu loin, lache par l'autre : rendue ainsi a la physique, ses joints
+            // arrachaient le raccord, corps libre a la racine de la scene, et le tuyau restait a 12 m du camion chez l'hote ; essai
+            // tuyau 31/10, Markos dossier #29). Le bout est d'abord ramene a portee du raccord, la chaine reposee jusqu'a lui.
+            if (coupler != null && segs != null && segs.Length > 0 && restLen > 1f && FireTools.Held() != end.gameObject && Config.GetInt("Test", "TuyauEtire", 0) == 0)
+            {
+                Vector3 a = coupler.position, d = end.transform.position - a;
+                if (d.magnitude > restLen * 1.05f)
+                {
+                    int n = segs.Length;
+                    Vector3[] pts = Layout(a, a + d.normalized * restLen * 0.9f, restLen, n);
+                    for (int i = 0; i < n; i++)
+                    {
+                        Vector3 p = pts[i + 1], q = i + 2 <= n ? pts[i + 2] : pts[n] + (pts[n] - pts[n - 1]);
+                        segs[i].transform.position = p;
+                        if ((q - p).sqrMagnitude > 1e-6f) segs[i].transform.rotation = Quaternion.LookRotation(q - p, Vector3.up);
+                    }
+                    if (logs++ < 10) Log.Info("tuyau de la GIFU : chaine etiree a " + d.magnitude.ToString("F1") + " m rendue a la physique : bout ramene a portee du raccord");
+                }
+            }
             if (couplerRb != null) couplerRb.isKinematic = couplerKin;   // (colliders rallumes : IgnoreCollision a refaire)
             if (segs != null) foreach (Rigidbody r in segs) if (r != null) { if (wasSelf && r == end) { r.isKinematic = endKin; continue; } r.isKinematic = false; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
             if (cols != null) foreach (Collider c in cols) if (c != null) c.enabled = true;

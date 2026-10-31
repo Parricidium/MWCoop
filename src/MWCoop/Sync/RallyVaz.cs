@@ -33,7 +33,7 @@ namespace MWCoop
         static string nameWas, carLogged = "";
         static readonly List<FsmStateAction> formMuted = new List<FsmStateAction>();
 
-        static void VazReset() { vazMine = vazRestored = formHooked = nameSet = vazPassed = false; vazWeek = -1; form = null; tent = null; formMuted.Clear(); carLogged = ""; nextCar = nextFormLook = 0f; }
+        static void VazReset() { for (int i = 0; i < lineHinted.Length; i++) lineHinted[i] = false; vazMine = vazRestored = formHooked = nameSet = vazPassed = false; vazWeek = -1; form = null; tent = null; formMuted.Clear(); carLogged = ""; nextCar = nextFormLook = 0f; }
 
         static int Week() { FsmInt wk = FsmVariables.GlobalVariables.FindFsmInt("GlobalWeeksPassed"); return wk != null ? wk.Value : 0; }
         static string VazPath { get { return System.IO.Path.Combine(Log.DataDir, "rallye-vaz.ini"); } }
@@ -56,16 +56,19 @@ namespace MWCoop
                 if (vazWeek >= 0) vazMine = false;
                 vazWeek = w;
             }
-            if (!vazRestored && data != null)
+            // Inscription avec la VAZ reprise apres un rechargement : seulement une fois 'Registered' relu par l'automate du jeu. Avant,
+            // le premier passage (Data trouve avant son chargement : inscrit faux) fermait la reprise -- apres un rechargement le depart
+            // attendait la Rivett, la VAZ ne lancait plus l'horloge (Jani, 31/10).
+            if (!vazRestored && data != null && Bool("Registered"))
             {
                 vazRestored = true;
-                if (Bool("Registered") && System.IO.File.Exists(VazPath))
+                if (System.IO.File.Exists(VazPath))
                     foreach (string l in System.IO.File.ReadAllLines(VazPath)) if (l == VazKey + "1") { vazMine = true; Log.Info("rallye : inscription avec ma VAZ reprise (semaine " + w + ")"); }
             }
             HookForm(now);
             FormName();
             if (formMuted.Count > 0 && Time.frameCount > mutedFrame) { foreach (FsmStateAction a in formMuted) a.Enabled = true; formMuted.Clear(); }
-            if (now >= nextCar) { nextCar = now + 1f; PointCar(); }
+            if (now >= nextCar) { nextCar = now + 1f; PointCar(); LineHint(); }
         }
 
         // Variable CAR du depart des speciales et du parc ferme : la VAZ d'ici si inscrit avec elle, sinon la CORRIS.
@@ -85,6 +88,31 @@ namespace MWCoop
             }
             string key = want.name;
             if (changed > 0 && key != carLogged) { carLogged = key; Log.Info("rallye : depart des speciales et parc ferme suivent " + key + " (" + changed + " automates)"); }
+        }
+
+        // Inscrit avec la Rivett (inspection passee), mais venu au depart d'une speciale avec sa VAZ : le depart n'attend que la
+        // voiture inscrite, l'horloge ne part pas (Jani, 31/10 : « l'horloge de depart ne demarre pas », en VAZ). Message une fois
+        // par speciale, dans l'heure du depart ou celle d'avant, VAZ a moins de LineHintDist m du point de controle (CarCheck).
+        const float LineHintDist = 25f;
+        static readonly bool[] lineHinted = new bool[4];
+        static void LineHint()
+        {
+            if (data == null || vazMine || startTimes == null || !Bool("Registered")) return;
+            Transform vaz = Vaz.CarOf(Session.LocalId);
+            FsmInt gh = FsmVariables.GlobalVariables.FindFsmInt("GlobalHour");
+            if (vaz == null || gh == null) return;
+            for (int n = 1; n <= 3 && n < startTimes.Count; n++)
+            {
+                if (lineHinted[n] || !(startTimes[n] is int)) continue;
+                int st = (int)startTimes[n];
+                if (st <= 0 || (gh.Value != st && gh.Value != st - 1)) continue;
+                GameObject cc = Game.FindAny("RACES/RALLY/SS" + n + "/StartArea/StartLineObjects/CarCheck");
+                if (cc == null || Vector3.Distance(vaz.position, cc.transform.position) > LineHintDist) continue;
+                lineHinted[n] = true;
+                Log.Info("rallye : ma VAZ au depart de SS" + n + " (" + st + " h) alors que je suis inscrit avec la Rivett : message donne");
+                Hud.Toast(Lang.T("Rallye : tu es inscrit avec la Rivett, ce départ n'attend qu'elle. Pour courir avec ta voiture, remplis la feuille avec elle à moins de 40 m de la tente de Fleetari.",
+                                 "Rally: you are registered with the Rivett, this start only counts the Rivett. To race your own car, fill in the form with it within 40 m of Fleetari's tent."));
+            }
         }
 
         // ---------------------------------------------------------------- feuille d'inscription

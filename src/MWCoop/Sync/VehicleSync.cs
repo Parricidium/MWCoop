@@ -3832,9 +3832,7 @@ namespace MWCoop
         {
             Car a = cars.Find(x => x.Key.StartsWith(car));
             if (a == null || a.Body == null) return car + " introuvable";
-            MoveCargo(a, to, rot, Vector3.zero);
-            a.Body.position = to; a.Body.rotation = rot; a.T.position = to; a.T.rotation = rot;
-            a.Body.velocity = Vector3.zero; a.Body.angularVelocity = Vector3.zero;
+            PlaceCar(a, to, rot.eulerAngles.y);   // (comme /voiture : pieces et chargement suivent)
             return a.Key + " posee en " + to.ToString("F1");
         }
         public static string TestPlaceBehind(string car, string target, float gap)
