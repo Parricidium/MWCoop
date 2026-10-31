@@ -214,7 +214,21 @@ namespace MWCoop
                 var wp = new GameObject("essuie_" + wk[i]).transform; wp.SetParent(par, false); wp.localPosition = wc;
                 var wi = new GameObject("pieces").transform; wi.SetParent(wp, false); wi.localPosition = -wc;
                 VazCar.AddModel(b, wi, wf);
-                st.Wipers[i] = wp; st.WiperAxis[i] = wa.normalized; st.WiperMax[i] = i == 2 ? 115f : 88f;
+                st.Wipers[i] = wp; st.WiperAxis[i] = wa.normalized; st.WiperMax[i] = i == 2 ? RearSweep : 88f;
+                if (i == 2)
+                {
+                    // (JD 31/10, video : le balai de la lunette « descend sur le hayon » au retour, trace en miroir -- dans le modele, bras en
+                    // L : a plat vers la droite depuis le pied, raclette debout le long du bord droit de la vitre ; c'est son repos. Course :
+                    // le bras monte, la raclette balaie vers la gauche)
+                    Vector3 ax = st.WiperAxis[2], far = wc; float fd = 0f;
+                    foreach (MeshFilter mf in wi.GetComponentsInChildren<MeshFilter>())
+                        foreach (Vector3 v in mf.sharedMesh.vertices) { Vector3 q = b.Body.InverseTransformPoint(mf.transform.TransformPoint(v)); if ((q - wc).sqrMagnitude > fd) { fd = (q - wc).sqrMagnitude; far = q; } }
+                    Vector3 rgt = Vector3.ProjectOnPlane(Vector3.right, ax).normalized, up = Vector3.ProjectOnPlane(Vector3.up, ax).normalized;
+                    st.WiperSign[2] = Mathf.Sign(Vector3.Dot(ax, Vector3.Cross(rgt, up)));   // (de la droite vers le haut)
+                    st.WiperRest[2] = 0f;
+                    Vector3 d0 = far - wc; st.RearWiperA0 = Mathf.Atan2(-d0.x, d0.y) * Mathf.Rad2Deg;
+                    Log.Info("standalone : essuie-glace arriere, raclette au repos a " + st.RearWiperA0.ToString("F0") + " degres de la verticale, course " + RearSweep.ToString("F0") + " vers la gauche");
+                }
             }
             Vector3 sc0, sa0;
             if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "comodo.p205")) && inf.TryGetValue("comodo_centre", out sc0) && inf.TryGetValue("comodo_axe", out sa0))
@@ -1294,7 +1308,7 @@ namespace MWCoop
             }
             float k = (1f - Mathf.Cos(st.WiperPhase * 2f * Mathf.PI)) * 0.5f;
             for (int i = 0; i < 3; i++)
-                if (st.Wipers[i] != null) st.Wipers[i].localRotation = Quaternion.AngleAxis((i == 2 ? -1f : 1f) * st.WiperMax[i] * k, st.WiperAxis[i]);
+                if (st.Wipers[i] != null) st.Wipers[i].localRotation = Quaternion.AngleAxis(st.WiperRest[i] + st.WiperSign[i] * st.WiperMax[i] * k, st.WiperAxis[i]);
             if (st.Stalk != null)
             {
                 st.StalkAngle = Mathf.MoveTowards(st.StalkAngle, st.WipersOn ? 14f : 0f, 90f * dt);
@@ -1390,7 +1404,7 @@ namespace MWCoop
                     {
                         int k = cl[r][i]; Vector3 q = key(pos[r][i], k), sz = hi[k] - lo[k];
                         float a = sz.x > 1e-4f ? (q.x - lo[k].x) / sz.x : 0.5f, c = sz.y > 1e-4f ? (q.y - lo[k].y) / sz.y : 0.5f;
-                        if (k == 0) a = 1f - a; else if (k == 1) c = 1f - c;
+                        if (k == 0 || rear[r]) a = 1f - a; else if (k == 1) c = 1f - c;   // (lunette dans la bande du pare-brise : meme sens que lui)
                         Rect rk = rear[r] ? rect[0] : rect[k];
                         uv[i] = new Vector2(rk.x + rk.width * (0.02f + 0.96f * a), rk.y + rk.height * (0.02f + 0.96f * c));
                     }
@@ -1433,7 +1447,7 @@ namespace MWCoop
                     Vector3 pv0 = ct.InverseTransformPoint(st.Wipers[w].position); float reach = 0f;
                     foreach (MeshFilter mf in st.Wipers[w].GetComponentsInChildren<MeshFilter>())
                         foreach (Vector3 v in mf.sharedMesh.vertices) reach = Mathf.Max(reach, (ct.InverseTransformPoint(mf.transform.TransformPoint(v)) - pv0).magnitude);
-                    return Mathf.Clamp(reach / Mathf.Max(0.1f, hi[k].x - lo[k].x), 0.1f, rect[0].height * 0.95f);
+                    return Mathf.Clamp(reach / Mathf.Max(0.1f, hi[k].x - lo[k].x), 0.1f, k == 2 ? 1f : rect[0].height * 0.95f);   // (lunette : seule dans sa texture)
                 };
                 if (front.Count > 0)
                 {
@@ -1456,9 +1470,13 @@ namespace MWCoop
                     RF(c3, "frontWindowNormal").SetValue(c3, RF(c3, "rearWindowNormal").GetValue(c3));
                     RF(c3, "frontWind").SetValue(c3, RF(c3, "rearWind").GetValue(c3));
                     Vector3 pv = ct.InverseTransformPoint(st.Wipers[2].position);
-                    RF(c3, "wiper1").SetValue(c3, new Vector2(Mathf.Clamp01((pv.x - lo[2].x) / Mathf.Max(0.1f, hi[2].x - lo[2].x)), 0f));
+                    // (JD 31/10, video : trace en miroir et plus courte que le balai -- u retourne comme au pare-brise, portee entiere ; angle du
+                    // composant : 0 vers le haut de la vitre, +90 vers +u -- la gauche de la voiture apres le retournement ; du repos de la
+                    // raclette, course vers la gauche)
+                    RF(c3, "wiper1").SetValue(c3, new Vector2(Mathf.Clamp01(1f - (pv.x - lo[2].x) / Mathf.Max(0.1f, hi[2].x - lo[2].x)), 0f));
                     RF(c3, "wiper1Length").SetValue(c3, reachOf(2, 2));
-                    RF(c3, "wiper1MaxAngle").SetValue(c3, 57.5f); RF(c3, "wiper1AngleOffset").SetValue(c3, -32.5f);
+                    float a0 = st.RearWiperA0, a1 = a0 + RearSweep;
+                    RF(c3, "wiper1MaxAngle").SetValue(c3, (a1 - a0) * 0.5f); RF(c3, "wiper1AngleOffset").SetValue(c3, (a0 + a1) * 0.5f);
                     RF(c3, "wiper2Length").SetValue(c3, 0f);
                     c3.gameObject.SetActive(true);
                     st.Rain2 = c3;
@@ -1469,6 +1487,8 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : pluie : " + e.Message); }
         }
         // (eau sur nos vitres : teinte des gouttes et opacite, par rapport a la Satsuma -- [Test] PluieTeinte, PluieOpacite)
+        // (balai de la lunette : course, degres -- [Test] EssuieArCourse)
+        static float RearSweep { get { return Config.GetFloat("Test", "EssuieArCourse", 100f); } }
         static float RainWet { get { return Config.GetFloat("Test", "PluieTeinte", 0.30f); } }
         static float RainOpacityK { get { return Config.GetFloat("Test", "PluieOpacite", 0.38f); } }
         static void RainTick(VazCar.Built b, State st)
@@ -1969,15 +1989,18 @@ namespace MWCoop
             if (host && wOn > 0f && st != null && st.Rain != null && t > wOn + 6f && !wDump)
             {
                 wDump = true;
-                var rt = RF(st.Rain, "active").GetValue(st.Rain) as RenderTexture;
+                foreach (Component rc in new[] { st.Rain, st.Rain2 })   // (pluie-rt.png : pare-brise et cotes ; pluie-rt-lunette.png)
+                {
+                var rt = rc != null ? RF(rc, "active").GetValue(rc) as RenderTexture : null;
                 if (rt != null)
                 {
                     RenderTexture prev = RenderTexture.active; RenderTexture.active = rt;
                     var tx = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false); tx.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0); tx.Apply();
                     RenderTexture.active = prev;
-                    string f = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "pluie-rt.png");
+                    string f = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), rc == st.Rain ? "pluie-rt.png" : "pluie-rt-lunette.png");
                     System.IO.File.WriteAllBytes(f, tx.EncodeToPNG()); UnityEngine.Object.Destroy(tx);
                     Log.Info("standalone : coop, texture de pluie " + rt.width + "x" + rt.height + " -> " + f);
+                }
                 }
             }
             if (host && wOn > 0f && st != null && t > wOn + 2f && Time.time >= wLog) { wLog = Time.time + 1f; Log.Info("standalone : coop, essuie-glaces " + st.WipersOn + " phase " + st.WiperPhase.ToString("F2") + " balai " + (st.Wipers[0] != null ? st.Wipers[0].localEulerAngles.ToString("F0") : "absent") + " dt " + Time.deltaTime.ToString("F3")); }

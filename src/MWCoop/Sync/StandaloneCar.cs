@@ -52,6 +52,8 @@ namespace MWCoop
             public bool ModelButtons, Hazard, BlinkShown; public GameObject BrakeLamp;
             // (essuie-glaces : av1, av2, ar -- pivot, axe, angle maxi ; comodo ; StandaloneDrive)
             public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
+            public float[] WiperRest = new float[3], WiperSign = { 1f, 1f, -1f };   // (angle du repos par rapport au modele, sens de la course)
+            public float RearWiperA0;   // (balai de la lunette au repos, angle du composant de pluie : 0 vers le haut, +90 vers la gauche)
             public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
             public Component Rain, Rain2, RainSrc;   // (Rain2 : la lunette et son balai)
             // (ceintures : 0 conducteur, 1 passager avant, 2 arriere gauche, 3 arriere droite -- sangle pendue du modele, bouclee dessinee ;
