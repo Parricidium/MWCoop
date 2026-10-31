@@ -66,52 +66,9 @@ def out(name, fl, sides):
             o.write(struct.pack('<i', len(tri))); o.write(struct.pack('<%di' % len(tri), *tri))
             o.write(struct.pack('<fff', 1.0, 1.0, 1.0))
     print(name, len(pos), 'sommets', len(subs[0]) // 3, '+', len(subs[1]) // 3, 'triangles (sangle + metal)')
-for f in glob.glob('assets/ceintures/*.mwm'): os.remove(f)
+for f in glob.glob('assets/ceintures/arr-*.mwm'): os.remove(f)
 for s in 'gd':
     out('arr-pieces-%s.mwm' % s, faces(['seatbelts_parts']), s)
     out('arr-languette-%s.mwm' % s, faces(['seatbelts_handle']), s)
     out('arr-bouclee-%s.mwm' % s, faces(['seatbelts_fastened']), s)
-
-# MACHTWAGEN (taxi, modele de Menos du 25/10 : assets/ceintures/machtwagen_rear_seatbelts-menos.obj) : modele tourne d'un
-# demi-tour (l'arriere en z positif) et a la hauteur de la racine de la voiture -- repere Unity : (x, y, -z), un miroir comme
-# l'import d'un .obj. Une seule languette (cote g) : celle du cote d en miroir. Pieces telles quelles (pas de siege separe a
-# mesurer dans la MACHTWAGEN : sa banquette est dans LOD/interior).
-TAXI = 'assets/ceintures/machtwagen_rear_seatbelts-menos.obj'
-tv, tvt, tvn, tg = obj2mwm.load(TAXI)
-XF = lambda x, y, z: (x, y, -z)
-XFM = lambda x, y, z: (-x, y, -z)   # (miroir de la languette : cote oppose -- deux miroirs, donc pas un miroir : ordre a reinverser)
-def tfaces(names, side, ymin=None, ymax=None):
-    out = []
-    for n in names:
-        for f in tg[n]:
-            cx = sum(tv[a][0] for (a, b, c) in f) / len(f); cy = sum(tv[a][1] for (a, b, c) in f) / len(f)
-            if side == 'g' and cx >= 0: continue
-            if side == 'd' and cx <= 0: continue
-            if ymin is not None and cy < ymin: continue
-            if ymax is not None and cy >= ymax: continue
-            out.append(f)
-    return out
-TSHOULDER = 0.62   # (haut de la ceinture bouclee : au-dessus, la sangle va a l'ancrage haut dans les deux etats)
-def tout(name, fl, xf=XF, flip=False):
-    pos, nrm, uv, tri = obj2mwm.build(tv, tvt, tvn, fl, xf)
-    if flip: tri = [tri[i + k] for i in range(0, len(tri), 3) for k in (0, 2, 1)]
-    obj2mwm.write('assets/ceintures/' + name, pos, nrm, uv, tri)
-    print(name, len(pos), 'sommets', len(tri) // 3, 'triangles')
-# (Base en pieces, les memes que la SORBET -- l'outil des places les deplace une a une : ancrages hauts y > 0,8 ; ancrages bas
-# cote portiere |x| > 0,6 ; boucles au milieu)
-def tpart(keep):
-    out = []
-    for f in tg['taxi_seatbelts_parts']:
-        cx = sum(tv[a][0] for (a, b, c) in f) / len(f); cy = sum(tv[a][1] for (a, b, c) in f) / len(f)
-        if keep(cx, cy): out.append(f)
-    return out
-tout('taxi-ancres-haut.mwm', tpart(lambda x, y: y > 0.8))
-tout('taxi-boucles.mwm', tpart(lambda x, y: y <= 0.8 and abs(x) <= 0.6))
-tout('taxi-ancre-bas-g.mwm', tpart(lambda x, y: y <= 0.8 and x < -0.6))
-tout('taxi-ancre-bas-d.mwm', tpart(lambda x, y: y <= 0.8 and x > 0.6))
-for s in 'gd':
-    tout('taxi-sangle-haut-%s.mwm' % s, tfaces(['seatbelt', 'seatbelt.001'], s, ymin=TSHOULDER))
-    tout('taxi-sangle-bas-%s.mwm' % s, tfaces(['seatbelt', 'seatbelt.001'], s, ymax=TSHOULDER))
-    tout('taxi-bouclee-%s.mwm' % s, tfaces(['taxi_seatbelts_fastened', 'taxi_seatbelts_fastened.001'], s))
-tout('taxi-languette-g.mwm', tfaces(['seatbelts_handle'], 'g'))
-tout('taxi-languette-d.mwm', tfaces(['seatbelts_handle'], 'g'), XFM, True)
+# (MACHTWAGEN et CORRIS : modeles de Menor du 31/10, run/ceintures-menor.py)

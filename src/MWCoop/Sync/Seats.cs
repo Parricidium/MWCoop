@@ -211,6 +211,8 @@ namespace MWCoop
                     float bz = n.StartsWith("SORBET") ? Config.GetFloat("Test", "BanquetteSorbetRecul", 0.68f) : 0.85f;
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + by, d.z - bz) });
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x + xm, d.y + by, d.z - bz) });
+                    // (CORRIS : place du milieu, avec la ceinture ventrale de Menor -- 31/10)
+                    if (!Game.Msc && n.StartsWith("CORRIS")) seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 3, Head = new Vector3(xm / 2f, d.y + by, d.z - bz) });
                 }
                 if (n.StartsWith("GIFU"))
                 {
@@ -918,6 +920,7 @@ namespace MWCoop
                 return;
             }
             Belt b = BeltOf(current.CarT);
+            if (b != null && Mathf.Abs(current.Head.x) < 0.15f) { RearMiddleInput(); return; }   // (place du milieu)
             Vector3 off; bool mir;
             if (b == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return;
             Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
@@ -934,6 +937,27 @@ namespace MWCoop
             beltOn = !beltOn;
             Foley(beltOn ? "seatbelt_fasten" : "seatbelt_unfasten", at);
             Log.Info("ceinture arriere : " + (beltOn ? "attachee" : "detachee") + " (" + current.Car + ", place " + current.Index + ")");
+            SendSeat(current.Car, current.Index, headLocal);
+        }
+
+        // Place du milieu (CORRIS, Menor 31/10 : « a middle seatbelt, just like the front seatbelt of the bachglotz, you just click and it
+        // gets fastened ») : viser la boucle de la ceinture ventrale : "FASTEN SEATBELT" ou "UNFASTEN SEATBELT" ; clic : bouclee ou
+        // defaite, sans languette a tirer. Voiture sans ceinture du milieu : rien.
+        static void RearMiddleInput()
+        {
+            RearModel m;
+            if (!rearModels.TryGetValue(current.CarT, out m) || m == null || m.Mid == null || m.Root == null || !m.Root.activeSelf) return;
+            Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
+            if (view == null) return;
+            Vector3 at = m.Root.transform.TransformPoint(m.MidBuckle), d = at - view.position;
+            Vector3 fwd = testAim == 1 ? d : view.forward;   // (essais : regard vise par TestBeltLook)
+            bool aim = d.magnitude < 1.3f && Vector3.Angle(fwd, d) < 18f;
+            BlockHandle(aim);
+            BeltHint(aim ? (beltOn ? "UNFASTEN SEATBELT" : "FASTEN SEATBELT") : null);
+            if (!aim || !Input.GetMouseButtonDown(0)) return;
+            beltOn = !beltOn;
+            Foley(beltOn ? "seatbelt_fasten" : "seatbelt_unfasten", at);
+            Log.Info("ceinture du milieu : " + (beltOn ? "attachee" : "detachee") + " (" + current.Car + ", place " + current.Index + ")");
             SendSeat(current.Car, current.Index, headLocal);
         }
 
@@ -1083,10 +1107,26 @@ namespace MWCoop
         // places peut deplacer chaque cote d'un bloc (ceinture « modele »). Toujours la avec l'option CeinturesArriere. Les autres voitures
         // gardent la copie en miroir de la ceinture du conducteur. [Test] CeinturesArriereCopie=1 : la copie aussi sur la SORBET.
         class RearModel { public GameObject Root; public GameObject[] Open = new GameObject[2], Closed = new GameObject[2]; public int State = -1, Gen;
-                          public bool Pull; public Vector3[] Top = new Vector3[2], Low = new Vector3[2], Buckle = new Vector3[2]; public Mesh[] StrapUv = new Mesh[2]; }   // (Pull : languette a tirer, SORBET)
+                          public bool Pull; public Vector3[] Top = new Vector3[2], Low = new Vector3[2], Buckle = new Vector3[2]; public Mesh[] StrapUv = new Mesh[2];   // (Pull : languette a tirer)
+                          public GameObject Mid; public Vector3 MidBuckle; }   // (place du milieu : ceinture ventrale bouclee d'un clic, repere de Root)
         static readonly Dictionary<Transform, RearModel> rearModels = new Dictionary<Transform, RearModel>();
-        static readonly string[] RearNames = { "arr-pieces-g", "arr-languette-g", "arr-bouclee-g", "arr-pieces-d", "arr-languette-d", "arr-bouclee-d" };   // (par cote, 3 k)
-        static Mesh[] rearMeshes; static bool rearMeshTried;
+        // Modeles par voiture (prefixe du nom de la voiture -> cle des maillages <cle>-<piece>.mwm) : SORBET, modele v2 de Menos (26/10,
+        // run/ceintures-arr.py) ; MACHTWAGEN et CORRIS, modeles de Menor du 31/10 (run/ceintures-menor.py) -- memes trois pieces par cote,
+        // et la CORRIS une ceinture du milieu (« middle seatbelt, just like the front seatbelt of the bachglotz, you just click »).
+        // Bulge : bombe de la ceinture bouclee devant la poitrine (m ; [Test] CeintureArrBombe la remplace) -- CORRIS : l'avatar y est assis
+        // plus en avant que la ceinture de Menor, elle restait dans le buste (essai du 31/10).
+        class RearKind { public string Car, Key; public bool Middle; public float Bulge = 0.04f; public Mesh[] Meshes; public bool Tried; }
+        static readonly RearKind[] RearKinds = {
+            new RearKind { Car = "SORBET", Key = "arr" },
+            new RearKind { Car = "MACHTWAGEN", Key = "taxi2", Bulge = 0.06f },
+            new RearKind { Car = "CORRIS", Key = "corris", Middle = true, Bulge = 0.12f } };
+        static readonly string[] RearNames = { "pieces-g", "languette-g", "bouclee-g", "pieces-d", "languette-d", "bouclee-d", "milieu" };   // (par cote, 3 k ; puis le milieu)
+        static RearKind KindOf(Transform car)
+        {
+            if (car == null) return null;
+            foreach (RearKind k in RearKinds) if (car.name.StartsWith(k.Car)) return k;
+            return null;
+        }
         // (modele v2 de Menos, 26/10 : sous-maillage 1 = metal et plastique, sur l'atlas des pieces du jeu ATLAS_MOTOR_MWC ; la sangle
         // garde la matiere de la ceinture avant. Atlas introuvable : la matiere de la sangle partout, comme la v1)
         static Material rearAtlas; static bool rearAtlasTried;
@@ -1102,17 +1142,18 @@ namespace MWCoop
             }
             return rearAtlas ?? strap;
         }
-        static Mesh[] RearMeshes()
+        static Mesh[] RearMeshes(RearKind k)
         {
-            if (rearMeshTried) return rearMeshes;
-            rearMeshTried = true;
+            if (k.Tried) return k.Meshes;
+            k.Tried = true;
             try
             {
-                rearMeshes = new Mesh[RearNames.Length];
-                for (int i = 0; i < RearNames.Length; i++) rearMeshes[i] = SleepingBags.LoadMesh("MWCoop." + RearNames[i] + ".mwm", 1f);
+                k.Meshes = new Mesh[RearNames.Length];
+                for (int i = 0; i < RearNames.Length; i++)
+                    if (i < 6 || k.Middle) k.Meshes[i] = SleepingBags.LoadMesh("MWCoop." + k.Key + "-" + RearNames[i] + ".mwm", 1f);
             }
-            catch (System.Exception e) { rearMeshes = null; Log.Warn("ceintures arriere : modele illisible (" + e.Message + "), copie de la ceinture avant"); }
-            return rearMeshes;
+            catch (System.Exception e) { k.Meshes = null; Log.Warn("ceintures arriere (" + k.Car + ") : modele illisible (" + e.Message + "), copie de la ceinture avant"); }
+            return k.Meshes;
         }
         // (bouclee : bombee vers l'avant au milieu des sangles -- l'avatar est plus epais que le joueur du jeu et la cachait,
         // comme la ceinture avant, BulgedMesh ; ses attaches -- epaule, boucle, bas cote portiere -- ne bougent pas)
@@ -1124,15 +1165,15 @@ namespace MWCoop
             Vector3 top = v[0], inner = v[0], outer = v[0];
             float minY = float.MaxValue, maxY = float.MinValue;
             foreach (Vector3 p in v) { minY = Mathf.Min(minY, p.y); maxY = Mathf.Max(maxY, p.y); if (p.y > top.y) top = p; }
-            float low = minY + 0.2f * (maxY - minY);
-            bool lowSet = false;
+            // (ancrage bas cote portiere : le plus a l'exterieur du bas (20 %) ; boucle : le plus au milieu de la moitie basse -- sur les
+            // modeles de Menor du 31/10, la boucle est plus haute que le bas de la sangle, hors des 20 %)
+            float low = minY + 0.2f * (maxY - minY), half = minY + 0.5f * (maxY - minY);
+            bool lowSet = false, halfSet = false;
             foreach (Vector3 p in v)
-                if (p.y <= low)
-                {
-                    if (!lowSet) { inner = outer = p; lowSet = true; }
-                    if (Mathf.Abs(p.x) < Mathf.Abs(inner.x)) inner = p;
-                    if (Mathf.Abs(p.x) > Mathf.Abs(outer.x)) outer = p;
-                }
+            {
+                if (p.y <= half) { if (!halfSet) { inner = p; halfSet = true; } if (Mathf.Abs(p.x) < Mathf.Abs(inner.x)) inner = p; }
+                if (p.y <= low) { if (!lowSet) { outer = p; lowSet = true; } if (Mathf.Abs(p.x) > Mathf.Abs(outer.x)) outer = p; }
+            }
             for (int i = 0; i < v.Length; i++)
             {
                 float d = Mathf.Min((v[i] - top).magnitude, Mathf.Min((v[i] - inner).magnitude, (v[i] - outer).magnitude));
@@ -1146,71 +1187,10 @@ namespace MWCoop
         static bool HasRearModel(Transform car)
         {
             if (car == null || Game.Msc || Config.GetInt("Test", "CeinturesArriereCopie", 0) != 0) return false;
-            if (car.name.StartsWith("SORBET")) return RearMeshes() != null;
-            if (car.name.StartsWith("MACHTWAGEN")) return TaxiMeshes() != null;
-            return false;
+            RearKind k = KindOf(car);
+            return k != null && RearMeshes(k) != null;
         }
 
-        // MACHTWAGEN (taxi) : modele de Menos du 25/10 (run/ceintures-arr.py, taxi-*), pose tel quel dans le repere de la voiture --
-        // pas de siege separe a mesurer (sa banquette est dans LOD/interior). Toujours : ancrages, boucles et haut des sangles ;
-        // rangee : bas de la sangle et languette (celle de droite en miroir, Menos n'en a fait qu'une) ; bouclee : la ceinture.
-        // [Test] TaxiCeintY/Z : decalage.
-        // (Base en pieces aux memes noms que la SORBET -- AncresHaut, Boucles, AncreBasG/D : l'outil des places les deplace une a une)
-        static readonly string[] TaxiNames = { "taxi-ancres-haut", "taxi-sangle-haut-g", "taxi-sangle-bas-g", "taxi-languette-g", "taxi-bouclee-g",
-                                               "taxi-sangle-haut-d", "taxi-sangle-bas-d", "taxi-languette-d", "taxi-bouclee-d",
-                                               "taxi-boucles", "taxi-ancre-bas-g", "taxi-ancre-bas-d" };
-        static Mesh[] taxiMeshes; static bool taxiMeshTried;
-        static Mesh[] TaxiMeshes()
-        {
-            if (taxiMeshTried) return taxiMeshes;
-            taxiMeshTried = true;
-            try
-            {
-                taxiMeshes = new Mesh[TaxiNames.Length];
-                for (int i = 0; i < TaxiNames.Length; i++) taxiMeshes[i] = SleepingBags.LoadMesh("MWCoop." + TaxiNames[i] + ".mwm", 1f);
-            }
-            catch (System.Exception e) { taxiMeshes = null; Log.Warn("ceintures arriere du taxi : modele illisible (" + e.Message + ")"); }
-            return taxiMeshes;
-        }
-        static RearModel BuildTaxiModel(Transform car, Belt b)
-        {
-            Mesh[] ms = TaxiMeshes();
-            MeshRenderer src = b.Fastened != null ? b.Fastened.GetComponent<MeshRenderer>() : null;
-            if (ms == null || src == null) return null;
-            var m = new RearModel { Root = new GameObject("MWCoop-CeinturesArriere") };
-            Transform rt = m.Root.transform;
-            rt.parent = car;
-            rt.localPosition = new Vector3(0f, Config.GetFloat("Test", "TaxiCeintY", 0f), Config.GetFloat("Test", "TaxiCeintZ", 0f));
-            rt.localRotation = Quaternion.identity;
-            Vector3 cs = car.lossyScale;
-            rt.localScale = new Vector3(1f / cs.x, 1f / cs.y, 1f / cs.z);
-            System.Func<string, Mesh, Transform, GameObject> part = (name, mesh, parent) =>
-            {
-                var g = new GameObject(name);
-                g.layer = b.Fastened.layer;
-                g.transform.parent = parent;
-                g.transform.localPosition = Vector3.zero; g.transform.localRotation = Quaternion.identity; g.transform.localScale = Vector3.one;
-                if (mesh != null) { g.AddComponent<MeshFilter>().sharedMesh = mesh; g.AddComponent<MeshRenderer>().sharedMaterial = src.sharedMaterial; }
-                return g;
-            };
-            Transform baseT = part("Base", null, rt).transform;
-            part("AncresHaut", ms[0], baseT); part("Boucles", ms[9], baseT); part("AncreBasG", ms[10], baseT); part("AncreBasD", ms[11], baseT);
-            float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
-            for (int k = 0; k < 2; k++)
-            {
-                int o = 1 + 4 * k;
-                part(k == 0 ? "SangleHauteG" : "SangleHauteD", ms[o], baseT);
-                m.Open[k] = part(k == 0 ? "RangeeG" : "RangeeD", null, rt);
-                part("Sangle", ms[o + 1], m.Open[k].transform);
-                part("Languette", ms[o + 2], m.Open[k].transform);
-                m.Closed[k] = part(k == 0 ? "BoucleeG" : "BoucleeD", null, rt);
-                Mesh fast = Object.Instantiate(ms[o + 3]);
-                BulgeRear(fast, bulge, reach);
-                part("Ceinture", fast, m.Closed[k].transform);
-            }
-            Log.Info("ceintures arriere : modele de Menos pose sur " + car.name + " (taxi, matiere " + (src.sharedMaterial != null ? src.sharedMaterial.name : "?") + ")");
-            return m;
-        }
         static void UpdateRearModel(Transform car, Belt b, bool on, HashSet<int> belted)
         {
             RearModel m; rearModels.TryGetValue(car, out m);
@@ -1218,8 +1198,8 @@ namespace MWCoop
             if (m != null && m.Root != null && m.Gen != SeatFiles.Generation) { Object.Destroy(m.Root); m = null; }   // (fichier des places relu : refaite)
             if (m == null || m.Root == null)
             {
-                m = car.name.StartsWith("MACHTWAGEN") ? BuildTaxiModel(car, b) : BuildRearModel(car, b);
-                if (m != null) { m.Gen = SeatFiles.Generation; if (car.name.StartsWith("MACHTWAGEN")) FileBelts(car, m); }   // (SORBET : le modele de Menos tel quel)
+                m = BuildRearModel(car, b);
+                if (m != null) m.Gen = SeatFiles.Generation;   // (le modele tel quel ; la ceinture « modele » du fichier des places le decale par cote)
                 rearModels[car] = m;
             }
             if (m == null) return;
@@ -1228,7 +1208,7 @@ namespace MWCoop
             if (belted != null)
                 foreach (int i in belted)
                     foreach (Seat s in seats)
-                        if (s.CarT == car && s.Index == i && Mathf.Abs(s.Head.x) >= 0.15f) state |= s.Head.x < 0f ? 1 : 2;
+                        if (s.CarT == car && s.Index == i) state |= Mathf.Abs(s.Head.x) < 0.15f ? 4 : s.Head.x < 0f ? 1 : 2;   // (4 : place du milieu)
             if (state == m.State) return;
             m.State = state;
             for (int k = 0; k < 2; k++)
@@ -1236,68 +1216,9 @@ namespace MWCoop
                 bool fast = (state & (1 << k)) != 0;
                 m.Open[k].SetActive(!fast); m.Closed[k].SetActive(fast);
             }
+            if (m.Mid != null) m.Mid.SetActive((state & 4) != 0);
         }
 
-        // Ceintures du fichier des places (outil de [Addons et Tools], 26/10 ; JD : « Tout me vas ») : par cote, celles de la place
-        // arriere de ce cote. Points dans le repere de la voiture (CarT) ; une ligne absente garde la pose calculee. Pieces (ancrages,
-        // boucle, languette) : centre de leurs bornes (cote de la place) mis au point du fichier, rotation en plus autour de lui ;
-        // trajets rangee / bouclee : ruban de 'largeur' a la place de la sangle du modele.
-        static void FileBelts(Transform car, RearModel m)
-        {
-            Transform rt = m.Root.transform, baseT = rt.Find("Base");
-            var diag = new System.Text.StringBuilder();
-            for (int k = 0; k < 2; k++)
-            {
-                float sx = k == 0 ? -1f : 1f;
-                Seat s = null;
-                foreach (Seat q in seats) if (q.CarT == car && q.Index > 0 && Mathf.Abs(q.Head.x) >= 0.15f && Mathf.Sign(q.Head.x) == sx) { s = q; break; }
-                SeatFiles.Belt fb = s != null ? SeatFiles.BeltFor(s.Car, s.Index) : null;
-                if (fb == null) continue;
-                string sd = k == 0 ? "G" : "D";
-                System.Func<Vector3, Vector3> at = v => rt.InverseTransformPoint(car.TransformPoint(v));
-                int moved = 0;
-                if (fb.HasTop && MovePart(baseT, "AncresHaut", sx, at(fb.Top), Quaternion.identity)) moved++;
-                if (fb.HasBottom && MovePart(baseT, "AncreBas" + sd, 0f, at(fb.Bottom), Quaternion.identity)) moved++;
-                if (fb.HasBuckle && MovePart(baseT, "Boucles", sx, at(fb.Buckle), fb.BuckleRot)) moved++;
-                if (fb.HasTongue && MovePart(m.Open[k].transform, "Languette", 0f, at(fb.Tongue), fb.TongueRot)) moved++;
-                // (texture de la sangle : sangle haute du modele, sous la bouclee (SORBET) ou sous Base (taxi))
-                Transform sh = m.Closed[k].transform.Find("SangleHaute") ?? (baseT != null ? baseT.Find("SangleHaute" + sd) : null);
-                Mesh uv = sh != null && sh.GetComponent<MeshFilter>() != null ? sh.GetComponent<MeshFilter>().sharedMesh : null;
-                List<Vector3> st = fb.StowedPath(), fp = fb.FastenedPath();
-                bool rib = false;
-                if (uv != null && st.Count >= 2) rib |= StrapTo(m.Open[k].transform, "Sangle", st.ConvertAll(v => at(v)), fb.Width, uv);
-                if (uv != null && fp.Count >= 2 && StrapTo(m.Closed[k].transform, "Ceinture", fp.ConvertAll(v => at(v)), fb.Width, uv))
-                {
-                    rib = true;
-                    if (sh.parent == m.Closed[k].transform) sh.gameObject.SetActive(false);
-                }
-                // (taxi : sa sangle haute est montree dans les deux etats -- le fichier donne tout le trajet, elle ferait double)
-                if (rib && sh != null && sh.parent == baseT && fb.HasTop) sh.gameObject.SetActive(false);
-                diag.Append(" ; ").Append(sd).Append(" place ").Append(s.Index).Append(" (").Append(fb.Kind).Append(") : ").Append(moved).Append(" pieces, rangee ")
-                    .Append(st.Count).Append(" points, bouclee ").Append(fp.Count).Append(" points");
-            }
-            if (diag.Length > 0) Log.Info("ceintures arriere : fichier des places sur " + car.name + diag);
-        }
-        // Piece 'name' sous 'parent' (sx != 0 : seulement ses sommets de ce cote, les maillages des deux cotes) : centre de ses bornes
-        // en 'to', tournee de 'rot' autour de lui. Copie du maillage (ceux des ressources sont partages).
-        static bool MovePart(Transform parent, string name, float sx, Vector3 to, Quaternion rot)
-        {
-            Transform t = parent != null ? parent.Find(name) : null;
-            MeshFilter mf = t != null ? t.GetComponent<MeshFilter>() : null;
-            if (mf == null || mf.sharedMesh == null) return false;
-            Mesh msh = Object.Instantiate(mf.sharedMesh);
-            Vector3[] v = msh.vertices, nr = msh.normals;
-            Vector3 lo = Vector3.one * float.MaxValue, hi = -lo;
-            for (int i = 0; i < v.Length; i++) if (sx == 0f || Mathf.Sign(v[i].x) == sx) { lo = Vector3.Min(lo, v[i]); hi = Vector3.Max(hi, v[i]); }
-            if (lo.x > hi.x) return false;
-            Vector3 c = (lo + hi) / 2f;
-            for (int i = 0; i < v.Length; i++)
-                if (sx == 0f || Mathf.Sign(v[i].x) == sx) { v[i] = to + rot * (v[i] - c); if (i < nr.Length) nr[i] = rot * nr[i]; }
-            msh.vertices = v; if (nr.Length == v.Length) msh.normals = nr;
-            msh.RecalculateBounds();
-            mf.sharedMesh = msh;
-            return true;
-        }
         // Ruban le long de 'path' (largeur 'w', a plat face a l'avant de la voiture) a la place du maillage de 'name' sous 'parent'.
         static bool StrapTo(Transform parent, string name, List<Vector3> path, float w, Mesh uv)
         {
@@ -1350,13 +1271,14 @@ namespace MWCoop
 
         static RearModel BuildRearModel(Transform car, Belt b)
         {
-            Mesh[] ms = RearMeshes();
+            RearKind kind = KindOf(car);
+            Mesh[] ms = kind != null ? RearMeshes(kind) : null;
             MeshRenderer src = b.Fastened != null ? b.Fastened.GetComponent<MeshRenderer>() : null;
             if (ms == null || src == null) return null;
             var m = new RearModel { Root = new GameObject("MWCoop-CeinturesArriere") };
             Transform rt = m.Root.transform;
             rt.parent = car;
-            rt.localPosition = Vector3.zero; rt.localRotation = Quaternion.identity;   // (repere de la voiture : celui du modele de Menos)
+            rt.localPosition = Vector3.zero; rt.localRotation = Quaternion.identity;   // (repere de la voiture : celui des modeles de Menos et de Menor)
             Vector3 cs = car.lossyScale;
             rt.localScale = new Vector3(1f / cs.x, 1f / cs.y, 1f / cs.z);
             // (metal : l'atlas de la ceinture du conducteur elle-meme -- sa 2e matiere ; JD 28/10, le plastique noir de la languette sortait
@@ -1380,7 +1302,7 @@ namespace MWCoop
                 }
                 return g;
             };
-            float bulge = Config.GetFloat("Test", "CeintureArrBombe", 0.04f), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
+            float bulge = Config.GetFloat("Test", "CeintureArrBombe", kind.Bulge), reach = Config.GetFloat("Test", "CeintureArrRayon", 0.28f);
             // (un cote = un objet : la ceinture « modele » du fichier des places le deplace d'un bloc -- outil des places, JD 28/10)
             var diag = new System.Text.StringBuilder();
             for (int k = 0; k < 2; k++)
@@ -1407,8 +1329,17 @@ namespace MWCoop
                     diag.Append(" ; ").Append(sd).Append(" decale de ").Append(fb.ModelPos.ToString("F3")).Append(" tourne de ").Append(fb.ModelRot.eulerAngles.ToString("F1")).Append(" (place ").Append(s.Index).Append(")");
                 }
             }
+            // place du milieu (CORRIS) : sa ceinture ventrale, montree bouclee seulement ; boucle visee = centre de ses bornes
+            if (ms.Length > 6 && ms[6] != null)
+            {
+                m.Mid = part("Milieu", null, rt);
+                part("Ceinture", ms[6], m.Mid.transform);
+                m.MidBuckle = ms[6].bounds.center;
+                m.Mid.SetActive(false);
+                diag.Append(" ; ceinture du milieu");
+            }
             m.Pull = true;
-            Log.Info("ceintures arriere : modele de Menos pose sur " + car.name + " (systeme du conducteur : pieces, languette rangee, ceinture bouclee ; matiere "
+            Log.Info("ceintures arriere : modele " + kind.Key + " pose sur " + car.name + " (systeme du conducteur : pieces, languette rangee, ceinture bouclee ; matiere "
                      + (strapMat != null ? strapMat.name : "?") + ", metal " + (atlas != strapMat && atlas != null ? atlas.name + " / " + atlas.shader.name : "matiere de la sangle (atlas introuvable)") + ")" + diag);
             return m;
         }
@@ -1423,15 +1354,15 @@ namespace MWCoop
             Vector3 top = v[0], inner = v[0], outer = v[0];
             float minY = float.MaxValue, maxY = float.MinValue;
             foreach (Vector3 p in v) { minY = Mathf.Min(minY, p.y); maxY = Mathf.Max(maxY, p.y); if (p.y > top.y) top = p; }
-            float low = minY + 0.2f * (maxY - minY);
-            bool lowSet = false;
+            // (ancrage bas cote portiere : le plus a l'exterieur du bas (20 %) ; boucle : le plus au milieu de la moitie basse -- sur les
+            // modeles de Menor du 31/10, la boucle est plus haute que le bas de la sangle, hors des 20 %)
+            float low = minY + 0.2f * (maxY - minY), half = minY + 0.5f * (maxY - minY);
+            bool lowSet = false, halfSet = false;
             foreach (Vector3 p in v)
-                if (p.y <= low)
-                {
-                    if (!lowSet) { inner = outer = p; lowSet = true; }
-                    if (Mathf.Abs(p.x) < Mathf.Abs(inner.x)) inner = p;
-                    if (Mathf.Abs(p.x) > Mathf.Abs(outer.x)) outer = p;
-                }
+            {
+                if (p.y <= half) { if (!halfSet) { inner = p; halfSet = true; } if (Mathf.Abs(p.x) < Mathf.Abs(inner.x)) inner = p; }
+                if (p.y <= low) { if (!lowSet) { outer = p; lowSet = true; } if (Mathf.Abs(p.x) > Mathf.Abs(outer.x)) outer = p; }
+            }
             m.Top[k] = top; m.Low[k] = outer; m.Buckle[k] = inner;
             int[] t = fast.GetTriangles(0);
             Vector2[] uv = fast.uv;
@@ -1882,6 +1813,11 @@ namespace MWCoop
         {
             target = Vector3.zero;
             RearModel rm = current != null && current.Index > 0 ? RearPullModel() : null;
+            if (rm != null && rm.Mid != null && Mathf.Abs(current.Head.x) < 0.15f)
+            {
+                target = what == 2 ? current.CarT.TransformPoint(current.Head + new Vector3(0f, -0.75f, 0.12f)) : rm.Root.transform.TransformPoint(rm.MidBuckle);
+                return true;
+            }
             if (rm != null)
             {
                 int k = current.Head.x < 0f ? 0 : 1;
@@ -1901,6 +1837,12 @@ namespace MWCoop
         {
             if (current == null || cam == null) return "pas assis";
             RearModel rm = current.Index > 0 ? RearPullModel() : null;
+            if (rm != null && rm.Mid != null && Mathf.Abs(current.Head.x) < 0.15f)
+            {
+                cam.rotation = Quaternion.LookRotation(rm.Root.transform.TransformPoint(rm.MidBuckle) - cam.position);
+                testAim = 1;
+                return "regard vers la boucle du milieu";
+            }
             if (rm != null)
             {
                 int k = current.Head.x < 0f ? 0 : 1;
@@ -1955,8 +1897,9 @@ namespace MWCoop
             if (current == null) return "pas assis";
             if (current.Index > 0)
             {
-                Belt rb = BeltOf(current.CarT); Vector3 off; bool mir;
-                if (rb == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return "pas de ceinture a cette place arriere";
+                Belt rb = BeltOf(current.CarT); Vector3 off; bool mir = false; off = Vector3.zero;
+                bool mid = Mathf.Abs(current.Head.x) < 0.15f;
+                if (rb == null || !mid && !RearPlace(current.CarT, current.Index, out off, out mir)) return "pas de ceinture a cette place arriere";
                 beltOn = !beltOn;
                 SendSeat(current.Car, current.Index, headLocal);
                 UpdateBelts();
