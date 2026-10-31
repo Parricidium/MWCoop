@@ -310,9 +310,9 @@ namespace MWCoop
         // contact / starter / phares / warning en colonne sur cette face, comme la R5.
         public static readonly Model Golf83 = new Model { Id = ModelGolf, Folder = "golf83", Name = "Golf GTI",
             Head = new Vector3(-0.31f, 1.03f, -0.35f), SeatEyes = true, SteerDeg = 540f, Engine = new Vector3(0f, 0.60f, 1.45f),
-            // (levier du frein a main du modele, frein.p205 : sur le tunnel, poignee vers l'arriere, pivot a l'avant -- angle negatif : la
-            // poignee monte)
-            BrakePivot = new Vector3(0f, 0.39f, 0.23f), BrakeGrip = new Vector3(0f, 0.40f, 0.01f), BrakeAngle = -1.3f,
+            // (levier du frein a main du modele, frein.p205 : sur le tunnel, pivot a l'arriere, poignee et bouton vers l'avant -- JD 31/10 :
+            // « bizarre », il tournait autour de sa poignee)
+            BrakePivot = new Vector3(0f, 0.385f, 0.012f), BrakeGrip = new Vector3(0f, 0.40f, 0.21f), BrakeAngle = 1.3f,
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.07f, 0.865f, 0.520f)),
                 new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(-0.07f, 0.835f, 0.520f)),

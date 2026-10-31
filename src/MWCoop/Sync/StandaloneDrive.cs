@@ -515,7 +515,13 @@ namespace MWCoop
                 Vector3 c;
                 if (i < 2) { if (st.Doors[i] == null) continue; c = st.Doors[i].TransformPoint(st.DoorCenter[i] - st.Doors[i].localPosition); }
                 else if (i == 2) { if (st.Hatch == null) continue; c = st.Hatch.TransformPoint(st.HatchCenter - st.Hatch.localPosition); }
-                else { if (st.Shelf == null) continue; c = st.Shelf.TransformPoint(st.ShelfCenter - st.Shelf.localPosition); }
+                else
+                {
+                    // (plage : coffre ouvert, ou depuis l'habitacle -- JD 31/10 : on la relevait de dehors, hayon ferme)
+                    if (st.Shelf == null) continue;
+                    if (!st.HatchOpen && b.Car.transform.InverseTransformPoint(cam.position).z < st.ShelfCenter.z + 0.15f) continue;
+                    c = st.Shelf.TransformPoint(st.ShelfCenter - st.Shelf.localPosition);
+                }
                 Vector3 v = c - cam.position;
                 float along = Vector3.Dot(v, cam.forward);
                 if (along < 0.1f || along > 2f) continue;
@@ -1026,7 +1032,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- tableau de bord
-        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200;
+        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300;
         static void SetHorn(VazCar.Built b, State st, bool on, bool send)
         {
             if (on == st.HornOn) return;
@@ -1059,6 +1065,23 @@ namespace MWCoop
                 if (along < 0.15f || along > 1.6f) continue;
                 float perp = (v - cam.forward * along).magnitude;
                 if (perp < 0.05f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KCrank0 + w; }
+            }
+            // levier du frein a main (frein.p205) : vise, molette (vers l'avant : serre) ou clic (serre / desserre), comme les voitures du jeu
+            var sdh = b.Axis as StandaloneDriver;
+            if (b.BrakePivot != null && sdh != null)
+            {
+                Vector3 g = b.BrakePivot.TransformPoint(b.M.BrakeGrip - b.M.BrakePivot), v = g - cam.position;
+                float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
+                if (along > 0.15f && along < 1.3f && perp < 0.06f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KHand; }
+            }
+            if (hit == KHand)
+            {
+                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", "HANDBRAKE");
+                float sc = Input.GetAxis("Mouse ScrollWheel");
+                if (sc != 0f) sdh.HandLatch = Mathf.Clamp01(sdh.HandLatch + Mathf.Sign(sc) * 0.25f);
+                if (Input.GetMouseButtonDown(0)) sdh.HandLatch = sdh.HandLatch > 0.5f ? 0f : 1f;
+                return;
             }
             if (hit >= KCrank0)
             {

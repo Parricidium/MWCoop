@@ -534,6 +534,7 @@ namespace MWCoop
     public class StandaloneDriver : CarController
     {
         public float Throttle, Brake, Steer, Handbrake = 1f, Clutch;
+        public float HandLatch;   // (frein a main tire a la main sur le levier, StandaloneDrive.Knobs : reste serre, s'ajoute a la touche)
         public bool StartEngine;
         public int Gear = -1;   // (rapport voulu ; -1 : celui de la boite)
         public bool Keys;       // (au volant d'ici : touches du jeu par cInput, axes et rapports comme l'AxisCarController de la Ruscko)
@@ -544,7 +545,7 @@ namespace MWCoop
             if (Keys)
             {
                 throttleInput = Mathf.Clamp01(StandaloneCar.Axis("Throttle")); brakeInput = Mathf.Clamp01(StandaloneCar.Axis("Brake")); steerInput = StandaloneCar.Axis("Horizontal");
-                handbrakeInput = Mathf.Clamp01(StandaloneCar.Axis("Handbrake")); clutchInput = Mathf.Clamp01(StandaloneCar.Axis("Clutch"));
+                handbrakeInput = Mathf.Max(Mathf.Clamp01(StandaloneCar.Axis("Handbrake")), HandLatch); clutchInput = Mathf.Clamp01(StandaloneCar.Axis("Clutch"));
                 int g = drivetrain != null ? drivetrain.gear : 0;
                 if (StandaloneCar.Down("ShiftUp")) g++;
                 if (StandaloneCar.Down("ShiftDown")) g--;
