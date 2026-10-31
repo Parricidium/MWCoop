@@ -53,6 +53,7 @@ namespace MWCoop
             // (essuie-glaces : av1, av2, ar -- pivot, axe, angle maxi ; comodo ; StandaloneDrive)
             public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
             public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
+            public Component Rain, RainSrc;   // (pluie sur les vitres : composant windshield du jeu a nous, celui de la Satsuma -- StandaloneDrive)
             public Transform[] Glass = new Transform[2], Crank = new Transform[2]; public Vector3[] GlassDown = new Vector3[2], CrankAxis = new Vector3[2]; public float[] WinPos = new float[2];   // (vitres de portiere a manivelle, StandaloneDrive)
             public Vector3 LastPos; public float LastPosT, RemoteKmh, NextState;   // (co-op : compteur d'une voiture menee ailleurs, etat renvoye)   // (habitacle creux : StandaloneDrive.Shell)
         }
@@ -123,7 +124,7 @@ namespace MWCoop
                 var rw = new GameObject("VAZ_roue").transform;
                 rw.SetParent(model.transform, false);
                 rw.localRotation = q; rw.localPosition = -(q * wb.center);
-                if (!inf.ContainsKey("roues_jeu") || !GameWheel(b, model.transform, left, radius)) VazCar.AddModel(b, rw, "roue.p205");
+                if (!inf.ContainsKey("roues_jeu") || !GameWheel(b, model.transform, left, fr, radius)) VazCar.AddModel(b, rw, "roue.p205");
                 else UnityEngine.Object.Destroy(rw.gameObject);
                 w.model = model; w.caliperModel = null;
                 if (fr) { if (left) front.leftWheel = w; else front.rightWheel = w; }
@@ -322,7 +323,7 @@ namespace MWCoop
         // (pneu route d'origine) monte sur la jante ; a l'echelle du rayon du modele.
         // Maillages et matieres du jeu partages, rien d'embarque ; sans eux : roue.p205.
         static Mesh tireMesh; static Material[] tireMats; static Matrix4x4 tireFromRim; static bool tireFound;
-        static bool GameWheel(VazCar.Built b, Transform model, bool left, float radius)
+        static bool GameWheel(VazCar.Built b, Transform model, bool left, bool front, float radius)
         {
             try
             {
@@ -335,7 +336,8 @@ namespace MWCoop
                     // (modeles de pneus du jeu : objets racine inactifs TireGobra, TireStock13... ; monte, un pneu est l'enfant de sa jante sans
                     // decalage -- wheel_regula/TireOld(Clone), releve du 31/10)
                     var all = Resources.FindObjectsOfTypeAll<MeshFilter>();
-                    foreach (string tn in new[] { "TireGobra", "TireGobra2", "TireStock13", "TireOld" })
+                    // (pneu d'origine sans inscriptions blanches d'abord -- JD 31/10 : « enleve les logos en blanc »)
+                    foreach (string tn in new[] { "TireStock13", "TireStock14", "TireOld", "TireGobra" })
                     {
                         foreach (MeshFilter mf in all)
                             if (mf != null && mf.sharedMesh != null && mf.name == tn && mf.GetComponent<MeshRenderer>() != null)
@@ -355,11 +357,35 @@ namespace MWCoop
                 holder.localScale = Vector3.one * (rs > 0.05f ? radius / rs : 1f);
                 MeshRenderer rimMr = rimSrc.GetComponent<MeshRenderer>();
                 var black = new Material(rimMr.sharedMaterial) { name = "jante_octo_noire" };
-                if (black.HasProperty("_Color")) black.color = new Color(0.035f, 0.035f, 0.04f);
+                if (black.HasProperty("_Color")) black.color = new Color(0.196f, 0.196f, 0.196f);   // (gris des pare-chocs du modele -- JD 31/10)
                 var rms = new Material[rimMr.sharedMaterials.Length]; for (int i = 0; i < rms.Length; i++) rms[i] = black;
                 Piece(holder, "jante", rimRel, rimSrc.GetComponent<MeshFilter>().sharedMesh, rms, model.gameObject.layer);
                 Piece(holder, "pneu", tireRel, tireMesh, tireMats, model.gameObject.layer);
-                Log.Info("standalone : roue " + (left ? "gauche" : "droite") + " du jeu (jante Octo noire, pneu " + tireMesh.name + ", echelle " + holder.localScale.x.ToString("F2") + ")");
+                // freins derriere la roue (JD 31/10) : disque a l'avant, tambour a l'arriere, pris sur la Satsuma (emplacements presents meme
+                // demontee : TireF<L|R>/OFFSET/discbrake..., TireR<L|R>/drumbrake...), poses par rapport a la roue de la Satsuma du meme coin
+                string fr = front ? "F" : "R";
+                GameObject tbr = Game.FindAny("SATSUMA(557kg, 248)/" + fr + s + (front ? "/AckerF" + s : "") + "/wheel" + fr + s + "/Tire" + fr + s);
+                int nb = 0;
+                if (tbr != null)
+                    foreach (MeshFilter mf in tbr.GetComponentsInChildren<MeshFilter>(true))
+                    {
+                        if (mf.sharedMesh == null || mf.GetComponent<MeshRenderer>() == null) continue;
+                        Transform up = mf.transform; bool brake = false;
+                        while (up != null && up != tbr.transform) { if (up.name.StartsWith("discbrake") || up.name.StartsWith("drumbrake")) { brake = true; break; } up = up.parent; }
+                        if (!brake) continue;
+                        Piece(holder, "frein", tbr.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix, mf.sharedMesh, mf.GetComponent<MeshRenderer>().sharedMaterials, model.gameObject.layer);
+                        nb++;
+                    }
+                // porte-moyeu avant de la Satsuma (SpindleF<L|R>/OFFSET/spindle...) : sur la roue sans sa rotation (objet de la roue, pas le modele)
+                GameObject spf = front ? Game.FindAny("SATSUMA(557kg, 248)/F" + s + "/AckerF" + s + "/wheelF" + s + "/SpindleF" + s) : null;
+                if (spf != null && model.parent != null)
+                {
+                    var fixe = new GameObject("roue_jeu_fixe").transform; fixe.SetParent(model.parent, false); fixe.localScale = holder.localScale;
+                    foreach (MeshFilter mf in spf.GetComponentsInChildren<MeshFilter>(true))
+                        if (mf.sharedMesh != null && mf.GetComponent<MeshRenderer>() != null && mf.name.StartsWith("spindle"))
+                        { Piece(fixe, "porte_moyeu", spf.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix, mf.sharedMesh, mf.GetComponent<MeshRenderer>().sharedMaterials, model.gameObject.layer); nb++; }
+                }
+                Log.Info("standalone : roue " + (front ? "avant " : "arriere ") + (left ? "gauche" : "droite") + " du jeu (jante Octo grise, pneu " + tireMesh.name + ", " + nb + " piece(s) de frein, echelle " + holder.localScale.x.ToString("F2") + ")");
                 return true;
             }
             catch (Exception e) { Log.Warn("standalone : roues du jeu : " + e.Message); return false; }

@@ -2823,6 +2823,7 @@ namespace MWCoop
         // correctif du 10/10, vitesse x duree d'image vers l'arriere).
         static Transform pietonCible;
         static bool givreEtat, maillagesDone, siegesSondes;
+        static float pluieNext;
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
         static bool taxiOut; static int lastAround;
         public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
@@ -2969,6 +2970,37 @@ namespace MWCoop
                     if (tr != null && (motif == "*" || tr.name.ToLowerInvariant().Contains(motif)) && tr.hideFlags == HideFlags.None && (sous.Length == 0 || Recon.Path(tr).ToLowerInvariant().Contains(sous)) && n++ < 80)
                         Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1") + ", racine " + tr.root.InverseTransformPoint(tr.position).ToString("F2") + ", angles " + tr.localEulerAngles.ToString("F1") + ", couche " + LayerMask.LayerToName(tr.gameObject.layer) + " [" + string.Join(",", System.Array.ConvertAll(tr.GetComponents<Component>(), c => c == null ? "?" : c is Collider ? c.GetType().Name + ((Collider)c).isTrigger.ToString().Substring(0, 1) : c.GetType().Name)) + "]");
                 Log.Info("autotest : sonde '" + motif + "' : " + n + " objet(s)");
+                // ([Test] SondeComposant=<chemin>|<type> : tous les champs du composant, par reflexion -- pluie de la Satsuma, 31/10)
+                string sc = Config.Get("Test", "SondeComposant", "");
+                if (sc.Contains("|"))
+                {
+                    GameObject cg = Game.FindAny(sc.Substring(0, sc.IndexOf('|')));
+                    Component co = cg != null ? cg.GetComponent(sc.Substring(sc.IndexOf('|') + 1)) : null;
+                    if (co == null) Log.Info("autotest : sonde composant " + sc + " introuvable");
+                    else
+                        foreach (System.Reflection.FieldInfo fi in co.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                        {
+                            object v = fi.GetValue(co); string s;
+                            if (v is Transform) { var tv = (Transform)v; s = Recon.Path(tv) + " local " + tv.localPosition.ToString("F3") + " rot " + tv.localEulerAngles.ToString("F1") + " racine av " + tv.root.InverseTransformDirection(tv.forward).ToString("F2") + " haut " + tv.root.InverseTransformDirection(tv.up).ToString("F2") + " droite " + tv.root.InverseTransformDirection(tv.right).ToString("F2"); }
+                            else if (v is System.Collections.IEnumerable && !(v is string)) { var l = new System.Collections.Generic.List<string>(); foreach (object e in (System.Collections.IEnumerable)v) l.Add(e is Component ? Recon.Path(((Component)e).transform) : e is Object ? ((Object)e).name : e != null ? e.ToString() : "null"); s = "[" + string.Join(" ; ", l.ToArray()) + "]"; }
+                            else if (v is Transform) { var tv = (Transform)v; s = Recon.Path(tv) + " local " + tv.localPosition.ToString("F3") + " rot " + tv.localEulerAngles.ToString("F1") + " racine " + tv.root.InverseTransformDirection(tv.forward).ToString("F2") + "/" + tv.root.InverseTransformDirection(tv.up).ToString("F2"); }
+                            else if (v is Material) { var mv = (Material)v; s = mv.name + " [" + mv.shader.name + "]"; }
+                            else s = v != null ? v.ToString() : "null";
+                            Log.Info("autotest : sonde champ " + fi.Name + " = " + s);
+                        }
+                }
+                // ([Test] SondeMaillage=<chemin> : bornes des sommets et des deux jeux d'UV du maillage, matieres et proprietes de texture)
+                string sm = Config.Get("Test", "SondeMaillage", "");
+                foreach (string smp in sm.Split(';'))
+                {
+                    if (smp.Length == 0) continue;
+                    GameObject mg = Game.FindAny(smp); MeshFilter mfi = mg != null ? mg.GetComponent<MeshFilter>() : null;
+                    if (mfi == null || mfi.sharedMesh == null) { Log.Info("autotest : sonde maillage " + smp + " introuvable"); continue; }
+                    Mesh mm = mfi.sharedMesh;
+                    System.Func<Vector2[], string> rb = a => { if (a == null || a.Length == 0) return "-"; Vector2 lo = a[0], hi = a[0]; foreach (Vector2 q in a) { lo = Vector2.Min(lo, q); hi = Vector2.Max(hi, q); } return lo.ToString("F3") + ".." + hi.ToString("F3"); };
+                    Material mat0 = mg.GetComponent<MeshRenderer>() != null ? mg.GetComponent<MeshRenderer>().sharedMaterial : null;
+                    Log.Info("autotest : sonde maillage " + smp + " : " + mm.vertexCount + " sommets, bornes " + mm.bounds.ToString("F2") + ", uv " + rb(mm.uv) + ", uv2 " + rb(mm.uv2) + ", matiere " + (mat0 != null ? mat0.name + " [" + mat0.shader.name + "] tex " + (mat0.mainTexture != null ? mat0.mainTexture.name : "-") : "-"));
+                }
                 // ([Test] SondeSons=<texte du chemin> : sources de son dont le chemin contient le texte, clip et volume -- echappements de
                 // la Satsuma pour la Golf, 31/10)
                 string ss = Config.Get("Test", "SondeSons", "").ToLowerInvariant();
@@ -2994,6 +3026,20 @@ namespace MWCoop
                             System.IO.File.WriteAllBytes(f, cp.EncodeToPNG()); Object.Destroy(cp);
                             Log.Info("autotest : sonde texture copiee " + f); break;
                         }
+            }
+            // ([Test] SondePluieSatsuma=1 : de 32 a 42 s, balais de test du composant de pluie de la Satsuma, pluie forcee ; leurs champs
+            // releves toutes les 0,25 s -- semantique de wiper1Position pour la Golf, 31/10)
+            if (Config.GetInt("Test", "SondePluieSatsuma", 0) != 0 && t > 32f && t < 42f && Time.time >= pluieNext)
+            {
+                pluieNext = Time.time + 0.25f;
+                GameObject rg = Game.FindAny("SATSUMA(557kg, 248)/RainScript"); Component wc = rg != null ? rg.GetComponent("windshield") : null;
+                if (wc != null)
+                {
+                    var bf = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                    System.Type ty = wc.GetType();
+                    ty.GetField("wipersTestMove", bf).SetValue(wc, true); ty.GetField("rain", bf).SetValue(wc, 1f); ty.GetField("disabledRain", bf).SetValue(wc, false);
+                    Log.Info("autotest : pluie satsuma t=" + t.ToString("F2") + " w1 " + ty.GetField("wiper1Position", bf).GetValue(wc) + " w2 " + ty.GetField("wiper2Position", bf).GetValue(wc) + " a1 " + ty.GetField("previous1Angle", bf).GetValue(wc) + " a2 " + ty.GetField("previous2Angle", bf).GetValue(wc));
+                }
             }
             if (Game.Msc)   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC ; vidage d'automates : les deux jeux)
             {

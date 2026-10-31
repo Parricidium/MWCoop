@@ -414,6 +414,8 @@ namespace MWCoop
         class Part { public string Mat; public Mesh Mesh; }
         static readonly Dictionary<string, List<Part>> meshCache = new Dictionary<string, List<Part>>();
         static readonly Dictionary<string, MatDef> matDefs = new Dictionary<string, MatDef>();
+        // genre de la matiere <cle> du modele (« glass », « paint »...) -- pluie sur les vitres des standalones (StandaloneDrive.SetupRain)
+        public static string KindOf(Model m, string key) { MatDef d; return m != null && matDefs.TryGetValue(m.Folder + "|" + key, out d) ? d.Kind : null; }
         static readonly Dictionary<string, Texture2D> texCache = new Dictionary<string, Texture2D>();
 
         // Maillages lus une fois (partages par toutes les VAZ : seules les matieres de peinture et de numero sont a chacune).

@@ -224,6 +224,7 @@ namespace MWCoop
                 VazCar.AddModel(b, si0, "comodo.p205");
                 st.Stalk = sp0; st.StalkAxis = sa0.normalized;
             }
+            SetupRain(b, st, inf);
             Shell(b, st);
             // son moteur de l'addon (boucles + demarrage) au moteur du modele
             var eng = new GameObject("moteur_son").transform;
@@ -518,6 +519,7 @@ namespace MWCoop
             KeyVisual(b, st);
             WindowAnim(b, st);
             WiperAnim(b, st);
+            RainTick(b, st);
             DoorAnim(b, st);
             Gauges(b, st);
             GameObject pl = Game.PlayerGo;
@@ -1214,6 +1216,125 @@ namespace MWCoop
                 st.Stalk.localRotation = Quaternion.AngleAxis(st.StalkAngle, st.StalkAxis);
             }
         }
+        // ---------------------------------------------------------------- pluie sur les vitres (infos.txt pluie -- Golf, JD 31/10 : « que les
+        // vitres recoivent la pluie comme sur les vraies voitures du jeu ») : composant windshield du jeu (celui de la Satsuma :
+        // SATSUMA/RainScript) copie sur la voiture, ses reglages repris, nos vitres a sa place. Il simule les gouttes dans une texture
+        // en trois bandes de coordonnees (pare-brise frontUV en bas, cotes sideUV, arriere rearUV) que la matiere de pluie du jeu
+        // (CAR_WINDOWS_RAIN, shader Windshield/windshield) lit avec les UV des vitres : les UV de nos vitres (matieres « glass ») sont
+        // refaites a plat dans leur bande -- pare-brise : u de la droite vers la gauche (balais au repos vers -u, comme ceux du jeu),
+        // v vers le haut ; cotes : v vers le bas ; lunette : v vers le haut, comme les reperes NormalFront / Side / Rear de la Satsuma.
+        // Pluie et vent : ceux de la Satsuma, recopies a chaque image ; balais : nos deux balais avant (wiper1 / wiper2, position 0..1).
+        static readonly Dictionary<string, System.Reflection.FieldInfo> rainF = new Dictionary<string, System.Reflection.FieldInfo>();
+        static System.Reflection.FieldInfo RF(Component c, string n)
+        {
+            System.Reflection.FieldInfo f;
+            if (!rainF.TryGetValue(n, out f)) { f = c.GetType().GetField(n, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance); rainF[n] = f; }
+            return f;
+        }
+        static void SetupRain(VazCar.Built b, State st, Dictionary<string, Vector3> inf)
+        {
+            if (!inf.ContainsKey("pluie")) return;
+            try
+            {
+                GameObject sat = Game.FindAny("SATSUMA(557kg, 248)/RainScript");
+                Component src = sat != null ? sat.GetComponent("windshield") : null;
+                var srcR = src != null ? RF(src, "windowRenderers").GetValue(src) as MeshRenderer[] : null;
+                if (src == null || srcR == null || srcR.Length == 0 || srcR[0] == null) { Log.Warn("standalone : pluie, composant windshield de la Satsuma introuvable"); return; }
+                Transform ct = b.Car.transform;
+                // vitres du modele et classe de chaque sommet (0 pare-brise, 1 cotes, 2 lunette) d'apres sa normale, repere de la voiture
+                var rs = new List<MeshFilter>();
+                foreach (MeshRenderer mr in b.Car.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    Material sm = mr.sharedMaterial;
+                    if (sm == null || !sm.name.StartsWith("vaz_") || VazCar.KindOf(b.M, sm.name.Substring(4)) != "glass") continue;
+                    MeshFilter mf = mr.GetComponent<MeshFilter>();
+                    // (vitres seulement : pas le verre des compteurs ni les petits verres de l'habitacle -- JD 31/10 : « pas l'effet de pluie sur
+                    // les compteurs »)
+                    if (mf != null && mf.sharedMesh != null && Mathf.Max(mf.sharedMesh.bounds.size.x, mf.sharedMesh.bounds.size.y, mf.sharedMesh.bounds.size.z) >= 0.5f) rs.Add(mf);
+                }
+                if (rs.Count == 0) { Log.Warn("standalone : pluie, pas de vitre (matiere glass) dans le modele"); return; }
+                var lo = new Vector3[3]; var hi = new Vector3[3]; for (int k = 0; k < 3; k++) { lo[k] = Vector3.one * 1e9f; hi[k] = -Vector3.one * 1e9f; }
+                Vector3 upF = new Vector3(0f, 0.77f, -0.64f);
+                Func<Vector3, int> cls = n => n.z > 0.35f && Mathf.Abs(n.x) < 0.6f ? 0 : n.z < -0.35f && Mathf.Abs(n.x) < 0.6f ? 2 : 1;
+                Func<Vector3, int, Vector3> key = (p, k) => k == 0 ? new Vector3(p.x, Vector3.Dot(p, upF), 0f) : k == 1 ? new Vector3(p.z, p.y, 0f) : new Vector3(p.x, p.y, 0f);
+                var pos = new List<Vector3[]>(); var cl = new List<int[]>();
+                foreach (MeshFilter mf in rs)
+                {
+                    Mesh m = mf.sharedMesh; Vector3[] v = m.vertices, n = m.normals;
+                    var pc = new Vector3[v.Length]; var cc = new int[v.Length];
+                    for (int i = 0; i < v.Length; i++)
+                    {
+                        pc[i] = ct.InverseTransformPoint(mf.transform.TransformPoint(v[i]));
+                        cc[i] = cls(ct.InverseTransformDirection(mf.transform.TransformDirection(n.Length == v.Length ? n[i] : Vector3.up)));
+                        Vector3 q = key(pc[i], cc[i]); lo[cc[i]] = Vector3.Min(lo[cc[i]], q); hi[cc[i]] = Vector3.Max(hi[cc[i]], q);
+                    }
+                    pos.Add(pc); cl.Add(cc);
+                }
+                Rect[] rect = { (Rect)RF(src, "frontUV").GetValue(src), (Rect)RF(src, "sideUV").GetValue(src), (Rect)RF(src, "rearUV").GetValue(src) };
+                Material rainMat = new Material(srcR[0].sharedMaterial) { name = "standalone_vitre_pluie" };
+                for (int r = 0; r < rs.Count; r++)
+                {
+                    Mesh m = UnityEngine.Object.Instantiate(rs[r].sharedMesh); m.name = rs[r].sharedMesh.name + "_pluie";
+                    var uv = new Vector2[pos[r].Length];
+                    for (int i = 0; i < uv.Length; i++)
+                    {
+                        int k = cl[r][i]; Vector3 q = key(pos[r][i], k), sz = hi[k] - lo[k];
+                        float a = sz.x > 1e-4f ? (q.x - lo[k].x) / sz.x : 0.5f, c = sz.y > 1e-4f ? (q.y - lo[k].y) / sz.y : 0.5f;
+                        if (k == 0) a = 1f - a; else if (k == 1) c = 1f - c;
+                        uv[i] = new Vector2(rect[k].x + rect[k].width * (0.02f + 0.96f * a), rect[k].y + rect[k].height * (0.02f + 0.96f * c));
+                    }
+                    m.uv = uv; rs[r].sharedMesh = m;
+                    int[] nc = new int[3]; foreach (int q in cl[r]) nc[q]++;
+                    Vector2 ul = uv.Length > 0 ? uv[0] : Vector2.zero, uh = ul; foreach (Vector2 q in uv) { ul = Vector2.Min(ul, q); uh = Vector2.Max(uh, q); }
+                    Log.Info("standalone : pluie, " + Recon.Path(rs[r].transform) + " : " + uv.Length + " sommets (pare-brise " + nc[0] + ", cotes " + nc[1] + ", arriere " + nc[2] + "), uv " + ul.ToString("F2") + ".." + uh.ToString("F2") + ", bornes " + rs[r].sharedMesh.bounds.size.ToString("F2"));
+                    rs[r].GetComponent<MeshRenderer>().sharedMaterial = rainMat;
+                }
+                // composant a nous, reglages de celui de la Satsuma ; reperes (normales, vent) a la meme orientation dans la voiture
+                var go = new GameObject("RainScript"); go.SetActive(false);
+                go.transform.SetParent(ct, false);
+                Component c2 = go.AddComponent(src.GetType());
+                Transform satRoot = sat.transform.root;
+                foreach (System.Reflection.FieldInfo fi in src.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                {
+                    if (fi.Name == "windowRenderers" || fi.Name == "cachedWindowMaterials" || fi.Name.StartsWith("renderTexture") || fi.Name == "active" || fi.Name.StartsWith("previous")) continue;
+                    object val = fi.GetValue(src);
+                    if (val is Transform)
+                    {
+                        var tr = new GameObject(((Transform)val).name).transform; tr.SetParent(go.transform, false);
+                        tr.rotation = ct.rotation * (Quaternion.Inverse(satRoot.rotation) * ((Transform)val).rotation);
+                        val = tr;
+                    }
+                    fi.SetValue(c2, val);
+                }
+                RF(c2, "windowRenderers").SetValue(c2, rs.ConvertAll(x => x.GetComponent<MeshRenderer>()).ToArray());
+                // balais : moyeux et portee dans la bande du pare-brise (largeur = 1)
+                for (int w = 0; w < 2; w++)
+                {
+                    if (st.Wipers[w] == null) continue;
+                    Vector3 pv = ct.InverseTransformPoint(st.Wipers[w].position); float reach = 0f;
+                    foreach (MeshFilter mf in st.Wipers[w].GetComponentsInChildren<MeshFilter>())
+                        foreach (Vector3 v in mf.sharedMesh.vertices) reach = Mathf.Max(reach, (ct.InverseTransformPoint(mf.transform.TransformPoint(v)) - pv).magnitude);
+                    float wd = Mathf.Max(0.1f, hi[0].x - lo[0].x);
+                    RF(c2, "wiper" + (w + 1)).SetValue(c2, new Vector2(Mathf.Clamp01(1f - (pv.x - lo[0].x) / wd), 0f));
+                    RF(c2, "wiper" + (w + 1) + "Length").SetValue(c2, Mathf.Clamp(reach / wd, 0.1f, 0.8f));
+                }
+                go.SetActive(true);
+                st.Rain = c2; st.RainSrc = src;
+                Log.Info("standalone : pluie sur " + rs.Count + " vitre(s), composant windshield de la Satsuma copie");
+            }
+            catch (Exception e) { Log.Warn("standalone : pluie : " + e.Message); }
+        }
+        static void RainTick(VazCar.Built b, State st)
+        {
+            if (st.Rain == null || st.RainSrc == null) return;
+            float forced = Config.GetFloat("Test", "StandalonePluie", -1f);   // ([Test] StandalonePluie=1 : pluie forcee, essais)
+            RF(st.Rain, "rain").SetValue(st.Rain, forced >= 0f ? forced : RF(st.RainSrc, "rain").GetValue(st.RainSrc));
+            RF(st.Rain, "wind").SetValue(st.Rain, RF(st.RainSrc, "wind").GetValue(st.RainSrc));
+            RF(st.Rain, "disabledRain").SetValue(st.Rain, forced >= 0f ? false : RF(st.RainSrc, "disabledRain").GetValue(st.RainSrc));
+            float k = (1f - Mathf.Cos(st.WiperPhase * 2f * Mathf.PI)) * 0.5f;
+            RF(st.Rain, "wiper1Position").SetValue(st.Rain, k);
+            RF(st.Rain, "wiper2Position").SetValue(st.Rain, k);
+        }
         const float KeyOnDeg = 40f, KeyStartDeg = 70f;
         // vitres : position 0 (fermee) a 1 (baissee), manivelle 3 tours sur la course
         static void WindowAnim(VazCar.Built b, State st)
@@ -1506,6 +1627,7 @@ namespace MWCoop
             UnityEngine.Object.Destroy(go);
         }
         static bool cFrein;
+        static float wLog; static bool wDump;
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -1556,6 +1678,25 @@ namespace MWCoop
                 cStep = 3;
                 Log.Info("standalone : coop, invite : copie " + car.name + (b != null ? " standalone" : " PAS standalone") + ", passager -> " + Seats.TestSit(car.name, 0));
             }
+            // ([Test] StandaloneEssuieMarche=66 : essuie-glaces mis en marche a ce temps -- pluie sur les vitres, captures avant / apres)
+            float wOn = Config.GetFloat("Test", "StandaloneEssuieMarche", 0f);
+            if (host && wOn > 0f && st != null && !st.WipersOn && t > wOn && t < wOn + 1f) { st.WipersOn = true; Log.Info("standalone : coop, essuie-glaces en marche"); }
+            // (texture de simulation de la pluie enregistree a wOn + 6 s : dumps/pluie-rt.png)
+            if (host && wOn > 0f && st != null && st.Rain != null && t > wOn + 6f && !wDump)
+            {
+                wDump = true;
+                var rt = RF(st.Rain, "active").GetValue(st.Rain) as RenderTexture;
+                if (rt != null)
+                {
+                    RenderTexture prev = RenderTexture.active; RenderTexture.active = rt;
+                    var tx = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false); tx.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0); tx.Apply();
+                    RenderTexture.active = prev;
+                    string f = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "pluie-rt.png");
+                    System.IO.File.WriteAllBytes(f, tx.EncodeToPNG()); UnityEngine.Object.Destroy(tx);
+                    Log.Info("standalone : coop, texture de pluie " + rt.width + "x" + rt.height + " -> " + f);
+                }
+            }
+            if (host && wOn > 0f && st != null && t > wOn + 2f && Time.time >= wLog) { wLog = Time.time + 1f; Log.Info("standalone : coop, essuie-glaces " + st.WipersOn + " phase " + st.WiperPhase.ToString("F2") + " balai " + (st.Wipers[0] != null ? st.Wipers[0].localEulerAngles.ToString("F0") : "absent") + " dt " + Time.deltaTime.ToString("F3")); }
             if (host && cStep == 3 && t > 75f && t < 76.5f) SetHorn(b, st, true, true);
             if (host && cStep == 3 && t > 78f)
             {
