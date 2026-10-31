@@ -25,6 +25,17 @@ namespace MWCoop
     //    ne recopie leurs variables (FuseState et Tightness sont envoyes ici).
     //    HouseElectricity 'Status' (coupure : lampes eteintes, 'Lights off 2' / 'State 10') : etat de l'hote envoye ; un
     //    invite reste allume plus de 3 s alors que l'hote est coupe (ou l'inverse) : recale (au plus une fois par 30 s).
+    //    Orage : la foudre (MAP/CloudSystem/.../Thunder n::Logic, tiree au sort chez chacun) donne GLOBALEVENT a 'Status' ;
+    //    sa distance tire {Blackout} (0-2 s au loin, jusqu'a 3000 s tout pres), puis 'Cut off' diffuse ELEC_CUTOFF et
+    //    'Lights off 2' attend {Blackout}. ELEC_CUTOFF etait rejoue chez l'autre, qui attendait SON {Blackout} (reste d'une
+    //    autre foudre : des minutes) ; et un invite arrive pendant l'orage ne savait rien de l'hote (envoye seulement quand
+    //    il change, releve une fois par seconde : une coupure d'une seconde passait entre deux releves) -- lumieres
+    //    eteintes pour de bon chez l'invite (Markos, dossier #32, 31/10). Maintenant :
+    //     - l'hote releve 4 fois par seconde et renvoie son etat toutes les 5 s ;
+    //     - chez un invite, la coupure de sa propre foudre ('Cut off') est bloquee : l'hote decide ;
+    //     - coupe chez un invite, 'Lights off 2' attend l'hote ({Blackout} pousse a une heure) : courant revenu chez
+    //       l'hote et la (globale HouseElectricity), rallume 1 s apres, sans la limite des 30 s.
+    //    [Test] CoupureAncienne=1 : comme avant.
     // 2) KILJU. Seau EQUIPMENTS/bucket(itemx) :: Use (Sugar, Yeast, Water, Alcohol, Time, LidOn, KiljuFinished...) : le
     //    monde ne le suit pas ((itemx)), chacun brassait le sien. Un joueur fait autorite (l'hote au chargement, puis le
     //    dernier qui a tenu le seau ou son couvercle, ou y a jete sucre ou levure) : il envoie les variables du seau
@@ -44,7 +55,7 @@ namespace MWCoop
         const string Mod = "maison";
         const int K_Fuse = 0, K_Status = 1, K_Brew = 2, K_Lid = 3;
         public const int K_FleaPlaced = 6, K_FleaCredit = 7;   // marche aux puces (Wallet)
-        const int HK_Blow = 0, HK_Ingredient = 1, HK_Lid = 2, HK_Freeze = 3, HK_Player = 4, HK_LetsSee = 5;
+        const int HK_Blow = 0, HK_Ingredient = 1, HK_Lid = 2, HK_Freeze = 3, HK_Player = 4, HK_LetsSee = 5, HK_CutOff = 6, HK_LightsOff = 7;
 
         class Hook : ModHook
         {
@@ -57,19 +68,19 @@ namespace MWCoop
             }
         }
 
-        static float startAt = -1, nextHookCheck, nextPoll, nextFull, nextStatus, nextRescan, nextBrew;
+        static float startAt = -1, nextHookCheck, nextPoll, nextFull, nextStatus, nextStatusFull, nextRescan, nextBrew;
         static bool resolved, leftHooked;
 
         public static void OnLevelLoaded()
         {
             Unmute();
-            holders.Clear(); holderOf.Clear(); statuses.Clear(); heldAt.Clear();
+            holders.Clear(); holderOf.Clear(); statuses.Clear(); heldAt.Clear(); statusLogs = 0;
             hand = null; resolved = false; applyingHolder = null;
             bucket = lid = null; brew = lidRemoval = ingredients = jokke = fill = null;
             lidHooked = ingHooked = jokkeHooked = fillHooked = false;
             brewAuth = 0; brewSig = ""; lastBrewSent = -100; brewDirty = false; jokkeHere = true; jokkeCut = false;
             brewApplied = brewSent = 0;
-            testStep = testStep2 = 0; testLog = 0; testDescribed = false; testCan = null;
+            testStep = testStep2 = 0; testLog = 0; testDescribed = false; testCan = null; cutT0 = -1;
             // Avant le releve du monde (16 s) : les porte-fusibles, le seau et Jokke sont a ce module.
             startAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 8f : -1;
             nextRescan = Time.realtimeSinceStartup + 40f;
@@ -94,7 +105,7 @@ namespace MWCoop
             if (now >= nextHookCheck) { nextHookCheck = now + 1f; HookAll(); }
             if (now >= nextPoll) { nextPoll = now + 0.2f; PollFuses(now); }
             if (Session.IsHost && now >= nextFull) { nextFull = now + 10f; if (Session.RemoteCount > 0 && holders.Count > 0) SendFuses(holders, true); }
-            if (now >= nextStatus) { nextStatus = now + 1f; StatusStep(now); }
+            if (now >= nextStatus) { nextStatus = now + (OldStatus ? 1f : 0.25f); StatusStep(now); }
             if (now >= nextBrew) { nextBrew = now + 0.25f; BrewStep(now); }
             if (jokkeCut)
             {
@@ -105,6 +116,14 @@ namespace MWCoop
                     try { Game.SetState(jokke, "Wait"); } finally { Replay.Depth--; }
                     Log.Info("kilju : Jokke revient a 'Wait' ici (le verdict et la paie sont chez celui qui a pose la canette)");
                 }
+            }
+            foreach (Status s in statuses)
+            {
+                if (!s.CutBack) continue;
+                s.CutBack = false;
+                if (s.F == null || s.F.ActiveStateName != "Cut off") continue;
+                Replay.Depth++;
+                try { Game.SetState(s.F, "State 1"); } finally { Replay.Depth--; }   // ('Cut off' n'a pas de sortie : ELEC_CUTOFF l'en tirait)
             }
             if (now >= nextRescan) { nextRescan = now + 30f; ScanHolders(); }   // porte-fusible retire puis remis : meme automate
         }
@@ -199,6 +218,14 @@ namespace MWCoop
                 Inject(jokke, "Lets see", HK_LetsSee, null);
                 Log.Info("kilju : Jokke (CanTrigger) suivi");
             }
+            if (!OldStatus)
+                foreach (Status s in statuses)
+                {
+                    if (s.Hooked || !Ready(s.F)) continue;
+                    s.Hooked = true;
+                    bool a = Inject(s.F, "Cut off", HK_CutOff, s) != null, b = Inject(s.F, "Lights off 2", HK_LightsOff, s) != null;
+                    Log.Info("maison : coupure " + s.Key + " suivie (orage " + (a ? "ok" : "absent") + ", attente " + (b ? "ok" : "absente") + ", Blackout " + (s.Blackout != null ? "ok" : "absent") + ")");
+                }
         }
 
         static void OnHook(Hook h)
@@ -219,6 +246,8 @@ namespace MWCoop
                 case HK_Player:
                     if (!jokkeHere && Replay.Depth == 0) MuteAfter(h, null);   // tout fini d'office : FINISHED -> 'Lets see'
                     break;
+                case HK_CutOff: OnStormCut((Status)h.Target, h); break;
+                case HK_LightsOff: OnLightsOff((Status)h.Target); break;
                 case HK_LetsSee:
                     if (!jokkeHere && Replay.Depth == 0)
                     {
@@ -433,8 +462,35 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- coupure (HouseElectricity 'Status')
-        class Status { public string Key; public PlayMakerFSM F; public string Host, Sent; public float DiffSince = -1, FixedAt = -100; }
+        class Status { public string Key; public PlayMakerFSM F; public FsmFloat Blackout; public string Host, Sent; public float DiffSince = -1, FixedAt = -100, HostAt = -100; public bool Hooked, CutBack; }
         static readonly List<Status> statuses = new List<Status>();
+        static bool OldStatus { get { return Config.GetInt("Test", "CoupureAncienne", 0) != 0; } }
+        static int statusLogs;
+
+        // Courant de la maison ici (globale HouseElectricity, recopiee de l'hote ; absente : on suppose oui).
+        static bool Power()
+        {
+            FsmBool v = FsmVariables.GlobalVariables.FindFsmBool("HouseElectricity");
+            return v == null || v.Value;
+        }
+
+        // 'Cut off' (orage : State 9 -> 'Cut off' -> ELEC_CUTOFF a tous) : chez un invite, bloque s'il vient de sa propre foudre.
+        static void OnStormCut(Status s, Hook h)
+        {
+            if (Session.IsHost || Replay.Depth > 0) return;
+            MuteAfter(h, null);
+            s.CutBack = true;
+            if (statusLogs++ < 20) Log.Info("maison : coupure " + s.Key + " par la foudre de cet invite, bloquee (l'hote decide)");
+        }
+
+        // 'Lights off 2' chez un invite qui connait l'hote : attend le retour du courant chez lui (StatusStep), pas {Blackout}.
+        static void OnLightsOff(Status s)
+        {
+            if (Session.IsHost || s.Blackout == null || s.Host == null || Time.realtimeSinceStartup - s.HostAt > 15f) return;
+            float was = s.Blackout.Value;
+            s.Blackout.Value = 3600f;
+            if (statusLogs++ < 20) Log.Info("maison : coupure " + s.Key + " ici (hote " + s.Host + ") : attend le courant de l'hote (Blackout " + was.ToString("F1") + " -> 3600)");
+        }
 
         static void ScanStatus()
         {
@@ -443,19 +499,20 @@ namespace MWCoop
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Status" || f.gameObject.name != "HouseElectricity") continue;
                 if (!f.transform.root.gameObject.activeInHierarchy) continue;
-                statuses.Add(new Status { Key = Recon.Path(f.transform), F = f });
+                statuses.Add(new Status { Key = Recon.Path(f.transform), F = f, Blackout = f.FsmVariables.FindFsmFloat("Blackout") });
             }
         }
 
         static bool Off(string s) { return s == "Lights off 2" || s == "State 10"; }
 
-        // Home : U8 joueur, U8 K_Status, U8 n, (Str compteur, Str etat) x n (hote -> invites, quand un etat change).
+        // Home : U8 joueur, U8 K_Status, U8 n, (Str compteur, Str etat) x n (hote -> invites, quand un etat change, et toutes les 5 s).
         static void StatusStep(float now)
         {
             if (Session.IsHost)
             {
                 bool changed = false;
                 foreach (Status s in statuses) if (s.F != null && s.F.ActiveStateName != s.Sent) changed = true;
+                if (!OldStatus && now >= nextStatusFull) { nextStatusFull = now + 5f; changed = statuses.Count > 0; }
                 if (!changed || Session.RemoteCount == 0) return;
                 var w = new NetWriter(Msg.Home).U8(Session.LocalId).U8(K_Status).U8(statuses.Count);
                 foreach (Status s in statuses) { s.Sent = s.F != null ? s.F.ActiveStateName : ""; w.Str(s.Key).Str(s.Sent ?? ""); }
@@ -468,6 +525,15 @@ namespace MWCoop
                 string local = s.F.ActiveStateName;
                 if (Off(s.Host) == Off(local)) { s.DiffSince = -1; continue; }
                 if (s.DiffSince < 0) { s.DiffSince = now; continue; }
+                // Courant revenu chez l'hote et ici, coupe encore ici ({Blackout} d'ici, ou attente de l'hote) : rallume vite.
+                if (!OldStatus && !Off(s.Host) && Power() && now - s.DiffSince >= 1f)
+                {
+                    s.DiffSince = -1;
+                    Replay.Depth++;
+                    try { Game.SetState(s.F, "Reset mat"); } finally { Replay.Depth--; }
+                    if (statusLogs++ < 40) Log.Info("maison : electricite " + s.Key + " rallumee comme chez l'hote (" + s.Host + ") : " + local + " -> " + s.F.ActiveStateName);
+                    continue;
+                }
                 if (now - s.DiffSince < 3f || now - s.FixedAt < 30f) continue;
                 s.DiffSince = -1; s.FixedAt = now;
                 Replay.Depth++;
@@ -482,7 +548,7 @@ namespace MWCoop
             for (int i = 0; i < n; i++)
             {
                 string key = r.Str(), st = r.Str();
-                foreach (Status s in statuses) if (s.Key == key) s.Host = st;
+                foreach (Status s in statuses) if (s.Key == key) { s.Host = st; s.HostAt = Time.realtimeSinceStartup; }
             }
         }
 
@@ -704,6 +770,54 @@ namespace MWCoop
             if (mode == "fusible") TestFuse(t);
             else if (mode == "kilju") TestKilju(t);
             else if (mode == "kiljuremplir") TestFill(t);
+            else if (mode == "coupure") TestCut(t);
+        }
+
+        // [Test] Autotest=coupure : coupures de l'orage, a partir de T = 20 s apres que l'autre est en partie. T : {Blackout} de
+        //   l'invite a 2000 (reste d'une foudre toute proche) ; T+5 : l'hote coupe pour 0.4 s ('Cut off' comme sa foudre,
+        //   Blackout 0.4 ; le monde ne le rejoue pas). T+8 : chez l'invite, ELEC_CUTOFF de l'hote rejoue ('Lights off 2' sous
+        //   Replay, son Blackout 2000). T+18 : {Blackout} de l'hote a 2000 ; T+20 : la foudre de l'invite coupe ('Cut off').
+        //   Chacun note chaque seconde de T a T+35 « autotest : coupure ». Attendu : invite rallume ~1 s apres T+8 ; a T+20
+        //   personne ne s'eteint (bloque chez l'invite). Avant (CoupureAncienne=1) : invite eteint pour de bon des T+8.
+        static float cutT0 = -1;
+        static void TestCut(float t)
+        {
+            Status s = statuses.Count > 0 ? statuses[0] : null;
+            if (s == null || s.F == null) { if (testStep == 0 && t > 30f) { testStep = 9; Log.Info("autotest : coupure, HouseElectricity::Status absent"); } return; }
+            float now = Time.realtimeSinceStartup;
+            if (cutT0 < 0) { if (!Jobs.OtherInGame(20f)) return; cutT0 = now; testLog = -10; }
+            float d = now - cutT0;
+            if (!Session.IsHost && testStep == 0) { testStep = 1; if (s.Blackout != null) s.Blackout.Value = 2000f; Log.Info("autotest : coupure, Blackout de l'invite a 2000"); }
+            if (Session.IsHost && testStep == 0 && d > 5f)
+            {
+                testStep = 1;
+                if (s.Blackout != null) s.Blackout.Value = 0.4f;
+                string before = s.F.ActiveStateName;
+                Game.SetState(s.F, "Cut off");
+                Log.Info("autotest : coupure, l'hote coupe 0.4 s ('Cut off') : " + before + " -> " + s.F.ActiveStateName);
+            }
+            if (!Session.IsHost && testStep == 1 && d > 8f)
+            {
+                testStep = 3;
+                string before = s.F.ActiveStateName;
+                Replay.Depth++;
+                try { Game.SetState(s.F, "Lights off 2"); } finally { Replay.Depth--; }
+                Log.Info("autotest : coupure, ELEC_CUTOFF de l'hote rejoue ici ('Lights off 2', Blackout d'ici) : " + before + " -> " + s.F.ActiveStateName);
+            }
+            if (Session.IsHost && testStep == 1 && d > 18f) { testStep = 2; if (s.Blackout != null) s.Blackout.Value = 2000f; Log.Info("autotest : coupure, Blackout de l'hote a 2000"); }
+            if (!Session.IsHost && testStep == 3 && d > 20f)
+            {
+                testStep = 2;
+                string before = s.F.ActiveStateName;
+                Game.SetState(s.F, "Cut off");
+                Log.Info("autotest : coupure, la foudre de l'invite coupe ('Cut off') : " + before + " -> " + s.F.ActiveStateName);
+            }
+            if (d < 36f && d - testLog >= 1f)
+            {
+                testLog = d;
+                Log.Info("autotest : coupure, T+" + d.ToString("F0") + " " + s.F.ActiveStateName + (Off(s.F.ActiveStateName) ? " ETEINT" : " allume") + ", Blackout "
+                         + (s.Blackout != null ? s.Blackout.Value.ToString("F1") : "?") + ", courant " + Power() + ", hote " + (s.Host ?? "-"));
+            }
         }
 
         static string SlotName(Holder h) { GameObject s = GoVar(h.F, "Slot"); return s != null ? s.name : h.Key; }
