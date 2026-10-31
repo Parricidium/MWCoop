@@ -1408,7 +1408,7 @@ namespace MWCoop
                         Rect rk = rear[r] ? rect[0] : rect[k];
                         uv[i] = new Vector2(rk.x + rk.width * (0.02f + 0.96f * a), rk.y + rk.height * (0.02f + 0.96f * c));
                     }
-                    m.uv = uv; rs[r].sharedMesh = m;
+                    m.uv = uv; FaceNormals(m); rs[r].sharedMesh = m;
                     int[] nc = new int[3]; foreach (int q in cl[r]) nc[q]++;
                     Vector2 ul = uv.Length > 0 ? uv[0] : Vector2.zero, uh = ul; foreach (Vector2 q in uv) { ul = Vector2.Min(ul, q); uh = Vector2.Max(uh, q); }
                     Log.Info("standalone : pluie, " + Recon.Path(rs[r].transform) + " : " + uv.Length + " sommets (pare-brise " + nc[0] + ", cotes " + nc[1] + ", arriere " + nc[2] + (rear[r] ? ", composant de la lunette" : "") + "), uv " + ul.ToString("F2") + ".." + uh.ToString("F2") + ", bornes " + rs[r].sharedMesh.bounds.size.ToString("F2"));
@@ -1491,6 +1491,24 @@ namespace MWCoop
         static float RearSweep { get { return Config.GetFloat("Test", "EssuieArCourse", 100f); } }
         static float RainWet { get { return Config.GetFloat("Test", "PluieTeinte", 0.30f); } }
         static float RainOpacityK { get { return Config.GetFloat("Test", "PluieOpacite", 0.38f); } }
+        // (JD 31/10, video : vitres de gauche et lunette sous un voile blanc, celles de droite justes -- sur les faces vues de dehors, des
+        // normales du modele tournees vers l'interieur (pieces en miroir, verre a deux faces) : le reflet du shader de pluie partait a
+        // l'envers. Normales refaites d'apres le sens de chaque triangle, sommets separes)
+        static void FaceNormals(Mesh m)
+        {
+            Vector3[] v = m.vertices, n0 = m.normals; Vector2[] u = m.uv; int[] t = m.triangles;
+            var nv = new Vector3[t.Length]; var nn = new Vector3[t.Length]; var nu = new Vector2[t.Length]; var nt = new int[t.Length];
+            int inv = 0;
+            for (int i = 0; i + 2 < t.Length; i += 3)
+            {
+                Vector3 a = v[t[i]], b = v[t[i + 1]], c = v[t[i + 2]], n = Vector3.Cross(b - a, c - a).normalized;
+                if (n0.Length == v.Length && Vector3.Dot(n0[t[i]] + n0[t[i + 1]] + n0[t[i + 2]], n) < 0f) inv++;
+                for (int j = 0; j < 3; j++) { nv[i + j] = v[t[i + j]]; nn[i + j] = n; nu[i + j] = u.Length == v.Length ? u[t[i + j]] : Vector2.zero; nt[i + j] = i + j; }
+            }
+            Log.Info("standalone : pluie, " + m.name + " : " + inv + " triangle(s) sur " + t.Length / 3 + " avaient leur normale a l'envers");
+            string nm = m.name; m.Clear(); m.name = nm;
+            m.vertices = nv; m.normals = nn; m.uv = nu; m.triangles = nt; m.RecalculateBounds();
+        }
         static void RainTick(VazCar.Built b, State st)
         {
             if (st.RainSrc == null) return;
