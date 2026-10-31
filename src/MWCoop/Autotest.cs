@@ -2732,7 +2732,7 @@ namespace MWCoop
         // de la voiture ou l'invite est assis, pendant qu'elle roule : etendue de ses positions (0 attendu ; avant le
         // correctif du 10/10, vitesse x duree d'image vers l'arriere).
         static Transform pietonCible;
-        static bool givreEtat, maillagesDone;
+        static bool givreEtat, maillagesDone, siegesSondes;
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
         static bool taxiOut; static int lastAround;
         public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
@@ -4394,6 +4394,18 @@ namespace MWCoop
                     if (mf.sharedMesh != null)
                         Log.Info("autotest : maillage " + Recon.Path(mf.transform) + " pos " + vb.transform.InverseTransformPoint(mf.transform.position).ToString("F3") + " rot " + (Quaternion.Inverse(vb.rotation) * mf.transform.rotation).eulerAngles.ToString("F0")
                                  + " local " + mf.sharedMesh.bounds.min.ToString("F2") + ".." + mf.sharedMesh.bounds.max.ToString("F2") + (mf.sharedMesh.isReadable ? "" : " (illisible)"));
+            }
+            // ([Test] SondeSieges=<motif> : a 30 s, tous les objets dont le nom contient le motif (sieges de la SATSUMA de My Winter Car,
+            // ceintures de Menor, 31/10) -- chemin, actif, position)
+            if (!siegesSondes && t > 30f && Config.Get("Test", "SondeSieges", "").Length > 0)
+            {
+                siegesSondes = true;
+                string motif = Config.Get("Test", "SondeSieges", "").ToLowerInvariant(), sous = Config.Get("Test", "SondeSous", "").ToLowerInvariant();   // (SondeSous : dans le chemin)
+                int n = 0;
+                foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
+                    if (tr != null && (motif == "*" || tr.name.ToLowerInvariant().Contains(motif)) && tr.hideFlags == HideFlags.None && (sous.Length == 0 || Recon.Path(tr).ToLowerInvariant().Contains(sous)) && n++ < 80)
+                        Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1"));
+                Log.Info("autotest : sonde '" + motif + "' : " + n + " objet(s)");
             }
             // ([Test] GivreEtat=s : a s secondes, les vitres de toutes les voitures -- triche /degivrer, 25/10)
             if (!givreEtat && Config.GetFloat("Test", "GivreEtat", 0f) > 0f && t > Config.GetFloat("Test", "GivreEtat", 0f)) { givreEtat = true; Log.Info("autotest : givre " + Frost.StateAll()); }
