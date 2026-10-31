@@ -76,7 +76,7 @@ namespace MWCoop
             zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
             SeatFiles.OnLevelLoaded();
-            belts.Clear(); rearModels.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false; blockedHandle = null;
+            belts.Clear(); rearModels.Clear(); partFitted.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false; blockedHandle = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -919,6 +919,7 @@ namespace MWCoop
                 if (beltOn) { beltOn = false; SendSeat(current.Car, current.Index, headLocal); Log.Info("ceinture arriere : option coupee, detachee"); }
                 return;
             }
+            if (HasRearModel(current.CarT) && !RearPartFitted(current.CarT)) return;   // (SATSUMA sans banquette : pas de ceinture)
             Belt b = BeltOf(current.CarT);
             if (b != null && Mathf.Abs(current.Head.x) < 0.15f) { RearMiddleInput(); return; }   // (place du milieu)
             Vector3 off; bool mir;
@@ -1115,12 +1116,17 @@ namespace MWCoop
         // et la CORRIS une ceinture du milieu (« middle seatbelt, just like the front seatbelt of the bachglotz, you just click »).
         // Bulge : bombe de la ceinture bouclee devant la poitrine (m ; [Test] CeintureArrBombe la remplace) -- CORRIS : l'avatar y est assis
         // plus en avant que la ceinture de Menor, elle restait dans le buste (essai du 31/10).
-        class RearKind { public string Car, Key; public bool Middle; public float Bulge = 0.04f; public Mesh[] Meshes; public bool Tried; }
+        // Msc : modele de My Summer Car (les autres : My Winter Car) ; Offset / Turn : pose du modele dans la voiture (Turn : demi-tour
+        // autour de y), [Test] CeintureArrDecal=x,y,z et CeintureArrDemiTour=0|1 les remplacent (reglage en jeu).
+        class RearKind { public string Car, Key, NeedPart; public bool Middle, Msc, Turn; public float Bulge = 0.04f; public Vector3 Offset; public Mesh[] Meshes; public bool Tried; }
         static readonly RearKind[] RearKinds = {
             new RearKind { Car = "SORBET", Key = "arr" },
             new RearKind { Car = "MACHTWAGEN", Key = "taxi2", Bulge = 0.06f },
-            new RearKind { Car = "CORRIS", Key = "corris", Middle = true, Bulge = 0.12f } };
-        static readonly string[] RearNames = { "pieces-g", "languette-g", "bouclee-g", "pieces-d", "languette-d", "bouclee-d", "milieu" };   // (par cote, 3 k ; puis le milieu)
+            new RearKind { Car = "CORRIS", Key = "corris", Middle = true, Bulge = 0.12f },
+            // SATSUMA de My Summer Car (Menor 31/10 ; JD : « My Summer Car ») : banquette « seat rear(Clone) » sous Interior/pivot_seat_rear,
+            // a (0 ; -0,09 ; -0,65) de la racine (sauvegarde « Satsuma Save Game » de JD) ; le modele de Menor est dans le repere de cette banquette
+            new RearKind { Car = "SATSUMA", Key = "satsuma", Msc = true, Bulge = 0.06f, Offset = new Vector3(0f, -0.09f, -0.65f), NeedPart = "seat rear(Clone)" } };   // (seulement banquette montee)
+        static readonly string[] RearNames = { "pieces-g", "languette-g", "bouclee-g", "pieces-d", "languette-d", "bouclee-d", "milieu", "pieces-m" };   // (par cote, 3 k ; puis le milieu ; boucles du milieu, SATSUMA)
         static RearKind KindOf(Transform car)
         {
             if (car == null) return null;
@@ -1135,7 +1141,7 @@ namespace MWCoop
             if (!rearAtlasTried)
             {
                 rearAtlasTried = true;
-                string want = Config.Get("Test", "CeintureAtlas", "ATLAS_MOTOR_MWC");
+                string want = Config.Get("Test", "CeintureAtlas", Game.Msc ? "ATLAS_MOTORPARTS" : "ATLAS_MOTOR_MWC");   // (My Summer Car : son atlas des pieces, meme disposition)
                 foreach (Material mt in Resources.FindObjectsOfTypeAll<Material>())
                     if (mt != null && mt.mainTexture != null && mt.mainTexture.name == want) { rearAtlas = mt; break; }
                 Log.Info("ceintures arriere : atlas " + want + (rearAtlas != null ? " trouve (matiere " + rearAtlas.name + ", shader " + rearAtlas.shader.name + ")" : " introuvable, matiere de la sangle"));
@@ -1149,8 +1155,9 @@ namespace MWCoop
             try
             {
                 k.Meshes = new Mesh[RearNames.Length];
-                for (int i = 0; i < RearNames.Length; i++)
-                    if (i < 6 || k.Middle) k.Meshes[i] = SleepingBags.LoadMesh("MWCoop." + k.Key + "-" + RearNames[i] + ".mwm", 1f);
+                for (int i = 0; i < 6; i++) k.Meshes[i] = SleepingBags.LoadMesh("MWCoop." + k.Key + "-" + RearNames[i] + ".mwm", 1f);
+                if (k.Middle) k.Meshes[6] = SleepingBags.LoadMesh("MWCoop." + k.Key + "-" + RearNames[6] + ".mwm", 1f);
+                try { k.Meshes[7] = SleepingBags.LoadMesh("MWCoop." + k.Key + "-" + RearNames[7] + ".mwm", 1f); } catch { }   // (facultatif)
             }
             catch (System.Exception e) { k.Meshes = null; Log.Warn("ceintures arriere (" + k.Car + ") : modele illisible (" + e.Message + "), copie de la ceinture avant"); }
             return k.Meshes;
@@ -1186,14 +1193,29 @@ namespace MWCoop
 
         static bool HasRearModel(Transform car)
         {
-            if (car == null || Game.Msc || Config.GetInt("Test", "CeinturesArriereCopie", 0) != 0) return false;
+            if (car == null || Config.GetInt("Test", "CeinturesArriereCopie", 0) != 0) return false;
             RearKind k = KindOf(car);
-            return k != null && RearMeshes(k) != null;
+            return k != null && k.Msc == Game.Msc && RearMeshes(k) != null;
         }
 
+        // Piece dont le modele a besoin (RearKind.NeedPart : la banquette de la SATSUMA, piece montee = enfant de la voiture), relue toutes les 2 s.
+        static readonly Dictionary<Transform, KeyValuePair<float, bool>> partFitted = new Dictionary<Transform, KeyValuePair<float, bool>>();
+        static bool RearPartFitted(Transform car)
+        {
+            RearKind k = KindOf(car);
+            if (k == null || k.NeedPart == null) return true;
+            KeyValuePair<float, bool> c;
+            float now = Time.realtimeSinceStartup;
+            if (partFitted.TryGetValue(car, out c) && now < c.Key) return c.Value;
+            bool fitted = false;
+            foreach (Transform t in car.GetComponentsInChildren<Transform>()) if (t.name == k.NeedPart) { fitted = true; break; }
+            partFitted[car] = new KeyValuePair<float, bool>(now + 2f, fitted);
+            return fitted;
+        }
         static void UpdateRearModel(Transform car, Belt b, bool on, HashSet<int> belted)
         {
             RearModel m; rearModels.TryGetValue(car, out m);
+            if (on && !RearPartFitted(car)) on = false;   // (SATSUMA sans sa banquette : rien a montrer)
             if (!on) { if (m != null && m.Root != null && m.Root.activeSelf) m.Root.SetActive(false); return; }
             if (m != null && m.Root != null && m.Gen != SeatFiles.Generation) { Object.Destroy(m.Root); m = null; }   // (fichier des places relu : refaite)
             if (m == null || m.Root == null)
@@ -1278,7 +1300,10 @@ namespace MWCoop
             var m = new RearModel { Root = new GameObject("MWCoop-CeinturesArriere") };
             Transform rt = m.Root.transform;
             rt.parent = car;
-            rt.localPosition = Vector3.zero; rt.localRotation = Quaternion.identity;   // (repere de la voiture : celui des modeles de Menos et de Menor)
+            // (repere de la voiture : celui des modeles de Menos et de Menor ; SATSUMA : pose a la banquette)
+            string dec = Config.Get("Test", "CeintureArrDecal", "");
+            rt.localPosition = dec.Length > 0 ? ParseV(dec, kind.Offset) : kind.Offset;
+            rt.localRotation = Config.GetInt("Test", "CeintureArrDemiTour", kind.Turn ? 1 : 0) != 0 ? Quaternion.Euler(0f, 180f, 0f) : Quaternion.identity;
             Vector3 cs = car.lossyScale;
             rt.localScale = new Vector3(1f / cs.x, 1f / cs.y, 1f / cs.z);
             // (metal : l'atlas de la ceinture du conducteur elle-meme -- sa 2e matiere ; JD 28/10, le plastique noir de la languette sortait
@@ -1329,6 +1354,8 @@ namespace MWCoop
                     diag.Append(" ; ").Append(sd).Append(" decale de ").Append(fb.ModelPos.ToString("F3")).Append(" tourne de ").Append(fb.ModelRot.eulerAngles.ToString("F1")).Append(" (place ").Append(s.Index).Append(")");
                 }
             }
+            // boucles du milieu (SATSUMA : celles des deux places laterales, au milieu de la banquette) : toujours la
+            if (ms.Length > 7 && ms[7] != null) part("PiecesM", ms[7], rt);
             // place du milieu (CORRIS) : sa ceinture ventrale, montree bouclee seulement ; boucle visee = centre de ses bornes
             if (ms.Length > 6 && ms[6] != null)
             {

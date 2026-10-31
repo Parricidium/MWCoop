@@ -753,6 +753,55 @@ namespace MWCoop
             else if (Config.Get("Test", "RegarderPos", "").Length > 0 && t > 9f) FacePoint(Config.Get("Test", "RegarderPos", ""));
         }
 
+        // [Test] Autotest=ceinture (MWC et MSC -- SATSUMA de My Summer Car, ceintures de Menor 31/10)
+        static void CeintureTest(string mode, float t)
+        {
+            // [Test] Autotest=ceinture : l'invite s'assoit a l'avant de [Test] TestVoiture, attache sa ceinture a 36 s ;
+            // l'hote le regarde (CameraAvatar) et voit la ceinture bouclee (journal + captures).
+            if (mode == "ceinture" && !Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "CeinturePlace", 0))); }
+            // [Test] CeintureVisee=1 : avant d'attacher, le regard vers la ceinture rangee (37-41 s) puis la boucle (42-46 s),
+            // ce que voit la visee note chaque seconde, et captures (ecran-ceinture-*).
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) != 0 && step >= 1 && step < 9 && t > 37f && t < 47f)
+            {
+                Log.Info("autotest : " + Seats.TestBeltLook(t < 42f ? 0 : 1));
+                if (Time.realtimeSinceStartup >= rivLog) { rivLog = Time.realtimeSinceStartup + 1f; Log.Info("autotest : " + Seats.TestBeltAim()); }
+                if (step == 1 && t > 39f) { step = 3; CaptureSoon("ceinture-rangee", 0.1f); }
+                if (step == 3 && t > 44f) { step = 4; CaptureSoon("ceinture-boucle", 0.1f); }
+            }
+            // [Test] CeintureTenue=1 : ceinture tenue de 36 a 44 s (regard vers la boucle), capture ecran-ceinture-tenue, puis bouclee.
+            // (place arriere : camera d'essai vers la languette tenue puis vers la boucle, capture ecran-ceinture-bouclee-arriere)
+            bool tenueArr = Config.GetInt("Test", "CeinturePlace", 0) > 0;
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureTenue", 0) != 0 && step >= 1 && step < (tenueArr ? 7 : 5) && t > 36f)
+            {
+                if (Config.GetInt("Test", "CeintureRegard", 0) != 0) Seats.TestBeltLook(1);
+                if (tenueArr) BeltLookLate = t < 44f ? 0 : 1;
+                if (tenueArr && step == 5 && t > 47f) { step = 6; CaptureSoon("ceinture-bouclee-arriere", 0.05f); }
+                if (t < 44f) { string tenue = Seats.TestPull(true); if (Time.frameCount % 120 == 0) Log.Info("autotest : " + tenue); }
+                if (step == 1 && t > 41f) { step = 3; CaptureSoon("ceinture-tenue", 0.05f); }
+                if (step == 3 && t > 44f) { step = 4; Log.Info("autotest : " + Seats.TestPull(false)); }
+                if (step == 4 && t > 45f) { step = 5; Log.Info("autotest : " + (Config.GetInt("Test", "CeinturePlace", 0) > 0 ? Seats.TestBeltState() : Seats.TestBelt())); }   // (arriere : bouclee en lachant sur la boucle)
+                if (step == 4 && t > 47f) { step = 5; CaptureSoon("ceinture-bouclee-invite", 0.05f); }
+            }
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && Config.GetInt("Test", "CeintureTenue", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
+            // (puis la vue du passager vers sa ceinture bouclee : ecran-ceinture-vue-passager)
+            if (mode == "ceinture" && !Net.Session.IsHost && step >= 2 && step < 4 && t > 38f) { BeltLookLate = Config.GetInt("Test", "CeintureVueRegard", 1); if (step == 2 && t > 41f) { step = 3; CaptureSoon("ceinture-vue-passager", 0.05f); Log.Info("autotest : " + Seats.TestBeltCopy()); } }
+            if (mode == "ceinture" && Net.Session.IsHost && t > 30f && Config.Get("Test", "CameraCeinture", "") != "libre")   // (libre : CameraVoiture garde la camera)
+            {
+                // camera d'essai a la place du conducteur, vers le passager avant
+                Transform car; Vector3 head; string cn;
+                for (int id = 1; id < 8; id++)
+                    if (Seats.RemoteSeat(id, out car, out head, out cn) && car != null)
+                    {
+                        if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
+                        bool front = Config.Get("Test", "CameraCeinture", "") == "avant";   // (de face, depuis le tableau de bord)
+                        testCam.transform.position = car.TransformPoint(front ? head + new Vector3(Config.GetFloat("Test", "CeintureCamX", -0.12f), Config.GetFloat("Test", "CeintureCamY", 0f), Config.GetFloat("Test", "CeintureCamZ", 0.42f)) : new Vector3(-head.x * 0.7f, head.y + 0.05f, head.z + 0.25f));
+                        testCam.transform.LookAt(car.TransformPoint(head + new Vector3(Config.GetFloat("Test", "CeintureViseX", 0f), Config.GetFloat("Test", "CeintureViseY", -0.3f), 0f)), car.up);
+                        if (step == 0 && t > Config.GetInt("Test", "CeintureCapture", 110)) { step = 1; CaptureSoon("ceinture-hote", 0.1f); }
+                        break;
+                    }
+            }
+        }
+
         // [Test] Autotest=conduite : MWC et MSC.
         static void Conduite(float t)
         {
@@ -2868,6 +2917,36 @@ namespace MWCoop
                 DumpFsms(string.Join(";", specs.ToArray()));
             }
             if (mode == "unitycardump" && t > 35f && !done) { done = true; UnityCarDump.Run(); }   // (pilote standalone, 28/10 : champs UnityCar des voitures, les deux jeux)
+            // ([Test] SondeSieges=<motif> : a 30 s, tous les objets dont le nom contient le motif (sieges de la SATSUMA de My Winter Car,
+            // ceintures de Menor, 31/10) -- chemin, actif, position)
+            if (!siegesSondes && t > 30f && Config.Get("Test", "SondeSieges", "").Length > 0)
+            {
+                siegesSondes = true;
+                string motif = Config.Get("Test", "SondeSieges", "").ToLowerInvariant(), sous = Config.Get("Test", "SondeSous", "").ToLowerInvariant();   // (SondeSous : dans le chemin)
+                int n = 0;
+                foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
+                    if (tr != null && (motif == "*" || tr.name.ToLowerInvariant().Contains(motif)) && tr.hideFlags == HideFlags.None && (sous.Length == 0 || Recon.Path(tr).ToLowerInvariant().Contains(sous)) && n++ < 80)
+                        Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1") + ", racine " + tr.root.InverseTransformPoint(tr.position).ToString("F2"));
+                Log.Info("autotest : sonde '" + motif + "' : " + n + " objet(s)");
+                string tx = Config.Get("Test", "SondeTextures", "").ToLowerInvariant();   // (textures dont le nom contient tx : atlas des ceintures sur My Summer Car)
+                if (tx.Length > 0) foreach (Material mt in Resources.FindObjectsOfTypeAll<Material>()) if (mt != null && mt.mainTexture != null && mt.mainTexture.name.ToLowerInvariant().Contains(tx)) Log.Info("autotest : sonde matiere " + mt.name + " [" + mt.shader.name + "] texture " + mt.mainTexture.name + " " + mt.mainTexture.width + "x" + mt.mainTexture.height);
+                // ([Test] SondeTextureCopie=<nom exact> : la texture recopiee dans dumps/texture-<nom>.png, par une RenderTexture -- textures illisibles)
+                string tc = Config.Get("Test", "SondeTextureCopie", "");
+                if (tc.Length > 0)
+                    foreach (Texture2D tex in Resources.FindObjectsOfTypeAll<Texture2D>())
+                        if (tex != null && tex.name == tc)
+                        {
+                            var rt = RenderTexture.GetTemporary(tex.width, tex.height, 0);
+                            Graphics.Blit(tex, rt); RenderTexture.active = rt;
+                            var cp = new Texture2D(tex.width, tex.height, TextureFormat.RGB24, false);
+                            cp.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0); cp.Apply();
+                            RenderTexture.active = null; RenderTexture.ReleaseTemporary(rt);
+                            string f = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "texture-" + tc + ".png");
+                            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(f));
+                            System.IO.File.WriteAllBytes(f, cp.EncodeToPNG()); Object.Destroy(cp);
+                            Log.Info("autotest : sonde texture copiee " + f); break;
+                        }
+            }
             if (Game.Msc)   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC ; vidage d'automates : les deux jeux)
             {
                 if (mode == "kupladump" && t > 25f && !done) { done = true; KuplaDump(); }   // (Kupla : les deux jeux)
@@ -3126,6 +3205,7 @@ namespace MWCoop
                 }
                 Spy(t);
                 if (LightsGuard.KeyReleve) { LightsGuard.KeyReleve = false; MscEtat(); }   // (mscphares : etat de la Satsuma a chaque releve, pour etat-diff.py)
+                CeintureTest(mode, t);
                 MscTest(mode, t); return;
             }
             if (Config.Get("Test", "Triche", "").Length > 0 && t > Config.GetFloat("Test", "TricheA", 30f) && !tricheDone) { tricheDone = true; foreach (string tc in Config.Get("Test", "Triche", "").Split(';')) if (tc.Trim().Length > 0) Log.Info("autotest : triche " + tc.Trim() + " -> " + (Cheats.Command(tc.Trim()) ?? "ok")); if (Config.GetInt("Test", "TricheCapture", 0) != 0) CaptureSoon("triche", 4f); }   // (« ; » : plusieurs a la suite ; TricheCapture=1 : capture 4 s apres)
@@ -4395,18 +4475,6 @@ namespace MWCoop
                         Log.Info("autotest : maillage " + Recon.Path(mf.transform) + " pos " + vb.transform.InverseTransformPoint(mf.transform.position).ToString("F3") + " rot " + (Quaternion.Inverse(vb.rotation) * mf.transform.rotation).eulerAngles.ToString("F0")
                                  + " local " + mf.sharedMesh.bounds.min.ToString("F2") + ".." + mf.sharedMesh.bounds.max.ToString("F2") + (mf.sharedMesh.isReadable ? "" : " (illisible)"));
             }
-            // ([Test] SondeSieges=<motif> : a 30 s, tous les objets dont le nom contient le motif (sieges de la SATSUMA de My Winter Car,
-            // ceintures de Menor, 31/10) -- chemin, actif, position)
-            if (!siegesSondes && t > 30f && Config.Get("Test", "SondeSieges", "").Length > 0)
-            {
-                siegesSondes = true;
-                string motif = Config.Get("Test", "SondeSieges", "").ToLowerInvariant(), sous = Config.Get("Test", "SondeSous", "").ToLowerInvariant();   // (SondeSous : dans le chemin)
-                int n = 0;
-                foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
-                    if (tr != null && (motif == "*" || tr.name.ToLowerInvariant().Contains(motif)) && tr.hideFlags == HideFlags.None && (sous.Length == 0 || Recon.Path(tr).ToLowerInvariant().Contains(sous)) && n++ < 80)
-                        Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1"));
-                Log.Info("autotest : sonde '" + motif + "' : " + n + " objet(s)");
-            }
             // ([Test] GivreEtat=s : a s secondes, les vitres de toutes les voitures -- triche /degivrer, 25/10)
             if (!givreEtat && Config.GetFloat("Test", "GivreEtat", 0f) > 0f && t > Config.GetFloat("Test", "GivreEtat", 0f)) { givreEtat = true; Log.Info("autotest : givre " + Frost.StateAll()); }
             if (mode == "pieton")
@@ -5457,53 +5525,10 @@ namespace MWCoop
             // [Test] TaxiSorti=1 (tout mode) : taxi JOBS/TAXIJOB/MACHTWAGEN active a 8 s, comme pris pour le service (sinon range,
             // inactif : les places et ceintures arriere du taxi ne s'essaient pas).
             if (!taxiOut && t > 8f && Config.GetInt("Test", "TaxiSorti", 0) != 0) { taxiOut = true; GameObject tx = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN"); if (tx != null && !tx.activeSelf) tx.SetActive(true); Log.Info("autotest : taxi " + (tx == null ? "introuvable" : tx.activeInHierarchy ? "sorti" : "inactif")); }
-            // [Test] Autotest=ceinture : l'invite s'assoit a l'avant de [Test] TestVoiture, attache sa ceinture a 36 s ;
-            // l'hote le regarde (CameraAvatar) et voit la ceinture bouclee (journal + captures).
-            if (mode == "ceinture" && !Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "CeinturePlace", 0))); }
-            // [Test] CeintureVisee=1 : avant d'attacher, le regard vers la ceinture rangee (37-41 s) puis la boucle (42-46 s),
-            // ce que voit la visee note chaque seconde, et captures (ecran-ceinture-*).
-            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) != 0 && step >= 1 && step < 9 && t > 37f && t < 47f)
-            {
-                Log.Info("autotest : " + Seats.TestBeltLook(t < 42f ? 0 : 1));
-                if (Time.realtimeSinceStartup >= rivLog) { rivLog = Time.realtimeSinceStartup + 1f; Log.Info("autotest : " + Seats.TestBeltAim()); }
-                if (step == 1 && t > 39f) { step = 3; CaptureSoon("ceinture-rangee", 0.1f); }
-                if (step == 3 && t > 44f) { step = 4; CaptureSoon("ceinture-boucle", 0.1f); }
-            }
-            // [Test] CeintureTenue=1 : ceinture tenue de 36 a 44 s (regard vers la boucle), capture ecran-ceinture-tenue, puis bouclee.
-            // (place arriere : camera d'essai vers la languette tenue puis vers la boucle, capture ecran-ceinture-bouclee-arriere)
-            bool tenueArr = Config.GetInt("Test", "CeinturePlace", 0) > 0;
-            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureTenue", 0) != 0 && step >= 1 && step < (tenueArr ? 7 : 5) && t > 36f)
-            {
-                if (Config.GetInt("Test", "CeintureRegard", 0) != 0) Seats.TestBeltLook(1);
-                if (tenueArr) BeltLookLate = t < 44f ? 0 : 1;
-                if (tenueArr && step == 5 && t > 47f) { step = 6; CaptureSoon("ceinture-bouclee-arriere", 0.05f); }
-                if (t < 44f) { string tenue = Seats.TestPull(true); if (Time.frameCount % 120 == 0) Log.Info("autotest : " + tenue); }
-                if (step == 1 && t > 41f) { step = 3; CaptureSoon("ceinture-tenue", 0.05f); }
-                if (step == 3 && t > 44f) { step = 4; Log.Info("autotest : " + Seats.TestPull(false)); }
-                if (step == 4 && t > 45f) { step = 5; Log.Info("autotest : " + (Config.GetInt("Test", "CeinturePlace", 0) > 0 ? Seats.TestBeltState() : Seats.TestBelt())); }   // (arriere : bouclee en lachant sur la boucle)
-                if (step == 4 && t > 47f) { step = 5; CaptureSoon("ceinture-bouclee-invite", 0.05f); }
-            }
-            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && Config.GetInt("Test", "CeintureTenue", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
-            // (puis la vue du passager vers sa ceinture bouclee : ecran-ceinture-vue-passager)
-            if (mode == "ceinture" && !Net.Session.IsHost && step >= 2 && step < 4 && t > 38f) { BeltLookLate = Config.GetInt("Test", "CeintureVueRegard", 1); if (step == 2 && t > 41f) { step = 3; CaptureSoon("ceinture-vue-passager", 0.05f); Log.Info("autotest : " + Seats.TestBeltCopy()); } }
+            CeintureTest(mode, t);   // (les deux jeux)
             // [Test] Autotest=apimods : (avec MSCLoader et MWCoopTestMod) l'hote sauvegarde sur place a 20 s : son Mods.txt
             // (compteur du mod d'essai) partira avec la sauvegarde a la partie suivante.
             if (mode == "apimods" && Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : sauvegarde de l'hote"); Game.SaveInPlace(); }
-            if (mode == "ceinture" && Net.Session.IsHost && t > 30f)
-            {
-                // camera d'essai a la place du conducteur, vers le passager avant
-                Transform car; Vector3 head; string cn;
-                for (int id = 1; id < 8; id++)
-                    if (Seats.RemoteSeat(id, out car, out head, out cn) && car != null)
-                    {
-                        if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
-                        bool front = Config.Get("Test", "CameraCeinture", "") == "avant";   // (de face, depuis le tableau de bord)
-                        testCam.transform.position = car.TransformPoint(front ? head + new Vector3(Config.GetFloat("Test", "CeintureCamX", -0.12f), Config.GetFloat("Test", "CeintureCamY", 0f), Config.GetFloat("Test", "CeintureCamZ", 0.42f)) : new Vector3(-head.x * 0.7f, head.y + 0.05f, head.z + 0.25f));
-                        testCam.transform.LookAt(car.TransformPoint(head + new Vector3(Config.GetFloat("Test", "CeintureViseX", 0f), Config.GetFloat("Test", "CeintureViseY", -0.3f), 0f)), car.up);
-                        if (step == 0 && t > Config.GetInt("Test", "CeintureCapture", 110)) { step = 1; CaptureSoon("ceinture-hote", 0.1f); }
-                        break;
-                    }
-            }
             if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "tableau" && t > 35f && !done)
             {

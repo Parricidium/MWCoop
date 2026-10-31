@@ -2,6 +2,7 @@
 (assets/ceintures/<cle>-*.mwm, embarques par build.cmd), sur le systeme de la ceinture du conducteur de la SORBET (Seats.RearModel).
   taxi2  : MACHTWAGEN (le modele du 25/10 refait comme la SORBET v2 : sangle + metal, une languette par cote)
   corris : CORRIS -- deux places laterales + la ceinture du milieu (ventrale, bouclee d'un clic comme celle de la BACHGLOTZ)
+  satsuma: SATSUMA de My Summer Car -- deux places laterales (atlas ATLAS_MOTORPARTS de MSC, meme disposition que celui de MWC)
 Les objets de Menor sont deja dans le repere de la voiture, tournes d'un demi-tour (l'arriere en z positif, comme le taxi du 25/10) :
 repere Unity (x, y, -z), un miroir comme l'import d'un .obj. Par objet : 'parts' -> pieces (ancrages, boucles, sangle rangee),
 'handle' -> languette pendue (place libre), 'fastened' -> ceinture bouclee, 'middle...fastened' -> ceinture du milieu.
@@ -15,7 +16,10 @@ import obj2mwm
 
 XF = lambda x, y, z: (x, y, -z)
 CARS = [('taxi2', 'assets/ceintures/machtwagen_rear_seatbelts-menor-v2.obj', XF),
-        ('corris', 'assets/ceintures/corris_rear_seatbelts-menor.obj', XF)]
+        ('corris', 'assets/ceintures/corris_rear_seatbelts-menor.obj', XF),
+        # SATSUMA de My Summer Car (JD 31/10 : « My Summer Car ») : repere de sa banquette (Interior/pivot_seat_rear), avant en z negatif
+        # du .obj -> import ordinaire (x oppose) ; Seats.RearKinds la pose a la banquette
+        ('satsuma', 'assets/ceintures/satsuma_rear_seatbelts-menor.obj', lambda x, y, z: (-x, y, z))]
 MID = 0.12
 
 def det(xf):
