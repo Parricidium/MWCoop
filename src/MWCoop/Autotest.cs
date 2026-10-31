@@ -492,6 +492,11 @@ namespace MWCoop
         {
             int ss = Config.GetInt("Test", "DepartSS", 1);
             string root = "RACES/RALLY/SS" + ss + "/StartArea/StartLineObjects/RallyTree";
+            // ([Test] DepartVaz=1 : inscription avec la VAZ par la feuille, comme Autotest=rallyevaz -- samedi 9 h, VAZ a la tente,
+            // feuille confirmee a 43 s ; puis CarCheck devant la VAZ et l'heure qui avance des 60 s. Joueur Jani, 31/10.)
+            bool vazMode = Config.GetInt("Test", "DepartVaz", 0) != 0;
+            if (vazMode && t < 58f) Rally.Test("rallyevaz", t);
+            if (vazMode && depStep == 0 && t > 20f) depStep = 1;
             if (Net.Session.IsHost && depStep == 0 && t > 20f)
             {
                 depStep = 1;
@@ -525,9 +530,11 @@ namespace MWCoop
             int pilot = Config.GetInt("Test", "DepartPilote", 1);
             bool me = (pilot == 1 && Net.Session.IsHost) || (pilot == 2 && !Net.Session.IsHost);
             string car = Config.Get("Test", "DepartVoiture", "CORRIS");
-            if (me && depStep == 2 && t > 40f) { depStep = 3; Log.Info("autotest : mwcdepart, inscription : " + Rally.TestRegister()); }
+            if (me && depStep == 2 && t > 40f && !vazMode) { depStep = 3; Log.Info("autotest : mwcdepart, inscription : " + Rally.TestRegister()); }
+            if (me && depStep == 2 && t > 56f && vazMode) { depStep = 3; Transform vz = Vaz.CarOf(Net.Session.LocalId); if (vz != null) car = vz.name; Log.Info("autotest : mwcdepart, inscrit " + Rally.MeRegistered + " avec la VAZ " + Rally.MeWithVaz + " (" + car + ")"); }
             if (me && depStep >= 3 && depStep <= 6 && tree != null)
             {
+                if (vazMode) { Transform vz = Vaz.CarOf(Net.Session.LocalId); if (vz != null) car = vz.name; }
                 Transform ct = null;
                 foreach (Transform x in tree.transform.parent.parent.GetComponentsInChildren<Transform>(true)) if (x.name == "CarCheck") { ct = x; break; }
                 Vector3 fw = ct != null ? Vector3.ProjectOnPlane(ct.forward, Vector3.up).normalized : Vector3.forward; if (fw.sqrMagnitude < 0.5f) fw = Vector3.forward;
@@ -539,6 +546,7 @@ namespace MWCoop
                     // a DepartEcart m devant elle ; [Test] DepartBougeVoiture=1 : la voiture va a la ligne)
                     depStep = 4;
                     GameObject c = Game.FindAny(car);
+                    if (vazMode) { Transform vz = Vaz.CarOf(Net.Session.LocalId); c = vz != null ? vz.gameObject : null; if (c != null) car = c.name; }
                     if (Config.GetInt("Test", "DepartBougeVoiture", 0) == 0 && c != null)
                     {
                         ct.position = c.transform.position + c.transform.forward * Config.GetFloat("Test", "DepartEcart", 3f);
@@ -557,7 +565,7 @@ namespace MWCoop
                 else if (depStep == 6 && t > 52f) { depStep = 7; Log.Info("autotest : mwcdepart, au volant : " + VehicleSync.TestEnter(car, true)); }
             }
             // (hote : l'heure avance d'une heure toutes les DepartPas s des 55 s, de DepartHeure + 1 a DepartHeureFin)
-            if (Net.Session.IsHost && t > Config.GetFloat("Test", "DepartHeureA", 58f) && Time.realtimeSinceStartup >= depHourAt)
+            if (Net.Session.IsHost && t > Config.GetFloat("Test", "DepartHeureA", vazMode ? 62f : 58f) && Time.realtimeSinceStartup >= depHourAt)
             {
                 int h0 = Config.GetInt("Test", "DepartHeure", 13), hEnd = Config.GetInt("Test", "DepartHeureFin", 18);
                 if (depHour < 0) depHour = h0;
