@@ -184,7 +184,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- releve
         static bool IsMscPoint(PlayMakerFSM f)
         {
-            if (f.FsmName != "Assembly" || f.FsmVariables.FindFsmGameObject("Part") == null || f.Fsm.GetState("Wait for assembly") == null) return false;
+            if (f.FsmName != "Assembly" || f.FsmVariables.FindFsmGameObject("Part") == null || WaitState(f) == null) return false;
             return Game.RootName(f.transform) != "ITEMS";   // (piles de la radio : ItemFsms)
         }
 
@@ -201,9 +201,19 @@ namespace MWCoop
         }
 
         // Etat ou mene le clic ('Wait for assembly' -ASSEMBLE->) : 'Wait' le plus souvent.
-        static string ClickTarget(PlayMakerFSM f)
+        // Point sans 'Wait for assembly' mais avec 'Wait for assembly 2' (SATSUMA/MiscParts/trigger_battery : 'Check shoes' ->
+        // 'Wait for assembly 2' -ASSEMBLE-> 'Assemble') : celui-la. Avant, jamais releve -- la batterie posee dans la voiture
+        // n'etait pas envoyee, seul son demontage l'etait (dossier #35, квазарик 31/10). [Test] BatterieAncienne=1 : comme avant.
+        static FsmState WaitState(PlayMakerFSM f)
         {
             FsmState w = f.Fsm.GetState("Wait for assembly");
+            if (w == null && Config.GetInt("Test", "BatterieAncienne", 0) == 0)
+                foreach (FsmState s in f.FsmStates) if (s.Name.StartsWith("Wait for assembly ")) { w = s; break; }
+            return w;
+        }
+        static string ClickTarget(PlayMakerFSM f)
+        {
+            FsmState w = WaitState(f);
             if (w != null) foreach (FsmTransition t in w.Transitions) if (t.EventName == "ASSEMBLE") return t.ToState;
             return null;
         }
@@ -762,7 +772,8 @@ namespace MWCoop
             part.transform.position = p.Fsm.transform.position;
             part.transform.rotation = pv != null && pv.Value != null ? pv.Value.transform.rotation : p.Fsm.transform.rotation;
             p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
-            Game.SetState(p.Fsm, WaitStateFor(p.Fsm, part) ?? "Wait for assembly");   // (branche de la piece, comme 'Find correct part 2')
+            FsmState ws0 = WaitState(p.Fsm);
+            Game.SetState(p.Fsm, WaitStateFor(p.Fsm, part) ?? (ws0 != null ? ws0.Name : "Wait for assembly"));   // (branche de la piece, comme 'Find correct part 2')
             testClick = p.Fsm; testClickFrame = Time.frameCount + 2;
             return "clic de montage de " + partKey + " sur " + pointKey;
         }
@@ -804,6 +815,66 @@ namespace MWCoop
                 sb.Append("sur le pivot : ");
                 if (piv != null) foreach (Transform c in piv) sb.Append(c.name).Append(' ');
                 Log.Info(sb.ToString());
+            }
+        }
+
+        // [Test] Autotest=dossier35 (2 joueurs, квазарик 31/10), a partir de T (les deux en jeu depuis 20 s) : T+5 l'invite demonte la
+        // batterie et l'hote le frein a main (comme le joueur) ; T+15 l'invite repose la batterie (clic de montage) ; T+20 l'hote
+        // sauvegarde en jeu ; T+28 chacun note la batterie, le frein a main monte et les freins a main libres ; T+30 l'hote vise le
+        // cric rouleur main vide (PickedObject sans prise, comme un clic sur le cric leve) ; T+34 tenu ou non, deplace ou non.
+        static float d35T0 = -1; static int d35Step; static string d35Bat; static Vector3 d35Jack;
+        public static void TestDossier35()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (d35T0 < 0) { if (!Jobs.OtherInGame(20f)) return; d35T0 = now; MscScan(); }
+            float d = now - d35T0;
+            string bp = null;
+            foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith("trigger_battery")) bp = kv.Key;
+            if (d35Step == 0 && d > 5f)
+            {
+                d35Step = 1;
+                string key = Session.IsHost ? "db:Database/DatabaseMechanics/Handbrake" : (bp != null ? MscInstalledId(mscPoints[bp]) : "");
+                if (!Session.IsHost) d35Bat = key;
+                GameObject part = key.Length > 0 ? MscFindPart(key) : null;
+                PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                if (rem != null) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); }
+                Log.Info("autotest dossier35 : point batterie " + (bp ?? "absent") + ", demontage de " + (key.Length > 0 ? key : "?") + " (" + (rem != null ? "Removal " + rem.ActiveStateName : "introuvable") + ")");
+            }
+            if (d35Step == 1 && d > 15f)
+            {
+                d35Step = 2;
+                if (!Session.IsHost) Log.Info("autotest dossier35 : " + (bp != null && !string.IsNullOrEmpty(d35Bat) ? MscTestClick(bp, d35Bat) : "pas de batterie a reposer"));
+            }
+            if (d35Step == 2 && d > 20f)
+            {
+                d35Step = 3;
+                if (Session.IsHost) { Log.Info("autotest dossier35 : sauvegarde en jeu"); Game.SaveInPlace(); }
+            }
+            if (d35Step == 3 && d > 28f)
+            {
+                d35Step = 4;
+                GameObject hb = Game.FindAny("SATSUMA(557kg, 248)/MiscParts/HandBrake/handbrake(xxxxx)");
+                GameObject db = Game.FindAny("Database/DatabaseMechanics/Handbrake");
+                PlayMakerFSM data = db != null ? Game.FsmOn(db, "Data") : null;
+                FsmBool inst = data != null ? data.FsmVariables.FindFsmBool("Installed") : null;
+                int loose = 0;
+                foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>()) if (rb.name == "handbrake(Clone)" && rb.gameObject.activeInHierarchy) loose++;
+                Log.Info("autotest dossier35 : batterie " + (bp != null ? MscTestHolds(bp) : "point absent") + " ; frein a main monte " + (hb != null ? hb.activeSelf.ToString() : "?")
+                         + ", Installed " + (inst != null ? inst.Value.ToString() : "?") + ", Data " + (data != null ? data.ActiveStateName : "?") + ", libres " + loose);
+            }
+            if (Session.IsHost && d35Step == 4 && d > 30f)
+            {
+                d35Step = 5;
+                GameObject fj = Game.FindAny("ITEMS/floor jack(itemx)");
+                if (fj != null) { d35Jack = fj.transform.position; Props.TestSetPicked(fj); }
+                Log.Info("autotest dossier35 : cric rouleur vise main vide " + (fj != null ? "en " + d35Jack.ToString("F2") : "introuvable"));
+            }
+            if (Session.IsHost && d35Step == 5 && d > 34f)
+            {
+                d35Step = 6;
+                GameObject fj = Game.FindAny("ITEMS/floor jack(itemx)");
+                Log.Info("autotest dossier35 : cric rouleur " + (Props.Holding ? "TENU" : "pas tenu") + ", deplace de " + (fj != null ? (fj.transform.position - d35Jack).magnitude.ToString("F2") : "?") + " m");
+                Props.TestSetPicked(null);
             }
         }
 
