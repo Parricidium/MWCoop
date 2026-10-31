@@ -298,6 +298,24 @@ namespace MWCoop
                 }
         }
 
+        // Mort de faim, de soif, de fatigue ou par la vessie : elle vient de Database/PlayerDatabase :: Simulation, qui finit dans un
+        // etat sans sortie (« State 7 » pour la faim : PlayerHunger a 0, Systems/Death allume) ; le jeu recharge ensuite la partie.
+        // La mort arretee ici, l'automate y restait : plus de besoins qui montent, et la sauvegarde en jeu, qui remet chaque automate
+        // dans son etat d'avant, rejouait cet etat -- mort de faim juste apres la sauvegarde aux toilettes (dossier #30,
+        // Podpivas_70RUS 31/10). Relance au debut de sa boucle, « Run simulation ». ([Test] RelanceBesoins=0 : comme avant.)
+        public static void RestartNeeds(string why)
+        {
+            if (Config.GetInt("Test", "RelanceBesoins", 1) == 0) return;
+            GameObject db = Game.FindAny("Database/PlayerDatabase");
+            PlayMakerFSM sim = db != null ? Game.FsmOn(db, "Simulation") : null;
+            if (sim == null || sim.Fsm.GetState("Run simulation") == null) return;
+            HutongGames.PlayMaker.FsmState st = sim.Fsm.GetState(sim.ActiveStateName);
+            if (st == null || st.Transitions == null || st.Transitions.Length > 0) return;   // (dans sa boucle : rien a faire)
+            string was = sim.ActiveStateName;
+            Game.SetState(sim, "Run simulation");
+            Log.Info(why + " : besoins du joueur relances (Simulation " + was + " -> " + sim.ActiveStateName + ")");
+        }
+
         static void Set(string name, float v)
         {
             FsmFloat f = FsmVariables.GlobalVariables.FindFsmFloat(name);
@@ -356,6 +374,7 @@ namespace MWCoop
             pl.transform.rotation = Quaternion.Euler(0f, pl.transform.eulerAngles.y, 0f);
             if (cc != null) cc.enabled = true;
             Needs();
+            RestartNeeds("reapparition");
             Log.Info("reapparition : a " + place.Name + " en " + to.ToString("F2"));
             Hud.Toast(Lang.T("De retour \u00E0 ", "Back at ") + Lang.T(place.Name, place.NameEn));
             if (Session.Active) Chat.Send("* revient a " + place.Name + " *");
