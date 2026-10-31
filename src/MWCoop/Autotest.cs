@@ -2073,6 +2073,8 @@ namespace MWCoop
             if (mode == "mscmontage") { MscMontage(t); return; }
             if (mode == "mscremonte") { Parts.TestRemount(t); return; }   // (aile arrachee au montage chez l'hote, WIGA 25/10)
             if (mode == "dossier35") { Parts.TestDossier35(); return; }   // (batterie, frein a main apres sauvegarde, cric vise main vide -- квазарик 31/10)
+            if (mode == "radiateur") { Parts.TestRadiator(); return; }   // (radiateur sport monte par l'invite, branche stock rejouee chez l'hote -- xZOTIK 31/10)
+            if (mode == "remorque") { Jobs.TestTrailer(); return; }   // (objets sur le plateau du KEKMET, l'hote descend -- Markos 31/10)
             if (mode == "fusibles") { Parts.TestFuses(t); return; }   // (tableau electrique, dossier #27 : montage d'un porte-fusible tenu ou monte ailleurs par l'autre)
             // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
             // (envoye), remontee a 50 s (message NON envoye) ; l'empreinte des 2 s doit la faire remonter chez l'invite en 6 s au plus ; etat a EtatA s)

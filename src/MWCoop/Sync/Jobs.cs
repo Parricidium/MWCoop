@@ -2561,6 +2561,79 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=remorque (MSC, 2 joueurs, dossier #34 Markos 31/10 : « les pieces glissent de la remorque du tracteur ») : a partir
+        // de T (les deux en jeu depuis 20 s), l'hote prend le KEKMET (T+5, volant T+10), l'attelle au plateau (T+14, crochet du jeu), pose
+        // des objets sur le plateau (T+18), roule a 3 m/s de T+22 a T+32, descend a T+38 ([Test] RemorqueHayon=1 : ouvre le hayon a T+44) ;
+        // chacun note chaque seconde de T+18 a T+65 l'inclinaison du tracteur et du plateau et la place des objets dans le plateau.
+        static float trT0 = -1, trLog; static int trStep; static readonly List<string> trItems = new List<string>();
+        public static void TestTrailer()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (trT0 < 0) { if (!OtherInGame(20f)) return; trT0 = now; }
+            float d = now - trT0;
+            const string car = "KEKMET(350-400psi)";
+            Rigidbody k = VehicleSync.Body("KEKMET"), fb = VehicleSync.Body("FLATBED");
+            if (Session.IsHost)
+            {
+                if (d > 5f && trStep == 0) { trStep = 1; Log.Info("autotest : remorque, " + VehicleSync.TestEnter(car, false)); }
+                if (d > 10f && trStep == 1) { trStep = 2; Log.Info("autotest : remorque, volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (d > 14f && trStep == 2)
+                {
+                    trStep = 3;
+                    FindHitch();
+                    Transform target = fb != null ? fb.transform.Find("HookTarget") : null;
+                    if (hitchHook == null || hitchTractor == null || target == null) Log.Info("autotest : remorque, crochet ou plateau introuvable");
+                    else
+                    {
+                        Vector3 dv = target.position - hitchHook.transform.position;
+                        hitchTractor.position += dv; hitchTractor.transform.position += dv;
+                        hitchTractor.velocity = Vector3.zero; hitchTractor.angularVelocity = Vector3.zero;
+                        Log.Info("autotest : remorque, tracteur deplace de " + dv.magnitude.ToString("F1") + " m, crochet sur le plateau");
+                    }
+                }
+                if (d > 18f && trStep == 3)
+                {
+                    trStep = 4;
+                    string[] words = { "gasoline", "spanner set", "coolant", "brake fluid", "motoroil" };
+                    Vector3[] at = { new Vector3(-0.4f, 1.3f, -0.6f), new Vector3(0.4f, 1.3f, -0.6f), new Vector3(-0.4f, 1.3f, 0.4f), new Vector3(0.4f, 1.3f, 0.4f), new Vector3(0f, 1.3f, 1.1f) };
+                    for (int i = 0; i < words.Length; i++)
+                    {
+                        string id = Props.FindKey(words[i]);
+                        if (Props.BodyOf(id) == null) continue;
+                        trItems.Add(id);
+                        Log.Info("autotest : remorque, " + Props.TestPlace(id, fb, at[i]));
+                    }
+                }
+                if (d > 22f && d < 32f && k != null) { Vector3 f = k.transform.forward; f.y = 0; k.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(k.velocity.y, 0f); }
+                if (d > 38f && trStep == 4) { trStep = 5; Log.Info("autotest : remorque, sortie du tracteur -> " + VehicleSync.TestExit(car)); }
+                if (d > 44f && trStep == 5 && Config.GetInt("Test", "RemorqueHayon", 0) != 0)
+                {
+                    trStep = 6;
+                    GameObject h = Game.FindAny("FLATBED/Bed/HatchPivot/flatbed_hatch");
+                    PlayMakerFSM hu = h != null ? Game.FsmOn(h, "Use") : null;
+                    if (hu != null && hu.Fsm.GetState("Open door") != null) Game.SetState(hu, "Open door");
+                    Log.Info("autotest : remorque, hayon -> " + (hu != null ? hu.ActiveStateName : "introuvable"));
+                }
+            }
+            else if (d > 18f && trItems.Count == 0)
+                foreach (string w in new[] { "gasoline", "spanner set", "coolant", "brake fluid", "motoroil" }) { string id = Props.FindKey(w); if (Props.BodyOf(id) != null) trItems.Add(id); }
+            if (d > 18f && d < 65f && now >= trLog && k != null && fb != null)
+            {
+                trLog = now + 1f;
+                Quaternion inv = Quaternion.Inverse(fb.rotation);
+                var sb = new System.Text.StringBuilder("autotest : remorque T+" + d.ToString("F0") + " : tracteur " + (k.isKinematic ? "copie" : "local") + " incline " + Vector3.Angle(k.transform.up, Vector3.up).ToString("F0") + " en " + k.position.ToString("F1")
+                    + ", plateau " + (fb.isKinematic ? "copie" : "local") + " incline " + Vector3.Angle(fb.transform.up, Vector3.up).ToString("F0") + " en " + fb.position.ToString("F1") + " ; objets dans le plateau :");
+                foreach (string id in trItems)
+                {
+                    Rigidbody b = Props.BodyOf(id);
+                    if (b == null) { sb.Append(" ").Append(id).Append(" ?"); continue; }
+                    Vector3 lp = inv * (b.position - fb.position);
+                    sb.Append(" ").Append(id.Length > 14 ? id.Substring(id.Length - 14) : id).Append(' ').Append(lp.ToString("F1")).Append(b.isKinematic ? "c" : "");
+                }
+                Log.Info(sb.ToString());
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "cle" || mode == "vazcle") { TestKey(t); return; }
