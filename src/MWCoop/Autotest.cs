@@ -481,6 +481,111 @@ namespace MWCoop
         // se pose 5,5 m derriere la cible a 76 s et la pousse a 3 m/s de 78 a 82 s (cible menee par l'hote, au volant), s'ecarte a 86 s ;
         // de nouveau a 120 s, poussee de 122 a 126 s (cible rendue, moteur coupe), ecart a 130 s. Chacun note les deux voitures toutes les 0,5 s.
         static int mpStep, mpClutchLog; static float mpLogAt, mpSeatAt;
+        // [Test] Autotest=mwcdepart (Discord 31/10, Jani Rajamaki : « l'horloge de depart du rallye ne demarre pas ») : l'hote met
+        // une semaine de rallye (GlobalWeeksPassed pair), samedi DepartHeure (13 h), RACES 'SwapDates' WAKEUP a 20 s. A 35 s chacun
+        // decrit l'automate du depart (SS DepartSS : StartArea/StartLineObjects/RallyTree 'Clock', etats, actions, sorties). Le
+        // pilote (DepartPilote : 1 hote, 2 invite, 0 personne) s'inscrit a 40 s (Rally.TestRegister), monte dans DepartVoiture
+        // (CORRIS) a 45 s, et la pose a DepartRecul m derriere CarCheck a 55 s. Toutes les 3 s, chacun note l'etat du depart et
+        // ses variables.
+        static int depStep, depHour = -1; static float depLogAt, depHourAt;
+        static void MwcDepart(float t)
+        {
+            int ss = Config.GetInt("Test", "DepartSS", 1);
+            string root = "RACES/RALLY/SS" + ss + "/StartArea/StartLineObjects/RallyTree";
+            if (Net.Session.IsHost && depStep == 0 && t > 20f)
+            {
+                depStep = 1;
+                FsmInt wk = FsmVariables.GlobalVariables.FindFsmInt("GlobalWeeksPassed"); if (wk != null && wk.Value % 2 != 0) wk.Value++;
+                FsmInt gd = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay"); if (gd != null) gd.Value = Config.GetInt("Test", "DepartJour", 6);
+                PlayMakerFSM sun = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                if (sun != null) { sun.FsmVariables.GetFsmInt("Time").Value = Config.GetInt("Test", "DepartHeure", 13); sun.SendEvent("TIMESKIP"); }
+                PlayMakerFSM sw = Game.FindFsm("RACES", "SwapDates"); if (sw != null) sw.SendEvent("WAKEUP");
+                Log.Info("autotest : mwcdepart, semaine " + (wk != null ? wk.Value : -1) + " jour " + (gd != null ? gd.Value : -1) + " SwapDates " + (sw != null ? sw.ActiveStateName : "?"));
+            }
+            if (!Net.Session.IsHost && depStep == 0 && t > 20f) depStep = 1;
+            GameObject tree = Game.FindAny(root);
+            PlayMakerFSM clock = tree != null ? Game.FsmOn(tree, "Clock") : null;
+            if (depStep == 1 && t > 35f)
+            {
+                depStep = 2;
+                if (clock == null) Log.Info("autotest : mwcdepart, " + root + " :: Clock introuvable");
+                else
+                {
+                    Log.Info("autotest : mwcdepart, " + root + " :: Clock [" + clock.ActiveStateName + "] allume " + clock.gameObject.activeInHierarchy);
+                    foreach (FsmState st in clock.Fsm.States)
+                    {
+                        var tr = new System.Text.StringBuilder();
+                        if (st.Transitions != null) foreach (FsmTransition x in st.Transitions) tr.Append(' ').Append(x.EventName).Append("->").Append(x.ToState);
+                        string acts; try { acts = Jobs.DumpActions(clock, st.Name); } catch (System.Exception e) { acts = e.GetType().Name; }
+                        Log.Info("autotest : mwcdepart etat " + acts + " ; sorties" + tr);
+                    }
+                    foreach (FsmGameObject g in clock.FsmVariables.GameObjectVariables) Log.Info("autotest : mwcdepart objet " + g.Name + " = " + (g.Value != null ? Recon.Path(g.Value.transform) + " " + g.Value.transform.position.ToString("F1") : "rien"));
+                }
+            }
+            int pilot = Config.GetInt("Test", "DepartPilote", 1);
+            bool me = (pilot == 1 && Net.Session.IsHost) || (pilot == 2 && !Net.Session.IsHost);
+            string car = Config.Get("Test", "DepartVoiture", "CORRIS");
+            if (me && depStep == 2 && t > 40f) { depStep = 3; Log.Info("autotest : mwcdepart, inscription : " + Rally.TestRegister()); }
+            if (me && depStep >= 3 && depStep <= 6 && tree != null)
+            {
+                Transform ct = null;
+                foreach (Transform x in tree.transform.parent.parent.GetComponentsInChildren<Transform>(true)) if (x.name == "CarCheck") { ct = x; break; }
+                Vector3 fw = ct != null ? Vector3.ProjectOnPlane(ct.forward, Vector3.up).normalized : Vector3.forward; if (fw.sqrMagnitude < 0.5f) fw = Vector3.forward;
+                Vector3 to = ct != null ? ct.position - fw * Config.GetFloat("Test", "DepartRecul", 0f) + Vector3.up * 0.8f : Vector3.zero;
+                if (ct == null) { depStep = 7; Log.Info("autotest : mwcdepart, CarCheck introuvable"); }
+                else if (depStep == 3 && t > 42f)
+                {
+                    // (la CORRIS teleportee sur la ligne s'emballe -- pieces et liaisons : c'est le point de controle CarCheck qui vient
+                    // a DepartEcart m devant elle ; [Test] DepartBougeVoiture=1 : la voiture va a la ligne)
+                    depStep = 4;
+                    GameObject c = Game.FindAny(car);
+                    if (Config.GetInt("Test", "DepartBougeVoiture", 0) == 0 && c != null)
+                    {
+                        ct.position = c.transform.position + c.transform.forward * Config.GetFloat("Test", "DepartEcart", 3f);
+                        depStep = 5;
+                        Log.Info("autotest : mwcdepart, CarCheck pose a " + Config.GetFloat("Test", "DepartEcart", 3f) + " m devant " + car + " en " + ct.position.ToString("F1"));
+                    }
+                    else
+                    {
+                        GameObject p = Game.PlayerGo; var cc = p != null ? p.GetComponent<CharacterController>() : null;
+                        if (cc != null) { cc.enabled = false; p.transform.position = to + Vector3.Cross(Vector3.up, fw) * 4f + Vector3.up; cc.enabled = true; }
+                        Log.Info("autotest : mwcdepart, joueur pres de la ligne (" + Recon.Path(ct) + " " + ct.position.ToString("F1") + ")");
+                    }
+                }
+                else if (depStep == 4 && t > 48f) { depStep = 5; Log.Info("autotest : mwcdepart, " + VehicleSync.TestPlaceAt(car, to, Quaternion.LookRotation(fw, Vector3.up))); }
+                else if (depStep == 5 && t > 50f) { depStep = 6; Log.Info("autotest : mwcdepart, " + VehicleSync.TestEnter(car, false)); }
+                else if (depStep == 6 && t > 52f) { depStep = 7; Log.Info("autotest : mwcdepart, au volant : " + VehicleSync.TestEnter(car, true)); }
+            }
+            // (hote : l'heure avance d'une heure toutes les DepartPas s des 55 s, de DepartHeure + 1 a DepartHeureFin)
+            if (Net.Session.IsHost && t > Config.GetFloat("Test", "DepartHeureA", 58f) && Time.realtimeSinceStartup >= depHourAt)
+            {
+                int h0 = Config.GetInt("Test", "DepartHeure", 13), hEnd = Config.GetInt("Test", "DepartHeureFin", 18);
+                if (depHour < 0) depHour = h0;
+                if (depHour < hEnd)
+                {
+                    depHour++; depHourAt = Time.realtimeSinceStartup + Config.GetFloat("Test", "DepartPas", 15f);
+                    PlayMakerFSM sun = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                    if (sun != null) { sun.FsmVariables.GetFsmInt("Time").Value = depHour; sun.SendEvent("TIMESKIP"); }
+                    Log.Info("autotest : mwcdepart, heure posee a " + depHour + " h");
+                }
+            }
+            if (clock != null && t > 36f && Time.realtimeSinceStartup >= depLogAt)
+            {
+                depLogAt = Time.realtimeSinceStartup + 3f;
+                var sb = new System.Text.StringBuilder("autotest : mwcdepart t=" + t.ToString("F0") + " Clock [" + clock.ActiveStateName + "]");
+                foreach (var v in clock.FsmVariables.FloatVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value.ToString("G5"));
+                foreach (var v in clock.FsmVariables.BoolVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                foreach (var v in clock.FsmVariables.IntVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                FsmGameObject cv = clock.FsmVariables.FindFsmGameObject("CAR");
+                PlayMakerFSM tmg = Game.FindFsm("RACES/RALLY/SS" + ss + "/TimingSS" + ss, "Timing"); FsmBool tst = tmg != null ? tmg.FsmVariables.FindFsmBool("Start") : null;
+                sb.Append(" Timing.Start ").Append(tst != null ? tst.Value.ToString() : "?").Append(" au volant ").Append(VehicleSync.LocalDriving >= 0);
+                FsmInt h = FsmVariables.GlobalVariables.FindFsmInt("GlobalHour");
+                sb.Append(" heure ").Append(h != null ? h.Value : -1);
+                if (cv != null && cv.Value != null) sb.Append(" CORRIS ").Append(cv.Value.transform.position.ToString("F1"));
+                Log.Info(sb.ToString());
+            }
+        }
+
         static void MwcPousse(float t)
         {
             string car = Config.Get("Test", "PousseCible", "KEKMET(350-400psi)"), rp = Config.Get("Test", "PousseVoiture", "SORBET(190-200psi)");
@@ -3192,6 +3297,7 @@ namespace MWCoop
             if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)
             if (mode == "cledemarreur") { CleDemarreur(t); return; }   // (cle rejouee restee sur le demarreur, 23a21df, essai MWC 29/10)
             if (mode == "mwcpousse") { MwcPousse(t); return; }
+            if (mode == "mwcdepart") { MwcDepart(t); return; }
             // ([Test] Autotest=mwcliste, signalements de Донской 30/10 : tele, thermometre) : a ListeA s (40), chaque automate dont le chemin ou
             // le nom correspond a ListeMotif (regex, sans casse) : chemin, nom, etat, allume ou non, coupe ou non ; et ses variables si ListeVars=1.
             if (mode == "mwcliste")
@@ -3238,6 +3344,15 @@ namespace MWCoop
                             foreach (var v in f.FsmVariables.IntVariables) sb.Append(" ").Append(v.Name).Append("=").Append(v.Value);
                         }
                         Log.Info(sb.ToString());
+                        // ([Test] ListeEtats=1 : chaque etat de ces automates, ses actions et ses sorties -- depart du rallye, 31/10)
+                        if (Config.GetInt("Test", "ListeEtats", 0) != 0 && f.Fsm != null && f.Fsm.States != null)
+                            foreach (FsmState st in f.Fsm.States)
+                            {
+                                var tr = new System.Text.StringBuilder();
+                                if (st.Transitions != null) foreach (FsmTransition x in st.Transitions) tr.Append(' ').Append(x.EventName).Append("->").Append(x.ToState);
+                                string acts; try { acts = Jobs.DumpActions(f, st.Name); } catch (System.Exception e) { acts = e.GetType().Name; }
+                                Log.Info("autotest : mwcliste etat " + pth + " :: " + f.FsmName + " / " + acts + " ; sorties" + tr);
+                            }
                     }
                     Log.Info("autotest : mwcliste, " + n + " automate(s)");
                     // ([Test] ListeEcrit=nom : chaque etat d'automate dont une action cite ce nom -- qui ecrit une variable globale)

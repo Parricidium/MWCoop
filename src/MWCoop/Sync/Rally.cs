@@ -539,6 +539,16 @@ namespace MWCoop
         // envoye a 'Data' comme a la fin de la speciale), a 55 s ouvre le classement (OPENRESULTS). Chacun note ses heures
         // de depart, son classement (Leaderboard) et le tableau des humains. Attendu : heures de SS1 differentes, et les
         // deux pilotes humains dans le classement de chacun, avec les memes adversaires.
+        // Inscription comme la feuille (REGISTER, classe Junior) -- Autotest=mwcdepart.
+        public static string TestRegister()
+        {
+            if (!Find()) return "Data introuvable";
+            FsmInt cl = I("PlayerClassLevel"); if (cl != null) cl.Value = 1;
+            data.SendEvent("REGISTER");
+            FsmBool rg = data.FsmVariables.FindFsmBool("Registered");
+            return "Data [" + data.ActiveStateName + "] inscrit " + (rg != null && rg.Value) + ", departs " + (startTimes != null ? Join(startTimes) : "?");
+        }
+
         static int testStep;
         public static void Test(string mode, float t)
         {
