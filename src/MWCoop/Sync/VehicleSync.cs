@@ -276,6 +276,20 @@ namespace MWCoop
             return false;
         }
 
+        // Attelage gare chez un autre que l'hote (personne ne mene ni le tracteur ni la remorque) : tenu en copie cinematique, pose
+        // exactement sur l'hote (ses poses de voiture garee, toutes les 2 s). Dossier #34 (Markos 31/10, « les pieces glissent de la
+        // remorque du tracteur ») : l'hote descendait du KEKMET, tracteur et plateau redevenaient physiques chez l'invite, chacun
+        // de son cote, l'attelage entre les deux ; puis recales separement toutes les 2 s, l'attelage tirait l'un contre l'autre --
+        // assiette de 54 et 71 degres au premier recalage, objets du plateau par terre chez l'invite (seulement chez lui) ; en essai,
+        // plateau projete a 170 m. [Test] AttelageGareLibre=1 : comme avant.
+        static bool HoldHitched(Car c)
+        {
+            if (Session.IsHost || c.Body == null || c.Index == LocalDriving || Kept(c) || c.Index == bumped || c.RemoteBy >= 0 || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)) return false;
+            if (Config.GetInt("Test", "AttelageGareLibre", 0) != 0) return false;
+            return Hitched(c);
+        }
+        static int holdLogs;
+
         // 20 fois/s : la remorque attelee au vehicule qu'on mene (conduit, ou quitte moteur tournant / pousse) -- sauf si un
         // autre la conduit. (Avant : seulement conduit. Conducteur descendu moteur tournant : le tracteur restait a lui, la
         // remorque rendue a l'hote -- deux joueurs tiraient sur l'attelage, remorque projetee, valeurs folles, plantage ;
@@ -1030,7 +1044,7 @@ namespace MWCoop
                     if (c.Kinematic) { c.Vel = Vector3.zero; c.AngVel = Vector3.zero; Log.Info("copie de " + c.Key + " relachee a l'arret (flux de #" + c.RemoteBy + " coupe depuis " + (now - c.LastRemote).ToString("F0") + " s" + (Session.Players.ContainsKey(c.RemoteBy) ? "" : ", joueur parti") + ")"); }
                     c.RemoteBy = -1; c.RemoteDriver = -1;
                 }
-                SetKinematic(c, remote);
+                SetKinematic(c, remote || HoldHitched(c));
                 Ride(c, remote && Seats.SeatedCar == c.T);
                 if (remote)
                 {
@@ -3570,6 +3584,22 @@ namespace MWCoop
             if (c.RemoteBy == who) { c.RemoteBy = -1; c.RemoteDriver = -1; }
             c.Vel = vel; c.AngVel = ang;
             Transform t = c.Body.transform;
+            if (HoldHitched(c))
+            {
+                // (attelage gare tenu en copie : pose de l'hote telle quelle, ce qui est pose dessus suit ; cible de Follow aussi, a
+                // l'arret -- sinon il la ramenait a la derniere pose roulante)
+                SetKinematic(c, true);
+                c.Pos = pos; c.Rot = rot; c.Vel = Vector3.zero; c.AngVel = Vector3.zero;
+                if ((t.position - pos).sqrMagnitude > 0.0004f || Quaternion.Angle(t.rotation, rot) > 0.5f)
+                {
+                    MoveCargo(c, pos, rot, Vector3.zero);
+                    float dd = (t.position - pos).magnitude;
+                    t.position = pos; t.rotation = rot;
+                    c.Body.position = pos; c.Body.rotation = rot;
+                    if (holdLogs++ < 10) Log.Info("voiture " + c.Key + " attelee, garee : tenue en copie sur la pose de l'hote (ecart " + dd.ToString("F2") + " m)");
+                }
+                return;
+            }
             // Voiture en chantier (piece montee ou demontee depuis moins de 20 s) : seuil serre, 4 cm / 1,5 degre -- decalee de
             // 30-90 cm, le moteur au palan n'arrivait jamais a 5 cm des detecteurs de vis et les pieces portees par l'autre
             // apparaissaient a cote de la voiture (relecture du 15/10). Sinon 1 m / 10 degres (voiture garee au loin).

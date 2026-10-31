@@ -223,9 +223,13 @@ namespace MWCoop
         // ('Wait' -> 'GT', 'Wait 4' -> 'Stock') pose SA piece et met Installed a SON entree de Database. Le rejeu par le clic de la
         // 1re branche montait le volant stock en le declarant GT : GT remonte au rechargement (Kamixak/Mikol, 24/10). Le montage
         // local par une autre branche n'etait pas annonce non plus (crochet sur la 1re seulement : rattrape par le controle).
+        // Le radiateur (trigger_radiator : stock / sport) compare le NOM de la piece en main (StringCompare a {HandChild2}=racing
+        // radiator(Clone), PART2 -> 'Wait for assembly 2') : pas reconnu, le montage du radiateur sport par l'autre etait rejoue par la
+        // branche stock -- radiateur normal monte ici, le sport detruit (dossier #36, xZOTIK 31/10). [Test] RadiateurAncien=1 : comme avant.
         static string WaitStateFor(PlayMakerFSM f, GameObject part)
         {
             if (part == null) return null;
+            bool byName = Config.GetInt("Test", "RadiateurAncien", 0) == 0;
             foreach (FsmState s in f.FsmStates)
             {
                 FsmStateAction[] acts;
@@ -233,11 +237,23 @@ namespace MWCoop
                 if (acts == null) continue;
                 foreach (FsmStateAction a in acts)
                 {
-                    if (a == null || a.GetType().Name != "GameObjectCompare") continue;   // (action d'Assembly-CSharp de MSC : par reflexion)
+                    if (a == null) continue;
+                    string tn = a.GetType().Name;
+                    bool match;
                     System.Reflection.FieldInfo cf = a.GetType().GetField("compareTo"), ef = a.GetType().GetField("equalEvent");
-                    FsmGameObject c = cf != null ? cf.GetValue(a) as FsmGameObject : null;
+                    if (tn == "GameObjectCompare")   // (action d'Assembly-CSharp de MSC : par reflexion)
+                    {
+                        FsmGameObject c = cf != null ? cf.GetValue(a) as FsmGameObject : null;
+                        match = c != null && c.Value == part;
+                    }
+                    else if (tn == "StringCompare" && byName)
+                    {
+                        FsmString c = cf != null ? cf.GetValue(a) as FsmString : null;
+                        match = c != null && c.Value == part.name;
+                    }
+                    else continue;
                     FsmEvent e = ef != null ? ef.GetValue(a) as FsmEvent : null;
-                    if (c == null || e == null || c.Value != part) continue;
+                    if (!match || e == null) continue;
                     foreach (FsmTransition t in s.Transitions) if (t.EventName == e.Name && t.ToState.StartsWith("Wait for assembly")) return t.ToState;
                 }
             }
@@ -878,6 +894,82 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=radiateur (2 joueurs, dossier #36 xZOTIK 31/10), a partir de T : T+5 l'invite demonte le radiateur stock ; T+10
+        // chacun sort le radiateur sport (racing radiator(Clone), eteint tant qu'il n'est pas achete) ; T+16 l'invite le monte (branche
+        // 'Wait for assembly 2', comme 'Find correct part') ; T+26 chacun note les deux Installed et les deux radiateurs allumes.
+        static float radT0 = -1; static int radStep; static GameObject radPart;
+        public static void TestRadiator()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (radT0 < 0) { if (!Jobs.OtherInGame(20f)) return; radT0 = now; MscScan(); }
+            float d = now - radT0;
+            string pk = null;
+            foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith("trigger_radiator")) pk = kv.Key;
+            if (radStep == 0 && d > 5f)
+            {
+                radStep = 1;
+                GameObject part = !Session.IsHost ? MscFindPart("db:Database/DatabaseMechanics/Radiator") : null;
+                PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                if (rem != null) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); }
+                Log.Info("autotest radiateur : point " + (pk ?? "absent") + (Session.IsHost ? "" : ", demontage du radiateur stock (" + (rem != null ? "Removal " + rem.ActiveStateName : "introuvable") + ")"));
+            }
+            if (radStep == 1 && d > 10f)
+            {
+                radStep = 2;
+                // (pas achete : STORE/Boxes/racing radiator(Clone)/racing radiator(Clone), eteint -- {SpawnThis} de sa Database, comme 'Basic state')
+                GameObject dbg = Game.FindAny("Database/DatabaseOrders/Racing Radiator");
+                PlayMakerFSM dbf = dbg != null ? Game.FsmOn(dbg, "Data") : null;
+                FsmGameObject sp = dbf != null ? dbf.FsmVariables.FindFsmGameObject("SpawnThis") : null;
+                GameObject rr = sp != null ? sp.Value : null; radPart = rr;
+                GameObject trig = pk != null ? mscPoints[pk].Fsm.gameObject : null;
+                if (rr != null)
+                {
+                    rr.transform.parent = null;
+                    rr.SetActive(true);
+                    if (trig != null) rr.transform.position = trig.transform.position + Vector3.up * 1.5f;
+                    Rigidbody rb = rr.GetComponent<Rigidbody>(); if (rb != null) rb.isKinematic = true;
+                    Props.Adopt(rr, "w:racing radiator");   // (cle de la partie du joueur : radiateur achete, a la racine)
+                }
+                Log.Info("autotest radiateur : radiateur sport " + (rr != null ? "sorti" : "introuvable"));
+            }
+            if (radStep == 2 && d > 24f)
+            {
+                radStep = 3;
+                if (!Session.IsHost && pk != null)
+                {
+                    MscPoint p = mscPoints[pk];
+                    GameObject part = radPart;
+                    if (part == null) Log.Info("autotest radiateur : w:racing radiator introuvable");
+                    else
+                    {
+                        part.transform.position = p.Fsm.transform.position;
+                        p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
+                        Game.SetState(p.Fsm, "Wait for assembly 2");
+                        testClick = p.Fsm; testClickFrame = Time.frameCount + 2;
+                        Log.Info("autotest radiateur : clic de montage du radiateur sport (cle " + MscPartKey(part) + ")");
+                    }
+                }
+            }
+            if (radStep == 3 && d > 34f)
+            {
+                radStep = 4;
+                var sb = new System.Text.StringBuilder("autotest radiateur : ");
+                foreach (string db in new[] { "Database/DatabaseMechanics/Radiator", "Database/DatabaseOrders/Racing Radiator" })
+                {
+                    GameObject g = Game.FindAny(db);
+                    PlayMakerFSM dd = g != null ? Game.FsmOn(g, "Data") : null;
+                    FsmBool inst = dd != null ? dd.FsmVariables.FindFsmBool("Installed") : null;
+                    sb.Append(db.Substring(db.LastIndexOf('/') + 1)).Append(" Installed=").Append(inst != null ? inst.Value.ToString() : "?").Append(" ; ");
+                }
+                foreach (string m in new[] { "SATSUMA(557kg, 248)/MiscParts/radiator(xxxxx)", "SATSUMA(557kg, 248)/MiscParts/racing radiator(xxxxx)" })
+                {
+                    GameObject g = Game.FindAny(m);
+                    sb.Append(m.Substring(m.LastIndexOf('/') + 1)).Append(' ').Append(g != null ? (g.activeSelf ? "allume" : "eteint") : "?").Append(" ; ");
+                }
+                Log.Info(sb.ToString());
+            }
+        }
+
         // [Test] Autotest=mscremonte (WIGA 25/10 : aile montee chez l'hote, arrachee 50 ms apres, force 1e9) : le joueur [Test] Monteur
         // demonte [Test] Piece (Fender_Left) comme le joueur a 40 s, la remonte sur son point ([Test] Point, fin du chemin) a 50 s ;
         // a 60 s chacun note si elle est montee (les casses sont notees par PartWatch).
@@ -1056,7 +1148,11 @@ namespace MWCoop
                     PlayMakerFSM rem = Game.FsmOn(part, "Removal");
                     if (rem == null) { Log.Warn("piece " + id + " sans Removal ici"); return; }
                     FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
-                    if (trig != null && trig.Value != null && trig.Value.activeSelf) { Log.Info("piece " + id + " deja demontee"); return; }
+                    // Piece « echange » (SpawnPart : la piece montee s'eteint au demontage) : demontee si elle est eteinte. Son declencheur peut
+                    // rester allume piece montee (trigger_radiator : 'Already installed' boucle depuis le chargement) -- le demontage du radiateur
+                    // par l'invite etait ignore chez l'hote (dossier #36, xZOTIK 31/10). [Test] RadiateurAncien=1 : comme avant.
+                    bool swapPart = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null && Config.GetInt("Test", "RadiateurAncien", 0) == 0;
+                    if (swapPart ? !part.activeSelf : trig != null && trig.Value != null && trig.Value.activeSelf) { Log.Info("piece " + id + " deja demontee"); return; }
                     // Casse (flags 1) : d'abord 'Break off' comme chez celui qui mene (BoltCheck, ou 'Use' d'une roue) -- Bolted=false, crans a
                     // zero, Tightness 0, Detach. Avant : 'Remove part' seul, la piece par terre ici mais encore « serree » (audit Satsuma 27/10).
                     if ((flags & 1) != 0)
