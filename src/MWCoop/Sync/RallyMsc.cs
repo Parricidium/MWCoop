@@ -295,6 +295,56 @@ namespace MWCoop
         // Spawner/CreateTrophiesAmateur :: Gold, comme le podium du jeu ('Player position' -> 'Gold') ; a 60 s chacun compte ses
         // trophees d'or (objets trophygold*) et leur position.
         static int tStep;
+        // Essai (Autotest=mscdepart, Jani 31/10 : « le chrono du depart ne demarre pas ») : a DepartA s (40, hote ; invite : son horloge),
+        // RALLY/Saturday allume des deux cotes ; [Test] DepartPilote=hote|invite monte dans DepartVoiture (SATSUMA) a DepartA+2,
+        // la pose 6 m avant la zone Lines/Staging a DepartA+6 et la pousse dedans a 2 m/s 3 s ; chacun note toutes les 2 s l'etat de
+        // Staging, Countdown, Clock (Start, TimeTotal) et Timing jusqu'a DepartA+60.
+        static int dStep; static float dLog;
+        public static void TestStart(float t)
+        {
+            float a = Config.GetFloat("Test", "DepartA", 40f) - (Session.IsHost ? 0f : Config.GetFloat("Test", "DepartDecalage", 70f));
+            bool pilot = Config.Get("Test", "DepartPilote", "hote") == (Session.IsHost ? "hote" : "invite");
+            string car = Config.Get("Test", "DepartVoiture", "SATSUMA(557kg, 248)");
+            GameObject sat = Game.FindAny("RALLY/Saturday");
+            if (dStep == 0 && t > a)
+            {
+                dStep = 1;
+                if (sat != null) { for (Transform x = sat.transform; x != null; x = x.parent) if (!x.gameObject.activeSelf) x.gameObject.SetActive(true); }
+                Log.Info("autotest : depart, RALLY/Saturday " + (sat != null ? "allume" : "introuvable"));
+            }
+            if (!pilot) { DepartLog(t, a); return; }
+            if (dStep == 1 && t > a + 2f) { dStep = 2; Log.Info("autotest : depart, " + VehicleSync.TestEnter(car, false)); }
+            if (dStep == 2 && t > a + 4f) { dStep = 3; Log.Info("autotest : depart, au volant : " + VehicleSync.TestEnter(car, true)); }
+            Transform st = sat != null ? sat.transform.Find("TimingSaturday/Lines/Staging") : null;
+            Rigidbody cb = VehicleSync.Body(car);
+            if (dStep == 3 && t > a + 6f && st != null && cb != null)
+            {
+                dStep = 4;
+                Vector3 back = -st.forward; back.y = 0f;
+                Vector3 to = st.position + back.normalized * 6f + Vector3.up * 1f;
+                Log.Info("autotest : depart, " + VehicleSync.TestShift(car, to - cb.position) + " (Staging en " + st.position.ToString("F1") + ")");
+                cb.transform.rotation = Quaternion.LookRotation(new Vector3(st.forward.x, 0f, st.forward.z));
+            }
+            if (dStep == 4 && t > a + 8f && t < a + 11f && cb != null && st != null) { Vector3 f = st.forward; f.y = 0f; cb.velocity = f.normalized * 2f + Vector3.up * Mathf.Min(cb.velocity.y, 0f); }
+            DepartLog(t, a);
+        }
+        static void DepartLog(float t, float a)
+        {
+            if (t < a + 5f || t > a + 60f || Time.realtimeSinceStartup < dLog) return;
+            dLog = Time.realtimeSinceStartup + 2f;
+            var sb = new System.Text.StringBuilder("autotest : depart t=" + t.ToString("F0"));
+            foreach (string[] s in new[] { new[] { "RALLY/Saturday/TimingSaturday/Lines/Staging", "Checkpoint" }, new[] { "RALLY/Saturday/TimingSaturday", "Countdown" }, new[] { "RALLY/Saturday/TimingSaturday", "Clock" }, new[] { "RALLY/Saturday/TimingSaturday", "Timing" } })
+            {
+                GameObject fo = Game.FindAny(s[0]); PlayMakerFSM f = fo != null ? Game.FsmOn(fo, s[1]) : null;
+                sb.Append(" | ").Append(s[1]).Append(' ');
+                if (f == null) { sb.Append('?'); continue; }
+                sb.Append(f.ActiveStateName).Append(f.enabled ? "" : " (coupe)");
+                if (s[1] == "Clock") { FsmBool b = f.FsmVariables.FindFsmBool("Start"); FsmFloat tt = f.FsmVariables.FindFsmFloat("TimeTotal"); sb.Append(" Start=").Append(b != null && b.Value).Append(" T=").Append(tt != null ? tt.Value.ToString("F1") : "?"); }
+                if (s[1] == "Countdown") { FsmFloat w = f.FsmVariables.FindFsmFloat("Time"); sb.Append(" Time=").Append(w != null ? w.Value.ToString("F1") : "?"); }
+            }
+            Log.Info(sb.ToString());
+        }
+
         public static void Test(float t)
         {
             if (tStep == 0 && t > 40f)

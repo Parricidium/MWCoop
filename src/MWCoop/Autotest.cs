@@ -2139,6 +2139,7 @@ namespace MWCoop
             }
             if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
             if (mode == "mscdrag") { DragMsc.Test(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10)
+            if (mode == "mscdepart") { RallyMsc.TestStart(t); return; }   // (chrono du depart du rallye, Jani 31/10)
             if (mode == "msctrophee") { RallyMsc.Test(t); return; }   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)
             if (mode == "mscpodium") { RallyMsc.TestPodium(t); return; }   // (podium du rallye qui attend les autres humains, 24/10)
             if (mode == "msclumieres") { Lights.Test(t); return; }   // (ombres des phares, halos, portee sur MSC, 24/10)
