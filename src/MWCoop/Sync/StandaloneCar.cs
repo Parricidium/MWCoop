@@ -53,7 +53,7 @@ namespace MWCoop
             // (essuie-glaces : av1, av2, ar -- pivot, axe, angle maxi ; comodo ; StandaloneDrive)
             public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
             public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
-            public Component Rain, RainSrc;
+            public Component Rain, Rain2, RainSrc;   // (Rain2 : la lunette et son balai)
             // (ceintures : 0 conducteur, 1 passager avant, 2 arriere gauche, 3 arriere droite -- sangle pendue du modele, bouclee dessinee ;
             // dossiers avant rabattables, 0 gauche, 1 droite ; banquette : places arriere -- StandaloneDrive, JD 31/10)
             public Transform[] BeltHang = new Transform[4]; public Vector3[] BeltTop = new Vector3[4], BeltLow = new Vector3[4];
@@ -132,6 +132,7 @@ namespace MWCoop
                 var rw = new GameObject("VAZ_roue").transform;
                 rw.SetParent(model.transform, false);
                 rw.localRotation = q; rw.localPosition = -(q * wb.center);
+                Vector3 rlg; wheelWide = inf.TryGetValue("roues_largeur", out rlg) && rlg.x > 0.5f ? rlg : new Vector3(1f, 0f, 0f);
                 if (!inf.ContainsKey("roues_jeu") || !GameWheel(b, model.transform, left, fr, radius)) VazCar.AddModel(b, rw, "roue.p205");
                 else UnityEngine.Object.Destroy(rw.gameObject);
                 w.model = model; w.caliperModel = null;
@@ -332,6 +333,7 @@ namespace MWCoop
         // (pneu route d'origine) monte sur la jante ; a l'echelle du rayon du modele.
         // Maillages et matieres du jeu partages, rien d'embarque ; sans eux : roue.p205.
         static Mesh tireMesh; static Material[] tireMats; static Matrix4x4 tireFromRim; static bool tireFound;
+        static Vector3 wheelWide = new Vector3(1f, 0f, 0f);   // (infos.txt roues_largeur : facteur de largeur, decalage vers l'exterieur en m)
         static bool GameWheel(VazCar.Built b, Transform model, bool left, bool front, float radius)
         {
             try
@@ -375,9 +377,18 @@ namespace MWCoop
                 // (JD 31/10, capture : « les freins depassent sur les jantes » -- tambour et moyeu de la Satsuma au-dela de la face d'appui
                 // de la jante Octo : recules le long de l'essieu, derriere elle)
                 Vector3 outH = holder.InverseTransformDirection(b.Car.transform.right * (left ? -1f : 1f)).normalized;
+                // (JD 31/10, capture : pneus et jantes plus larges, jusqu'au bord de l'aile -- elargis le long de l'essieu, pousses dehors)
+                if (Mathf.Abs(wheelWide.x - 1f) > 0.01f || wheelWide.y != 0f)
+                {
+                    Vector3 sc = holder.localScale; int ax = Mathf.Abs(outH.x) >= Mathf.Abs(outH.y) && Mathf.Abs(outH.x) >= Mathf.Abs(outH.z) ? 0 : Mathf.Abs(outH.y) >= Mathf.Abs(outH.z) ? 1 : 2;
+                    sc[ax] *= wheelWide.x; holder.localScale = sc;
+                    holder.localPosition += model.InverseTransformDirection(b.Car.transform.right * (left ? -1f : 1f)) * wheelWide.y;
+                }
                 float hubFace = RimHubFace(rimSrc.GetComponent<MeshFilter>().sharedMesh, rimRel, outH);
                 string fr = front ? "F" : "R";
-                GameObject tbr = Game.FindAny("SATSUMA(557kg, 248)/" + fr + s + (front ? "/AckerF" + s : "") + "/wheel" + fr + s + "/Tire" + fr + s);
+                // (disques aux quatre roues -- JD 31/10 : « les disques sont devant et pas derriere » : ceux de l'avant de la Satsuma, du meme
+                // cote, aussi a l'arriere a la place des tambours)
+                GameObject tbr = Game.FindAny("SATSUMA(557kg, 248)/F" + s + "/AckerF" + s + "/wheelF" + s + "/TireF" + s);
                 int nb = 0;
                 if (tbr != null)
                     foreach (MeshFilter mf in tbr.GetComponentsInChildren<MeshFilter>(true))

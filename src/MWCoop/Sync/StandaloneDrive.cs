@@ -1377,6 +1377,11 @@ namespace MWCoop
                     if (orig != null) rainMats[orig] = rm;
                     return rm;
                 };
+                // (lunette avec son essuie-glace -- JD 31/10 : « l'essuie-glace arriere n'essuie pas la pluie » : le composant du jeu n'a que
+                // deux balais, ceux du pare-brise : la lunette a son propre composant, ou elle tient la bande du pare-brise et son balai est
+                // le premier)
+                var rear = new bool[rs.Count];
+                for (int r = 0; r < rs.Count; r++) { rear[r] = st.Wipers[2] != null; foreach (int q in cl[r]) if (q != 2) { rear[r] = false; break; } }
                 for (int r = 0; r < rs.Count; r++)
                 {
                     Mesh m = UnityEngine.Object.Instantiate(rs[r].sharedMesh); m.name = rs[r].sharedMesh.name + "_pluie";
@@ -1386,65 +1391,100 @@ namespace MWCoop
                         int k = cl[r][i]; Vector3 q = key(pos[r][i], k), sz = hi[k] - lo[k];
                         float a = sz.x > 1e-4f ? (q.x - lo[k].x) / sz.x : 0.5f, c = sz.y > 1e-4f ? (q.y - lo[k].y) / sz.y : 0.5f;
                         if (k == 0) a = 1f - a; else if (k == 1) c = 1f - c;
-                        uv[i] = new Vector2(rect[k].x + rect[k].width * (0.02f + 0.96f * a), rect[k].y + rect[k].height * (0.02f + 0.96f * c));
+                        Rect rk = rear[r] ? rect[0] : rect[k];
+                        uv[i] = new Vector2(rk.x + rk.width * (0.02f + 0.96f * a), rk.y + rk.height * (0.02f + 0.96f * c));
                     }
                     m.uv = uv; rs[r].sharedMesh = m;
                     int[] nc = new int[3]; foreach (int q in cl[r]) nc[q]++;
                     Vector2 ul = uv.Length > 0 ? uv[0] : Vector2.zero, uh = ul; foreach (Vector2 q in uv) { ul = Vector2.Min(ul, q); uh = Vector2.Max(uh, q); }
-                    Log.Info("standalone : pluie, " + Recon.Path(rs[r].transform) + " : " + uv.Length + " sommets (pare-brise " + nc[0] + ", cotes " + nc[1] + ", arriere " + nc[2] + "), uv " + ul.ToString("F2") + ".." + uh.ToString("F2") + ", bornes " + rs[r].sharedMesh.bounds.size.ToString("F2"));
+                    Log.Info("standalone : pluie, " + Recon.Path(rs[r].transform) + " : " + uv.Length + " sommets (pare-brise " + nc[0] + ", cotes " + nc[1] + ", arriere " + nc[2] + (rear[r] ? ", composant de la lunette" : "") + "), uv " + ul.ToString("F2") + ".." + uh.ToString("F2") + ", bornes " + rs[r].sharedMesh.bounds.size.ToString("F2"));
                     MeshRenderer mr0 = rs[r].GetComponent<MeshRenderer>();
-                    Log.Info("standalone : pluie, vitre " + mr0.name + " : matiere " + (mr0.sharedMaterial != null ? mr0.sharedMaterial.name + " [" + mr0.sharedMaterial.shader.name + "] couleur " + mr0.sharedMaterial.color : "-"));
                     mr0.sharedMaterial = rainFor(mr0.sharedMaterial);
                 }
                 // composant a nous, reglages de celui de la Satsuma ; reperes (normales, vent) a la meme orientation dans la voiture
-                var go = new GameObject("RainScript"); go.SetActive(false);
-                go.transform.SetParent(ct, false);
-                Component c2 = go.AddComponent(src.GetType());
                 Transform satRoot = sat.transform.root;
-                foreach (System.Reflection.FieldInfo fi in src.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                Func<string, List<MeshFilter>, Component> make = (nm, list) =>
                 {
-                    if (fi.Name == "windowRenderers" || fi.Name == "cachedWindowMaterials" || fi.Name.StartsWith("renderTexture") || fi.Name == "active" || fi.Name.StartsWith("previous")) continue;
-                    object val = fi.GetValue(src);
-                    if (val is Transform)
+                    var go = new GameObject(nm); go.SetActive(false);
+                    go.transform.SetParent(ct, false);
+                    Component cc = go.AddComponent(src.GetType());
+                    foreach (System.Reflection.FieldInfo fi in src.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
                     {
-                        var tr = new GameObject(((Transform)val).name).transform; tr.SetParent(go.transform, false);
-                        tr.rotation = ct.rotation * (Quaternion.Inverse(satRoot.rotation) * ((Transform)val).rotation);
-                        val = tr;
+                        if (fi.Name == "windowRenderers" || fi.Name == "cachedWindowMaterials" || fi.Name.StartsWith("renderTexture") || fi.Name == "active" || fi.Name.StartsWith("previous")) continue;
+                        object val = fi.GetValue(src);
+                        if (val is Transform)
+                        {
+                            var tr = new GameObject(((Transform)val).name).transform; tr.SetParent(go.transform, false);
+                            tr.rotation = ct.rotation * (Quaternion.Inverse(satRoot.rotation) * ((Transform)val).rotation);
+                            val = tr;
+                        }
+                        fi.SetValue(cc, val);
                     }
-                    fi.SetValue(c2, val);
-                }
-                RF(c2, "windowRenderers").SetValue(c2, rs.ConvertAll(x => x.GetComponent<MeshRenderer>()).ToArray());
-                RF(c2, "Wet").SetValue(c2, new Color(RainWet, RainWet, RainWet, 1f));
-                // balais : moyeux et portee dans la bande du pare-brise (largeur = 1)
-                for (int w = 0; w < 2; w++)
+                    RF(cc, "windowRenderers").SetValue(cc, list.ConvertAll(x => x.GetComponent<MeshRenderer>()).ToArray());
+                    RF(cc, "Wet").SetValue(cc, new Color(RainWet, RainWet, RainWet, 1f));
+                    return cc;
+                };
+                var front = new List<MeshFilter>(); var back = new List<MeshFilter>();
+                for (int r = 0; r < rs.Count; r++) (rear[r] ? back : front).Add(rs[r]);
+                // balais : moyeux et portee dans la bande du pare-brise (largeur = 1) ; portee bornee a la hauteur de la bande -- au-dela,
+                // le balai essuyait la bande des vitres de cote (JD 31/10 : « on voit le passage de l'essuie-glace » sur les portieres)
+                Func<int, int, float> reachOf = (w, k) =>
                 {
-                    if (st.Wipers[w] == null) continue;
-                    Vector3 pv = ct.InverseTransformPoint(st.Wipers[w].position); float reach = 0f;
+                    Vector3 pv0 = ct.InverseTransformPoint(st.Wipers[w].position); float reach = 0f;
                     foreach (MeshFilter mf in st.Wipers[w].GetComponentsInChildren<MeshFilter>())
-                        foreach (Vector3 v in mf.sharedMesh.vertices) reach = Mathf.Max(reach, (ct.InverseTransformPoint(mf.transform.TransformPoint(v)) - pv).magnitude);
-                    float wd = Mathf.Max(0.1f, hi[0].x - lo[0].x);
-                    RF(c2, "wiper" + (w + 1)).SetValue(c2, new Vector2(Mathf.Clamp01(1f - (pv.x - lo[0].x) / wd), 0f));
-                    RF(c2, "wiper" + (w + 1) + "Length").SetValue(c2, Mathf.Clamp(reach / wd, 0.1f, 0.8f));
+                        foreach (Vector3 v in mf.sharedMesh.vertices) reach = Mathf.Max(reach, (ct.InverseTransformPoint(mf.transform.TransformPoint(v)) - pv0).magnitude);
+                    return Mathf.Clamp(reach / Mathf.Max(0.1f, hi[k].x - lo[k].x), 0.1f, rect[0].height * 0.95f);
+                };
+                if (front.Count > 0)
+                {
+                    Component c2 = make("RainScript", front);
+                    for (int w = 0; w < 2; w++)
+                    {
+                        if (st.Wipers[w] == null) { RF(c2, "wiper" + (w + 1) + "Length").SetValue(c2, 0f); continue; }
+                        Vector3 pv = ct.InverseTransformPoint(st.Wipers[w].position);
+                        RF(c2, "wiper" + (w + 1)).SetValue(c2, new Vector2(Mathf.Clamp01(1f - (pv.x - lo[0].x) / Mathf.Max(0.1f, hi[0].x - lo[0].x)), 0f));
+                        RF(c2, "wiper" + (w + 1) + "Length").SetValue(c2, reachOf(w, 0));
+                    }
+                    c2.gameObject.SetActive(true);
+                    st.Rain = c2;
                 }
-                go.SetActive(true);
-                st.Rain = c2; st.RainSrc = src;
-                Log.Info("standalone : pluie sur " + rs.Count + " vitre(s), composant windshield de la Satsuma copie");
+                if (back.Count > 0)
+                {
+                    // (lunette : ses reperes de normale et de vent a la place de ceux du pare-brise ; balai du repos, vers -u, a 25 degres
+                    // au-dela de la verticale -- sa course de 115 degres)
+                    Component c3 = make("RainScriptLunette", back);
+                    RF(c3, "frontWindowNormal").SetValue(c3, RF(c3, "rearWindowNormal").GetValue(c3));
+                    RF(c3, "frontWind").SetValue(c3, RF(c3, "rearWind").GetValue(c3));
+                    Vector3 pv = ct.InverseTransformPoint(st.Wipers[2].position);
+                    RF(c3, "wiper1").SetValue(c3, new Vector2(Mathf.Clamp01((pv.x - lo[2].x) / Mathf.Max(0.1f, hi[2].x - lo[2].x)), 0f));
+                    RF(c3, "wiper1Length").SetValue(c3, reachOf(2, 2));
+                    RF(c3, "wiper1MaxAngle").SetValue(c3, 57.5f); RF(c3, "wiper1AngleOffset").SetValue(c3, -32.5f);
+                    RF(c3, "wiper2Length").SetValue(c3, 0f);
+                    c3.gameObject.SetActive(true);
+                    st.Rain2 = c3;
+                }
+                st.RainSrc = src;
+                Log.Info("standalone : pluie sur " + rs.Count + " vitre(s) (" + back.Count + " lunette a part), composant windshield de la Satsuma copie");
             }
             catch (Exception e) { Log.Warn("standalone : pluie : " + e.Message); }
         }
         // (eau sur nos vitres : teinte des gouttes et opacite, par rapport a la Satsuma -- [Test] PluieTeinte, PluieOpacite)
-        static float RainWet { get { return Config.GetFloat("Test", "PluieTeinte", 0.45f); } }
-        static float RainOpacityK { get { return Config.GetFloat("Test", "PluieOpacite", 0.55f); } }
+        static float RainWet { get { return Config.GetFloat("Test", "PluieTeinte", 0.30f); } }
+        static float RainOpacityK { get { return Config.GetFloat("Test", "PluieOpacite", 0.38f); } }
         static void RainTick(VazCar.Built b, State st)
         {
-            if (st.Rain == null || st.RainSrc == null) return;
+            if (st.RainSrc == null) return;
             float forced = Config.GetFloat("Test", "StandalonePluie", -1f);   // ([Test] StandalonePluie=1 : pluie forcee, essais)
-            RF(st.Rain, "rain").SetValue(st.Rain, forced >= 0f ? forced : RF(st.RainSrc, "rain").GetValue(st.RainSrc));
-            RF(st.Rain, "wind").SetValue(st.Rain, RF(st.RainSrc, "wind").GetValue(st.RainSrc));
-            RF(st.Rain, "disabledRain").SetValue(st.Rain, forced >= 0f ? false : RF(st.RainSrc, "disabledRain").GetValue(st.RainSrc));
             float k = (1f - Mathf.Cos(st.WiperPhase * 2f * Mathf.PI)) * 0.5f;
-            RF(st.Rain, "wiper1Position").SetValue(st.Rain, k);
-            RF(st.Rain, "wiper2Position").SetValue(st.Rain, k);
+            foreach (Component c in new[] { st.Rain, st.Rain2 })
+            {
+                if (c == null) continue;
+                RF(c, "rain").SetValue(c, forced >= 0f ? forced : RF(st.RainSrc, "rain").GetValue(st.RainSrc));
+                RF(c, "wind").SetValue(c, RF(st.RainSrc, "wind").GetValue(st.RainSrc));
+                RF(c, "disabledRain").SetValue(c, forced >= 0f ? false : RF(st.RainSrc, "disabledRain").GetValue(st.RainSrc));
+                RF(c, "wiper1Position").SetValue(c, k);
+                RF(c, "wiper2Position").SetValue(c, k);
+            }
         }
         // ---------------------------------------------------------------- ceintures (Golf, JD 31/10 : « fonctionnelles, avant et arriere,
         // la sangle comme celles de Menor ») : place bouclee -- sangle pendue du modele cachee, ceinture trois points dessinee de
@@ -1499,7 +1539,15 @@ namespace MWCoop
         static GameObject BeltRibbon(VazCar.Built b, State st, int k, Vector3 e)
         {
             if (st.BeltMat == null)
-                foreach (Renderer r in st.BeltHang[k].GetComponentsInChildren<Renderer>(true)) if (r.sharedMaterial != null) { st.BeltMat = r.sharedMaterial; break; }
+            {
+                // (la sangle : le plus long morceau de la piece -- elle porte aussi la languette, plastique et chrome)
+                float best = 0f;
+                foreach (MeshRenderer r in st.BeltHang[k].GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    MeshFilter f = r.GetComponent<MeshFilter>();
+                    if (r.sharedMaterial != null && f != null && f.sharedMesh != null && f.sharedMesh.bounds.size.magnitude > best) { best = f.sharedMesh.bounds.size.magnitude; st.BeltMat = r.sharedMaterial; }
+                }
+            }
             float s = e.x < 0f ? -1f : 1f;
             Vector3 sh = e + new Vector3(s * 0.16f, -0.21f, -0.07f), chest = e + new Vector3(-s * 0.02f, -0.37f, 0.07f), bu = BuckleAt(st, k, e);
             Vector3 hip = e + new Vector3(s * 0.21f, -0.58f, 0.03f), lap = e + new Vector3(0f, -0.55f, 0.14f);
