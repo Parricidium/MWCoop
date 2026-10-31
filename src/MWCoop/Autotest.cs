@@ -2967,8 +2967,15 @@ namespace MWCoop
                 int n = 0;
                 foreach (Transform tr in Resources.FindObjectsOfTypeAll<Transform>())
                     if (tr != null && (motif == "*" || tr.name.ToLowerInvariant().Contains(motif)) && tr.hideFlags == HideFlags.None && (sous.Length == 0 || Recon.Path(tr).ToLowerInvariant().Contains(sous)) && n++ < 80)
-                        Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1") + ", racine " + tr.root.InverseTransformPoint(tr.position).ToString("F2"));
+                        Log.Info("autotest : sonde " + Recon.Path(tr) + (tr.gameObject.activeInHierarchy ? "" : " (inactif)") + " en " + tr.position.ToString("F1") + ", racine " + tr.root.InverseTransformPoint(tr.position).ToString("F2") + ", angles " + tr.localEulerAngles.ToString("F1"));
                 Log.Info("autotest : sonde '" + motif + "' : " + n + " objet(s)");
+                // ([Test] SondeSons=<texte du chemin> : sources de son dont le chemin contient le texte, clip et volume -- echappements de
+                // la Satsuma pour la Golf, 31/10)
+                string ss = Config.Get("Test", "SondeSons", "").ToLowerInvariant();
+                if (ss.Length > 0)
+                    foreach (AudioSource a in Resources.FindObjectsOfTypeAll<AudioSource>())
+                        if (a != null && a.hideFlags == HideFlags.None && Recon.Path(a.transform).ToLowerInvariant().Contains(ss))
+                            Log.Info("autotest : sonde son " + Recon.Path(a.transform) + (a.gameObject.activeInHierarchy ? "" : " (inactif)") + " clip " + (a.clip != null ? a.clip.name : "-") + " vol " + a.volume.ToString("F2") + " h " + a.pitch.ToString("F2") + (a.isPlaying ? " JOUE" : ""));
                 string tx = Config.Get("Test", "SondeTextures", "").ToLowerInvariant();   // (textures dont le nom contient tx : atlas des ceintures sur My Summer Car)
                 if (tx.Length > 0) foreach (Material mt in Resources.FindObjectsOfTypeAll<Material>()) if (mt != null && mt.mainTexture != null && mt.mainTexture.name.ToLowerInvariant().Contains(tx)) Log.Info("autotest : sonde matiere " + mt.name + " [" + mt.shader.name + "] texture " + mt.mainTexture.name + " " + mt.mainTexture.width + "x" + mt.mainTexture.height);
                 // ([Test] SondeTextureCopie=<nom exact> : la texture recopiee dans dumps/texture-<nom>.png, par une RenderTexture -- textures illisibles)

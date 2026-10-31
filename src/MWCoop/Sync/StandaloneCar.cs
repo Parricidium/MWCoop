@@ -42,6 +42,8 @@ namespace MWCoop
             public CrashSensor Sensor;   // (choc mortel, mesure a chaque pas de physique)
             public AudioSource Horn; public bool HornOn;   // (klaxon : son du CarHorn de la voiture du jeu)
             public Transform Key; public Vector3 KeyAxis; public bool KeyIn, KeyWait; public int KeyPos; public float KeyAngle;   // (cle de contact du modele, StandaloneDrive)
+            public Material ClockMat; public Texture2D ClockTex; public int ClockShown = -2; public bool ClockLit;   // (montre digitale, StandaloneDrive)
+            public Transform[] Glass = new Transform[2], Crank = new Transform[2]; public Vector3[] GlassDown = new Vector3[2], CrankAxis = new Vector3[2]; public float[] WinPos = new float[2];   // (vitres de portiere a manivelle, StandaloneDrive)
             public Vector3 LastPos; public float LastPosT, RemoteKmh, NextState;   // (co-op : compteur d'une voiture menee ailleurs, etat renvoye)   // (habitacle creux : StandaloneDrive.Shell)
         }
         static readonly Dictionary<VazCar.Built, State> states = new Dictionary<VazCar.Built, State>();

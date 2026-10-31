@@ -152,6 +152,22 @@ namespace MWCoop
                 var inner = new GameObject("pieces").transform;
                 inner.SetParent(piv, false); inner.localPosition = -h;
                 VazCar.AddModel(b, inner, dd[i][0]);
+                // vitre de portiere et sa manivelle (vitre_<g|d>.p205, manivelle_<g|d>.p205 ; infos.txt vitre_<g|d>_bas, manivelle_<g|d>_centre /
+                // _axe -- Golf, JD 31/10) : sur la portiere, la vitre descend quand on tourne la manivelle (Knobs, WindowAnim)
+                string sx = i == 0 ? "g" : "d"; Vector3 wd, mc, ma;
+                if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "vitre_" + sx + ".p205")) && inf.TryGetValue("vitre_" + sx + "_bas", out wd))
+                {
+                    var wg = new GameObject("vitre_" + sx).transform; wg.SetParent(inner, false);
+                    VazCar.AddModel(b, wg, "vitre_" + sx + ".p205");
+                    st.Glass[i] = wg; st.GlassDown[i] = wd;
+                }
+                if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "manivelle_" + sx + ".p205")) && inf.TryGetValue("manivelle_" + sx + "_centre", out mc) && inf.TryGetValue("manivelle_" + sx + "_axe", out ma) && ma.sqrMagnitude > 0.01f)
+                {
+                    var cp = new GameObject("manivelle_" + sx).transform; cp.SetParent(inner, false); cp.localPosition = mc;
+                    var ci = new GameObject("pieces").transform; ci.SetParent(cp, false); ci.localPosition = -mc;
+                    VazCar.AddModel(b, ci, "manivelle_" + sx + ".p205");
+                    st.Crank[i] = cp; st.CrankAxis[i] = ma.normalized;
+                }
                 Bounds db; st.DoorCenter[i] = VazCar.ModelBounds(m, dd[i][0], out db) ? db.center : h;
                 st.Doors[i] = piv;
                 // (portiere conducteur : elle ferme l'habitacle pour le joueur et tourne avec la portiere -- ouverte, on passe)
@@ -184,6 +200,7 @@ namespace MWCoop
             else Log.Warn("standalone : son du klaxon de la voiture du jeu introuvable");
             st.Speedo = Gauge.Make(b, inf, "v", "cadran_vitesse.png");
             st.Tacho = Gauge.Make(b, inf, "r", "cadran_regime.png");
+            SetupClock(b, inf);
             MakeMirrors(b, st, inf);
         }
 
@@ -224,6 +241,13 @@ namespace MWCoop
         public class Gauge
         {
             public Transform Needle; public Vector3 Axis; public float A0, A1, V0, V1, Shown = -1f;
+            // (face de nuit, <face>_nuit.png : graduations vertes avec les phares, comme le tableau de bord eclaire de la Golf -- JD 31/10)
+            public Material Face; public Texture2D Day, Night; public bool Lit;
+            public void Light(bool on)
+            {
+                if (Night == null || Face == null || on == Lit) return;
+                Lit = on; Face.mainTexture = on ? Night : Day;
+            }
 
             public static Gauge Make(VazCar.Built b, Dictionary<string, Vector3> inf, string k, string faceFile)
             {
@@ -238,13 +262,16 @@ namespace MWCoop
                 // (face ronde a coins transparents -- 205 T16 : decoupee, la planche se voit autour)
                 bool round = face.GetPixel(1, 1).a < 0.5f && face.GetPixel(face.width - 2, face.height - 2).a < 0.5f;
                 Shader cut = round ? Shader.Find("Unlit/Transparent Cutout") : null;
-                fq.GetComponent<MeshRenderer>().sharedMaterial = new Material(cut ?? unlit) { mainTexture = face, color = new Color(0.85f, 0.85f, 0.85f) };
+                var fm = new Material(cut ?? unlit) { mainTexture = face, color = new Color(0.85f, 0.85f, 0.85f) };
+                fq.GetComponent<MeshRenderer>().sharedMaterial = fm;
+                string nf = faceFile.Replace(".png", "_nuit.png");
+                Texture2D night = System.IO.File.Exists(System.IO.Path.Combine(b.M.Dir, nf)) ? Png(b.M, nf) : null;
                 var pivot = new GameObject("aiguille_" + k).transform;
                 pivot.SetParent(b.Body, false); pivot.localPosition = c - n * 0.003f;
                 var nq = Quad("pieces", pivot, Vector3.zero, Vector3.zero, up, right);
                 nq.GetComponent<MeshRenderer>().sharedMaterial = new Material(transp) { mainTexture = needle };
                 Log.Info("standalone : compteur " + (k == "v" ? "vitesse" : "regime") + " pose (" + val.x + "-" + val.y + ", " + ang.x + "-" + ang.y + " degres)");
-                return new Gauge { Needle = pivot, Axis = n, A0 = ang.x, A1 = ang.y, V0 = val.x, V1 = val.y };
+                return new Gauge { Needle = pivot, Axis = n, A0 = ang.x, A1 = ang.y, V0 = val.x, V1 = val.y, Face = fm, Day = face, Night = night };
             }
 
             public void Set(float value)
@@ -259,7 +286,7 @@ namespace MWCoop
             }
 
             // carre plat centre en c (repere du parent), cotes 2 x up et 2 x right, texture entiere (haut de l'image vers up)
-            static GameObject Quad(string name, Transform parent, Vector3 c, Vector3 unused, Vector3 up, Vector3 right)
+            public static GameObject Quad(string name, Transform parent, Vector3 c, Vector3 unused, Vector3 up, Vector3 right)
             {
                 var g = new GameObject(name);
                 g.transform.SetParent(parent, false); g.transform.localPosition = c;
@@ -330,8 +357,86 @@ namespace MWCoop
                 st.LastPos = b.Car.transform.position; st.LastPosT = now;
             }
             float kmh = b.Rb.isKinematic ? st.RemoteKmh : Mathf.Abs(b.Car.transform.InverseTransformDirection(b.Rb.velocity).z) * 3.6f;
-            if (st.Speedo != null) st.Speedo.Set(kmh);
-            if (st.Tacho != null) st.Tacho.Set(st.EngineOn ? b.Dt.rpm : 0f);
+            if (st.Speedo != null) { st.Speedo.Set(kmh); st.Speedo.Light(st.LightsOn); }
+            if (st.Tacho != null) { st.Tacho.Set(st.EngineOn ? b.Dt.rpm : 0f); st.Tacho.Light(st.LightsOn); }
+            Clock(b, st);
+        }
+
+        // ---------------------------------------------------------------- montre digitale (infos.txt montre_centre / haut / droite : ecran
+        // du modele -- Golf, JD 31/10) : heure du jeu en 7 segments, ecran vert eclaire avec les phares. Heure : aiguilles de l'horloge de
+        // la cour (YARD/.../SuomiClock/Clock/hour et minute, tournees autour de leur y : 30 degres par heure, 6 par minute) ; matin ou
+        // apres-midi : la tranche de deux heures du soleil (MAP/SUN/Pivot/SUN::Color, Time) la plus proche.
+        public static void SetupClock(VazCar.Built b, Dictionary<string, Vector3> inf)
+        {
+            State st; Vector3 c, up, right;
+            if (!states.TryGetValue(b, out st) || !inf.TryGetValue("montre_centre", out c) || !inf.TryGetValue("montre_haut", out up) || !inf.TryGetValue("montre_droite", out right)) return;
+            Vector3 n = Vector3.Cross(right, up).normalized;
+            var q = Gauge.Quad("montre", b.Body, c - n * 0.0012f, Vector3.zero, up, right);
+            st.ClockTex = new Texture2D(96, 32, TextureFormat.RGB24, false) { name = "standalone_montre", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            st.ClockMat = new Material(Shader.Find("Unlit/Texture")) { mainTexture = st.ClockTex, name = "standalone_montre" };
+            q.GetComponent<MeshRenderer>().sharedMaterial = st.ClockMat;
+        }
+        static Transform clockHour, clockMinute; static float clockFind;
+        static int GameMinutes()
+        {
+            if ((clockHour == null || clockMinute == null) && Time.time >= clockFind)
+            {
+                clockFind = Time.time + 10f;
+                GameObject h = Game.FindAny("YARD/Building/Dynamics/SuomiClock/Clock/hour"), m = Game.FindAny("YARD/Building/Dynamics/SuomiClock/Clock/minute");
+                clockHour = h != null ? h.transform : null; clockMinute = m != null ? m.transform : null;
+            }
+            if (clockHour == null || clockMinute == null) return -1;
+            int min = Mathf.RoundToInt(clockMinute.localEulerAngles.y / 6f) % 60;
+            int h12 = ((Mathf.RoundToInt((clockHour.localEulerAngles.y - min * 0.5f) / 30f) % 12) + 12) % 12;
+            int h24 = h12;
+            PlayMakerFSM sun = Game.FindFsm("MAP/SUN/Pivot/SUN", "Color");
+            if (sun != null && sun.Fsm.Initialized)
+            {
+                int slot = sun.FsmVariables.GetFsmInt("Time").Value % 24;
+                int d0 = Mathf.Abs(h12 - slot), d1 = Mathf.Abs(h12 + 12 - slot);
+                d0 = Mathf.Min(d0, 24 - d0); d1 = Mathf.Min(d1, 24 - d1);
+                if (d1 < d0) h24 = h12 + 12;
+            }
+            return h24 * 60 + min;
+        }
+        // segments de chaque chiffre (bits a b c d e f g) ; ecran 96 x 32 : HH:MM (dizaine d'heures vide sous 10 h ; heure inconnue : tirets)
+        static readonly int[] Seg = { 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F };
+        static void Clock(VazCar.Built b, State st)
+        {
+            if (st.ClockTex == null) return;
+            int t = GameMinutes();
+            if (t == st.ClockShown && st.LightsOn == st.ClockLit) return;
+            st.ClockShown = t; st.ClockLit = st.LightsOn;
+            Color bg = st.LightsOn ? new Color(0.42f, 0.86f, 0.30f) : new Color(0.62f, 0.66f, 0.56f), ink = new Color(0.07f, 0.09f, 0.07f), ghost = Color.Lerp(bg, ink, 0.08f);
+            var px = new Color[96 * 32]; for (int i = 0; i < px.Length; i++) px[i] = bg;
+            int[] dig = t < 0 ? new[] { -1, -1, -1, -1 } : new[] { t < 600 ? -2 : t / 600, t / 60 % 10, t % 60 / 10, t % 10 };
+            int[] x0 = { 8, 28, 54, 74 };
+            for (int k = 0; k < 4; k++)
+            {
+                int s = dig[k] >= 0 ? Seg[dig[k]] : dig[k] == -1 ? 0x40 : 0;
+                for (int sg = 0; sg < 7; sg++) DrawSeg(px, x0[k], 4, sg, (s & (1 << sg)) != 0 ? ink : ghost);
+            }
+            Rect(px, 47, 10, 3, 3, ink); Rect(px, 47, 19, 3, 3, ink);
+            st.ClockTex.SetPixels(px); st.ClockTex.Apply(false);
+        }
+        // segment sg d'un chiffre de 14 x 24 px en (x, y) depuis le haut : a haut, b haut droite, c bas droite, d bas, e bas gauche,
+        // f haut gauche, g milieu
+        static void DrawSeg(Color[] px, int x, int y, int sg, Color c)
+        {
+            switch (sg)
+            {
+                case 0: Rect(px, x + 2, y, 10, 3, c); break;
+                case 1: Rect(px, x + 11, y + 2, 3, 10, c); break;
+                case 2: Rect(px, x + 11, y + 12, 3, 10, c); break;
+                case 3: Rect(px, x + 2, y + 21, 10, 3, c); break;
+                case 4: Rect(px, x, y + 12, 3, 10, c); break;
+                case 5: Rect(px, x, y + 2, 3, 10, c); break;
+                case 6: Rect(px, x + 2, y + 10, 10, 3, c); break;
+            }
+        }
+        static void Rect(Color[] px, int x, int y, int w, int h, Color c)
+        {
+            for (int j = y; j < y + h; j++) for (int i = x; i < x + w; i++) if (i >= 0 && i < 96 && j >= 0 && j < 32) px[(31 - j) * 96 + i] = c;
         }
 
         // ---------------------------------------------------------------- chaque image
@@ -343,6 +448,7 @@ namespace MWCoop
             if (b.Sound != null) b.Sound.Update();
             Lamps(b, st);
             KeyVisual(b, st);
+            WindowAnim(b, st);
             DoorAnim(b, st);
             Gauges(b, st);
             GameObject pl = Game.PlayerGo;
@@ -819,7 +925,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- tableau de bord
-        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99;
+        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200;
         static void SetHorn(VazCar.Built b, State st, bool on, bool send)
         {
             if (on == st.HornOn) return;
@@ -842,6 +948,24 @@ namespace MWCoop
                 if (along < 0.15f || along > 1.3f) continue;
                 float perp = (v - cam.forward * along).magnitude;
                 if (perp < (i == KWheelHub ? 0.07f : bestPerp) && (hit < 0 || perp < bestPerp)) { bestPerp = Mathf.Min(bestPerp, perp); hit = i; }
+            }
+            // manivelles des vitres (les deux, du siege conducteur) : clic gauche tenu = vitre baissee, clic droit tenu = remontee
+            for (int w = 0; w < 2; w++)
+            {
+                if (st.Crank[w] == null) continue;
+                Vector3 v = st.Crank[w].position - cam.position;
+                float along = Vector3.Dot(v, cam.forward);
+                if (along < 0.15f || along > 1.6f) continue;
+                float perp = (v - cam.forward * along).magnitude;
+                if (perp < 0.05f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KCrank0 + w; }
+            }
+            if (hit >= KCrank0)
+            {
+                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", "WINDOW");
+                int w = hit - KCrank0; float dw = (Input.GetMouseButton(0) ? 1f : 0f) - (Input.GetMouseButton(1) ? 1f : 0f);
+                if (dw != 0f) st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] + dw * Time.deltaTime / 2.2f);
+                return;
             }
             if (hit < 0) { ClearHover(); CrankStop(b, st); SetHorn(b, st, false, true); return; }
             hovered = hit;
@@ -875,6 +999,15 @@ namespace MWCoop
         // cle : visible mise, tournee sur son axe (contact 40 degres, demarreur 70, retour au contact) ; moteur demarre d'ailleurs (autre
         // joueur, essais) : cle mise au contact
         const float KeyOnDeg = 40f, KeyStartDeg = 70f;
+        // vitres : position 0 (fermee) a 1 (baissee), manivelle 3 tours sur la course
+        static void WindowAnim(VazCar.Built b, State st)
+        {
+            for (int w = 0; w < 2; w++)
+            {
+                if (st.Glass[w] != null) st.Glass[w].localPosition = st.GlassDown[w] * st.WinPos[w];
+                if (st.Crank[w] != null) st.Crank[w].localRotation = Quaternion.AngleAxis(st.WinPos[w] * 1080f, st.CrankAxis[w]);
+            }
+        }
         static void KeyVisual(VazCar.Built b, State st)
         {
             if (st.Key == null) return;
@@ -1177,6 +1310,8 @@ namespace MWCoop
             if (host && cStep == 2 && t > 32f && b != null && !cPhotos && Config.GetInt("Test", "StandalonePhotos", 0) != 0)
             {
                 cPhotos = true;
+                // ([Test] StandaloneVitres=0.6 : vitres de portiere baissees pour les photos)
+                float wv = Config.GetFloat("Test", "StandaloneVitres", 0f); if (wv > 0f && st != null) { st.WinPos[0] = st.WinPos[1] = Mathf.Clamp01(wv); WindowAnim(b, st); }
                 Photo(b, "34av", new Vector3(-3.2f, 1.6f, 3.6f)); Photo(b, "34ar", new Vector3(3.0f, 1.8f, -3.8f));
                 Photo(b, "cote", new Vector3(-4.6f, 0.9f, 0.2f)); Photo(b, "dessus", new Vector3(-1.5f, 4.5f, -3.0f));
             }
