@@ -76,6 +76,7 @@ namespace MWCoop
             fingerAnim = fistAnim = null;
             functions = crouch = hand = passOut = knockOut = pissFsm = null;
             found = false; nextFind = 0; sBits = -1; bits = 0; testHeld = false;
+            passOutWas = null;
             seatTrigger = null; triggers.Clear(); nextTriggerScan = 0;
             stainsFsm = null; stains.Clear(); stainsClaimed = false;
             remote.Clear();
@@ -164,6 +165,25 @@ namespace MWCoop
             if (Session.Active) { SendState(now); Stains(now); }
         }
 
+        // Reveil d'ivresse dans la voiture de Pena (Systems/PassOut :: Activate : Where? -PENA-> Active? -> Pena, DRUNKSPAWN :
+        // la HEPPA assoit le joueur -> Wake up 2 -> State 6 -> Test alc) : contrairement au reveil ailleurs (State 5), le jeu
+        // ne remet pas PlayerSleeps a faux. Seul, ca ne se voit pas ; en coop le joueur restait « endormi » : avatar couche
+        // chez les autres (qui glisse en l'air le long de la route, la HEPPA n'etant pas au meme endroit chez eux), place de
+        // passager rendue aussitot, boutique / cinema / sacs inaccessibles, « Tu dors seul » (Донской, 31/10).
+        // [Test] ReveilPena=0 : ancien comportement.
+        static string passOutWas;
+        static void WakeFromPena()
+        {
+            string st = passOut != null ? passOut.ActiveStateName : null;
+            if (st == passOutWas) return;
+            string was = passOutWas; passOutWas = st;
+            if (st != "Test alc" || was != "Pena" && was != "Wake up 2" && was != "State 6") return;
+            FsmBool sl = FsmVariables.GlobalVariables.FindFsmBool("PlayerSleeps");
+            if (sl == null || !sl.Value || Config.GetInt("Test", "ReveilPena", 1) == 0) return;
+            sl.Value = false;
+            Log.Info("evanouissement : reveil dans la voiture de Pena (" + was + " -> " + st + "), PlayerSleeps remis a faux (oubli du jeu)");
+        }
+
         // Le joueur local pousse (main "Hand Push" du jeu) ; essais : [Test] force.
         public static bool TestPush;
         public static bool Pushing { get { return TestPush || Active(push); } }
@@ -178,6 +198,7 @@ namespace MWCoop
             if (Active(push)) b |= G_Push;
             if (Active(fluid)) b |= G_Piss;
             if (passOut != null && PassOutDown.Contains(passOut.ActiveStateName) || knockOut != null && KnockOutDown.Contains(knockOut.ActiveStateName)) b |= G_Down;
+            WakeFromPena();
             if (drunkVar == null) drunkVar = FsmVariables.GlobalVariables.FindFsmFloat("PlayerDrunk");
             drunk = drunkVar != null ? drunkVar.Value : 0f;
             bool inCar = VehicleSync.LocalDriving >= 0 || Seats.Seated;
@@ -550,6 +571,38 @@ namespace MWCoop
         static float drunkWas;
         static Quaternion leanWas;
         static readonly string[] Steps = { "coup", "doigt", "pouce", "montre", "pipi", "penche", "ivresse", "porter", "evanoui" };
+
+        // ([Test] Autotest=pena : a PenaA s (40), l'hote est mis « evanoui » (PlayerSleeps) puis Systems/PassOut sur 'Active?' :
+        // reveil dans la HEPPA si elle roule, sinon a un point au hasard ; puis toutes les 2 s : etat, PlayerSleeps, parent.)
+        static int penaStep;
+        static float penaLogAt;
+        public static void TestPena(string mode, float t)
+        {
+            if (mode != "pena" || !Session.Active || !FindLocal()) return;
+            if (Session.IsHost && penaStep == 0 && t > Config.GetFloat("Test", "PenaA", 40f) && passOut != null)
+            {
+                penaStep = 1;
+                FsmBool sl = FsmVariables.GlobalVariables.FindFsmBool("PlayerSleeps");
+                if (sl != null) sl.Value = true;
+                GameObject road = Game.FindAny("TRAFFIC/VehiclesDirtRoad"), heppa = Game.FindAny("TRAFFIC/VehiclesDirtRoad/Rally/HEPPA");
+                // (allumees par 'Pass out', saute ici : sans elles l'animation de 'Wake up 2' ne finit jamais)
+                foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(GameObject)))
+                {
+                    var g = o as GameObject;
+                    if (g != null && g.name == "SleepEyes" && g.hideFlags == HideFlags.None) { g.SetActive(true); Log.Info("autotest : pena : " + Recon.Path(g.transform) + " allume"); }
+                }
+                Game.SetState(passOut, "Active?");
+                Log.Info("autotest : pena : PassOut -> " + passOut.ActiveStateName + " (VehiclesDirtRoad " + (road != null && road.activeInHierarchy) + ", HEPPA " + (heppa != null && heppa.activeInHierarchy) + ")");
+            }
+            if (t > 30f && Time.realtimeSinceStartup >= penaLogAt)
+            {
+                penaLogAt = Time.realtimeSinceStartup + 2f;
+                Transform p = Game.PlayerT;
+                Log.Info("autotest : pena : PassOut " + (passOut != null ? passOut.ActiveStateName : "-") + ", dort " + Game.GlobalBool("PlayerSleeps") + ", PlayerStop " + Game.GlobalBool("PlayerStop")
+                         + ", parent " + (p != null && p.parent != null ? p.parent.name : "-") + ", gestes " + bits);
+                foreach (Avatar a in PlayerSync.Avatars) Log.Info("autotest : pena : avatar " + a.Player.Name + " drapeaux " + a.Player.State.Flags);
+            }
+        }
 
         public static void Test(string mode, float t)
         {
