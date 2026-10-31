@@ -91,7 +91,7 @@ namespace MWCoop
         public static void Update()
         {
             if (restore == null || Time.realtimeSinceStartup < restoreAt) return;
-            int n = 0, kept = 0;
+            int n = 0, kept = 0, deadly = 0;
             foreach (KeyValuePair<PlayMakerFSM, string> kv in restore)
             {
                 if (kv.Key == null || kv.Key.ActiveStateName == kv.Value) continue;
@@ -99,6 +99,9 @@ namespace MWCoop
                 // SELLCAR) : y revenir ne ferait que rejouer ses actions -- la vente de la Rivett relancee a chaque
                 // sauvegarde (retour d'un joueur, 10/10). Rester dans l'etat de sauvegarde (terminal aussi) revient au meme.
                 if (OneShot(kv.Key, kv.Value)) { kept++; continue; }
+                // Etat d'avant qui tue le joueur (Simulation « State 7 », reste d'une mort de faim d'avant -- dossier #30) : jamais
+                // rejoue ; l'automate des besoins est relance apres la boucle.
+                if (KillsPlayer(kv.Key, kv.Value)) { deadly++; Log.Warn("sauvegarde en jeu : " + kv.Key.name + " :: " + kv.Key.FsmName + " pas remis dans '" + kv.Value + "' (etat qui tue le joueur)"); continue; }
                 // Parti ailleurs entre-temps (action d'un joueur rejouee pendant l'ecriture) : on le laisse.
                 string saved;
                 if (afterSave != null && afterSave.TryGetValue(kv.Key, out saved) && kv.Key.ActiveStateName != saved) continue;
@@ -106,7 +109,19 @@ namespace MWCoop
                 catch (System.Exception e) { Log.Warn("sauvegarde en jeu : " + kv.Key.name + " -> " + kv.Value + " : " + e.Message); }
             }
             restore = null; afterSave = null;
+            if (deadly > 0) Respawn.RestartNeeds("sauvegarde en jeu");
             Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant" + (kept > 0 ? ", " + kept + " laisses (etat d'avant terminal : ses actions ne sont pas rejouees)" : ""));
+        }
+
+        // Etat sans sortie qui allume la mort du joueur (SetFsmBool vers Systems/Death :: Activate Dead Body, comme les etats de
+        // mort de faim, de soif... de Database/PlayerDatabase :: Simulation).
+        static bool KillsPlayer(PlayMakerFSM f, string state)
+        {
+            HutongGames.PlayMaker.FsmState st = f.Fsm.GetState(state);
+            if (st == null || st.Transitions == null || st.Transitions.Length > 0) return false;
+            string acts;
+            try { acts = Jobs.DumpActions(f, state); } catch { return false; }
+            return acts != null && acts.Contains("fsmName=Activate Dead Body");
         }
 
         // Etat sans transition ni action repetee a chaque image (une fois ses actions faites, il ne fait plus rien) et

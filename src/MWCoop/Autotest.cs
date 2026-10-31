@@ -4176,7 +4176,19 @@ namespace MWCoop
                 // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres. MortVolant=1 : au
                 // volant de TestVoiture des 22 s (mort au volant : commandes coupees, puis rendues).
                 if (Config.GetInt("Test", "MortVolant", 0) != 0 && t > 22f && step == 0 && step2 == 0) { step2 = 1; Log.Info("autotest : mort au volant, " + VehicleSync.TestEnter(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), true)); }
-                if (t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Respawn.TestDie(Config.Get("Test", "TestCause", "Hunger"))); }
+                // ([Test] MortFaim=1, dossier #30 : faim mise a 205 a 30 s, la mort vient de l'automate du jeu (Database/PlayerDatabase ::
+                // Simulation, Hunger 2 -> State 7) ; son etat et la faim notes toutes les 5 s ; MortSauveA=s : sauvegarde en jeu a s secondes)
+                bool faim = Config.GetInt("Test", "MortFaim", 0) != 0;
+                if (faim && t > 30f && step == 0) { step = 1; FsmFloat ph = FsmVariables.GlobalVariables.FindFsmFloat("PlayerHunger"); if (ph != null) ph.Value = 205f; Log.Info("autotest : mort de faim, PlayerHunger = 205"); }
+                if (faim && t > 25f && Time.realtimeSinceStartup >= mpLogAt)
+                {
+                    mpLogAt = Time.realtimeSinceStartup + 5f;
+                    PlayMakerFSM sim = Game.FindFsm("PlayerDatabase", "Simulation"); FsmFloat ph = FsmVariables.GlobalVariables.FindFsmFloat("PlayerHunger");
+                    Log.Info("autotest : mort, Simulation [" + (sim != null ? sim.ActiveStateName : "?") + "] faim " + (ph != null ? ph.Value.ToString("F1") : "?") + " t=" + t.ToString("F0"));
+                }
+                float msa = Config.GetFloat("Test", "MortSauveA", 0f);
+                if (msa > 0f && t > msa && mmSave == 0) { mmSave = 1; Game.SaveInPlace(); Log.Info("autotest : mort, sauvegarde en jeu"); }
+                if (!faim && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Respawn.TestDie(Config.Get("Test", "TestCause", "Hunger"))); }
                 if (t > 31f && Time.frameCount % 90 == 0 && t < 45f) Log.Info("autotest : " + Respawn.State() + " ; " + Respawn.FxDiff());
                 if (t > 38f && step == 1)
                 {
