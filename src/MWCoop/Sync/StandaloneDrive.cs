@@ -943,9 +943,13 @@ namespace MWCoop
         static bool InZone(VazCar.Built b, State st, Transform pl)
         {
             Vector3 lp = b.Car.transform.InverseTransformPoint(pl.position);
-            bool alongSeat = Mathf.Abs(lp.z - st.T.EntreeZ) < st.T.EntreeLongueur * 0.5f && lp.y > -1.0f && lp.y < 2.0f;
+            // (siege mesure dans le modele -- JD 01/11 : « les zones pour s'asseoir par rapport aux assises » : l'assise du conducteur, 30 cm
+            // autour de son milieu ; sinon tenue.ini [Poste] EntreeZ / EntreeLongueur)
+            float zc = st.HasSeatRef[0] ? st.SeatRef[0].z + 0.25f : st.T.EntreeZ, zh = st.HasSeatRef[0] ? 0.32f : st.T.EntreeLongueur * 0.5f;
+            float xc = st.HasSeatRef[0] ? st.SeatRef[0].x : b.M.Head.x, xh = st.HasSeatRef[0] ? 0.3f : 0.32f;
+            bool alongSeat = Mathf.Abs(lp.z - zc) < zh && lp.y > -1.0f && lp.y < 2.0f;
             if (!alongSeat) return false;
-            if (Mathf.Abs(lp.x - b.M.Head.x) < 0.32f) return true;
+            if (Mathf.Abs(lp.x - xc) < xh) return true;
             float side = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f, flank = st.HalfWidth > 0.3f ? st.HalfWidth : 0.85f;
             return st.DoorOpen != null && st.DoorOpen[0] && lp.x * side > flank - 0.12f && lp.x * side < flank + 1.1f;
         }
@@ -1935,7 +1939,7 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
             UnityEngine.Object.Destroy(go);
         }
-        static bool cFrein;
+        static bool cFrein, cSeatShots;
         static float wLog; static bool wDump;
         public static void CoopTest(float t)
         {
@@ -2000,7 +2004,21 @@ namespace MWCoop
             if (!host && cStep == 1 && t > 44f && car != null)
             {
                 cStep = 3;
-                Log.Info("standalone : coop, invite : copie " + car.name + (b != null ? " standalone" : " PAS standalone") + ", passager -> " + Seats.TestSit(car.name, 0));
+                Log.Info("standalone : coop, invite : copie " + car.name + (b != null ? " standalone" : " PAS standalone") + ", passager -> " + Seats.TestSit(car.name, Config.GetInt("Test", "StandalonePlace", 0)));   // ([Test] StandalonePlace=1 : banquette)
+            }
+            // ([Test] StandalonePhotosPlaces=1 : a 58 s, les avatars assis -- chez l'hote, le passager (l'invite) ; chez l'invite, le
+            // conducteur (l'hote) : par la vitre de cote, par le pare-brise, de l'arriere)
+            if (Config.GetInt("Test", "StandalonePhotosPlaces", 0) != 0 && b != null && t > (host ? 73f : 58f) && !cSeatShots)
+            {
+                cSeatShots = true; float sx = host ? 1f : -1f; string w = host ? "passager" : "conducteur";
+                if (host && Config.GetInt("Test", "StandalonePlace", 0) > 0)
+                {
+                    Photo(b, "arriere-cote", new Vector3(-1.8f, 1.1f, -0.9f), new Vector3(-0.3f, 0.85f, -0.9f));
+                    Photo(b, "arriere-face", new Vector3(0.3f, 1.2f, 0.35f), new Vector3(-0.3f, 0.85f, -0.95f));
+                }
+                Photo(b, w + "-cote", new Vector3(sx * 1.7f, 1.1f, -0.2f), new Vector3(sx * 0.33f, 0.8f, -0.2f));
+                Photo(b, w + "-face", new Vector3(sx * 0.3f, 1.25f, 1.7f), new Vector3(sx * 0.33f, 0.85f, -0.25f));
+                Photo(b, w + "-profil", new Vector3(-sx * 0.05f, 1.05f, 0.35f), new Vector3(sx * 0.4f, 0.75f, -0.35f));
             }
             // ([Test] StandaloneEssuieMarche=66 : essuie-glaces mis en marche a ce temps -- pluie sur les vitres, captures avant / apres)
             float wOn = Config.GetFloat("Test", "StandaloneEssuieMarche", 0f);

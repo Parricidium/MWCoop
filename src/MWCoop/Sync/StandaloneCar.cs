@@ -533,6 +533,34 @@ namespace MWCoop
             foreach (VazCar.Built b in cars) { State st; if (b.Car == car.gameObject && states.TryGetValue(b, out st) && st.HasRear) { off = st.RearOffset; return true; } }
             return false;
         }
+        // Places mesurees dans le modele (infos.txt siege_<k> : milieu x, dessus de l'assise, avant du bas du dossier ; k 1 passager avant,
+        // 2 arriere gauche, 3 arriere droite) -> yeux d'un passager assis (JD 01/11 : « les mannequins bien assis sur les fauteuils » ;
+        // en miroir du conducteur, le passager etait 20 cm trop en arriere -- les deux sieges avant du modele ne sont pas a la meme place)
+        // et zone ou l'on s'assoit : l'assise elle-meme. [Test] SiegeYeux=cote,haut,avant (m).
+        public static bool SeatEyes(Transform car, int k, out Vector3 eyes, out Vector3 cushion)
+        {
+            eyes = cushion = Vector3.zero;
+            if (car == null) return false;
+            foreach (VazCar.Built b in cars)
+            {
+                State st;
+                if (b.Car != car.gameObject || !states.TryGetValue(b, out st) || k < 0 || k > 3 || !st.HasSeatRef[k]) continue;
+                Vector3 c = st.SeatRef[k], o = SeatEyeOffset;
+                eyes = new Vector3(c.x + o.x, c.y + o.y, c.z + o.z);
+                cushion = new Vector3(c.x, c.y, c.z + 0.25f);   // (milieu de l'assise : 25 cm devant le dossier)
+                return true;
+            }
+            return false;
+        }
+        static Vector3 SeatEyeOffset
+        {
+            get
+            {
+                string[] p = Config.Get("Test", "SiegeYeux", "").Split(','); var ci = System.Globalization.CultureInfo.InvariantCulture; float a, b2, c2;
+                if (p.Length == 3 && float.TryParse(p[0], System.Globalization.NumberStyles.Float, ci, out a) && float.TryParse(p[1], System.Globalization.NumberStyles.Float, ci, out b2) && float.TryParse(p[2], System.Globalization.NumberStyles.Float, ci, out c2)) return new Vector3(a, b2, c2);
+                return new Vector3(0.06f, 0.535f, 0.155f);
+            }
+        }
         // Boucle de la ceinture d'une place (yeux du passager, repere de la voiture) : faux sans ceinture a cette place
         public static bool SeatBuckle(Transform car, Vector3 head, out Vector3 buckle)
         {

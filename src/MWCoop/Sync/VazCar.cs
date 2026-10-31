@@ -339,7 +339,7 @@ namespace MWCoop
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
         public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
         // au F10 (installe, et pas reserve a une quete)
-        public static bool InF10(int id) { return Has(id) && !ModelOf(id).QuestOnly; }
+        public static bool InF10(int id) { return Has(id) && (!ModelOf(id).QuestOnly || Config.Testing && Config.GetInt("Test", "QueteF10", 0) != 0); }   // ([Test] QueteF10=1 : essais)
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
         public static int Current(int id) { return StandaloneCar.Ready(id) ? StandaloneOf(id) : id; }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)

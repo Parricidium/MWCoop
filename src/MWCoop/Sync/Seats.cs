@@ -32,7 +32,7 @@ namespace MWCoop
     //    (DriverBelt/HandleUpPivot) cachee.
     public static partial class Seats   // (partie : SeatFiles.cs, places de l'outil de JD)
     {
-        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f; public bool Bed; public float Yaw; public bool Stand; }   // (Stand : place debout, appuye -- cabine du tracteur)   // (Bed : ridelle d'une remorque, on y monte depuis le sol ; Yaw : sens de la place, degres, 0 = l'avant)
+        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f, ZoneDz = -0.1f; public bool Bed; public float Yaw; public bool Stand; }   // (Stand : place debout, appuye -- cabine du tracteur)   // (Bed : ridelle d'une remorque, on y monte depuis le sol ; Yaw : sens de la place, degres, 0 = l'avant)
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
@@ -194,13 +194,16 @@ namespace MWCoop
                 // (pose de conduite) : en miroir simple, le passager avant s'asseyait 15 cm vers le milieu de son siege -- essai SATSUMA, 21/10)
                 float xm = Game.Msc ? 2f * EyeFromPivotMsc.x : 0f;
                 seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x + xm, d.y, d.z), ZoneZ = Vaz.IsVaz(rb.transform) ? 0.85f : 0.5f });   // (VAZ-2108 : baquets plus en arriere, on n'approche que l'espace des pieds depuis la portiere -- zone plus longue)
+                StandaloneSeat(seats[seats.Count - 1], 1);
                 // (standalone a banquette -- Golf, JD 31/10 : « je ne peux pas passer sur les places arriere » : deux places derriere les
                 // sieges avant, d'apres infos.txt banquette ; on y passe dossier avant rabattu)
                 Vector3 sbo;
                 if (StandaloneCar.RearBench(rb.transform, out sbo))
                 {
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + sbo.y, d.z + sbo.z) });
+                    StandaloneSeat(seats[seats.Count - 1], 2);
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x + xm, d.y + sbo.y, d.z + sbo.z) });
+                    StandaloneSeat(seats[seats.Count - 1], 3);
                 }
                 // (taxi et ses copies -- mods Machtwagen300D, SECONDMACHTWAGEN : noms en minuscules ou prefixes, sans banquette
                 // avant, retour de Menos 10/10 : « on ne peut pas s'asseoir a l'arriere »)
@@ -238,6 +241,14 @@ namespace MWCoop
         }
 
         static int seatLogs;
+        // Standalone aux places mesurees (StandaloneCar.SeatEyes, Golf -- JD 01/11) : les yeux sur le siege, la zone sur l'assise.
+        static void StandaloneSeat(Seat s, int k)
+        {
+            Vector3 eyes, cushion;
+            if (!StandaloneCar.SeatEyes(s.CarT, k, out eyes, out cushion)) return;
+            s.Head = eyes; s.ZoneX = 0.3f; s.ZoneZ = 0.3f; s.ZoneDz = cushion.z - eyes.z;
+            if (seatLogs++ < 12) Log.Info("places passagers : " + s.Car + " place " + s.Index + " sur son siege, yeux " + eyes.ToString("F2") + ", assise " + cushion.ToString("F2"));
+        }
         // Couchette de la GIFU par rapport aux yeux du conducteur : ecart entre les places (x), hauteur (y), recul (z). Coupe de
         // la cabine (essai sondeplaces) : couchette a 1,75 m (repere du camion), toit 2,60, paroi arriere z 1,9, yeux du
         // conducteur 2,05 / z 2,99. Dessous du toit a 2,42 : 67 cm seulement au-dessus de la couchette -> yeux juste sous le toit
@@ -419,7 +430,7 @@ namespace MWCoop
                 if ((s.CarT.position - player.position).sqrMagnitude > 25f || !s.CarT.gameObject.activeInHierarchy) continue;   // (taxi range : inactif)
                 Vector3 p = s.CarT.InverseTransformPoint(player.position);
                 if (!InSeatZone(s, p)) continue;
-                float dx = Mathf.Abs(p.x - s.Head.x), dz = Mathf.Abs(p.z - (s.Head.z - 0.1f));
+                float dx = Mathf.Abs(p.x - s.Head.x), dz = Mathf.Abs(p.z - (s.Head.z + s.ZoneDz));
                 float d = dx * dx + dz * dz;
                 if (d < bestD) { bestD = d; best = s; }
             }
@@ -433,7 +444,7 @@ namespace MWCoop
         {
             float low = s.Bed ? s.Head.y - 2.3f : Mathf.Max(-0.3f, s.Head.y - 1.6f);   // (plateau : depuis le sol a cote de la remorque)
             if (p.y < low || p.y > s.Head.y || Mathf.Abs(p.x) > s.MaxX) return false;
-            return Mathf.Abs(p.x - s.Head.x) <= s.ZoneX && Mathf.Abs(p.z - (s.Head.z - 0.1f)) <= s.ZoneZ;
+            return Mathf.Abs(p.x - s.Head.x) <= s.ZoneX && Mathf.Abs(p.z - (s.Head.z + s.ZoneDz)) <= s.ZoneZ;
         }
 
         // Zone du conducteur coupee pour le joueur d'ici (son automate 'PlayerTrigger' arrete, icone du volant eteinte) :
