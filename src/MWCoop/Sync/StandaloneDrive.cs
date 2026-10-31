@@ -574,7 +574,7 @@ namespace MWCoop
             {
                 Doors(b, st);
                 CabinPresence(b, st, pl.transform);
-                bool zone = InZone(b, st, pl.transform) && b.Rb.velocity.magnitude < 2f && Vector3.Angle(b.Car.transform.up, Vector3.up) < 45f;
+                bool zone = !QueteGolf.Locked(b) && InZone(b, st, pl.transform) && b.Rb.velocity.magnitude < 2f && Vector3.Angle(b.Car.transform.up, Vector3.up) < 45f;   // (voiture de la quete s21 pas encore pretee : fermee)
                 if (zone)
                 {
                     prompted = b;
@@ -639,6 +639,8 @@ namespace MWCoop
             if (hit < 0) { if (doorHover >= 0) { doorHover = -1; Game.SetGlobalBool("GUIuse", false); if (prompted == null) Game.SetGlobal("GUIinteraction", ""); } return; }
             doorHover = hit;
             Game.SetGlobalBool("GUIuse", true);
+            // (voiture de la quete s21, pas encore pretee : portieres et hayon fermes a cle)
+            if (hit <= 2 && QueteGolf.Locked(b)) { if (prompted == null) Game.SetGlobal("GUIinteraction", "LOCKED"); return; }
             if (prompted == null) Game.SetGlobal("GUIinteraction", hit < 2 ? (st.DoorOpen[hit] ? "CLOSE DOOR" : "OPEN DOOR") : hit == 2 ? (st.HatchOpen ? "CLOSE TRUNK" : "OPEN TRUNK") : hit == 3 ? (st.ShelfUp ? "LOWER SHELF" : "LIFT SHELF") : (st.Folded[hit - 4] ? "RAISE SEAT" : "FOLD SEAT"));
             if (!Input.GetMouseButtonDown(0) && !Down("Use")) return;
             if (hit >= 4) { st.Folded[hit - 4] = !st.Folded[hit - 4]; SendState(b, st); Log.Info("standalone : dossier " + (hit == 4 ? "gauche" : "droit") + (st.Folded[hit - 4] ? " rabattu" : " releve")); return; }

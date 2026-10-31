@@ -415,6 +415,8 @@ namespace MWCoop
         }
 
         public Bounds BodyBounds { get { return body != null ? body.bounds : new Bounds(Root.transform.position, Vector3.zero); } }
+        // (apercu fige) debout au repos, la main droite tendue vers 'at' de 'w' (0..1) -- le client de la boutique s21 qui tend une cle
+        public void PoseGive(Vector3 at, float w) { PoseStanding(0f); ArmTo(true, at, w); }
         public Transform HeadBone { get { return headBone; } }
 
         static AnimationClip FindClip(string name)

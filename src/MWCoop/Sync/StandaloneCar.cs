@@ -509,6 +509,21 @@ namespace MWCoop
         }
 
         public static VazCar.Built Find(GameObject car) { foreach (VazCar.Built b in cars) if (b.Car == car) return b; return null; }
+        // Copie de la cle de la voiture de la quete s21 (le client la tend au joueur, Kauppa) ; null sans voiture ni cle.
+        public static GameObject QuestKeyCopy()
+        {
+            foreach (VazCar.Built b in cars)
+            {
+                State st;
+                if (!QueteGolf.IsQuestCar(b) || !states.TryGetValue(b, out st) || st.Key == null) continue;
+                var k = (GameObject)UnityEngine.Object.Instantiate(st.Key.gameObject);
+                k.SetActive(true); k.transform.localScale = st.Key.lossyScale;
+                foreach (Transform t in k.GetComponentsInChildren<Transform>(true)) t.gameObject.SetActive(true);
+                foreach (Renderer rr in k.GetComponentsInChildren<Renderer>(true)) rr.enabled = true;   // (cle rangee : rendus eteints)
+                return k;
+            }
+            return null;
+        }
         // Banquette d'une standalone (infos.txt banquette -- Golf, JD 31/10) : decalage des places arriere par rapport aux places avant
         // (Seats en fait deux places)
         public static bool RearBench(Transform car, out Vector3 off)

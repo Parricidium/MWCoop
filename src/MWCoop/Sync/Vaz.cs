@@ -34,7 +34,8 @@ namespace MWCoop
         //  35 V_LIV   invite -> hote : empreinte de sa livree (changee au lanceur pendant la partie)
         // (V_ASK et V_SET portent aussi le modele et l'empreinte de la livree : Session.NetVersion 43)
         //  36 V_STD   tous -> tous : voiture standalone n, etat (moteur, phares, portieres) -- StandaloneCar.SendState
-        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33, V_ROOF = 34, V_LIV = 35, V_STD = 36;
+        //  37 V_QUETE quete de la Golf : invite -> hote (cle donnee), hote -> tous (quete faite ?) -- QueteGolf
+        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33, V_ROOF = 34, V_LIV = 35, V_STD = 36, V_QUETE = 37;
 
         static readonly string[] NamesFr = { "Rouge", "Bleu", "Jaune", "Vert", "Blanc", "Noir", "Orange", "Violet", "Bleu ciel", "Rose", "Gris", "Bordeaux", "Turquoise", "Vert pomme", "Marron", "Bleu nuit" };
         static readonly string[] NamesEn = { "Red", "Blue", "Yellow", "Green", "White", "Black", "Orange", "Purple", "Sky blue", "Pink", "Grey", "Burgundy", "Turquoise", "Lime", "Brown", "Navy" };
@@ -179,7 +180,7 @@ namespace MWCoop
             if (!PlayerSync.InGame) return false;
             if (n < 1 || n > Count) return false;
             model = VazCar.Current(model);
-            if (!VazCar.Has(model)) model = VazCar.ModelVaz;
+            if (!VazCar.InF10(model)) model = VazCar.ModelVaz;   // (voiture de quete : pas au F10)
             if (wanted.ContainsKey(Me)) { Deny(2, n); return false; }
             if (!IsFree(n)) { Deny(1, n); return false; }
             Vector3 pos; float yaw; if (!SpotNearMe(out pos, out yaw)) { WetToast(); return false; }
@@ -197,7 +198,7 @@ namespace MWCoop
         public static bool RequestAt(int model, Vector3 pos, float yaw)
         {
             if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coupée (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
-            if (!PlayerSync.InGame || !VazCar.Has(model)) return false;
+            if (!PlayerSync.InGame || !VazCar.InF10(model)) return false;
             atModel = -1;
             Slot s; int n = 0;
             if (wanted.TryGetValue(Me, out s))
@@ -241,6 +242,16 @@ namespace MWCoop
 
         static void WetToast() { Hud.Toast(Lang.T("Pas de place au sec pour ta voiture près de toi : éloigne-toi de l'eau", "No dry spot for your car near you: move away from the water")); }
 
+        // Voiture du monde (hote ou solo ; QueteGolf : la Golf garee chez Teimo) : place de la table a un proprietaire qui n'est pas un
+        // joueur (owner), a ce numero, a cette place ; construite chez tous comme les autres, sans message. Rendue : null.
+        public static void PlaceWorldCar(int owner, int number, int model, Vector3 pos, float yaw)
+        {
+            if (!Host) return;
+            wanted[owner] = new Slot { Number = number, Model = model, Pos = pos, Yaw = yaw };
+            HostChanged("voiture du monde n " + number + " " + VazCar.ModelOf(model).Name + " en " + pos.ToString("F1"));
+        }
+        public static bool HasWorldCar(int owner) { return wanted.ContainsKey(owner); }
+
         // Faire venir la sienne a cote de soi.
         public static void Call()
         {
@@ -266,6 +277,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- cycle
         public static void OnLevelLoaded()
         {
+            QueteGolf.OnLevelLoaded();
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
             rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f; gearStep = 0; gearLog = 0f; stageStep = stageIdx = 0; stageLog = stageEnd = 0f;
             if (!hooked)
@@ -276,7 +288,7 @@ namespace MWCoop
         }
 
         static string World() { var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat("PlayerID"); return v != null ? v.Value.ToString("F0") : ""; }
-        static string NameOf(int id) { PlayerInfo pi; return Session.Players.TryGetValue(id, out pi) ? pi.Name : Solo && id == 0 ? "solo" : "#" + id; }
+        static string NameOf(int id) { PlayerInfo pi; return id == QueteGolf.Owner ? "quete" : Session.Players.TryGetValue(id, out pi) ? pi.Name : Solo && id == 0 ? "solo" : "#" + id; }
         static string Clean(string s) { return (s ?? "").Replace(";", "").Replace(":", "").Replace("=", "").Replace("|", ""); }
 
         // Apres la physique et les automates (VehicleSync.LateUpdate) : ralenti des VAZ (VazHandling.Idle).
@@ -291,6 +303,7 @@ namespace MWCoop
         {
             if (!PlayerSync.InGame) return;
             StandaloneCar.Update();
+            QueteGolf.Update();
             if (!Enabled && rents.Count == 0 && wanted.Count == 0) return;   // (VAZ coupee, aucune sortie : rien a chaque image -- demande de Menor 25/10)
             float now = Time.realtimeSinceStartup;
             foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null && !StandaloneCar.Owns(r.Car)) VazCar.Tick(r.Car, now);   // (standalone : StandaloneCar.Update)
@@ -398,6 +411,7 @@ namespace MWCoop
                 int model = r.More ? r.U8() : VazCar.ModelVaz; string liv = r.More ? r.Str() : "";
                 if (model <= VazCar.ModelVaz || model >= 64) { model = VazCar.ModelVaz; liv = ""; }   // (modele inconnu ici : garde, construit en VAZ)
                 model = VazCar.Current(model);   // (R5 copie demandee sur My Summer Car : la standalone)
+                if (VazCar.ModelOf(model).QuestOnly) { model = VazCar.ModelVaz; liv = ""; }   // (voiture de quete : jamais au F10)
                 if (n == 0) { if (wanted.Remove(from.Id)) { HostChanged("rendue par " + NameOf(from.Id)); } return; }
                 int why = !Enabled ? 4 : n < 1 || n > Count ? 3 : wanted.ContainsKey(from.Id) ? 2 : !IsFree(n) ? 1 : 0;
                 if (why != 0)
@@ -416,6 +430,7 @@ namespace MWCoop
                 return;
             }
             if (kind == V_STD) { StandaloneCar.OnState(from, r); return; }
+            if (kind == V_QUETE) { QueteGolf.OnMessage(from, r); return; }
             if (kind == V_ROOF)
             {
                 int n = r.U8(); bool open = r.Bool();
@@ -454,8 +469,9 @@ namespace MWCoop
                     try
                     {
                         Quaternion rot = Quaternion.Euler(0f, kv.Value.Yaw, 0f);
-                        r.Car = VazCar.ModelOf(r.Model).Standalone ? StandaloneCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, rot, VazCar.ModelOf(VazCar.CopyOf(r.Model)))
-                                                            : VazCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, rot, VazCar.ModelOf(r.Model));
+                        Color paint = kv.Key == QueteGolf.Owner ? QueteGolf.Paint : ColorOf(r.Number);   // (voiture de la quete s21 : sa couleur, pas celle du numero)
+                        r.Car = VazCar.ModelOf(r.Model).Standalone ? StandaloneCar.Build(Prefix + r.Number, r.Number, paint, kv.Value.Pos, rot, VazCar.ModelOf(VazCar.CopyOf(r.Model)))
+                                                            : VazCar.Build(Prefix + r.Number, r.Number, paint, kv.Value.Pos, rot, VazCar.ModelOf(r.Model));
                     }
                     catch (System.Exception e) { Log.Error("vaz : construction de la n " + r.Number + " : " + e); if (r.Car != null) VazCar.Destroy(r.Car); r.Car = null; }
                     if (r.Car != null && Changed != null) Changed();

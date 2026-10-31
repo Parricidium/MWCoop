@@ -90,6 +90,7 @@ namespace MWCoop
             {
                 get
                 {
+                    if (!string.IsNullOrEmpty(DirOverride) && Directory.Exists(DirOverride)) return DirOverride;
                     string root = System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop";
                     if (Folder != "vaz") { string a = Path.Combine(Path.Combine(root, "addons"), Folder); if (Directory.Exists(a)) return a; }
                     return Path.Combine(root, Folder);
@@ -97,6 +98,8 @@ namespace MWCoop
             }
             public bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
             public bool Retired;   // (retiree de la liste meme installee : ni F10 ni demande ; un ancien client qui la demande montre une VAZ)
+            public bool QuestOnly; // (pas au F10 : seulement par une quete -- la Golf, QueteGolf)
+            public string DirOverride;   // (fichiers ailleurs que dans addons : ceux tires de la DLL, QueteGolf)
         }
         public class Knob { public string Path; public Vector3 At, Normal; public Color Col; public bool Choke; }
         // Tenue de route d'un addon (VazHandling.Spec) : moteur, boite, masse, repartition (part sur l'avant), ressorts.
@@ -303,12 +306,12 @@ namespace MWCoop
         // R5 standalone (pilote, spec du 28/10, lot 4) : numero de modele a elle dans la table des voitures du F10 ; construite par
         // StandaloneCar la ou [Test] AddonStandalone=1, ailleurs la R5 copie (n 6) de la meme couleur et du meme numero (Vaz.BuildModel).
         public static readonly Model R5S = R5.CloneAs(ModelR5S, null);
-        // Golf GTI 1983 (modele de SamGrey achete par JD sur RenderHub le 31/10, MWCoop-voiture/golf83) : standalone sans copie, pas
-        // encore proposee aux joueurs (JD : « j'ai un autre projet pour elle ») -- au F10 seulement la ou son dossier addons\golf83 est
-        // pose a la main. Traction (1,8 l de 112 ch, 840 kg, 61 % sur l'avant). Poste mesure sur le modele (rayons dans la caisse) :
+        // Golf GTI 1983 (modele de SamGrey achete par JD sur RenderHub le 31/10, MWCoop-voiture/golf83 ; credit « 3D model copyright
+        // nerdadantes via RenderHub ») : standalone sans copie, jamais au F10 -- la voiture de la quete de la boutique s21 (QueteGolf :
+        // pretee par un client, garee chez Teimo). Traction (1,8 l de 112 ch, 840 kg, 61 % sur l'avant). Poste mesure sur le modele (rayons dans la caisse) :
         // volant (-0,31 ; 0,83 ; 0,34), assise vers y 0,57, appui-tete z -0,30, face de la planche a droite du volant z 0,53 ; boutons
         // contact / starter / phares / warning en colonne sur cette face, comme la R5.
-        public static readonly Model Golf83 = new Model { Id = ModelGolf, Folder = "golf83", Name = "Golf GTI",
+        public static readonly Model Golf83 = new Model { Id = ModelGolf, Folder = "golf83", Name = "Golf GTI", QuestOnly = true,
             Head = new Vector3(-0.31f, 1.03f, -0.35f), SeatEyes = true, SteerDeg = 540f, Engine = new Vector3(0f, 0.60f, 1.45f),
             // (levier du frein a main du modele, frein.p205 : sur le tunnel, pivot a l'arriere, poignee et bouton vers l'avant -- JD 31/10 :
             // « bizarre », il tournait autour de sa poignee)
@@ -335,6 +338,8 @@ namespace MWCoop
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
         public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
+        // au F10 (installe, et pas reserve a une quete)
+        public static bool InF10(int id) { return Has(id) && !ModelOf(id).QuestOnly; }
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
         public static int Current(int id) { return StandaloneCar.Ready(id) ? StandaloneOf(id) : id; }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)

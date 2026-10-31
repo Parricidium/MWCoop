@@ -144,7 +144,7 @@ namespace MWCoop
         {
             var l = new List<string>();
             if (!Vaz.Enabled) return l.ToArray();
-            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i)) l.Add(i + "|" + VazCar.ModelOf(i).Name);
+            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i)) l.Add(i + "|" + VazCar.ModelOf(i).Name);
             return l.ToArray();
         }
 

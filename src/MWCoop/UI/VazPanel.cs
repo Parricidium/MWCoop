@@ -31,7 +31,7 @@ namespace MWCoop
         static System.Collections.Generic.List<string> Groups()
         {
             var g = new System.Collections.Generic.List<string>();
-            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i) && !g.Contains(VazCar.ModelOf(i).Group)) g.Add(VazCar.ModelOf(i).Group);
+            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i) && !g.Contains(VazCar.ModelOf(i).Group)) g.Add(VazCar.ModelOf(i).Group);
             g.Sort((a, b) => a == "MWCoop" ? -1 : b == "MWCoop" ? 1 : string.CompareOrdinal(a, b));
             return g;
         }
@@ -208,7 +208,7 @@ namespace MWCoop
                 case KeyCode.V: CallMine(); return true;
                 case KeyCode.M:
                     if (!Vaz.EvoAvailable) return false;
-                    { int m = Pick, n = 0; do { m = (m + 1) % VazCar.Models.Length; n++; } while ((!VazCar.Has(m) || !InFilter(m)) && n <= VazCar.Models.Length); if (VazCar.Has(m)) Pick = m; }   // (modele suivant installe, dans le filtre)
+                    { int m = Pick, n = 0; do { m = (m + 1) % VazCar.Models.Length; n++; } while ((!VazCar.InF10(m) || !InFilter(m)) && n <= VazCar.Models.Length); if (VazCar.InF10(m)) Pick = m; }   // (modele suivant installe, dans le filtre)
                     return true;
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter: Act(hi); return true;
@@ -343,7 +343,7 @@ namespace MWCoop
                     cy += P(30);
                 }
                 var ms = new System.Collections.Generic.List<int>();
-                for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i) && InFilter(i)) ms.Add(i);
+                for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i) && InFilter(i)) ms.Add(i);
                 if (ms.Count > 0 && !ms.Contains(Pick)) Pick = ms[0];   // (le modele choisi est toujours un de ceux du filtre)
                 float gap = P(8);
                 var w = new float[ms.Count];

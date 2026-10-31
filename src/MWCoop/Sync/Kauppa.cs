@@ -47,13 +47,14 @@ namespace MWCoop
             ResetOsat();
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
+            ResetAsiakas();
             offers.Clear(); vitriinit.Clear(); videoCab = konsoliCab = null; script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
             // (programmee meme coupee : chez un invite, les ajouts suivent l'hote depuis le 28/10, et son annonce arrive APRES le chargement --
             // decide dans Update une fois connue, Ajouts.Ready ; avant, un invite en SansAjouts=1 n'avait jamais ni boutique, ni musee, ni cinema)
             buildAt = Game.LevelName == "GAME" && Config.GetInt("Boutique", "Active", 1) != 0 ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
 
-        public static void OnGameSave() { OnGameSaveVideo(); OnGameSaveBags(); OnGameSaveKino(); OnGameSaveOsat(); }
+        public static void OnGameSave() { OnGameSaveVideo(); OnGameSaveBags(); OnGameSaveKino(); OnGameSaveOsat(); QueteGolf.OnGameSave(); }
 
         public static void Update()
         {
@@ -95,6 +96,7 @@ namespace MWCoop
             TickVitriinit();
             BeretRetry(Time.realtimeSinceStartup);
             Interact();
+            TickAsiakas(now);
             Greet(now);
             TickSay();
             TickBags(now);
@@ -173,6 +175,7 @@ namespace MWCoop
                 foreach (Vitriini v in vitriinit) foreach (Lasi p in v.Panes) if (p.Col != null && p.Col.Raycast(ray, out h, best)) { best = h.distance; hit = p; }
                 if (registerCol != null && registerCol.Raycast(ray, out h, best)) { best = h.distance; hit = registerCol; }
                 if (doorCol != null && doorCol.Raycast(ray, out h, best)) { best = h.distance; hit = doorCol; }
+                if (asiakasCol != null && asiakasCol.Raycast(ray, out h, best)) { best = h.distance; hit = asiakasCol; }
                 foreach (Pussi b in pussit)
                     if (b.Go != null && b.Go.transform.parent == null && b.Col.Raycast(ray, out h, best)) { best = h.distance; hit = b; }   // (pas tenu en main)
             }
@@ -238,6 +241,12 @@ namespace MWCoop
                 guiUse.Value = true;
                 guiText.Value = pane.V.OpenHalf == pane.Half ? Lang.TG("FERMER LA VITRINE", "CLOSE THE CABINET") : Lang.TG("OUVRIR LA VITRINE", "OPEN THE CABINET");
                 if (Input.GetMouseButtonDown(0)) ToggleVitriini(pane);
+                return;
+            }
+            if (ReferenceEquals(hit, asiakasCol))
+            {
+                guiUse.Value = true; guiText.Value = "TALK";
+                if (Input.GetMouseButtonDown(0) && talkT < 0f) StartTalk();
                 return;
             }
             if (ReferenceEquals(hit, doorCol))
