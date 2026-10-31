@@ -96,11 +96,22 @@ namespace MWCoop
             head.localPosition = m.Head;
             st.Pivot = LeanRig(b, st, head);
             Bounds cb; st.HalfWidth = VazCar.ModelBounds(m, "carrosserie.p205", out cb) ? Mathf.Max(Mathf.Abs(cb.min.x), Mathf.Abs(cb.max.x)) : 0.85f;
+            // cle de contact du modele (cle.p205, infos.txt cle_centre / cle_axe -- Golf, JD 31/10) : comme celle de la Satsuma, mise,
+            // contact, demarreur tenu, retiree (Knobs) ; elle remplace le bouton rouge du contact
+            Vector3 kc, ka;
+            if (System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "cle.p205")) && inf.TryGetValue("cle_centre", out kc) && inf.TryGetValue("cle_axe", out ka) && ka.sqrMagnitude > 0.01f)
+            {
+                var kp = new GameObject("cle").transform; kp.SetParent(b.Body, false); kp.localPosition = kc;
+                var ki = new GameObject("pieces").transform; ki.SetParent(kp, false); ki.localPosition = -kc;
+                VazCar.AddModel(b, ki, "cle.p205");
+                st.Key = kp; st.KeyAxis = ka.normalized; kp.gameObject.SetActive(false);
+            }
             // boutons visibles du tableau de bord (cylindres colores, comme sur la copie)
             VazCar.Knob[] kns = KnobsOf(m);
             if (kns != null)
                 for (int i = 0; i < kns.Length; i++)
                 {
+                    if (i == KIgnition && st.Key != null) continue;
                     VazCar.Knob kn = kns[i];
                     GameObject g = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                     UnityEngine.Object.DestroyImmediate(g.GetComponent<Collider>());
@@ -331,6 +342,7 @@ namespace MWCoop
             Engine(b, st);
             if (b.Sound != null) b.Sound.Update();
             Lamps(b, st);
+            KeyVisual(b, st);
             DoorAnim(b, st);
             Gauges(b, st);
             GameObject pl = Game.PlayerGo;
@@ -783,7 +795,8 @@ namespace MWCoop
         {
             st.NextState = Time.realtimeSinceStartup + 3f;
             if (!Net.Session.Active || b.Number < 1) return;
-            int f = (st.EngineOn ? 1 : 0) | (st.LightsOn ? 2 : 0) | (st.DoorOpen != null && st.DoorOpen[0] ? 4 : 0) | (st.DoorOpen != null && st.DoorOpen[1] ? 8 : 0) | (st.HornOn ? 16 : 0);
+            int f = (st.EngineOn ? 1 : 0) | (st.LightsOn ? 2 : 0) | (st.DoorOpen != null && st.DoorOpen[0] ? 4 : 0) | (st.DoorOpen != null && st.DoorOpen[1] ? 8 : 0) | (st.HornOn ? 16 : 0)
+                  | (st.KeyIn ? 32 : 0) | (st.KeyPos > 0 ? 64 : 0);   // (cle mise, contact)
             Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f), true);
         }
 
@@ -800,6 +813,7 @@ namespace MWCoop
                 st.EngineOn = eng; st.LightsOn = (f & 2) != 0;
                 if (st.DoorOpen != null) { st.DoorOpen[0] = (f & 4) != 0; st.DoorOpen[1] = (f & 8) != 0; }
                 SetHorn(b, st, (f & 16) != 0, false);
+                st.KeyIn = (f & 32) != 0; st.KeyPos = (f & 64) != 0 ? 1 : 0;
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
@@ -823,7 +837,7 @@ namespace MWCoop
             {
                 if (i != KWheelHub && i >= ks.Length) continue;
                 if (i == KWheelHub && b.SteerPivot == null) continue;
-                Vector3 v = (i == KWheelHub ? b.SteerPivot.position : b.Car.transform.TransformPoint(ks[i].At)) - cam.position;
+                Vector3 v = (i == KWheelHub ? b.SteerPivot.position : i == KIgnition && st.Key != null ? st.Key.position : b.Car.transform.TransformPoint(ks[i].At)) - cam.position;
                 float along = Vector3.Dot(v, cam.forward);
                 if (along < 0.15f || along > 1.3f) continue;
                 float perp = (v - cam.forward * along).magnitude;
@@ -832,11 +846,22 @@ namespace MWCoop
             if (hit < 0) { ClearHover(); CrankStop(b, st); SetHorn(b, st, false, true); return; }
             hovered = hit;
             Game.SetGlobalBool("GUIuse", true);
-            Game.SetGlobal("GUIinteraction", hit == KIgnition ? (st.EngineOn ? "ENGINE OFF" : "START ENGINE") : hit == KLights ? (st.LightsOn ? "LIGHTS OFF" : "LIGHTS ON") : "HORN");
+            string ign = st.Key == null ? (st.EngineOn ? "ENGINE OFF" : "START ENGINE") : !st.KeyIn ? "INSERT KEY" : st.EngineOn ? "ENGINE OFF" : st.KeyPos == 0 ? "IGNITION" : "START ENGINE";
+            Game.SetGlobal("GUIinteraction", hit == KIgnition ? ign : hit == KLights ? (st.LightsOn ? "LIGHTS OFF" : "LIGHTS ON") : "HORN");
             // klaxon : bouton orange ou moyeu du volant, tant que le clic est tenu (comme le bouton du jeu)
             if (hit == KHorn || hit == KWheelHub) { SetHorn(b, st, Input.GetMouseButton(0), true); return; }
             SetHorn(b, st, false, true);
             if (hit == KLights) { if (Input.GetMouseButtonDown(0)) { st.LightsOn = !st.LightsOn; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints")); } return; }
+            // cle (comme la Satsuma) : clic = mise ; clic = contact ; relacher puis clic tenu = demarreur ; moteur tournant, clic = cle
+            // ramenee, moteur coupe ; clic droit moteur coupe = contact coupe, puis cle retiree
+            if (st.Key != null)
+            {
+                if (!st.KeyIn) { if (Input.GetMouseButtonDown(0)) { st.KeyIn = true; st.KeyPos = 0; SendState(b, st); Log.Info("standalone : cle mise"); } return; }
+                if (!st.EngineOn && Input.GetMouseButtonDown(1)) { CrankStop(b, st); if (st.KeyPos > 0) st.KeyPos = 0; else st.KeyIn = false; SendState(b, st); Log.Info("standalone : " + (st.KeyIn ? "contact coupe" : "cle retiree")); return; }
+                if (st.EngineOn) { if (Input.GetMouseButtonDown(0)) { st.KeyPos = 0; SetEngine(b, false); } return; }
+                if (st.KeyPos == 0) { if (Input.GetMouseButtonDown(0)) { st.KeyPos = 1; st.KeyWait = true; SendState(b, st); Log.Info("standalone : contact mis"); } return; }
+                if (st.KeyWait) { if (Input.GetMouseButton(0)) return; st.KeyWait = false; }
+            }
             // contact : clic moteur tournant = arret ; moteur coupe, clic tenu = demarreur, le moteur prend apres 0,9 s
             if (st.EngineOn) { if (Input.GetMouseButtonDown(0)) SetEngine(b, false); return; }
             if (Input.GetMouseButton(0))
@@ -847,6 +872,18 @@ namespace MWCoop
             else CrankStop(b, st);
         }
         static void CrankStop(VazCar.Built b, State st) { if (st.CrankT >= 0f) { st.CrankT = -1f; if (b.Sound != null) b.Sound.ExternalStarter(false, false); } }
+        // cle : visible mise, tournee sur son axe (contact 40 degres, demarreur 70, retour au contact) ; moteur demarre d'ailleurs (autre
+        // joueur, essais) : cle mise au contact
+        const float KeyOnDeg = 40f, KeyStartDeg = 70f;
+        static void KeyVisual(VazCar.Built b, State st)
+        {
+            if (st.Key == null) return;
+            if (st.EngineOn && (!st.KeyIn || st.KeyPos == 0)) { st.KeyIn = true; st.KeyPos = 1; }
+            if (st.Key.gameObject.activeSelf != st.KeyIn) st.Key.gameObject.SetActive(st.KeyIn);
+            float want = st.CrankT >= 0f ? KeyStartDeg : st.KeyPos > 0 ? KeyOnDeg : 0f;
+            st.KeyAngle = Mathf.MoveTowards(st.KeyAngle, want, 400f * Time.deltaTime);
+            st.Key.localRotation = Quaternion.AngleAxis(st.KeyAngle, st.KeyAxis);
+        }
         static void ClearHover() { if (hovered < 0) return; hovered = -1; Game.SetGlobalBool("GUIuse", false); Game.SetGlobal("GUIinteraction", ""); }
 
         // Feux du modele : avant allumes avec les phares, arriere faibles avec les phares et forts au freinage, recul en marche arriere.
