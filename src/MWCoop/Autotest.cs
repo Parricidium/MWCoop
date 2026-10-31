@@ -29,7 +29,7 @@ namespace MWCoop
         // moteur tenu (1500 tr/min) de 24 a 60 s, poussee en avant (6 m/s) de 26 a 38 s ; il ouvre [Test] TestPorte (la premiere
         // par defaut) a 45 s, la relache, et la referme a 65 s. Chacun note la voiture toutes les 2 s et la portiere des 42 s
         // (l'invite doit voir la copie bouger, puis la portiere ouverte et refermee).
-        static int mscStep, mscFast; static float mscLog;
+        static int mscStep, mscFast; static float mscLog; static GameObject mscTool;
         // [Test] Autotest=mscmeca (19/10) : l'hote monte la portiere gauche de la SATSUMA a 60 s (comme un clic : 'Wait for assembly'
         // -ASSEMBLE->), serre deux crans d'une de ses vis a 70 s, fait des courses chez Teimo a 80 s (QSausages = 2, 'Purchase') et
         // demonte la portiere a 100 s (l'invite arrive vers 35 s). Chacun note toutes les 5 s : portiere montee ? (declencheur eteint, parent), vis, argent.
@@ -3426,8 +3426,58 @@ namespace MWCoop
             if (mode == "cledemarreur") { CleDemarreur(t); return; }   // (cle rejouee restee sur le demarreur, 23a21df, essai MWC 29/10)
             if (mode == "mwcpousse") { MwcPousse(t); return; }
             if (mode == "mwcdepart") { MwcDepart(t); return; }
-            // ([Test] Autotest=mwcliste, signalements de Донской 30/10 : tele, thermometre) : a ListeA s (40), chaque automate dont le chemin ou
-            // le nom correspond a ListeMotif (regex, sans casse) : chemin, nom, etat, allume ou non, coupe ou non ; et ses variables si ListeVars=1.
+            // [Test] Autotest=mwcfils (dossier #33, 31/10 : cablage de la CORRIS branche par l'invite, absent chez l'hote) : l'acteur
+            // ([Test] TestActeur=invite, sinon l'hote) clique les bornes [Test] TestBorne (HarnessHeadlights/Harness,HarnessHeadlights/Headlights :
+            // les deux bouts d'un fil -- le 1er attend en 'Sound', le 2e lui envoie CLOSELOOP) a 40 s puis toutes les 3 s, comme un vrai clic :
+            // WiringTool pose sur la borne (State 1 -> Assemble), puis ASSEMBLE (bouton Use). Chacun note toutes les 5 s
+            // Wiring/DatabaseWiring/[Test] TestFil (WiringHarnessHeadlights) Installed, Wiring/Parts/[Test] TestPiece (harness-headlights) et les bornes.
+            if (mode == "mwcfils")
+            {
+                bool actor = Config.Get("Test", "TestActeur", "hote") == "invite" ? !Net.Session.IsHost : Net.Session.IsHost;
+                string[] bornes = Config.Get("Test", "TestBorne", "HarnessHeadlights/Harness,HarnessHeadlights/Headlights").Split(',');
+                string fil = Config.Get("Test", "TestFil", "WiringHarnessHeadlights"), piece = Config.Get("Test", "TestPiece", "harness-headlights");
+                Rigidbody car = VehicleSync.Body("CORRIS");
+                if (car == null) return;
+                FsmGameObject tool = FsmVariables.GlobalVariables.FindFsmGameObject("WiringTool");
+                int i = mscStep / 2;
+                if (actor && tool != null && i < bornes.Length)
+                {
+                    Transform tr = car.transform.Find("Wiring/Triggers/" + bornes[i]);
+                    PlayMakerFSM f = tr != null ? Game.FsmOn(tr.gameObject, "Assemble") : null;
+                    if (mscStep % 2 == 0 && t > 40f + 3f * i)
+                    {
+                        mscStep++;
+                        if (f == null || !tr.gameObject.activeInHierarchy) { mscStep++; Log.Info("autotest : mwcfils, borne " + bornes[i] + " introuvable ou eteinte"); return; }
+                        mscTool = tool.Value; tool.Value = tr.gameObject;
+                        Log.Info("autotest : mwcfils, WiringTool pose sur " + bornes[i] + " [" + f.ActiveStateName + "]");
+                    }
+                    else if (mscStep % 2 == 1 && t > 41.5f + 3f * i)
+                    {
+                        mscStep++;
+                        string was = f.ActiveStateName;
+                        if (was == "Assemble") f.SendEvent("ASSEMBLE");
+                        tool.Value = mscTool;
+                        Log.Info("autotest : mwcfils, borne " + bornes[i] + " cliquee ici [" + was + "] -> [" + f.ActiveStateName + "]");
+                    }
+                }
+                if (t > 30f && t < 120f && t >= mscLog)
+                {
+                    mscLog = t + 5f;
+                    Transform db = car.transform.Find("Wiring/DatabaseWiring/" + fil);
+                    PlayMakerFSM d = db != null ? Game.FsmOn(db.gameObject, "Data") : null;
+                    FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+                    Transform part = car.transform.Find("Wiring/Parts/" + piece);
+                    var sb = new System.Text.StringBuilder("autotest : mwcfils, " + fil + " Installed " + (inst != null ? inst.Value.ToString() : "?") + ", fil " + (part != null ? (part.gameObject.activeSelf ? "allume" : "eteint") : "?"));
+                    foreach (string bn in bornes)
+                    {
+                        Transform tb = car.transform.Find("Wiring/Triggers/" + bn);
+                        PlayMakerFSM fb = tb != null ? Game.FsmOn(tb.gameObject, "Assemble") : null;
+                        sb.Append(", ").Append(bn).Append(' ').Append(tb != null ? (tb.gameObject.activeInHierarchy ? "allumee" : "eteinte") : "?").Append(" [").Append(fb != null ? fb.ActiveStateName : "?").Append(']');
+                    }
+                    Log.Info(sb.ToString());
+                }
+                return;
+            }
             if (mode == "mwcliste")
             {
                 // ([Test] ListeTele=chemin : l'hote allume cette tele a 30 s, comme Autotest=teletexte -- YARD/Building/LIVINGROOM/TV/TVSwitch)

@@ -508,7 +508,12 @@ namespace MWCoop
             // de cote : la touche des phares, lue par les boutons de TOUS les vehicules, partait pour chacun ; chez un autre joueur
             // au volant de l'un d'eux, l'automate rejoue comparait SA voiture et allumait ses phares (Tavirus, MSC, 27/10 : les
             // phares de l'autre voiture s'allumaient et s'eteignaient avec les siens).
-            if (from != null && KeyDriven(j, from.Name, tr.EventName))
+            // Branchement du cablage (CORRIS : 'Assemble', Use lu pres de WiringTool -- le faisceau tenu ICI, WiringGuard) : un geste a
+            // pied, pas une touche de conduite. Il ne partait que si l'on conduisait la voiture : faisceau branche par l'un jamais vu
+            // chez l'autre (Podpivas_70RUS, dossier #33, 31/10). [Test] FilsATouche=1 : ancien comportement. (MSC : fils de la SATSUMA
+            // envoyes par WiringMsc, inchange.)
+            bool wire = !Game.Msc && j.F.FsmName == "Assemble" && Config.GetInt("Test", "FilsATouche", 0) == 0;
+            if (from != null && !wire && KeyDriven(j, from.Name, tr.EventName))
             {
                 if (j.Vehicle == null) j.Vehicle = VehicleOf(j.F.transform);
                 if (j.Vehicle != null && VehicleSync.LocalDrivingRoot != j.Vehicle) return;
@@ -2968,6 +2973,15 @@ namespace MWCoop
                     if (nv != null) txt = nv.UseVariable && !string.IsNullOrEmpty(nv.Name) ? "{" + nv.Name + "}" : nv.ToString();
                     else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; txt = od.OwnerOption == OwnerDefaultOption.UseOwner ? "proprietaire" : od.GameObject != null && od.GameObject.Value != null ? od.GameObject.Value.name : "?"; }
                     else if (v is FsmEvent) txt = ((FsmEvent)v).Name;
+                    else if (v is FsmEventTarget)
+                    {
+                        var et = (FsmEventTarget)v;
+                        txt = et.target.ToString();
+                        if (et.target == FsmEventTarget.EventTarget.GameObject || et.target == FsmEventTarget.EventTarget.GameObjectFSM)
+                            txt += "(" + (et.gameObject == null ? "?" : et.gameObject.OwnerOption == OwnerDefaultOption.UseOwner ? "proprietaire" : et.gameObject.GameObject != null && et.gameObject.GameObject.Value != null ? et.gameObject.GameObject.Value.name : "?")
+                                   + (et.fsmName != null && et.fsmName.Value.Length > 0 ? "::" + et.fsmName.Value : "") + (et.sendToChildren != null && et.sendToChildren.Value ? ", enfants" : "") + ")";
+                        else if (et.target == FsmEventTarget.EventTarget.FSMComponent && et.fsmComponent != null) txt += "(" + et.fsmComponent.gameObject.name + "::" + et.fsmComponent.FsmName + ")";
+                    }
                     else if (v is bool || v is int || v is float || v is string || v is System.Enum) txt = v.ToString();
                     else if (v is FsmProperty) { var fp = (FsmProperty)v; txt = (fp.TargetObject != null && fp.TargetObject.Value != null ? fp.TargetObject.Value.GetType().Name + "(" + fp.TargetObject.Value.name + ")" : fp.TargetTypeName) + "." + fp.PropertyName + (fp.setProperty ? " <- " : " -> ") + PropVar(fp); }
                     if (txt != null) sb.Append(' ').Append(fi.Name).Append('=').Append(txt);
