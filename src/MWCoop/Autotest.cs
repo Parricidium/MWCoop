@@ -3018,6 +3018,7 @@ namespace MWCoop
                 }
                 LightsGuard.TestKey(mode, t);
                 if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
+                if (mode == "coupure") Home.Test(mode, t);   // (MSC aussi : coupures de l'orage, dossier #32 31/10)
                 // ([Test] Autotest=mscleviers, Markos 28/10 : LeviersPilote=1 (l'invite) monte sur la JONNEZ a 30 s, coupe son AxisCarController a 40 s
                 // et tient gaz 0,8 / frein 0,5 / embrayage 0,6 comme la manette, jusqu'a 70 s ; chacun releve l'angle des trois leviers toutes les 5 s)
                 if (mode == "mscleviers") Leviers(t);
