@@ -3037,8 +3037,8 @@ namespace MWCoop
                         {
                             if (dmCrash == 0 && t > rca) { dmCrash = 1; Log.Info("autotest : mscralenti, crash : " + VehicleSync.TestEnter(rv, false)); }
                             if (dmCrash == 1 && t > rca + 2f) { dmCrash = 2; Log.Info("autotest : mscralenti, crash, au volant : " + VehicleSync.TestEnter(rv, true)); }
-                            if (dmCrash == 2 && t > rca + 3f) { dmCrash = 3; Log.Info("autotest : mscralenti, crash, " + VehicleSync.TestShift(rv, new Vector3(0f, 0.3f, 10f))); }
-                            if (dmCrash == 3 && t > rca + 6f && t < rca + 6.3f) VehicleSync.TestLaunch(rv, Config.GetFloat("Test", "RalentiCrashVitesse", 12f));
+                            if (dmCrash == 2 && t > rca + 3f) { dmCrash = 3; if (Config.GetInt("Test", "RalentiCrashDeplace", 1) != 0) Log.Info("autotest : mscralenti, crash, " + VehicleSync.TestShift(rv, new Vector3(0f, 0.3f, 10f))); }   // ([Test] RalentiCrashDeplace=0 : sur place)
+                            if (dmCrash == 3 && t > rca + 6f && t < rca + 6.3f && Config.GetFloat("Test", "RalentiCrashVitesse", 12f) > 0f) VehicleSync.TestLaunch(rv, Config.GetFloat("Test", "RalentiCrashVitesse", 12f));
                             if (dmCrash == 3 && t > rca + 16f) { dmCrash = 4; Log.Info("autotest : mscralenti, crash, sortie : " + VehicleSync.TestExit(rv)); }
                         }
                         float hs = Net.Session.IsHost ? Config.GetFloat("Test", "RalentiDecalage", 70f) : 0f;
