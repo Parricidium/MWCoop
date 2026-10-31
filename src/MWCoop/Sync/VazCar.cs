@@ -112,10 +112,13 @@ namespace MWCoop
             // 0 : celui de la Rivett)
             public float RearGrip = 1f, HandbrakeSlide = 1f, AntiRollFront, AntiRollRear, YawDamp;
             public bool Rwd;                  // propulsion (false : integrale, comme les autres addons) -- Rihno 5 Maxi, JD 28/10
+            public bool Fwd;                  // traction (standalone : Transmission=traction) -- Golf GTI, 31/10
         }
         public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3, ModelSq = 4, ModelT16b = 5, ModelR5 = 6, ModelR5S = 7;
         // standalones des autres addons (JD 29/10 : « on va faire les autres en standalone, memes criteres ») : 8 a 12, copies 1 a 5
         public const int ModelEvoS = 8, ModelT16S = 9, ModelImpS = 10, ModelSqS = 11, ModelT16bS = 12;
+        // standalones sans copie (leur numero est aussi leur « copie ») : Golf GTI 1983
+        public const int ModelGolf = 13;
         public static int StandaloneOf(int copy) { return copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
         public static int CopyOf(int id) { return id == ModelR5S ? ModelR5 : id >= ModelEvoS && id <= ModelT16bS ? id - ModelR5S : id; }
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
@@ -300,12 +303,36 @@ namespace MWCoop
         // R5 standalone (pilote, spec du 28/10, lot 4) : numero de modele a elle dans la table des voitures du F10 ; construite par
         // StandaloneCar la ou [Test] AddonStandalone=1, ailleurs la R5 copie (n 6) de la meme couleur et du meme numero (Vaz.BuildModel).
         public static readonly Model R5S = R5.CloneAs(ModelR5S, null);
+        // Golf GTI 1983 (modele de SamGrey achete par JD sur RenderHub le 31/10, MWCoop-voiture/golf83) : standalone sans copie, pas
+        // encore proposee aux joueurs (JD : « j'ai un autre projet pour elle ») -- au F10 seulement la ou son dossier addons\golf83 est
+        // pose a la main. Traction (1,8 l de 112 ch, 840 kg, 61 % sur l'avant). Poste mesure sur le modele (rayons dans la caisse) :
+        // volant (-0,31 ; 0,83 ; 0,34), assise vers y 0,57, appui-tete z -0,30, face de la planche a droite du volant z 0,53 ; boutons
+        // contact / starter / phares / warning en colonne sur cette face, comme la R5.
+        public static readonly Model Golf83 = new Model { Id = ModelGolf, Folder = "golf83", Name = "Golf GTI",
+            Head = new Vector3(-0.31f, 1.03f, -0.35f), SeatEyes = true, SteerDeg = 540f, Engine = new Vector3(0f, 0.60f, 1.45f),
+            BrakePivot = new Vector3(0f, 0.42f, -0.15f), BrakeGrip = new Vector3(0f, 0.55f, -0.05f), BrakeAngle = 1.2f,
+            Controls = new[] {
+                new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.07f, 0.865f, 0.520f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(-0.07f, 0.835f, 0.520f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(-0.07f, 0.805f, 0.520f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(-0.07f, 0.775f, 0.520f)) },
+            Knobs = new[] {
+                new Knob { At = new Vector3(-0.07f, 0.865f, 0.528f), Normal = Vector3.back, Col = new Color(0.80f, 0.06f, 0.05f) },
+                new Knob { At = new Vector3(-0.07f, 0.835f, 0.528f), Normal = Vector3.back, Col = new Color(0.10f, 0.25f, 0.85f), Choke = true, Path = "Functions/Dashboard/Choke/ButtonChoke" },
+                new Knob { At = new Vector3(-0.07f, 0.805f, 0.528f), Normal = Vector3.back, Col = new Color(0.92f, 0.92f, 0.90f) },
+                new Knob { At = new Vector3(-0.07f, 0.775f, 0.528f), Normal = Vector3.back, Col = new Color(0.95f, 0.45f, 0.05f) } },
+            Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
+                          "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
+                          "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
+            Dome = new Vector3(0f, 1.27f, -0.20f), HasDome = true, ControlSize = 0.024f,
+            Sp = new Spec { Name = "Golf GTI 1.8 (1983)", Power = 112f, PowerRpm = 5800f, Torque = 153f, TorqueRpm = 3500f, MaxRpm = 6600f, Inertia = 0.12f,
+                            Final = 3.89f, Mass = 840f, Com = 0.61f, Steer = 33f, Gears = new[] { -3.17f, 0f, 3.45f, 2.12f, 1.44f, 1.13f, 0.91f }, Fwd = true } };
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
-                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null) };   // (rempli : Vaz2108 au constructeur statique)
+                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || StandaloneCar.Ready(CopyOf(id))) && !StandaloneCar.Ready(id)); }
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
         public static int Current(int id) { return StandaloneCar.Ready(id) ? StandaloneOf(id) : id; }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)

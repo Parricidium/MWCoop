@@ -63,7 +63,7 @@ namespace MWCoop
             Masse = sp.Mass; CgAvant = sp.Com;
             Puissance = sp.Power; PuissanceRegime = sp.PowerRpm; Couple = sp.Torque; CoupleRegime = sp.TorqueRpm; Rupteur = sp.MaxRpm; InertieMoteur = sp.Inertia;
             if (sp.Gears != null) Rapports = (float[])sp.Gears.Clone();
-            Pont = sp.Final; Embrayage = sp.Clutch; Transmission = "integrale";
+            Pont = sp.Final; Embrayage = sp.Clutch; Transmission = sp.Fwd ? "traction" : "integrale";
             if (sp.Handbrake > 0f) FreinAMain = sp.Handbrake;
             BraquageMax = sp.Steer;
             foreach (Essieu e in new[] { Av, Ar }) { e.Ressort = 44573f * k; e.Compression = e.Detente = 7132f * k; }
