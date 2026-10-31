@@ -194,6 +194,14 @@ namespace MWCoop
                 // (pose de conduite) : en miroir simple, le passager avant s'asseyait 15 cm vers le milieu de son siege -- essai SATSUMA, 21/10)
                 float xm = Game.Msc ? 2f * EyeFromPivotMsc.x : 0f;
                 seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x + xm, d.y, d.z), ZoneZ = Vaz.IsVaz(rb.transform) ? 0.85f : 0.5f });   // (VAZ-2108 : baquets plus en arriere, on n'approche que l'espace des pieds depuis la portiere -- zone plus longue)
+                // (standalone a banquette -- Golf, JD 31/10 : « je ne peux pas passer sur les places arriere » : deux places derriere les
+                // sieges avant, d'apres infos.txt banquette ; on y passe dossier avant rabattu)
+                Vector3 sbo;
+                if (StandaloneCar.RearBench(rb.transform, out sbo))
+                {
+                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + sbo.y, d.z + sbo.z) });
+                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x + xm, d.y + sbo.y, d.z + sbo.z) });
+                }
                 // (taxi et ses copies -- mods Machtwagen300D, SECONDMACHTWAGEN : noms en minuscules ou prefixes, sans banquette
                 // avant, retour de Menos 10/10 : « on ne peut pas s'asseoir a l'arriere »)
                 // (My Summer Car : SATSUMA, FERNDALE et RCO_RUSCKO12 ont une banquette ; HAYOSIKO, la place avant seulement)
@@ -750,6 +758,7 @@ namespace MWCoop
         static void BeltInput()
         {
             if (SeatFiles.NoBelt(current.Car, current.Index)) return;   // (place « sansceinture » de l'outil des places)
+            if (current.CarT != null && StandaloneCar.IsCar(current.CarT.gameObject)) { StandaloneBeltInput(); return; }
             if (current.Index > 0) { RearBeltInput(); return; }
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             bool aimBuckle = false, aimHandle = false;
@@ -817,6 +826,34 @@ namespace MWCoop
                 Log.Info("ceinture passager : lachee " + (tooFar ? "trop loin du montant" : "hors de la boucle") + ", rangee");
             }
         }
+
+        // Standalone (Golf, JD 31/10) : viser la boucle de sa place (StandaloneCar.SeatBuckle) : "FASTEN SEATBELT" / "UNFASTEN SEATBELT" ;
+        // clic : bouclee ou detachee -- la ceinture dessinee par StandaloneDrive chez tous (BeltedHeads, envoyee avec la place)
+        static void StandaloneBeltInput()
+        {
+            Vector3 bk;
+            if (!StandaloneCar.SeatBuckle(current.CarT, current.Head, out bk)) return;
+            Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
+            if (view == null) return;
+            Vector3 at = current.CarT.TransformPoint(bk), d = at - view.position;
+            bool aim = d.magnitude < 1.3f && Vector3.Angle(view.forward, d) < 16f;
+            BeltHint(aim ? (beltOn ? "UNFASTEN SEATBELT" : "FASTEN SEATBELT") : null);
+            if (!aim || !Input.GetMouseButtonDown(0)) return;
+            beltOn = !beltOn;
+            Foley(beltOn ? "seatbelt_fasten" : "seatbelt_unfasten", at);
+            Log.Info("ceinture standalone : " + (beltOn ? "attachee" : "detachee") + " (" + current.Car + ", place " + current.Index + ")");
+            SendSeat(current.Car, current.Index, headLocal);
+        }
+        // Places bouclees d'une voiture (la mienne et celles des autres) : yeux de la place, repere de la voiture
+        public static void BeltedHeads(Transform car, List<Vector3> heads)
+        {
+            heads.Clear();
+            if (car == null) return;
+            if (current != null && current.CarT == car && beltOn) heads.Add(current.Head);
+            foreach (Remote r in remote.Values)
+                if (r.Belt) foreach (Seat s in seats) if (s.CarT == car && s.Car == r.Car && s.Index == r.Index) { heads.Add(s.Head); break; }
+        }
+        public static void PlayFoley(string variation, Vector3 at) { Foley(variation, at); }
 
         // Languette prise : rattachee a la camera, a la pose ou elle est (le jeu : SetParent sans remise a zero).
         static bool testHold;   // (essais : clic maintenu simule)

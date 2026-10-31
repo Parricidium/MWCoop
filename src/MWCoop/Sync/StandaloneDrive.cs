@@ -224,6 +224,36 @@ namespace MWCoop
                 VazCar.AddModel(b, si0, "comodo.p205");
                 st.Stalk = sp0; st.StalkAxis = sa0.normalized;
             }
+            // ceintures (ceinture_<cg|cd|ag|ad>.p205 : sangle pendue au montant ; infos.txt ceinture_<k>_haut / _bas -- Golf, JD 31/10 :
+            // « les ceintures fonctionnelles, avant et arriere ») : la sangle pendue cachee quand la place est bouclee, la bouclee
+            // dessinee (BeltTick) ; 0 conducteur (gauche), 1 passager avant, 2 arriere gauche, 3 arriere droite
+            string[] bk = { "cg", "cd", "ag", "ad" };
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 bt, bl; string bf = "ceinture_" + bk[i] + ".p205";
+                if (!System.IO.File.Exists(System.IO.Path.Combine(m.Dir, bf)) || !inf.TryGetValue("ceinture_" + bk[i] + "_haut", out bt) || !inf.TryGetValue("ceinture_" + bk[i] + "_bas", out bl)) continue;
+                var bp = new GameObject("ceinture_" + bk[i]).transform; bp.SetParent(b.Body, false);
+                VazCar.AddModel(b, bp, bf);
+                st.BeltHang[i] = bp; st.BeltTop[i] = bt; st.BeltLow[i] = bl;
+            }
+            // dossiers des sieges avant rabattables (dossier_<g|d>.p205 ; infos.txt dossier_<k>_pivot / _axe -- JD 31/10 : « rabattre les
+            // sieges avant pour pouvoir passer a l'arriere ») : clic dessus, portiere ouverte (Doors) ; releve, il ferme le passage vers
+            // la banquette pour le joueur (Shell). Banquette (infos.txt banquette, habitacle_arriere) : places arriere (Seats), habitacle
+            // creux jusque derriere elle.
+            for (int i = 0; i < 2; i++)
+            {
+                string sk = i == 0 ? "g" : "d"; Vector3 dp, da; Bounds sbb;
+                if (!System.IO.File.Exists(System.IO.Path.Combine(m.Dir, "dossier_" + sk + ".p205")) || !inf.TryGetValue("dossier_" + sk + "_pivot", out dp) || !inf.TryGetValue("dossier_" + sk + "_axe", out da)) continue;
+                var dpv = new GameObject("dossier_" + sk).transform; dpv.SetParent(b.Body, false); dpv.localPosition = dp;
+                var dpi = new GameObject("pieces").transform; dpi.SetParent(dpv, false); dpi.localPosition = -dp;
+                VazCar.AddModel(b, dpi, "dossier_" + sk + ".p205");
+                st.SeatBack[i] = dpv; st.SeatBackAxis[i] = da.normalized;
+                st.SeatBackBox[i] = VazCar.ModelBounds(m, "dossier_" + sk + ".p205", out sbb) ? sbb : new Bounds(dp + new Vector3(0f, 0.3f, -0.05f), new Vector3(0.5f, 0.6f, 0.2f));
+            }
+            for (int i = 0; i < 4; i++) { Vector3 sr; if (inf.TryGetValue("siege_" + bk[i], out sr)) { st.SeatRef[i] = sr; st.HasSeatRef[i] = true; } }
+            Vector3 rb0;
+            if (inf.TryGetValue("banquette", out rb0)) { st.RearOffset = rb0; st.HasRear = true; }
+            if (inf.TryGetValue("habitacle_arriere", out rb0)) st.CabinRear = rb0.z;
             SetupRain(b, st, inf);
             Shell(b, st);
             // son moteur de l'addon (boucles + demarrage) au moteur du modele
@@ -521,6 +551,7 @@ namespace MWCoop
             WiperAnim(b, st);
             RainTick(b, st);
             DoorAnim(b, st);
+            BeltTick(b, st);
             Gauges(b, st);
             GameObject pl = Game.PlayerGo;
             if (pl == null || !PlayerSync.InGame) return;
@@ -564,10 +595,19 @@ namespace MWCoop
             Transform cam = PlayerCam();
             if (cam == null || st.Doors == null) return;
             int hit = -1; float best = 0.35f;
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 6; i++)
             {
                 Vector3 c;
-                if (i < 2) { if (st.Doors[i] == null) continue; c = st.Doors[i].TransformPoint(st.DoorCenter[i] - st.Doors[i].localPosition); }
+                if (i >= 4)
+                {
+                    // (dossier avant : portiere de son cote ouverte, ou depuis l'habitacle ; pas au volant)
+                    int k = i - 4;
+                    if (st.SeatBack[k] == null || driving != null) continue;
+                    if (st.DoorAngle[k] < 20f && Mathf.Abs(b.Car.transform.InverseTransformPoint(cam.position).x) > 0.65f) continue;
+                    Bounds sb = st.SeatBackBox[k];
+                    c = st.SeatBack[k].TransformPoint(new Vector3(sb.center.x, sb.max.y - 0.18f, sb.center.z) - st.SeatBack[k].localPosition);
+                }
+                else if (i < 2) { if (st.Doors[i] == null) continue; c = st.Doors[i].TransformPoint(st.DoorCenter[i] - st.Doors[i].localPosition); }
                 else if (i == 2) { if (st.Hatch == null) continue; c = st.Hatch.TransformPoint(st.HatchCenter - st.Hatch.localPosition); }
                 else
                 {
@@ -585,8 +625,9 @@ namespace MWCoop
             if (hit < 0) { if (doorHover >= 0) { doorHover = -1; Game.SetGlobalBool("GUIuse", false); if (prompted == null) Game.SetGlobal("GUIinteraction", ""); } return; }
             doorHover = hit;
             Game.SetGlobalBool("GUIuse", true);
-            if (prompted == null) Game.SetGlobal("GUIinteraction", hit < 2 ? (st.DoorOpen[hit] ? "CLOSE DOOR" : "OPEN DOOR") : hit == 2 ? (st.HatchOpen ? "CLOSE TRUNK" : "OPEN TRUNK") : (st.ShelfUp ? "LOWER SHELF" : "LIFT SHELF"));
+            if (prompted == null) Game.SetGlobal("GUIinteraction", hit < 2 ? (st.DoorOpen[hit] ? "CLOSE DOOR" : "OPEN DOOR") : hit == 2 ? (st.HatchOpen ? "CLOSE TRUNK" : "OPEN TRUNK") : hit == 3 ? (st.ShelfUp ? "LOWER SHELF" : "LIFT SHELF") : (st.Folded[hit - 4] ? "RAISE SEAT" : "FOLD SEAT"));
             if (!Input.GetMouseButtonDown(0) && !Down("Use")) return;
+            if (hit >= 4) { st.Folded[hit - 4] = !st.Folded[hit - 4]; SendState(b, st); Log.Info("standalone : dossier " + (hit == 4 ? "gauche" : "droit") + (st.Folded[hit - 4] ? " rabattu" : " releve")); return; }
             if (hit == 2) { st.HatchOpen = !st.HatchOpen; SendState(b, st); Log.Info("standalone : hayon " + (st.HatchOpen ? "ouvert" : "ferme")); return; }
             if (hit == 3) { st.ShelfUp = !st.ShelfUp; Log.Info("standalone : plage arriere " + (st.ShelfUp ? "relevee" : "baissee")); return; }
             // (portiere : ouverte = lancee sur sa charniere ; fermee = poussee vers le pene -- elle se verrouille en y arrivant)
@@ -657,6 +698,13 @@ namespace MWCoop
                 st.HatchAngle = Mathf.MoveTowards(st.HatchAngle, st.HatchOpen ? 78f : 0f, 110f * dt);
                 st.Hatch.localRotation = Quaternion.Euler(st.HatchAngle, 0f, 0f);
             }
+            for (int k = 0; k < 2; k++)
+            {
+                if (st.SeatBack[k] == null) continue;
+                st.FoldAngle[k] = Mathf.MoveTowards(st.FoldAngle[k], st.Folded[k] ? 42f : 0f, 140f * dt);
+                st.SeatBack[k].localRotation = Quaternion.AngleAxis(st.FoldAngle[k], st.SeatBackAxis[k]);
+                if (st.SeatBackCol[k] != null) st.SeatBackCol[k].enabled = st.FoldAngle[k] < 5f;
+            }
             if (st.Shelf != null)
             {
                 // (relevee a la main, ou soulevee par ses cordons quand le hayon s'ouvre)
@@ -677,6 +725,9 @@ namespace MWCoop
             if (buildPlayerLayer < 0 || db.size.y < 0.3f || !VazCar.ModelBounds(b.M, "carrosserie.p205", out bb)) { Log.Warn("standalone : pas d'habitacle creux (couche joueur ou portiere absente)"); return; }
             int L = buildPlayerLayer; Transform ct = b.Car.transform;
             float zMin = db.min.z - 0.13f, zMax = db.max.z - 0.27f, fl = db.min.y + 0.02f, rf = db.max.y + 0.02f, ix = Mathf.Min(Mathf.Abs(db.max.x), Mathf.Abs(db.min.x)) + 0.01f;
+            // (banquette : habitacle jusque derriere son dossier -- les dossiers avant, releves, en ferment le passage ; JD 31/10)
+            float zDoor = zMin;
+            if (st.HasRear && st.CabinRear < zMin && st.CabinRear > bb.min.z + 0.1f) zMin = st.CabinRear;
             float x0 = bb.min.x, x1 = bb.max.x;
             // (rien sur la course des roues : le rayon d'une roue prenait le plancher pour le sol -- essai du 28/10, voiture envolee ;
             // plancher sous l'habitacle seulement, blocs avant / arriere au-dessus des roues, et cette couche retiree du rayon : WheelMask)
@@ -694,6 +745,12 @@ namespace MWCoop
             if (pd.size.y > 0.3f) Box(ct, L, "joueur_flanc_d_ar", new Vector3((ix + x1) * 0.5f, (fl + rf) * 0.5f, (zMin + pd.min.z) * 0.5f), new Vector3(x1 - ix, rf - fl, pd.min.z - zMin));
             else Box(ct, L, "joueur_flanc_d", new Vector3((ix + x1) * 0.5f, (fl + rf) * 0.5f, (zMin + zMax) * 0.5f), new Vector3(x1 - ix, rf - fl, zMax - zMin));
             Box(ct, L, "joueur_flanc_g_ar", new Vector3((x0 - ix) * 0.5f, (fl + rf) * 0.5f, (zMin + db.min.z) * 0.5f), new Vector3(-ix - x0, rf - fl, db.min.z - zMin));
+            for (int k = 0; k < 2; k++)
+            {
+                if (st.SeatBack[k] == null || zMin >= zDoor) continue;
+                Bounds sb = st.SeatBackBox[k]; float xa = k == 0 ? -ix : 0f, xb = k == 0 ? 0f : ix;
+                st.SeatBackCol[k] = Box(ct, L, "joueur_dossier_" + (k == 0 ? "g" : "d"), new Vector3((xa + xb) * 0.5f, (fl + rf) * 0.5f, sb.center.z), new Vector3(xb - xa, rf - fl, Mathf.Max(0.12f, sb.size.z)));
+            }
             st.Cabin = new Bounds(); st.Cabin.SetMinMax(new Vector3(-ix, fl, zMin), new Vector3(ix, rf, zMax));
             st.HasCabin = true;
             Log.Info("standalone : habitacle creux " + st.Cabin.min.ToString("F2") + " - " + st.Cabin.max.ToString("F2") + ", couche " + LayerMask.LayerToName(L));
@@ -735,6 +792,7 @@ namespace MWCoop
             float lim = st.T.ChocMortel * Time.fixedDeltaTime / 0.02f;   // (meme force sur la tete : la vitesse perdue en un pas suit la duree du pas)
             FsmBool helmet = FsmVariables.GlobalVariables.FindFsmBool("PlayerHelmet");
             if (helmet != null && helmet.Value) lim *= 1.6f;
+            if (st.DriverBelted) lim *= 1.6f;   // (ceinture bouclee, comme le casque)
             if (h > crashMaxH) crashMaxH = h; if (v > crashMaxV) crashMaxV = v;
             if (h < lim) return false;
             Log.Info("standalone : choc mortel, " + h.ToString("F0") + " km/h perdus a l'horizontale en un pas (" + v.ToString("F0") + " a la verticale, limite " + lim.ToString("F0") + ")");
@@ -902,6 +960,7 @@ namespace MWCoop
             var d = (StandaloneDriver)b.Axis;
             d.Keys = true; d.Handbrake = 0f;
             driving = b; enteredAt = Time.realtimeSinceStartup;
+            if (st.Folded[0]) { st.Folded[0] = false; SendState(b, st); }   // (dossier conducteur releve en s'asseyant)
             GearHud(true, b);
             Log.Info("standalone : joueur au volant de " + b.Car.name + " (pied a " + footHeight.ToString("F2") + " m)");
         }
@@ -912,6 +971,7 @@ namespace MWCoop
             GameObject pl = Game.PlayerGo;
             Transform ct = b.Car != null ? b.Car.transform : null;
             State xs; bool cabin = !force && ct != null && states.TryGetValue(b, out xs) && xs.HasCabin;
+            if (states.TryGetValue(b, out xs) && xs.DriverBelted) { xs.DriverBelted = false; SendState(b, xs); }   // (on sort ceinture detachee)
             if (pl != null)
             {
                 pl.transform.SetParent(null, true);
@@ -1058,7 +1118,8 @@ namespace MWCoop
             int f = (st.EngineOn ? 1 : 0) | (st.LightsOn ? 2 : 0) | (st.DoorOpen != null && st.DoorOpen[0] ? 4 : 0) | (st.DoorOpen != null && st.DoorOpen[1] ? 8 : 0) | (st.HornOn ? 16 : 0)
                   | (st.KeyIn ? 32 : 0) | (st.KeyPos > 0 ? 64 : 0) | (st.HatchOpen ? 128 : 0);   // (cle mise, contact, hayon ouvert)
             // (octet de plus : warnings -- les anciennes versions lisent les deux premiers et ignorent le reste)
-            Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0)), true);
+            // (octet de plus : warnings 1, essuie-glaces 2, ceinture du conducteur 4, dossiers rabattus 8 / 16)
+            Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0) | (st.DriverBelted ? 4 : 0) | (st.Folded[0] ? 8 : 0) | (st.Folded[1] ? 16 : 0)), true);
         }
 
         public static void OnState(Net.Peer from, Net.NetReader r)
@@ -1083,13 +1144,18 @@ namespace MWCoop
                     }
                 SetHorn(b, st, (f & 16) != 0, false);
                 st.KeyIn = (f & 32) != 0; st.KeyPos = (f & 64) != 0 ? 1 : 0; st.HatchOpen = (f & 128) != 0;
-                if (extra.Length > 0) { st.Hazard = (extra[0] & 1) != 0; st.WipersOn = (extra[0] & 2) != 0; }
+                if (extra.Length > 0)
+                {
+                    st.Hazard = (extra[0] & 1) != 0; st.WipersOn = (extra[0] & 2) != 0;
+                    if (driving != b) st.DriverBelted = (extra[0] & 4) != 0;
+                    st.Folded[0] = (extra[0] & 8) != 0; st.Folded[1] = (extra[0] & 16) != 0;
+                }
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
 
         // ---------------------------------------------------------------- tableau de bord
-        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300, KStalk = 400;
+        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300, KStalk = 400, KBelt = 500;
         static void SetHorn(VazCar.Built b, State st, bool on, bool send)
         {
             if (on == st.HornOn) return;
@@ -1126,7 +1192,7 @@ namespace MWCoop
             // comodo des essuie-glaces : vise, clic = marche / arret
             if (st.Stalk != null)
             {
-                Vector3 v = b.Body.TransformPoint(st.Stalk.localPosition + new Vector3(0.10f, 0f, 0f)) - cam.position;
+                Vector3 v = b.Body.TransformPoint(st.Stalk.localPosition + new Vector3(0.10f * Mathf.Sign(st.StalkAxis.z), 0f, 0f)) - cam.position;   // (bout du levier)
                 float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
                 if (along > 0.15f && along < 1.3f && perp < 0.06f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KStalk; }
             }
@@ -1135,6 +1201,25 @@ namespace MWCoop
                 hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", st.WipersOn ? "WIPERS OFF" : "WIPERS ON");
                 if (Input.GetMouseButtonDown(0)) { st.WipersOn = !st.WipersOn; SendState(b, st); Log.Info("standalone : essuie-glaces " + (st.WipersOn ? "en marche" : "arretes")); }
+                return;
+            }
+            // ceinture du conducteur : viser la boucle (a la hanche, cote interieur), clic = bouclee / detachee
+            if (st.BeltHang[0] != null)
+            {
+                Vector3 v = b.Body.TransformPoint(BuckleAt(st, 0, st.T.Yeux)) - cam.position;
+                float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
+                if (along > 0.15f && along < 1.3f && perp < 0.07f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KBelt; }
+            }
+            if (hit == KBelt)
+            {
+                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", st.DriverBelted ? "UNFASTEN SEATBELT" : "FASTEN SEATBELT");
+                if (Input.GetMouseButtonDown(0))
+                {
+                    st.DriverBelted = !st.DriverBelted; SendState(b, st);
+                    Seats.PlayFoley(st.DriverBelted ? "seatbelt_fasten" : "seatbelt_unfasten", b.Body.TransformPoint(BuckleAt(st, 0, st.T.Yeux)));
+                    Log.Info("standalone : ceinture du conducteur " + (st.DriverBelted ? "bouclee" : "detachee"));
+                }
                 return;
             }
             // levier du frein a main (frein.p205) : vise, molette (vers l'avant : serre) ou clic (serre / desserre), comme les voitures du jeu
@@ -1271,7 +1356,27 @@ namespace MWCoop
                     pos.Add(pc); cl.Add(cc);
                 }
                 Rect[] rect = { (Rect)RF(src, "frontUV").GetValue(src), (Rect)RF(src, "sideUV").GetValue(src), (Rect)RF(src, "rearUV").GetValue(src) };
-                Material rainMat = new Material(srcR[0].sharedMaterial) { name = "standalone_vitre_pluie" };
+                // (JD 31/10 : « trop claire » et, la pluie finie, « les textures des vitres sont buggees » : la matiere de pluie montre sa
+                // texture de fond -- celle des vitres de la Satsuma, claire et rayee, sur nos UV -- des que l'eau seche (_Raining 0). Fond
+                // = notre verre (texture et teinte de sa matiere), normale a plat ; eau plus sombre et moins opaque : comme la petite vitre)
+                var rainMats = new Dictionary<Material, Material>();
+                var flat = new Texture2D(2, 2, TextureFormat.ARGB32, false) { name = "standalone_normale_plate" };
+                flat.SetPixels(new[] { new Color(0.5f, 0.5f, 1f, 0.5f), new Color(0.5f, 0.5f, 1f, 0.5f), new Color(0.5f, 0.5f, 1f, 0.5f), new Color(0.5f, 0.5f, 1f, 0.5f) }); flat.Apply(false);
+                Func<Material, Material> rainFor = orig =>
+                {
+                    Material rm;
+                    if (orig != null && rainMats.TryGetValue(orig, out rm)) return rm;
+                    rm = new Material(srcR[0].sharedMaterial) { name = "standalone_vitre_pluie" };
+                    if (orig != null)
+                    {
+                        rm.SetTexture("_MainTex", orig.mainTexture); rm.SetTextureScale("_MainTex", Vector2.one); rm.SetTextureOffset("_MainTex", Vector2.zero);
+                        if (orig.HasProperty("_Color")) rm.SetColor("_Color", orig.color);
+                    }
+                    rm.SetTexture("_BumpMap", flat);
+                    rm.SetFloat("_RainOpacity", rm.GetFloat("_RainOpacity") * RainOpacityK);
+                    if (orig != null) rainMats[orig] = rm;
+                    return rm;
+                };
                 for (int r = 0; r < rs.Count; r++)
                 {
                     Mesh m = UnityEngine.Object.Instantiate(rs[r].sharedMesh); m.name = rs[r].sharedMesh.name + "_pluie";
@@ -1287,7 +1392,9 @@ namespace MWCoop
                     int[] nc = new int[3]; foreach (int q in cl[r]) nc[q]++;
                     Vector2 ul = uv.Length > 0 ? uv[0] : Vector2.zero, uh = ul; foreach (Vector2 q in uv) { ul = Vector2.Min(ul, q); uh = Vector2.Max(uh, q); }
                     Log.Info("standalone : pluie, " + Recon.Path(rs[r].transform) + " : " + uv.Length + " sommets (pare-brise " + nc[0] + ", cotes " + nc[1] + ", arriere " + nc[2] + "), uv " + ul.ToString("F2") + ".." + uh.ToString("F2") + ", bornes " + rs[r].sharedMesh.bounds.size.ToString("F2"));
-                    rs[r].GetComponent<MeshRenderer>().sharedMaterial = rainMat;
+                    MeshRenderer mr0 = rs[r].GetComponent<MeshRenderer>();
+                    Log.Info("standalone : pluie, vitre " + mr0.name + " : matiere " + (mr0.sharedMaterial != null ? mr0.sharedMaterial.name + " [" + mr0.sharedMaterial.shader.name + "] couleur " + mr0.sharedMaterial.color : "-"));
+                    mr0.sharedMaterial = rainFor(mr0.sharedMaterial);
                 }
                 // composant a nous, reglages de celui de la Satsuma ; reperes (normales, vent) a la meme orientation dans la voiture
                 var go = new GameObject("RainScript"); go.SetActive(false);
@@ -1307,6 +1414,7 @@ namespace MWCoop
                     fi.SetValue(c2, val);
                 }
                 RF(c2, "windowRenderers").SetValue(c2, rs.ConvertAll(x => x.GetComponent<MeshRenderer>()).ToArray());
+                RF(c2, "Wet").SetValue(c2, new Color(RainWet, RainWet, RainWet, 1f));
                 // balais : moyeux et portee dans la bande du pare-brise (largeur = 1)
                 for (int w = 0; w < 2; w++)
                 {
@@ -1324,6 +1432,9 @@ namespace MWCoop
             }
             catch (Exception e) { Log.Warn("standalone : pluie : " + e.Message); }
         }
+        // (eau sur nos vitres : teinte des gouttes et opacite, par rapport a la Satsuma -- [Test] PluieTeinte, PluieOpacite)
+        static float RainWet { get { return Config.GetFloat("Test", "PluieTeinte", 0.45f); } }
+        static float RainOpacityK { get { return Config.GetFloat("Test", "PluieOpacite", 0.55f); } }
         static void RainTick(VazCar.Built b, State st)
         {
             if (st.Rain == null || st.RainSrc == null) return;
@@ -1334,6 +1445,115 @@ namespace MWCoop
             float k = (1f - Mathf.Cos(st.WiperPhase * 2f * Mathf.PI)) * 0.5f;
             RF(st.Rain, "wiper1Position").SetValue(st.Rain, k);
             RF(st.Rain, "wiper2Position").SetValue(st.Rain, k);
+        }
+        // ---------------------------------------------------------------- ceintures (Golf, JD 31/10 : « fonctionnelles, avant et arriere,
+        // la sangle comme celles de Menor ») : place bouclee -- sangle pendue du modele cachee, ceinture trois points dessinee de
+        // l'ancrage du montant a l'epaule, en travers du buste jusqu'a la boucle (cote interieur, a la hanche), et de l'ancrage du
+        // plancher sur les cuisses jusqu'a la boucle ; matiere de la sangle du modele (texture de Menor). Conducteur : clic sur la boucle
+        // (Knobs), envoye avec l'etat ; passagers : Seats (clic sur la boucle de leur place), vus de tous avec leur place.
+        // Points du buste d'apres les yeux de la place (repere de la voiture) ; s : vers l'exterieur.
+        public static Vector3 BuckleOf(Vector3 e) { float s = e.x < 0f ? -1f : 1f; return e + new Vector3(-s * 0.21f, -0.60f, 0.02f); }
+        // (place mesuree dans le modele -- infos.txt siege_<k> : milieu x, dessus de l'assise, avant du bas du dossier ; les yeux de la
+        // Golf sont presque dans l'appui-tete, le buste d'apres eux passait dans le dossier)
+        static Vector3 SeatPoint(State st, int k, Vector3 e, float side, float up, float fwd)
+        {
+            if (!st.HasSeatRef[k]) { float se = e.x < 0f ? -1f : 1f; return e + new Vector3(se * side, up - 0.62f, fwd); }
+            Vector3 c = st.SeatRef[k]; float s = c.x < 0f ? -1f : 1f;
+            return new Vector3(c.x + s * side, c.y + up, c.z + fwd);
+        }
+        static Vector3 BuckleAt(State st, int k, Vector3 e) { return st.HasSeatRef[k] ? SeatPoint(st, k, e, -0.20f, 0.06f, 0.07f) : BuckleOf(e); }
+        static int BeltSeat(State st, Vector3 head)
+        {
+            float split = st.HasRear ? (st.BeltTop[0].z + st.BeltTop[2].z) * 0.5f : -99f;
+            return (head.z > split ? 0 : 2) + (head.x < 0f ? 0 : 1);
+        }
+        static readonly List<Vector3> beltHeads = new List<Vector3>();
+        static void BeltTick(VazCar.Built b, State st)
+        {
+            if (st.BeltHang[0] == null && st.BeltHang[1] == null && st.BeltHang[2] == null && st.BeltHang[3] == null) return;
+            var want = new Vector3?[4];
+            if (st.DriverBelted || testBelts) want[0] = st.T.Yeux;
+            Seats.BeltedHeads(b.Car.transform, beltHeads);
+            foreach (Vector3 h in beltHeads) { int k = BeltSeat(st, h); if (k > 0) want[k] = h; }
+            if (testBelts)
+            {
+                Vector3 e = st.T.Yeux, p = new Vector3(-e.x, e.y, e.z);
+                if (want[1] == null) want[1] = p;
+                if (st.HasRear) { if (want[2] == null) want[2] = e + st.RearOffset; if (want[3] == null) want[3] = p + st.RearOffset; }
+            }
+            for (int k = 0; k < 4; k++)
+            {
+                if (st.BeltHang[k] == null) continue;
+                bool on = want[k].HasValue;
+                if (on && (st.BeltOn[k] == null || (st.BeltHead[k] - want[k].Value).sqrMagnitude > 0.0009f))
+                {
+                    if (st.BeltOn[k] != null) { UnityEngine.Object.Destroy(st.BeltOn[k].GetComponent<MeshFilter>().sharedMesh); UnityEngine.Object.Destroy(st.BeltOn[k]); }
+                    st.BeltOn[k] = BeltRibbon(b, st, k, want[k].Value); st.BeltHead[k] = want[k].Value;
+                }
+                if (st.BeltOn[k] != null && st.BeltOn[k].activeSelf != on) st.BeltOn[k].SetActive(on);
+                if (st.BeltHang[k].gameObject.activeSelf == on) st.BeltHang[k].gameObject.SetActive(!on);
+            }
+        }
+        static bool testBelts;
+        const float BeltWidth = 0.048f;
+        static GameObject BeltRibbon(VazCar.Built b, State st, int k, Vector3 e)
+        {
+            if (st.BeltMat == null)
+                foreach (Renderer r in st.BeltHang[k].GetComponentsInChildren<Renderer>(true)) if (r.sharedMaterial != null) { st.BeltMat = r.sharedMaterial; break; }
+            float s = e.x < 0f ? -1f : 1f;
+            Vector3 sh = e + new Vector3(s * 0.16f, -0.21f, -0.07f), chest = e + new Vector3(-s * 0.02f, -0.37f, 0.07f), bu = BuckleAt(st, k, e);
+            Vector3 hip = e + new Vector3(s * 0.21f, -0.58f, 0.03f), lap = e + new Vector3(0f, -0.55f, 0.14f);
+            if (st.HasSeatRef[k])
+            {
+                // (epaule 50 cm au-dessus de l'assise, buste 13 cm devant le dossier, boucle a la hanche cote interieur, cuisses)
+                sh = SeatPoint(st, k, e, 0.15f, 0.50f, -0.02f); chest = SeatPoint(st, k, e, -0.03f, 0.30f, 0.13f);
+                hip = SeatPoint(st, k, e, 0.21f, 0.08f, 0.09f); lap = SeatPoint(st, k, e, 0f, 0.13f, 0.24f);
+            }
+            var vs = new List<Vector3>(); var ns = new List<Vector3>(); var uv = new List<Vector2>(); var tr = new List<int>();
+            Strap(new[] { st.BeltTop[k], sh, chest, bu }, new Vector3(0f, 0.25f, 1f), vs, ns, uv, tr);
+            Strap(new[] { st.BeltLow[k], hip, lap, bu }, new Vector3(0f, 1f, 0.6f), vs, ns, uv, tr);
+            var mesh = new Mesh { name = "ceinture_bouclee_" + k };
+            mesh.vertices = vs.ToArray(); mesh.normals = ns.ToArray(); mesh.uv = uv.ToArray(); mesh.triangles = tr.ToArray(); mesh.RecalculateBounds();
+            var go = new GameObject("ceinture_bouclee_" + k); go.layer = st.BeltHang[k].gameObject.layer;
+            foreach (Renderer r in st.BeltHang[k].GetComponentsInChildren<Renderer>(true)) { go.layer = r.gameObject.layer; break; }
+            go.transform.SetParent(b.Body, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>(); mr.sharedMaterial = st.BeltMat;
+            Log.Info("standalone : ceinture " + k + " bouclee, yeux " + e.ToString("F2") + ", haut " + st.BeltTop[k].ToString("F2") + ", boucle " + bu.ToString("F2") + ", " + vs.Count + " sommets, matiere " + (st.BeltMat != null ? st.BeltMat.name + " [" + st.BeltMat.shader.name + "]" : "-") + ", couche " + LayerMask.LayerToName(go.layer) + ", monde " + go.transform.TransformPoint(chest).ToString("F1"));
+            return go;
+        }
+        // sangle le long des points (courbe de Catmull-Rom), a plat face a 'face', deux faces ; u le long (une texture par largeur)
+        static void Strap(Vector3[] pts, Vector3 face, List<Vector3> vs, List<Vector3> ns, List<Vector2> uv, List<int> tr)
+        {
+            var path = new List<Vector3>();
+            for (int i = 0; i < pts.Length - 1; i++)
+            {
+                Vector3 p0 = pts[Mathf.Max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Mathf.Min(pts.Length - 1, i + 2)];
+                for (int j = 0; j < 8; j++)
+                {
+                    float t = j / 8f, t2 = t * t, t3 = t2 * t;
+                    path.Add(0.5f * (2f * p1 + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (-p0 + 3f * p1 - 3f * p2 + p3) * t3));
+                }
+            }
+            path.Add(pts[pts.Length - 1]);
+            face = face.normalized; float len = 0f;
+            int b0 = vs.Count;
+            for (int i = 0; i < path.Count; i++)
+            {
+                Vector3 tg = (path[Mathf.Min(path.Count - 1, i + 1)] - path[Mathf.Max(0, i - 1)]).normalized;
+                Vector3 w = Vector3.Cross(tg, face); if (w.sqrMagnitude < 1e-6f) w = Vector3.Cross(tg, Vector3.up); w = w.normalized * (BeltWidth * 0.5f);
+                Vector3 n = Vector3.Cross(w, tg).normalized; if (Vector3.Dot(n, face) < 0f) n = -n;
+                if (i > 0) len += (path[i] - path[i - 1]).magnitude;
+                float u = len / BeltWidth;
+                vs.Add(path[i] - w); vs.Add(path[i] + w); ns.Add(n); ns.Add(n); uv.Add(new Vector2(u, 0f)); uv.Add(new Vector2(u, 1f));
+                vs.Add(path[i] - w); vs.Add(path[i] + w); ns.Add(-n); ns.Add(-n); uv.Add(new Vector2(u, 0f)); uv.Add(new Vector2(u, 1f));
+            }
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                int a = b0 + i * 4, c = a + 4;
+                tr.AddRange(new[] { a, c, a + 1, a + 1, c, c + 1 });
+                tr.AddRange(new[] { a + 2, a + 3, c + 2, a + 3, c + 3, c + 2 });
+            }
         }
         const float KeyOnDeg = 40f, KeyStartDeg = 70f;
         // vitres : position 0 (fermee) a 1 (baissee), manivelle 3 tours sur la course
@@ -1603,7 +1823,8 @@ namespace MWCoop
         // choc contre un mur a 60 km/h : morts et reapparition
         // chez les deux (plantage RemapPPtrTransfer a surveiller, JD 29/10).
         static int cStep; static float cAt, cLog; static bool cPhotos;
-        static void Photo(VazCar.Built b, string name, Vector3 local)
+        static void Photo(VazCar.Built b, string name, Vector3 local) { Photo(b, name, local, new Vector3(0f, 0.6f, 0f)); }
+        static void Photo(VazCar.Built b, string name, Vector3 local, Vector3 target)
         {
             var go = new GameObject("standalone_photo");
             try
@@ -1613,7 +1834,7 @@ namespace MWCoop
                 if (main != null) cam.CopyFrom(main);
                 cam.fieldOfView = 45f; cam.nearClipPlane = 0.05f; cam.farClipPlane = 500f;
                 go.transform.position = b.Car.transform.TransformPoint(local);
-                go.transform.LookAt(b.Car.transform.TransformPoint(new Vector3(0f, 0.6f, 0f)));
+                go.transform.LookAt(b.Car.transform.TransformPoint(target));
                 var rt = new RenderTexture(1280, 720, 24); cam.targetTexture = rt; cam.Render();
                 RenderTexture.active = rt; var tex = new Texture2D(1280, 720, TextureFormat.RGB24, false); tex.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); tex.Apply();
                 RenderTexture.active = null; cam.targetTexture = null;
@@ -1660,6 +1881,21 @@ namespace MWCoop
                     st.HatchOpen = true; st.HatchAngle = 78f; st.ShelfUp = true; st.ShelfAngle = 80f;
                     if (st.Doors[0] != null) { st.DoorOpen[0] = true; st.DoorAngle[0] = 40f; st.DoorVel[0] = 0f; }
                     DoorAnim(b, st);
+                }
+                // ([Test] StandaloneCeintures=1 : les quatre ceintures bouclees ; StandaloneDossier=1 : dossier droit rabattu)
+                if (Config.GetInt("Test", "StandaloneCeintures", 0) != 0 && st != null) { testBelts = true; BeltTick(b, st); }
+                if (Config.GetInt("Test", "StandaloneDossier", 0) != 0 && st != null) { st.Folded[1] = true; st.FoldAngle[1] = 42f; if (st.Doors[1] != null) { st.DoorOpen[1] = true; st.DoorAngle[1] = 65f; st.DoorVel[1] = 0f; } DoorAnim(b, st); }
+                if (Config.GetInt("Test", "StandalonePhotos", 0) >= 2 && st != null)
+                {
+                    // (vues de l'habitacle : de la place conducteur vers la portiere passager et le ciel de toit, de la portiere passager
+                    // ouverte vers la banquette, comodo, roue avant gauche de pres)
+                    Vector3 e = st.T.Yeux;
+                    Photo(b, "habitacle", e + new Vector3(0.05f, 0.02f, -0.05f), new Vector3(0.75f, 1.12f, -0.35f));
+                    Photo(b, "banquette", new Vector3(1.35f, 1.05f, 0.15f), new Vector3(0.0f, 0.6f, -0.8f));
+                    Photo(b, "ceintures", new Vector3(0.5f, 1.05f, 0.4f), new Vector3(-0.33f, 0.72f, -0.2f));
+                    Photo(b, "arriere", new Vector3(0.12f, 1.1f, 0.05f), new Vector3(0f, 0.7f, -1.0f));
+                    Photo(b, "comodo", e + new Vector3(0.0f, -0.05f, 0.05f), st.Stalk != null ? st.Stalk.localPosition + new Vector3(0.10f * Mathf.Sign(st.StalkAxis.z), 0f, 0f) : e + Vector3.forward);
+                    Photo(b, "roue", new Vector3(-1.6f, 0.45f, 1.25f), new Vector3(-0.7f, 0.3f, 1.25f));
                 }
                 Photo(b, "34av", new Vector3(-3.2f, 1.6f, 3.6f)); Photo(b, "34ar", new Vector3(3.0f, 1.8f, -3.8f));
                 Photo(b, "cote", new Vector3(-4.6f, 0.9f, 0.2f)); Photo(b, "dessus", new Vector3(-1.5f, 4.5f, -3.0f));

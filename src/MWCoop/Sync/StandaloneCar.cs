@@ -53,7 +53,15 @@ namespace MWCoop
             // (essuie-glaces : av1, av2, ar -- pivot, axe, angle maxi ; comodo ; StandaloneDrive)
             public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
             public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
-            public Component Rain, RainSrc;   // (pluie sur les vitres : composant windshield du jeu a nous, celui de la Satsuma -- StandaloneDrive)
+            public Component Rain, RainSrc;
+            // (ceintures : 0 conducteur, 1 passager avant, 2 arriere gauche, 3 arriere droite -- sangle pendue du modele, bouclee dessinee ;
+            // dossiers avant rabattables, 0 gauche, 1 droite ; banquette : places arriere -- StandaloneDrive, JD 31/10)
+            public Transform[] BeltHang = new Transform[4]; public Vector3[] BeltTop = new Vector3[4], BeltLow = new Vector3[4];
+            public GameObject[] BeltOn = new GameObject[4]; public Vector3[] BeltHead = new Vector3[4]; public bool DriverBelted; public Material BeltMat;
+            public Transform[] SeatBack = new Transform[2]; public Vector3[] SeatBackAxis = new Vector3[2]; public Bounds[] SeatBackBox = new Bounds[2];
+            public bool[] Folded = new bool[2]; public float[] FoldAngle = new float[2]; public Collider[] SeatBackCol = new Collider[2];
+            public float CabinRear; public Vector3 RearOffset; public bool HasRear;
+            public Vector3[] SeatRef = new Vector3[4]; public bool[] HasSeatRef = new bool[4];   // (siege_<k> : milieu x, dessus de l'assise, avant du dossier)   // (pluie sur les vitres : composant windshield du jeu a nous, celui de la Satsuma -- StandaloneDrive)
             public Transform[] Glass = new Transform[2], Crank = new Transform[2]; public Vector3[] GlassDown = new Vector3[2], CrankAxis = new Vector3[2]; public float[] WinPos = new float[2];   // (vitres de portiere a manivelle, StandaloneDrive)
             public Vector3 LastPos; public float LastPosT, RemoteKmh, NextState;   // (co-op : compteur d'une voiture menee ailleurs, etat renvoye)   // (habitacle creux : StandaloneDrive.Shell)
         }
@@ -262,13 +270,14 @@ namespace MWCoop
             return l;
         }
 
-        static void Box(Transform parent, int layer, string name, Vector3 center, Vector3 size)
+        static BoxCollider Box(Transform parent, int layer, string name, Vector3 center, Vector3 size)
         {
             var g = new GameObject(name);
             g.layer = layer;
             g.transform.SetParent(parent, false);
             var c = g.AddComponent<BoxCollider>();
             c.center = center; c.size = new Vector3(Mathf.Max(0.1f, size.x), Mathf.Max(0.1f, size.y), Mathf.Max(0.1f, size.z));
+            return c;
         }
 
         // Champs de valeur d'un composant (ou d'un essieu) vers un autre de meme type : nombres, booleens, enums, vecteurs, courbes et
@@ -363,6 +372,10 @@ namespace MWCoop
                 Piece(holder, "pneu", tireRel, tireMesh, tireMats, model.gameObject.layer);
                 // freins derriere la roue (JD 31/10) : disque a l'avant, tambour a l'arriere, pris sur la Satsuma (emplacements presents meme
                 // demontee : TireF<L|R>/OFFSET/discbrake..., TireR<L|R>/drumbrake...), poses par rapport a la roue de la Satsuma du meme coin
+                // (JD 31/10, capture : « les freins depassent sur les jantes » -- tambour et moyeu de la Satsuma au-dela de la face d'appui
+                // de la jante Octo : recules le long de l'essieu, derriere elle)
+                Vector3 outH = holder.InverseTransformDirection(b.Car.transform.right * (left ? -1f : 1f)).normalized;
+                float hubFace = RimHubFace(rimSrc.GetComponent<MeshFilter>().sharedMesh, rimRel, outH);
                 string fr = front ? "F" : "R";
                 GameObject tbr = Game.FindAny("SATSUMA(557kg, 248)/" + fr + s + (front ? "/AckerF" + s : "") + "/wheel" + fr + s + "/Tire" + fr + s);
                 int nb = 0;
@@ -373,7 +386,10 @@ namespace MWCoop
                         Transform up = mf.transform; bool brake = false;
                         while (up != null && up != tbr.transform) { if (up.name.StartsWith("discbrake") || up.name.StartsWith("drumbrake")) { brake = true; break; } up = up.parent; }
                         if (!brake) continue;
-                        Piece(holder, "frein", tbr.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix, mf.sharedMesh, mf.GetComponent<MeshRenderer>().sharedMaterials, model.gameObject.layer);
+                        Matrix4x4 brel = tbr.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                        float over = MaxAlong(mf.sharedMesh.bounds, brel, outH) - (hubFace - 0.004f);
+                        if (over > 0f && !float.IsNaN(hubFace)) brel = Matrix4x4.TRS(-outH * over, Quaternion.identity, Vector3.one) * brel;
+                        Piece(holder, "frein", brel, mf.sharedMesh, mf.GetComponent<MeshRenderer>().sharedMaterials, model.gameObject.layer);
                         nb++;
                     }
                 // porte-moyeu avant de la Satsuma (SpindleF<L|R>/OFFSET/spindle...) : sur la roue sans sa rotation (objet de la roue, pas le modele)
@@ -385,10 +401,88 @@ namespace MWCoop
                         if (mf.sharedMesh != null && mf.GetComponent<MeshRenderer>() != null && mf.name.StartsWith("spindle"))
                         { Piece(fixe, "porte_moyeu", spf.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix, mf.sharedMesh, mf.GetComponent<MeshRenderer>().sharedMaterials, model.gameObject.layer); nb++; }
                 }
+                nb += Shock(model, holder.localScale, front, s, model.gameObject.layer);
                 Log.Info("standalone : roue " + (front ? "avant " : "arriere ") + (left ? "gauche" : "droite") + " du jeu (jante Octo grise, pneu " + tireMesh.name + ", " + nb + " piece(s) de frein, echelle " + holder.localScale.x.ToString("F2") + ")");
                 return true;
             }
             catch (Exception e) { Log.Warn("standalone : roues du jeu : " + e.Message); return false; }
+        }
+        // Amortisseur au-dessus de la roue (JD 31/10 : « mettre des amortisseurs au-dessus, sans animation ») : celui de la Satsuma, fixe,
+        // sur la roue sans sa rotation. Arriere : l'amortisseur pose dans la Satsuma (Chassis/R<L|R>/ShockTop/Arm/shock absorber(...),
+        // le meme demontee), par rapport a sa roue (wheelR<L|R>). Avant : la jambe de force n'a pas de maillage simple en place ; le meme
+        // amortisseur, tendu du point bas de la jambe (SpindleF<L|R>/OFFSET/pivot_shock_f<l|r>) a son point haut (Chassis/F<L|R>/
+        // TriggersStrutsF<L|R>), par rapport au porte-moyeu.
+        static Mesh shockMesh; static Material[] shockMats; static bool shockSeen;
+        static int Shock(Transform model, Vector3 scale, bool front, string s, int layer)
+        {
+            if (model.parent == null) return 0;
+            if (!shockSeen)
+            {
+                shockSeen = true;
+                foreach (string sp in new[] { "SATSUMA(557kg, 248)/Chassis/RL/ShockTop/Arm", "SATSUMA(557kg, 248)/Chassis/RR/ShockTop/Arm" })
+                {
+                    GameObject a = Game.FindAny(sp); if (a == null) continue;
+                    foreach (MeshFilter mf in a.GetComponentsInChildren<MeshFilter>(true))
+                        if (mf.sharedMesh != null && mf.GetComponent<MeshRenderer>() != null && mf.name.StartsWith("shock absorber")) { shockMesh = mf.sharedMesh; shockMats = mf.GetComponent<MeshRenderer>().sharedMaterials; break; }
+                    if (shockMesh != null) break;
+                }
+                if (shockMesh == null) Log.Warn("standalone : amortisseur de la Satsuma introuvable");
+            }
+            if (shockMesh == null) return 0;
+            string sl = s.ToLowerInvariant(); Matrix4x4 rel;
+            if (!front)
+            {
+                GameObject wr = Game.FindAny("SATSUMA(557kg, 248)/R" + s + "/wheelR" + s), arm = Game.FindAny("SATSUMA(557kg, 248)/Chassis/R" + s + "/ShockTop/Arm");
+                MeshFilter mf = null;
+                if (arm != null) foreach (MeshFilter m in arm.GetComponentsInChildren<MeshFilter>(true)) if (m.name.StartsWith("shock absorber")) { mf = m; break; }
+                if (wr == null || mf == null) return 0;
+                rel = wr.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+            }
+            else
+            {
+                string w = "SATSUMA(557kg, 248)/F" + s + "/AckerF" + s + "/wheelF" + s + "/SpindleF" + s;
+                GameObject spf = Game.FindAny(w), lo = Game.FindAny(w + "/OFFSET/pivot_shock_f" + sl), hi = Game.FindAny("SATSUMA(557kg, 248)/Chassis/F" + s + "/TriggersStrutsF" + s);
+                if (spf == null || lo == null || hi == null) return 0;
+                Vector3 pl = spf.transform.InverseTransformPoint(lo.transform.position), ph = spf.transform.InverseTransformPoint(hi.transform.position);
+                // (axe du maillage : sa plus grande longueur ; son bout le plus pres de l'origine -- l'attache haute -- au point haut)
+                Bounds mb = shockMesh.bounds; Vector3 ex = mb.extents; int ax = ex.x >= ex.y && ex.x >= ex.z ? 0 : ex.y >= ex.z ? 1 : 2;
+                Vector3 dir = Vector3.zero; dir[ax] = 1f;
+                Vector3 e1 = mb.center + dir * ex[ax], e2 = mb.center - dir * ex[ax];
+                bool firstTop = e1.sqrMagnitude < e2.sqrMagnitude; Vector3 top = firstTop ? e1 : e2, bottom = firstTop ? e2 : e1;
+                Quaternion q = Quaternion.FromToRotation((bottom - top).normalized, (pl - ph).normalized);
+                rel = Matrix4x4.TRS(ph, q, Vector3.one) * Matrix4x4.TRS(-top, Quaternion.identity, Vector3.one);
+            }
+            Transform fixe = model.parent.Find("roue_jeu_fixe");
+            if (fixe == null) { fixe = new GameObject("roue_jeu_fixe").transform; fixe.SetParent(model.parent, false); fixe.localScale = scale; }
+            Piece(fixe, "amortisseur", rel, shockMesh, shockMats, layer);
+            return 1;
+        }
+
+        // Face d'appui de la jante (repere de la roue) : le plus en dedans des sommets proches de l'axe (moyeu) ; sans sommets lisibles,
+        // le milieu de sa profondeur
+        static float RimHubFace(Mesh m, Matrix4x4 rel, Vector3 outH)
+        {
+            Vector3 c = rel.MultiplyPoint3x4(m.bounds.center);
+            Vector3 ex = m.bounds.extents; float r = Mathf.Max(ex.x, ex.y, ex.z) * rel.GetColumn(0).magnitude;
+            float best = float.MaxValue;
+            if (m.isReadable)
+                foreach (Vector3 v in m.vertices)
+                {
+                    Vector3 p = rel.MultiplyPoint3x4(v) - c; float a = Vector3.Dot(p, outH);
+                    if ((p - outH * a).magnitude < r * 0.28f && a < best) best = a;
+                }
+            float lo = MaxAlong(m.bounds, rel, -outH), hi = MaxAlong(m.bounds, rel, outH);
+            return best < float.MaxValue ? Vector3.Dot(c, outH) + best : (hi - lo) * 0.5f;
+        }
+        static float MaxAlong(Bounds bd, Matrix4x4 rel, Vector3 dir)
+        {
+            float mx = float.MinValue;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 k = bd.center + Vector3.Scale(bd.extents, new Vector3((i & 1) != 0 ? 1f : -1f, (i & 2) != 0 ? 1f : -1f, (i & 4) != 0 ? 1f : -1f));
+                mx = Mathf.Max(mx, Vector3.Dot(rel.MultiplyPoint3x4(k), dir));
+            }
+            return mx;
         }
         static void Piece(Transform parent, string name, Matrix4x4 rel, Mesh mesh, Material[] mats, int layer)
         {
@@ -402,6 +496,30 @@ namespace MWCoop
         }
 
         public static VazCar.Built Find(GameObject car) { foreach (VazCar.Built b in cars) if (b.Car == car) return b; return null; }
+        // Banquette d'une standalone (infos.txt banquette -- Golf, JD 31/10) : decalage des places arriere par rapport aux places avant
+        // (Seats en fait deux places)
+        public static bool RearBench(Transform car, out Vector3 off)
+        {
+            off = Vector3.zero;
+            if (car == null) return false;
+            foreach (VazCar.Built b in cars) { State st; if (b.Car == car.gameObject && states.TryGetValue(b, out st) && st.HasRear) { off = st.RearOffset; return true; } }
+            return false;
+        }
+        // Boucle de la ceinture d'une place (yeux du passager, repere de la voiture) : faux sans ceinture a cette place
+        public static bool SeatBuckle(Transform car, Vector3 head, out Vector3 buckle)
+        {
+            buckle = Vector3.zero;
+            if (car == null) return false;
+            foreach (VazCar.Built b in cars)
+            {
+                State st;
+                if (b.Car != car.gameObject || !states.TryGetValue(b, out st)) continue;
+                int k = BeltSeat(st, head);
+                if (k < 0 || st.BeltHang[k] == null) return false;
+                buckle = BuckleAt(st, k, head); return true;
+            }
+            return false;
+        }
         public static bool Owns(VazCar.Built b) { return b != null && states.ContainsKey(b); }
         public static bool IsCar(GameObject g) { if (g == null) return false; foreach (VazCar.Built b in cars) if (b.Car == g) return true; return false; }
         // Yeux du conducteur au repos, repere de la voiture : ceux de tenue.ini (Poste.Yeux*), la ou StandaloneDrive pose la camera --
