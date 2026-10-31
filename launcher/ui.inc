@@ -1481,8 +1481,8 @@ static const Credit kCredits[] = {
     { CRED_SUPPORT, L"moonmax11", L"Supporter", L"Supporter",
       L"Pour avoir fait une donation.", L"For making a donation.", L"18/10/2026", 0 },
     { CRED_THANKS, L"Menos", L"Modèle 3D", L"3D model",
-      L"Le modèle 3D des ceintures de sécurité arrière de la Sorbet, de la Machtwagen, de la CORRIS et de la SATSUMA (My Winter Car).",
-      L"The 3D model of the rear seat belts of the Sorbet, the Machtwagen, the CORRIS and the SATSUMA (My Winter Car).", L"31/10/2026", 0 },   // (CORRIS et SATSUMA : 31/10, nom « Menos » garde, JD)
+      L"Le modèle 3D des ceintures de sécurité arrière de la Sorbet, de la Machtwagen et de la CORRIS (My Winter Car), et de la SATSUMA (My Summer Car).",
+      L"The 3D model of the rear seat belts of the Sorbet, the Machtwagen and the CORRIS (My Winter Car), and of the SATSUMA (My Summer Car).", L"31/10/2026", 0 },   // (CORRIS, et SATSUMA de My Summer Car : 31/10, nom « Menos » garde, JD)
     { CRED_THANKS, L"Dom", L"Tenues", L"Outfits",
       L"Un pack de 155 tenues pour ton personnage : 84 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
       L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026", 6 },
