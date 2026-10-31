@@ -534,7 +534,9 @@ namespace MWCoop
     public class StandaloneDriver : CarController
     {
         public float Throttle, Brake, Steer, Handbrake = 1f, Clutch;
-        public float HandLatch;   // (frein a main tire a la main sur le levier, StandaloneDrive.Knobs : reste serre, s'ajoute a la touche)
+        public float HandLatch;   // (frein a main tire a la main sur le levier, StandaloneDrive.Knobs : reste serre, s'ajoute a la touche ;
+                                  // un appui sur la touche le desserre -- la touche agit ensuite tant qu'elle est tenue)
+        float handKeyLast;
         public bool StartEngine;
         public int Gear = -1;   // (rapport voulu ; -1 : celui de la boite)
         public bool Keys;       // (au volant d'ici : touches du jeu par cInput, axes et rapports comme l'AxisCarController de la Ruscko)
@@ -545,14 +547,17 @@ namespace MWCoop
             if (Keys)
             {
                 throttleInput = Mathf.Clamp01(StandaloneCar.Axis("Throttle")); brakeInput = Mathf.Clamp01(StandaloneCar.Axis("Brake")); steerInput = StandaloneCar.Axis("Horizontal");
-                handbrakeInput = Mathf.Max(Mathf.Clamp01(StandaloneCar.Axis("Handbrake")), HandLatch); clutchInput = Mathf.Clamp01(StandaloneCar.Axis("Clutch"));
+                float hk = Mathf.Clamp01(StandaloneCar.Axis("Handbrake"));
+                if (hk > 0.5f && handKeyLast <= 0.5f && HandLatch > 0f) HandLatch = 0f;
+                handKeyLast = hk;
+                handbrakeInput = Mathf.Max(hk, HandLatch); clutchInput = Mathf.Clamp01(StandaloneCar.Axis("Clutch"));
                 int g = drivetrain != null ? drivetrain.gear : 0;
                 if (StandaloneCar.Down("ShiftUp")) g++;
                 if (StandaloneCar.Down("ShiftDown")) g--;
                 targetGear = drivetrain != null && drivetrain.gearRatios != null ? Mathf.Clamp(g, 0, drivetrain.gearRatios.Length - 1) : 0;
                 return;
             }
-            throttleInput = Throttle; brakeInput = Brake; steerInput = Steer; handbrakeInput = Handbrake; clutchInput = Clutch;
+            throttleInput = Throttle; brakeInput = Brake; steerInput = Steer; handbrakeInput = Mathf.Max(Handbrake, HandLatch); clutchInput = Clutch;
             targetGear = Gear >= 0 && drivetrain != null && drivetrain.gearRatios != null && Gear < drivetrain.gearRatios.Length ? Gear : drivetrain != null ? drivetrain.gear : 0;
         }
     }

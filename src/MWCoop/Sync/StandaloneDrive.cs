@@ -1413,6 +1413,7 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
             UnityEngine.Object.Destroy(go);
         }
+        static bool cFrein;
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -1462,7 +1463,19 @@ namespace MWCoop
                 Log.Info("standalone : coop, invite : copie " + car.name + (b != null ? " standalone" : " PAS standalone") + ", passager -> " + Seats.TestSit(car.name, 0));
             }
             if (host && cStep == 3 && t > 75f && t < 76.5f) SetHorn(b, st, true, true);
-            if (host && cStep == 3 && t > 78f) { cStep = 4; cAt = t; SetHorn(b, st, false, true); var d = (StandaloneDriver)b.Axis; d.Keys = false; d.Handbrake = 0f; d.Gear = 2; d.Throttle = 0.6f; Log.Info("standalone : coop, hote roule"); }
+            if (host && cStep == 3 && t > 78f)
+            {
+                cStep = 4; cAt = t; SetHorn(b, st, false, true); var d = (StandaloneDriver)b.Axis; d.Keys = false; d.Handbrake = 0f; d.Gear = 2; d.Throttle = 0.6f;
+                // ([Test] StandaloneFrein=1 : frein a main serre au levier les 2,5 premieres secondes, gaz ouverts -- puis desserre)
+                if (Config.GetInt("Test", "StandaloneFrein", 0) != 0) { d.HandLatch = 1f; cFrein = true; }
+                Log.Info("standalone : coop, hote roule" + (cFrein ? " (frein a main serre au levier)" : ""));
+            }
+            if (host && cStep == 4 && cFrein && t > cAt + 2.5f)
+            {
+                cFrein = false; var d = (StandaloneDriver)b.Axis;
+                Log.Info("standalone : coop, frein a main serre 2,5 s gaz ouverts : " + (b.Rb.velocity.magnitude * 3.6f).ToString("F1") + " km/h, entree " + d.handbrakeInput.ToString("F2") + " ; desserre");
+                d.HandLatch = 0f;
+            }
             if (host && cStep == 4 && t > cAt + 5f) { cStep = 5; var d = (StandaloneDriver)b.Axis; d.Throttle = 0f; d.Brake = 1f; Log.Info("standalone : coop, hote freine (" + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h)"); }
             if (!host && cStep == 3 && t > 46f && t < 100f && (t >= cLog || (st != null && st.HornOn && t >= cLog - 1f)) && car != null)
             {
