@@ -215,6 +215,12 @@ namespace MWCoop
                 if (n.Root != null && n.Root.name == "PhysicsPivot" && n.Root.parent != null) n.Root = n.Root.parent;
                 for (Transform t = ch; t.parent != null; t = t.parent) if (t.parent.name == "Customers") { n.Customer = t; break; }
                 n.Ambient = n.Customer != null && n.Root != null && Game.FsmOn(n.Root.gameObject, "Work") == null;
+                // Ouvriers de l'usine (JOB/WORKERn/WorkerPIVOT) : comme les clients, tout leur poste suit l'hote et leur logique est
+                // coupee chez les autres (Packaging, Move, caisses, voix Random). Avant, seul le corps suivait : leur logique d'ici les
+                // menait ailleurs, corps pose sur la pose de l'hote, objets en main de l'un sur l'autre -- « tous les PNJ du Futufon
+                // fous » (Донской, 01/11). [Test] UsineAncienne=1 : comme avant.
+                if (!n.Ambient && Usine.On && path.Contains("/JOB/WORKER"))
+                    for (Transform t = ch.parent; t != null; t = t.parent) if (t.name == "WorkerPIVOT") { n.Root = t; n.Ambient = true; break; }
                 if (n.Ambient) { clients++; n.Moved = n.Root; }
                 else for (Transform t = ch.parent; t != null; t = t.parent) if (t.GetComponent("splineMove") != null) { n.Moved = t; break; }   // luge
                 if (!underChar) bodies++;

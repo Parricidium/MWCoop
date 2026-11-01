@@ -424,6 +424,18 @@ namespace MWCoop
             }
             return sb.ToString().TrimEnd();
         }
+        static string Workers()
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 1; i <= 4; i++)
+            {
+                GameObject c = Game.FindAny(Root + "/WORKER" + i + "/WorkerPIVOT/Worker" + (i == 3 ? "3" : i.ToString()) + "/PhysicsPivot/Pivot/Char");
+                GameObject fw = Game.FindAny(Root + "/WORKER" + i + "/WorkerPIVOT/FunctionsWorker");
+                PlayMakerFSM pk = fw != null ? Game.FsmOn(fw, "Packaging") : null;
+                sb.Append(' ').Append(i).Append(':').Append(c != null ? c.transform.position.ToString("F1") : "?").Append(pk != null ? (pk.enabled ? "" : "(coupe)") + pk.ActiveStateName : "");
+            }
+            return sb.ToString();
+        }
         public static void Test(string mode, float t)
         {
             if (mode != "usinetravail") return;
@@ -468,7 +480,7 @@ namespace MWCoop
                          + " ; colis " + (pack != null ? Vars(pack, "Use", "Stage", "Mould") : "-")
                          + " ; caisse " + (pbox != null ? Vars(pbox.transform.Find("TriggerPackage") != null ? pbox.transform.Find("TriggerPackage").gameObject : null, "Assembly", "Slot", "TotalPackages") : "-")
                          + " ; palette " + (pal != null ? Vars(pal.transform.Find("TriggerBox") != null ? pal.transform.Find("TriggerBox").gameObject : null, "Assembly", "Slot") : "-")
-                         + " ; colis comptes " + Counts()[0]);
+                         + " ; colis comptes " + Counts()[0] + " ; ouvriers" + Workers());
             }
         }
     }
