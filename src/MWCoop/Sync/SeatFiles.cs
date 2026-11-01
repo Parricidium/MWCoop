@@ -397,12 +397,17 @@ namespace MWCoop
                         else if (t.name == "seat rear(Clone)") rear = true;
                     }
                 }
+                // (zone d'entree recalee sur l'assise mesuree -- standalone, Seats.StandaloneSeat : gardee pour la place du meme rang)
+                var dz = new Dictionary<int, float>();
+                foreach (Seat s in seats) if (s.Car == n) dz[s.Index] = s.ZoneDz;
                 seats.RemoveAll(s => s.Car == n);
+                bool solo = StandaloneCar.IsCar(rb.gameObject);
                 foreach (SeatFiles.Place p in f.Places)
                 {
                     if (!(p.N == 0 ? front : rear) && p.Kind != "ridelle" && p.Kind != "couchette") continue;
+                    float zd;
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = p.N, Head = p.Eyes, Yaw = p.Yaw, ZoneX = p.ZoneX, ZoneZ = p.ZoneZ, MaxX = p.MaxX,
-                                         Bed = p.Kind == "ridelle", Stand = p.Kind == "debout" });
+                                         Bed = p.Kind == "ridelle", Stand = p.Kind == "debout", ZoneDz = solo && dz.TryGetValue(p.N, out zd) ? zd : -0.1f });
                 }
             }
             fileGen = SeatFiles.Generation;

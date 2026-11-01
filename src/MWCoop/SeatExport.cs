@@ -102,7 +102,7 @@ namespace MWCoop
 
             // VAZ et addons installes : sortis un a un (comme le F10), exportes, rendus
             var models = new List<int> { VazCar.ModelVaz };
-            for (int i = 1; i < VazCar.Models.Length; i++) if (VazCar.Has(i)) models.Add(i);
+            for (int i = 1; i < VazCar.Models.Length; i++) if (VazCar.Has(i) && !VazCar.Models[i].QuestOnly) models.Add(i);   // (voiture de quete : pas au F10, plus bas)
             foreach (int id in models)
             {
                 VazCar.Model m = id == VazCar.ModelVaz ? VazCar.Vaz2108 : VazCar.Models[id];
@@ -120,6 +120,33 @@ namespace MWCoop
                 Vaz.Release();
                 until = Time.realtimeSinceStartup + 10f;
                 while (Vaz.CarOf(Session.Active ? Session.LocalId : 0) != null && Time.realtimeSinceStartup < until) { Wait(0.5f); yield return true; }
+            }
+
+            // Voiture de la quete s21 (QueteGolf, les deux jeux) : jamais au F10 ; voiture du monde a son proprietaire (QueteGolf.Owner),
+            // celle de la partie si elle est deja posee, sinon posee ici devant le joueur. Jamais nommee (JD 01/11) : nom neutre.
+            for (int id = 1; id < VazCar.Models.Length; id++)
+            {
+                if (!VazCar.Models[id].QuestOnly || !StandaloneCar.Quest || !VazCar.Has(id)) continue;
+                State("addons", "Voiture de la quete", false);
+                if (!Vaz.HasWorldCar(QueteGolf.Owner))
+                {
+                    Transform pl = Game.PlayerGo != null ? Game.PlayerGo.transform : null;
+                    if (pl == null) { Log.Warn("export des places : voiture de la quete : pas de joueur"); continue; }
+                    Vector3 fwd = Vector3.ProjectOnPlane(pl.forward, Vector3.up); if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward; fwd.Normalize();
+                    Vector3 at = pl.position + fwd * 6f;
+                    float gy = float.MinValue;
+                    foreach (RaycastHit h in Physics.RaycastAll(at + Vector3.up * 6f, Vector3.down, 20f))
+                        if (!h.collider.isTrigger && h.collider.attachedRigidbody == null && h.point.y > gy) gy = h.point.y;
+                    if (gy > float.MinValue) at.y = gy + 0.8f;
+                    Vaz.PlaceWorldCar(QueteGolf.Owner, QueteGolf.Number, id, at, Quaternion.LookRotation(fwd).eulerAngles.y);
+                }
+                float until = Time.realtimeSinceStartup + 20f;
+                while (Vaz.CarOf(QueteGolf.Owner) == null && Time.realtimeSinceStartup < until) { Wait(0.5f); yield return true; }
+                Transform car = Vaz.CarOf(QueteGolf.Owner);
+                if (car == null) { Log.Warn("export des places : voiture de la quete pas construite"); continue; }
+                Wait(6f); yield return true;
+                Rescan();
+                try { ExportCar(car, Vaz.SeatKey(car.name) ?? "quete-s21", "Voiture de la quête s21", "standalone"); } catch (Exception e) { Log.Warn("export des places : voiture de la quete : " + e.Message); }
             }
 
             var sb = new StringBuilder("{\"jeu\":" + S(Game.Msc ? "msc" : "mwc") + ",\"mod\":" + S(Version.Text) + ",\"avatar\":\"avatar.json\",\"voitures\":[");
