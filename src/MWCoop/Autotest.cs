@@ -2087,7 +2087,7 @@ namespace MWCoop
                 int q = Config.GetInt("Test", "OmbresQualite", -1);
                 if (q >= 0) { QualitySettings.SetQualityLevel(q, true); Log.Info("autotest : sondeombres : qualite forcee " + q + " (" + QualitySettings.names[q] + ")"); }
             }
-            if (mode == "sondeombres" && t > 36f && step == 0 && !sondeOut)
+            if (mode == "sondeombres" && t > Config.GetFloat("Test", "OmbresPosA", 36f) && !sondeOut)
             {
                 sondeOut = true;
                 GameObject pl = Game.PlayerGo;
@@ -2100,7 +2100,7 @@ namespace MWCoop
                 { pl.transform.position = new Vector3(ox, oy, oz); pl.transform.rotation = Quaternion.Euler(0f, oyaw, 0f); }
                 if (cc != null) cc.enabled = true;
             }
-            if (mode == "sondeombres" && t > 40f && step == 0)
+            if (mode == "sondeombres" && t > Config.GetFloat("Test", "OmbresPosA", 36f) + 4f && step == 0)
             {
                 step = 1;
                 var sb = new System.Text.StringBuilder("autotest : sondeombres : qualite " + QualitySettings.GetQualityLevel() + ", ombres " + QualitySettings.shadowDistance + " m x" + QualitySettings.shadowCascades + " " + QualitySettings.shadowProjection);
