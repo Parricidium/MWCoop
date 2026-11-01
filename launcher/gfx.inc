@@ -135,6 +135,9 @@ static const std::vector<GfxRow> &GfxRows()
         { "OmbresSoleil", L"Ombres du soleil", L"Sun shadows", 1, {}, {}, {}, 3, 1 },
         { "OmbresLune", L"Ombres de la lune", L"Moon shadows", 0, {}, {}, {}, 2, 1 },
         { "OmbresMaisons", L"Ombres des maisons", L"House shadows", 1, {}, {}, {}, 2, 1 },
+        // (lanceur-1.16.11, 01/11 : ombre des nuages au sol sans le grillage du tramage du jeu ; 0 = celle d'origine. Le mod
+        // l'applique en direct, MSC et MWC)
+        { "OmbresNuages", L"Ombre des nuages corrigée (sans grillage)", L"Fixed cloud shadows (no grid pattern)", 1, {}, {}, {}, 0, 1 },
         { "OmbresDistance", L"Distance des ombres", L"Shadow distance", -1, { -1, 30, 60, 100, 150, 250, 400 },
           { L"Jeu", L"30 m", L"60 m", L"100 m", L"150 m", L"250 m", L"400 m" }, { L"Game", L"30 m", L"60 m", L"100 m", L"150 m", L"250 m", L"400 m" }, 3, 11 },
         { "OmbresCascades", L"Finesse des ombres", L"Shadow detail", -1, { -1, 1, 2, 4 }, { L"Jeu", L"Simple", L"Fine", L"Très fine" }, { L"Game", L"Basic", L"Fine", L"Very fine" }, 2, 11 },
@@ -408,6 +411,7 @@ static bool GfxRowOff(const GfxRow &r, const wchar_t **why)
 //  OmbresSoleil        jeu     oui      oui        oui       oui
 //  OmbresLune          jeu     non      non        oui       oui
 //  OmbresMaisons       jeu     non      oui        oui       oui
+//  OmbresNuages        non     oui      oui        oui       oui   (Vanilla : l'ombre d'origine, tramee)
 //  OmbresDistance      jeu     30 m     60 m       150 m     400 m
 //  OmbresCascades      jeu     simple   fine       fine      tres fine
 //  Distance            jeu     1,5 km   3 km       4,5 km    9 km
@@ -428,16 +432,17 @@ static const std::vector<GfxPreset> &GfxPresets()
     if (!p.empty()) return p;
     static const char *keys[] = { "QualiteUnity", "Anticrenelage", "HDR", "Bloom", "Contraste", "RayonsSoleil", "OmbresSoleil", "OmbresLune", "OmbresMaisons",
                                   "OmbresDistance", "OmbresCascades", "Distance", "Details", "Textures", "Filtrage", "Retroviseurs", "PoussiereTrafic", "TracesTrafic",
-                                  "OmbresPhares", "OmbresLampadaires", "Halos", "RayTracing" };
+                                  "OmbresPhares", "OmbresLampadaires", "Halos", "OmbresNuages", "RayTracing" };
     const int n = (int)(sizeof(keys) / sizeof(keys[0]));
-    static const int vals[4][22] = {
-        { 0, 0, 0, 0, 0, 0, 1, 0, 0, 30, 1, 1500, 70, 1, 0, 1, 0, 0, 0, 0, 0, 0 },
-        { 1, 1, 1, 0, 0, 0, 1, 0, 1, 60, 2, 3000, 100, 0, 1, 1, 1, 0, 0, 0, 1, 0 },
-        { 3, 1, 1, 1, 0, 1, 1, 1, 1, 150, 2, 4500, 150, 0, 1, 2, 1, 1, 2, 1, 1, 0 },
-        { 5, 1, 1, 1, 0, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2, 1 } };
+    static const int vals[4][23] = {
+        { 0, 0, 0, 0, 0, 0, 1, 0, 0, 30, 1, 1500, 70, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0 },
+        { 1, 1, 1, 0, 0, 0, 1, 0, 1, 60, 2, 3000, 100, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0 },
+        { 3, 1, 1, 1, 0, 1, 1, 1, 1, 150, 2, 4500, 150, 0, 1, 2, 1, 1, 2, 1, 1, 1, 0 },
+        { 5, 1, 1, 1, 0, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2, 1, 1 } };
     std::vector<std::pair<const char *, int>> van;
     for (int i = 0; i < n; i++) { int d = 0; for (const GfxRow &r : GfxRows()) if (!strcmp(r.key, keys[i])) d = r.def; van.push_back(std::make_pair(keys[i], d)); }
     van.back().second = 0;   // (RayTracing : jamais en Vanilla)
+    van[n - 2].second = 0;   // (OmbresNuages : l'ombre d'origine du jeu en Vanilla, la ligne vaut oui par defaut)
     p.push_back({ L"Vanilla", L"Vanilla", L"tel quel", L"as is", van });
     static const wchar_t *nf[] = { L"Léger", L"Équilibré", L"Joli", L"Ultra" }, *ne[] = { L"Light", L"Balanced", L"Pretty", L"Ultra" };
     static const wchar_t *df[] = { L"vieux PC", L"60 i/s", L"ombres, HDR", L"ray tracing" }, *de[] = { L"old PC", L"60 fps", L"shadows, HDR", L"ray tracing" };   // (Vanilla : "le jeu tel quel")
@@ -590,6 +595,7 @@ static const SetItem kSetItems[] = {
     { 4, SI_GFX, "Halos", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "PorteePhares", NULL, NULL, NULL, NULL },
     { 4, SI_GFX, "SondesReflets", NULL, NULL, L"Carrosseries, vitres, sols", L"Car paint, windows, floors", 0, 2 }, { 4, SI_GFX, "RefletsEau", NULL, NULL, L"Lacs et rivières", L"Lakes and rivers", 0, 2 },
     { 5, SI_GFX, "OmbresSoleil", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresLune", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresMaisons", NULL, NULL, NULL, NULL },
+    { 5, SI_GFX, "OmbresNuages", NULL, NULL, NULL, NULL },
     { 5, SI_GFX, "OmbresDistance", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresCascades", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresPhares", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresLampadaires", NULL, NULL, NULL, NULL },
     { 6, SI_GFX, "RayTracing", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTRayons", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTPortee", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTDouceur", NULL, NULL, NULL, NULL },
     { 6, SI_GFX, "RTCorps", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTReflets", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTVitres", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTRebond", NULL, NULL, NULL, NULL },
@@ -1939,7 +1945,7 @@ static bool SetChar(wchar_t c)
 static void SetEnter(int tab) { g_setTab = tab == TAB_COOP ? SET_COOP : SET_JEU; g_setSearch.clear(); g_setFocus = false; }
 // La barre de gauche suit l'onglet : Jeu / Image / Son = page Jeu (TAB_GFX), le reste = Co-op (TAB_COOP).
 static void SetRail() { int t = g_setTab <= SET_SON ? TAB_GFX : TAB_COOP; if (g_tab == TAB_GFX || g_tab == TAB_COOP) g_tab = t; }
-static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : step == 53 ? SET_SON : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage ; 53 : Son & vocal, parler)
+static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : step == 53 ? SET_SON : step == 63 ? SET_IMAGE : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage ; 53 : Son & vocal, parler)
 static void SetCaptureState(const std::wstring &st)
 {
     static const wchar_t *names[SET_N] = { L"jeu", L"image", L"hud", L"son", L"coop", L"touches", L"theme", L"lanceur" };

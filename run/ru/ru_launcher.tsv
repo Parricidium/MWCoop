@@ -2440,3 +2440,6 @@ Discord is back	Discord снова работает
 The Discord button opens the MWCoop server again: it led to GitHub for a few versions. Come and say hi!	Кнопка Discord снова открывает сервер MWCoop: несколько версий она вела на GitHub. Заходи поздороваться!
 The 3D model of the rear seat belts of the Sorbet, the Machtwagen and the CORRIS (My Winter Car), and of the SATSUMA (My Summer Car).	3D-модель задних ремней безопасности Sorbet, Machtwagen и CORRIS (My Winter Car), а также SATSUMA (My Summer Car).
 A 3D model used in My Summer Car: 3D model copyright nerdadantes via RenderHub.	3D-модель, используемая в My Summer Car: 3D model copyright nerdadantes via RenderHub.
+Fixed cloud shadows (no grid pattern)	Исправленные тени облаков (без сетки)
+Fixed cloud shadows	Исправленные тени облаков
+Settings > Image > Shadows: cloud shadows on the ground no longer have a grid pattern. On by default; turned off, the game's original dithered shadow comes back. Applied live, even in game.	Настройки > Изображение > Тени: у теней облаков на земле больше нет сетки. Включено по умолчанию; если выключить, вернётся исходная зернистая тень игры. Применяется сразу, даже в игре.

@@ -147,6 +147,9 @@ static const TutoStep kTuto[] = {
     // apres une mise a jour seulement, pas dans la visite complete : l'etape 15 presente deja le bouton)
     { L"Le Discord est de retour", L"Le bouton Discord ouvre de nouveau le serveur MWCoop : il menait sur GitHub depuis quelques versions. Viens nous dire bonjour !",
       L"Discord is back", L"The Discord button opens the MWCoop server again: it led to GitHub for a few versions. Come and say hi!", "1.16.7" },
+    // lanceur-1.16.11 (01/11) : ombre des nuages corrigee, Reglages > Image > Ombres (63)
+    { L"Ombre des nuages corrigée", L"Réglages > Image > Ombres : l'ombre des nuages au sol n'a plus de grillage. Activée d'office ; coupée, l'ombre d'origine du jeu revient, tramée. Appliquée en direct, même en jeu.",
+      L"Fixed cloud shadows", L"Settings > Image > Shadows: cloud shadows on the ground no longer have a grid pattern. On by default; turned off, the game's original dithered shadow comes back. Applied live, even in game.", "1.16.11" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -249,11 +252,12 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 63: return TutoSetTab(SET_IMAGE);                   // onglet Image (SetTutoTab l'ouvre) : ombre des nuages corrigee
     case 62: return g_btn[B_DISCORD].r;                      // le Discord est de retour (bouton de la barre)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

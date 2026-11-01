@@ -1,0 +1,3 @@
+L88-1	Fixed cloud shadows (no grid pattern)
+L88-2	Fixed cloud shadows
+L88-3	Settings > Image > Shadows: cloud shadows on the ground no longer have a grid pattern. On by default; turned off, the game's original dithered shadow comes back. Applied live, even in game.
