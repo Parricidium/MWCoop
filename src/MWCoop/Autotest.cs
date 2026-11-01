@@ -2992,6 +2992,29 @@ namespace MWCoop
                             Log.Info("autotest : sonde champ " + fi.Name + " = " + s);
                         }
                 }
+                // ([Test] SondeCouches=<racine> : couches qui touchent les objets (Parts), et colliders pleins de la voiture par couche --
+                // objets gardes dans l'habitacle, Golf 01/11)
+                string sco = Config.Get("Test", "SondeCouches", "");
+                if (sco.Length > 0)
+                {
+                    int parts = LayerMask.NameToLayer("Parts");
+                    var sb0 = new System.Text.StringBuilder();
+                    for (int l = 0; l < 32; l++) { string ln = LayerMask.LayerToName(l); if (ln.Length > 0) sb0.Append(l).Append(' ').Append(ln).Append(parts >= 0 && Physics.GetIgnoreLayerCollision(parts, l) ? "(ignore) " : " "); }
+                    Log.Info("autotest : sonde couches, Parts=" + parts + " : " + sb0);
+                    GameObject cr = Game.FindAny(sco);
+                    if (cr != null)
+                    {
+                        var per = new System.Collections.Generic.Dictionary<string, int>(); int shown = 0;
+                        foreach (Collider c in cr.GetComponentsInChildren<Collider>(true))
+                        {
+                            string k = LayerMask.LayerToName(c.gameObject.layer) + (c.isTrigger ? "/T" : "");
+                            int nn; per.TryGetValue(k, out nn); per[k] = nn + 1;
+                            if (!c.isTrigger && shown++ < 60) Log.Info("autotest : sonde collider " + Recon.Path(c.transform) + " " + c.GetType().Name + " couche " + LayerMask.LayerToName(c.gameObject.layer) + (c.enabled ? "" : " (coupe)") + ", racine " + cr.transform.InverseTransformPoint(c.bounds.center).ToString("F2") + " taille " + c.bounds.size.ToString("F2"));
+                        }
+                        var sb1 = new System.Text.StringBuilder(); foreach (var kv in per) sb1.Append(kv.Key).Append('=').Append(kv.Value).Append(' ');
+                        Log.Info("autotest : sonde colliders de " + sco + " par couche : " + sb1);
+                    }
+                }
                 // ([Test] SondeMaillage=<chemin> : bornes des sommets et des deux jeux d'UV du maillage, matieres et proprietes de texture)
                 string sm = Config.Get("Test", "SondeMaillage", "");
                 foreach (string smp in sm.Split(';'))

@@ -15,7 +15,7 @@ namespace MWCoop
         public class Mirror
         {
             public Transform Glass; public Vector3 Up, Right; public Camera Cam; public RenderTexture Rt; public MeshRenderer Mr;
-            public Material Live, Dark; public bool Copied; public string Key;
+            public Material Live, Dark; public bool Copied, OwnDark = true; public string Key; public Mesh Own;
 
             public static Mirror Make(VazCar.Built b, Dictionary<string, Vector3> inf, string k, Transform parent, int w, int h, bool oval)
             {
@@ -25,6 +25,32 @@ namespace MWCoop
                 if (unlit == null) return null;
                 var g = new GameObject("retro_" + k);
                 g.transform.SetParent(parent, false); g.transform.localPosition = c;
+                // retro_<k>_glace n : l'image va sur la glace du modele elle-meme (objet vaz_m<n> sous parent, Golf -- JD 01/11 : « utiliser
+                // la texture grise du retro pour afficher le miroir ») : forme exacte, UV projetes sur (droite, haut) ; au repos, sa matiere
+                Vector3 gl; Transform model = null;
+                if (inf.TryGetValue("retro_" + k + "_glace", out gl)) model = parent.Find("vaz_m" + Mathf.RoundToInt(gl.x));
+                MeshFilter mf = model != null ? model.GetComponent<MeshFilter>() : null;
+                if (mf != null && mf.sharedMesh != null && model.GetComponent<MeshRenderer>() != null)
+                {
+                    Mesh own = Object.Instantiate(mf.sharedMesh); own.name = "retro_" + k;
+                    Vector3[] mv = own.vertices; var muv = new Vector2[mv.Length];
+                    Matrix4x4 toParent = parent.worldToLocalMatrix * model.localToWorldMatrix;
+                    for (int i = 0; i < mv.Length; i++)
+                    {
+                        Vector3 q = toParent.MultiplyPoint3x4(mv[i]) - c;
+                        muv[i] = new Vector2((1f - Vector3.Dot(q, right) / right.sqrMagnitude) * 0.5f, (1f + Vector3.Dot(q, up) / up.sqrMagnitude) * 0.5f);
+                    }
+                    own.uv = muv; mf.sharedMesh = own;
+                    var mmr = model.GetComponent<MeshRenderer>();
+                    var mrt = new RenderTexture(w, h, 16) { name = "retro_" + k, wrapMode = TextureWrapMode.Clamp };
+                    var mm = new Mirror { Glass = g.transform, Up = up, Right = right, Rt = mrt, Mr = mmr, Key = k, Own = own, OwnDark = false,
+                        Live = new Material(unlit) { mainTexture = mrt }, Dark = mmr.sharedMaterial };
+                    var mcg = new GameObject("retro_camera_" + k);
+                    mcg.transform.SetParent(b.Car.transform, false);
+                    mm.Cam = mcg.AddComponent<Camera>(); mm.Cam.enabled = false;
+                    Log.Info("standalone : retroviseur " + k + " sur la glace du modele " + model.name + " (" + (right.magnitude * 200f).ToString("F0") + " x " + (up.magnitude * 200f).ToString("F0") + " cm, " + mv.Length + " sommets)");
+                    return mm;
+                }
                 // glace : ovale (portieres) ou rectangle (interieur) ; u = 0 du cote +right (l'image vue de derriere la glace)
                 var mesh = new Mesh { name = "retro_" + k };
                 var vs = new List<Vector3>(); var uv = new List<Vector2>(); var tri = new List<int>();
@@ -122,7 +148,8 @@ namespace MWCoop
             {
                 if (Rt != null) { Rt.Release(); Object.Destroy(Rt); Rt = null; }
                 if (Live != null) Object.Destroy(Live);
-                if (Dark != null) { Object.Destroy(Dark.mainTexture); Object.Destroy(Dark); }
+                if (Dark != null && OwnDark) { Object.Destroy(Dark.mainTexture); Object.Destroy(Dark); }
+                if (Own != null) Object.Destroy(Own);
             }
         }
 

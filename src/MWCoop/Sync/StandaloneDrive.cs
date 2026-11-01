@@ -770,6 +770,59 @@ namespace MWCoop
             st.Cabin = new Bounds(); st.Cabin.SetMinMax(new Vector3(-ix, fl, zMin), new Vector3(ix, rf, zMax));
             st.HasCabin = true;
             Log.Info("standalone : habitacle creux " + st.Cabin.min.ToString("F2") + " - " + st.Cabin.max.ToString("F2") + ", couche " + LayerMask.LayerToName(L));
+            if (st.HasSeatRef[0]) ItemShell(b, st, bb, ix, fl, rf, fb, zMin, zMax);
+        }
+
+        // Coque pour les objets (Golf, JD 01/11 : « les objets passent a travers, qu'ils restent a l'interieur comme dans les autres
+        // voitures ») : les objets du jeu (couche Parts) ne heurtent pas la couche des boites de la caisse ; comme la Satsuma (habitacle
+        // sur Collider2, sieges sur HingedObjects -- releve SondeCouches du 01/11) : plancher de l'habitacle et du coffre, toit, planche,
+        // flancs derriere les portieres sur Collider2 ; une paroi dans chaque portiere et dans le hayon (elles s'ecartent avec eux : on
+        // sort les objets portiere ou hayon ouvert) ; assises et dossiers des sieges sur HingedObjects (les dossiers avant suivent le
+        // rabattement). Les deux couches retirees du rayon des roues (WheelMask) ; inertie de la caisse gardee (pas de changement de tenue).
+        static int itemLayer = -1, seatItemLayer = -1;
+        static void ItemShell(VazCar.Built b, State st, Bounds bb, float ix, float fl, float rf, float fb, float zMin, float zMax)
+        {
+            int IL = LayerMask.NameToLayer("Collider2"), SL = LayerMask.NameToLayer("HingedObjects"), parts = LayerMask.NameToLayer("Parts");
+            if (IL < 0 || SL < 0 || parts < 0 || Physics.GetIgnoreLayerCollision(parts, IL) || Physics.GetIgnoreLayerCollision(parts, SL)) { Log.Warn("standalone : pas de coque pour les objets (couches Collider2 / HingedObjects)"); return; }
+            itemLayer = IL; seatItemLayer = SL;
+            Transform ct = b.Car.transform;
+            Vector3 inertia = b.Rb.inertiaTensor; Quaternion inertiaRot = b.Rb.inertiaTensorRotation;
+            const float T = 0.08f;   // (epaisseur des parois)
+            float zBack = bb.min.z + 0.14f;   // (fond du coffre : derriere, le hayon)
+            Box(ct, IL, "objets_plancher", new Vector3(0f, fl - T * 0.5f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zMin));
+            Box(ct, IL, "objets_coffre", new Vector3(0f, fb - T * 0.5f, (zBack + zMin) * 0.5f), new Vector3(2f * ix, T, zMin - zBack));
+            Box(ct, IL, "objets_toit", new Vector3(0f, rf + T * 0.5f, (zBack + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zBack));
+            Box(ct, IL, "objets_planche", new Vector3(0f, (fl + rf) * 0.5f, zMax + T * 0.5f), new Vector3(2f * ix, rf - fl, T));
+            // flancs : de l'arriere de chaque portiere au fond du coffre (sans portiere de ce cote : tout le long)
+            for (int s = 0; s < 2; s++)
+            {
+                float sx = s == 0 ? -1f : 1f; Bounds d = st.DoorBox[s];
+                float zEnd = d.size.y > 0.3f ? d.min.z : zMax;
+                Box(ct, IL, "objets_flanc_" + (s == 0 ? "g" : "d"), new Vector3(sx * (ix + T * 0.5f), (fl + rf) * 0.5f, (zBack + zEnd) * 0.5f), new Vector3(T, rf - fl, zEnd - zBack));
+                // paroi dans la portiere (tourne avec elle)
+                if (st.Doors[s] != null && d.size.y > 0.3f)
+                {
+                    Transform inner = st.Doors[s].Find("pieces");
+                    if (inner != null) Box(inner, IL, "objets_portiere", new Vector3(sx * (ix + T * 0.5f), (fl + rf) * 0.5f, d.center.z), new Vector3(T, rf - fl, d.size.z));
+                }
+            }
+            // fond du coffre : dans le hayon s'il s'ouvre
+            Transform hp = st.Hatch != null ? st.Hatch.Find("pieces") : null;
+            Box(hp ?? ct, IL, "objets_hayon", new Vector3(0f, (fb + rf) * 0.5f, zBack - T * 0.5f), new Vector3(2f * ix, rf - fb, T));
+            // sieges : assises (avant, banquette) fixes ; dossiers avant dans leur pivot (rabattus avec eux), dossier de la banquette fixe
+            for (int k = 0; k < 4; k++)
+            {
+                if (!st.HasSeatRef[k]) continue;
+                Vector3 c = st.SeatRef[k]; bool rear = k >= 2;
+                if (rear && k == 3) continue;   // (banquette : une seule assise et un seul dossier, sur toute la largeur)
+                float cx = rear ? 0f : c.x, w = rear ? 2f * ix - 0.1f : 0.46f;
+                Box(ct, SL, "objets_assise_" + k, new Vector3(cx, c.y - 0.06f, c.z + 0.27f), new Vector3(w, 0.12f, 0.46f));
+                Transform par = !rear && st.SeatBack[k] != null ? st.SeatBack[k].Find("pieces") : null;
+                Box(par ?? ct, SL, "objets_dossier_" + k, new Vector3(cx, c.y + 0.3f, c.z - 0.06f), new Vector3(w, 0.5f, 0.12f));
+            }
+            b.Rb.inertiaTensor = inertia; b.Rb.inertiaTensorRotation = inertiaRot;
+            GameObject pl = Game.PlayerGo;
+            Log.Info("standalone : coque pour les objets (" + LayerMask.LayerToName(IL) + ", sieges " + LayerMask.LayerToName(SL) + ")" + (pl != null ? ", le joueur heurte " + LayerMask.LayerToName(IL) + " : " + !Physics.GetIgnoreLayerCollision(IL, pl.layer) + ", " + LayerMask.LayerToName(SL) + " : " + !Physics.GetIgnoreLayerCollision(SL, pl.layer) : ""));
         }
 
         // Choc mortel. Les voitures du jeu tuent par la liaison du pivot de tete du conducteur (releve 29/10 sur la Satsuma : tete de
@@ -914,6 +967,7 @@ namespace MWCoop
                 int m = v is LayerMask ? ((LayerMask)v).value : v is int ? (int)v : 0;
                 if (m == 0) return;   // (Start pas encore passe)
                 int nm = m & ~(1 << buildPlayerLayer);
+                if (itemLayer >= 0) nm &= ~(1 << itemLayer); if (seatItemLayer >= 0) nm &= ~(1 << seatItemLayer);   // (coque pour les objets)
                 if (nm != m) { if (v is LayerMask) wheelMaskField.SetValue(w, (LayerMask)nm); else wheelMaskField.SetValue(w, nm); n++; }
             }
             st.MaskDone = true;
@@ -1916,7 +1970,7 @@ namespace MWCoop
         // chez les deux (plantage RemapPPtrTransfer a surveiller, JD 29/10).
         static int cStep; static float cAt, cLog; static bool cPhotos;
         static void Photo(VazCar.Built b, string name, Vector3 local) { Photo(b, name, local, new Vector3(0f, 0.6f, 0f)); }
-        static void Photo(VazCar.Built b, string name, Vector3 local, Vector3 target)
+        static void Photo(VazCar.Built b, string name, Vector3 local, Vector3 target, float fov = 45f)
         {
             var go = new GameObject("standalone_photo");
             try
@@ -1924,7 +1978,7 @@ namespace MWCoop
                 var cam = go.AddComponent<Camera>(); cam.enabled = false;
                 Transform pc = PlayerCam(); Camera main = pc != null ? pc.GetComponent<Camera>() : null;
                 if (main != null) cam.CopyFrom(main);
-                cam.fieldOfView = 45f; cam.nearClipPlane = 0.05f; cam.farClipPlane = 500f;
+                cam.fieldOfView = fov; cam.nearClipPlane = 0.05f; cam.farClipPlane = 500f;
                 go.transform.position = b.Car.transform.TransformPoint(local);
                 go.transform.LookAt(b.Car.transform.TransformPoint(target));
                 var rt = new RenderTexture(1280, 720, 24); cam.targetTexture = rt; cam.Render();
@@ -1939,7 +1993,8 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
             UnityEngine.Object.Destroy(go);
         }
-        static bool cFrein, cSeatShots;
+        static bool cFrein, cSeatShots, cMirrorShots;
+        static List<GameObject> cObjets; static int cObjLog;
         static float wLog; static bool wDump;
         public static void CoopTest(float t)
         {
@@ -2019,6 +2074,42 @@ namespace MWCoop
                 Photo(b, w + "-cote", new Vector3(sx * 1.7f, 1.1f, -0.2f), new Vector3(sx * 0.33f, 0.8f, -0.2f));
                 Photo(b, w + "-face", new Vector3(sx * 0.3f, 1.25f, 1.7f), new Vector3(sx * 0.33f, 0.85f, -0.25f));
                 Photo(b, w + "-profil", new Vector3(-sx * 0.05f, 1.05f, 0.35f), new Vector3(sx * 0.4f, 0.75f, -0.35f));
+            }
+            // ([Test] StandaloneRetros=1 : a 70 s, l'hote au volant, chaque glace vue de ses yeux, zoomee -- retroviseurs fonctionnels)
+            if (host && b != null && st != null && st.Mirrors != null && driving == b && t > 70f && !cMirrorShots && Config.GetInt("Test", "StandaloneRetros", 0) != 0)
+            {
+                cMirrorShots = true; Transform pc = PlayerCam();
+                if (pc != null)
+                    foreach (Mirror m in st.Mirrors)
+                        if (m != null && m.Glass != null)
+                        {
+                            Log.Info("standalone : retro " + m.Key + " " + (m.Mr.sharedMaterial == m.Live ? "vivant" : "sombre") + ", glace " + b.Car.transform.InverseTransformPoint(m.Glass.position).ToString("F2"));
+                            Photo(b, "retro-" + m.Key, b.Car.transform.InverseTransformPoint(pc.position), b.Car.transform.InverseTransformPoint(m.Glass.position), m.Key == "i" ? 22f : 14f);
+                        }
+            }
+            // ([Test] StandaloneObjets=1 : a 50 s, trois cubes du jeu (couche Parts, 2 kg) poses dans la voiture -- siege passager, plancher
+            // arriere, coffre ; releves a 70 s (arret) et 88 s (apres le roulage et le freinage) : toujours dedans ?)
+            if (host && b != null && st != null && Config.GetInt("Test", "StandaloneObjets", 0) != 0)
+            {
+                if (cObjets == null && t > 50f)
+                {
+                    cObjets = new List<GameObject>(); int parts = LayerMask.NameToLayer("Parts");
+                    Vector3[] at = { st.HasSeatRef[1] ? st.SeatRef[1] + new Vector3(0f, 0.15f, 0.25f) : new Vector3(0.3f, 0.7f, 0f),
+                                     new Vector3(-0.2f, st.Cabin.min.y + 0.12f, st.HasSeatRef[2] ? st.SeatRef[2].z + 0.55f : -0.6f),
+                                     new Vector3(0.1f, st.Cabin.min.y + 0.35f, b.Car.transform.InverseTransformPoint(b.Car.transform.position).z - 1.45f) };
+                    foreach (Vector3 p in at)
+                    {
+                        var g = GameObject.CreatePrimitive(PrimitiveType.Cube); g.name = "essai_objet"; g.layer = parts; g.transform.localScale = Vector3.one * 0.15f;
+                        g.transform.position = b.Car.transform.TransformPoint(p); g.AddComponent<Rigidbody>().mass = 2f; cObjets.Add(g);
+                    }
+                    Log.Info("standalone : coop, objets poses dans la voiture : " + cObjets.Count);
+                }
+                if (cObjets != null && (t > 70f && cObjLog == 0 || t > 88f && cObjLog == 1))
+                {
+                    cObjLog++; var sb = new System.Text.StringBuilder();
+                    foreach (GameObject g in cObjets) { Vector3 lp = b.Car.transform.InverseTransformPoint(g.transform.position); bool inside = Mathf.Abs(lp.x) < 0.75f && lp.y > -0.2f && lp.y < 1.4f && lp.z > -2f && lp.z < 1.2f; sb.Append(lp.ToString("F2")).Append(inside ? " dedans" : " DEHORS").Append(" ; "); }
+                    Log.Info("standalone : coop, objets (" + (cObjLog == 1 ? "a l'arret" : "apres roulage") + ") : " + sb);
+                }
             }
             // ([Test] StandaloneEssuieMarche=66 : essuie-glaces mis en marche a ce temps -- pluie sur les vitres, captures avant / apres)
             float wOn = Config.GetFloat("Test", "StandaloneEssuieMarche", 0f);
