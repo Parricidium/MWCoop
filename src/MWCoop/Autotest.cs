@@ -2090,8 +2090,27 @@ namespace MWCoop
                 Rigidbody sb = VehicleSync.Body("SATSUMA");
                 if (drv && step == 0 && d > 5f) { step = 1; Log.Info("autotest : roues, " + VehicleSync.TestEnter(rcar, false)); }
                 if (drv && step == 1 && d > 10f) { step = 2; Log.Info("autotest : roues, volant -> " + VehicleSync.TestEnter(rcar, true)); }
-                if (drv && sb != null && d > 15f && d < 27f) { Vector3 f = sb.transform.forward; f.y = 0; sb.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(sb.velocity.y, 0f); }
-                if (sb != null && d > 12f && d < 34f && now >= rouesLog)
+                // (non-regression des roues, 01/11 : a T+12 la voiture sortie sur la route, puis ligne droite a 8 m/s (T+15-22), virages
+                // serres (T+22-28), freinage (T+28-30), choc (T+31 : vitesse renversee d'un coup) ; chacun note toutes les 2 s)
+                if (drv && sb != null && step == 2 && d > 12f)
+                {
+                    step = 3;
+                    Vector3 to = new Vector3(Config.GetFloat("Test", "RouesX", 30f), Config.GetFloat("Test", "RouesY", 1.2f), Config.GetFloat("Test", "RouesZ", -55f));
+                    sb.position = to; sb.transform.position = to; sb.rotation = Quaternion.Euler(0f, Config.GetFloat("Test", "RouesCap", 120f), 0f); sb.transform.rotation = sb.rotation;
+                    sb.velocity = Vector3.zero; sb.angularVelocity = Vector3.zero;
+                    Log.Info("autotest : roues, voiture sortie en " + to.ToString("F1"));
+                }
+                if (drv && sb != null && step >= 3)
+                {
+                    Vector3 f = sb.transform.forward; f.y = 0; f.Normalize();
+                    float vy = Mathf.Min(sb.velocity.y, 0f);
+                    if (d > 15f && d < 22f) sb.velocity = f * 8f + Vector3.up * vy;
+                    else if (d > 22f && d < 28f) { sb.velocity = f * 6f + Vector3.up * vy; sb.angularVelocity = new Vector3(sb.angularVelocity.x, (d < 25f ? 1.2f : -1.2f), sb.angularVelocity.z); }
+                    else if (d > 28f && d < 30f) sb.velocity = Vector3.Lerp(sb.velocity, Vector3.zero, 0.15f);
+                    else if (d > 31f && step == 3) { step = 4; sb.velocity = f * 14f; Log.Info("autotest : roues, elan avant le choc"); }
+                    else if (d > 31.4f && step == 4) { step = 5; sb.velocity = -f * 6f + Vector3.up * 2f; Log.Info("autotest : roues, choc (vitesse renversee)"); }
+                }
+                if (sb != null && d > 12f && d < 40f && now >= rouesLog)
                 {
                     rouesLog = now + 2f;
                     var sb2 = new System.Text.StringBuilder("autotest : roues T+" + d.ToString("F0") + " : SATSUMA " + (sb.isKinematic ? "copie" : "locale") + " en " + sb.position.ToString("F1") + " ;");
