@@ -427,12 +427,12 @@ namespace MWCoop
         public class Preset { public string Fr, En; public int[] V; }
         // (meme ordre que PresetKeys ; comme dans le lanceur)
         public static readonly string[] PresetKeys = { "Anticrenelage", "HDR", "Bloom", "RayonsSoleil", "OmbresSoleil", "OmbresLune", "OmbresMaisons", "OmbresDistance", "OmbresCascades",
-                                                       "Distance", "Details", "Textures", "Filtrage", "Retroviseurs", "PoussiereTrafic", "TracesTrafic", "OmbresPhares", "OmbresLampadaires", "Halos" };
+                                                       "Distance", "Details", "Textures", "Filtrage", "Retroviseurs", "PoussiereTrafic", "TracesTrafic", "OmbresPhares", "OmbresLampadaires", "Halos", "OmbresNuages" };
         public static readonly Preset[] Presets = {
-            new Preset { Fr = "Performance", En = "Performance", V = new[] { 0, 0, 0, 0, 1, 0, 0, 30, 1, 1500, 70, 1, 0, 1, 0, 0, 0, 0, 0 } },
-            new Preset { Fr = "\u00C9quilibr\u00E9", En = "Balanced", V = new[] { 1, 1, 0, 0, 1, 0, 1, 60, 2, 3000, 100, 0, 1, 1, 1, 0, 0, 0, 1 } },
-            new Preset { Fr = "Beau", En = "Pretty", V = new[] { 1, 1, 1, 1, 1, 1, 1, 150, 2, 4500, 150, 0, 1, 2, 1, 1, 2, 1, 1 } },
-            new Preset { Fr = "Ultra", En = "Ultra", V = new[] { 1, 1, 1, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2 } },
+            new Preset { Fr = "Performance", En = "Performance", V = new[] { 0, 0, 0, 0, 1, 0, 0, 30, 1, 1500, 70, 1, 0, 1, 0, 0, 0, 0, 0, 1 } },
+            new Preset { Fr = "\u00C9quilibr\u00E9", En = "Balanced", V = new[] { 1, 1, 0, 0, 1, 0, 1, 60, 2, 3000, 100, 0, 1, 1, 1, 0, 0, 0, 1, 1 } },
+            new Preset { Fr = "Beau", En = "Pretty", V = new[] { 1, 1, 1, 1, 1, 1, 1, 150, 2, 4500, 150, 0, 1, 2, 1, 1, 2, 1, 1, 1 } },
+            new Preset { Fr = "Ultra", En = "Ultra", V = new[] { 1, 1, 1, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2, 1 } },
         };
 
         public static int Value(Row r) { int v; return ini.TryGetValue(r.Key, out v) ? v : r.Vals == null || r.Def != -1 ? GameValue(r.Key, r.Def) : -1; }
@@ -442,7 +442,7 @@ namespace MWCoop
             for (int i = 0; i < Presets.Length; i++)
             {
                 bool all = true;
-                for (int k = 0; k < PresetKeys.Length && all; k++) { int v; if (!ini.TryGetValue(PresetKeys[k], out v) || v != Presets[i].V[k]) all = false; }
+                for (int k = 0; k < PresetKeys.Length && all; k++) { int v; if (!ini.TryGetValue(PresetKeys[k], out v)) v = PresetKeys[k] == "OmbresNuages" ? 1 : int.MinValue; if (v != Presets[i].V[k]) all = false; }   // (OmbresNuages absente : 1, sa valeur par defaut -- ini d'avant l'option)
                 if (all) return i;
             }
             return -1;
