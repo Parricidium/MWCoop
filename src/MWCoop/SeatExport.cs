@@ -365,7 +365,8 @@ namespace MWCoop
                 if (ct != car) continue;
                 sb.Append(n++ > 0 ? "," : "").Append("{\"n\":").Append(Get<int>(s, t, "Index")).Append(",\"tete\":").Append(V(Get<Vector3>(s, t, "Head")))
                   .Append(",\"cap\":").Append(F(Get<float>(s, t, "Yaw"))).Append(",\"zone\":[").Append(F(Get<float>(s, t, "ZoneX"))).Append(',').Append(F(Get<float>(s, t, "ZoneZ")))
-                  .Append("],\"maxx\":").Append(F(Get<float>(s, t, "MaxX"))).Append(",\"ridelle\":").Append(Get<bool>(s, t, "Bed") ? "true" : "false")
+                  .Append("],\"zonedz\":").Append(F(Get<float>(s, t, "ZoneDz")))   // (centre de la zone par rapport a la tete en z : -0,1, standalone : l'assise)
+                  .Append(",\"maxx\":").Append(F(Get<float>(s, t, "MaxX"))).Append(",\"ridelle\":").Append(Get<bool>(s, t, "Bed") ? "true" : "false")
                   .Append(",\"debout\":").Append(Get<bool>(s, t, "Stand") ? "true" : "false").Append('}');
             }
             return sb.ToString();
