@@ -21,8 +21,10 @@ namespace MWCoop
         // (garee chez Teimo, a droite de la terrasse du pub, l'arriere contre la cloture, le nez vers la route -- capture de JD, 31/10 ;
         // repere du magasin STORE : x vers le pub, z vers l'arriere ; [Test] QueteGolfPlace=x,z,cap pour la deplacer)
         static readonly Vector3 SpotStore = new Vector3(11.4f, 0f, 3.6f); const float YawStore = 180f;
-        // (My Winter Car : chez Teimo aussi, repere STORE_AREA -- a caler sur une capture de JD)
-        static readonly Vector3 SpotStoreMwc = new Vector3(4f, 0f, -7f); const float YawStoreMwc = 0f;
+        // (My Winter Car : comme sur MSC -- JD 01/11 : « au meme endroit que MSC, dans le coin ou y a les barrieres » : a droite de la
+        // terrasse du pub, l'arriere contre la cloture (STORE_AREA/Stuff/LOD/Fence 2), le flanc gauche le long de son retour, le nez vers
+        // la route ; repere STORE_AREA)
+        static readonly Vector3 SpotStoreMwc = new Vector3(8.7f, 0f, 8.5f); const float YawStoreMwc = 153f;
         public static bool Done { get; private set; }
         static bool loaded, placed, hasSaved; static Vector3 savedPos; static float savedYaw;
         static float nextSend, nextCheck, firstInGame = -1f, placedAt; static bool on;
