@@ -3438,6 +3438,64 @@ namespace MWCoop
                             for (int i = 0; i < s.Actions.Length && i < 40; i++) Log.Info("autotest : options " + f.FsmName + "/" + sn + " : " + Recon.Describe(s.Actions[i]));
                         }
             }
+            if (mode == "sondeusine2" && t > 40f && step < 12)
+            {
+                // (une caisse par seconde : allumee, ouverte, deux pieces)
+                string[] binsU = { "PickChargers", "PickManuals", "PickSheets", "PickTrays", "PickBoxes" };
+                int bi = step / 2;
+                if (bi < binsU.Length && t > 40f + step)
+                {
+                    GameObject bg = Game.FindAny("JOBS/FACTORY/OpeningTimes/LOD1/JOB/" + binsU[bi]);
+                    PlayMakerFSM bu = bg != null ? Game.FsmOn(bg, "Use") : null;
+                    GameObject box = bu != null && bu.FsmVariables.FindFsmGameObject("Package") != null ? bu.FsmVariables.FindFsmGameObject("Package").Value : null;
+                    if (box != null)
+                    {
+                        if (!box.activeSelf) box.SetActive(true);
+                        PlayMakerFSM bx = Game.FsmOn(box, "Use");
+                        if (bx != null) Game.SetState(bx, bx.Fsm.GetState("State 8") != null ? "State 8" : "Check open");
+                        Log.Info("autotest : sondeusine2, " + binsU[bi] + " -> " + (bx != null ? bx.ActiveStateName : "pas de Use"));
+                    }
+                    step++;
+                }
+                else if (bi >= binsU.Length) step = 12;
+            }
+            if (mode == "sondeusine2" && t > 60f && !done)
+            {
+                done = true;
+                var sbf = new System.Text.StringBuilder();
+                foreach (Object o in Game.AllFsms(0f))
+                {
+                    var f = o as PlayMakerFSM;
+                    if (f == null || f.hideFlags != HideFlags.None || !f.gameObject.activeInHierarchy) continue;
+                    string path = Recon.Path(f.transform);
+                    bool want = path.Contains("(Clone)") && (path.Contains("charger") || path.Contains("manual") || path.Contains("tray") || path.Contains("package") || path.Contains("sheet"))
+                                || path.Contains("PalletPackages");
+                    if (!want) continue;
+                    sbf.Append(path).Append(" :: ").Append(f.FsmName).Append(" [").Append(f.ActiveStateName).Append("]\n");
+                    try
+                    {
+                        var vs = new System.Text.StringBuilder();
+                        foreach (FsmFloat v in f.FsmVariables.FloatVariables) vs.Append(' ').Append(v.Name).Append('=').Append(v.Value.ToString("G4"));
+                        foreach (FsmInt v in f.FsmVariables.IntVariables) vs.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                        foreach (FsmBool v in f.FsmVariables.BoolVariables) vs.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                        foreach (FsmString v in f.FsmVariables.StringVariables) vs.Append(' ').Append(v.Name).Append("='").Append(v.Value).Append('\'');
+                        foreach (FsmGameObject v in f.FsmVariables.GameObjectVariables) vs.Append(' ').Append(v.Name).Append("=@").Append(v.Value != null ? v.Value.name : "-");
+                        sbf.Append("   vars").Append(vs).Append('\n');
+                        foreach (FsmState st in f.Fsm.States)
+                        {
+                            var acts = new System.Text.StringBuilder();
+                            if (f.Fsm.Initialized && st.Actions != null) foreach (FsmStateAction a in st.Actions) if (a != null) acts.Append(a.GetType().Name).Append(' ');
+                            var trs = new System.Text.StringBuilder();
+                            foreach (FsmTransition x in st.Transitions) trs.Append(x.EventName).Append("->").Append(x.ToState).Append(' ');
+                            sbf.Append("   - ").Append(st.Name).Append(" : ").Append(acts).Append(" | ").Append(trs).Append('\n');
+                        }
+                    }
+                    catch (System.Exception e) { sbf.Append("   ! ").Append(e.GetType().Name).Append('\n'); }
+                }
+                string outp = System.IO.Path.Combine(Log.DataDir, "sondeusine2.txt");
+                System.IO.File.WriteAllText(outp, sbf.ToString());
+                Log.Info("autotest : sondeusine2 ecrite (" + sbf.Length + " car.)");
+            }
             if (mode == "kekremorque") Jobs.TestTrailer();   // (attelage du KEKMET, comme Autotest=remorque sur MSC ; [Test] RemorqueActeur=invite -- Донской 01/11)
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t); Gestures.TestPena(mode, t);
