@@ -1460,6 +1460,10 @@ enum { CRED_3D, CRED_IMG, CRED_THANKS, CRED_SUPPORT };
 struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    // (quete de la boutique s21, msc-1.15.62 : mention exigee par la licence, mot pour mot ; ne jamais nommer la voiture, JD)
+    { CRED_3D, L"nerdadantes", L"Modèle 3D", L"3D model",
+      L"Un modèle 3D utilisé dans My Summer Car : 3D model copyright nerdadantes via RenderHub.",
+      L"A 3D model used in My Summer Car: 3D model copyright nerdadantes via RenderHub.", L"01/11/2026", 0 },
     { CRED_3D, L"osmosikum", L"Modèle 3D", L"3D model",
       L"Le Cessna 172 de l'aérodrome du mod Voyage (agence de voyage, vols vers les circuits convertis), d'après le modèle « Plane » de osmosikum sur Sketchfab : sketchfab.com/osmosikum, licence CC BY 4.0. Textures réduites pour le jeu.",
       L"The Cessna 172 at the airfield of the Voyage mod (travel agency, flights to converted tracks), from the Plane model by osmosikum on Sketchfab: sketchfab.com/osmosikum, CC BY 4.0 license. Textures reduced for the game.", L"23/10/2026", 0 },
