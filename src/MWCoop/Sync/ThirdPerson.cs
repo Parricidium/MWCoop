@@ -18,7 +18,7 @@ namespace MWCoop
         static Avatar me;
         static string meSkin;
         static Camera cam, handCam;
-        static bool handCamWas;
+        static bool handCamWas; static int handMaskWas = -1;
         static Vector3 eye, eyeLocal; static Quaternion eyeLocalRot; static bool moved;
         // (remise aux yeux en position LOCALE -- par rapport au parent, qui suit la voiture : remise en monde, une remise
         // tardive la laissait la ou la voiture etait, la vue restait sur place puis revenait d'un coup)
@@ -35,12 +35,12 @@ namespace MWCoop
         public static Vector3 EyeOf(Transform c) { return moved && cam != null && c == cam.transform ? eye : c.position; }
         public static Vector3 EyePosition { get { return moved ? eye : PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.position : Vector3.zero; } }
 
-        public static void OnLevelLoaded() { Off(); cam = null; handCam = null; }
+        public static void OnLevelLoaded() { Off(); cam = null; handCam = null; handMaskWas = -1; }
 
         static void Off()
         {
             if (me != null) { me.Destroy(); me = null; }
-            if (handCam != null) handCam.enabled = handCamWas;
+            if (handCam != null) { handCam.enabled = handCamWas; HandMask(false); }
             if (Active) Log.Info("vue : premiere personne");
             Active = false; dist = -1f;
         }
@@ -61,7 +61,7 @@ namespace MWCoop
             bool rtBody = !Active && !DroneCam.Active && (RayTracing.BodyWanted || Kauppa.SelfBodyWanted);
             if (!Active && !DroneCam.Active && !rtBody)
             {
-                if (me != null) { me.Destroy(); me = null; if (handCam != null) handCam.enabled = handCamWas; }
+                if (me != null) { me.Destroy(); me = null; if (handCam != null) { handCam.enabled = handCamWas; HandMask(false); } }
                 return;
             }
             if (!hooked) { hooked = true; Camera.onPreCull += PreCull; }
@@ -76,6 +76,7 @@ namespace MWCoop
                 if (cam == null) return;
             }
             if (handCam != null && handCam.enabled && Active) handCam.enabled = false;
+            if (handCam != null) HandMask(Active);
             PlayerInfo pi = Session.Me;
             if (pi == null) return;
             if (me != null && (me.Root == null || meSkin != pi.Skin && me.Body != Looks.Parse(pi.Skin).Body)) { me.Destroy(); me = null; }
@@ -89,6 +90,17 @@ namespace MWCoop
             pi.StateTime = Time.realtimeSinceStartup;
             me.Apply(pi);
             ShadowsOnly(rtBody);
+        }
+
+        // Mains a la premiere personne : PLAYER ... ::Update Cursor (etat « Update cursor », boucle avec « Loop ») remet
+        // HandCamera.enabled a vrai a chaque tour ; eteinte une fois par Update ici, elle rendait une image quand l'automate passait
+        // apres -- bras et cigarette (fumer, boire) un instant a l'ecran en troisieme personne (JD, 01/11). Masque vide pendant la vue :
+        // le jeu ne touche qu'a enabled. [Test] MainsMasqueLibre=1 : comme avant.
+        static void HandMask(bool hide)
+        {
+            if (handCam == null || Config.GetInt("Test", "MainsMasqueLibre", 0) != 0) return;
+            if (hide) { if (handMaskWas < 0) { handMaskWas = handCam.cullingMask; handCam.cullingMask = 0; } else if (handCam.cullingMask != 0) handCam.cullingMask = 0; }
+            else if (handMaskWas >= 0) { handCam.cullingMask = handMaskWas; handMaskWas = -1; }
         }
 
         // Avatar local invisible a la camera mais present pour les ombres et les rayons (premiere personne + ray tracing).
@@ -153,8 +165,18 @@ namespace MWCoop
         }
 
         // Rendu de la camera du joueur : reculee le temps de l'image, remise aux yeux a la fin de l'image.
+        // [Test] Autotest=mainsvue (MSC, JD 01/11) : troisieme personne de 30 a 60 s ; images ou la camera des mains passe au rendu
+        // avec un masque (mains visibles), comptees et notees a 60 s.
+        static int handLeaks, handCulls; static bool handTestDone;
+        public static void TestHands(float t)
+        {
+            if (t > 30f && t < 60f && !Active) { Active = true; Log.Info("vue : troisieme personne (essai mainsvue)"); }
+            if (t > 60f && !handTestDone) { handTestDone = true; Log.Info("autotest : mainsvue : camera des mains au rendu " + handCulls + " fois, dont " + handLeaks + " avec un masque (mains visibles)"); Off(); }
+        }
+
         static void PreCull(Camera c)
         {
+            if (c != null && c == handCam && Active) { handCulls++; if (c.cullingMask != 0) handLeaks++; }
             if (!Active || DroneCam.Active || c == null || c != cam || Time.frameCount == lastFrame) return;
             if (moved) PutBack();   // (remise de l'image d'avant pas faite : d'abord aux yeux)
             Transform t = c.transform;

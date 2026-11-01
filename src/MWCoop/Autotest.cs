@@ -2075,7 +2075,49 @@ namespace MWCoop
             if (mode == "dossier35") { Parts.TestDossier35(); return; }   // (batterie, frein a main apres sauvegarde, cric vise main vide -- квазарик 31/10)
             if (mode == "radiateur") { Parts.TestRadiator(); return; }   // (radiateur sport monte par l'invite, branche stock rejouee chez l'hote -- xZOTIK 31/10)
             if (mode == "remorque") { Jobs.TestTrailer(); return; }
-            if (mode == "prisoninvite") { Police.TestGuestCrime(); return; }   // (delit de l'hote lu par l'invite, prison de l'ami -- квазарик 31/10)   // (objets sur le plateau du KEKMET, l'hote descend -- Markos 31/10)
+            if (mode == "prisoninvite") { Police.TestGuestCrime(); return; }
+            if (mode == "mainsvue") { ThirdPerson.TestHands(t); return; }   // (bras et cigarette de la 1re personne en 3e personne -- JD 01/11)
+            // ([Test] Autotest=sondeombres, JD 01/11 « ombres en grillage » : a 40 s, reglages d'ombres du moteur et de chaque lumiere
+            // directionnelle -- biais, cookie, force... par reflexion ; captures par [Test] Captures=)
+            // ([Test] OmbresQualite=n : niveau de qualite du moteur force a 25 s -- 0 « Shitty », celui du setup DLSS de JD ; a 36 s le
+            // joueur est pose dehors, devant le KEKMET, pour les captures)
+            if (mode == "sondeombres" && t > 25f && step == 0 && !sondeQ)
+            {
+                sondeQ = true;
+                int q = Config.GetInt("Test", "OmbresQualite", -1);
+                if (q >= 0) { QualitySettings.SetQualityLevel(q, true); Log.Info("autotest : sondeombres : qualite forcee " + q + " (" + QualitySettings.names[q] + ")"); }
+            }
+            if (mode == "sondeombres" && t > 36f && step == 0 && !sondeOut)
+            {
+                sondeOut = true;
+                GameObject pl = Game.PlayerGo;
+                var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                if (cc != null) cc.enabled = false;
+                string[] op = Config.Get("Test", "OmbresPos", "58,0.5,-70,160").Split('|','/',',');   // ([Test] OmbresPos=x,y,z,cap)
+                float ox, oy, oz, oyaw;
+                if (op.Length >= 4 && float.TryParse(op[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out ox) && float.TryParse(op[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out oy)
+                    && float.TryParse(op[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out oz) && float.TryParse(op[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out oyaw) && pl != null)
+                { pl.transform.position = new Vector3(ox, oy, oz); pl.transform.rotation = Quaternion.Euler(0f, oyaw, 0f); }
+                if (cc != null) cc.enabled = true;
+            }
+            if (mode == "sondeombres" && t > 40f && step == 0)
+            {
+                step = 1;
+                var sb = new System.Text.StringBuilder("autotest : sondeombres : qualite " + QualitySettings.GetQualityLevel() + ", ombres " + QualitySettings.shadowDistance + " m x" + QualitySettings.shadowCascades + " " + QualitySettings.shadowProjection);
+                Camera cm = Game.MainCam;
+                if (cm != null) sb.Append(", camera ").Append(cm.renderingPath).Append(" pres ").Append(cm.nearClipPlane).Append(" loin ").Append(cm.farClipPlane);
+                foreach (Light l in Object.FindObjectsOfType<Light>())
+                {
+                    if (l.type != LightType.Directional) continue;
+                    sb.Append(" | ").Append(Recon.Path(l.transform)).Append(" ombres ").Append(l.shadows);
+                    foreach (string pn in new[] { "shadowStrength", "shadowBias", "shadowNormalBias", "shadowSoftness", "shadowSoftnessFade", "cookie", "cookieSize", "intensity" })
+                    {
+                        System.Reflection.PropertyInfo pi = typeof(Light).GetProperty(pn);
+                        if (pi != null) { object v = pi.GetValue(l, null); sb.Append(' ').Append(pn).Append('=').Append(v is Object ? ((Object)v).name : v != null ? v.ToString() : "null"); }
+                    }
+                }
+                Log.Info(sb.ToString());
+            }   // (delit de l'hote lu par l'invite, prison de l'ami -- квазарик 31/10)   // (objets sur le plateau du KEKMET, l'hote descend -- Markos 31/10)
             if (mode == "fusibles") { Parts.TestFuses(t); return; }   // (tableau electrique, dossier #27 : montage d'un porte-fusible tenu ou monte ailleurs par l'autre)
             // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
             // (envoye), remontee a 50 s (message NON envoye) ; l'empreinte des 2 s doit la faire remonter chez l'invite en 6 s au plus ; etat a EtatA s)
@@ -2702,6 +2744,7 @@ namespace MWCoop
 
         static int mscPhares, mscCapot; static System.Collections.Generic.List<GameObject> mscWood;
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
+        static bool sondeQ, sondeOut;   // (Autotest=sondeombres)
 
         // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
         // [Test] Autotest=texte, Texte=<mot> : chaque TextMesh (eteints compris) dont le texte contient le mot, avec son chemin et
