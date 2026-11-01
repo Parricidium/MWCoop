@@ -431,7 +431,7 @@ namespace MWCoop
             Door(door0);
             Shelter();
             Vendor();
-            if (Game.Msc && Vaz.Enabled && VazCar.Golf83.HasFiles) try { Asiakas(); } catch (System.Exception e) { L("client : " + e); }   // (quete s21)
+            if (StandaloneCar.Quest && Vaz.Enabled && VazCar.Golf83.HasFiles) try { Asiakas(); } catch (System.Exception e) { L("client : " + e); }   // (quete s21)
             L("construite en " + root.transform.position.ToString("F1"));
         }
 

@@ -13,7 +13,7 @@ namespace MWCoop
     // Hote (ou solo) : pose la voiture (Vaz.PlaceWorldCar, proprietaire Owner, numero Number) et fait autorite sur la quete ; un
     // invite qui recoit la cle le dit a l'hote (V_QUETE 1) ; l'hote diffuse l'etat (V_QUETE 0|1, a chaque changement et toutes les
     // 5 s). Fichiers de la voiture : dans la DLL (assets\kauppa\s21.pak, golf83/paquet-s21.py de MWCoop-voiture), poses dans
-    // MWCoop\cache\s21 au premier lancement de My Summer Car (refaits a chaque nouvelle version du paquet).
+    // MWCoop\cache\s21 au premier lancement du jeu (refaits a chaque nouvelle version du paquet).
     public static class QueteGolf
     {
         public const int Owner = 99, Number = 16;
@@ -21,6 +21,8 @@ namespace MWCoop
         // (garee chez Teimo, a droite de la terrasse du pub, l'arriere contre la cloture, le nez vers la route -- capture de JD, 31/10 ;
         // repere du magasin STORE : x vers le pub, z vers l'arriere ; [Test] QueteGolfPlace=x,z,cap pour la deplacer)
         static readonly Vector3 SpotStore = new Vector3(11.4f, 0f, 3.6f); const float YawStore = 180f;
+        // (My Winter Car : chez Teimo aussi, repere STORE_AREA -- a caler sur une capture de JD)
+        static readonly Vector3 SpotStoreMwc = new Vector3(4f, 0f, -7f); const float YawStoreMwc = 0f;
         public static bool Done { get; private set; }
         static bool loaded, placed, hasSaved; static Vector3 savedPos; static float savedYaw;
         static float nextSend, nextCheck, firstInGame = -1f, placedAt; static bool on;
@@ -28,7 +30,7 @@ namespace MWCoop
         static bool Host { get { return !Session.Active || Session.IsHost; } }
         static void L(string s) { Log.Info("quete s21 : " + s); }
 
-        // quete possible ici : My Summer Car, boutique s21 construite (ajout COOP), voitures du F10 (VAZ) et la voiture posee
+        // quete possible ici : les deux jeux (StandaloneCar.Quest), boutique s21 construite (ajout COOP), voitures du F10 (VAZ) et la voiture posee
         public static bool On { get { return on; } }
         // la voiture de la quete, pas encore pretee : portieres, hayon et contact fermes
         public static bool Locked(VazCar.Built b) { return b != null && b.Number == Number && b.M != null && b.M.QuestOnly && !Done; }
@@ -42,7 +44,7 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!Game.Msc || !PlayerSync.InGame) return;
+            if (!StandaloneCar.Quest || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextCheck) { nextCheck = now + 2f; on = Kauppa.ShopOn && Vaz.Enabled && VazCar.Golf83.HasFiles; }
             if (!Host) return;
@@ -62,9 +64,9 @@ namespace MWCoop
         {
             if (hasSaved) { pos = savedPos; yaw = savedYaw; return true; }
             pos = Vector3.zero; yaw = 0f;
-            GameObject st = GameObject.Find("STORE");
+            GameObject st = GameObject.Find(Game.Msc ? "STORE" : "STORE_AREA");
             if (st == null) return false;
-            Vector3 local = SpotStore; float y0 = YawStore;
+            Vector3 local = Game.Msc ? SpotStore : SpotStoreMwc; float y0 = Game.Msc ? YawStore : YawStoreMwc;
             string t = Config.Get("Test", "QueteGolfPlace", "");
             if (t.Length > 0)
             {
@@ -138,8 +140,10 @@ namespace MWCoop
                 tStep = 1;
                 VazCar.Built b = StandaloneCar.Find(car.gameObject);
                 L("essai : voiture en " + car.position.ToString("F1") + ", fermee " + Locked(b));
-                GameObject st = GameObject.Find("STORE");
+                GameObject st = GameObject.Find(Game.Msc ? "STORE" : "STORE_AREA");
                 if (st != null) Shot("quete-voiture", st.transform.TransformPoint(new Vector3(2.5f, 2.6f, -8f)), car.position + Vector3.up * 0.6f);
+                Shot("quete-voiture-haut", car.position + Vector3.up * 14f - car.forward * 9f, car.position);   // (la place vue d'en haut, de l'arriere)
+                Shot("quete-voiture-cote", car.position + car.right * 5f + Vector3.up * 1.6f, car.position + Vector3.up * 0.6f);
             }
             if (tStep == 1 && e > 10f) { tStep = 2; L("essai : " + Kauppa.TestTalk()); }
             Vector3 eye, head;
@@ -203,7 +207,7 @@ namespace MWCoop
 
         public static void OnGameSave()
         {
-            if (!Game.Msc || !Host || !loaded) return;
+            if (!StandaloneCar.Quest || !Host || !loaded) return;
             try
             {
                 Transform c = Vaz.CarOf(Owner);
@@ -223,7 +227,7 @@ namespace MWCoop
         static bool packDone;
         static void EnsurePack()
         {
-            if (packDone || !Game.Msc) return;
+            if (packDone || !StandaloneCar.Quest) return;
             packDone = true;
             try
             {

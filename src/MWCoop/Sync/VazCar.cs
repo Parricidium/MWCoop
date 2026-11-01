@@ -337,7 +337,7 @@ namespace MWCoop
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On || Models[id].QuestOnly && StandaloneCar.Quest : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
         // au F10 (installe, et pas reserve a une quete)
         public static bool InF10(int id) { return Has(id) && (!ModelOf(id).QuestOnly || Config.Testing && Config.GetInt("Test", "QueteF10", 0) != 0); }   // ([Test] QueteF10=1 : essais)
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone

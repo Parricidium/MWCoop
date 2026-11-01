@@ -3494,6 +3494,7 @@ namespace MWCoop
             }
             if (mode == "conduite") Conduite(t);
             if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
+            if (mode == "standalonecoop") { StandaloneCar.CoopTest(t); return; }   // (voiture de la quete s21 sur My Winter Car, [Test] QueteMwc=1 -- 01/11)
             if (mode == "mscphares") { LightsGuard.TestKey(mode, t); return; }   // (touche des phares, Jobs commun : [Test] PharesTouche=LightsDrive sur MWC, 27/10)
             if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)
             if (mode == "porteappart") { PorteAppart(t); return; }   // (portes de l'appartement bloquees chez l'hote, Донской 28/10)

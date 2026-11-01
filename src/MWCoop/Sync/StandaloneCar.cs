@@ -20,6 +20,9 @@ namespace MWCoop
         // Sortie publique (JD 29/10) : sur My Summer Car la standalone REMPLACE la R5 copie, sans interrupteur (« seulement les addons
         // vont etre la, les anciennes disparaitront ») ; My Winter Car garde la copie jusqu'au portage.
         public static bool On { get { return Game.Msc; } }
+        // voiture de la quete s21 (QuestOnly) en standalone : les deux jeux (My Winter Car : JD 01/11, « la version de la quete s21 avec
+        // la Golf pour MWC ») -- seulement elle sur MWC, les copies y restent des copies ; [Test] QueteMwc=0 : pas de quete sur MWC
+        public static bool Quest { get { return Game.Msc || Config.GetInt("Test", "QueteMwc", 1) != 0; } }
         // copie remplacee par sa standalone ici : toutes (la R5 depuis le 29/10 midi, les autres validees par JD en jeu le 29/10 soir)
         public static bool Ready(int copy)
         {
@@ -74,7 +77,7 @@ namespace MWCoop
 
         public static VazCar.Built Build(string name, int number, Color paint, Vector3 pos, Quaternion rot, VazCar.Model m)
         {
-            if (!On) return null;
+            if (!On && !(m != null && m.QuestOnly && Quest)) return null;
             GameObject tpl = VazCar.Template();
             if (tpl == null) { Log.Warn("standalone : Ruscko de la scene introuvable"); return null; }
             if (m == null || !m.HasFiles) { Log.Warn("standalone : fichiers du modele absents"); return null; }

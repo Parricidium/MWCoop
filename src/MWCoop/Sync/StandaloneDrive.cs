@@ -279,7 +279,9 @@ namespace MWCoop
             // klaxon : le son du CarHorn de la voiture du jeu (Ruscko : LOD/Dashboard/Knobs/ButtonHorn/CarHorn, Satsuma :
             // CarSimulation/CarHorn -- le jeu l'allume tant que le clic est tenu sur le bouton), a l'avant de la voiture
             GameObject tpl = VazCar.Template(); AudioSource th = null;
-            foreach (string hp in new[] { "LOD/Dashboard/Knobs/ButtonHorn/CarHorn", "CarSimulation/CarHorn" }) { Transform x = tpl != null ? tpl.transform.Find(hp) : null; if (x != null && x.GetComponent<AudioSource>() != null) { th = x.GetComponent<AudioSource>(); break; } }
+            foreach (string hp in new[] { "LOD/Dashboard/Knobs/ButtonHorn/CarHorn", "CarSimulation/CarHorn", "Simulation/CarHorn" })   // (My Winter Car, SORBET : Simulation/CarHorn) { Transform x = tpl != null ? tpl.transform.Find(hp) : null; if (x != null && x.GetComponent<AudioSource>() != null) { th = x.GetComponent<AudioSource>(); break; } }
+            // (sinon un CarHorn du jeu avec son clip -- My Winter Car : celui de la SORBET est eteint, clip pose plus tard)
+            if (th == null || th.clip == null) foreach (AudioSource a in Resources.FindObjectsOfTypeAll<AudioSource>()) if (a != null && a.name == "CarHorn" && a.clip != null) { th = a; break; }
             if (th != null && th.clip != null)
             {
                 var hg = new GameObject("CarHorn"); hg.transform.SetParent(b.Body, false); hg.transform.localPosition = new Vector3(0f, 0.5f, 1.5f);
@@ -895,12 +897,12 @@ namespace MWCoop
         static Transform LeanRig(VazCar.Built b, State st, Transform head)
         {
             Transform srcHead = null;
-            foreach (string pth in new[] { "SATSUMA(557kg, 248)/DriverHeadPivot", "RCO_RUSCKO12(270)/LOD/DriverHeadPivot" }) { GameObject g = Game.FindAny(pth); if (g != null && g.transform.Find("CameraPivot/Pivot") != null) { srcHead = g.transform; break; } }
+            foreach (string pth in new[] { "SATSUMA(557kg, 248)/DriverHeadPivot", "RCO_RUSCKO12(270)/LOD/DriverHeadPivot", "SORBET(190-200psi)/Functions/PlayerTrigger/DriverHeadPivot", "CORRIS/Functions/DriverHeadPivot" }) { GameObject g = Game.FindAny(pth); if (g != null && (g.transform.Find("CameraPivot/Pivot") != null || g.transform.Find("CameraPivotPLR/Pivot") != null)) { srcHead = g.transform; break; } }   // (My Winter Car : CameraPivotPLR)
             Transform cp = new GameObject("CameraPivot").transform; cp.SetParent(head, false);
             Transform pv = new GameObject("Pivot").transform; pv.SetParent(cp, false);
             if (srcHead != null)
             {
-                Transform scp = srcHead.Find("CameraPivot"), spv = scp.Find("Pivot");
+                Transform scp = srcHead.Find("CameraPivot/Pivot") != null ? srcHead.Find("CameraPivot") : srcHead.Find("CameraPivotPLR"), spv = scp.Find("Pivot");
                 Transform root = srcHead.root;
                 head.localRotation = Quaternion.Inverse(root.rotation) * srcHead.rotation;
                 cp.localPosition = scp.localPosition; cp.localRotation = scp.localRotation;
@@ -1395,7 +1397,8 @@ namespace MWCoop
             if (!inf.ContainsKey("pluie")) return;
             try
             {
-                GameObject sat = Game.FindAny("SATSUMA(557kg, 248)/RainScript");
+                // (My Winter Car : celui de la SORBET, sinon de la CORRIS -- ref v.261008-01)
+                GameObject sat = Game.FindAny("SATSUMA(557kg, 248)/RainScript") ?? Game.FindAny("SORBET(190-200psi)/Functions/RainScript") ?? Game.FindAny("CORRIS/LOD/Activator/RainScript");
                 Component src = sat != null ? sat.GetComponent("windshield") : null;
                 var srcR = src != null ? RF(src, "windowRenderers").GetValue(src) as MeshRenderer[] : null;
                 if (src == null || srcR == null || srcR.Length == 0 || srcR[0] == null) { Log.Warn("standalone : pluie, composant windshield de la Satsuma introuvable"); return; }
