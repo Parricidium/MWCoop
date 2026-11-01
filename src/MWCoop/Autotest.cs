@@ -2077,6 +2077,79 @@ namespace MWCoop
             if (mode == "remorque") { Jobs.TestTrailer(); return; }
             if (mode == "prisoninvite") { Police.TestGuestCrime(); return; }
             if (mode == "mainsvue") { ThirdPerson.TestHands(t); return; }   // (bras et cigarette de la 1re personne en 3e personne -- JD 01/11)
+            // ([Test] Autotest=tremble, 2 joueurs, dossier #38 xZOTIK : « la Satsuma tremble chez l'autre quand quelqu'un prend le volant ») :
+            // l'invite ([Test] TrembleConducteur=0 : l'hote) prend la SATSUMA (T+5, volant T+10), moteur lance a T+12, au ralenti sur place ;
+            // chacun mesure a chaque image le chemin parcouru par la carrosserie (cm/s) et sa rotation (deg/s), note toutes les 2 s jusqu'a T+40.
+// ([Test] TremblePassager=1 : l'autre s'assoit en passager a T+8 ; TrembleRoule=1 : a T+12 la voiture est sortie sur la route,
+            // le moteur lance, puis 6 m/s de T+16 a T+34 avec un leger virage -- tremblement mesure par la variation du deplacement
+            // d'une image a l'autre, « secousses » en cm/s)
+            if (mode == "tremble")
+            {
+                float now = Time.realtimeSinceStartup;
+                if (trembleT0 < 0) { if (!Jobs.OtherInGame(20f)) return; trembleT0 = now; }
+                float d = now - trembleT0;
+                bool drv = Net.Session.IsHost == (Config.GetInt("Test", "TrembleConducteur", 1) == 0);
+                bool roule = Config.GetInt("Test", "TrembleRoule", 0) != 0;
+                Rigidbody sb = VehicleSync.Body("SATSUMA(557kg, 248)");
+                if (!trembleNamed && sb != null) { trembleNamed = true; Log.Info("autotest : tremble, corps suivi " + Recon.Path(sb.transform) + " id " + sb.GetInstanceID() + (sb.isKinematic ? " (cinematique)" : "")); }
+                // (voiture vide sortie sur la route a T+3 par l'hote, qui mene les voitures garees : teleportee avec le conducteur dedans,
+                // le jeu y voyait un accident -- mort)
+                if ((Config.GetInt("Test", "TrembleSortieIci", 0) != 0 ? drv : Net.Session.IsHost) && roule && sb != null && d > 3f && !trembleOut && Config.GetInt("Test", "TrembleSortie", 1) != 0)
+                {
+                    trembleOut = true;
+                    Vector3 to = new Vector3(Config.GetFloat("Test", "RouesX", 30f), Config.GetFloat("Test", "RouesY", 1.2f), Config.GetFloat("Test", "RouesZ", -55f));
+                    sb.position = to; sb.transform.position = to; sb.rotation = Quaternion.Euler(0f, Config.GetFloat("Test", "RouesCap", 120f), 0f); sb.transform.rotation = sb.rotation;
+                    sb.velocity = Vector3.zero; sb.angularVelocity = Vector3.zero;
+                    Log.Info("autotest : tremble, voiture sortie en " + to.ToString("F1"));
+                }
+                if (drv && step == 0 && d > 5f) { step = 1; Log.Info("autotest : tremble, " + VehicleSync.TestEnter("SATSUMA(557kg, 248)", false)); }
+                // ([Test] TrembleDedans=1 : l'autre se tient debout dans la cabine -- zone PlayerTrigger de la voiture -- a T+8, sans
+                // s'asseoir : la voiture qui part l'en fait sortir, comme un joueur reste a cote quand l'autre prend le volant)
+                if (!drv && step == 0 && d > 8f && Config.GetInt("Test", "TrembleDedans", 0) != 0 && sb != null)
+                {
+                    step = 1;
+                    Transform trig = sb.transform.Find("PlayerTrigger");
+                    GameObject pl = Game.PlayerGo;
+                    var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (trig != null && pl != null) { if (cc != null) cc.enabled = false; pl.transform.position = trig.position; if (cc != null) cc.enabled = true; }
+                    Log.Info("autotest : tremble, debout dans la cabine " + (trig != null ? trig.position.ToString("F1") : "(PlayerTrigger introuvable)"));
+                }
+                if (!drv && step == 0 && d > 8f && Config.GetInt("Test", "TremblePassager", 0) != 0) { step = 1; Log.Info("autotest : tremble, " + Seats.TestSit("SATSUMA", 0)); }
+                if (drv && step == 1 && d > 10f) { step = 2; Log.Info("autotest : tremble, volant -> " + VehicleSync.TestEnter("SATSUMA(557kg, 248)", true)); }
+                if (drv && step == 2 && d > 12f) { step = 3; Log.Info("autotest : tremble, " + VehicleSync.TestStart("SATSUMA(557kg, 248)")); }
+                if (drv && roule && sb != null && step >= 3 && d > 16f && d < 34f)
+                {
+                    // (roues libres : frein a main serre et boite en prise, la voiture restait sur place a 5 cm/s pendant que la
+                    // vitesse forcee partait chez l'autre -- la copie avancait puis revenait)
+                    foreach (Wheel w in sb.GetComponentsInChildren<Wheel>()) { w.handbrake = 0f; w.brake = 0f; }
+                    Drivetrain tdt = sb.GetComponent<Drivetrain>();
+                    if (tdt != null && tdt.gearRatios != null) { int nz = System.Array.IndexOf(tdt.gearRatios, 0f); if (nz >= 0 && tdt.gear != nz) tdt.gear = nz; }
+                    Vector3 f = sb.transform.forward; f.y = 0; f.Normalize();
+                    sb.velocity = f * 6f + Vector3.up * Mathf.Min(sb.velocity.y, 0f);
+                    sb.angularVelocity = new Vector3(sb.angularVelocity.x, 0.15f, sb.angularVelocity.z);
+                }
+                if (sb != null && d > 13f && d < 40f)
+                {
+                    Transform st = sb.transform;
+                    Vector3 dp = st.position - tremblePrev;
+                    if (trembleHas) { tremblePath += dp.magnitude; trembleAng += Quaternion.Angle(st.rotation, trembleRot); trembleN++; if (trembleHas2) trembleJerk += (dp - trembleDp).magnitude; trembleDp = dp; trembleHas2 = true; }
+                    tremblePrev = st.position; trembleRot = st.rotation; trembleHas = true;
+                    // (acceleration vue a 10 Hz : deuxieme difference de la position et de l'orientation, insensible au decalage
+                    // images / pas de physique ; virage de 6 m/s a 0,15 rad/s = 0,9 m/s2)
+                    if (now >= trembleSample)
+                    {
+                        trembleSample = now + 0.1f;
+                        if (trembleS >= 2) { float a = (st.position - 2f * trembleP1 + trembleP2).magnitude / 0.01f; trembleAcc += a; if (a > trembleAccMax) trembleAccMax = a; float w = Quaternion.Angle(trembleR1, st.rotation) - Quaternion.Angle(trembleR2, trembleR1); trembleAngAcc += Mathf.Abs(w) / 0.01f; trembleAccN++; }
+                        trembleP2 = trembleP1; trembleP1 = st.position; trembleR2 = trembleR1; trembleR1 = st.rotation; trembleS++;
+                    }
+                    if (now >= trembleLog)
+                    {
+                        if (trembleLogAt > 0f) { float span = now - trembleLogAt; Log.Info("autotest : tremble T+" + d.ToString("F0") + " : SATSUMA " + (sb.isKinematic ? "copie" : "locale") + (Seats.SeatedCar == st ? " (assis dedans)" : "") + ", chemin " + (tremblePath * 100f / span).ToString("F0") + " cm/s, secousses " + (trembleJerk * 100f / span).ToString("F1") + " cm/s, rotation " + (trembleAng / span).ToString("F2") + " deg/s, " + trembleN + " images ; a 10 Hz : acceleration moy " + (trembleAccN > 0 ? trembleAcc / trembleAccN : 0f).ToString("F1") + " max " + trembleAccMax.ToString("F1") + " m/s2, rotation " + (trembleAccN > 0 ? trembleAngAcc / trembleAccN : 0f).ToString("F0") + " deg/s2"); }
+                        tremblePath = 0f; trembleAng = 0f; trembleJerk = 0f; trembleN = 0; trembleAcc = 0f; trembleAccMax = 0f; trembleAngAcc = 0f; trembleAccN = 0; trembleLogAt = now; trembleLog = now + 2f;
+                    }
+                }
+                return;
+            }
             // ([Test] Autotest=roues, 2 joueurs, dossier #37 xZOTIK : « la roue reste sur place quand la Satsuma demarre ») : l'invite
             // ([Test] RouesConducteur=0 : l'hote) prend la SATSUMA a T+5 (volant T+10) et roule a 4 m/s de T+15 a T+27 ; chacun note
             // toutes les 2 s, de T+12 a T+34, chaque roue (wheel_*) : parent, cinematique, pose dans le repere de la voiture.
@@ -2825,6 +2898,8 @@ namespace MWCoop
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
         static bool sondeQ, sondeOut, sondeCloudLog;   // (Autotest=sondeombres)
         static float rouesT0 = -1, rouesLog;   // (Autotest=roues)
+        static float trembleT0 = -1, trembleLog, trembleLogAt, tremblePath, trembleAng, trembleJerk; static int trembleN; static bool trembleHas, trembleHas2; static Vector3 trembleDp; static Vector3 tremblePrev; static Quaternion trembleRot;   // (Autotest=tremble)
+        static float trembleSample, trembleAcc, trembleAccMax, trembleAngAcc; static int trembleAccN, trembleS; static Vector3 trembleP1, trembleP2; static Quaternion trembleR1, trembleR2; static bool trembleOut, trembleNamed;
 
         // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
         // [Test] Autotest=texte, Texte=<mot> : chaque TextMesh (eteints compris) dont le texte contient le mot, avec son chemin et

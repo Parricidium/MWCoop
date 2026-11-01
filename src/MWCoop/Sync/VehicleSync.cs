@@ -90,6 +90,7 @@ namespace MWCoop
             public Vector3 ThawPos; public Quaternion ThawRot; public float GuardUntil; public int GuardHits;   // reprise : pose de depart, garde-fou
             public Dictionary<Joint, Vector2> JointsLater;   // attaches rendues cassables a SettleUntil seulement
             public float NextLog;
+            public float KinLostLog; public int KinLost;
             public Drivetrain Dt;
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
             public float NanSince = -1f; public int NanHits; public bool NanDumped;   // garde-fou : corrections rapprochees (releve complet une fois)
@@ -1107,6 +1108,7 @@ namespace MWCoop
                     Log.Info("voiture " + c.Key + " attelee, garee : tenue sur place en attendant la pose de l'hote");
                 }
                 SetKinematic(c, remote || hold);
+                if (c.Kinematic && !c.Body.isKinematic) KinLost(c, now);
                 Ride(c, remote && Seats.SeatedCar == c.T);
                 if (remote)
                 {
@@ -1956,6 +1958,37 @@ namespace MWCoop
         // Objet replace d'un coup (pose recue) : la voiture sous lui sera cherchee a nouveau.
         public static void Forget(Rigidbody item) { if (item != null) under.Remove(item); }
 
+
+        // Copie remise en physique par un tiers : automate du jeu SATSUMA/PlayerTrigger, etat « Wait for player » (SetIsKinematic
+        // faux sur la voiture, a chaque sortie d'un joueur de la cabine -- celui d'ici, ou l'arrivee de l'autre). c.Kinematic restait
+        // vrai, SetKinematic ne la refigeait plus : la copie roulait sous la physique ici en meme temps que la voiture du conducteur
+        // chez lui, les deux se disputaient la pose (dossier #38 xZOTIK : « la Satsuma tremble chez l'autre quand quelqu'un prend
+        // le volant »). Refigee aussitot ; [Test] CopieRefigee=0 : comme avant.
+        static void KinLost(Car c, float now)
+        {
+            if (Config.GetInt("Test", "CopieRefigee", 1) == 0) return;
+            c.Body.isKinematic = true;
+            c.KinLost++;
+            if (now < c.KinLostLog) return;
+            c.KinLostLog = now + 10f;
+            var sb = new System.Text.StringBuilder();
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (f == null || f.Fsm == null || !f.Fsm.Initialized || f.FsmStates == null) continue;
+                foreach (FsmState st in f.FsmStates)
+                {
+                    if (st.Actions == null || st.Name != f.ActiveStateName) continue;
+                    foreach (FsmStateAction a in st.Actions)
+                    {
+                        var k = a as HutongGames.PlayMaker.Actions.SetIsKinematic;
+                        if (k == null || k.isKinematic == null || k.isKinematic.Value) continue;
+                        sb.Append(' ').Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append('/').Append(st.Name);
+                        break;
+                    }
+                }
+            }
+            Log.Warn("voiture " + c.Key + " copie remise en physique par un autre code (" + c.KinLost + " fois) : refigee ; automate du jeu en cause :" + (sb.Length > 0 ? sb.ToString() : " aucun trouve"));
+        }
 
         static void SetKinematic(Car c, bool on)
         {
