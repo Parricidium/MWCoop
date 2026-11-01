@@ -126,6 +126,11 @@ namespace MWCoop
         {
             string w = World(), line = null;
             if (w.Length == 0) return;
+            // (recherche AVANT de remettre les delits : apres, WantedAtHome() etait toujours faux -- l'automate restait sur « At home »
+            // avec les delits de l'hote lus dans sa sauvegarde, agents a la maison et CopsAtHome sur la porte d'entree ; l'invite etait
+            // embarque avec l'hote, puis de nouveau en ouvrant sa porte (GLOBALEVENT -> Pass out) : dossier #35, квазарик 31/10, l'ami
+            // reste en prison. [Test] PrisonAncienne=1 : comme avant.)
+            bool wasHome = Config.GetInt("Test", "PrisonAncienne", 0) == 0 ? AtHome.Contains(wanted.ActiveStateName) : false;
             if (System.IO.File.Exists(CrimePath))
                 foreach (string l in System.IO.File.ReadAllLines(CrimePath)) if (l.StartsWith(w + "=")) line = l.Substring(w.Length + 1);
             var vals = new Dictionary<string, string>();
@@ -142,7 +147,7 @@ namespace MWCoop
             }
             if (Game.Msc) MscFinesRestore(vals);
             crimesStored = CrimeLine();
-            bool was = WantedAtHome();
+            bool was = wasHome || WantedAtHome();
             string st = wanted.ActiveStateName;
             if (st == "Idle" || was) Game.SetState(wanted, "Check crime");   // (JAIL -> At home, sinon Idle)
             if (was && !WantedAtHome())
@@ -150,8 +155,39 @@ namespace MWCoop
                 GameObject cops = Game.FindAny("COPS");
                 if (cops != null && cops.activeSelf) cops.SetActive(false);
                 foreach (Object o in Game.AllFsms()) { FsmBool b = ((PlayMakerFSM)o).FsmVariables.FindFsmBool("CopsAtHome"); if (b != null) b.Value = false; }
+                // (globale PlayerWanted mise par « At home » : au reveil, Idle -WAKEUP-> Check wanted rappelait les agents)
+                FsmBool pw = FsmVariables.GlobalVariables.FindFsmBool("PlayerWanted");
+                if (pw != null && wasHome) pw.Value = false;
             }
             Log.Info("police a domicile : delits de l'invite " + (line != null ? "retrouves" : "a zero (premiere partie dans ce monde)") + " : " + crimesStored + " -> " + wanted.ActiveStateName);
+        }
+
+        // [Test] Autotest=prisoninvite (invite, dossier #35) : avant la remise de ses delits (crimesAt), le delit de l'hote lu dans sa
+        // sauvegarde est simule (AttemptedManslaughter 1, 'Check crime' -> « At home ») ; 5 s apres la remise, etat de PlayerWanted,
+        // agents COPS, CopsAtHome de la porte d'entree et globale PlayerWanted.
+        static int tgStep; static float tgAt;
+        public static void TestGuestCrime()
+        {
+            if (Session.IsHost || wanted == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (tgStep == 0 && crimesAt > 0 && now < crimesAt - 2f)
+            {
+                tgStep = 1;
+                FsmInt am = wanted.FsmVariables.FindFsmInt("AttemptedManslaughter"); if (am != null) am.Value = 1;
+                Game.SetState(wanted, "Check crime");
+                GameObject cops = Game.FindAny("COPS");
+                Log.Info("autotest : prisoninvite, delit de l'hote simule -> " + wanted.ActiveStateName + ", COPS " + (cops != null && cops.activeSelf ? "allumes" : "eteints"));
+            }
+            if (tgStep == 1 && crimesAt < 0) { tgStep = 2; tgAt = now + 5f; }
+            if (tgStep == 2 && now > tgAt)
+            {
+                tgStep = 3;
+                GameObject cops = Game.FindAny("COPS"), h = Game.FindAny("YARD/Building/LIVINGROOM/DoorFront/Pivot/Handle");
+                PlayMakerFSM hu = h != null ? Game.FsmOn(h, "Use") : null;
+                FsmBool cah = hu != null ? hu.FsmVariables.FindFsmBool("CopsAtHome") : null, pw = FsmVariables.GlobalVariables.FindFsmBool("PlayerWanted");
+                Log.Info("autotest : prisoninvite, apres la remise : " + wanted.ActiveStateName + ", COPS " + (cops != null && cops.activeSelf ? "allumes" : "eteints")
+                         + ", CopsAtHome " + (cah != null ? cah.Value.ToString() : "?") + ", PlayerWanted " + (pw != null ? pw.Value.ToString() : "?"));
+            }
         }
 
         static void StoreCrimes()
