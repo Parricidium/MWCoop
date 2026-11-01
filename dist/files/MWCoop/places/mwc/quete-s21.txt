@@ -1,0 +1,45 @@
+PLACES 1
+# outil des places (01/11/2026 14:29:03) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture quete-s21
+conducteur
+corps conducteur 0.0434 0.1467 0.086
+place 0 passager 0.3812 1.1455 -0.0502 0 0.3 0.3
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left 0.13505 -0.40473 0.55982 -0.71032
+os 0 shoulder_right 0.18305 -0.52374 -0.53501 0.63714
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+place 1 passager -0.2658 1.1585 -0.8528 0 0.3 0.3
+os 1 arm_left -0.38731 0.06344 0.51328 -0.76322
+os 1 arm_right 0.14799 -0.13624 -0.01766 0.9794
+os 1 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 1 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 1 fingers_right -0.03135 -0.12741 0.18825 0.97332
+os 1 hand_left 0.06669 0.01795 0.03671 0.99694
+os 1 hand_right 0.02684 0.06856 -0.02937 0.99685
+os 1 knee_left 0.00902 0.0235 0.84345 0.53661
+os 1 knee_right -0.03472 0.02233 0.83505 0.54863
+os 1 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 1 shoulder_left 0.16139 -0.32988 0.49515 -0.78737
+os 1 shoulder_right 0.32803 -0.29888 -0.63058 0.63674
+os 1 spine_middle -0.00005 0.00056 -0.08713 0.9962
+os 1 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+os 1 thig_left 0.15807 -0.64256 -0.71 -0.24088
+os 1 thig_right -0.17627 0.64295 0.72295 0.18133
+place 2 passager 0.3813 1.1624 -0.8528 0 0.3 0.3
+os 2 arm_left 0.07868 -0.1599 0.79982 -0.57318
+os 2 arm_right -0.02374 -0.29397 -0.41862 0.85894
+os 2 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 2 collar_right 0.00353 -0.79445 0.14958 0.58861
+os 2 knee_left 0.01165 0.02232 0.89927 0.43667
+os 2 knee_right 0.0445 -0.00981 0.89995 0.43362
+os 2 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 2 shoulder_left -0.02588 -0.42588 0.254 -0.86801
+os 2 shoulder_right 0.10574 -0.47866 -0.20565 0.847
+os 2 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 2 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+os 2 thig_left 0.22479 -0.62237 -0.68072 -0.31423
+os 2 thig_right -0.25327 0.6167 0.69549 0.26803

@@ -376,6 +376,16 @@ namespace MWCoop
     // Seats : places du fichier a la place de celles calculees (appele a la fin de Scan).
     public static partial class Seats
     {
+        // Essai : boucler la ceinture de sa place dans une standalone (le clic de StandaloneBeltInput) -- [Test] StandaloneCeinturePassager
+        public static string TestStandaloneBelt()
+        {
+            if (current == null) return "pas assis";
+            Vector3 bk;
+            if (!StandaloneCar.SeatBuckle(current.CarT, current.Head, out bk)) return "pas de boucle a cette place";
+            beltOn = true;
+            SendSeat(current.Car, current.Index, headLocal);
+            return "ceinture standalone attachee (" + current.Car + ", place " + current.Index + ", boucle " + bk.ToString("F2") + ", tete " + current.Head.ToString("F2") + ")";
+        }
         static void FileSeats()
         {
             var done = new HashSet<string>();

@@ -2010,7 +2010,7 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
             UnityEngine.Object.Destroy(go);
         }
-        static bool cFrein, cSeatShots, cMirrorShots; static int cHeat; static float cHeatLog;
+        static bool cFrein, cSeatShots, cMirrorShots, cBeltDone; static int cHeat; static float cHeatLog;
         // (console du chauffage vue du milieu de l'habitacle, entre les sieges, avec une lampe le temps des photos)
         static void HeatShots(VazCar.Built b, State st, string tag)
         {
@@ -2087,9 +2087,12 @@ namespace MWCoop
                 cStep = 3;
                 Log.Info("standalone : coop, invite : copie " + car.name + (b != null ? " standalone" : " PAS standalone") + ", passager -> " + Seats.TestSit(car.name, Config.GetInt("Test", "StandalonePlace", 0)));   // ([Test] StandalonePlace=1 : banquette)
             }
+            // ([Test] StandaloneCeinturePassager=1 : l'invite boucle sa ceinture 1 s apres s'etre assis -- photos de l'hote avec la ceinture)
+            if (!host && cStep >= 3 && !cBeltDone && t > 45f && Config.GetInt("Test", "StandaloneCeinturePassager", 0) != 0) { cBeltDone = true; Log.Info("standalone : coop, invite : " + Seats.TestStandaloneBelt()); }
             // ([Test] StandalonePhotosPlaces=1 : a 58 s, les avatars assis -- chez l'hote, le passager (l'invite) ; chez l'invite, le
-            // conducteur (l'hote) : par la vitre de cote, par le pare-brise, de l'arriere)
-            if (Config.GetInt("Test", "StandalonePhotosPlaces", 0) != 0 && b != null && t > (host ? 73f : 58f) && !cSeatShots)
+            // conducteur (l'hote) : par la vitre de cote, par le pare-brise, de l'arriere ; StandalonePhotosHote=s : heure des photos de l'hote,
+            // 73 par defaut -- l'invite s'assoit a ses 44 s, parfois apres les 73 s de l'hote)
+            if (Config.GetInt("Test", "StandalonePhotosPlaces", 0) != 0 && b != null && t > (host ? Config.GetFloat("Test", "StandalonePhotosHote", 73f) : 58f) && !cSeatShots)
             {
                 cSeatShots = true; float sx = host ? 1f : -1f; string w = host ? "passager" : "conducteur";
                 if (host && Config.GetInt("Test", "StandalonePlace", 0) > 0)
