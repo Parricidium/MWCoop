@@ -64,7 +64,11 @@ namespace MWCoop
 
         static bool Spot(out Vector3 pos, out float yaw)
         {
-            if (hasSaved) { pos = savedPos; yaw = savedYaw; return true; }
+            if (hasSaved && !Bogged(savedPos)) { pos = savedPos; yaw = savedYaw; return true; }
+            // (laissee au marais ou sous l'eau -- dossier #39, квазарик 01/11 : le sol Swamp du jeu (resistance au roulement 2, contre
+            // 0,018 sur la route) enlise toutes les voitures, le jeu a sa depanneuse pour les siennes ; la voiture de la quete, unique,
+            // y restait d'une partie a l'autre -- ramenee chez Teimo au chargement, comme remorquee)
+            if (hasSaved) { L("voiture laissee au marais en " + savedPos.ToString("F1") + " : ramenee chez Teimo (remorquee)"); hasSaved = false; }
             pos = Vector3.zero; yaw = 0f;
             GameObject st = GameObject.Find(Game.Msc ? "STORE" : "STORE_AREA");
             if (st == null) return false;
@@ -82,6 +86,21 @@ namespace MWCoop
             if (gy == float.MinValue) return false;
             pos = new Vector3(p.x, gy + 0.8f, p.z); yaw = st.transform.eulerAngles.y + y0;
             return true;
+        }
+
+        // Sol du marais sous la place (matiere Swamp, colliders SWAMP / SwampCollider* du jeu) ou sous le niveau de l'eau (My Summer Car)
+        static bool Bogged(Vector3 p)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (RaycastHit h in Physics.RaycastAll(p + Vector3.up * 3f, Vector3.down, 12f))
+            {
+                string m = h.collider.sharedMaterial != null ? h.collider.sharedMaterial.name : "";
+                sb.Append(" [").Append(h.collider.name).Append(" ").Append(m).Append(" y ").Append(h.point.y.ToString("F1")).Append(h.collider.isTrigger ? " declencheur" : "").Append(h.collider.attachedRigidbody != null ? " corps" : "").Append("]");
+                if (h.collider.isTrigger || h.collider.attachedRigidbody != null) continue;
+                if (m.StartsWith("Swamp") || h.collider.name == "SWAMP" || h.collider.name.StartsWith("SwampCollider")) { L("sol sous " + p.ToString("F1") + " :" + sb); return true; }
+            }
+            L("sol sous " + p.ToString("F1") + " :" + sb);
+            return Game.Msc && p.y < -3.5f;
         }
 
         // ---------------------------------------------------------------- cle
@@ -188,8 +207,17 @@ namespace MWCoop
             try
             {
                 WorldFiles.Check(Path.GetDirectoryName(FilePath));
-                if (!File.Exists(FilePath)) { L("pas de sauvegarde : quete a faire, voiture chez Teimo"); return; }
                 var ci = System.Globalization.CultureInfo.InvariantCulture;
+                // ([Test] QueteGolfSauvee=x,y,z,cap : place lue comme dans une sauvegarde -- essai du marais, dossier #39)
+                string ts = Config.Get("Test", "QueteGolfSauvee", "");
+                if (ts.Length > 0)
+                {
+                    string[] c = ts.Split(','); float x, y, z, w;
+                    if (c.Length == 4 && float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out x) && float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out y)
+                        && float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out z) && float.TryParse(c[3], System.Globalization.NumberStyles.Float, ci, out w))
+                    { savedPos = new Vector3(x, y, z); savedYaw = w; hasSaved = true; Done = true; L("essai : place sauvee posee en " + savedPos.ToString("F1")); return; }
+                }
+                if (!File.Exists(FilePath)) { L("pas de sauvegarde : quete a faire, voiture chez Teimo"); return; }
                 foreach (string line in File.ReadAllLines(FilePath))
                 {
                     string[] p = line.Trim().Split(' ');
