@@ -2117,7 +2117,23 @@ namespace MWCoop
                     }
                 }
                 Log.Info(sb.ToString());
-            }   // (delit de l'hote lu par l'invite, prison de l'ami -- квазарик 31/10)   // (objets sur le plateau du KEKMET, l'hote descend -- Markos 31/10)
+                // (nuages : l'ombre « en grillage » est celle d'un nuage qui passe au-dessus du joueur -- JD 01/11)
+                GameObject cs = Game.FindAny("MAP/CloudSystem");
+                var sc = new System.Text.StringBuilder("autotest : sondeombres : nuages :");
+                int nc = 0;
+                if (cs != null)
+                    foreach (Renderer r in cs.GetComponentsInChildren<Renderer>(true))
+                    {
+                        if (nc++ >= 12) break;
+                        Material mt = r.sharedMaterial;
+                        sc.Append(" | ").Append(Recon.Path(r.transform)).Append(r.gameObject.activeInHierarchy ? "" : " (eteint)").Append(" y ").Append(r.transform.position.y.ToString("F0"))
+                          .Append(" ombres ").Append(r.shadowCastingMode).Append(" recoit ").Append(r.receiveShadows)
+                          .Append(" mat ").Append(mt != null ? mt.name : "?").Append(" shader ").Append(mt != null && mt.shader != null ? mt.shader.name : "?")
+                          .Append(" file ").Append(mt != null ? mt.renderQueue.ToString() : "?").Append(" mots ").Append(mt != null ? string.Join(",", mt.shaderKeywords) : "?")
+                          .Append(mt != null && mt.HasProperty("_Mode") ? " _Mode " + mt.GetFloat("_Mode") : "").Append(mt != null && mt.HasProperty("_Color") ? " alpha " + mt.color.a.ToString("F2") : "");
+                    }
+                Log.Info(sc.ToString());
+            }
             if (mode == "fusibles") { Parts.TestFuses(t); return; }   // (tableau electrique, dossier #27 : montage d'un porte-fusible tenu ou monte ailleurs par l'autre)
             // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
             // (envoye), remontee a 50 s (message NON envoye) ; l'empreinte des 2 s doit la faire remonter chez l'invite en 6 s au plus ; etat a EtatA s)
