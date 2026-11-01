@@ -2565,7 +2565,8 @@ namespace MWCoop
         // de T (les deux en jeu depuis 20 s), l'hote prend le KEKMET (T+5, volant T+10), l'attelle au plateau (T+14, crochet du jeu), pose
         // des objets sur le plateau (T+18), roule a 3 m/s de T+22 a T+32, descend a T+38 ([Test] RemorqueHayon=1 : ouvre le hayon a T+44) ;
         // chacun note chaque seconde de T+18 a T+65 l'inclinaison du tracteur et du plateau et la place des objets dans le plateau.
-        static float trT0 = -1, trLog; static int trStep; static readonly List<string> trItems = new List<string>();
+        // (My Winter Car : pas d'appel ici, « remorque » y est l'essai de corde de Tow -- Autotest=kekremorque.)
+        static float trT0 = -1, trLog, trExitTry; static bool trHitched; static int trStep; static readonly List<string> trItems = new List<string>();
         public static void TestTrailer()
         {
             float now = Time.realtimeSinceStartup;
@@ -2573,24 +2574,26 @@ namespace MWCoop
             float d = now - trT0;
             const string car = "KEKMET(350-400psi)";
             Rigidbody k = VehicleSync.Body("KEKMET"), fb = VehicleSync.Body("FLATBED");
-            if (Session.IsHost)
+            bool driver = Session.IsHost != (Config.GetInt("Test", "RemorqueInvite", 0) != 0 || Config.Get("Test", "RemorqueActeur", "hote") == "invite");   // ([Test] RemorqueInvite=1 ou RemorqueActeur=invite : l'invite conduit -- Донской 01/11)
+            // (attele par l'hote a T+3, personne au volant : tracteur gare, a lui -- le crochet du jeu se ferme a la distance)
+            if (Session.IsHost && !trHitched && d > 3f)
             {
-                if (d > 5f && trStep == 0) { trStep = 1; Log.Info("autotest : remorque, " + VehicleSync.TestEnter(car, false)); }
-                if (d > 10f && trStep == 1) { trStep = 2; Log.Info("autotest : remorque, volant -> " + VehicleSync.TestEnter(car, true)); }
-                if (d > 14f && trStep == 2)
+                trHitched = true;
+                FindHitch();
+                Transform target = fb != null ? fb.transform.Find("HookTarget") : null;
+                if (hitchHook == null || hitchTractor == null || target == null) Log.Info("autotest : remorque, crochet ou plateau introuvable");
+                else
                 {
-                    trStep = 3;
-                    FindHitch();
-                    Transform target = fb != null ? fb.transform.Find("HookTarget") : null;
-                    if (hitchHook == null || hitchTractor == null || target == null) Log.Info("autotest : remorque, crochet ou plateau introuvable");
-                    else
-                    {
-                        Vector3 dv = target.position - hitchHook.transform.position;
-                        hitchTractor.position += dv; hitchTractor.transform.position += dv;
-                        hitchTractor.velocity = Vector3.zero; hitchTractor.angularVelocity = Vector3.zero;
-                        Log.Info("autotest : remorque, tracteur deplace de " + dv.magnitude.ToString("F1") + " m, crochet sur le plateau");
-                    }
+                    Vector3 dv = target.position - hitchHook.transform.position;
+                    hitchTractor.position += dv; hitchTractor.transform.position += dv;
+                    hitchTractor.velocity = Vector3.zero; hitchTractor.angularVelocity = Vector3.zero;
+                    Log.Info("autotest : remorque, tracteur deplace de " + dv.magnitude.ToString("F1") + " m, crochet sur le plateau");
                 }
+            }
+            if (driver)
+            {
+                if (d > 8f && trStep == 0) { trStep = 1; Log.Info("autotest : remorque, " + VehicleSync.TestEnter(car, false)); }
+                if (d > 12f && trStep == 1) { trStep = 3; Log.Info("autotest : remorque, volant -> " + VehicleSync.TestEnter(car, true)); }
                 if (d > 18f && trStep == 3)
                 {
                     trStep = 4;
@@ -2605,7 +2608,8 @@ namespace MWCoop
                     }
                 }
                 if (d > 22f && d < 32f && k != null) { Vector3 f = k.transform.forward; f.y = 0; k.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(k.velocity.y, 0f); }
-                if (d > 38f && trStep == 4) { trStep = 5; Log.Info("autotest : remorque, sortie du tracteur -> " + VehicleSync.TestExit(car)); }
+                if (d > 32f && d < 34f && k != null) { k.velocity = Vector3.Lerp(k.velocity, Vector3.zero, 0.2f); }   // (freinage)
+                if (d > 38f && trStep == 4 && now >= trExitTry) { trExitTry = now + 1f; string st = VehicleSync.TestExit(car); if (st != "Player in car") trStep = 5; Log.Info("autotest : remorque, sortie du tracteur -> " + st); }
                 if (d > 44f && trStep == 5 && Config.GetInt("Test", "RemorqueHayon", 0) != 0)
                 {
                     trStep = 6;
