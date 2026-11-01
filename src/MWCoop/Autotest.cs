@@ -3364,6 +3364,7 @@ namespace MWCoop
                             for (int i = 0; i < s.Actions.Length && i < 40; i++) Log.Info("autotest : options " + f.FsmName + "/" + sn + " : " + Recon.Describe(s.Actions[i]));
                         }
             }
+            if (mode == "kekremorque") Jobs.TestTrailer();   // (attelage du KEKMET, comme Autotest=remorque sur MSC ; [Test] RemorqueActeur=invite -- Донской 01/11)
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t); Gestures.TestPena(mode, t);
             VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); Pvp.Test(mode, t); ModRam1500.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); Kartturi.Test(mode, t); Net.ModServe.Test(mode, t); Kauppa.TestKartturi(mode, t); Kauppa.TestKartturiDrive(mode, t); PushDoors.Test(mode, t); WoodCarriers.Test(mode, t); NewHud.Test(mode, t); ExitGuard.Test(mode, t); LightsGuard.Test(mode, t);

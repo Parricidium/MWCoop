@@ -2565,6 +2565,7 @@ namespace MWCoop
         // de T (les deux en jeu depuis 20 s), l'hote prend le KEKMET (T+5, volant T+10), l'attelle au plateau (T+14, crochet du jeu), pose
         // des objets sur le plateau (T+18), roule a 3 m/s de T+22 a T+32, descend a T+38 ([Test] RemorqueHayon=1 : ouvre le hayon a T+44) ;
         // chacun note chaque seconde de T+18 a T+65 l'inclinaison du tracteur et du plateau et la place des objets dans le plateau.
+        // (My Winter Car : pas d'appel ici, « remorque » y est l'essai de corde de Tow -- Autotest=kekremorque.)
         static float trT0 = -1, trLog; static int trStep; static readonly List<string> trItems = new List<string>();
         public static void TestTrailer()
         {
@@ -2573,7 +2574,7 @@ namespace MWCoop
             float d = now - trT0;
             const string car = "KEKMET(350-400psi)";
             Rigidbody k = VehicleSync.Body("KEKMET"), fb = VehicleSync.Body("FLATBED");
-            if (Session.IsHost)
+            if (Session.IsHost != (Config.Get("Test", "RemorqueActeur", "hote") == "invite"))   // ([Test] RemorqueActeur=invite : l'invite mene et descend -- Донской 01/11)
             {
                 if (d > 5f && trStep == 0) { trStep = 1; Log.Info("autotest : remorque, " + VehicleSync.TestEnter(car, false)); }
                 if (d > 10f && trStep == 1) { trStep = 2; Log.Info("autotest : remorque, volant -> " + VehicleSync.TestEnter(car, true)); }

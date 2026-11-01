@@ -1044,7 +1044,18 @@ namespace MWCoop
                     if (c.Kinematic) { c.Vel = Vector3.zero; c.AngVel = Vector3.zero; Log.Info("copie de " + c.Key + " relachee a l'arret (flux de #" + c.RemoteBy + " coupe depuis " + (now - c.LastRemote).ToString("F0") + " s" + (Session.Players.ContainsKey(c.RemoteBy) ? "" : ", joueur parti") + ")"); }
                     c.RemoteBy = -1; c.RemoteDriver = -1;
                 }
-                SetKinematic(c, remote || HoldHitched(c));
+                bool hold = !remote && HoldHitched(c);
+                // Attelage tenu a partir d'ici : sur place, jusqu'a la prochaine pose garee de l'hote (2 s). La pose d'avant
+                // (c.Pos) datait d'avant qu'on le mene, voire n'avait jamais ete recue -- l'invite descendait du KEKMET attele qu'il
+                // avait conduit, la copie partait sur une pose d'il y a 2 km (ou a l'origine du monde), le plateau encore a lui
+                // arrache par l'attelage, et chez l'hote le tracteur se retournait (Донской, 01/11). [Test] AttelageTenuSurPlace=0 :
+                // comme avant.
+                if (hold && !c.Kinematic && Config.GetInt("Test", "AttelageTenuSurPlace", 1) != 0)
+                {
+                    c.Pos = c.Body.position; c.Rot = c.Body.rotation; c.Vel = Vector3.zero; c.AngVel = Vector3.zero;
+                    Log.Info("voiture " + c.Key + " attelee, garee : tenue sur place en attendant la pose de l'hote");
+                }
+                SetKinematic(c, remote || hold);
                 Ride(c, remote && Seats.SeatedCar == c.T);
                 if (remote)
                 {
