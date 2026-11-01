@@ -40,6 +40,7 @@ namespace MWCoop
             public Transform[] Doors; public Vector3[] DoorCenter; public bool[] DoorOpen; public float[] DoorAngle;
             public Gauge Speedo, Tacho;
             public Mirror[] Mirrors; public int MirrorNext; public bool MirrorsLive;   // (retroviseurs fonctionnels, StandaloneMirror)
+            public Heater Heat;   // (chauffage, StandaloneHeater)
             public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;
             public Bounds[] DoorBox = new Bounds[2]; public float WheelVis;   // (portieres : boites ; volant visible lisse)
             public CrashSensor Sensor;   // (choc mortel, mesure a chaque pas de physique)
@@ -600,7 +601,7 @@ namespace MWCoop
             if (b == null) return;
             if (driving == b) Exit(b, true);   // (jamais detruire la voiture avec le joueur dedans : le PLAYER partirait avec)
             State st;
-            if (states.TryGetValue(b, out st)) FreeMirrors(st);
+            if (states.TryGetValue(b, out st)) { FreeMirrors(st); FreeHeater(st); }
             cars.Remove(b); states.Remove(b);
             if (b.Car != null) UnityEngine.Object.Destroy(b.Car);
         }
@@ -620,7 +621,7 @@ namespace MWCoop
                 VazCar.Built b = cars[i];
                 State st;
                 bool has = states.TryGetValue(b, out st);
-                if (b.Car == null || !has) { if (driving == b) Exit(b, true); cars.RemoveAt(i); if (has) FreeMirrors(st); states.Remove(b); continue; }
+                if (b.Car == null || !has) { if (driving == b) Exit(b, true); cars.RemoveAt(i); if (has) { FreeMirrors(st); FreeHeater(st); } states.Remove(b); continue; }
                 if (key || (now >= st.NextFile && st.T.Changed())) { Reload(b, st, key ? "touche " + reloadKey : "fichier enregistre"); }
                 if (now >= st.NextFile) st.NextFile = now + 1f;
                 b.Dt.engineOrientation = b.Car.transform.forward;

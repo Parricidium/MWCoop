@@ -269,6 +269,7 @@ namespace MWCoop
             if (inf.TryGetValue("banquette", out rb0)) { st.RearOffset = rb0; st.HasRear = true; }
             if (inf.TryGetValue("habitacle_arriere", out rb0)) st.CabinRear = rb0.z;
             SetupRain(b, st, inf);
+            SetupHeater(b, st, inf);
             Shell(b, st);
             // son moteur de l'addon (boucles + demarrage) au moteur du modele
             var eng = new GameObject("moteur_son").transform;
@@ -569,6 +570,7 @@ namespace MWCoop
             DoorAnim(b, st);
             BeltTick(b, st);
             Gauges(b, st);
+            HeaterTick(b, st);
             GameObject pl = Game.PlayerGo;
             if (pl == null || !PlayerSync.InGame) return;
             WheelMask(b, st);
@@ -1195,7 +1197,10 @@ namespace MWCoop
                   | (st.KeyIn ? 32 : 0) | (st.KeyPos > 0 ? 64 : 0) | (st.HatchOpen ? 128 : 0);   // (cle mise, contact, hayon ouvert)
             // (octet de plus : warnings -- les anciennes versions lisent les deux premiers et ignorent le reste)
             // (octet de plus : warnings 1, essuie-glaces 2, ceinture du conducteur 4, dossiers rabattus 8 / 16)
-            Net.Session.SendAll(new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0) | (st.DriverBelted ? 4 : 0) | (st.Folded[0] ? 8 : 0) | (st.Folded[1] ? 16 : 0)), true);
+            // (puis le chauffage : marche 1, ventilateur x 2 (0-3) ; temperature et direction 0-255 -- StandaloneHeater)
+            var w = new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0) | (st.DriverBelted ? 4 : 0) | (st.Folded[0] ? 8 : 0) | (st.Folded[1] ? 16 : 0));
+            if (st.Heat != null) w.U8((st.Heat.On ? 1 : 0) | (st.Heat.FanStep << 1)).U8(Mathf.RoundToInt(st.Heat.TempPos * 255f)).U8(Mathf.RoundToInt(st.Heat.DirPos * 255f));
+            Net.Session.SendAll(w, true);
         }
 
         public static void OnState(Net.Peer from, Net.NetReader r)
@@ -1226,12 +1231,18 @@ namespace MWCoop
                     if (driving != b) st.DriverBelted = (extra[0] & 4) != 0;
                     st.Folded[0] = (extra[0] & 8) != 0; st.Folded[1] = (extra[0] & 16) != 0;
                 }
+                if (extra.Length > 3 && st.Heat != null)
+                {
+                    st.Heat.On = (extra[1] & 1) != 0; st.Heat.FanStep = Mathf.Clamp((extra[1] >> 1) & 3, 0, FanSteps);
+                    st.Heat.TempPos = extra[2] / 255f; st.Heat.DirPos = extra[3] / 255f;
+                    HeaterParts(st);
+                }
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
 
         // ---------------------------------------------------------------- tableau de bord
-        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300, KStalk = 400, KBelt = 500;
+        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300, KStalk = 400, KBelt = 500, KHeater = 600;
         static void SetHorn(VazCar.Built b, State st, bool on, bool send)
         {
             if (on == st.HornOn) return;
@@ -1244,6 +1255,9 @@ namespace MWCoop
             Transform cam = PlayerCam();
             VazCar.Knob[] ks = KnobsOf(b.M);
             if (cam == null || ks == null) return;
+            // chauffage (commandes de la console, visee serree : l'interrupteur est a 2,4 cm de celui des warnings)
+            string ht = HeaterInput(b, st, cam);
+            if (ht != null) { hovered = KHeater; CrankStop(b, st); SetHorn(b, st, false, true); Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", ht); return; }
             int hit = -1; float bestPerp = 0.035f;
             foreach (int i in new[] { KIgnition, KLights, KHorn, KWheelHub })
             {
@@ -1996,7 +2010,16 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
             UnityEngine.Object.Destroy(go);
         }
-        static bool cFrein, cSeatShots, cMirrorShots;
+        static bool cFrein, cSeatShots, cMirrorShots; static int cHeat; static float cHeatLog;
+        // (console du chauffage vue du milieu de l'habitacle, entre les sieges, avec une lampe le temps des photos)
+        static void HeatShots(VazCar.Built b, State st, string tag)
+        {
+            var lg = new GameObject("essai_lampe"); lg.transform.SetParent(b.Body, false); lg.transform.localPosition = new Vector3(0f, 1.0f, 0.25f);
+            Light li = lg.AddComponent<Light>(); li.type = LightType.Point; li.range = 1.5f; li.intensity = 2.5f;
+            Photo(b, "console-" + tag, new Vector3(0.0f, 1.0f, 0.12f), new Vector3(-0.01f, 0.87f, 0.53f), 26f);
+            if (st.Heat != null && st.Heat.HasSwitch) Photo(b, "chauffage-voyant-" + tag, new Vector3(0.05f, 1.0f, 0.18f), st.Heat.SwitchAt, 12f);
+            UnityEngine.Object.Destroy(lg);
+        }
         static List<GameObject> cObjets; static int cObjLog;
         static float wLog; static bool wDump;
         public static void CoopTest(float t)
@@ -2089,6 +2112,21 @@ namespace MWCoop
                             Log.Info("standalone : retro " + m.Key + " " + (m.Mr.sharedMaterial == m.Live ? "vivant" : "sombre") + ", glace " + b.Car.transform.InverseTransformPoint(m.Glass.position).ToString("F2"));
                             Photo(b, "retro-" + m.Key, b.Car.transform.InverseTransformPoint(pc.position), b.Car.transform.InverseTransformPoint(m.Glass.position), m.Key == "i" ? 22f : 14f);
                         }
+            }
+            // ([Test] StandaloneChauffage=1 : a 40 s, l'hote au volant met le chauffage a fond (marche, ventilateur 3, chaud, direction 0,3) ;
+            // etat toutes les 10 s jusqu'a 100 s (liquide, habitacle, source de chaleur, PlayerTemp) ; a 70 et 72 s, la console vue des yeux
+            // (reglages a fond puis ventilateur 1, froid, direction en bas) -- chez l'invite aussi l'etat recu)
+            if (b != null && st != null && Config.GetInt("Test", "StandaloneChauffage", 0) != 0)
+            {
+                if (host && driving == b && t > 40f && cHeat == 0) { cHeat = 1; TestHeater(b.Car, true, 3, 0f, 0.7f); }
+                if (t > 40f && t < 101f && t >= cHeatLog)
+                {
+                    cHeatLog = t + 10f; HutongGames.PlayMaker.FsmFloat pt = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat("PlayerTemp");
+                    Log.Info("standalone : coop, " + HeaterState(b.Car) + (pt != null ? ", PlayerTemp " + pt.Value.ToString("F2") : ""));
+                }
+                Transform pc = PlayerCam();
+                if (host && driving == b && pc != null && cHeat == 1 && t > 70f) { cHeat = 2; HeatShots(b, st, "a-fond"); TestHeater(b.Car, true, 1, 1f, 1f); }
+                if (host && driving == b && pc != null && cHeat == 2 && t > 72f) { cHeat = 3; HeatShots(b, st, "froid"); TestHeater(b.Car, true, 3, 0f, 0.7f); }
             }
             // ([Test] StandaloneObjets=1 : a 50 s, trois cubes du jeu (couche Parts, 2 kg) poses dans la voiture -- siege passager, plancher
             // arriere, coffre ; releves a 70 s (arret) et 88 s (apres le roulage et le freinage) : toujours dedans ?)

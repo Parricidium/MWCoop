@@ -224,8 +224,8 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- fichiers de la voiture (dans la DLL)
         // s21.pak : « S21P », nombre de fichiers, puis pour chacun : nom (longueur + UTF-8), taille, taille compressee, donnees
-        // (deflate brut ; Inflate : le Mono d'Unity 5.0 n'a pas zlib). Poses dans MWCoop\cache\s21 si la marque (paquet.txt : taille du
-        // paquet) a change ; VazCar.Golf83 y lit ses fichiers.
+        // (deflate brut ; Inflate : le Mono d'Unity 5.0 n'a pas zlib). Poses dans MWCoop\cache\s21 si la marque (paquet.txt : taille et
+        // empreinte du paquet) a change ; VazCar.Golf83 y lit ses fichiers.
         static bool packDone;
         static void EnsurePack()
         {
@@ -242,7 +242,9 @@ namespace MWCoop
                     while (got < b.Length) { int n = s.Read(b, got, b.Length - got); if (n <= 0) break; got += n; }
                 }
                 VazCar.Golf83.DirOverride = dir;
-                string mark = Path.Combine(dir, "paquet.txt"), want = b.Length.ToString();
+                // (marque : taille et empreinte FNV-1a du paquet -- une retouche de meme taille refait aussi les fichiers, essai du 01/11)
+                uint fnv = 2166136261; for (int i = 0; i < b.Length; i++) { fnv ^= b[i]; fnv *= 16777619; }
+                string mark = Path.Combine(dir, "paquet.txt"), want = b.Length + " " + fnv.ToString("x8");
                 if (File.Exists(mark) && File.ReadAllText(mark).Trim() == want && File.Exists(Path.Combine(dir, "carrosserie.p205"))) return;
                 if (b.Length < 8 || b[0] != 'S' || b[1] != '2' || b[2] != '1' || b[3] != 'P') { L("paquet illisible"); return; }
                 Directory.CreateDirectory(dir);

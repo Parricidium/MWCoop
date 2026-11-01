@@ -842,10 +842,13 @@ namespace MWCoop
         // clic : bouclee ou detachee -- la ceinture dessinee par StandaloneDrive chez tous (BeltedHeads, envoyee avec la place)
         static void StandaloneBeltInput()
         {
-            Vector3 bk;
-            if (!StandaloneCar.SeatBuckle(current.CarT, current.Head, out bk)) return;
             Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
             if (view == null) return;
+            // commandes du chauffage a portee (passager avant -- StandaloneHeater)
+            string heat = StandaloneCar.HeaterInputFor(current.CarT, view);
+            if (heat != null) { BeltHint(heat); return; }
+            Vector3 bk;
+            if (!StandaloneCar.SeatBuckle(current.CarT, current.Head, out bk)) return;
             Vector3 at = current.CarT.TransformPoint(bk), d = at - view.position;
             bool aim = d.magnitude < 1.3f && Vector3.Angle(view.forward, d) < 16f;
             BeltHint(aim ? (beltOn ? "UNFASTEN SEATBELT" : "FASTEN SEATBELT") : null);
