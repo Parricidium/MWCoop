@@ -456,6 +456,7 @@ namespace MWCoop
             { "Sun shadows", "Тени от солнца" },
             { "Moon shadows", "Тени от луны" },
             { "House shadows", "Тени домов" },
+            { "Fixed cloud shadows (no grid pattern)", "Исправленные тени облаков (без сетки)" },
             { "Shadow distance", "Дальность теней" },
             { "Ray-traced sun shadows", "Тени от солнца (трассировка)" },
             { "Rays per pixel", "Лучей на пиксель" },

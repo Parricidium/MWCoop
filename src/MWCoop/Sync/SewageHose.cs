@@ -166,7 +166,7 @@ namespace MWCoop
         // ShitTank cinematique de la copie, explosait chez celui qui tenait le bout (essai MSC 27/10 : maillons a 15 000 m/s, a 800 km ;
         // GG chez JD : « il partait dans tous les sens comme un serpent ») et ses poses folles partaient chez les autres. Posee comme
         // chez les autres, du raccord au bout que la main tient (le bout reste au jeu).
-        static bool endKin, selfHeld, couplerKin, dropSet; static float restLen; static Vector3 dropPos; static Quaternion dropRot;
+        static bool endKin, selfHeld, couplerKin, dropSet, remoteHeld, endGrab; static float restLen; static Vector3 dropPos; static Quaternion dropRot;
         // Raccord (corps soude au ShitTank) : sur une copie du camion, sa pose physique restait en arriere de la voiture deplacee
         // (Unity 5.0 : corps enfant en retard -- [MWC] 27/10, raccord a ~20 m chez l'invite, poses du bout fausses et refusees chez
         // l'hote au-dela de 30 m). Pendant le suivi : cinematique, a sa pose de repos sous HOSE.
@@ -182,6 +182,17 @@ namespace MWCoop
                 chainLen = restLen > 1f ? restLen : segs.Length * 0.38f;
                 foreach (Rigidbody r in segs) { if (!r.isKinematic) { r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; } r.isKinematic = true; }   // (le bout aussi : tenu, il suit la main -- son parent -- ; lache, il reste ou il est pose)
                 foreach (Collider c in cols) if (c != null && !(self && c.attachedRigidbody == end)) c.enabled = false;
+                endGrab = false;
+            }
+            // Bout pose par l'autre (pas en main chez lui) : son collisionneur reste allume ici, cinematique, pour que la main du jeu puisse
+            // le reprendre. Tout eteint, personne d'autre ne pouvait plus le saisir tant que celui qui mene la GIFU l'envoyait : le
+            // client avait sorti le tuyau, le camion de l'hote menait le bout, tuyau intouchable chez lui, coince dans un mur du Futufon
+            // jusqu'a ce qu'il prenne le volant (Донской, 01/11). [Test] TuyauBoutEteint=1 : comme avant.
+            bool grab = !self && !remoteHeld && Config.GetInt("Test", "TuyauBoutEteint", 0) == 0;
+            if (grab != endGrab)
+            {
+                endGrab = grab;
+                foreach (Collider c in cols) if (c != null && c.GetComponentInParent<Rigidbody>() == end) c.enabled = grab || self;   // (attachedRigidbody : null pour un collisionneur eteint)
             }
             Vector3 ep0 = end.transform.position; Quaternion eq0 = end.transform.rotation;   // (le raccord est la racine de la chaine : le recaler deplace le bout)
             if (couplerRb != null && coupler.parent == couplerParent) { coupler.localPosition = couplerPos; coupler.localRotation = couplerRot; }
@@ -388,10 +399,11 @@ namespace MWCoop
                 Transform stt = Gifu() != null ? Gifu().Find("ShitTank") : null; Rigidbody stb = stt != null ? stt.GetComponent<Rigidbody>() : null;
                 if (stb != null) Log.Info("autotest : tuyau, ShitTank : corps a " + (stb.position - stt.position).magnitude.ToString("F2") + " m de son objet" + (stb.isKinematic ? " (cin)" : " (libre)") + ", raccord a " + (coupler != null ? (coupler.position - stt.position).magnitude.ToString("F2") : "?") + " m");
                 Log.Info("autotest : tuyau, maillons : vitesse max " + vmax.ToString("F1") + " m/s, ecart max au raccord " + dmax.ToString("F1") + " m" + (following ? " (suivi)" : "") + (ignoring ? " (chocs copie coupes)" : ""));
-                Log.Info("autotest : tuyau, " + (root.activeInHierarchy ? "sorti" : "range") + ", bout en " + end.position.ToString("F2") + (end.isKinematic ? " (cinematique)" : "") + (mine ? " a nous" : remoteBy >= 0 ? " suivi sur #" + remoteBy : "") + (following ? ", chaine posee" : "") + (cols != null && cols.Length > 0 && cols[0] != null && !cols[0].enabled ? ", sans collision" : ""));
+                Log.Info("autotest : tuyau, " + (root.activeInHierarchy ? "sorti" : "range") + ", bout en " + end.position.ToString("F2") + (end.isKinematic ? " (cinematique)" : "") + (mine ? " a nous" : remoteBy >= 0 ? " suivi sur #" + remoteBy : "") + (following ? ", chaine posee" : "") + (cols != null && cols.Length > 0 && cols[0] != null && !cols[0].enabled ? ", sans collision" : "") + ", bout " + (EndGrabbable() ? "saisissable" : "insaisissable"));
             }
         }
         static float nextTestLog, tvAt; static int tvStep;
+        static bool EndGrabbable() { if (cols != null) foreach (Collider c in cols) if (c != null && c.enabled && !c.isTrigger && c.GetComponentInParent<Rigidbody>() == end) return true; return false; }
         static Transform testHand, endParent;
 
         public static void Test(string mode, float t)
@@ -445,7 +457,7 @@ namespace MWCoop
             if (FireTools.Held() == end.gameObject) return;   // (on le tient ici : le notre fait foi)
             if (remoteBy != who && logs++ < 10) Log.Info("tuyau de la GIFU : bout suivi sur #" + who + (held ? " (en main)" : " (pose)"));
             if (float.IsNaN(p.x + p.y + p.z) || float.IsInfinity(p.x + p.y + p.z) || (p - (coupler != null ? coupler.position : p)).sqrMagnitude > 900f) return;   // (rien de fou : 30 m au plus du camion)
-            mine = false; remoteBy = who; rp = p; rq = q; lastRemote = Time.realtimeSinceStartup;
+            mine = false; remoteBy = who; rp = p; rq = q; lastRemote = Time.realtimeSinceStartup; remoteHeld = held;
         }
     }
 }
