@@ -2842,6 +2842,21 @@ namespace MWCoop
                         if (sd != null) sd.SetValue(cl, float.NaN);
                     }
             }
+            // ([Test] RoueCassee=<voiture> : a 40 s le modele de sa roue avant droite deplace de 10 m, a 45 s le pivot de cette roue mis a
+            // une rotation non finie -- dossier #37)
+            if (roueTest == null) roueTest = Config.Get("Test", "RoueCassee", "");
+            if (roueTest.Length > 0 && roueStep < 2 && Time.timeSinceLevelLoad > (roueStep == 0 ? 40f : 45f))
+            {
+                Car tc = cars.Find(x => x.Key.StartsWith(roueTest));
+                Wheel fw = null;
+                if (tc != null && tc.Wheels != null) foreach (Wheel w in tc.Wheels) if (w != null && w.name.EndsWith("FR")) fw = w;
+                if (fw != null && fw.model != null)
+                {
+                    if (roueStep == 0) { fw.model.transform.localPosition += Vector3.up * 10f; Log.Info("autotest : roue cassee : modele de " + fw.name + " deplace de 10 m"); }
+                    else { fw.transform.parent.localRotation = new Quaternion(float.NaN, 0f, 0f, 1f); Log.Info("autotest : roue cassee : " + fw.transform.parent.name + " en rotation non finie"); }
+                }
+                roueStep++;
+            }
             foreach (Car c in cars)
             {
                 if (c.Body == null || c.Kinematic && c.Index != LocalDriving) continue;
@@ -2868,6 +2883,7 @@ namespace MWCoop
                 if (!deep || c.Dt == null) { if (calm) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; } if (!bad && fixedF == 0) continue; }
                 c.SanNext = now0 + 0.25f; c.SanSlow = now0 + 2f;
                 if (deep && c.Dt != null) fixedF += SanFields(c);
+                if (deep) fixedF += WheelPoses(c);
                 if (bad)
                 {
                     // Remise a repetition (retour de Crowbangus, 14/10 : Sorbet rendue par l'invite contre la CORRIS que l'hote
@@ -2907,6 +2923,40 @@ namespace MWCoop
             }
         }
 
+        // Roue « restee sur place » (dossier #37, xZOTIK 01/11 : la roue avant droite de la SATSUMA reste visuellement la ou la voiture
+        // etait, montee pourtant ; les deux joueurs la voient). Leurs journaux : Wheel.Mz des roues avant non fini a repetition (surtout
+        // wheelFR), corrige champ par champ -- mais les poses des transforms de la roue (pivot d'Ackermann, roue, modele) ne l'etaient pas.
+        // Chaine de chaque roue jusqu'a la voiture et son modele : pose locale non finie, ou modele a plus de 3 m de sa roue -> derniere
+        // pose saine ; note une fois avec le detail. [Test] RouesPosesLibres=1 : comme avant.
+        static readonly Dictionary<Transform, KeyValuePair<Vector3, Quaternion>> wheelGood = new Dictionary<Transform, KeyValuePair<Vector3, Quaternion>>();
+        static int wheelPoseLogs; static readonly List<Transform> wheelChain = new List<Transform>();
+        static string roueTest; static int roueStep;   // ([Test] RoueCassee)
+        static int WheelPoses(Car c)
+        {
+            if (c.Wheels == null || c.T == null || c.Key.StartsWith("MWCoop-") || Config.GetInt("Test", "RouesPosesLibres", 0) != 0) return 0;   // (pas les VAZ ni les standalone : roues a eux)
+            int n = 0;
+            foreach (Wheel w in c.Wheels)
+            {
+                if (w == null) continue;
+                Transform mt = w.model != null ? w.model.transform : null;
+                bool far = mt != null && Finite(mt.position) && Finite(w.transform.position) && (mt.position - w.transform.position).sqrMagnitude > 9f;
+                wheelChain.Clear();
+                if (mt != null) wheelChain.Add(mt);
+                for (Transform t = w.transform; t != null && t != c.T; t = t.parent) if (t != mt) wheelChain.Add(t);
+                foreach (Transform t in wheelChain)
+                {
+                    Vector3 lp = t.localPosition; Quaternion lr = t.localRotation;
+                    bool ok = Finite(lp) && Finite(lr.x + lr.y + lr.z + lr.w) && !(far && t == mt);
+                    KeyValuePair<Vector3, Quaternion> g;
+                    if (ok) { wheelGood[t] = new KeyValuePair<Vector3, Quaternion>(lp, lr); continue; }
+                    if (!wheelGood.TryGetValue(t, out g)) g = new KeyValuePair<Vector3, Quaternion>(t == mt ? Vector3.zero : lp, Quaternion.identity);
+                    if (wheelPoseLogs++ < 10) Log.Warn("voitures : " + c.Key + " roue " + w.name + " : " + Recon.Path(t) + (far && t == mt ? " a " + (mt.position - w.transform.position).magnitude.ToString("F1") + " m de sa roue" : " pose locale non finie (" + lp + ", " + lr + ")") + ", remise a sa derniere pose saine");
+                    t.localPosition = Finite(g.Key) ? g.Key : Vector3.zero; t.localRotation = g.Value;
+                    n++;
+                }
+            }
+            return n;
+        }
         // Essai [Test] SuivreNaN=<voiture> : chaque seconde, les champs flottants non finis de tous ses scripts (sans corriger).
         public static string TestNan(string key)
         {

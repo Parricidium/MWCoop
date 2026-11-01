@@ -2077,6 +2077,35 @@ namespace MWCoop
             if (mode == "remorque") { Jobs.TestTrailer(); return; }
             if (mode == "prisoninvite") { Police.TestGuestCrime(); return; }
             if (mode == "mainsvue") { ThirdPerson.TestHands(t); return; }   // (bras et cigarette de la 1re personne en 3e personne -- JD 01/11)
+            // ([Test] Autotest=roues, 2 joueurs, dossier #37 xZOTIK : « la roue reste sur place quand la Satsuma demarre ») : l'invite
+            // ([Test] RouesConducteur=0 : l'hote) prend la SATSUMA a T+5 (volant T+10) et roule a 4 m/s de T+15 a T+27 ; chacun note
+            // toutes les 2 s, de T+12 a T+34, chaque roue (wheel_*) : parent, cinematique, pose dans le repere de la voiture.
+            if (mode == "roues")
+            {
+                float now = Time.realtimeSinceStartup;
+                if (rouesT0 < 0) { if (!Jobs.OtherInGame(20f)) return; rouesT0 = now; }
+                float d = now - rouesT0;
+                bool drv = Net.Session.IsHost == (Config.GetInt("Test", "RouesConducteur", 1) == 0);
+                const string rcar = "SATSUMA(557kg, 248)";
+                Rigidbody sb = VehicleSync.Body("SATSUMA");
+                if (drv && step == 0 && d > 5f) { step = 1; Log.Info("autotest : roues, " + VehicleSync.TestEnter(rcar, false)); }
+                if (drv && step == 1 && d > 10f) { step = 2; Log.Info("autotest : roues, volant -> " + VehicleSync.TestEnter(rcar, true)); }
+                if (drv && sb != null && d > 15f && d < 27f) { Vector3 f = sb.transform.forward; f.y = 0; sb.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(sb.velocity.y, 0f); }
+                if (sb != null && d > 12f && d < 34f && now >= rouesLog)
+                {
+                    rouesLog = now + 2f;
+                    var sb2 = new System.Text.StringBuilder("autotest : roues T+" + d.ToString("F0") + " : SATSUMA " + (sb.isKinematic ? "copie" : "locale") + " en " + sb.position.ToString("F1") + " ;");
+                    foreach (Rigidbody r in Object.FindObjectsOfType<Rigidbody>())
+                    {
+                        if (r == null || !r.name.StartsWith("wheel_") || !r.gameObject.activeInHierarchy) continue;
+                        Vector3 lp = sb.transform.InverseTransformPoint(r.position), lt = sb.transform.InverseTransformPoint(r.transform.position);
+                        sb2.Append(' ').Append(r.name).Append('@').Append(r.transform.parent != null ? r.transform.parent.name : "-").Append(r.isKinematic ? "c" : "").Append(' ').Append(lt.ToString("F2"));
+                        if ((lp - lt).sqrMagnitude > 0.01f) sb2.Append(" (corps ").Append(lp.ToString("F2")).Append(')');
+                    }
+                    Log.Info(sb2.ToString());
+                }
+                return;
+            }
             // ([Test] Autotest=sondeombres, JD 01/11 « ombres en grillage » : a 40 s, reglages d'ombres du moteur et de chaque lumiere
             // directionnelle -- biais, cookie, force... par reflexion ; captures par [Test] Captures=)
             // ([Test] OmbresQualite=n : niveau de qualite du moteur force a 25 s -- 0 « Shitty », celui du setup DLSS de JD ; a 36 s le
@@ -2776,6 +2805,7 @@ namespace MWCoop
         static int mscPhares, mscCapot; static System.Collections.Generic.List<GameObject> mscWood;
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
         static bool sondeQ, sondeOut, sondeCloudLog;   // (Autotest=sondeombres)
+        static float rouesT0 = -1, rouesLog;   // (Autotest=roues)
 
         // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
         // [Test] Autotest=texte, Texte=<mot> : chaque TextMesh (eteints compris) dont le texte contient le mot, avec son chemin et
