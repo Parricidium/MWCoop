@@ -2100,6 +2100,20 @@ namespace MWCoop
                 { pl.transform.position = new Vector3(ox, oy, oz); pl.transform.rotation = Quaternion.Euler(0f, oyaw, 0f); }
                 if (cc != null) cc.enabled = true;
             }
+            // ([Test] OmbresNuageIci=1 : de OmbresPosA+2 s a la fin, le premier nuage tenu entre le soleil et le joueur -- son ombre sur lui)
+            if (mode == "sondeombres" && Config.GetInt("Test", "OmbresNuageIci", 0) != 0 && t > Config.GetFloat("Test", "OmbresPosA", 36f) + 2f)
+            {
+                GameObject co = Game.FindAny(Game.Msc ? "MAP/CloudSystem/Clouds/CloudObjects/1" : "MAP/WEATHER/Clouds");
+                Light sun = null; foreach (Light l in Object.FindObjectsOfType<Light>()) if (l.type == LightType.Directional && l.shadows != LightShadows.None) { sun = l; break; }
+                Transform pt = Game.PlayerT;
+                if (co != null && sun != null && pt != null && sun.transform.forward.y < -0.1f)
+                {
+                    Vector3 dir = sun.transform.forward;
+                    float h = 300f - pt.position.y;
+                    co.transform.position = pt.position - dir * (h / -dir.y);
+                    if (!sondeCloudLog) { sondeCloudLog = true; Log.Info("autotest : sondeombres : nuage pose au-dessus du joueur en " + co.transform.position.ToString("F0") + " (soleil " + dir.ToString("F2") + ")"); }
+                }
+            }
             if (mode == "sondeombres" && t > Config.GetFloat("Test", "OmbresPosA", 36f) + 4f && step == 0)
             {
                 step = 1;
@@ -2133,6 +2147,7 @@ namespace MWCoop
                           .Append(mt != null && mt.HasProperty("_Mode") ? " _Mode " + mt.GetFloat("_Mode") : "").Append(mt != null && mt.HasProperty("_Color") ? " alpha " + mt.color.a.ToString("F2") : "");
                     }
                 Log.Info(sc.ToString());
+                Log.Info("autotest : sondeombres : " + CloudShadows.State());
             }
             if (mode == "fusibles") { Parts.TestFuses(t); return; }   // (tableau electrique, dossier #27 : montage d'un porte-fusible tenu ou monte ailleurs par l'autre)
             // ([Test] Autotest=mscperte, 2 joueurs, lot D 27/10, avec [Test] PerteMontage=1 chez l'hote : comme mscremonte -- aile gauche demontee a 40 s
@@ -2760,7 +2775,7 @@ namespace MWCoop
 
         static int mscPhares, mscCapot; static System.Collections.Generic.List<GameObject> mscWood;
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
-        static bool sondeQ, sondeOut;   // (Autotest=sondeombres)
+        static bool sondeQ, sondeOut, sondeCloudLog;   // (Autotest=sondeombres)
 
         // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
         // [Test] Autotest=texte, Texte=<mot> : chaque TextMesh (eteints compris) dont le texte contient le mot, avec son chemin et

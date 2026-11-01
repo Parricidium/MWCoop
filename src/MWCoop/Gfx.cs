@@ -152,7 +152,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            gfx = null; gameApplied = false; applied.Clear();
+            gfx = null; gameApplied = false; applied.Clear(); CloudShadows.OnLevelLoaded();
             gfxAt = Game.LevelName == "GAME" ? Time.realtimeSinceStartup + 3f : -1;
             bool first = baseShadow < 0;
             if (first) CaptureBase();
@@ -168,6 +168,7 @@ namespace MWCoop
             if (now < nextCheck) return;
             if (borderlessAt > 0 && now >= borderlessAt) Borderless();
             nextCheck = now + 1f;
+            CloudShadows.Update();
             if (ReadIni(false)) { ApplyQuality(); ApplyScreen(); ApplyEngine(); if (gameApplied) ApplyGame(false); }
             if (gfxAt > 0 && now >= gfxAt && gfx == null)
             {
@@ -380,6 +381,8 @@ namespace MWCoop
             R("OmbresSoleil", "Ombres du soleil", "Sun shadows", 1, 1, true),
             R("OmbresLune", "Ombres de la lune", "Moon shadows", 0, 1),
             R("OmbresMaisons", "Ombres des maisons", "House shadows", 1, 1),
+            // (ombre des nuages pleine au lieu de tramee -- CloudShadows, JD 01/11 ; 0 : comme le jeu)
+            R("OmbresNuages", "Ombre des nuages corrig\u00E9e (sans grillage)", "Fixed cloud shadows (no grid pattern)", 1, 1),
             S("OmbresDistance", "Distance des ombres", "Shadow distance", -1, 1, new[] { -1, 30, 60, 100, 150, 250, 400 },
               new[] { "Jeu", "30 m", "60 m", "100 m", "150 m", "250 m", "400 m" }, new[] { "Game", "30 m", "60 m", "100 m", "150 m", "250 m", "400 m" }, true),
             // Ray tracing (6) : comme la categorie du lanceur ; RayTracing au prochain lancement par le lanceur (-force-gfx-direct).
