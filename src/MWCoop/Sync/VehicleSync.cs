@@ -286,10 +286,61 @@ namespace MWCoop
         {
             if (Session.IsHost || c.Body == null || c.Index == LocalDriving || Kept(c) || c.Index == bumped || c.RemoteBy >= 0 || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)) return false;
             if (Config.GetInt("Test", "AttelageGareLibre", 0) != 0) return false;
-            return Hitched(c);
+            return Hitched(c) && !HitchedToLed(c);
+        }
+        // Attele a un vehicule qu'on mene ici (conduit, moteur garde, pousse, remorque tiree) : jamais tenu. Le joint est vu tout de
+        // suite, hitchSent seulement au releve suivant (jusqu'a 1 s) : la remorque figee en copie au bout du tracteur que l'invite
+        // conduisait le faisait tourner a 72 rad/s, emballe, l'invite ejecte (Донской 01/11 sur MWC, reproduit sur MSC).
+        static bool HitchedToLed(Car c)
+        {
+            foreach (Car o in cars)
+            {
+                if (o == c || o.Body == null || !(o.Index == LocalDriving || Kept(o) || o.Index == bumped || hitchSent.Contains(o.Index))) continue;
+                foreach (Joint j in o.Body.GetComponentsInChildren<Joint>())
+                    if (j != null && j.connectedBody != null && !(j is SpringJoint) && !Tow.IsRope(j) && (j.connectedBody == c.Body || j.connectedBody.transform.IsChildOf(c.T))) return true;
+                foreach (Joint j in c.Body.GetComponentsInChildren<Joint>())
+                    if (j != null && j.connectedBody != null && !(j is SpringJoint) && !Tow.IsRope(j) && (j.connectedBody == o.Body || j.connectedBody.transform.IsChildOf(o.T))) return true;
+            }
+            return false;
         }
         static int holdLogs;
 
+        // Reprise d'un vehicule attele a un autre (tracteur et plateau repris l'un apres l'autre, l'autre deja physique ici ou encore en
+        // copie) : l'attelage du jeu (CharacterJoint de FLATBED relie au KEKMET, ancrage calcule a l'attelage) avait ete rejoue ici
+        // pendant que la copie de l'autre vehicule etait encore en retard -- ancrage decale (14 m en essai), et au premier pas de
+        // physique 44 a 155 m/s, objets du plateau par terre, attelage qui roule tout seul (Донской 01/11 : invite au volant qui
+        // descend, chez l'hote ; et la prise du volant chez l'invite). Reattele sur les poses actuelles, a la vitesse de l'autre, avant
+        // le premier pas. [Test] AttelageSansAlignement=1 : comme avant.
+        static int hitchAlignLogs;
+        static void AlignHitch(Car c)
+        {
+            if (c.Body == null || c.Body.isKinematic || Config.GetInt("Test", "AttelageSansAlignement", 0) != 0) return;
+            foreach (Car o in cars)
+            {
+                if (o == c || o.Body == null || !o.Body.gameObject.activeInHierarchy) continue;
+                Joint hj = null; Vector3 d = Vector3.zero;
+                foreach (Joint j in c.Body.GetComponentsInChildren<Joint>())
+                    if (j != null && j.connectedBody == o.Body && !(j is SpringJoint) && !Tow.IsRope(j)) { hj = j; d = o.Body.transform.TransformPoint(j.connectedAnchor) - j.transform.TransformPoint(j.anchor); break; }
+                if (hj == null)
+                    foreach (Joint j in o.Body.GetComponentsInChildren<Joint>())
+                        if (j != null && j.connectedBody == c.Body && !(j is SpringJoint) && !Tow.IsRope(j)) { hj = j; d = j.transform.TransformPoint(j.anchor) - c.Body.transform.TransformPoint(j.connectedAnchor); break; }
+                if (hj == null) continue;
+                // (ancrage pris a l'attelage rejoue ici, la copie de l'autre vehicule encore en retard -- jusqu'a 14 m en essai : reattele sur
+                // les poses actuelles, comme le jeu a l'attelage -- SetJointConnectedBody, ancrage recalcule)
+                bool rebound = false;
+                if (Finite(d.x) && Finite(d.y) && Finite(d.z) && d.sqrMagnitude > 0.0025f && hj.autoConfigureConnectedAnchor)
+                {
+                    Rigidbody cb = hj.connectedBody;
+                    hj.connectedBody = null; hj.connectedBody = cb;
+                    rebound = true;
+                }
+                Vector3 ov = o.Body.isKinematic ? o.Vel : o.Body.velocity;   // (l'autre encore en copie, repris juste apres : sa vitesse recue)
+                c.Body.velocity = ov; c.Body.angularVelocity = o.Body.isKinematic ? o.AngVel : o.Body.angularVelocity;
+                c.SettleVel = c.Body.velocity; c.SettleAng = c.Body.angularVelocity;
+                if (hitchAlignLogs++ < 10) Log.Info("voiture " + c.Key + " reprise : attelage a " + o.Key + (rebound ? " reattele sur les poses actuelles (ancrage decale de " + d.magnitude.ToString("F2") + " m)" : " en place") + ", a sa vitesse");
+                return;
+            }
+        }
         // 20 fois/s : la remorque attelee au vehicule qu'on mene (conduit, ou quitte moteur tournant / pousse) -- sauf si un
         // autre la conduit. (Avant : seulement conduit. Conducteur descendu moteur tournant : le tracteur restait a lui, la
         // remorque rendue a l'hote -- deux joueurs tiraient sur l'attelage, remorque projetee, valeurs folles, plantage ;
@@ -1996,6 +2047,7 @@ namespace MWCoop
                         if (rb != c.Body && !rb.isKinematic) { rb.velocity = c.Vel; rb.angularVelocity = c.AngVel; }
                     c.SettleUntil = now0 + 1.5f; c.SettleVel = c.Vel; c.SettleAng = c.AngVel;
                     c.ThawPos = c.Body.position; c.ThawRot = c.Body.rotation; c.GuardUntil = now0 + 4f; c.GuardHits = 0;
+                    AlignHitch(c);
                 }
                 else c.SettleUntil = now0;
                 if (Config.GetInt("Test", "SondeReprise", 0) != 0) Log.Info("voiture " + c.Key + " reprise : " + PartsProbe(c));
