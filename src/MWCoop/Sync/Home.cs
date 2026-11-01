@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -53,7 +53,7 @@ namespace MWCoop
     public static class Home
     {
         const string Mod = "maison";
-        const int K_Fuse = 0, K_Status = 1, K_Brew = 2, K_Lid = 3;
+        const int K_Fuse = 0, K_Status = 1, K_Brew = 2, K_Lid = 3, K_Mount = 8;
         public const int K_FleaPlaced = 6, K_FleaCredit = 7;   // marche aux puces (Wallet)
         const int HK_Blow = 0, HK_Ingredient = 1, HK_Lid = 2, HK_Freeze = 3, HK_Player = 4, HK_LetsSee = 5, HK_CutOff = 6, HK_LightsOff = 7;
 
@@ -103,8 +103,9 @@ namespace MWCoop
             if (!resolved) { resolved = true; Resolve(); }
             TrackHand(now);
             if (now >= nextHookCheck) { nextHookCheck = now + 1f; HookAll(); }
-            if (now >= nextPoll) { nextPoll = now + 0.2f; PollFuses(now); }
-            if (Session.IsHost && now >= nextFull) { nextFull = now + 10f; if (Session.RemoteCount > 0 && holders.Count > 0) SendFuses(holders, true); }
+            if (now >= nextPoll) { nextPoll = now + 0.2f; PollFuses(now); if (MountSync) PollMounts(now); }
+            if (MountSync) MountClicks();
+            if (Session.IsHost && now >= nextFull) { nextFull = now + 10f; if (Session.RemoteCount > 0 && holders.Count > 0) { SendFuses(holders, true); if (MountSync) SendMounts(holders, true); } }
             if (now >= nextStatus) { nextStatus = now + (OldStatus ? 1f : 0.25f); StatusStep(now); }
             if (now >= nextBrew) { nextBrew = now + 0.25f; BrewStep(now); }
             if (jokkeCut)
@@ -130,6 +131,7 @@ namespace MWCoop
 
         static void Resolve()
         {
+            OwnSockets();
             ScanHolders();
             ScanStatus();
             ResolveKilju();
@@ -304,6 +306,7 @@ namespace MWCoop
         {
             public string Key; public PlayMakerFSM F; public FsmInt State; public FsmFloat Tight;
             public int Last, None = 0, Blown = 2; public bool Hooked; public float LocalAt = -100;
+            public string Mount; public float MountLocalAt = -100, MountWaitUntil = -100;   // emplacement (chemin) ou "" : libre ; null : pas encore releve
         }
         static readonly List<Holder> holders = new List<Holder>();
         static readonly Dictionary<string, Holder> holderOf = new Dictionary<string, Holder>();
@@ -321,6 +324,7 @@ namespace MWCoop
                 foreach (Holder x in holders) if (x.F == f) { known = true; break; }
                 if (known || !Game.LocalVar(f, "FuseState")) continue;
                 Own(f);
+                if (MountSync) Own(Game.FsmOn(f.gameObject, "Removal"));
                 FsmString id = f.FsmVariables.FindFsmString("ID");
                 string key = id != null && !string.IsNullOrEmpty(id.Value) ? id.Value : Recon.Path(f.transform);
                 if (holderOf.ContainsKey(key)) key = key + "|" + Recon.Path(f.transform);
@@ -459,6 +463,151 @@ namespace MWCoop
             catch (System.Exception e) { Log.Warn("fusible " + h.Key + " : " + e.Message); }
             finally { Replay.Depth--; applyingHolder = null; h.Last = h.State.Value; }
             Log.Info("fusible " + h.Key + " : " + Name(h, was) + " -> " + Name(h, h.State.Value) + " (" + why + ", etat " + f.ActiveStateName + ")");
+        }
+
+        // ---------------------------------------------------------------- place des porte-fusibles
+        // Porte-fusible demonte (Removal 'Remove part') ou monte dans un emplacement (FuseN 'Assembly' -ASSEMBLE->) : seul l'etat
+        // du fusible a l'interieur etait envoye (FuseState), pas la place du porte-fusible : demonte chez l'un, il restait monte
+        // chez l'autre, et l'inverse ; le monde ne rejouait que l'ASSEMBLE de l'emplacement, sur la piece que CE joueur y voyait
+        // (Донской, 01/11 : « porte-fusibles pas synchronises chez l'invite » ; essai Autotest=portefusibles). Maintenant : place
+        // relevee 5 fois par seconde (Removal 'Trigger' = l'emplacement, eteint quand la piece y est montee) ; un changement ici part
+        // a tous, refait ailleurs par les memes etats du jeu ; l'hote renvoie toutes les places toutes les 10 s. Removal des
+        // porte-fusibles et Assembly des emplacements pris a ce module. [Test] PorteFusiblesAncien=1 : comme avant.
+        static bool MountSync { get { return !Game.Msc && Config.GetInt("Test", "PorteFusiblesAncien", 0) == 0; } }   // (My Summer Car : PartsMsc)
+        static readonly List<KeyValuePair<PlayMakerFSM, int>> mountClicks = new List<KeyValuePair<PlayMakerFSM, int>>();
+        static Holder applyingMount;
+
+        static void OwnSockets()
+        {
+            if (!MountSync) return;
+            int n = 0;
+            foreach (Object o in Game.FsmsNamed("Assembly", 0.5f))
+            {
+                var f = o as PlayMakerFSM;
+                if (f == null || f.hideFlags != HideFlags.None || !f.gameObject.name.StartsWith("Fuse") || f.transform.parent == null || f.transform.parent.name != "Fusetable") continue;
+                Own(f); n++;
+            }
+            Log.Info("maison : " + n + " emplacements de porte-fusibles suivis (montages envoyes par ce module)");
+        }
+
+        static GameObject MountTrigger(Holder h)
+        {
+            PlayMakerFSM rem = h.F != null ? Game.FsmOn(h.F.gameObject, "Removal") : null;
+            FsmGameObject tr = rem != null ? rem.FsmVariables.FindFsmGameObject("Trigger") : null;
+            return tr != null ? tr.Value : null;
+        }
+        static string MountOf(Holder h)
+        {
+            GameObject tr = MountTrigger(h);
+            if (tr == null) return null;
+            return tr.activeSelf ? "" : Recon.Path(tr.transform);
+        }
+        static string Short(string m) { return m == null ? "?" : m.Length == 0 ? "libre" : m.Substring(m.LastIndexOf('/') + 1); }
+
+        static void PollMounts(float now)
+        {
+            List<Holder> changed = null;
+            foreach (Holder h in holders)
+            {
+                if (h.F == null) continue;
+                string cur = MountOf(h);
+                if (cur == null) continue;
+                if (h.Mount == null) { h.Mount = cur; continue; }
+                if (cur == h.Mount) continue;
+                string was = h.Mount;
+                h.Mount = cur;
+                if (applyingMount == h || now < h.MountWaitUntil) continue;   // (montage recu en cours : demonte, puis ASSEMBLE deux images plus tard)
+                h.MountLocalAt = now;
+                if (changed == null) changed = new List<Holder>();
+                changed.Add(h);
+                Log.Info("porte-fusible " + h.Key + " : " + Short(was) + " -> " + Short(cur) + " ici, envoye");
+            }
+            if (changed != null) SendMounts(changed, false);
+        }
+
+        // Home : U8 joueur, U8 K_Mount, Bool complet, U8 n, (Str porte-fusible, Str emplacement ou "") x n.
+        static void SendMounts(List<Holder> list, bool full)
+        {
+            if (Session.IsHost && Session.RemoteCount == 0) return;
+            var send = new List<Holder>();
+            foreach (Holder h in list) if (h.F != null && h.Mount != null && send.Count < 40) send.Add(h);
+            if (send.Count == 0) return;
+            var w = new NetWriter(Msg.Home).U8(Session.LocalId).U8(K_Mount).Bool(full).U8(send.Count);
+            foreach (Holder h in send) w.Str(h.Key).Str(h.Mount);
+            Session.SendAll(w, true);
+        }
+
+        static void OnMounts(int who, NetReader r)
+        {
+            bool full = r.Bool();
+            int n = r.U8();
+            float now = Time.realtimeSinceStartup;
+            for (int i = 0; i < n; i++)
+            {
+                string key = r.Str(), slot = r.Str();
+                Holder h;
+                if (!holderOf.TryGetValue(key, out h) || h.F == null) { if (!full) Log.Warn("porte-fusible " + key + " introuvable ici"); continue; }
+                string cur = MountOf(h);
+                if (cur == null || cur == slot) continue;
+                if (full && (now - h.MountLocalAt < 4f || now < h.MountWaitUntil)) continue;   // (notre propre changement est en route vers l'hote)
+                ApplyMount(h, cur, slot, full ? "place chez l'hote" : "change par #" + who);
+            }
+        }
+
+        // Porte-fusible amene a 'slot' ("" : demonte) par les etats du jeu : Removal 'Remove part', puis, pour un montage, le clic du
+        // joueur (piece au declencheur de l'emplacement, 'Wait for assembly', ASSEMBLE deux images plus tard).
+        static void ApplyMount(Holder h, string cur, string slot, string why)
+        {
+            GameObject part = h.F.gameObject;
+            PlayMakerFSM asm = null; GameObject tr = null;
+            if (slot.Length > 0)
+            {
+                tr = Game.FindAny(slot);
+                asm = tr != null ? Game.FsmOn(tr, "Assembly") : null;
+                if (asm == null) { Log.Warn("porte-fusible " + h.Key + " : emplacement " + slot + " introuvable ici (" + why + ")"); return; }
+                // (emplacement pris ici par un autre porte-fusible : attendu -- l'autre sera demonte par son propre message, ou par la
+                // place renvoyee par l'hote dans 10 s)
+                if (!tr.activeSelf) { Log.Info("porte-fusible " + h.Key + " -> " + Short(slot) + " (" + why + ") : emplacement occupe ici, attendu"); return; }
+            }
+            applyingMount = h;
+            Replay.Depth++;
+            try
+            {
+                if (cur.Length > 0)
+                {
+                    PlayMakerFSM rem = Game.FsmOn(part, "Removal");
+                    if (rem != null) { rem.enabled = true; Game.SetState(rem, "Remove part"); }
+                }
+                if (asm != null)
+                {
+                    Rigidbody rb = part.GetComponent<Rigidbody>();
+                    if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; rb.isKinematic = true; }
+                    part.transform.position = tr.transform.position;
+                    FsmGameObject pv = asm.FsmVariables.FindFsmGameObject("Part");
+                    if (pv != null) pv.Value = part;
+                    FsmState ws = null; foreach (FsmState st in asm.FsmStates) if (st.Name.StartsWith("Wait for assembly")) { ws = st; break; }
+                    if (ws != null) Game.SetState(asm, ws.Name);
+                    mountClicks.Add(new KeyValuePair<PlayMakerFSM, int>(asm, Time.frameCount + 2));
+                    h.MountWaitUntil = Time.realtimeSinceStartup + 1.5f;
+                }
+            }
+            catch (System.Exception e) { Log.Warn("porte-fusible " + h.Key + " : " + e.Message); }
+            finally { Replay.Depth--; applyingMount = null; string m = MountOf(h); if (m != null) h.Mount = m; }
+            Log.Info("porte-fusible " + h.Key + " : " + Short(cur) + " -> " + Short(slot) + " (" + why + ")");
+        }
+
+        static void MountClicks()
+        {
+            for (int i = mountClicks.Count - 1; i >= 0; i--)
+            {
+                if (Time.frameCount < mountClicks[i].Value) continue;
+                PlayMakerFSM asm = mountClicks[i].Key;
+                mountClicks.RemoveAt(i);
+                if (asm == null) continue;
+                Replay.Depth++;
+                try { asm.SendEvent("ASSEMBLE"); } catch (System.Exception e) { Log.Warn("porte-fusible : " + e.Message); }
+                finally { Replay.Depth--; }
+            }
         }
 
         // ---------------------------------------------------------------- coupure (HouseElectricity 'Status')
@@ -739,6 +888,7 @@ namespace MWCoop
             switch (kind)
             {
                 case K_Fuse: OnFuses(who, r); break;
+                case K_Mount: if (MountSync) OnMounts(who, r); break;
                 case K_Status: if (!Session.IsHost) OnStatus(r); break;
                 case K_Brew: OnBrew(who, r); break;
                 case K_Lid: OnLid(who); break;
@@ -771,6 +921,70 @@ namespace MWCoop
             else if (mode == "kilju") TestKilju(t);
             else if (mode == "kiljuremplir") TestFill(t);
             else if (mode == "coupure") TestCut(t);
+            else if (mode == "portefusibles") TestHolders(t);
+        }
+
+        // [Test] Autotest=portefusibles (Донской 01/11 : porte-fusibles pas synchronises chez l'invite) : tableau de l'appartement.
+        // 40 s : l'hote demonte le porte-fusible de Fuse2 ; 46 s : il le remonte (clic de montage) ; 60 s : l'invite demonte celui de
+        // Fuse1 ; 66 s : il le remonte. Chacun note toutes les 4 s de 34 a 86 s ou est chaque porte-fusible de l'appartement.
+        static string thKey1, thKey2; static PlayMakerFSM thClick; static int thClickFrame;
+        static GameObject HolderTrigger(Holder h)
+        {
+            PlayMakerFSM rem = h.F != null ? Game.FsmOn(h.F.gameObject, "Removal") : null;
+            FsmGameObject tr = rem != null ? rem.FsmVariables.FindFsmGameObject("Trigger") : null;
+            return tr != null ? tr.Value : null;
+        }
+        static Holder HolderOn(string slot)
+        {
+            foreach (Holder h in holders) { GameObject tr = HolderTrigger(h); if (tr != null && tr.name == slot && Recon.Path(tr.transform).StartsWith("HOMENEW")) return h; }
+            return null;
+        }
+        static void TestRemove(Holder h)
+        {
+            PlayMakerFSM rem = Game.FsmOn(h.F.gameObject, "Removal");
+            if (rem != null) { rem.enabled = true; Game.SetState(rem, "Remove part"); }
+        }
+        static string TestMount(Holder h)
+        {
+            GameObject tr = HolderTrigger(h);
+            PlayMakerFSM asm = tr != null ? Game.FsmOn(tr, "Assembly") : null;
+            if (asm == null) return "point introuvable";
+            if (!tr.activeInHierarchy) return "point eteint";
+            GameObject part = h.F.gameObject;
+            Rigidbody rb = part.GetComponent<Rigidbody>();
+            if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; rb.isKinematic = true; }
+            part.transform.position = tr.transform.position;
+            asm.FsmVariables.GetFsmGameObject("Part").Value = part;
+            FsmState ws = null; foreach (FsmState s in asm.FsmStates) if (s.Name.StartsWith("Wait for assembly")) { ws = s; break; }
+            if (ws != null) Game.SetState(asm, ws.Name);
+            thClick = asm; thClickFrame = Time.frameCount + 2;
+            return "clic sur " + tr.name + " (" + asm.ActiveStateName + ")";
+        }
+        static void TestHolders(float t)
+        {
+            if (thClick != null && Time.frameCount >= thClickFrame) { thClick.SendEvent("ASSEMBLE"); Log.Info("autotest : portefusibles, ASSEMBLE -> " + thClick.ActiveStateName); thClick = null; }
+            if (Session.IsHost)
+            {
+                if (testStep == 0 && t > Config.GetFloat("Test", "PorteFusibleHote", 40f)) { testStep = 1; Holder h = HolderOn("Fuse2"); thKey1 = h != null ? h.Key : null; if (h != null) TestRemove(h); Log.Info("autotest : portefusibles, hote demonte " + (thKey1 ?? "?")); }
+                if (testStep == 1 && t > Config.GetFloat("Test", "PorteFusibleHote", 40f) + 6f && Config.GetInt("Test", "PorteFusibleRemonter", 1) != 0) { testStep = 2; Holder h; if (thKey1 != null && holderOf.TryGetValue(thKey1, out h)) Log.Info("autotest : portefusibles, hote remonte " + thKey1 + " : " + TestMount(h)); }
+            }
+            else
+            {
+                if (testStep == 0 && t > 60f) { testStep = 1; Holder h = HolderOn("Fuse1"); thKey2 = h != null ? h.Key : null; if (h != null) TestRemove(h); Log.Info("autotest : portefusibles, invite demonte " + (thKey2 ?? "?")); }
+                if (testStep == 1 && t > 66f && Config.GetInt("Test", "PorteFusibleRemonter", 1) != 0) { testStep = 2; Holder h; if (thKey2 != null && holderOf.TryGetValue(thKey2, out h)) Log.Info("autotest : portefusibles, invite remonte " + thKey2 + " : " + TestMount(h)); }
+            }
+            if (t > 34f && t < 97f && Time.realtimeSinceStartup >= testLog)
+            {
+                testLog = Time.realtimeSinceStartup + 4f;
+                var sb = new System.Text.StringBuilder("autotest : portefusibles t=" + t.ToString("F0") + " :");
+                foreach (Holder h in holders)
+                {
+                    GameObject tr = HolderTrigger(h);
+                    if (tr == null || !Recon.Path(tr.transform).StartsWith("HOMENEW")) continue;
+                    sb.Append(' ').Append(h.Key).Append(tr.activeSelf ? " libre(" + tr.name + ")" : "@" + tr.name).Append(" ").Append(h.F.transform.position.ToString("F1")).Append(';');
+                }
+                Log.Info(sb.ToString());
+            }
         }
 
         // [Test] Autotest=coupure : coupures de l'orage, a partir de T = 20 s apres que l'autre est en partie. T : {Blackout} de
