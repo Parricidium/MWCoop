@@ -223,6 +223,7 @@ namespace MWCoop
             jobs.Clear(); hooked.Clear(); reserved.Clear(); classified.Clear(); jobCars.Clear(); waitingJobs.Clear(); waitingSet.Clear();
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
             SewageHose.OnLevelLoaded();
+            Usine.OnLevelLoaded();
             PhoneMsc.OnLevelLoaded();
             RadioMsc.OnLevelLoaded();
             TractsMsc.OnLevelLoaded();
@@ -256,6 +257,7 @@ namespace MWCoop
         public static void Update()
         {
             SewageHose.Update();
+            Usine.Update();
             if (Game.Msc) { PhoneMsc.Update(); TractsMsc.Update(); RadioMsc.Update(); }   // (telephone de MSC : decroche partage, PhoneMsc.cs ; tracts de Teimo)
             if (nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
@@ -2140,6 +2142,7 @@ namespace MWCoop
                 case "@fleetfin": FleetariMsc.OnWorkDone(who, r); break;
                 case "@postcmd": FleetariMsc.OnPost(who, r); break;   // (MSC : commande par la poste payee)
                 case "@postbox": FleetariMsc.OnPostBox(who, r); break;   // (MSC : enveloppe du catalogue postee au magasin)
+                case "@usine": Usine.OnMessage(who, r); break;   // (usine Futufon : caisses des bacs et pieces du travail)
                 case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;
