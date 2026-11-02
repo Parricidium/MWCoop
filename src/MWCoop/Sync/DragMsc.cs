@@ -22,9 +22,10 @@ namespace MWCoop
         static Hashtable table;
         static ArrayList names, cars, speeds;
         static float nextLook, best = float.MaxValue;
+        static string bestCar = "", bestSpeed = "";   // (audit MSC 02/11 : notre meilleur temps, redit aux arrivants par l'hote)
         static bool hooked;
 
-        public static void OnLevelLoaded() { humans.Clear(); results = board = null; table = null; names = cars = speeds = null; nextLook = 0f; hooked = false; best = float.MaxValue; }
+        public static void OnLevelLoaded() { humans.Clear(); results = board = null; table = null; names = cars = speeds = null; nextLook = 0f; hooked = false; best = float.MaxValue; bestCar = bestSpeed = ""; snapshots.Clear(); }
 
         class Hook : ModHook
         {
@@ -68,21 +69,66 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!Session.Active || !PlayerSync.InGame) return;
+            // (My Summer Car seulement, audit MSC 02/11 : sur My Winter Car, DRAGRACE n'existe pas -- Game.FindAny relevait toutes les
+            // racines toutes les 5 s, comme RallyMsc avant sa garde)
+            if (!Game.Msc || !Session.Active || !PlayerSync.InGame) return;
             Find();
+            Snapshots();
         }
 
         // Fin de l'etat 'Leaderboard' de Results : temps du concurrent entre au classement ; le notre -> envoye a tous.
         static void Announce()
         {
-            if (results == null || !Session.Active || Session.RemoteCount == 0) return;
+            if (results == null) return;
             FsmVariables v = results.FsmVariables;
             FsmString nm = v.FindFsmString("Name"), car = v.FindFsmString("Car"), spd = v.FindFsmString("Speed");
             FsmFloat tot = v.FindFsmFloat("TimeOverall");
             FsmString me = FsmVariables.GlobalVariables.FindFsmString("PlayerName");
+            // (audit MSC 02/11 : la copie d'une voiture qu'un autre conduit garde son StagingWheel -- Data.Name = le pseudo de celui
+            // d'ici s'il l'a conduite avant, jamais remis -- et passe les declencheurs de la piste : sa manche etait annoncee sous
+            // notre pseudo. Seule une voiture que personne d'autre ne conduit compte. [Test] DragCopie=0 : comme avant.)
+            FsmGameObject comp = v.FindFsmGameObject("Competitor");
+            if (Config.GetInt("Test", "DragCopie", 1) != 0 && comp != null && comp.Value != null && VehicleSync.RemotelyDriven(comp.Value.transform))
+            {
+                Log.Info("dragsters (MSC) : manche de " + comp.Value.transform.root.name + ", conduite par un autre joueur : pas la notre");
+                return;
+            }
             if (nm == null || tot == null || me == null || nm.Value != me.Value || tot.Value <= 0f || tot.Value >= best) return;
-            best = tot.Value;
-            SendBest(Session.Me != null ? Session.Me.Name : "?", car != null ? car.Value : "", spd != null ? spd.Value : "", best);
+            // (garde meme seul : redit aux arrivants -- avant, un temps fait sans personne n'etait jamais annonce)
+            best = tot.Value; bestCar = car != null ? car.Value : ""; bestSpeed = spd != null ? spd.Value : "";
+            if (!Session.Active || Session.RemoteCount == 0) return;
+            SendBest(Session.Me != null ? Session.Me.Name : "?", bestCar, bestSpeed, best);
+        }
+
+        // Hote : a l'arrivee d'un joueur (PlayerSync.SnapshotAll, 20 s), notre meilleur temps et ceux des autres humains connus (leur
+        // numero en tete, comme s'ils venaient d'eux) -- audit MSC 02/11 : un arrivant (ou un invite revenu) ne voyait les autres
+        // que s'ils battaient leur temps apres son arrivee ; le jeu ne sauve pas ces tables.
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
+        public static void ScheduleSnapshot(Peer p) { if (Session.IsHost && p != null && Game.Msc) snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
+
+        static void Snapshots()
+        {
+            float now = Time.realtimeSinceStartup;
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (now < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value; snapshots.RemoveAt(i);
+                if (!p.Accepted || Session.T == null) continue;
+                int n = 0;
+                if (best < float.MaxValue) { FireTools.SendTo(p, Write(Session.LocalId, Session.Me != null ? Session.Me.Name : "?", bestCar, bestSpeed, best)); n++; }
+                foreach (KeyValuePair<int, Human> kv in humans)
+                {
+                    if (kv.Key == p.Id || kv.Value.Time <= 0f) continue;
+                    FireTools.SendTo(p, Write(kv.Key, kv.Value.Name, kv.Value.Car, kv.Value.Speed, kv.Value.Time));
+                    n++;
+                }
+                if (n > 0) Log.Info("dragsters (MSC) : " + n + " meilleur(s) temps envoye(s) a " + p);
+            }
+        }
+
+        static NetWriter Write(int who, string name, string car, string speed, float time)
+        {
+            return new NetWriter(Msg.Job).U8(who).Str("@dragmsc").Str(name ?? "?").Str(car ?? "").Str(speed ?? "").F32(time);
         }
 
         static void SendBest(string name, string car, string speed, float time)
@@ -95,8 +141,20 @@ namespace MWCoop
         {
             string name = r.Str(), car = r.Str(), speed = r.Str();
             float time = r.F32();
+            if (!Game.Msc) return;
+            // (le notre, renvoye par l'hote apres un rechargement : pas un concurrent de plus, mais le temps a battre pour l'annoncer)
+            // (sous son ancien numero aussi, apres une reconnexion : meme pseudo que le notre)
+            if (who == Session.LocalId || Session.Me != null && name == Session.Me.Name) { if (time > 0f && time < best) best = time; return; }
             Human h;
-            if (!humans.TryGetValue(who, out h)) humans[who] = h = new Human();
+            if (!humans.TryGetValue(who, out h))
+            {
+                // (meme pseudo sous un autre numero : le joueur est revenu -- sa ligne reprise, meme place du classement et meilleur
+                // temps garde ; avant, une deuxieme ligne a son nom)
+                int old = -1;
+                foreach (KeyValuePair<int, Human> kv in humans) if (kv.Value.Name == name) old = kv.Key;
+                if (old >= 0) { h = humans[old]; humans.Remove(old); } else h = new Human();
+                humans[who] = h;
+            }
             if (h.Time > 0f && time >= h.Time) return;   // (seulement un meilleur temps)
             h.Name = name; h.Car = car; h.Speed = speed; h.Time = time;
             Log.Info("dragsters (MSC) : " + name + " (#" + who + ") " + time.ToString("F3") + " s (" + car + ")");
@@ -132,9 +190,13 @@ namespace MWCoop
         // [Test] Autotest=mscdrag (MSC, a deux, piste pas besoin d'etre ouverte) : a 30 s l'invite annonce un faux meilleur temps
         // ([Test] DragTemps, 12.345 par defaut) ; chacun note toutes les 5 s si la piste est suivie, les humains recus et les 12
         // premieres lignes (ResultsNames/ResultsTimes) de son classement.
-        static int tStep, tCap; static float tNext;
+        static int tStep, tCap, tHost; static float tNext;
         public static void Test(float t)
         {
+            // (audit MSC 02/11, [Test] DragHoteTemps=s : l'hote retient a 10 s un faux meilleur temps, comme une manche faite seul
+            // avant l'arrivee de l'invite ; l'invite lance ~60 s plus tard doit le recevoir par ScheduleSnapshot, 20 s apres son arrivee)
+            float ht = Config.GetFloat("Test", "DragHoteTemps", 0f);
+            if (tHost == 0 && t > 10f && Session.IsHost && ht > 0f) { tHost = 1; TestHostBest(ht); }
             // ([Test] DragOuvrir=1 : piste allumee hors du vendredi, pour que 'Leaderboard' tourne ; DRAGRACE/TriggerIn :: Trigger,
             // qui allume et eteint DRAGRACE/LOD au passage du joueur, suspendu)
             if (Config.GetInt("Test", "DragOuvrir", 0) != 0 && t > 15f && t < 120f)
@@ -181,6 +243,24 @@ namespace MWCoop
                     }
             Log.Info(sb.ToString());
         }
+        // Essai : meilleur temps d'ici retenu sans manche (comme Announce, seul : rien d'envoye).
+        public static string TestHostBest(float time)
+        {
+            best = time; bestCar = "Satsuma"; bestSpeed = "150 km/h";
+            string r = "autotest mscdrag : meilleur temps d'ici retenu " + time.ToString("F3") + " s (" + Session.RemoteCount + " autre(s) joueur(s))";
+            Log.Info(r);
+            return r;
+        }
+
+        // Essai (copie, audit MSC 02/11) : le Competitor de Results serait-il annonce ? (voiture conduite par un autre : non)
+        public static string TestCopy(string car)
+        {
+            Transform t = VehicleSync.Body(car) != null ? VehicleSync.Body(car).transform : null;
+            string r = "autotest mscdrag : " + car + (t == null ? " introuvable" : VehicleSync.RemotelyDriven(t) ? " conduite par un autre : manche pas annoncee ici" : " pas conduite par un autre : manche annoncee si elle porte notre pseudo");
+            Log.Info(r);
+            return r;
+        }
+
         static string humains()
         {
             var sb = new System.Text.StringBuilder();

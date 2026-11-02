@@ -295,6 +295,7 @@ namespace MWCoop
             TaxiCustomer.ScheduleSnapshot(p); k++;   // client du taxi : automates et apparence (20 s)
             Fires.ScheduleSnapshot(p); Cooking.ScheduleSnapshot(p); Frost.ScheduleSnapshot(p); k += 3;   // feux, cuisson, givre (25-28 s, comme a l'arrivee)
             Markers.ScheduleSnapshot(p); k++;        // marqueurs partages poses avant son arrivee (20 s)
+            if (Game.Msc) { RallyMsc.ScheduleSnapshot(p); DragMsc.ScheduleSnapshot(p); k += 2; }   // temps des humains au rallye et aux dragsters (audit MSC 02/11 ; 20 s)
             // A tous les invites (pas de destinataire) : boutons du vendeur du rallye vendus et saucisse en attente au kiosque
             // (ecart n14), pose des objets au repos, equipements de la 300D et bagages du taxi (revue du 14/10 : jamais redits a
             // celui qui arrive), tables des cles courtes des particules et des sons.
