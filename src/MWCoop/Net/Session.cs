@@ -96,6 +96,10 @@ namespace MWCoop.Net
             try
             {
                 T = NewTransport();
+                // Numeros des invites recycles dans 1..255 (audit MSC 02/11, Transport.FreeId) ; [Test] PremierNumero=N : premier
+                // numero donne (essai du passage de 255 a 1).
+                T.RecycleIds = Config.GetInt("Test", "NumerosRecycles", 1) != 0;
+                T.FirstId(Config.GetInt("Test", "PremierNumero", 0));
                 if (Steam) { T.Host(new SteamLink(true)); SteamNet.Host(); }
                 else T.Host(port);
                 Active = IsHost = true;
@@ -196,9 +200,13 @@ namespace MWCoop.Net
         // de 15 s de silence, l'invite au menu le tenait pour parti et se reconnectait (essais chaos, 27/10 : un chargement
         // de 24 s). Prevenu juste avant, il tolere le silence (Transport.Grace), comme l'hote le fait pour un invite qui charge.
         public const int LoadingGrace = 60;
+        static int loadingFrame = -1;
         public static void AnnounceLoading()
         {
             if (!Active || !IsHost || T == null || RemoteCount == 0) return;
+            // (Flow l'annonce puis force l'etat du bouton, ou l'accroche du bouton l'annonce aussi : une fois par image)
+            if (Time.frameCount == loadingFrame) return;
+            loadingFrame = Time.frameCount;
             Broadcast(new NetWriter(Msg.Loading).U8(LoadingGrace), true);
             T.Flush();
             Log.Info("hote : chargement annonce aux invites (silence tolere " + LoadingGrace + " s)");
@@ -228,7 +236,8 @@ namespace MWCoop.Net
             Players[LocalId] = Me;
             Status = "connecte a " + address;
             Log.Info("accepte par l'hote, numero " + LocalId);
-            SendToHost(new NetWriter(Msg.Hello).Str(Me.Name).Str(Me.Skin).Str(Game.ModVersion).Str(SteamNet.MyId.ToString()), true);
+            // (U8 a la fin : deja en jeu -- reconnexion sans quitter la partie --, lu par OnHello si present)
+            SendToHost(new NetWriter(Msg.Hello).Str(Me.Name).Str(Me.Skin).Str(Game.ModVersion).Str(SteamNet.MyId.ToString()).U8(PlayerSync.InGame ? 1 : 0), true);
         }
 
         static void Disconnected(Peer p, string reason)
@@ -364,6 +373,7 @@ namespace MWCoop.Net
             string ver = r.Str();
             ulong sid;
             if (r.More && ulong.TryParse(r.Str(), out sid)) pi.SteamId = sid;
+            int lvl = r.More ? r.U8() : 0;
             if (from.End is ulong) pi.SteamId = (ulong)from.End;   // (Steam : l'adresse meme du pair)
             Log.Info("bonjour de " + pi.Name + " (#" + pi.Id + ", MWCoop " + ver + ", apparence " + pi.Skin + ")");
             if (ver != Game.ModVersion)
@@ -374,7 +384,29 @@ namespace MWCoop.Net
             }
             Hud.Toast(pi.Name + Lang.T(" a rejoint la partie", " joined the game"));
             SendRoster();
+            if (SkipSaveOnRejoin(pi, lvl)) return;
             SaveTransfer.Queue(from);
+        }
+
+        // Invite reconnecte sans avoir quitte la partie (coupure > 15 s, pair remplace), l'hote en jeu : la sauvegarde envoyee
+        // n'aurait jamais ete chargee (Flow n'agit qu'au menu), mais l'hote figeait tout le monde (K_PAUSE, sauvegarde en
+        // place) et lui laissait 120 s de silence (LoadGrace) -- audit MSC 02/11. Pas d'envoi : son premier etat de niveau 1
+        // (PlayerSync.OnState, pi.Level encore 0) refait l'etat complet (SnapshotAll) ; revenu au menu plus tard, il redemande
+        // la sauvegarde (K_NEED), et l'hote revenu en jeu la renvoie a tous. [Test] ReconnexionSansSauvegarde=0 : comme avant
+        // (My Winter Car : 0 par defaut, meme chemin, a verifier avant).
+        static bool SkipSaveOnRejoin(PlayerInfo pi, int lvl)
+        {
+            if (lvl != 1 || !PlayerSync.InGame) return false;
+            if (Config.GetInt("Test", "ReconnexionSansSauvegarde", Game.Msc ? 1 : 0) == 0) return false;
+            Log.Info("sauvegarde : " + pi.Name + " (#" + pi.Id + ") deja en jeu (reconnexion), pas d'envoi : resynchronisation a son premier etat");
+            return true;
+        }
+
+        // Essai (audit MSC 02/11) : ce que l'hote ferait d'un Hello de niveau 'lvl' maintenant.
+        public static string TestReconnexion(int lvl)
+        {
+            var pi = new PlayerInfo { Id = 99, Name = "essai" };
+            return "reconnexion : niveau " + lvl + ", hote " + (PlayerSync.InGame ? "en jeu" : "au menu") + " -> " + (SkipSaveOnRejoin(pi, lvl) ? "pas d'envoi" : "sauvegarde en file");
         }
 
         // Pseudo/apparence changes en cours de partie : l'invite previent l'hote, qui renvoie la liste.

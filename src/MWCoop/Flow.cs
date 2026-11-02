@@ -75,6 +75,7 @@ namespace MWCoop
         static void Menu()
         {
             if (menuSince < 0) menuSince = Time.realtimeSinceStartup;
+            HookMenuButtons();
             if (pending == null) pending = Decide();
             if (pending == null || Time.realtimeSinceStartup - menuSince < 2f) return;
             if (Contenu.MenuBusy) return;   // (import des musiques en cours : CD vides = CD absents de la partie)
@@ -106,6 +107,53 @@ namespace MWCoop
             if (Config.GetInt("Test", "Continuer", 0) != 0 && HasSave()) return "continuer";
             if (Config.GetInt("Test", "NouvellePartie", 0) != 0 || Config.GetInt("Test", "Continuer", 0) != 0) return "nouvelle";
             return null;
+        }
+
+        // Hote qui clique LUI-MEME Continuer ou Commencer (apres « sauver et quitter », invites revenus au menu avec lui) :
+        // seul Flow annoncait le chargement, et 20 a 40 s de chargement sans un paquet faisaient croire aux invites l'hote
+        // parti (« delai depasse », transport recree, nouveau numero) -- audit MSC 02/11. Une action en tete des etats de
+        // chargement des deux boutons l'annonce, clic a la main ou force par Flow (AnnounceLoading : une fois par image).
+        // Accrochee quand le bouton est actif et son automate initialise (ButtonBegin n'apparait qu'avec le nom saisi).
+        // [Test] AnnonceChargementMenu=0 : comme avant (My Winter Car : 0 par defaut, memes boutons, a verifier avant).
+        static PlayMakerFSM hookedCont, hookedBegin;
+
+        class LoadingHook : ModHook
+        {
+            public override string Module { get { return "Flow"; } }
+            public override void OnEnter()
+            {
+                try { Session.AnnounceLoading(); }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static void HookMenuButtons()
+        {
+            if (!Session.Active || !Session.IsHost) return;
+            if (Config.GetInt("Test", "AnnonceChargementMenu", Game.Msc ? 1 : 0) == 0) return;
+            HookButton("Interface/Buttons/ButtonContinue", "Reset globals 2", ref hookedCont);
+            HookButton("Licence/Buttons/ButtonBegin", "State 2", ref hookedBegin);
+        }
+
+        static void HookButton(string path, string state, ref PlayMakerFSM done)
+        {
+            GameObject go = Game.FindAny(path);
+            if (go == null || !go.activeInHierarchy) return;
+            PlayMakerFSM f = Game.FsmOn(go, "SetSize");
+            if (f == null || f == done || !f.Fsm.Initialized) return;
+            HutongGames.PlayMaker.FsmState s = f.Fsm.GetState(state);
+            done = f;   // (une fois par bouton et par menu charge : le menu suivant a d'autres objets)
+            if (s == null) { Log.Warn("menu : etat '" + state + "' absent de " + path + "::SetSize, chargement non annonce au clic"); return; }
+            FsmHooks.Prepend(s, new LoadingHook());
+            Log.Info("menu : chargement annonce aux invites au clic de " + go.name);
+        }
+
+        // Essai (audit MSC 02/11) : boutons accroches dans ce menu.
+        public static string TestMenuHooks()
+        {
+            HookMenuButtons();
+            return "menu : continuer " + (hookedCont != null ? "accroche" : "non accroche") + ", commencer " + (hookedBegin != null ? "accroche" : "non accroche");
         }
 
         static bool HasSave()

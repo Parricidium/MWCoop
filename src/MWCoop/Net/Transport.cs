@@ -51,6 +51,49 @@ namespace MWCoop.Net
         public int NetVersion;
         public int LocalId;   // invite : numero donne par l'hote (l'hote est 0)
         int nextId = 1;
+        // Numeros recycles (audit MSC 02/11 : nextId++ sans fin ; chaque reconnexion -- coupure, pair remplace, invite d'une
+        // autre version exclu puis revenu toutes les 3 s sur un port neuf -- prenait un numero, et le 256e, ecrit sur un octet
+        // (Roster, U8(from.Id) des modules), valait 0 : les autres le prenaient pour l'hote). Tourniquet 1..255 a partir de
+        // nextId, sans un numero porte par un pair present ; aucun libre : refuse. [Test] NumerosRecycles=0 : comme avant.
+        public bool RecycleIds = true;
+        public void FirstId(int id) { if (id > 0) nextId = id; }   // ([Test] PremierNumero : essai du passage de 255 a 1)
+
+        int FreeId()
+        {
+            if (!RecycleIds) return nextId++;
+            for (int k = 0; k < 255; k++)
+            {
+                int id = (Math.Max(nextId, 1) - 1 + k) % 255 + 1;
+                bool used = false;
+                foreach (Peer q in Peers) if (q.Id == id) { used = true; break; }
+                if (used) continue;
+                nextId = id % 255 + 1;   // (le suivant : un numero qui vient de se liberer n'est pas redonne tout de suite)
+                return id;
+            }
+            return -1;
+        }
+
+        // Essai hors jeu (sans lien) : 'cycles' arrivees et departs au hasard, au plus 'active' pairs a la fois, a partir du
+        // numero 'first'. Rend « numeros OK ... » ou la premiere faute (numero hors 1..255, doublon parmi les presents).
+        public static string TestNumeros(int cycles, int active, int first)
+        {
+            var t = new Transport { IsHost = true };
+            t.FirstId(first);
+            var r = new Random(1234);
+            int max = 0, refused = 0;
+            for (int i = 0; i < cycles; i++)
+            {
+                if (t.Peers.Count >= active || (t.Peers.Count > 0 && r.Next(3) == 0)) t.Peers.RemoveAt(r.Next(t.Peers.Count));
+                int id = t.FreeId();
+                if (id < 0) { refused++; continue; }
+                if (id < 1 || id > 255) return "numeros FAUX : " + id + " au cycle " + i;
+                foreach (Peer q in t.Peers) if (q.Id == id) return "numeros FAUX : doublon " + id + " au cycle " + i;
+                t.Peers.Add(new Peer { Id = id });
+                if (id > max) max = id;
+            }
+            return "numeros OK : " + cycles + " arrivees, plus grand " + max + ", refus " + refused + ", presents " + t.Peers.Count;
+        }
+
         public float Now;
         public long BytesIn, BytesOut;
         // Jeton de session (relecture du 15/10, #2) : un invite qui recree son transport (hote fige > 15 s, Steam) garde
@@ -342,7 +385,12 @@ namespace MWCoop.Net
                 if (p != null && tok != p.Token) { DropPeer(p, "pair remplace", false); p = null; }
                 // Meme processus a une autre adresse (reconnexion en IP, port ephemere neuf) : l'ancien pair part tout de suite.
                 if (inst != 0) foreach (Peer q in Peers.ToArray()) if (q != p && q.Instance == inst) DropPeer(q, "pair remplace (nouvelle adresse)");
-                if (p == null) { p = AddPeer(ep); p.Id = nextId++; p.Token = tok; p.Instance = inst; }
+                if (p == null)
+                {
+                    int id = FreeId();
+                    if (id < 0) { SendRawTo(ep, Build(T_REJECT, System.Text.Encoding.UTF8.GetBytes("partie pleine"))); return; }
+                    p = AddPeer(ep); p.Id = id; p.Token = tok; p.Instance = inst;
+                }
                 p.LastHeard = Now;
                 SendRaw(p, Build(T_ACCEPT, BitConverter.GetBytes(p.Id)));
                 if (!p.Accepted) { p.Accepted = true; if (OnConnected != null) OnConnected(p); }
