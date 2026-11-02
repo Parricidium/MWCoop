@@ -177,9 +177,15 @@ namespace MWCoop
         // allumee prend Systems/TV/TVPrograms sous elle). On cherche alors par le nom de l'objet et de
         // l'automate, s'il est unique.
         static readonly Dictionary<string, W> alias = new Dictionary<string, W>();
+        // (audit MSC 02/11 : jamais d'alias quand l'automate de la cle existe ici mais n'est pas encore accroche -- objet inactif, en
+        // attente. La porte du magasin ou du bar, la station d'epuration (STORE/LOD/DoorStore/TriggerIn::Trigger#0...), loin d'ici,
+        // tombaient sur DRAGRACE/TriggerIn, seul « TriggerIn::Trigger#0 » accroche : sa Distance ecrasee, ses GetDistance coupes.
+        // L'automate s'accrochera quand son LOD s'allumera. La tele, dont la cle n'existe nulle part ici, garde son alias.)
         static bool Lookup(string key, out W j)
         {
             if (byKey.TryGetValue(key, out j)) return true;
+            if (aliasStrict)
+                foreach (W p in pending) if (p.Key == key) { j = null; return false; }
             if (alias.TryGetValue(key, out j) && j.F != null) return true;
             string tail = key.Substring(key.LastIndexOf('/') + 1);
             W found = null;
@@ -304,11 +310,46 @@ namespace MWCoop
             worldLogic.Clear();   // (automates de la partie d'avant gardes en cle : fuite, relecture du 15/10)
             tvAuthor = -1; tvSchedule = null; tvSentOn = false; scanIdx = -1; scanRoots = null; rootsDirty = true; npcLeft = npcLogged = 0;
             triggers = Config.GetInt("Test", "SansDeclencheurs", 0) == 0; trigSent = trigRecv = 0;   // ([Test] SansDeclencheurs=1 : essais A/B, comme avant)
+            // (audit MSC 02/11 : voir Skip, SharedKey et Lookup -- [Test] <Nom>=0 : comme avant)
+            fraisesPerso = Config.GetInt("Test", "FraisesPerso", 1) != 0;
+            dragPerso = Config.GetInt("Test", "DragPerso", 1) != 0;
+            pcPerso = Config.GetInt("Test", "OrdinateurPerso", 1) != 0;
+            clesPartagees = Config.GetInt("Test", "ClesPartagees", 1) != 0;
+            aliasStrict = Config.GetInt("Test", "AliasStrict", 1) != 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
 
         public static void ScheduleSnapshot(Peer p) { snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 22f, p)); }
+
+        static bool fraisesPerso = true, dragPerso = true, pcPerso = true, clesPartagees = true, aliasStrict = true;
+
+        // My Summer Car (audit MSC 02/11) : automates du monde laisses a chacun.
+        //  - Champ de fraises (JOBS/StrawberryField : PickABox, BerryTrigger, DropABox, Money, tous 'Pick' ; caisses berry box(Clone)::Use) :
+        //    prendre une caisse ('State 1' : CreateObject) etait rejoue chez l'autre -- une 2e caisse apparaissait chez lui, son PickABox se
+        //    coupait et pointait sur cette caisse fantome, ses propres cueillettes armaient la mauvaise caisse ; la paie en attente (Money)
+        //    de l'autre etait ecrasee. Chacun prend sa caisse, cueille, livre et touche ses 40 mk chez lui (la caisse portee reste vue par Props).
+        //  - Piste de dragsters (DRAGRACE) : TriggerIn::Trigger bascule DRAGRACE/LOD a chaque passage du joueur -- rejoue, la piste s'eteignait
+        //    chez celui qui y etait quand l'autre repartait. Chrono, sapin, voies et classement (DragTiming/...) et dragsters de l'IA
+        //    (Drag1|2/dragcar*) etaient rejoues sans le concurrent (objets nuls) : faux depart sur la voie de l'autre, ligne fausse au
+        //    classement. Chacun fait tourner sa piste ; les temps des autres arrivent par DragMsc (@dragmsc). Le signaleur reste suivi.
+        //  - Ordinateur de la chambre (YARD/Building/BEDROOM1/COMPUTER : racine YARD, pas COMPUTER comme sur MWC) : frappes, jeux et
+        //    BBS (COMPUTER/SYSTEM/...) et place devant le PC (Computer/TriggerPlayMode) rejoues dans le PC de l'autre (commande tapee chez
+        //    lui, succes, facture du BBS). A chacun le sien, comme sur MWC ; la pose du PC (TriggersAssembly) et ses boutons (alimentation,
+        //    reset, lecteur) restent rejoues.
+        static bool MscPersonal(PlayMakerFSM f, Transform root, string n)
+        {
+            if (fraisesPerso && n.StartsWith("berry box")) return true;
+            if (dragPerso && root.name == "DRAGRACE" && n == "TriggerIn" && f.FsmName == "Trigger") return true;
+            for (Transform p = f.transform; p != null; p = p.parent)
+            {
+                string pn = p.name;
+                if (fraisesPerso && f.FsmName == "Pick" && pn == "StrawberryField" && root.name == "JOBS") return true;
+                if (dragPerso && root.name == "DRAGRACE" && (pn == "DragTiming" || pn.StartsWith("dragcar", System.StringComparison.Ordinal))) return true;
+                if (pcPerso && p.parent != null && (pn == "SYSTEM" && p.parent.name == "COMPUTER" || pn == "TriggerPlayMode" && p.parent.name == "Computer")) return true;
+            }
+            return false;
+        }
 
         // ---------------------------------------------------------------- choix des automates
         static bool Skip(PlayMakerFSM f)
@@ -337,6 +378,7 @@ namespace MWCoop
                 string pn = p.name;
                 foreach (string s in SkipParents) if (pn.StartsWith(s, System.StringComparison.Ordinal)) return true;
             }
+            if (Game.Msc && MscPersonal(f, root, n)) return true;                        // fraises, dragsters, ordinateur : a chacun (audit MSC 02/11)
             if (f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) return true;  // pieces : Parts
             if (n.StartsWith("VINP")) return true;                                       // points de montage : Parts
             if (Interactions.Tracks(f) || Interactions.Wants(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
@@ -746,7 +788,7 @@ namespace MWCoop
                             var nv = fi.GetValue(a) as NamedVariable;
                             // (Booleens aussi : PlayerHandRight mis a vrai par le pistolet de la pompe rejoue laissait la main de
                             // l'invite « occupee » : plus de coup de poing ni de cigarette, vraie partie du 05/10.)
-                            if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && (nv is FsmFloat || nv is FsmInt || nv is FsmBool) && !Game.LocalVar(j.F, nv.Name))
+                            if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && (nv is FsmFloat || nv is FsmInt || nv is FsmBool) && !Game.LocalVar(j.F, nv.Name) && !SharedKey(nv.Name))
                             { j.Writes.Add(a); break; }
                         }
                     }
@@ -916,11 +958,22 @@ namespace MWCoop
 
         // Argent et corps du joueur local : notes avant un rejeu, remis apres.
         class Personal { public List<KeyValuePair<FsmFloat, float>> F = new List<KeyValuePair<FsmFloat, float>>(); public List<KeyValuePair<FsmInt, int>> I = new List<KeyValuePair<FsmInt, int>>(); public List<KeyValuePair<FsmBool, bool>> B = new List<KeyValuePair<FsmBool, bool>>(); }
+
+        // Cles des vehicules partages de My Summer Car (audit MSC 02/11) : GIFU et HAYOSIKO (prises chez l'oncle : YARD/UNCLE/Home/GifuKeys,
+        // VanKeys), RUSCKO. Globales Player* comme l'argent : le rejeu coupait leur SetIntValue (MuteWrites) puis les remettait (RestorePersonal)
+        // -- l'objet cles detruit chez l'autre, ses cles restees a 0 : son contact retombait sur NOKEY, plus moyen de demarrer le camion
+        // jusqu'au chargement suivant. Elles suivent maintenant le rejeu. PlayerKeyHome, PlayerKeySatsuma et PlayerKeyFerndale (pret de
+        // Fleetari a celui qui paie) restent a chacun. [Test] ClesPartagees=0 : comme avant. (Aussi Jobs.SavePersonal.)
+        public static bool SharedKey(string n)
+        {
+            return clesPartagees && Game.Msc && (n == "PlayerKeyGifu" || n == "PlayerKeyHayosiko" || n == "PlayerKeyRuscko");
+        }
+
         static Personal SavePersonal()
         {
             var p = new Personal();
             foreach (FsmFloat x in FsmVariables.GlobalVariables.FloatVariables) if (x.Name.StartsWith("Player")) p.F.Add(new KeyValuePair<FsmFloat, float>(x, x.Value));
-            foreach (FsmInt x in FsmVariables.GlobalVariables.IntVariables) if (x.Name.StartsWith("Player")) p.I.Add(new KeyValuePair<FsmInt, int>(x, x.Value));
+            foreach (FsmInt x in FsmVariables.GlobalVariables.IntVariables) if (x.Name.StartsWith("Player") && !SharedKey(x.Name)) p.I.Add(new KeyValuePair<FsmInt, int>(x, x.Value));
             foreach (FsmBool x in FsmVariables.GlobalVariables.BoolVariables) if (x.Name.StartsWith("PlayerHand")) p.B.Add(new KeyValuePair<FsmBool, bool>(x, x.Value));
             return p;
         }
@@ -963,6 +1016,13 @@ namespace MWCoop
             if (!Lookup(key, out j) || j.F == null)
             {
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("monde : " + key + " introuvable ici"); }
+                return;
+            }
+            // Automate trouve par alias qui n'a ni l'etat de depart ni l'etat d'arrivee : ce n'est pas le meme, aucune variable
+            // etrangere n'y est ecrite (audit MSC 02/11 ; [Test] AliasStrict=0 : comme avant).
+            if (aliasStrict && j.Key != key && j.F.Fsm.GetState(state) == null && (prev.Length == 0 || j.F.Fsm.GetState(prev) == null))
+            {
+                if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("monde : " + key + " pris pour " + j.Key + " ici, mais ses etats n'y sont pas : ignore"); }
                 return;
             }
             // Tele : seul l'auteur compte, variables ET etat (avant, les variables de l'hote ecrasaient toujours la grille).
@@ -1329,6 +1389,34 @@ namespace MWCoop
                     return j.Key + " : " + before + " => " + j.F.ActiveStateName;
                 }
             return "rien pour " + part;
+        }
+
+        // Essais (audit MSC 02/11) : l'automate 'fsm' de l'objet 'path' est-il suivi ici, ecarte par Skip, ou en attente ?
+        // (fraises : JOBS/StrawberryField/LOD/Functions/PickABox Pick ; dragsters : DRAGRACE/TriggerIn Trigger,
+        // DRAGRACE/LOD/DRAGSTRIP/DragTiming/LaneLeft/Stageline2left Staging ; ordinateur : .../COMPUTER/SYSTEM/POS/CommandPrompt Typer)
+        public static string TestSkip(string path, string fsm)
+        {
+            GameObject go = Game.FindAny(path);
+            if (go == null) return path + " introuvable";
+            PlayMakerFSM f = Game.FsmOn(go, fsm);
+            if (f == null) return path + "::" + fsm + " : pas d'automate";
+            bool skip;
+            try { skip = Skip(f); } catch (System.Exception e) { return path + "::" + fsm + " : " + e.GetType().Name; }
+            bool waiting = false; foreach (W p in pending) if (p.F == f) { waiting = true; break; }
+            return path + "::" + fsm + " : " + (hooked.Contains(f) ? "suivi" : waiting ? "en attente" : "non suivi") + (skip ? ", ecarte (Skip)" : ", pas ecarte") + (Replay.Owner(f) != null ? " (a " + Replay.Owner(f) + ")" : "");
+        }
+
+        // Essais (audit MSC 02/11, cles des vehicules) : valeurs des cles partagees et presence de l'objet cles de l'oncle.
+        public static string Keys()
+        {
+            var sb = new System.Text.StringBuilder("cles :");
+            foreach (string n in new[] { "PlayerKeyGifu", "PlayerKeyHayosiko", "PlayerKeyRuscko", "PlayerKeyFerndale", "PlayerKeyHome" })
+            {
+                FsmInt x = FsmVariables.GlobalVariables.FindFsmInt(n);
+                sb.Append(' ').Append(n).Append('=').Append(x != null ? x.Value.ToString() : "?").Append(SharedKey(n) ? "(partagee)" : "");
+            }
+            sb.Append(", GifuKeys ").Append(Game.FindAny("YARD/UNCLE/Home/GifuKeys") != null ? "present" : "absent");
+            return sb.ToString();
         }
 
         // Essais (declencheur) : etat courant du premier automate suivi dont la cle contient 'part'.

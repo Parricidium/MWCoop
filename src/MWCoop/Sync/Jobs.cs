@@ -93,6 +93,7 @@ namespace MWCoop
             public HashSet<string> Entered = new HashSet<string>();
             public HashSet<string> RandomStates = new HashSet<string>();                     // etats qui tirent au sort
             public HashSet<string> ClickStates = new HashSet<string>();                      // etats qui attendent un clic
+            public HashSet<string> HeldStates = new HashSet<string>();                       // MSC, 'Screw' : etats tenus (GetMouseButtonUp), voir OnLocal
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();  // transitions prises ici
             public bool FromReplay;                                                          // cle : derniere position recue d'un autre
             public HashSet<string> InputStates = new HashSet<string>();                      // etats qui lisent la souris ou le clavier
@@ -447,6 +448,7 @@ namespace MWCoop
                         string tn = a.GetType().Name;
                         if (RandomActions.Contains(tn)) j.RandomStates.Add(s.Name);
                         if (ClickActions.Contains(tn)) j.ClickStates.Add(s.Name);
+                        if (tn == "GetMouseButtonUp" && Game.Msc && j.F.FsmName == "Screw") j.HeldStates.Add(s.Name);
                         foreach (string p in InputActions) if (tn.StartsWith(p)) j.InputStates.Add(s.Name);
                         bool keyA = tn.StartsWith("GetButton") || tn.StartsWith("GetKey"), mouseA = tn.StartsWith("MousePick") || tn.StartsWith("GetMouse");
                         if (keyA) j.KeyStates.Add(s.Name);
@@ -496,6 +498,11 @@ namespace MWCoop
             if (j.Kind == K_IGNITION) { OnIgnition(j, from, tr.EventName, state); return; }
             // Clic rendu par FINISHED (boite a gants : "Mouse over 1" -FINISHED-> "Open door") : une vraie action.
             bool click = tr.EventName == "FINISHED" && j.Control && from != null && j.ClickStates.Contains(from.Name) && (state == "Open door" || state == "Close door");
+            // Etat tenu qui se relache par FINISHED (MSC, tringlerie d'accelerateur du carbu : throttle linkage(xxxxx)::Screw, 'Screw' met
+            // idlethrottle et throttle a 1 a chaque image tant que le clic est tenu, -FINISHED-> 'Get scroll' au relachement ou a plus de 2 m) :
+            // l'entree partait, jamais la sortie -- chez l'autre l'automate restait dans 'Screw', moteur a fond jusqu'a ce qu'il clique ou
+            // s'eloigne (surregime, coussinets). Le relachement part aussi (audit MSC 02/11 ; [Test] TenuRelache=0 : comme avant).
+            if (!click && tr.EventName == "FINISHED" && j.Control && from != null && j.HeldStates.Contains(from.Name) && HeldRelease()) click = true;
             if (Ignore.Contains(tr.EventName) && !click) return;
             if (j.Control && DoorEvents.Contains(tr.EventName)) return;   // (lumiere de l'habitacle : la portiere rejouee la mene deja chez les autres)
             if (!j.Control && Npcs.LedElsewhere(j.F.transform)) return;   // PNJ mene par un autre joueur (client du taxi) : sa logique fait foi
@@ -567,6 +574,13 @@ namespace MWCoop
                 if (again) return;
             }
             Send(j, from != null ? from.Name : null, tr.EventName, state);
+        }
+
+        static int heldRelease = -1;
+        static bool HeldRelease()
+        {
+            if (heldRelease < 0) heldRelease = Config.GetInt("Test", "TenuRelache", 1);
+            return heldRelease != 0;
         }
 
         // Transition menee par une touche : depuis un etat qui lit une touche sans viser a la souris, ou dont l'evenement vient
@@ -882,8 +896,20 @@ namespace MWCoop
         {
             return f != null && f.FsmName == FactoryFsm && f.gameObject.name == "FACTORY" && f.transform.parent != null && f.transform.parent.name == "JOBS" && f.transform.parent.parent == null;
         }
+        // Tracts de Teimo (MSC, JOBS/TeimoADs::Data) : Delivered n'est compte que par TractsMsc (@tract, une boite = +1). Recopie ici avec
+        // l'etat ('Wait player' -JOB-> 'Activate pay', Delivered deja a 1), puis +1 encore a l'arrivee du @tract de la meme boite : 2 pour un
+        // tract pose chez l'autre, 25 mk de trop a la paie (audit MSC 02/11). Ni envoye ni recopie ; JobAccepted et l'etat restent
+        // partages. [Test] TractsCompteSeul=0 : comme avant.
+        static readonly HashSet<string> tractsOwnSet = new HashSet<string> { "Delivered" };
+        static int tractsOwn = -1;
+        static bool IsTractsData(PlayMakerFSM f)
+        {
+            if (!Game.Msc || f == null || f.FsmName != "Data" || f.gameObject.name != "TeimoADs") return false;
+            if (tractsOwn < 0) tractsOwn = Config.GetInt("Test", "TractsCompteSeul", 1);
+            return tractsOwn != 0;
+        }
         // Variables de cet automate qui restent a chacun (null : aucune).
-        static HashSet<string> OwnVars(PlayMakerFSM f) { return IsFactoryData(f) ? factoryOwnSet : null; }
+        static HashSet<string> OwnVars(PlayMakerFSM f) { return IsFactoryData(f) ? factoryOwnSet : IsTractsData(f) ? tractsOwnSet : null; }
 
         static bool StateIn(Dictionary<string, string[]> table, Job j, string prev, string state)
         {
@@ -910,7 +936,7 @@ namespace MWCoop
         {
             var p = new Personal();
             foreach (FsmFloat x in FsmVariables.GlobalVariables.FloatVariables) if (x.Name.StartsWith("Player") && !Money(x.Name)) p.F.Add(new KeyValuePair<FsmFloat, float>(x, x.Value));
-            foreach (FsmInt x in FsmVariables.GlobalVariables.IntVariables) if (x.Name.StartsWith("Player")) p.I.Add(new KeyValuePair<FsmInt, int>(x, x.Value));
+            foreach (FsmInt x in FsmVariables.GlobalVariables.IntVariables) if (x.Name.StartsWith("Player") && !WorldFsms.SharedKey(x.Name)) p.I.Add(new KeyValuePair<FsmInt, int>(x, x.Value));   // (cles GIFU/HAYOSIKO/RUSCKO : partagees, audit MSC 02/11)
             foreach (FsmBool x in FsmVariables.GlobalVariables.BoolVariables) if (x.Name.StartsWith("PlayerHand")) p.B.Add(new KeyValuePair<FsmBool, bool>(x, x.Value));
             return p;
         }
@@ -1136,6 +1162,24 @@ namespace MWCoop
                     try { Game.SetState(j.F, state); } finally { applying = false; Replay.Depth--; }
                     Session.SendAll(w, true);
                     return j.Key + " " + prev + " -" + ev + "-> " + state + " envoye";
+                }
+            return "rien pour " + part;
+        }
+
+        // Essais (audit MSC 02/11, etat tenu) : la commande 'part' (tringlerie : "throttle linkage") posee dans 'held' sans envoi, puis
+        // relachee ici comme par le jeu (-FINISHED->) : le crochet l'envoie si c'est un etat tenu (journal « quete : ... Screw -FINISHED->
+        // Get scroll » ici, « quete de #N : ... -> Get scroll » chez les autres). Retour : etats tenus et etat atteint.
+        public static string TestHeld(string part, string held)
+        {
+            foreach (Job j in jobs.Values)
+                if (j.F != null && j.Key.Contains(part))
+                {
+                    if (j.F.Fsm.GetState(held) == null) return j.Key + " : pas d'etat " + held;
+                    applying = true; Replay.Depth++;
+                    try { Game.SetState(j.F, held); } finally { applying = false; Replay.Depth--; }
+                    string at = j.F.ActiveStateName;
+                    j.F.SendEvent("FINISHED");
+                    return j.Key + " (etats tenus : " + string.Join(", ", new List<string>(j.HeldStates).ToArray()) + ") : " + at + " -FINISHED-> " + j.F.ActiveStateName;
                 }
             return "rien pour " + part;
         }

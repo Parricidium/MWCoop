@@ -1425,6 +1425,9 @@ namespace MWCoop
                             if (pay == null) { e.Hooked = true; Log.Warn("argent : enveloppe " + e.Key + " sans etat de paie"); continue; }
                             if (!pay.IsInitialized) continue;
                             FsmHooks.Prepend(pay, new EnvHook { E = e, Take = true });
+                            // (tracts de Teimo : montant de l'enveloppe = la part du joueur local, voir TractsHook)
+                            FsmState wb = IsTracts(e) ? e.F.Fsm.GetState("Wait button") : null;
+                            if (wb != null) FsmHooks.Prepend(wb, new TractsHook { E = e });
                             e.TakeState = pay.Name;
                             e.Hooked = true;
                             Log.Info("argent : enveloppe " + e.Key + " tendue ici (paie en '" + pay.Name + "')");
@@ -1448,6 +1451,42 @@ namespace MWCoop
             }
         }
 
+        // Tracts de Teimo, My Summer Car (audit MSC 02/11) : l'enveloppe (PayMoneyAdvert : 'Calculate' Money = Delivered x 25, puis 'Wait
+        // button' l'affiche) payait au premier preneur toute la tournee de l'equipe, rien aux autres. A plusieurs, en entrant dans 'Wait
+        // button', Money et le texte deviennent la part du joueur local (ses boites et celles de personne, TractsMsc.TakerCount) ; a la
+        // prise, les parts des autres partent avec le message (EnvTaken) et chacun touche la sienne chez lui (OnPayout). La remise a zero
+        // du boulot reste commune (Retire). [Test] TractsParJoueur=0 : comme avant.
+        const float TractPrice = 25f;   // PricePerAd du jeu (vidage v.250908-04)
+        static bool IsTracts(Env e) { return Game.Msc && e != null && e.F != null && e.F.gameObject.name == "PayMoneyAdvert"; }
+
+        class TractsHook : ModHook
+        {
+            public override string Module { get { return "argent"; } }
+            public Env E;
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (!envApplying && Replay.Depth == 0 && TractsMsc.SplitPay())
+                    {
+                        int mine = TractsMsc.TakerCount(new List<KeyValuePair<int, int>>());
+                        FsmFloat m = E.F.FsmVariables.FindFsmFloat("Money");
+                        FsmFloat price = E.F.FsmVariables.FindFsmFloat("PricePerAd");
+                        float amount = mine * (price != null && price.Value > 0f ? price.Value : TractPrice);
+                        if (m != null && Mathf.Abs(m.Value - amount) > 0.01f)
+                        {
+                            m.Value = amount;
+                            FsmString v = E.F.FsmVariables.FindFsmString("Value");
+                            if (v != null) v.Value = "AD DELIVERY PAYMENT " + amount + " MK";
+                            MWCoop.Log.Info("argent : tracts, enveloppe a ta part " + mine + " boites = " + amount + " mk (parts " + TractsMsc.Shares() + ")");
+                        }
+                    }
+                }
+                catch (System.Exception ex) { Replay.HookError(ex); }
+                Finish();
+            }
+        }
+
         // Prise ici (ou achat de la voiture du client du bois) : retiree chez les autres.
         static void EnvTaken(Env e)
         {
@@ -1455,7 +1494,17 @@ namespace MWCoop
             if (e.TakenAt >= 0 && now - e.TakenAt < 10f) return;   // ("State 3" apres "State 1" : la meme prise, deja envoyee)
             e.TakenAt = now;
             Log.Info("argent : enveloppe " + e.Key + " prise ici");
-            Session.SendAll(new NetWriter(Msg.Payout).U8(Session.LocalId).Str(e.Key), true);
+            var w = new NetWriter(Msg.Payout).U8(Session.LocalId).Str(e.Key);
+            // (tracts : parts des autres joueurs, U8 n puis (U8 joueur, U16 boites) x n ; ignorees par une version d'avant)
+            if (IsTracts(e) && TractsMsc.SplitPay())
+            {
+                var others = new List<KeyValuePair<int, int>>();
+                TractsMsc.TakerCount(others);
+                w.U8(System.Math.Min(others.Count, 255));
+                for (int i = 0; i < others.Count && i < 255; i++) w.U8(others[i].Key).U16(System.Math.Min(others[i].Value, 65535));
+                if (others.Count > 0) Log.Info("argent : tracts, parts des autres envoyees (" + TractsMsc.Shares() + ")");
+            }
+            Session.SendAll(w, true);
         }
 
         static void Retire(Env e)
@@ -1501,11 +1550,28 @@ namespace MWCoop
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
             string key = r.Str();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Payout).U8(who).Str(key), true, who);
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Payout).U8(who).Str(key).Raw(r.Rest()), true, who);   // (parts des tracts comprises)
             Env e = envs.Find(x => x.Key == key);
             if (e == null || e.F == null) { Log.Warn("argent : enveloppe " + key + " prise par #" + who + ", introuvable ici"); return; }
             PlayerInfo pi;
             Log.Info("argent : enveloppe " + key + " prise par " + (Session.Players.TryGetValue(who, out pi) ? pi.Name : "#" + who));
+            // Tracts (audit MSC 02/11) : notre part, comptee par le preneur, versee ici -- revenu a nous, comme une enveloppe prise.
+            if (IsTracts(e) && r.More && Config.GetInt("Test", "TractsParJoueur", 1) != 0)
+            {
+                int share = 0;
+                for (int i = 0, n = r.U8(); i < n; i++) { int id = r.U8(), c = r.U16(); if (id == Session.LocalId) share = c; }
+                // (prise ici aussi a moins d'une latence : notre part est deja dans ce qu'on a touche)
+                if (share > 0 && (e.TakenAt < 0 || Time.realtimeSinceStartup - e.TakenAt >= 3f))
+                {
+                    FsmFloat price = e.F.FsmVariables.FindFsmFloat("PricePerAd");
+                    float amount = share * (price != null && price.Value > 0f ? price.Value : TractPrice);
+                    FsmFloat cash = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney"), net = FsmVariables.GlobalVariables.FindFsmFloat("PlayerNetIncome");
+                    envIncomeUntil = Time.realtimeSinceStartup + 3f;   // (pas pris pour la paie d'un boulot rejoue)
+                    if (cash != null) cash.Value += amount;
+                    if (net != null) net.Value += amount;
+                    Log.Info("argent : tracts, ta part " + share + " x " + (amount / share) + " = " + amount + " mk versee ici (enveloppe prise par #" + who + ")");
+                }
+            }
             // (prise ici aussi a moins d'une latence : les deux clics ont paye chacun chez soi, indecidable -- note, rien retire)
             if (e.TakenAt >= 0 && Time.realtimeSinceStartup - e.TakenAt < 3f) Log.Warn("argent : enveloppe " + key + " prise ici aussi a quelques ms pres : chacun garde sa paie");
             if (e.F.gameObject.activeInHierarchy && e.Hooked) Retire(e);
