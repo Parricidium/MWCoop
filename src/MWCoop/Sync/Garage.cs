@@ -793,6 +793,7 @@ namespace MWCoop
                 n++;
             }
             if (n == 0) return 0;
+            ColorsGuard(d.D);
             try { if (mUpdateMesh != null) mUpdateMesh.Invoke(d.D, null); } catch (System.Exception) { }
             if (undoLogs++ < 10) Log.Info("atelier : tole " + c.Car + d.Key + " cabossee sur la copie (" + n + " sommets) : remise comme chez le conducteur");
             return 0;
@@ -905,12 +906,22 @@ namespace MWCoop
                 d.Snap[i] = v[i];
                 if (tint) cols[i] = Color.Lerp(bcols[i], d.D.DeformedVertexColor, off[j].magnitude / d.D.MaxVertexMov);
             }
+            ColorsGuard(d.D);
             try { if (mUpdateMesh != null) mUpdateMesh.Invoke(d.D, null); }
             catch (System.Exception e) { Warn("tole " + car + key + " : maillage pas mis a jour (" + e.GetType().Name + ")"); }
             dentsIn += n;
             if (++dentMsgs <= 10 || dentMsgs % 50 == 0) Log.Info("atelier : tole " + car + key + " deformee par #" + who + " (" + n + " sommets, " + dentsIn + " recus en tout)");
         }
         static int dentsIn, dentMsgs;
+        // Deformable.UpdateMesh du jeu lit colors.Length : tableau jamais cree sur une tole dont Start n'a pas tourne (la tole d#0 de la
+        // SATSUMA chez l'hote, audit MSC 02/11). L'exception tombait apres les sommets : bornes et collider jamais recalcules -- bosse
+        // de l'autre affichee mais coupee au rendu, sans collision. Tableau vide : le jeu saute la couleur. [Test] TolesCouleursVides=0 :
+        // comme avant.
+        static void ColorsGuard(Deformable dd)
+        {
+            if (dd == null || fColors == null || fColors.GetValue(dd) != null || Config.GetInt("Test", "TolesCouleursVides", 1) == 0) return;
+            fColors.SetValue(dd, new Color32[0]);
+        }
 
         static void Warn(string s)
         {
