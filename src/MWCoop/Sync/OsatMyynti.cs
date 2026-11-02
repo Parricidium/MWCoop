@@ -101,11 +101,11 @@ namespace MWCoop
             }
             Transform r = osatVendor.Root.transform;
             r.SetParent(osat.transform, false);
-            r.localPosition = new Vector3(0f, 0f, -3.4f);
+            r.localPosition = OsatVendorAt;
             r.localRotation = Quaternion.identity;
             var cg = new GameObject("osat_myyja_coll");
             cg.transform.SetParent(osat.transform, false);
-            cg.transform.localPosition = new Vector3(0f, 0.9f, -3.4f);
+            cg.transform.localPosition = OsatVendorAt + new Vector3(0f, 0.9f, 0f);
             var cc = cg.AddComponent<CapsuleCollider>(); cc.height = 1.8f; cc.radius = 0.28f;
         }
 
@@ -132,6 +132,7 @@ namespace MWCoop
         {
             if (osat == null) return;
             TickOsatDoors();
+            OsatShots(now);
             KinoGui();
             TickKinoTexts();
             if (!osatLoaded) { osatLoaded = true; if (BagAuthority) LoadOsat(); }
@@ -421,7 +422,7 @@ namespace MWCoop
         {
             GameObject regSrc = FindPath("PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister");
             float yaw = Config.GetFloat("Osat", "KassaKulma", -76f);   // (mesure : a 0, ecran vers -104 deg ; -76 le tourne vers le client, +z)
-            GameObject reg = regSrc != null ? Clone("PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister", 0, new Vector3(1.3f, 1.03f, -2.3f), yaw, new Vector3(0, -1, 0), false) : null;
+            GameObject reg = regSrc != null ? Clone("PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister", 0, OsatRegisterAt, yaw, new Vector3(0, -1, 0), false) : null;
             if (reg == null) { L("magasin de pieces : caisse de la PSK introuvable"); return; }
             Bounds rb = LocalBounds(reg);
             var cg = new GameObject("osat_kassa");
@@ -451,7 +452,7 @@ namespace MWCoop
 
         static void CashSound()
         {
-            try { MasterAudio.PlaySound3DAtVector3AndForget("Store", osat.transform.TransformPoint(new Vector3(1.4f, 1.1f, -2.3f)), 1f, null, 0f, "cash_register_2"); } catch { }
+            try { MasterAudio.PlaySound3DAtVector3AndForget("Store", osat.transform.TransformPoint(OsatRegisterAt + new Vector3(0.1f, 0.07f, 0f)), 1f, null, 0f, "cash_register_2"); } catch { }
         }
 
         static void InvokeMod(OsatModItem it, int buyer, bool here, Vector3 pos, Quaternion rot)
