@@ -335,6 +335,84 @@ namespace MWCoop
             }
         }
 
+        // Marcheur renverse par la voiture d'un invite (audit MSC 02/11) : chez l'invite le marcheur est muet (Traffic coupe ses
+        // automates), son choc ne tourne que chez l'hote, sur la copie de la voiture -- l'invite n'avait jamais le delit qu'il aurait
+        // eu en solo. Hote, a l'entree de 'Distance?' (zone touchee par une voiture de joueur, nom CarCollider) : voiture menee par
+        // un autre assis au volant -> delit envoye (cle de la voiture ; seul celui qui la conduit le prend). La suite de l'automate
+        // d'ici ne change pas ('Crime 2' garde par CrimeHook).
+        class WalkerHook : ModHook
+        {
+            public override string Module { get { return "police (delits)"; } }
+            public PlayMakerFSM F; public float Last = -100f;
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (Session.Active && Session.IsHost && Session.RemoteCount > 0 && Time.realtimeSinceStartup - Last > 2f)
+                    {
+                        FsmGameObject col = F.FsmVariables.FindFsmGameObject("Collider");
+                        Transform car = col != null && col.Value != null ? VehicleSync.CarRoot(col.Value.transform) : null;
+                        string key = car != null && car != VehicleSync.LocalDrivingRoot && VehicleSync.RemotelySeated(car) ? VehicleSync.KeyOf(car) : null;
+                        if (key != null)
+                        {
+                            Last = Time.realtimeSinceStartup;
+                            string path = Recon.Path(F.transform);
+                            Session.Broadcast(new NetWriter(Msg.Traffic).U16(0xFFFF).U8(Kind).U8(CrimeMark).Str(key).Str(path), true);
+                            MWCoop.Log.Info("police : " + path + " renverse par " + key + " (menee par un autre) : delit envoye a son conducteur");
+                        }
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+        const int CrimeMark = 2;   // (message de barrage : 0/1 = Checkpoints eteint/allume ; 2 = delit d'un pieton renverse)
+
+        // Invite : pieton renverse par la voiture 'key' chez l'hote ; delit compte ici si c'est la voiture conduite ici, comme
+        // 'Crime 2' (vitesse du joueur >= 1, PlayerWanted, ManSlaughter +1).
+        static void OnWalkerCrime(NetReader r)
+        {
+            string key = r.Str(), path = r.Str();
+            if (key != VehicleSync.LocalDrivingKey) return;
+            WalkerCrime(path, false);
+        }
+        static string WalkerCrime(string path, bool test)
+        {
+            GameObject cam = Game.FindAny("PLAYER/Pivot/AnimPivot/Camera/FPSCamera");
+            PlayMakerFSM pf = cam != null ? Game.FsmOn(cam, "PlayerFunctions") : null;
+            FsmFloat sp = pf != null ? pf.FsmVariables.FindFsmFloat("PlayerSpeed") : null;
+            if (sp != null && sp.Value < 1f && !test) { Log.Info("police : " + path + " renverse par la voiture d'ici chez l'hote, vitesse " + sp.Value.ToString("F1") + " : pas de delit (comme le jeu)"); return "vitesse " + sp.Value.ToString("F1") + " : pas de delit"; }
+            if (wanted == null) { GameObject g = Game.FindAny("Systems/PlayerWanted"); wanted = g != null ? Game.FsmOn(g, "Activate") : null; }
+            FsmInt ms = wanted != null ? wanted.FsmVariables.FindFsmInt("ManSlaughter") : null;
+            if (ms == null) { Log.Warn("police : " + path + " renverse par la voiture d'ici chez l'hote, Systems/PlayerWanted introuvable : delit perdu"); return "PlayerWanted introuvable"; }
+            ms.Value++;
+            FsmBool pw = FsmVariables.GlobalVariables.FindFsmBool("PlayerWanted");
+            if (pw != null) pw.Value = true;
+            Log.Info("police : " + path + " renverse par la voiture d'ici chez l'hote : delit compte ici (" + CrimeLine() + ")");
+            return CrimeLine();
+        }
+
+        // [Test] (audit MSC 02/11, pietons renverses) : etat des gardes de delit ici -- automates HumanTriggerCrime::CarHit gardes,
+        // marcheurs (envoi du delit), delits du joueur d'ici. TestWalkerCrime(true) : chez l'invite, delit d'un marcheur recu comme
+        // de l'hote (sans tenir compte de la vitesse ni de la voiture).
+        public static string CrimeState()
+        {
+            int walkers = 0, humans = 0;
+            foreach (PlayMakerFSM f in crimeHooked)
+            {
+                if (f == null || f.gameObject.name != "HumanTriggerCrime") continue;
+                humans++;
+                if (Recon.Path(f.transform).StartsWith("HUMANS/Randomizer/Walkers/")) walkers++;
+            }
+            return "delits gardes : " + crimeHooked.Count + " automates dont " + humans + " pietons (" + walkers + " marcheurs) ; " + (wanted != null ? CrimeLine() : "PlayerWanted ?");
+        }
+        public static string TestWalkerCrime(bool apply)
+        {
+            if (!apply) return CrimeState();
+            return "delit recu (essai) : " + WalkerCrime("(essai)", true);
+        }
+
+
         // ================================================================ My Summer Car : fuite d'un barrage par l'invite (19/10)
         // Le jeu lance la poursuite par TargetDispatch*::Check "Chase" (radar) ou TakeFine::Use "Chase" (fuite au controle d'alcool) :
         // CHASE au Throttle des POLICECAR, dont "Chase" met Throttle.Chase a vrai ; CopPassenger::Logic attend ce booleen puis, si le
@@ -427,10 +505,21 @@ namespace MWCoop
                     continue;
                 }
                 bool cop = f.FsmName == "CarHit" && f.gameObject.name == "HumanTriggerCop", crash = f.FsmName == "Crash" && f.gameObject.name == "CrashEvent";
-                if (!cop && !crash) continue;
+                // Pietons renverses (audit MSC 02/11, HumanTriggerCrime::CarHit : marcheurs, fermier, Jokke, grand-mere, spectateurs du
+                // rallye...) : 'Crime 2' / 'Crime' comptait ManSlaughter et PlayerWanted a quiconque est a moins de 8 m -- a l'hote en
+                // voiture derriere celle de l'invite (sa copie ici), au copilote ou au spectateur a pied du rallye. Meme garde que les
+                // agents : la voiture du collisionneur. [Test] DelitPieton=0 : comme avant.
+                bool walker = f.FsmName == "CarHit" && f.gameObject.name == "HumanTriggerCrime" && Config.GetInt("Test", "DelitPieton", 1) != 0;
+                if (!cop && !crash && !walker) continue;
                 FsmState s = f.Fsm.GetState("Crime");
+                if (walker && f.Fsm.GetState("Crime 2") != null) s = f.Fsm.GetState("Crime 2");
                 if (s == null || !s.IsInitialized) continue;
-                try { FsmHooks.Prepend(s, new CrimeHook { F = f, Cop = cop }); } catch { continue; }
+                // (marcheurs de HUMANS/Randomizer/Walkers : coupes chez l'invite -- Traffic -- leur choc ne tourne que chez l'hote ; il
+                // envoie le delit au conducteur de la voiture qui a touche, voir WalkerHook)
+                FsmState d = walker && Recon.Path(f.transform).StartsWith("HUMANS/Randomizer/Walkers/") ? f.Fsm.GetState("Distance?") : null;
+                if (d != null && !d.IsInitialized) continue;
+                try { FsmHooks.Prepend(s, new CrimeHook { F = f, Cop = cop || walker }); } catch { continue; }
+                if (d != null) try { FsmHooks.Prepend(d, new WalkerHook { F = f }); } catch { }
                 crimeHooked.Add(f); n++;
             }
             if (n > 0) Log.Info("police : " + n + " etats de delit gardes au conducteur (" + crimeHooked.Count + ")");
@@ -501,8 +590,12 @@ namespace MWCoop
         // Invite : barrage de l'hote recopie (automate Police coupe a la premiere reception).
         public static void OnMessage(Peer from, NetReader r)
         {
-            if (Session.IsHost || !built || logic == null) return;
-            bool on = r.U8() != 0;
+            if (Session.IsHost) return;
+            int mark = r.U8();
+            if (mark == CrimeMark) { OnWalkerCrime(r); return; }
+            if (!built || logic == null) return;
+            bool on = mark != 0;
+
             int n = r.U8();
             if (!muted) { muted = true; logic.enabled = false; Log.Info("police : barrages dictes par l'hote (automate Police coupe ici)"); }
             if (checkpoints != null && checkpoints.activeSelf != on) checkpoints.SetActive(on);
