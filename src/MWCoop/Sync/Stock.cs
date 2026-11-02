@@ -34,7 +34,8 @@ namespace MWCoop
             public string Key; public GameObject Inventory; public PlayMakerHashTableProxy StockedProxy, CarriedProxy, BoughtProxy;
             public Hashtable Stocked { get { return StockedProxy != null ? StockedProxy._hashTable : null; } }
             public Hashtable Carried { get { return CarriedProxy != null ? CarriedProxy._hashTable : NoCarried; } }
-            public Hashtable NoCarried;   // (My Summer Car : pas de table 'Carried' -- le panier est dans les Q* de la caisse ; table vide)
+            public Hashtable NoCarried;   // (My Summer Car : pas de table 'Carried' -- le panier est dans les Q* de la caisse, recopies ici)
+            public PlayMakerFSM Register; public Dictionary<string, FsmInt> Q = new Dictionary<string, FsmInt>();   // (MSC : caisse, Q<produit>)
             public Hashtable Bought { get { return BoughtProxy != null ? BoughtProxy._hashTable : null; } }
             public Dictionary<string, int> SentBought = new Dictionary<string, int>();
             public Hashtable BoughtRef; public bool FullNow;   // table 'Bought' vue au dernier tour ; envoi complet force (hote)
@@ -124,8 +125,37 @@ namespace MWCoop
                 List<PlayMakerFSM> bl;
                 if (!s.Buys.TryGetValue(name.Value, out bl)) s.Buys[name.Value] = bl = new List<PlayMakerFSM>();
                 if (!bl.Contains(f)) bl.Add(f);
+                if (s.NoCarried != null) BasketVar(s, f, name.Value);
             }
             if (stores.Count > 0) Log.Info("magasins : " + stores.Count + " stocks suivis, " + shelves + " etageres");
+        }
+
+        // My Summer Car (audit MSC 02/11) : le panier (pris en rayon, pas paye) n'est pas dans une table 'Carried' mais dans les Q<produit>
+        // de la caisse ('Register add' de l'automate 'Buy' : Q{Name}+1 sur {CashRegister}::Data) -- jamais envoye : Remote restait vide
+        // et PlayerLeft ne rendait rien. Un invite parti sans payer laissait ses articles caches chez tous (Bought), impossibles a
+        // reposer (DEPURCHASE teste le Q de la caisse LOCALE) et sauves par l'hote jusqu'au reassort. Recopie dans NoCarried a chaque
+        // tour, envoyee comme 'carried' ; au paiement les Q* repassent a 0 (rien a rendre). [Test] PanierMsc=0 : comme avant.
+        static void BasketVar(Store s, PlayMakerFSM buy, string name)
+        {
+            if (s.Register == null)
+            {
+                FsmGameObject cr = buy.FsmVariables.FindFsmGameObject("CashRegister");
+                s.Register = cr != null && cr.Value != null ? Game.FsmOn(cr.Value, "Data") : null;
+                if (s.Register == null) return;
+            }
+            if (s.Q.ContainsKey(name)) return;
+            FsmInt q = s.Register.FsmVariables.FindFsmInt("Q" + name);
+            if (q == null) return;
+            s.Q[name] = q;
+            if (!s.NoCarried.ContainsKey(name)) s.NoCarried[name] = 0;
+            if (!s.SentCarried.ContainsKey(name)) s.SentCarried[name] = 0;   // (rien a envoyer tant qu'il n'est pas pris)
+        }
+
+        // Q* de la caisse recopies dans NoCarried (pas pendant le rejeu de l'achat d'un autre : Shop y a mis le sien).
+        static void FillBasket(Store s)
+        {
+            if (s.Register == null || s.Q.Count == 0 || Shop.Lent(s.Register) || Config.GetInt("Test", "PanierMsc", 1) == 0) return;
+            foreach (KeyValuePair<string, FsmInt> kv in s.Q) s.NoCarried[kv.Key] = Mathf.Max(0, kv.Value.Value);
         }
 
         static int ToInt(object v) { return v is int ? (int)v : v is float ? (int)(float)v : 0; }
@@ -150,6 +180,7 @@ namespace MWCoop
                 // envoyer (les rayons des autres se videraient une 2e fois) ni a deduire des etageres ici ; le
                 // vrai panier revient a la fin du rejeu.
                 bool borrowed = Shop.Borrowed(s.Inventory);
+                if (s.NoCarried != null && !borrowed) FillBasket(s);
                 // Ce qui a change ici (panier du joueur local, stock) depuis le dernier envoi.
                 var changed = new List<string>();
                 foreach (DictionaryEntry e in stocked) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentStocked.TryGetValue(k, out old) || old != v) { s.SentStocked[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
@@ -345,16 +376,27 @@ namespace MWCoop
         }
 
         // Essais : le joueur local met 'count' articles 'item' dans son panier (comme en rayon).
+        // (MSC, audit 02/11 : dans le Q<item> de la caisse, comme 'Register add', et Bought comme 'Remove stock')
         public static string TestCarry(string item, int count)
         {
             foreach (Store s in stores.Values)
+            {
+                FsmInt q;
+                if (s.NoCarried != null && s.Q.TryGetValue(item, out q))
+                {
+                    q.Value = Mathf.Max(0, q.Value + count);
+                    if (s.Bought != null && s.Bought.ContainsKey(item)) s.Bought[item] = Mathf.Max(0, ToInt(s.Bought[item]) + count);
+                    s.Touched.Add(item); return State(item) + ", Q" + item + " " + q.Value;
+                }
                 if (s.Carried != null && s.Carried.ContainsKey(item))
                 {
                     s.Carried[item] = ToInt(s.Carried[item]) + count;
                     if (s.Bought != null && s.Bought.ContainsKey(item)) s.Bought[item] = Mathf.Max(0, ToInt(s.Bought[item]) + count);   // (comme l'automate 'Buy')
                     s.Touched.Add(item); return State(item);
                 }
+            }
             return "?";
         }
+
     }
 }

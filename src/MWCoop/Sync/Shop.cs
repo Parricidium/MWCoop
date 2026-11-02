@@ -204,6 +204,8 @@ namespace MWCoop
         const int K_Served = 5, K_Eat = 6;
         // Kind du message Purchase pour l'etat des vendeurs du rallye (hote -> invites : boutons vendus, saucisse en attente).
         const int K_Sellers = 7;
+        // Kind du message Purchase pour le resultat du controle technique (MSC : celui qui a paye -> tous).
+        const int K_Inspect = 8;
 
         // Kiosque a saucisses : Functions (:: Logic, bools Coffee/Sausage), Lantakari (:: Rotate, cree la saucisse).
         // Who/Serial : le dernier achat de saucisse (ici ou rejoue) -- ID de la prochaine saucisse creee.
@@ -350,6 +352,9 @@ namespace MWCoop
         // MSC, invite : la caisse de Teimo et les pompes viennent de la sauvegarde de l'hote -- son essence pas encore payee
         // (FuelPurchase, DieselPurchase, FuelOilPurchase, litres des pompes) et la vitre cassee (BrokenWindow) : l'invite les payait
         // a son premier passage en caisse. Remis a zero chez l'invite au premier releve ; chacun paie ce qu'il prend.
+        // Puis la dette de l'invite LUI-MEME (audit MSC 02/11 : jamais dans la sauvegarde de l'hote, elle s'effacait a chaque
+        // reconnexion -- essence gratuite en partant sans payer) : gardee avec l'etat du joueur (Wallet, etat-joueur.ini), remise ici.
+        public static PlayMakerFSM DebtClearedOn;   // caisse de Teimo dont la dette de l'hote a ete effacee (null : pas encore)
         static void ClearInheritedDebt(Counter c)
         {
             var sb = new System.Text.StringBuilder();
@@ -364,8 +369,10 @@ namespace MWCoop
                 FsmFloat v = u != null ? u.FsmVariables.FindFsmFloat("Fuel") : null;
                 if (v != null && v.Value != 0f) { sb.Append(' ').Append(p.Substring(p.LastIndexOf('/') + 1)).Append('=').Append(v.Value.ToString("F2")); v.Value = 0f; }
             }
-            Log.Info("magasin : dette de l'hote a la caisse de Teimo effacee ici :" + (sb.Length > 0 ? sb.ToString() : " aucune"));
+            DebtClearedOn = c.Fsm;
+            Log.Info("magasin : dette de l'hote a la caisse de Teimo effacee ici :" + (sb.Length > 0 ? sb.ToString() : " aucune") + Wallet.ApplyOwnDebt(c.Fsm));
         }
+
 
         static void EmulateTeimoBag(Counter c)
         {
@@ -432,7 +439,9 @@ namespace MWCoop
             ignored.Clear(); restCache.Clear(); named.Clear(); frozen.Clear();
             served.Clear(); servedOrder.Clear(); waitServe.Clear(); eatObjs.Clear(); eatPending.Clear(); eatMuted.Clear(); prefabs.Clear();
             testStep = 0; testLog = 0; testBag = null; testEatAt = 0;
-            kiosks.Clear(); sellersAt = -1f; testMoney = -1f;
+            kiosks.Clear(); sellersAt = -1f; testMoney = -1f; DebtClearedOn = null; ctHooked = ctApplying = false; nextCtLook = 0f;
+            if (Game.LevelName != "GAME") early.Clear();   // (gardes au menu : rejoues apres le chargement de la partie)
+            earlyAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1f;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 9f : -1;
             fleaDb = null; fleaCreator = null; fleaHostLists.Clear(); fleaHostShelf = null; fleaSentSig = null;
             fleaRolling = fleaPending = false; fleaReplyAt = -1; fleaApplied = 0; fleaRetry = 0; fleaNextSig = 0;
@@ -450,14 +459,26 @@ namespace MWCoop
             return false;
         }
 
+        // MSC (Teimo, Fleetari) : le panier de la caisse 'reg' est-il mis de cote le temps du rejeu de l'achat d'un autre (ses Q*
+        // sont alors ceux de l'acheteur) ? Stock ne l'envoie pas pour celui du joueur d'ici.
+        public static bool Lent(PlayMakerFSM reg)
+        {
+            Counter c;
+            return reg != null && counterOf.TryGetValue(reg, out c) && c.Saved != null;
+        }
+
         public static void Update()
         {
             if (Game.Msc) FleetariMsc.Update();   // (Fleetari et la poste, FleetariMsc.cs)
+
             if (Session.Active && PlayerSync.InGame)
             {
                 float tnow = Time.realtimeSinceStartup;
                 if (!orderHooked && tnow >= nextOrderLook) { nextOrderLook = tnow + 10f; HookOrder(); }
                 HostWorkTick(tnow);
+                if (Game.Msc && !ctHooked && tnow >= nextCtLook) { nextCtLook = tnow + 5f; HookInspection(); }
+                ReplayEarly(tnow);
+
             }
             float now = Time.realtimeSinceStartup;
             if (nextScan > 0 && now >= nextScan) { nextScan = now + 60f; Scan(); }   // caisses et comptoirs sont la des le chargement
@@ -1500,13 +1521,68 @@ namespace MWCoop
             // Relais aux autres invites : le message tel quel, seul le numero du joueur est fixe par l'hote.
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Purchase).U8(who).Raw(raw, 1, raw.Length - 1), true, who);
             int kind = r.U8();
+            if ((kind == 0 || kind == 1) && KeepEarly(who, kind, r)) return;
             if (kind == 0) OnBag(who, r);
             else if (kind == 1) OnCounter(who, r);
             else if (kind == K_Served) OnServed(who, r);
             else if (kind == K_Eat) OnEat(who, r);
             else if (kind == K_FleaLists || kind == K_FleaShelf) { if (!Session.IsHost && who == 0) OnFleaPrices(kind, r); }
             else if (kind == K_Sellers) { if (!Session.IsHost && who == 0) OnSellers(r); }
+            else if (kind == K_Inspect) OnInspection(who, r);
             else if (kind == K_FleaAsk) { if (Session.IsHost) { fleaReplyAt = Time.realtimeSinceStartup + 0.5f; Log.Info("magasin : puces : " + PlayerName(who) + " demande le tirage de l'hote"); } }
+        }
+
+        // Arrivee en cours de partie (audit MSC 02/11) : un achat fait pendant que l'invite charge (apres la sauvegarde envoyee, avant
+        // son entree en jeu) arrivait au menu -- caisse ou comptoir introuvable, message jete : ni sac ni articles chez lui, et le
+        // compteur des objets crees (shoppingbagxN...) en retard d'un cran pour toute la partie (le sac suivant prenait l'ID du
+        // precedent de l'hote). Garde de cote s'il arrive APRES le debut de la reception de la sauvegarde (messages fiables et
+        // ordonnes : l'achat n'y est pas ; avant, il y est deja -- jete comme avant), rejoue dans l'ordre une fois en jeu (12 s apres
+        // le chargement : caisses relevees, compteurs charges). [Test] AchatArrivee=0 : comme avant.
+        class Early { public int Who, Kind; public byte[] Data; public float At; }
+        static readonly List<Early> early = new List<Early>();
+        static float earlyAt = -1f;
+
+        static bool KeepEarly(int who, int kind, NetReader r)
+        {
+            if (Session.IsHost || PlayerSync.InGame || Config.GetInt("Test", "AchatArrivee", 1) == 0) return false;
+            if (!SaveTransfer.Receiving && !SaveTransfer.Received)
+            {
+                Log.Info("magasin : achat de " + PlayerName(who) + " recu au menu avant la sauvegarde de l'hote : deja dedans, ignore");
+                return true;
+            }
+            if (early.Count >= 64) { Log.Warn("magasin : achat de " + PlayerName(who) + " recu au menu : 64 deja en attente, ignore"); return true; }
+            early.Add(new Early { Who = who, Kind = kind, Data = r.Rest(), At = Time.realtimeSinceStartup });
+            Log.Info("magasin : achat de " + PlayerName(who) + " recu pendant le chargement (apres la sauvegarde) : garde pour l'entree en jeu (" + early.Count + ")");
+            return true;
+        }
+
+        static void ReplayEarly(float now)
+        {
+            if (early.Count == 0 || earlyAt < 0f || now < earlyAt || !PlayerSync.InGame) return;
+            earlyAt = -1f;
+            int n = 0;
+            foreach (Early e in early)
+            {
+                if (now - e.At > 300f) continue;   // (chargement de plus de 5 min : trop vieux)
+                try
+                {
+                    var r = new NetReader(e.Data, 0, e.Data.Length);
+                    if (e.Kind == 0) OnBag(e.Who, r); else OnCounter(e.Who, r);
+                    n++;
+                }
+                catch (System.Exception ex) { Log.Warn("magasin : achat garde de " + PlayerName(e.Who) + " pas rejoue (" + ex.Message + ")"); }
+            }
+            Log.Info("magasin : " + n + "/" + early.Count + " achat(s) recu(s) pendant le chargement rejoue(s) ici");
+            early.Clear();
+        }
+
+        // [Test] (audit MSC 02/11, Autotest=achatarrivee) : achats gardes pendant le chargement, et compteur des sacs de Teimo ici.
+        public static string EarlyState()
+        {
+            PlayMakerFSM sb = Game.FindFsm("Spawner/CreateShoppingbag", "ShoppingBag");
+            FsmInt on = sb != null ? sb.FsmVariables.FindFsmInt("ObjectNumberInt") : null;
+            return "achats gardes " + early.Count + (earlyAt > 0f ? " (rejeu dans " + (earlyAt - Time.realtimeSinceStartup).ToString("F0") + " s)" : "")
+                   + ", sacs de Teimo : compteur " + (on != null ? on.Value.ToString() : "?");
         }
 
         // ---------------------------------------------------------------- caisses a sac : reception
@@ -1996,6 +2072,14 @@ namespace MWCoop
             foreach (var x in it.V.I) { FsmInt t = fv.FindFsmInt(x.Key); if (t != null) t.Value = c.Kind == "puces" && x.Key == "Weeks" ? 0 : x.Value; }
             foreach (var x in it.V.B) { FsmBool t = fv.FindFsmBool(x.Key); if (t != null) t.Value = x.Value; }
             foreach (var x in it.V.S) { FsmString t = fv.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
+            // Controle technique (audit MSC 02/11) : seul le paiement et la vignette sont rejoues ('Tax sticker' / 'Spawn 2') -- le
+            // controle lui-meme ('Inspection' -> 'Spawn' -> Officer::Animations -> InspectionProcess) n'est plus refait ici : son seuil
+            // des pneus est tire au sort chez chacun, et le resultat de l'acheteur arrive par K_Inspect (OnInspection).
+            if (c.Kind == "caisse" && CtOwn && Recon.Path(f.transform).StartsWith("INSPECTION/"))
+            {
+                FsmBool ib = fv.FindFsmBool("Inspection");
+                if (ib != null && ib.Value) { ib.Value = false; Log.Info("magasin : controle technique de " + PlayerName(it.Who) + " : pas refait ici (son resultat suivra)"); }
+            }
             SetLists(c, it.Lists);
             c.SerialWho = it.SerialWho; c.Serial = it.Serial; c.Made = 0;
             if (c.Kind == "kiosque") KioskSale(c);
@@ -2011,7 +2095,97 @@ namespace MWCoop
             return true;
         }
 
+        // ---------------------------------------------------------------- controle technique (MSC, audit 02/11)
+        // INSPECTION/Functions/InspectionProcess : Inspect mesure la voiture (seuil des pneus tire au sort : RandomFloat 45-65 dans
+        // 'Reset results'), Results conclut ('Pass' : Inspect._CarInspected, _LeimaPaperissa, PlayerDatabase.Simulation.CarInspected,
+        // plaques ; 'Fail' : CarInspected faux, Order rallume). Refait chez chacun par le rejeu de la caisse, avec un autre tirage (ou
+        // pas du tout, comptoir eteint chez l'hote loin) : la sauvegarde de l'hote gardait CarInspected faux, et la feuille du rallye
+        // (ReqInspected) refusait. Celui qui a paye envoie son resultat ; les autres le posent puis envoient RESET a Inspect (comme
+        // 'State 4' : 'Inspection done' -> plaques d'apres _LeimaPaperissa, prochain controle). Sans stress, voix, recu ni succes.
+        // [Test] CtResultat=0 : comme avant.
+        const string InspPath = "INSPECTION/Functions/InspectionProcess";
+        static bool ctHooked, ctApplying;
+        static float nextCtLook;
+        static bool CtOwn { get { return Game.Msc && Config.GetInt("Test", "CtResultat", 1) != 0; } }
+
+        class CtHook : ModHook
+        {
+            public override string Module { get { return Mod; } }
+            public bool Pass;
+            public override void OnEnter()
+            {
+                try { if (Session.Active && !ctApplying && Replay.Depth == 0 && CtOwn) SendInspection(Pass); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static void HookInspection()
+        {
+            PlayMakerFSM res = Game.FindFsm(InspPath, "Results");
+            if (res == null || res.Fsm == null) return;
+            FsmState pass = res.Fsm.GetState("Pass"), fail = res.Fsm.GetState("Fail");
+            if (pass == null || fail == null) { ctHooked = true; Log.Warn("magasin : controle technique : Results sans 'Pass'/'Fail', resultat pas partage"); return; }
+            if (!pass.IsInitialized || !fail.IsInitialized) return;
+            try { FsmHooks.Prepend(pass, new CtHook { Pass = true }); FsmHooks.Prepend(fail, new CtHook { Pass = false }); }
+            catch (System.Exception e) { ctHooked = true; Log.Warn("magasin : controle technique pas suivi (" + e.Message + ")"); return; }
+            ctHooked = true;
+            Log.Info("magasin : controle technique suivi (resultat de celui qui paie envoye aux autres)");
+        }
+
+        static void SendInspection(bool pass)
+        {
+            PlayMakerFSM insp = Game.FindFsm(InspPath, "Inspect");
+            FsmInt nd = insp != null ? insp.FsmVariables.FindFsmInt("_NextInspectionDay") : null;
+            FsmFloat tl = insp != null ? insp.FsmVariables.FindFsmFloat("TireHealthLimit") : null;
+            Session.SendAll(new NetWriter(Msg.Purchase).U8(Session.LocalId).U8(K_Inspect).Bool(pass).I32(nd != null ? nd.Value : 0), true);
+            Log.Info("magasin : controle technique " + (pass ? "reussi" : "rate") + " ici (seuil des pneus " + (tl != null ? tl.Value.ToString("F0") : "?") + "), envoye aux autres");
+        }
+
+        static void OnInspection(int who, NetReader r)
+        {
+            bool pass = r.Bool();
+            int next = r.I32();
+            if (!CtOwn) return;
+            Log.Info("magasin : controle technique de " + PlayerName(who) + " : " + ApplyInspection(pass, next));
+        }
+
+        static string ApplyInspection(bool pass, int next)
+        {
+            PlayMakerFSM insp = Game.FindFsm(InspPath, "Inspect"), db = Game.FindFsm("Database/PlayerDatabase", "Simulation");
+            if (insp == null) return "InspectionProcess::Inspect introuvable ici";
+            FsmBool ci = insp.FsmVariables.FindFsmBool("_CarInspected"), lp = insp.FsmVariables.FindFsmBool("_LeimaPaperissa");
+            FsmInt nd = insp.FsmVariables.FindFsmInt("_NextInspectionDay");
+            if (ci != null) ci.Value = pass;
+            if (lp != null && pass) lp.Value = true;   // ('Fail' ne touche pas au tampon)
+            if (nd != null) nd.Value = next;
+            FsmBool sc = db != null ? db.FsmVariables.FindFsmBool("CarInspected") : null;
+            if (sc != null) sc.Value = pass;
+            GameObject order = Game.FindAny("INSPECTION/Functions/Order");
+            if (order != null && order.activeSelf == pass) order.SetActive(!pass);
+            if (pass)
+                foreach (string p in new[] { "Database/DatabaseBody/RegPlateFront", "Database/DatabaseBody/RegPlateRear" })
+                { GameObject g = Game.FindAny(p); if (g != null && !g.activeSelf) g.SetActive(true); }
+            ctApplying = true; Replay.Depth++;
+            try { insp.SendEvent("RESET"); }
+            finally { ctApplying = false; Replay.Depth--; }
+            return (pass ? "reussi" : "rate") + " pose ici (CarInspected " + (sc != null ? sc.Value.ToString() : "?") + ", Inspect " + insp.ActiveStateName + ")";
+        }
+
+        // [Test] (audit MSC 02/11, Autotest=mscct) : etat du controle ici ; TestInspection(pass) : resultat envoye comme Results.
+        public static string InspectionState()
+        {
+            PlayMakerFSM insp = Game.FindFsm(InspPath, "Inspect"), res = Game.FindFsm(InspPath, "Results"), db = Game.FindFsm("Database/PlayerDatabase", "Simulation");
+            System.Func<PlayMakerFSM, string, string> B = (f, n) => { FsmBool b = f != null ? f.FsmVariables.FindFsmBool(n) : null; return b == null ? "?" : b.Value ? "1" : "0"; };
+            FsmFloat tl = insp != null ? insp.FsmVariables.FindFsmFloat("TireHealthLimit") : null;
+            GameObject plate = Game.FindAny("Database/DatabaseBody/RegPlateFront");
+            return "controle : Inspect " + (insp != null ? insp.ActiveStateName : "?") + " _CarInspected " + B(insp, "_CarInspected") + " _LeimaPaperissa " + B(insp, "_LeimaPaperissa")
+                   + " seuil " + (tl != null ? tl.Value.ToString("F0") : "?") + ", Results " + (res != null ? res.ActiveStateName : "?") + ", CarInspected " + B(db, "CarInspected")
+                   + ", plaques " + (plate != null ? plate.activeSelf.ToString() : "?") + (ctHooked ? "" : " (pas encore suivi)");
+        }
+        public static string TestInspection(bool pass) { SendInspection(pass); return InspectionState(); }
+
         // Bar : carte cachee le temps du service rejoue (ce que fait 'State 6' a une commande, que le rejeu saute en
+
         // entrant dans 'Pay') ; remise par UnmuteCounter au retour au repos ('State 3'), ou au plus tard 120 s apres.
         static void HideOrders(Counter c)
         {

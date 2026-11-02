@@ -76,7 +76,15 @@ namespace MWCoop
             // Prix des courses (podium de CE joueur, calcule chez lui) : a lui, gardes pour soi.
             new Pay("RACES/RALLY/SS3/FinishArea/Stuff/PriceMoneyRally", "Use", "State 1", "prix du rallye", false, true),
             new Pay("RACES/ICERACE/TentContents/Prices/PriceMoneyRace", "Use", "State 1", "prix de la course sur glace", false, true),
+            // My Summer Car, enveloppe du rallye du dimanche (audit MSC 02/11) : 'Idle 2' de ResultsWeekend l'allume chez chaque
+            // engage (Money d'apres SA place) ; personne ne la reservait, le monde rejouait le clic d'un autre ('State 1' :
+            // ActivateGameObject(soi, faux)) et eteignait la sienne sans le payer. Reservee a ce module (ClaimEarly : le monde ne la
+            // rejoue plus) ; sur MSC son argent passe par le releve ordinaire, garde pour soi. (En fin de liste : numeros de source
+            // inchanges. Sur MWC le chemin est absent : sans effet.)
+
+            new Pay("RALLY/Sunday/FinishArea/Stuff/PayMoney", "Use", "State 1", "prix du rallye", false, true),
         };
+
         const string JokkePay = "JOBS/JOKKEHOME/HouseDrunkNew/KiljuBuyer/Char/skeleton/pelvis/spine_middle/spine_upper/collar_left/shoulder_left/arm_left/hand_left/PayMoney";
         const string ScrapPath = "REPAIRSHOP/Scrapmetal/GarbageTrigger", LottoPath = "PERAPORTTI/Building/LOD100/Store/VoittousArea/TrashTrigger";
         // Un versement partage est repere par son JOUR de jeu (GlobalDaysPassed, le meme chez tous) ; ce delai reel ne sert plus
@@ -332,6 +340,137 @@ namespace MWCoop
             return false;
         }
 
+        // My Summer Car, meme ligne (audit MSC 02/11) :
+        //  - teimo.<nom> : la dette de l'invite a la caisse de Teimo (STORE/StoreCashRegister/Register::Data : FuelPurchase,
+        //    DieselPurchase, FuelOilPurchase, BrokenWindow). Jamais dans la sauvegarde de l'hote, et celle de l'hote est effacee chez
+        //    l'invite (Shop.ClearInheritedDebt) : l'essence prise sans payer s'effacait a chaque reconnexion, alors qu'en solo elle
+        //    reste due. Relevee seulement apres cet effacement (avant : celle de l'hote) ; remise juste apres (Shop) ou a la lecture
+        //    si l'effacement est deja passe. (Pas les litres en cours des pompes.)
+        //  - dancing.ReputationAlltime : la reputation au dancing (DANCEHALL/Functions/GUARD/Guard::React, chargee de la sauvegarde
+        //    par 'Load', DancehallPlayerReputation) -- a 25 le videur bannit. L'invite prenait celle de l'hote (banni des l'entree sans
+        //    rien avoir fait) et perdait la sienne. Remise apres chaque 'Load' de l'automate (premier allumage compris, voir DanceTick).
+        // [Test] EtatJoueurMsc=0 : comme avant.
+        const string GuardPath = "DANCEHALL/Functions/GUARD/Guard";
+        static readonly string[] TeimoDebt = { "FuelPurchase", "DieselPurchase", "FuelOilPurchase", "BrokenWindow" };
+        static string teimoLine = "", danceLine = "";
+        static Dictionary<string, float> ownDebt;   // dette de l'invite lue pour ce monde (remise apres l'effacement de celle de l'hote)
+        static int danceRep = -1;                    // reputation de l'invite pour ce monde (-1 : pas encore lue)
+        static PlayMakerFSM guard;                   // Guard::React de ce niveau (null : pas encore vu)
+        static bool danceHooked, danceSeen;
+        static bool OwnMsc { get { return Game.Msc && Config.GetInt("Test", "EtatJoueurMsc", 1) != 0; } }
+
+        static string TeimoLine()
+        {
+            PlayMakerFSM r = Shop.DebtClearedOn;   // (null : dette de l'hote pas encore effacee ici, ou autre niveau)
+            if (!OwnMsc || r == null) return teimoLine;
+            var sb = new System.Text.StringBuilder();
+            foreach (string n in TeimoDebt)
+            {
+                FsmFloat v = r.FsmVariables.FindFsmFloat(n);
+                if (v != null) sb.Append(sb.Length > 0 ? ";" : "").Append("teimo.").Append(n).Append(':').Append(v.Value.ToString("R", Inv));
+            }
+            teimoLine = sb.ToString();
+            return teimoLine;
+        }
+
+        // Shop, apres l'effacement de la dette de l'hote : celle de l'invite remise ; texte pour le journal.
+        public static string ApplyOwnDebt(PlayMakerFSM reg)
+        {
+            if (!OwnMsc || reg == null || ownDebt == null || ownDebt.Count == 0) return "";
+            var sb = new System.Text.StringBuilder(" ; la sienne remise :");
+            foreach (KeyValuePair<string, float> kv in ownDebt)
+            {
+                FsmFloat v = reg.FsmVariables.FindFsmFloat(kv.Key);
+                if (v == null) continue;
+                v.Value = kv.Value;
+                if (kv.Value != 0f) sb.Append(' ').Append(kv.Key).Append('=').Append(kv.Value.ToString("F2"));
+            }
+            return sb.ToString();
+        }
+
+        static PlayMakerFSM Guard()
+        {
+            if (guard == null && PlayerSync.InGame) { GameObject g = Game.FindAny(GuardPath); guard = g != null ? Game.FsmOn(g, "React") : null; }
+            return guard;
+        }
+
+        static string DanceLine()
+        {
+            // (relevee seulement une fois la sienne remise dans CET automate : avant, c'est celle de la sauvegarde de l'hote)
+            if (!OwnMsc || danceRep < 0 || guard == null || !danceSeen) return danceLine;
+            FsmInt v = guard.FsmVariables.FindFsmInt("ReputationAlltime");
+            if (v == null) return danceLine;
+            danceRep = v.Value;
+            danceLine = "dancing.ReputationAlltime:" + v.Value.ToString(Inv);
+            return danceLine;
+        }
+
+        // Reputation de l'invite posee dans Guard::React ; texte pour le journal.
+        static string PutDance(string why)
+        {
+            PlayMakerFSM g = Guard();
+            FsmInt v = g != null ? g.FsmVariables.FindFsmInt("ReputationAlltime") : null;
+            if (v == null || danceRep < 0) return "";
+            int was = v.Value;
+            v.Value = danceRep;
+            danceSeen = true;
+            if (was != danceRep) Log.Info("joueur : reputation au dancing " + was + " (sauvegarde de l'hote) -> " + danceRep + " (la sienne, " + why + ")");
+            return " ; dancing : reputation " + danceRep;
+        }
+
+        // Apres 'Load' (LoadInt DancehallPlayerReputation : la valeur de la sauvegarde de l'hote) : la sienne.
+        class DanceLoad : FsmStateAction
+        {
+            public override void OnEnter()
+            {
+                try { if (Session.Active && !Session.IsHost && OwnMsc) PutDance("apres le chargement du videur"); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // Chaque image tant que le videur n'est pas accroche (cout : un booleen) : DANCEHALL s'allume en cours de partie, et son
+        // automate enchaine dans la meme image State 1 -> Load -> Reputation (-> Ban -> Catch : WALK au videur 1 s plus tard).
+        // Accroche entre l'initialisation et le demarrage : 'Load' remet la sienne avant la comparaison. Demarre deja : la sienne
+        // posee, et un bannissement venu de la valeur de l'hote annule (WALK en attente retire) si la sienne est sous 25.
+        static void DanceTick()
+        {
+            if (danceHooked || danceRep < 0 || !OwnMsc || Session.IsHost || !Session.Active) return;
+            PlayMakerFSM g = Guard();
+            if (g == null || g.Fsm == null || !g.Fsm.Initialized) return;
+            FsmState ld = g.Fsm.GetState("Load");
+            if (ld == null) { danceHooked = true; Log.Warn("joueur : videur du dancing sans etat 'Load' : reputation de l'invite remise une fois"); PutDance("videur sans 'Load'"); return; }
+            if (!ld.IsInitialized) return;
+            danceHooked = true;
+            try { FsmHooks.Append(ld, new DanceLoad()); } catch (System.Exception e) { Log.Warn("joueur : videur du dancing pas suivi (" + e.Message + ")"); }
+            string st = g.ActiveStateName;
+            if (string.IsNullOrEmpty(st)) { Log.Info("joueur : videur du dancing suivi avant son demarrage (reputation de l'invite remise a son chargement)"); return; }
+            FsmInt v = g.FsmVariables.FindFsmInt("ReputationAlltime");
+            int was = v != null ? v.Value : -1;
+            PutDance("videur deja demarre en " + st);
+            PlayMakerFSM sp = Game.FsmOn(g.gameObject, "Speak");
+            FsmInt inf = sp != null ? sp.FsmVariables.FindFsmInt("InfractionType") : null;
+            if (was >= 25 && danceRep < 25 && inf != null && inf.Value == 5 && (st == "Catch" || st == "Idle" || st == "Ban"))
+            {
+                g.Fsm.KillDelayedEvents();
+                inf.Value = 0;
+                Log.Info("joueur : bannissement du dancing venu de la reputation de l'hote (" + was + ") annule ici (la sienne : " + danceRep + ")");
+            }
+        }
+
+        // [Test] (audit MSC 02/11) : ce que la ligne de l'invite garde de Teimo et du dancing, les valeurs vivantes, et a qui est
+        // l'enveloppe du rallye du dimanche (attendu « argent »).
+        public static string TestOwnState()
+        {
+            PlayMakerFSM r = Shop.DebtClearedOn, g = Guard();
+            FsmFloat fp = r != null ? r.FsmVariables.FindFsmFloat("FuelPurchase") : null;
+            FsmInt rep = g != null ? g.FsmVariables.FindFsmInt("ReputationAlltime") : null;
+            GameObject pm = Game.FindAny("RALLY/Sunday/FinishArea/Stuff/PayMoney");
+            PlayMakerFSM pu = pm != null ? Game.FsmOn(pm, "Use") : null;
+            return "teimo [" + TeimoLine() + "] FuelPurchase " + (fp != null ? fp.Value.ToString("F2") : r == null ? "(dette de l'hote pas encore effacee)" : "?")
+                   + " ; dancing [" + DanceLine() + "] ReputationAlltime " + (rep != null ? rep.Value.ToString() : "?") + (danceHooked ? " (videur suivi)" : "")
+                   + " ; enveloppe du rallye " + (pu == null ? "absente" : (pm.activeSelf ? "allumee" : "eteinte") + ", a " + (Replay.Owner(pu) ?? "personne"));
+        }
+
         static string SelfLine()
         {
             var sb = new System.Text.StringBuilder();
@@ -349,13 +488,21 @@ namespace MWCoop
             if (kl.Length > 0) sb.Append(sb.Length > 0 ? ";" : "").Append(kl);
             string ul = UsineLine();
             if (ul.Length > 0) sb.Append(sb.Length > 0 ? ";" : "").Append(ul);
+            string tl = TeimoLine();
+            if (tl.Length > 0) sb.Append(sb.Length > 0 ? ";" : "").Append(tl);
+            string dl = DanceLine();
+            if (dl.Length > 0) sb.Append(sb.Length > 0 ? ";" : "").Append(dl);
             return sb.ToString();
         }
 
         static void RestoreSelf()
         {
-            kelaLine = usineLine = "";   // (nouveau monde : rien de Kela ni de l'usine a reporter tant que l'automate n'a pas ete releve ici)
-            if (Session.IsHost || world.Length == 0 || !System.IO.File.Exists(SelfPath)) return;
+            kelaLine = usineLine = teimoLine = danceLine = "";   // (nouveau monde : rien de Kela ni de l'usine a reporter tant que l'automate n'a pas ete releve ici)
+            ownDebt = null; danceRep = -1;
+            if (Session.IsHost || world.Length == 0) return;
+            // (MSC : premiere venue dans ce monde, ou ligne d'avant ce releve -- aucune dette, reputation 0 : celles de l'hote ne sont pas les siennes)
+            if (OwnMsc) { ownDebt = new Dictionary<string, float>(); danceRep = 0; }
+            if (!System.IO.File.Exists(SelfPath)) { OwnRestored(); return; }
             foreach (string l in System.IO.File.ReadAllLines(SelfPath))
             {
                 int eq = l.IndexOf('=');
@@ -377,8 +524,16 @@ namespace MWCoop
                         else if (RestoreKela(name, val)) nk++;
                         continue;
                     }
+                    if (OwnMsc && (name.StartsWith("teimo.") || name.StartsWith("dancing.")))
+                    {
+                        float fo; int io;
+                        if (name == "dancing.ReputationAlltime" && int.TryParse(val, System.Globalization.NumberStyles.Integer, Inv, out io)) danceRep = Mathf.Max(0, io);
+                        else if (name.StartsWith("teimo.") && System.Array.IndexOf(TeimoDebt, name.Substring(6)) >= 0 && float.TryParse(val, System.Globalization.NumberStyles.Float, Inv, out fo)) ownDebt[name.Substring(6)] = fo;
+                        continue;
+                    }
                     if (name.StartsWith("usine."))
                     {
+
                         keptUsine.Add(kv);
                         if (name == "usine.@etat") usineState = val;
                         else if (name == "usine.@paquets") packages = RestorePackages(val);
@@ -413,6 +568,22 @@ namespace MWCoop
                          + (kept.Count > 0 ? " ; Kela : " + nk + " valeurs" + (stNow != null ? ", etat " + stNow : kelaState != null ? ", etat '" + kelaState + "' pas remis" : "") + (k == null ? " (automate absent)" : "") : "")
                          + (keptUsine.Count > 0 ? " ; usine : " + nu + " compteurs" + (packages ? ", paquets" : "") + (ustNow != null ? ", pointe (" + ustNow + ")" : usineState != null ? ", etat '" + usineState + "' laisse" : "") + (u == null ? " (automate absent)" : "") : ""));
             }
+            OwnRestored();
+        }
+
+        // MSC, invite : dette chez Teimo et reputation au dancing lues pour ce monde (0 sans ligne) : remises, et reecrites telles
+        // quelles tant qu'elles ne sont pas relevees ici.
+        static void OwnRestored()
+        {
+            if (!OwnMsc || Session.IsHost || ownDebt == null || danceRep < 0) return;
+            var sb = new System.Text.StringBuilder();
+            foreach (KeyValuePair<string, float> kv in ownDebt) sb.Append(sb.Length > 0 ? ";" : "").Append("teimo.").Append(kv.Key).Append(':').Append(kv.Value.ToString("R", Inv));
+            teimoLine = sb.ToString();
+            danceLine = "dancing.ReputationAlltime:" + danceRep.ToString(Inv);
+            string debt = Shop.DebtClearedOn != null ? ApplyOwnDebt(Shop.DebtClearedOn) : "";
+            float total = 0f; foreach (float v in ownDebt.Values) total += v;
+            Log.Info("joueur : MSC, sa dette chez Teimo " + total.ToString("F2") + " mk" + (Shop.DebtClearedOn != null ? " (remise" + debt + ")" : " (remise a l'effacement de celle de l'hote)")
+                     + ", sa reputation au dancing " + danceRep + PutDance("lecture de son etat"));
         }
 
         static void StoreSelf()
@@ -514,6 +685,8 @@ namespace MWCoop
             fleaSeller = -1; fleaSellerSent = -2; fleaReported = -1; fleaSellerAt = -1; nextFleaHost = nextFleaSend = nextFleaReport = 0;
             fleaTakeLogged = sellWasOn = false; fleaTables.Clear();
             kela = usine = null;
+            guard = null; danceHooked = danceSeen = false; ownDebt = null; danceRep = -1;   // (relus pour ce monde par RestoreSelf ; Store ci-dessus a deja ecrit les lignes)
+
             trigLocal = trigOther = 0;
         }
 
@@ -1072,6 +1245,8 @@ namespace MWCoop
         public static void Update()
         {
             UnmuteTrigs();   // ecritures d'argent coupees pour un seul passage (etat deja entre)
+            DanceTick();     // (MSC, invite : reputation au dancing remise au premier allumage du videur)
+
             // Fin de session en cours de partie (deconnexion de l'hote, exclusion) : porte-monnaie ecrit tout de suite (relecture du 15/10).
             if (wasActive && !Session.Active) { wasActive = false; if (ready) Store(); }
             if (Session.Active) wasActive = true;
