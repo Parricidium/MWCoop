@@ -61,6 +61,12 @@ namespace MWCoop
                 {
                     FsmState prev = F.Fsm.PreviousActiveState;
                     // (piece « echange » : pas de joint, 'Mouse off' -REMOVE-> y est le decrochage {Detach} du joueur d'ici, pas une casse)
+                    float rr;
+                    if (remoteRemoval.Count > 0 && remoteRemoval.TryGetValue(F, out rr))
+                    {
+                        remoteRemoval.Remove(F);
+                        if (Time.realtimeSinceStartup < rr) { Finish(); return; }   // (housse : demontage recu, rejoue a la mise a jour suivante)
+                    }
                     if (!applying && Replay.Depth == 0)
                     {
                         // (piece « echange » : son 'Mouse off' -REMOVE-> est aussi le decrochage {Detach} du joueur d'ici -- sauf si son attache vient de
@@ -97,11 +103,12 @@ namespace MWCoop
         // sans tirer, et une vraie chute arrive par le demontage de la roue chez lui.
         static readonly HashSet<PlayMakerFSM> wheelHooked = new HashSet<PlayMakerFSM>();
         static readonly List<FsmStateAction> wheelCut = new List<FsmStateAction>();
-        static int wheelLogs;
+        static int wheelLogs, chanceLogs;
         class WheelChanceHook : ModHook
         {
-            public override string Module { get { return "pieces (roues)"; } }
+            public override string Module { get { return Bolt ? "pieces (casses)" : "pieces (roues)"; } }
             public PlayMakerFSM F;
+            public bool Bolt;   // (BoltCheck d'une piece, pas la roue)
             public override void OnEnter()
             {
                 try
@@ -109,7 +116,8 @@ namespace MWCoop
                     if (Session.Active && !VehicleSync.SimAuthority(F.transform))
                     {
                         foreach (FsmStateAction a in State.Actions) if (a != this && a.Enabled) { a.Enabled = false; wheelCut.Add(a); }
-                        if (wheelLogs++ < 10) global::MWCoop.Log.Info("roue " + Recon.Path(F.transform) + " : chute tiree au sort chez celui qui mene la voiture, pas ici");
+                        if (!Bolt && wheelLogs++ < 10) global::MWCoop.Log.Info("roue " + Recon.Path(F.transform) + " : chute tiree au sort chez celui qui mene la voiture, pas ici");
+                        if (Bolt && (chanceLogs++ < 10 || chanceLogs % 100 == 0)) global::MWCoop.Log.Info("piece " + Recon.Path(F.transform) + " : casse tiree au sort chez celui qui mene la voiture, pas ici");
                         Fsm.Event(FsmEvent.Finished);
                     }
                 }
@@ -125,9 +133,52 @@ namespace MWCoop
             wheelHooked.Add(f);
         }
 
+        // Meme tirage sur les BoltCheck des pieces (audit MSC 02/11) : carbu, bloc moteur, pistons, phares, pompes, amortisseurs,
+        // demi-arbres, triangles, fusees... -- 42 automates : 'Bolts ON' / 'State 1' -BREAK-> (EngineTemp > 81, RPM > 2500, SpeedKMH
+        // > 50 : globales, recues du conducteur sur la copie) 'Chance' (SendRandomEvent, poids (32 - Tightness)/100) -> 'Break off'
+        // (Tightness et crans a zero, Removal.Detach, feu sous le capot pour le carbu). Chacun tirait de son cote : casse chez un seul
+        // joueur -- pas envoyee par la copie (autorite), puis au controle suivant la piece etait demontee chez celui qui conduisait ;
+        // pour les pieces « echange » (amortisseur, demi-arbre...) le decrochage {Detach} partait comme un demontage ordinaire. Seul
+        // celui qui mene la voiture tire ; sa casse arrive aux autres par Part (flags 1, 'Break off' rejoue). [Test] ChanceConducteur=0 :
+        // comme avant.
+        static bool chanceConducteur = true;
+        static void MscChanceHook(PlayMakerFSM f)
+        {
+            if (!chanceConducteur || wheelHooked.Contains(f) || f.Fsm == null || f.Fsm.GetState("Break off") == null) return;
+            FsmState s = f.Fsm.GetState("Chance");
+            if (s == null || !s.IsInitialized) return;
+            bool random = false, finished = false;
+            foreach (FsmStateAction a in s.Actions) if (a != null && a.GetType().Name == "SendRandomEvent") { random = true; break; }
+            foreach (FsmTransition t in s.Transitions) if (t.EventName == "FINISHED") { finished = true; break; }   // ('Chance' -FINISHED-> 'Wait' : la sortie sans casse)
+            if (!random || !finished || !Inject(s, new WheelChanceHook { F = f, Bolt = true })) return;
+            wheelHooked.Add(f);
+        }
+
+        // Essais (audit MSC 02/11, casse tiree par le seul conducteur) : BoltCheck de la piece 'partKey' (db:Database/...) au serrage
+        // 'tightness', mis en 'Chance' ici : etat d'arrivee (Wait = pas tire ici), Detach de son Removal, autorite.
+        public static string TestChance(string partKey, float tightness)
+        {
+            GameObject part = MscFindPart(partKey);
+            PlayMakerFSM bc = part != null ? Game.FsmOn(part, "BoltCheck") : null;
+            if (bc == null || bc.Fsm.GetState("Chance") == null) return "BoltCheck de " + partKey + " introuvable (ou sans 'Chance')";
+            MscChanceHook(bc);
+            FsmFloat tg = bc.FsmVariables.FindFsmFloat("Tightness");
+            if (tg != null) tg.Value = tightness;
+            bc.enabled = true;
+            Game.SetState(bc, "Chance");
+            PlayMakerFSM rem = Game.FsmOn(part, "Removal");
+            FsmBool dt = rem != null ? rem.FsmVariables.FindFsmBool("Detach") : null;
+            return partKey + " : 'Chance' -> " + bc.ActiveStateName + ", serrage " + (tg != null ? tg.Value.ToString("F0") : "?") + ", Detach " + (dt != null ? dt.Value.ToString() : "?")
+                   + ", crochet " + wheelHooked.Contains(bc) + ", autorite ici " + VehicleSync.SimAuthority(bc.transform);
+        }
+
         static void MscReset()
         {
             wheelHooked.Clear(); wheelCut.Clear();
+            chanceConducteur = Config.GetInt("Test", "ChanceConducteur", 1) != 0;
+            housses = Config.GetInt("Test", "HoussesDemontage", 1) != 0;
+            libreCle = Config.GetInt("Test", "LibreCleDb", 1) != 0;
+            remoteRemoval.Clear(); mscIn.Clear(); listLogs = 0;
             mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear(); keptJoints.Clear();
             mscDb.Clear(); mscDbByHash = null; nextPrint = lastListAsk = lastListSent = 0f; printMiss = 0; mscLostOnce = false;
         }
@@ -267,12 +318,87 @@ namespace MWCoop
             return p.Click;
         }
 
+        // Housses de siege, de volant, de tableau de bord (audit MSC 02/11) : leur 'Removal' n'a pas de 'Remove part' mais 'Mouse over'
+        // -REMOVE-> 'What part' (ou 'What part 2') qui lit les Installed de ses 4 entrees (zebre, leopard, peluche, suomi) et mene a
+        // 'Remove part N' (Installed=false, housse libre neuve par CreateObject dans {Part}). Jamais accrochees : housse enlevee chez un
+        // seul joueur, l'autre la sauvait montee, la housse posee ensuite trouvait son point eteint chez lui (« deja occupe ? ») et
+        // l'empreinte differait pour de bon. [Test] HoussesDemontage=0 : comme avant.
+        static bool housses = true;
+        static FsmState WhatPart(PlayMakerFSM f)
+        {
+            foreach (FsmState s in f.FsmStates) if (s.Name.StartsWith("What part")) return s;
+            return null;
+        }
+        static bool MultiRemoval(PlayMakerFSM f)
+        {
+            return f.Fsm != null && f.Fsm.GetState("Remove part") == null && f.Fsm.GetState("Remove part 1") != null && WhatPart(f) != null;
+        }
+        // Housse montee ici d'apres la Database : une des entrees db_ThisPart1..4 du 'Removal' a Installed vrai ('What part' n'a pas
+        // d'autre sortie -- sans housse montee, l'automate y resterait bloque).
+        static bool MultiInstalled(PlayMakerFSM rem)
+        {
+            for (int i = 1; i <= 4; i++)
+            {
+                FsmGameObject db = rem.FsmVariables.FindFsmGameObject("db_ThisPart" + i);
+                PlayMakerFSM d = db != null && db.Value != null ? Game.FsmOn(db.Value, "Data") : null;
+                FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+                if (inst != null && inst.Value) return true;
+            }
+            return false;
+        }
+        // Demontage d'une housse recu : 'What part' peut ne passer en 'Remove part N' qu'a la mise a jour suivante de l'automate --
+        // marque 1 s pour que le crochet ne le renvoie pas, et la housse libre neuve prend la cle recue des qu'elle existe (MscTick).
+        static readonly Dictionary<PlayMakerFSM, float> remoteRemoval = new Dictionary<PlayMakerFSM, float>();
+        class MscIn { public PlayMakerFSM Rem; public GameObject Before; public string Key; public int Who; public float Until; }
+        static readonly List<MscIn> mscIn = new List<MscIn>();
+        static void MscCheckIn(float now)
+        {
+            for (int i = mscIn.Count - 1; i >= 0; i--)
+            {
+                MscIn m = mscIn[i];
+                FsmGameObject lv = m.Rem != null ? m.Rem.FsmVariables.FindFsmGameObject("Part") : null;
+                GameObject loose = lv != null ? lv.Value : null;
+                if (loose != null && loose != m.Before && loose != m.Rem.gameObject)
+                {
+                    Props.Adopt(loose, m.Key); Props.HoldFromRemote(loose, m.Who);
+                    mscIn.RemoveAt(i);
+                }
+                else if (m.Rem == null || now > m.Until) mscIn.RemoveAt(i);
+            }
+        }
+
+        // Essais (audit MSC 02/11, housses) : 'which' = wheel, seatd, seatp ou dash ; 'remove' : demontage comme le joueur ('Mouse over'
+        // -REMOVE->). Etat : Installed des 4 entrees, housse montee allumee, point allume, housses libres suivies par Props.
+        public static string TestCover(string which, bool remove)
+        {
+            string name = which == "seatd" ? "seat cover(xxxx1)" : which == "seatp" ? "seat cover(xxxx2)" : which == "dash" ? "dash cover(xxxxx)" : "wheel cover(xxxxx)";
+            PlayMakerFSM rem = null;
+            foreach (Object o in Game.FsmsNamed("Removal", 0.5f)) { var f = o as PlayMakerFSM; if (f != null && f.hideFlags == HideFlags.None && f.gameObject.name == name) { rem = f; break; } }
+            if (rem == null) return "housse " + name + " introuvable";
+            if (remove && rem.gameObject.activeInHierarchy) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); }
+            var sb = new System.Text.StringBuilder("housse " + name + " (" + rem.ActiveStateName + ", " + (rem.gameObject.activeSelf ? "allumee" : "eteinte") + ", accrochee " + mscRemovals.Contains(rem) + ") :");
+            for (int i = 1; i <= 4; i++)
+            {
+                FsmGameObject db = rem.FsmVariables.FindFsmGameObject("db_ThisPart" + i);
+                PlayMakerFSM d = db != null && db.Value != null ? Game.FsmOn(db.Value, "Data") : null;
+                FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+                FsmGameObject sp = d != null ? d.FsmVariables.FindFsmGameObject("SpawnThis") : null;
+                if (d == null) continue;
+                sb.Append(' ').Append(db.Value.name).Append(" Installed=").Append(inst != null ? inst.Value.ToString() : "?");
+                if (sp != null && sp.Value != null && sp.Value.activeInHierarchy) sb.Append(" libre ").Append(Props.KnownWorldKey(sp.Value) ?? "sans cle");
+                sb.Append(" ;");
+            }
+            FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
+            sb.Append(" point ").Append(trig != null && trig.Value != null ? (trig.Value.activeSelf ? "allume" : "eteint") : "?");
+            return sb.ToString();
+        }
+
         static int MscConsider(PlayMakerFSM f)
         {
             if (waitingSet.Contains(f)) return 0;
             bool known;
             if (f.FsmName == "Screw") known = screws.Contains(f) || !IsMscBolt(f);
-            else if (f.FsmName == "Removal") known = mscRemovals.Contains(f) || f.Fsm.GetState("Remove part") == null;
+            else if (f.FsmName == "Removal") known = mscRemovals.Contains(f) || f.Fsm.GetState("Remove part") == null && !(housses && MultiRemoval(f));
             else known = mscPointOf.ContainsKey(f) || !IsMscPoint(f);
             if (known) return 0;
             Replay.Claim(f, "pieces");
@@ -296,7 +422,15 @@ namespace MWCoop
             if (f.FsmName == "Removal")
             {
                 FsmState rs = f.Fsm.GetState("Remove part");
-                if (!rs.IsInitialized || !Inject(rs, new MscRemovalHook { F = f })) return false;
+                if (rs != null) { if (!rs.IsInitialized || !Inject(rs, new MscRemovalHook { F = f })) return false; }
+                else
+                {
+                    // (housse : une branche 'Remove part N' par housse possible, toutes accrochees)
+                    var rn = new List<FsmState>();
+                    foreach (FsmState s in f.FsmStates) if (s.Name.StartsWith("Remove part ")) rn.Add(s);
+                    foreach (FsmState s in rn) if (!s.IsInitialized) return false;
+                    foreach (FsmState s in rn) if (!Inject(s, new MscRemovalHook { F = f })) return false;
+                }
                 mscRemovals.Add(f);
                 if (f.GetComponent<PartWatch>() == null) f.gameObject.AddComponent<PartWatch>();
                 return true;
@@ -336,6 +470,7 @@ namespace MWCoop
                 string n = f.FsmName;
                 if (n == "Assembly" || n == "Removal" || n == "Screw") MscConsider(f);
                 else if (n == "Use" && f.gameObject.activeInHierarchy) MscWheelHook(f);
+                else if (n == "BoltCheck" && f.gameObject.activeInHierarchy) MscChanceHook(f);
             }
             if (mscPoints.Count != before || screws.Count != beforeBolts || mscRemovals.Count != beforeRem)
             {
@@ -467,6 +602,7 @@ namespace MWCoop
                 if (tp == null || tp.Value == null) continue;
                 foreach (MscDbEntry en in mscDb) if (en.Data != null && en.Data.gameObject == tp.Value) { en.Swap = p; break; }
             }
+            MscAdoptLibre();   // (pieces libres « echange » : cle commune, audit MSC 02/11)
         }
         static void MscPrints(out uint hi, out uint hb, out int ni, out int nb)
         {
@@ -533,8 +669,11 @@ namespace MWCoop
             lastListSent = now;
             MscDigest(now);
             MscDigestDb();
-            Log.Info("pieces (MSC) : liste complete renvoyee a la demande de #" + who);
+            // (journal bride comme chez l'invite : un ecart que la liste ne corrige pas -- entree hors controle -- la redemandait toutes les
+            // 4 s, une ligne a chaque fois sans fin chez l'hote ; audit MSC 02/11)
+            if (listLogs++ < 30 || listLogs % 50 == 0) Log.Info("pieces (MSC) : liste complete renvoyee a la demande de #" + who + (listLogs > 30 ? " (" + listLogs + " fois)" : ""));
         }
+        static int listLogs;
         // Controle, genre 2 : Installed des entrees Database des pieces « echange » et des fils (le reste passe par les points et les vis).
         static void MscDigestDb()
         {
@@ -632,6 +771,10 @@ namespace MWCoop
             PlayMakerFSM bc = Game.FsmOn(rem.gameObject, "BoltCheck");
             FsmObject jv = bc != null ? bc.FsmVariables.FindFsmObject("Joint") : null;
             if (jv != null) jv.Value = fj;
+            // (audit MSC 02/11 : {Detach} pose par un 'Break off' joue sur la copie restait vrai -- 'Mouse off' repartait aussitot en
+            // 'Remove part', l'attache neuve faisait cette fois echouer la garde ci-dessus et la piece tombait ici seule. [Test] ChanceConducteur=0 : comme avant)
+            FsmBool dt = chanceConducteur ? rem.FsmVariables.FindFsmBool("Detach") : null;
+            if (dt != null) dt.Value = false;
             bool back = Game.SwitchLater(rem, "Mouse off");
             if (keepLogs++ < 40 || keepLogs % 50 == 0)
                 Log.Warn("piece " + id + " : attache disparue ici sur la copie (voiture menee par #" + VehicleSync.Authority(cb) + "), remise sur " + to.name
@@ -666,7 +809,7 @@ namespace MWCoop
                 { Log.Warn("piece " + id + " cassee : trop de casses" + (crash ? " malgre le choc" : "") + ", pas envoyee"); return; }
             }
             // (echange : la nouvelle piece libre n'existe qu'apres les actions de 'Remove part' -- envoye a l'image suivante, MscTick)
-            if (rem.FsmVariables.FindFsmGameObject("SpawnPart") != null) { mscOut.Add(new MscOut { Rem = rem, Key = key, Id = id, Flags = breakoff ? 1 : 0 }); return; }
+            if (rem.FsmVariables.FindFsmGameObject("SpawnPart") != null || housses && MultiRemoval(rem)) { mscOut.Add(new MscOut { Rem = rem, Key = key, Id = id, Flags = breakoff ? 1 : 0 }); return; }
             Log.Info((breakoff ? "casse : " : "demontage : ") + id + " de " + key);
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(false).Str(key).Str(id).U8(breakoff ? 1 : 0), true);
             Props.SettleHere(rem.gameObject);
@@ -1052,6 +1195,64 @@ namespace MWCoop
         static readonly List<MscOut> mscOut = new List<MscOut>();
         static int mscOutSerial;
 
+        // Cle de la piece libre neuve d'un demontage (audit MSC 02/11). Avant : « w:msc-out/<piece>#<joueur>-<n> », connue des seuls joueurs
+        // presents -- un joueur arrive ensuite chargeait la meme piece libre sous CARPARTS/PartsCar/spindle fl(Clone) ('Load transform' de
+        // sa Database), cle Props « w:CARPARTS/... » : jamais la meme, ni pose ni prise en main partagees, et remontee par lui la fusee
+        // apparaissait chez l'hote a cote de sa piece libre restee par terre (doublon). Maintenant une cle tiree de l'entree Database, la
+        // meme pour tous : « w:libre:db:Database/.../Spindle_FL » (piece « echange » : 'Remove part' en fait le SpawnThis de son entree),
+        // donnee aussi a la piece libre rechargee (MscAdoptLibre). Housse : la cle que Props donne a la housse libre a la racine (son nom
+        // sans « (Clone) »), celle d'une housse achetee rechargee. Deux demontages en meme temps donnent aussi la meme cle.
+        // [Test] LibreCleDb=0 : comme avant.
+        static bool libreCle = true;
+        static GameObject MscSpawnOf(GameObject dbEntry)
+        {
+            PlayMakerFSM d = dbEntry != null ? Game.FsmOn(dbEntry, "Data") : null;
+            FsmGameObject s = d != null ? d.FsmVariables.FindFsmGameObject("SpawnThis") : null;
+            return s != null ? s.Value : null;
+        }
+        static string MscLibreKey(GameObject dbEntry) { return "w:libre:db:" + Recon.Path(dbEntry.transform); }
+        static string MscOutKey(MscOut o, GameObject loose)
+        {
+            if (libreCle)
+            {
+                FsmGameObject db = o.Rem.FsmVariables.FindFsmGameObject("db_ThisPart");
+                if (db != null && db.Value != null && MscSpawnOf(db.Value) == loose) return MscLibreKey(db.Value);
+                if (housses && MultiRemoval(o.Rem) && loose.transform.parent == null) return "w:" + Recon.Path(loose.transform).Replace("(Clone)", "");   // (comme Props.WorldKey a la racine)
+            }
+            return "w:msc-out/" + o.Id + "#" + Session.LocalId + "-" + (++mscOutSerial);
+        }
+        // Piece libre « echange » d'une entree pas montee (rechargee de la sauvegarde, ou nee d'un demontage) : la cle commune.
+        static int MscAdoptLibre()
+        {
+            if (!libreCle) return 0;
+            int n = 0;
+            foreach (MscDbEntry en in mscDb)
+            {
+                if (en.Swap == null || en.Installed == null || en.Installed.Value || en.Data == null) continue;
+                GameObject go = MscSpawnOf(en.Data.gameObject);
+                if (go == null || !go.activeInHierarchy || go.GetComponent<Rigidbody>() == null || Game.FsmOn(go, "Removal") != null) continue;
+                if (Game.UnderPlayer(go.transform) || Props.RemoteHolder(go) >= 0) continue;   // (tenue : la cle ne change pas en main)
+                string k = MscLibreKey(en.Data.gameObject);
+                if (Props.KnownWorldKey(go) == k) continue;
+                Props.Adopt(go, k); n++;
+            }
+            if (n > 0) Log.Info("pieces (MSC) : " + n + " piece(s) libre(s) « echange » sous leur cle commune (w:libre:db:...)");
+            return n;
+        }
+        // Essais (audit MSC 02/11, cle commune) : la piece libre de l'entree 'dbPath' (Database/DatabaseBody/Spindle_FL) : cle, position.
+        public static string TestLibre(string dbPath)
+        {
+            GameObject dbg = Game.FindAny(dbPath);
+            PlayMakerFSM d = dbg != null ? Game.FsmOn(dbg, "Data") : null;
+            FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+            GameObject go = MscSpawnOf(dbg);
+            if (d == null) return dbPath + " introuvable";
+            int loose = 0;
+            if (go != null) foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>()) if (rb.name == go.name && rb.gameObject.activeInHierarchy) loose++;
+            return dbPath + " Installed=" + (inst != null ? inst.Value.ToString() : "?") + " ; libre " + (go != null ? Recon.Path(go.transform) + (go.activeInHierarchy ? "" : " (eteinte)") + " cle " + (Props.KnownWorldKey(go) ?? "aucune")
+                   + " en " + go.transform.position.ToString("F2") : "aucune") + " ; " + loose + " corps actif(s) de ce nom";
+        }
+
         // Demontage d'une piece « echange » fait ici : la nouvelle piece libre ({Part} de 'Removal') recoit une cle commune.
         static void MscTick()
         {
@@ -1059,6 +1260,7 @@ namespace MWCoop
             if (testClick != null) MscTestClickTick();
             MscCheckKept(Time.realtimeSinceStartup);
             MscPrintTick(Time.realtimeSinceStartup);
+            if (mscIn.Count > 0) MscCheckIn(Time.realtimeSinceStartup);
             if (mscOut.Count == 0) return;
             foreach (MscOut o in mscOut)
             {
@@ -1068,7 +1270,7 @@ namespace MWCoop
                 string outKey = "";
                 if (loose != null && loose != o.Rem.gameObject)
                 {
-                    outKey = "w:msc-out/" + o.Id + "#" + Session.LocalId + "-" + (++mscOutSerial);
+                    outKey = MscOutKey(o, loose);
                     Props.Adopt(loose, outKey);
                     Props.SettleHere(loose);
                 }
@@ -1159,11 +1361,17 @@ namespace MWCoop
                         foreach (PlayMakerFSM bf in part.GetComponents<PlayMakerFSM>())
                             if ((bf.FsmName == "BoltCheck" || bf.FsmName == "Use") && bf.Fsm != null && bf.Fsm.GetState("Break off") != null) Game.SetState(bf, "Break off");
                     rem.enabled = true;
-                    Game.SetState(rem, "Remove part");
+                    // (housse : 'What part' relit les Installed d'ici et choisit sa branche 'Remove part N' -- audit MSC 02/11)
+                    bool multi = housses && MultiRemoval(rem);
+                    if (multi && !MultiInstalled(rem)) { Log.Warn("housse " + id + " : aucune entree montee ici, pas demontee"); return; }
+                    FsmGameObject lv = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null || multi ? rem.FsmVariables.FindFsmGameObject("Part") : null;
+                    GameObject before = lv != null ? lv.Value : null;
+                    if (multi) { remoteRemoval[rem] = Time.realtimeSinceStartup + 1f; Game.SetState(rem, WhatPart(rem).Name); }
+                    else Game.SetState(rem, "Remove part");
                     // (echange : la nouvelle piece libre d'ici prend la cle de celle de l'autre et suit sa chute)
-                    FsmGameObject lv = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null ? rem.FsmVariables.FindFsmGameObject("Part") : null;
-                    GameObject loose = lv != null && lv.Value != null && lv.Value != part ? lv.Value : null;
+                    GameObject loose = lv != null && lv.Value != null && lv.Value != part && (!multi || lv.Value != before) ? lv.Value : null;
                     if (loose != null && outKey.Length > 0) { Props.Adopt(loose, outKey); Props.HoldFromRemote(loose, who); }
+                    else if (multi && outKey.Length > 0) mscIn.Add(new MscIn { Rem = rem, Before = before, Key = outKey, Who = who, Until = Time.realtimeSinceStartup + 1f });
                     else Props.HoldFromRemote(part, who);
                     Log.Info("piece " + id + ((flags & 1) != 0 ? " cassee de " : " demontee de ") + key + " (joueur #" + who + ")");
                 }
