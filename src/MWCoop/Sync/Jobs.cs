@@ -700,7 +700,14 @@ namespace MWCoop
                    || f.FsmName == "Data" && f.Fsm != null && f.Fsm.GetState("Terrain Compare") != null && f.Fsm.GetState("Tire disable") != null
                    // (meme famille : wheel_regula::Use des roues -- « Bolts ON 2 -BREAK-> Chance » tire au sort la chute de la roue ; rejoue,
                    // l'autre tirait aussi : Parts.WheelChanceHook laisse le tirage a celui qui mene la voiture, Yunus et Markos 25/10)
-                   || f.FsmName == "Use" && f.Fsm != null && f.Fsm.GetState("Chance") != null && f.Fsm.GetState("Break off") != null && f.Fsm.GetState("Bolts ON 2") != null;
+                   || f.FsmName == "Use" && f.Fsm != null && f.Fsm.GetState("Chance") != null && f.Fsm.GetState("Break off") != null && f.Fsm.GetState("Bolts ON 2") != null
+                   // (meme famille, audit MSC 02/11 : BoltCheck des pieces montees sous la SATSUMA sans « (Clone) » -- strut fl(xxxxx), triangles,
+                   // demi-arbres, fusees, bras arriere, amortisseurs, radiateur, frein a main, timonerie, filtre a essence : UniqueTagFloat /
+                   // UniqueTagArray, donc suivis ici. « Check break -BREAK-> Chance » rejoue faisait tirer le conducteur une fois de plus, et
+                   // « Chance -BREAK-> Break off » de l'hote decrochait la piece chez chacun en plus de la casse envoyee par Parts (flags 1).
+                   // Tirage et casse : Parts.WheelChanceHook / MscLocalRemove. [Test] ChanceConducteur=0 : comme avant)
+                   || f.FsmName == "BoltCheck" && f.Fsm != null && f.Fsm.GetState("Chance") != null && f.Fsm.GetState("Break off") != null
+                      && Config.GetInt("Test", "ChanceConducteur", 1) != 0;
         }
 
         static bool IgnitionLike(PlayMakerFSM f)

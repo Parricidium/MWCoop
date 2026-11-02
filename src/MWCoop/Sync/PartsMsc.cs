@@ -103,7 +103,7 @@ namespace MWCoop
         // sans tirer, et une vraie chute arrive par le demontage de la roue chez lui.
         static readonly HashSet<PlayMakerFSM> wheelHooked = new HashSet<PlayMakerFSM>();
         static readonly List<FsmStateAction> wheelCut = new List<FsmStateAction>();
-        static int wheelLogs, chanceLogs;
+        static int wheelLogs, chanceLogs, chanceEntries;
         class WheelChanceHook : ModHook
         {
             public override string Module { get { return Bolt ? "pieces (casses)" : "pieces (roues)"; } }
@@ -113,7 +113,10 @@ namespace MWCoop
             {
                 try
                 {
-                    if (Session.Active && !VehicleSync.SimAuthority(F.transform))
+                    if (Bolt) chanceEntries++;
+                    // (relecture audit MSC 02/11 : une entree rejouee -- Replay.Depth > 0 -- ne tire jamais, meme chez le conducteur : un
+                    // 'Chance' venu d'un autre faisait un tirage de plus par joueur ; une vraie casse arrive par Part, droit en 'Break off')
+                    if (Session.Active && (Replay.Depth > 0 || !VehicleSync.SimAuthority(F.transform)))
                     {
                         foreach (FsmStateAction a in State.Actions) if (a != this && a.Enabled) { a.Enabled = false; wheelCut.Add(a); }
                         if (!Bolt && wheelLogs++ < 10) global::MWCoop.Log.Info("roue " + Recon.Path(F.transform) + " : chute tiree au sort chez celui qui mene la voiture, pas ici");
@@ -169,7 +172,8 @@ namespace MWCoop
             PlayMakerFSM rem = Game.FsmOn(part, "Removal");
             FsmBool dt = rem != null ? rem.FsmVariables.FindFsmBool("Detach") : null;
             return partKey + " : 'Chance' -> " + bc.ActiveStateName + ", serrage " + (tg != null ? tg.Value.ToString("F0") : "?") + ", Detach " + (dt != null ? dt.Value.ToString() : "?")
-                   + ", crochet " + wheelHooked.Contains(bc) + ", autorite ici " + VehicleSync.SimAuthority(bc.transform);
+                   + ", crochet " + wheelHooked.Contains(bc) + ", autorite ici " + VehicleSync.SimAuthority(bc.transform)
+                   + ", suivi par les quetes " + Jobs.Tracks(bc) + ", entrees en 'Chance' " + chanceEntries;
         }
 
         static void MscReset()
