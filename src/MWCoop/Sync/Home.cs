@@ -36,7 +36,7 @@ namespace MWCoop
     //     - coupe chez un invite, 'Lights off 2' attend l'hote ({Blackout} pousse a une heure) : courant revenu chez
     //       l'hote et la (globale HouseElectricity), rallume 1 s apres, sans la limite des 30 s.
     //    [Test] CoupureAncienne=1 : comme avant.
-    // 2) KILJU. Seau EQUIPMENTS/bucket(itemx) :: Use (Sugar, Yeast, Water, Alcohol, Time, LidOn, KiljuFinished...) : le
+    // 2) KILJU. Seau EQUIPMENTS/bucket(itemx) (MSC : ITEMS/bucket(itemx), voir BucketPath) :: Use (Sugar, Yeast, Water, Alcohol, Time, LidOn, KiljuFinished...) : le
     //    monde ne le suit pas ((itemx)), chacun brassait le sien. Un joueur fait autorite (l'hote au chargement, puis le
     //    dernier qui a tenu le seau ou son couvercle, ou y a jete sucre ou levure) : il envoie les variables du seau
     //    quand elles changent (3 s au plus souvent, 5 s sans changement) ; les autres les recopient, et recalent
@@ -708,7 +708,14 @@ namespace MWCoop
         static int brewAuth, brewApplied, brewSent;   // brewAuth : joueur qui fait autorite sur le seau
         static float lastBrewSent;
         static string brewSig = "";
-        const string BucketPath = "EQUIPMENTS/bucket(itemx)", JokkePath = "JOBS/JOKKEHOME/HouseDrunkNew/KiljuBuyer/CanTrigger";
+        // Chemins par jeu (audit MSC 02/11 : sur My Summer Car il n'y a pas de racine EQUIPMENTS -- seau, couvercle et Jokke
+        // restaient introuvables, « seau absent », chacun brassait le sien et la vente a Jokke tournait chez tous). MSC : seau
+        // ITEMS/bucket(itemx) :: Use, couvercle ITEMS/bucket lid(itemx) :: Removal, Jokke au camp de BeerCamp (memes etats
+        // 'Freeze Can' / 'Player?' / 'Lets see' que MWC). [Test] KiljuMsc=0 : comme avant (chemins de MWC partout).
+        static bool KiljuMsc { get { return Game.Msc && Config.GetInt("Test", "KiljuMsc", 1) != 0; } }
+        static string BucketPath { get { return KiljuMsc ? "ITEMS/bucket(itemx)" : "EQUIPMENTS/bucket(itemx)"; } }
+        static string LidPath { get { return KiljuMsc ? "ITEMS/bucket lid(itemx)" : "EQUIPMENTS/bucket lid(itemx)"; } }
+        static string JokkePath { get { return KiljuMsc ? "JOBS/HouseDrunk/BeerCampOld/BeerCamp/KiljuBuyer/CanTrigger" : "JOBS/JOKKEHOME/HouseDrunkNew/KiljuBuyer/CanTrigger"; } }
 
         // Bidon rempli au seau (TriggerFill :: Fill pose ContainsKilju, KiljuAlc... dans l'automate Use du bidon ; retour de
         // RullER 14/10 : « bidons de kilju remplis, vides apres la sauvegarde » -- rempli chez l'invite, il restait vide chez
@@ -737,7 +744,7 @@ namespace MWCoop
         {
             bucket = Game.FindAny(BucketPath);
             brew = bucket != null ? Game.FsmOn(bucket, "Use") : null;
-            lid = GoVar(brew, "Lid") ?? Game.FindAny("EQUIPMENTS/bucket lid(itemx)");
+            lid = GoVar(brew, "Lid") ?? Game.FindAny(LidPath);
             lidRemoval = lid != null ? Game.FsmOn(lid, "Removal") : null;
             Transform ti = bucket != null ? bucket.transform.Find("TriggerIngredients") : null;
             ingredients = ti != null ? Game.FsmOn(ti.gameObject, "Level") : null;
