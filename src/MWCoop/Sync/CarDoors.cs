@@ -118,6 +118,17 @@ namespace MWCoop
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
 
+        // Automate 'Use' que Scan prendrait (memes etats : portiere, capot, hayon), meme pas encore sous une voiture -- portiere
+        // de la SATSUMA demontee au chargement, que WorldFsms doit laisser libre pour ce module (desync du 02/11, voir WorldFsms.Skip).
+        public static bool DoorLike(PlayMakerFSM f)
+        {
+            if (f == null || f.FsmName != "Use") return false;
+            Fsm m = f.Fsm;
+            return m.GetState("Open door") != null && (m.GetState("Open door 2") != null || m.GetState("Open door 3") != null) && m.GetState("Close door") != null
+                   || m.GetState("Open hood") != null && m.GetState("Close hood") != null
+                   || m.GetState("Open hood 2") != null && m.GetState("Close hood 2") != null;
+        }
+
         // Attache posee par le verrou du jeu ("Set lock 2", reperee en fin d'etat, avant tout passage de
         // VehicleSync.ProtectJoints) : laissee cassable sur la copie -- incassable, elle soudait la portiere et le
         // clic suivant (qui la casse en tirant) ne l'ouvrait plus. Seulement elle : la charniere, le loquet de la

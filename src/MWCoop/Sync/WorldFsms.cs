@@ -120,6 +120,8 @@ namespace MWCoop
             public HashSet<string> TriggerStates = new HashSet<string>();                     // etats qui attendent une zone ou un choc
             public Dictionary<string, HashSet<string>> TriggerEvents = new Dictionary<string, HashSet<string>>();   // evenements qu'ils envoient
             public HashSet<string> PersonalOnly = new HashSet<string>();                      // etats dont TOUTES les actions touchent au joueur
+            public Dictionary<string, HashSet<string>> ZoneVars = new Dictionary<string, HashSet<string>>();   // etat qui attend une zone -> variables ou elle range l'objet entre
+            public Dictionary<string, bool> ZoneCache = new Dictionary<string, bool>();       // ReadsZone, par "attente|arrivee"
             public Dictionary<string, float> TrigSent = new Dictionary<string, float>();      // dernier envoi par declencheur, par etat
             public bool Races;                                                                 // sous RACES : declencheurs jamais rejoues
             public float WindowStart, NoisySince; public int Count; public bool Noisy;
@@ -316,6 +318,11 @@ namespace MWCoop
             pcPerso = Config.GetInt("Test", "OrdinateurPerso", 1) != 0;
             clesPartagees = Config.GetInt("Test", "ClesPartagees", 1) != 0;
             aliasStrict = Config.GetInt("Test", "AliasStrict", 1) != 0;
+            // (desync du 02/11 : voir Skip, OnLocal et OnMessage -- [Test] <Nom>=0 : comme avant)
+            portesPieces = Config.GetInt("Test", "PortesPieces", 1) != 0;
+            zoneObjet = Config.GetInt("Test", "ZoneObjet", 1) != 0;
+            outilsPerso = Config.GetInt("Test", "OutilsPerso", 1) != 0;
+            zoneLogged.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -323,6 +330,16 @@ namespace MWCoop
         public static void ScheduleSnapshot(Peer p) { snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 22f, p)); }
 
         static bool fraisesPerso = true, dragPerso = true, pcPerso = true, clesPartagees = true, aliasStrict = true;
+        static bool portesPieces = true, zoneObjet = true, outilsPerso = true;
+        static readonly HashSet<string> zoneLogged = new HashSet<string>();   // cles deja notees (zone propre / rejeu en erreur), une ligne chacune
+
+        // Mode outils du joueur (desync du 02/11, JD et GG : PLAYER/.../SelectItem diffuse REPAIRMODE_ON/OFF a toute la scene quand on
+        // sort ou range ses outils ; les vis de reglage des soupapes, CARPARTS/PartsMotor/rocker shaft(Clone)/New/ValveAdjust/BoltPM::Screw,
+        // allument ou eteignent leur collider). Propre a chaque joueur : rejoue, ranger sa cle eteignait les vis de celui qui reglait les
+        // soupapes (plus moyen de les viser). Jobs les ignore deja sur les vehicules (24/10) ; ici, sous CARPARTS, ils partaient en global.
+        // Ni envoyes ni rejoues (client d'avant compris). My Summer Car seulement. [Test] OutilsPerso=0 : comme avant.
+        static readonly HashSet<string> PersonalGlobals = new HashSet<string> { "REPAIRMODE_ON", "REPAIRMODE_OFF" };
+        static bool PersonalGlobal(string ev) { return outilsPerso && Game.Msc && PersonalGlobals.Contains(ev); }
 
         // My Summer Car (audit MSC 02/11) : automates du monde laisses a chacun.
         //  - Champ de fraises (JOBS/StrawberryField : PickABox, BerryTrigger, DropABox, Money, tous 'Pick' ; caisses berry box(Clone)::Use) :
@@ -381,6 +398,13 @@ namespace MWCoop
             if (Game.Msc && MscPersonal(f, root, n)) return true;                        // fraises, dragsters, ordinateur : a chacun (audit MSC 02/11)
             if (f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) return true;  // pieces : Parts
             if (n.StartsWith("VINP")) return true;                                       // points de montage : Parts
+            // Portiere, capot, coffre d'une piece demontable (desync du 02/11, JD et GG : portieres de la SATSUMA demontees au
+            // chargement, CARPARTS/PartsCar/door left(Clone)::Use) : libre, son 'Use' etait pris ici, et une fois montee CarDoors ne
+            // pouvait plus le prendre. Le verrou de l'ouverture ("Reset 2" -> "Set lock 2", attache rigide a la caisse) etait alors
+            // rejoue, chez l'hote sur une portiere encore libre en main ; et les verrous s'empilaient (charniere arrachee, demontage
+            // tout seul, caisse secouee). Laisse libre : CarDoors le prend a son releve une fois la piece montee. (Removal sur l'objet
+            // ou au-dessus : le coffre a son 'Use' sur bootlid(Clone)/Handles.) My Summer Car seulement. [Test] PortesPieces=0 : comme avant.
+            if (Game.Msc && portesPieces && CarDoors.DoorLike(f) && RemovableAbove(f)) return true;
             if (Interactions.Tracks(f) || Interactions.Wants(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
             if (root.name == "JOBS" && f.FsmName != "Use" && HasSave(f)) return true;   // boulots : Jobs (meme s'il ne les a pas encore vus)
             if (n == "CashRegisterLogic") return true;                                    // magasin : Shop
@@ -402,6 +426,14 @@ namespace MWCoop
         static bool UnderVehicle(Transform t)
         {
             for (Transform p = t; p != null; p = p.parent) if (p.GetComponent("CarDynamics") != null) return true;
+            return false;
+        }
+
+        // Piece demontable : un automate 'Removal' sur l'objet ou un parent (avant la racine).
+        static bool RemovableAbove(PlayMakerFSM f)
+        {
+            for (Transform p = f.transform; p != null && p.parent != null; p = p.parent)
+                if (Game.FsmOn(p.gameObject, "Removal") != null) return true;
             return false;
         }
 
@@ -463,6 +495,13 @@ namespace MWCoop
                         bool reads = f.gameObject.name.StartsWith("DiscTrigger") && a.GetType().Name.StartsWith("Get");
                         if (go != null && PersonalRoots.Contains(Game.RootName(go.transform)) && !reads) personalAct = true;
                         var nv = v as NamedVariable;
+                        // Variable ou la zone range l'objet entre (storeCollider) : voir ReadsZone (desync du 02/11).
+                        if (trig && fi.Name == "storeCollider" && v is FsmGameObject && nv.UseVariable && !string.IsNullOrEmpty(nv.Name) && !GoVar(nv.Name))
+                        {
+                            HashSet<string> zv;
+                            if (!w.ZoneVars.TryGetValue(st.Name, out zv)) w.ZoneVars[st.Name] = zv = new HashSet<string>();
+                            zv.Add(nv.Name);
+                        }
                         if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && !Game.LocalVar(f, nv.Name)
                             && (v is FsmGameObject || nv.Name == "PlayerStop" || nv.Name == "PlayerInMenu" || nv.Name == "PlayerSeated" || nv.Name == "PlayerSleeps"))
                             personalAct = true;
@@ -508,6 +547,54 @@ namespace MWCoop
                     if (inEv == null || !inEv.Contains(t.EventName)) todo.Push(t.ToState);   // automatique
             }
             w.SafeCache[state] = r;
+            return r;
+        }
+
+        // Objet de la zone (desync du 02/11, JD et GG : compost YARD/Building/LOD/komposti/GarbageTrigger::Logic). 'Wait part' range
+        // dans {Object} la piece ou l'objet qui y entre, 'State 2' en lit le nom (GetName, puis GetStringLeft a 6 lettres, non borne dans
+        // My Summer Car). Cet objet n'existe que chez celui qui l'a vu entrer et n'est pas transmis (seuls les GoVar le sont) : chez l'autre,
+        // {Object} nul -> exception a chaque image, compost bloque en 'State 2' ; ou perime (son dernier dechet) -> transforme une 2e fois.
+        // La transformation en dechet est deja suivie par les consommables. Pareil pour la fosse de la decharge, les feux (bois, saucisse),
+        // les buts du foot (SCORE en double). La chaine qui part de 'state' (transitions automatiques, jusqu'a ce que l'automate attende
+        // de nouveau une zone ou une commande) lit-elle une variable ou la zone 'from' range son objet ?
+        static readonly HashSet<string> ZoneWrites = new HashSet<string> { "variable", "storeObject", "storeResult", "storeCollider", "store", "storeGameObject" };
+        static bool ReadsZone(W w, string from, string state)
+        {
+            HashSet<string> vars;
+            if (!w.ZoneVars.TryGetValue(from, out vars) || vars.Count == 0) return false;
+            string ck = from + "|" + state;
+            bool r;
+            if (w.ZoneCache.TryGetValue(ck, out r)) return r;
+            var seen = new HashSet<string>();
+            var todo = new Stack<string>();
+            todo.Push(state);
+            r = false;
+            while (todo.Count > 0 && !r)
+            {
+                string s = todo.Pop();
+                if (!seen.Add(s)) continue;
+                if (s != state && (w.TriggerStates.Contains(s) || w.InputStates.Contains(s))) continue;   // attend de nouveau : fin de la chaine
+                FsmState st = w.F.Fsm.GetState(s);
+                if (st == null) continue;
+                foreach (FsmStateAction a in st.Actions)
+                {
+                    if (a == null || a is ModHook || TriggerActions.Contains(a.GetType().Name)) continue;
+                    foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        if (ZoneWrites.Contains(fi.Name)) continue;
+                        object v = fi.GetValue(a);
+                        NamedVariable nv = v as FsmGameObject;
+                        if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption == OwnerDefaultOption.SpecifyGameObject) nv = od.GameObject; }
+                        if (nv != null && nv.UseVariable && vars.Contains(nv.Name)) { r = true; break; }
+                    }
+                    if (r) break;
+                }
+                HashSet<string> inEv;
+                w.InputEvents.TryGetValue(s, out inEv);
+                foreach (FsmTransition t in st.Transitions)
+                    if (inEv == null || !inEv.Contains(t.EventName)) todo.Push(t.ToState);   // automatique
+            }
+            w.ZoneCache[ck] = r;
             return r;
         }
 
@@ -636,6 +723,7 @@ namespace MWCoop
             FsmTransition tr = j.F.Fsm.LastTransition;
             FsmState prev = j.F.Fsm.PreviousActiveState;
             float now = Time.realtimeSinceStartup;
+            if (tr != null && PersonalGlobal(tr.EventName)) return;   // outils sortis / ranges : a ce joueur (desync du 02/11)
             if (j.HostDriven)
             {
                 // Logique de l'hote : chaque etat est envoye (FINISHED compris), les invites s'y recalent.
@@ -691,6 +779,13 @@ namespace MWCoop
                 if (j.InputStates.Contains(state)) return;
                 // Tout l'etat agit sur le joueur (JailSafeTrigger : SetPosition PLAYER) : rien a rejouer ailleurs.
                 if (j.PersonalOnly.Contains(state)) return;
+                // La chaine lit l'objet entre dans la zone, qui n'est que chez nous (voir ReadsZone). My Summer Car seulement.
+                // [Test] ZoneObjet=0 : comme avant.
+                if (zoneObjet && Game.Msc && ReadsZone(j, prev.Name, state))
+                {
+                    if (zoneLogged.Add(j.Key)) Log.Info("monde : automate " + j.Key + " : etat " + state + " par declencheur (" + prev.Name + " -" + tr.EventName + "->), objet de la zone propre a ce joueur : pas envoye");
+                    return;
+                }
                 // Les deux dans la zone, OnTriggerStay chaque image, boucle de 0,1 s : pas deux fois le meme etat en 0,5 s.
                 float last;
                 if (j.TrigSent.TryGetValue(state, out last) && now - last < 0.5f) return;
@@ -992,6 +1087,7 @@ namespace MWCoop
             string key = r.Str(), prev = r.Str(), ev = r.Str();
             int global = r.U8();
             string state = r.Str();
+            if (PersonalGlobal(ev)) return;   // outils d'un autre (client d'avant le 02/11) : ni relaye ni rejoue
             var ints = new List<KeyValuePair<string, int>>();
             var floats = new List<KeyValuePair<string, float>>();
             var bools = new List<KeyValuePair<string, bool>>();
@@ -1091,8 +1187,24 @@ namespace MWCoop
                     finally { foreach (FsmStateAction a in muted) a.Enabled = true; }
                     if (j.F.Fsm.GetState("Disable phone") != null) Game.SetState(j.F, "Disable phone");
                 }
-                else if (global == 1 || j.F.ActiveStateName == prev) j.F.SendEvent(ev);
-                if (direct && !j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
+                else
+                {
+                    try
+                    {
+                        if (global == 1 || j.F.ActiveStateName == prev) j.F.SendEvent(ev);
+                        if (direct && !j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
+                    }
+                    catch (System.Exception e)
+                    {
+                        // Rejeu par declencheur en erreur (desync du 02/11, JD et GG : compost rejoue sans son objet, GetStringLeft sur un
+                        // nom vide). L'exception sortait de l'entree de l'etat avant la fin de l'action : automate fige dans 'State 2', la
+                        // meme exception a chaque image jusqu'au menu, actions coupees rendues 60 s plus tard seulement. Remis dans son
+                        // etat d'attente (les actions coupees sont rendues juste apres, Waiting). [Test] ZoneObjet=0 : comme avant.
+                        if (!zoneObjet || !byTrigger || string.IsNullOrEmpty(prev) || j.F.Fsm.GetState(prev) == null) throw;
+                        if (j.F.ActiveStateName != prev) Game.SetState(j.F, prev);
+                        if (zoneLogged.Add("r|" + key)) Log.Warn("monde de #" + who + " : " + key + " : rejeu par declencheur en erreur (" + e.GetType().Name + "), remis en " + prev);
+                    }
+                }
             }
             finally
             {
@@ -1427,6 +1539,91 @@ namespace MWCoop
             foreach (W j in pending)
                 if (j.F != null && j.Key.Contains(part)) return j.Key + " en attente (objet inactif), etat [" + j.F.ActiveStateName + "]";
             return "rien de suivi pour " + part;
+        }
+
+        // Essais (desync du 02/11, compost) : zones de l'automate suivi dont la cle contient 'part' (etat d'attente {variable de l'objet}
+        // -> etat d'arrivee : lue ou non par la chaine). Si 'obj' est donne (chemin d'un objet de la scene) : il « entre » dans la zone ici --
+        // la variable de la zone le recoit et l'evenement de la zone part de l'etat d'attente, comme un vrai declencheur ; le crochet decide
+        // d'envoyer ou non (« objet de la zone propre a ce joueur : pas envoye », ou « par declencheur ... envoye »). Compost : un objet au nom
+        // ordinaire (ni charre, ni spoile, ni rotten) repasse par 'Reset', rien n'est detruit.
+        public static string TestZone(string part, string obj)
+        {
+            foreach (W j in byKey.Values)
+            {
+                if (j.F == null || !j.Key.Contains(part) || j.ZoneVars.Count == 0) continue;
+                var sb = new System.Text.StringBuilder(j.Key + " [" + j.F.ActiveStateName + "] :");
+                string wait = null, ev = null, zvar = null;
+                foreach (KeyValuePair<string, HashSet<string>> kv in j.ZoneVars)
+                {
+                    HashSet<string> trEv;
+                    FsmState st = j.F.Fsm.GetState(kv.Key);
+                    if (st == null || !j.TriggerEvents.TryGetValue(kv.Key, out trEv)) continue;
+                    foreach (FsmTransition t in st.Transitions)
+                    {
+                        if (!trEv.Contains(t.EventName)) continue;
+                        sb.Append(' ').Append(kv.Key).Append(" {").Append(string.Join(",", new List<string>(kv.Value).ToArray())).Append("} -").Append(t.EventName).Append("-> ").Append(t.ToState)
+                          .Append(ReadsZone(j, kv.Key, t.ToState) ? " (objet lu : pas envoye)" : " (objet pas lu)").Append(';');
+                        if (j.F.ActiveStateName == kv.Key && wait == null) { wait = kv.Key; ev = t.EventName; foreach (string x in kv.Value) { zvar = x; break; } }
+                    }
+                }
+                if (string.IsNullOrEmpty(obj)) return sb.ToString();
+                GameObject go = Game.FindAny(obj);
+                if (go == null) return sb.Append(' ').Append(obj).Append(" introuvable").ToString();
+                if (wait == null) return sb.Append(" pas dans un etat d'attente de zone").ToString();
+                FsmGameObject zg = j.F.FsmVariables.FindFsmGameObject(zvar);
+                if (zg != null) zg.Value = go;
+                j.F.SendEvent(ev);
+                return sb.Append(' ').Append(go.name).Append(" entre : ").Append(wait).Append(" -").Append(ev).Append("-> [").Append(j.F.ActiveStateName).Append(']').ToString();
+            }
+            return "pas de zone suivie pour " + part;
+        }
+
+        // Essais (desync du 02/11, compost ; invite seulement) : comme si l'hote envoyait le rejeu par declencheur de la zone de l'automate
+        // 'part' (mode 4, depuis son etat d'attente) alors que l'objet entre chez lui n'existe pas ici -- notre variable de zone est videe.
+        // Attendu : « rejeu par declencheur en erreur (ArgumentOutOfRangeException), remis en Wait part », automate de nouveau en attente.
+        // Avec [Test] ZoneObjet=0 : l'exception remonte (rendue ici) et l'automate reste fige dans l'etat d'arrivee.
+        public static string TestZoneRejeu(string part)
+        {
+            if (Session.IsHost) return "invite seulement";
+            foreach (W j in byKey.Values)
+            {
+                if (j.F == null || !j.Key.Contains(part) || j.ZoneVars.Count == 0) continue;
+                HashSet<string> vars, trEv;
+                string wait = j.F.ActiveStateName;
+                if (!j.ZoneVars.TryGetValue(wait, out vars) || !j.TriggerEvents.TryGetValue(wait, out trEv)) return j.Key + " [" + wait + "] : pas dans un etat d'attente de zone";
+                FsmState st = j.F.Fsm.GetState(wait);
+                foreach (FsmTransition t in st.Transitions)
+                {
+                    if (!trEv.Contains(t.EventName)) continue;
+                    foreach (string x in vars) { FsmGameObject zg = j.F.FsmVariables.FindFsmGameObject(x); if (zg != null) zg.Value = null; }
+                    var w = new NetWriter(Msg.WorldFsm).U8(0).Str(j.Key).Str(wait).Str(t.EventName).U8(4).Str(t.ToState);
+                    WriteVars(j.F, w, false);
+                    byte[] data = w.ToArray();
+                    string err = "";
+                    try { OnMessage(null, new NetReader(data, 1, data.Length - 1)); }
+                    catch (System.Exception e) { err = ", exception " + e.GetType().Name; }
+                    return j.Key + " : rejeu " + wait + " -" + t.EventName + "-> " + t.ToState + " sans objet : [" + j.F.ActiveStateName + "]" + err;
+                }
+            }
+            return "pas de zone suivie pour " + part;
+        }
+
+        // Essais (desync du 02/11, portieres demontables) : les 'Use' de portiere, capot ou coffre poses sur une piece demontable -- chemin,
+        // ecarte par Skip ou non, et le module qui les a (vide : personne, la piece est libre ; "portieres" une fois montee et relevee
+        // par CarDoors ; "monde" : le bug, ou [Test] PortesPieces=0).
+        public static string TestPortesPieces()
+        {
+            var sb = new System.Text.StringBuilder("portes de pieces :");
+            int n = 0;
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            {
+                if (f.FsmName != "Use" || !CarDoors.DoorLike(f) || !RemovableAbove(f)) continue;
+                bool skip;
+                try { skip = Skip(f); } catch { skip = false; }
+                sb.Append(' ').Append(Recon.Path(f.transform)).Append(skip ? " (ecarte)" : " (pas ecarte)").Append(" a ").Append(Replay.Owner(f) ?? "personne").Append(';');
+                n++;
+            }
+            return n == 0 ? sb.Append(" aucune").ToString() : sb.ToString();
         }
 
         public static string Var(string part, string name)
