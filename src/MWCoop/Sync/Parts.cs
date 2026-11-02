@@ -782,6 +782,7 @@ namespace MWCoop
                 Rigidbody prb = part.GetComponent<Rigidbody>();
                 Log.Info("piece " + (Game.Msc ? MscPartKey(part) : IdOf(part)) + " posee : joint " + (part.GetComponent<Joint>() != null ? "oui" : "NON") + ", corps " + (prb == null ? "aucun" : prb.isKinematic ? "CINEMATIQUE" : "libre") + ", par rapport au point "
                     + pt.InverseTransformPoint(part.transform.position).ToString("F3") + " / " + (Quaternion.Inverse(pt.rotation) * part.transform.rotation).eulerAngles.ToString("F1"));
+                if (Game.Msc) MscAbortedMount(part, pt);   // (point eteint sur une piece libre : montage avorte, desync du 02/11)
             }
             mountedNow.Clear();
         }
