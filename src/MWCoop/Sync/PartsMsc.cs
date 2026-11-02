@@ -404,6 +404,9 @@ namespace MWCoop
             if (f.FsmName == "Screw") known = screws.Contains(f) || !IsMscBolt(f);
             else if (f.FsmName == "Removal") known = mscRemovals.Contains(f) || f.Fsm.GetState("Remove part") == null && !(housses && MultiRemoval(f));
             else known = mscPointOf.ContainsKey(f) || !IsMscPoint(f);
+            // (couvercle du seau de kilju : a Home sur My Summer Car -- pris ici d'abord chez l'hote, par Home chez l'invite selon l'ordre
+            // des releves : deux modules differents pour le meme automate, audit MSC 02/11 ; [Test] KiljuMsc=0 : comme avant)
+            if (f.FsmName == "Removal" && !known && Home.KiljuMsc && f.gameObject.name.StartsWith("bucket lid")) known = true;
             if (known) return 0;
             Replay.Claim(f, "pieces");
             if (MscTryHook(f)) return 1;

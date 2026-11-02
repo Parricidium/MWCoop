@@ -712,7 +712,7 @@ namespace MWCoop
         // restaient introuvables, « seau absent », chacun brassait le sien et la vente a Jokke tournait chez tous). MSC : seau
         // ITEMS/bucket(itemx) :: Use, couvercle ITEMS/bucket lid(itemx) :: Removal, Jokke au camp de BeerCamp (memes etats
         // 'Freeze Can' / 'Player?' / 'Lets see' que MWC). [Test] KiljuMsc=0 : comme avant (chemins de MWC partout).
-        static bool KiljuMsc { get { return Game.Msc && Config.GetInt("Test", "KiljuMsc", 1) != 0; } }
+        public static bool KiljuMsc { get { return Game.Msc && Config.GetInt("Test", "KiljuMsc", 1) != 0; } }
         static string BucketPath { get { return KiljuMsc ? "ITEMS/bucket(itemx)" : "EQUIPMENTS/bucket(itemx)"; } }
         static string LidPath { get { return KiljuMsc ? "ITEMS/bucket lid(itemx)" : "EQUIPMENTS/bucket lid(itemx)"; } }
         static string JokkePath { get { return KiljuMsc ? "JOBS/HouseDrunk/BeerCampOld/BeerCamp/KiljuBuyer/CanTrigger" : "JOBS/JOKKEHOME/HouseDrunkNew/KiljuBuyer/CanTrigger"; } }
