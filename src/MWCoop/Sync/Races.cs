@@ -52,6 +52,9 @@ namespace MWCoop
 
         const int F_ON = 1, F_BRAKE = 2, F_ENGINE = 4;
         const int K_CARS = 1, K_RESULTS = 2, K_HASH = 3, K_HASHREPLY = 4, K_ROOTS = 5, K_HELPERS = 6;
+        // (MSC, audit 02/11 : invite en speciale -> hote, chrono de sa journee ; RallyMsc. Rang libre entre Rally (10-14) et IceRace
+        // (20+) : un ancien hote le passe a Rally.OnMessage, qui l'ignore)
+        public const int K_MSCSTAGE = 15;
         // Course en place cette semaine (RACES 'SwapDates' : semaine paire le rallye, impaire la glace), d'apres l'hote :
         // chez l'invite le choix n'etait refait qu'a son reveil (WAKEUP) -- voitures IA de la glace roulant sur une piste eteinte.
         // My Summer Car (22/10) : memes automates (RallyCars :: AIdrivers / GenerateTimes / Leaderboard, RALLYCAR1-3 :: Steering /
@@ -255,6 +258,7 @@ namespace MWCoop
             if (kind == 29) { IceRace.OnMessage(kind, from, r); return; }   // VAZ inscrite a la course sur glace (18/10)
             if (kind >= 24) return;   // (24-28 : voitures Jokkis de location, retirees le 24/10 -- JD : les voitures addons a la place)
             if (kind >= 20) { IceRace.OnMessage(kind, from, r); return; }   // course sur glace a plusieurs pilotes
+            if (kind == K_MSCSTAGE) { int day = r.U8(); float el = r.F32(); if (Session.IsHost && from != null) RallyMsc.OnStage(from.Id, day, el); return; }   // (MSC : invite en speciale)
             if (kind >= 10) { Rally.OnMessage(kind, from, r); return; }   // rallye a plusieurs pilotes
             if (kind == K_HASH)
             {
@@ -590,11 +594,35 @@ namespace MWCoop
             }
         }
 
+        // My Summer Car (audit MSC 02/11, voitures IA lachees sur un invite en speciale) : Navigation 'Timing?' / 'Timing? 2' des
+        // RALLYCAR lit le chrono de la speciale d'ICI (RALLY/Saturday/TimingSaturday ou Sunday/TimingSunday :: Clock.TimeTotalFPS)
+        // et part (GO) s'il vaut moins de 0,1 s (pas en speciale) ou 150 s et plus (150 s d'avance) : l'hote qui ne court pas
+        // lachait une voiture IA ~10 s derriere l'invite qui court (elle le rattrapait sur la piste etroite). Juste apres la lecture,
+        // la valeur lue (PlayerTime de Navigation, pas le Clock : le temps final de l'hote reste le sien) prend le plus petit temps
+        // des invites en speciale ce jour-la (RallyMsc.StageHold, annonce chaque seconde) : on attend comme en solo. Personne en
+        // speciale : rien n'est touche. [Test] RallyeIaRetenues=0 : comme avant.
+        class HoldTiming : FsmStateAction
+        {
+            public HutongGames.PlayMaker.Actions.GetFsmFloat G;
+            public int Day;
+            public override void OnEnter() { Apply(); }
+            public override void OnUpdate() { Apply(); }
+            void Apply()
+            {
+                if (G.storeValue == null || G.storeValue.IsNone) return;
+                float g = RallyMsc.StageHold(Day);
+                if (g < 0f) return;
+                float v = G.storeValue.Value;
+                if (v < 0.1f || v >= 150f || g < v) G.storeValue.Value = Mathf.Max(0.2f, g);
+            }
+        }
+
         static void HookDistances()
         {
             if (distHooked || Session.RemoteCount == 0) return;
             distHooked = true;
-            int n = 0;
+            int n = 0, nh = 0;
+            bool hold = Game.Msc && Config.GetInt("Test", "RallyeIaRetenues", 1) != 0;
             var fsms = new List<PlayMakerFSM>();
             foreach (Car c in cars) if (c.T != null) fsms.AddRange(c.T.GetComponentsInChildren<PlayMakerFSM>(true));
             GameObject spec = Game.FindAny(Rp("RALLY/Spectators"));
@@ -610,6 +638,13 @@ namespace MWCoop
                         bool changed = false;
                         for (int i = 0; i < list.Count; i++)
                         {
+                            var gf = hold ? list[i] as HutongGames.PlayMaker.Actions.GetFsmFloat : null;
+                            if (gf != null && (st.Name == "Timing?" || st.Name == "Timing? 2") && gf.variableName != null && gf.variableName.Value == "TimeTotalFPS")
+                            {
+                                list.Insert(i + 1, new HoldTiming { G = gf, Day = st.Name == "Timing? 2" ? 2 : 1 });
+                                i++; nh++; changed = true;
+                                continue;
+                            }
                             var g = list[i] as HutongGames.PlayMaker.Actions.GetDistance;
                             if (g == null) continue;
                             bool toPlayer = g.target != null && g.target.Value != null && g.target.Value.name == "PLAYER";
@@ -624,7 +659,7 @@ namespace MWCoop
                 }
                 catch (System.Exception e) { Log.Warn("courses : distances de " + Recon.Path(f.transform) + "::" + f.FsmName + " pas accrochees (" + e.GetType().Name + ")"); }
             }
-            Log.Info("courses : " + n + " mesures de distance au joueur comptent tous les joueurs (voitures IA, aides)");
+            Log.Info("courses : " + n + " mesures de distance au joueur comptent tous les joueurs (voitures IA, aides)" + (hold ? ", " + nh + " departs de voitures IA attendent aussi les invites en speciale" : ""));
         }
 
         // ---------------------------------------------------------------- rallye : spectateurs qui remettent une voiture IA

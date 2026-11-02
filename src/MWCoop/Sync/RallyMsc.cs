@@ -33,8 +33,19 @@ namespace MWCoop
         static float nextLook;
         static bool hooked;
         static string lastSent = "";
+        // (audit MSC 02/11) Temps cumules annonces d'ici, samedi [1] et dimanche [2], et leur classe : redits aux arrivants (l'hote,
+        // RedireA) et apres un rechargement (Recharge) -- avant, une seule annonce, perdue pour qui n'etait pas la a ce moment.
+        static readonly float[] mine = new float[3];
+        static string mineCls = "";
+        static bool loaded;          // participation chargee par le jeu (Data sorti de 'State 2' / 'Check day' / 'Load 2')
+        static int weekDay;          // dernier GlobalDay vu (fin du week-end : temps des autres effaces)
 
-        public static void OnLevelLoaded() { humans.Clear(); data = null; names = times = null; nextLook = 0f; hooked = false; lastSent = ""; trophiesHooked = false; nextTrophyLook = 0f; myDay = 0; }
+        public static void OnLevelLoaded()
+        {
+            humans.Clear(); data = null; names = times = null; nextLook = 0f; hooked = false; lastSent = ""; trophiesHooked = false; nextTrophyLook = 0f; myDay = 0;
+            mine[1] = mine[2] = 0f; mineCls = ""; loaded = false; weekDay = 0; nextStore = 0f; storedLine = null;
+            snapshots.Clear(); stageBy.Clear(); clocks[1] = clocks[2] = null; nextStageSend = nextClockLook = 0f;
+        }
 
         // Humains engages qui n'ont pas encore annonce leur temps du dimanche (ma classe, temps du samedi recu, encore la).
         static List<Human> Pending()
@@ -226,8 +237,110 @@ namespace MWCoop
             // (My Summer Car seulement : sur My Winter Car, la recherche du rallye de MSC coutait 32 a 39 ms toutes les 10 s --
             // a-coup regulier, journal de Menor 1.15.2, 25/10)
             if (!Game.Msc || !Session.Active || !PlayerSync.InGame) return;
-            Find();
+            float now = Time.realtimeSinceStartup;
+            WeekTick();
+            if (Find())
+            {
+                if (!loaded) AfterLoad();
+                if (loaded && !Session.IsHost && now >= nextStore) { nextStore = now + 10f; StoreGuest(); }
+            }
             HookTrophies();
+            Snapshots(now);
+            StageSend(now);
+        }
+
+        static int GlobalDay() { FsmInt d = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay"); return d != null ? d.Value : -1; }
+
+        // Fin du week-end (GlobalDay 6 ou 7 -> lundi a vendredi) : temps des autres effaces (audit MSC 02/11 : `humans` n'etait vide
+        // qu'au chargement -- un temps du week-end precedent, d'un pilote qui ne courait plus ou etait parti, revenait au podium
+        // suivant et pouvait prendre l'or a celui d'ici). Les horloges suivent celle de l'hote : tout le monde efface en meme temps,
+        // un temps du samedi ou du dimanche reste valable jusqu'au lundi. [Test] RallyeSemaine=0 : comme avant.
+        static void WeekTick()
+        {
+            int d = GlobalDay();
+            if (d < 1) return;
+            if ((weekDay == 6 || weekDay == 7) && d < 6 && Config.GetInt("Test", "RallyeSemaine", 1) != 0)
+            {
+                bool any = humans.Count > 0 || mine[1] > 0f || mine[2] > 0f;
+                humans.Clear(); lastSent = ""; myDay = 0; mine[1] = mine[2] = 0f;
+                if (any) Log.Info("rallye (MSC) : nouveau week-end, temps des autres effaces");
+            }
+            weekDay = d;
+        }
+
+        // Classe d'apres le niveau (CurrentClass n'est pas sauve : « Junior » au chargement jusqu'au SATURDAY / SUNDAY du jeu ;
+        // 'Class?' / 'State 4' : PlayerClassLevel >= RequiredProClass -> Amateur).
+        static string LevelCls()
+        {
+            FsmInt lv = data != null ? data.FsmVariables.FindFsmInt("PlayerClassLevel") : null, req = data != null ? data.FsmVariables.FindFsmInt("RequiredProClass") : null;
+            if (lv == null) return Cls();
+            return lv.Value >= (req != null ? req.Value : 10) ? "Amateur" : "Junior";
+        }
+
+        // Une fois la participation chargee par le jeu ('State 2' -> 'Check day' -> 'Load 2' -> 'Rally unfinised?') : chez l'invite,
+        // la sienne remise a la place de celle de l'hote ; chez chacun, un samedi deja couru (rechargement, reconnexion) est redit.
+        static readonly HashSet<string> Loading = new HashSet<string> { "State 2", "Check day", "Load 2" };
+        static void AfterLoad()
+        {
+            if (data == null || Loading.Contains(data.ActiveStateName)) return;
+            PlayMakerFSM pen = Game.FsmOn(data.gameObject, "Penalties");
+            if (pen != null && Loading.Contains(pen.ActiveStateName)) return;
+            loaded = true;
+            if (!Session.IsHost && Config.GetInt("Test", "RallyeInvite", 1) != 0) RestoreGuest();
+            Recharge();
+        }
+
+        // Samedi deja couru ici (SecondDay vrai, temps cumule, week-end) apres un chargement : redit a tous (audit MSC 02/11 : apres
+        // une reconnexion ou une reprise de la partie, les autres n'avaient plus le Time1 d'ici : leur podium du dimanche ne
+        // l'attendait plus et ne le classait plus).
+        static void Recharge()
+        {
+            FsmBool sd = data.FsmVariables.FindFsmBool("SecondDay");
+            FsmFloat tot = data.FsmVariables.FindFsmFloat("PlayerTimeTotal");
+            int gd = GlobalDay();
+            if (sd == null || !sd.Value || tot == null || tot.Value <= 0f || (gd != 6 && gd != 7) || mine[1] > 0f) return;
+            mine[1] = tot.Value; mine[2] = 0f; mineCls = LevelCls(); myDay = 1;
+            lastSent = mineCls + ":1:" + tot.Value.ToString("F1");
+            Log.Info("rallye (MSC) : samedi deja couru ici (" + tot.Value.ToString("F1") + " s, " + mineCls + ")" + (Session.RemoteCount > 0 ? ", redit aux autres" : ""));
+            RedireA(null);
+        }
+
+        // Nos temps du week-end, a un joueur (hote : arrivant) ou a tous (null).
+        static void RedireA(Peer p)
+        {
+            if (!Session.Active || Session.RemoteCount == 0) return;
+            for (int d = 1; d <= 2; d++)
+            {
+                if (mine[d] <= 0f) continue;
+                NetWriter w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@rallymsc").Str(Session.Me != null ? Session.Me.Name : "?").Str(mineCls).U8((byte)d).F32(mine[d]);
+                if (p == null) Session.SendAll(w, true); else FireTools.SendTo(p, w);
+            }
+        }
+
+        // Hote : a l'arrivee d'un joueur (PlayerSync.SnapshotAll, 20 s), nos temps et ceux des autres humains connus (leur numero en
+        // tete, comme s'ils venaient d'eux ; l'arrivant n'est pas hote, il ne relaie pas). Pas les siens : il les a (sa participation).
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
+        public static void ScheduleSnapshot(Peer p) { if (Session.IsHost && p != null && Game.Msc) snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
+
+        static void Snapshots(float now)
+        {
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (now < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value; snapshots.RemoveAt(i);
+                if (!p.Accepted || Session.T == null) continue;
+                RedireA(p);
+                int n = mine[1] > 0f || mine[2] > 0f ? 1 : 0;
+                foreach (KeyValuePair<int, Human> kv in humans)
+                {
+                    Human h = kv.Value;
+                    if (kv.Key == p.Id || (h.Time1 <= 0f && h.Time2 <= 0f)) continue;
+                    if (h.Time1 > 0f) FireTools.SendTo(p, new NetWriter(Msg.Job).U8(kv.Key).Str("@rallymsc").Str(h.Name ?? "?").Str(h.Cls ?? "").U8(1).F32(h.Time1));
+                    if (h.Time2 > 0f) FireTools.SendTo(p, new NetWriter(Msg.Job).U8(kv.Key).Str("@rallymsc").Str(h.Name ?? "?").Str(h.Cls ?? "").U8(2).F32(h.Time2));
+                    n++;
+                }
+                if (n > 0) Log.Info("rallye (MSC) : temps du week-end de " + n + " pilote(s) envoyes a " + p);
+            }
         }
 
         // Fin d'une journee ici : temps cumule et classe envoyes a tous (une fois par valeur).
@@ -235,10 +348,13 @@ namespace MWCoop
         {
             if (data == null) return;
             myDay = day;
-            if (!Session.Active || Session.RemoteCount == 0) return;
             FsmFloat tot = data.FsmVariables.FindFsmFloat("PlayerTimeTotal");
             float t = tot != null ? tot.Value : 0f;
             if (t <= 0f) return;
+            // (garde meme seul : redit aux arrivants -- avant, un temps fait sans personne n'etait jamais annonce)
+            mine[day] = t; if (day == 1) mine[2] = 0f; mineCls = Cls();
+            if (!Session.IsHost) StoreGuest();
+            if (!Session.Active || Session.RemoteCount == 0) return;
             string key = Cls() + ":" + day + ":" + t.ToString("F1");
             if (key == lastSent) return;
             lastSent = key;
@@ -251,6 +367,12 @@ namespace MWCoop
             string name = r.Str(), cls = r.Str();
             int day = r.U8();
             float time = r.F32();
+            // (jamais soi-meme, meme sous son ancien numero apres une reconnexion : on serait son propre adversaire, cle MWC<soi>)
+            if (who == Session.LocalId || Session.Me != null && name == Session.Me.Name) return;
+            // (meme pseudo sous un autre numero : le joueur est revenu -- son ancienne entree retiree, sinon deux fois au podium)
+            int old = -1;
+            foreach (KeyValuePair<int, Human> kv in humans) if (kv.Key != who && kv.Value.Name == name) old = kv.Key;
+            if (old >= 0) humans.Remove(old);
             Human h;
             if (!humans.TryGetValue(who, out h) || h.Cls != cls) humans[who] = h = new Human { Cls = cls };   // (autre classe : nouveau week-end)
             h.Name = name;
@@ -392,6 +514,11 @@ namespace MWCoop
         {
             if (names == null || times == null) return;
             if (day == 0) day = myDay > 0 ? myDay : 1;
+            // (audit MSC 02/11 : les cles MWC<id> d'avant, sauvees avec les tables -- 'Save time' : HashTableEasySave Names / Times --
+            // et relues au chargement ('Load 2'), restaient : le dimanche, 'Add index 2' les traitait en pilotes IA, un fantome au
+            // temps invente pouvait prendre une place du podium ; chez l'invite, sa propre cle (sauvegarde de l'hote) : un double de
+            // lui-meme. Toutes retirees ici, puis celles des humains connus remises. Cles du jeu : des nombres, jamais « MWC ».)
+            if (Config.GetInt("Test", "RallyeFantomes", 1) != 0) StripHumans();
             string cls = Cls();
             int n = 0;
             foreach (KeyValuePair<int, Human> kv in humans)
@@ -405,6 +532,245 @@ namespace MWCoop
                 n++;
             }
             if (n > 0) Log.Info("rallye (MSC) : classement d'ici avec " + n + " autre(s) pilote(s) humain(s) (" + cls + ")");
+        }
+
+        static int StripHumans()
+        {
+            if (names == null || times == null) return 0;
+            var drop = new List<object>();
+            foreach (object k in names.Keys) { string s = k as string; if (s != null && s.StartsWith("MWC")) drop.Add(k); }
+            foreach (object k in times.Keys) { string s = k as string; if (s != null && s.StartsWith("MWC") && !drop.Contains(k)) drop.Add(k); }
+            foreach (object k in drop) { names.Remove(k); times.Remove(k); }
+            return drop.Count;
+        }
+
+        // ---------------------------------------------------------------- invite : participation gardee par monde
+        // (audit MSC 02/11) La sauvegarde recue a chaque connexion est celle de l'hote : 'Load 2' y relisait SA participation
+        // (RallyClass -> PlayerClassLevel, RallyDay2 -> SecondDay, RallyTimePlayer -> PlayerTimeTotal, penalites, tables) : la classe
+        // gagnee par l'invite (+5 par or) revenait a celle de l'hote, son samedi etait perdu, ou il heritait de celui de l'hote
+        // (inscription du dimanche gratuite, 'Check day' -> 'Good name 2', avec le temps de l'hote). Comme Rally (MWC, rallye.ini)
+        // et le porte-monnaie : sa participation gardee par monde (PlayerID de l'hote) dans rallye-msc.ini, ecrite toutes les 10 s
+        // et a chaque fin de journee, remise au chargement ; sans ligne pour ce monde (premiere venue) : participation neuve.
+        // [Test] RallyeInvite=0 : comme avant (participation de l'hote).
+        static float nextStore;
+        static string storedLine;
+        static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+        static string StorePath { get { return System.IO.Path.Combine(Log.DataDir, "rallye-msc.ini"); } }
+        static string World() { FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID"); return pid != null && pid.Value != 0f ? pid.Value.ToString("F0") : ""; }
+
+        static string GuestLine()
+        {
+            var sb = new System.Text.StringBuilder();
+            FsmInt lv = data.FsmVariables.FindFsmInt("PlayerClassLevel");
+            FsmFloat tot = data.FsmVariables.FindFsmFloat("PlayerTimeTotal");
+            FsmBool sd = data.FsmVariables.FindFsmBool("SecondDay");
+            if (lv != null) sb.Append("PlayerClassLevel:").Append(lv.Value).Append(';');
+            if (tot != null) sb.Append("PlayerTimeTotal:").Append(tot.Value.ToString("R", Inv)).Append(';');
+            if (sd != null) sb.Append("SecondDay:").Append(sd.Value ? 1 : 0).Append(';');
+            PlayMakerFSM pen = Game.FsmOn(data.gameObject, "Penalties");
+            if (pen != null)
+            {
+                FsmFloat o = pen.FsmVariables.FindFsmFloat("OverallTimePenalty"); FsmInt j = pen.FsmVariables.FindFsmInt("PenaltyJumpstart"), p = pen.FsmVariables.FindFsmInt("PenaltyParcferme");
+                if (o != null) sb.Append("pen.OverallTimePenalty:").Append(o.Value.ToString("R", Inv)).Append(';');
+                if (j != null) sb.Append("pen.PenaltyJumpstart:").Append(j.Value).Append(';');
+                if (p != null) sb.Append("pen.PenaltyParcferme:").Append(p.Value).Append(';');
+            }
+            return sb.ToString();
+        }
+
+        static void StoreGuest()
+        {
+            if (Session.IsHost || !loaded || data == null || Config.GetInt("Test", "RallyeInvite", 1) == 0) return;
+            string w = World();
+            if (w.Length == 0) return;
+            string line = GuestLine();
+            if (line == storedLine) return;
+            storedLine = line;
+            var lines = new List<string>();
+            try
+            {
+                if (System.IO.File.Exists(StorePath)) foreach (string l in System.IO.File.ReadAllLines(StorePath)) if (!l.StartsWith(w + "=")) lines.Add(l);
+                lines.Add(w + "=" + line);
+                System.IO.File.WriteAllLines(StorePath, lines.ToArray());
+            }
+            catch (System.Exception e) { Log.Warn("rallye (MSC) : participation pas ecrite (" + e.GetType().Name + ")"); }
+        }
+
+        static void RestoreGuest()
+        {
+            string w = World(), line = null;
+            if (w.Length == 0) { Log.Warn("rallye (MSC) : PlayerID inconnu, participation de l'hote gardee ici"); return; }
+            try { if (System.IO.File.Exists(StorePath)) foreach (string l in System.IO.File.ReadAllLines(StorePath)) if (l.StartsWith(w + "=")) line = l.Substring(w.Length + 1); }
+            catch (System.Exception e) { Log.Warn("rallye (MSC) : participation pas relue (" + e.GetType().Name + ")"); }
+            var vals = new Dictionary<string, string>();
+            if (line != null) foreach (string kv in line.Split(';')) { int c = kv.IndexOf(':'); if (c > 0) vals[kv.Substring(0, c)] = kv.Substring(c + 1); }
+            string s; int i; float f;
+            FsmInt lv = data.FsmVariables.FindFsmInt("PlayerClassLevel");
+            FsmFloat tot = data.FsmVariables.FindFsmFloat("PlayerTimeTotal"), pt = data.FsmVariables.FindFsmFloat("PlayerTime");
+            FsmBool sd = data.FsmVariables.FindFsmBool("SecondDay");
+            int hostLv = lv != null ? lv.Value : -1; bool hostSd = sd != null && sd.Value;
+            if (lv != null) lv.Value = vals.TryGetValue("PlayerClassLevel", out s) && int.TryParse(s, out i) ? i : 1;   // (premiere venue : niveau d'une partie neuve)
+            if (tot != null) tot.Value = vals.TryGetValue("PlayerTimeTotal", out s) && float.TryParse(s, System.Globalization.NumberStyles.Float, Inv, out f) ? f : 0f;
+            if (pt != null && line == null) pt.Value = 0f;
+            // (samedi couru hors du week-end en cours : comme 'Weekend?' du jeu, plus de deuxieme journee)
+            int gd = GlobalDay();
+            if (sd != null) sd.Value = vals.TryGetValue("SecondDay", out s) && s == "1" && (gd == 6 || gd == 7);
+            PlayMakerFSM pen = Game.FsmOn(data.gameObject, "Penalties");
+            if (pen != null)
+                foreach (string pn in new[] { "OverallTimePenalty", "PenaltyJumpstart", "PenaltyParcferme" })
+                {
+                    FsmFloat pf = pen.FsmVariables.FindFsmFloat(pn); FsmInt pi = pen.FsmVariables.FindFsmInt(pn);
+                    bool has = vals.TryGetValue("pen." + pn, out s);
+                    if (pf != null) pf.Value = has && float.TryParse(s, System.Globalization.NumberStyles.Float, Inv, out f) ? f : 0f;
+                    else if (pi != null) pi.Value = has && int.TryParse(s, out i) ? i : 0;
+                }
+            // Sa ligne dans les tables (cle PlayerIDstring, relue de la sauvegarde de l'hote : celle de l'hote) : son temps du samedi,
+            // sinon retiree ; et les cles MWC<id> d'avant.
+            FsmString pid = data.FsmVariables.FindFsmString("PlayerIDstring");
+            if (names != null && times != null && pid != null && !string.IsNullOrEmpty(pid.Value))
+            {
+                if (sd != null && sd.Value && tot != null)
+                {
+                    times[pid.Value] = tot.Value;
+                    FsmString pn = FsmVariables.GlobalVariables.FindFsmString("PlayerName");
+                    if (!names.ContainsKey(pid.Value)) names[pid.Value] = pn != null ? pn.Value : " ";
+                }
+                else { names.Remove(pid.Value); times.Remove(pid.Value); }
+            }
+            int ghosts = StripHumans();
+            storedLine = GuestLine();
+            Log.Info("rallye (MSC) : participation d'ici " + (line != null ? "retrouvee" : "neuve (premiere venue dans ce monde)") + " : niveau " + (lv != null ? lv.Value.ToString() : "?")
+                     + ", samedi couru " + (sd != null && sd.Value) + ", temps " + (tot != null ? tot.Value.ToString("F1") : "?") + " (sauvegarde de l'hote : niveau " + hostLv + ", samedi " + hostSd + ")"
+                     + (ghosts > 0 ? ", " + ghosts + " cle(s) MWC retiree(s)" : ""));
+        }
+
+        // ---------------------------------------------------------------- invite en speciale : voitures IA retenues chez l'hote
+        // (audit MSC 02/11) Chez l'invite : chrono de sa speciale (TimingSaturday / TimingSunday :: Clock en 'Get time') envoye a
+        // l'hote chaque seconde (Msg.Race K_MSCSTAGE, non fiable). Chez l'hote : Races.HoldTiming lit StageHold (le plus petit temps
+        // recu depuis moins de 2,5 s ce jour-la). Comme Rally.StageTick sur My Winter Car, sans ecrire dans le Clock de l'hote.
+        static readonly string[] ClockPaths = { null, "RALLY/Saturday/TimingSaturday", "RALLY/Sunday/TimingSunday" };
+        static readonly PlayMakerFSM[] clocks = new PlayMakerFSM[3];
+        static float nextStageSend, nextClockLook;
+        static readonly Dictionary<int, float[]> stageBy = new Dictionary<int, float[]>();   // hote : joueur -> (-, temps samedi, temps dimanche, -, recu samedi, recu dimanche)
+        static readonly bool[] stageLogged = new bool[3];
+
+        static void StageSend(float now)
+        {
+            if (Session.IsHost || now < nextStageSend) return;
+            nextStageSend = now + 1f;
+            bool look = now >= nextClockLook;
+            if (look) nextClockLook = now + 5f;
+            for (int d = 1; d <= 2; d++)
+            {
+                if (clocks[d] == null && look) { GameObject go = Game.FindAny(ClockPaths[d]); clocks[d] = go != null ? Game.FsmOn(go, "Clock") : null; }
+                PlayMakerFSM c = clocks[d];
+                if (c == null || !c.gameObject.activeInHierarchy || c.ActiveStateName != "Get time") continue;
+                FsmFloat el = c.FsmVariables.FindFsmFloat("TimeTotalFPS");
+                if (el != null) Session.SendToHost(new NetWriter(Msg.Race).U8(Races.K_MSCSTAGE).U8(d).F32(el.Value), false);
+            }
+        }
+
+        public static void OnStage(int who, int day, float el)
+        {
+            if (day < 1 || day > 2 || float.IsNaN(el) || el < 0f) return;
+            float[] s;
+            if (!stageBy.TryGetValue(who, out s)) stageBy[who] = s = new float[6];
+            s[day] = el; s[3 + day] = Time.realtimeSinceStartup;
+        }
+
+        // Hote : plus petit temps de speciale d'un invite qui court la journee 'day' (recu depuis moins de 2,5 s), sinon -1.
+        public static float StageHold(int day)
+        {
+            if (day < 1 || day > 2 || stageBy.Count == 0) return -1f;
+            float now = Time.realtimeSinceStartup, best = -1f;
+            foreach (KeyValuePair<int, float[]> kv in stageBy)
+                if (now - kv.Value[3 + day] < 2.5f && (best < 0f || kv.Value[day] < best)) best = kv.Value[day];
+            if ((best >= 0f) != stageLogged[day])
+            {
+                stageLogged[day] = best >= 0f;
+                Log.Info("rallye (MSC) : " + (best >= 0f ? "un invite court (" + (day == 1 ? "samedi" : "dimanche") + ", " + best.ToString("F0") + " s) : depart des voitures IA retenu ici" : "plus d'invite en speciale (" + (day == 1 ? "samedi" : "dimanche") + ")"));
+            }
+            return best;
+        }
+
+        // ---------------------------------------------------------------- essais (audit MSC 02/11)
+        // [Test] Autotest=mscrallyeinvite (a deux) : a 30 s l'invite allume RALLY/ResultsWeekend (comme TestPodium), pose
+        // PlayerClassLevel=[Test] RallyeNiveau (7), SecondDay vrai, PlayerTimeTotal=700 et une cle fantome MWC9 dans Names / Times,
+        // puis ecrit sa participation (StoreGuest) ; a 40 s il la remet comme au chargement (RestoreGuest, comme apres la sauvegarde
+        // de l'hote) apres avoir pose les valeurs de l'hote (niveau 1, samedi faux, 0 s) et journalise. L'hote, lui, journalise a
+        // 60 s les humains connus (le samedi de l'invite redit par Recharge / RedireA).
+        static int gStep;
+        public static string TestGuestStore(float t)
+        {
+            if (t > 20f && t < 200f)
+            {
+                GameObject rw = Game.FindAny("RALLY/ResultsWeekend");
+                for (Transform p = rw != null ? rw.transform : null; p != null; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
+                Find();
+            }
+            if (data == null) return null;
+            FsmInt lv = data.FsmVariables.FindFsmInt("PlayerClassLevel"); FsmFloat tot = data.FsmVariables.FindFsmFloat("PlayerTimeTotal"); FsmBool sd = data.FsmVariables.FindFsmBool("SecondDay");
+            if (Session.IsHost)
+            {
+                if (gStep == 0 && t > 60f) { gStep = 1; string r = "autotest mscrallyeinvite : hote, humains " + HumansText(); Log.Info(r); return r; }
+                return null;
+            }
+            if (gStep == 0 && t > 30f && lv != null && tot != null && sd != null)
+            {
+                gStep = 1; loaded = true;
+                FsmInt gd = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay"); if (gd != null && gd.Value != 6 && gd.Value != 7) gd.Value = 6;
+                lv.Value = Config.GetInt("Test", "RallyeNiveau", 7); sd.Value = true; tot.Value = 700f;
+                if (names != null && times != null) { names["MWC9"] = "fantome"; times["MWC9"] = 100f; }
+                storedLine = null; StoreGuest();
+                Log.Info("autotest mscrallyeinvite : participation ecrite (" + storedLine + ")");
+            }
+            if (gStep == 1 && t > 40f)
+            {
+                gStep = 2;
+                lv.Value = 1; sd.Value = false; tot.Value = 0f;   // (comme la sauvegarde de l'hote relue par 'Load 2')
+                mine[1] = mine[2] = 0f;
+                RestoreGuest(); Recharge();
+                string r = "autotest mscrallyeinvite : apres la remise, niveau " + lv.Value + ", samedi " + sd.Value + ", temps " + tot.Value.ToString("F1")
+                           + ", MWC9 " + (names != null && names.ContainsKey("MWC9") ? "encore la" : "retiree") + ", annonce samedi " + mine[1].ToString("F1");
+                Log.Info(r);
+                return r;
+            }
+            return null;
+        }
+
+        // [Test] Autotest=mscpodiumsemaine (hote seul ou a deux) : a 30 s, un faux humain #9 (Time1 700, Time2 1400, classe d'ici) et
+        // GlobalDay 7 ; a 32 s GlobalDay 1 (lundi) ; a 34 s le nombre d'humains (attendu : 0) et, en entrant dans 'Hash to array 2'
+        // avec une cle fantome MWC8 dans les tables, sa presence (attendu : retiree).
+        static int wStep;
+        public static string TestWeek(float t)
+        {
+            if (t > 20f && t < 200f)
+            {
+                GameObject rw = Game.FindAny("RALLY/ResultsWeekend");
+                for (Transform p = rw != null ? rw.transform : null; p != null; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
+                Find();
+            }
+            FsmInt gd = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay");
+            if (gd == null) return null;
+            if (wStep == 0 && t > 30f) { wStep = 1; humans[9] = new Human { Name = "fantome", Cls = Cls(), Time1 = 700f, Time2 = 1400f }; gd.Value = 7; Log.Info("autotest mscpodiumsemaine : humain #9, dimanche"); }
+            if (wStep == 1 && t > 32f) { wStep = 2; gd.Value = 1; Log.Info("autotest mscpodiumsemaine : lundi"); }
+            if (wStep == 2 && t > 34f)
+            {
+                wStep = 3;
+                if (names != null && times != null) { names["MWC8"] = "fantome"; times["MWC8"] = 100f; }
+                InjectHumans(1);
+                string r = "autotest mscpodiumsemaine : humains " + humans.Count + " (attendu 0), MWC8 " + (names != null && names.ContainsKey("MWC8") ? "encore la" : "retiree");
+                Log.Info(r);
+                return r;
+            }
+            return null;
+        }
+
+        static string HumansText()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (KeyValuePair<int, Human> kv in humans) sb.Append(kv.Value.Name).Append(" #").Append(kv.Key).Append(' ').Append(kv.Value.Cls).Append(' ').Append(kv.Value.Time1.ToString("F1")).Append('/').Append(kv.Value.Time2.ToString("F1")).Append("; ");
+            return sb.Length > 0 ? sb.ToString() : "aucun";
         }
     }
 }
