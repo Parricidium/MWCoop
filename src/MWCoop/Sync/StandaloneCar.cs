@@ -23,10 +23,13 @@ namespace MWCoop
         // voiture de la quete s21 (QuestOnly) en standalone : les deux jeux (My Winter Car : JD 01/11, « la version de la quete s21 avec
         // la Golf pour MWC ») -- seulement elle sur MWC, les copies y restent des copies ; [Test] QueteMwc=0 : pas de quete sur MWC
         public static bool Quest { get { return Game.Msc || Config.GetInt("Test", "QueteMwc", 1) != 0; } }
+        // copies passees en standalone sur My Winter Car aussi (JD 02/11 : « standalone partout » -- l'Imprezza, modele de Rallyworld) ;
+        // [Test] StandaloneMwc=0 : la copie comme avant
+        public static bool OnMwc(int copy) { return !Game.Msc && copy == VazCar.ModelImp && Config.GetInt("Test", "StandaloneMwc", 1) != 0; }
         // copie remplacee par sa standalone ici : toutes (la R5 depuis le 29/10 midi, les autres validees par JD en jeu le 29/10 soir)
         public static bool Ready(int copy)
         {
-            if (!On || VazCar.StandaloneOf(copy) < 0) return false;
+            if (!(On || OnMwc(copy)) || VazCar.StandaloneOf(copy) < 0) return false;
             // ([Test] StandaloneCopies=1 : les copies, sauf la R5)
             return copy == VazCar.ModelR5 || Config.GetInt("Test", "StandaloneCopies", 0) == 0;
         }
@@ -80,7 +83,7 @@ namespace MWCoop
 
         public static VazCar.Built Build(string name, int number, Color paint, Vector3 pos, Quaternion rot, VazCar.Model m)
         {
-            if (!On && !(m != null && m.QuestOnly && Quest)) return null;
+            if (!On && !(m != null && (m.QuestOnly && Quest || OnMwc(VazCar.CopyOf(m.Id))))) return null;
             GameObject tpl = VazCar.Template();
             if (tpl == null) { Log.Warn("standalone : Ruscko de la scene introuvable"); return null; }
             if (m == null || !m.HasFiles) { Log.Warn("standalone : fichiers du modele absents"); return null; }
