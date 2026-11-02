@@ -54,7 +54,12 @@ namespace MWCoop
     // les envoie (M_FX), la copie les rejoue -- section « particules et traces de pneus ».
     public static class VehicleSync
     {
-        class Sim { public string Key; public uint Hash; public FsmFloat Var; public bool Control; }
+        class Sim
+        {
+            public string Key; public uint Hash; public FsmFloat Var; public bool Control;
+            public FsmInt Int; public PlayMakerFSM Fsm;   // variable entiere (compteur kilometrique : OdometerReading), envoyee en flottant (exacte jusqu'a 16 millions)
+            public float Value { get { return Int != null ? Int.Value : Var.Value; } }
+        }
 
         public const float NoHeat = -9999f;   // (« pas de chaleur » sur le reseau : NaN est rejete a la lecture depuis la relecture du 15/10)
 
@@ -162,11 +167,17 @@ namespace MWCoop
             new[] { "Priming", "", "FuelChamber", "Priming" },                        // amorcage, carburateur noye
             new[] { "Starter", "", "PlugHeat" },                                      // bougies de prechauffage (diesels)
             new[] { "Air Pressure", "", "Pressure" },                                 // freins a air (GIFU)
+            // Compteur kilometrique (My Summer Car : SATSUMA -- dashboard meters monte --, GIFU, HAYOSIKO ; automate Data d'Odometer) :
+            // il additionne la vitesse du Drivetrain (global SpeedKMH), coupe sur la copie -- les km faits par un invite ne comptaient
+            // ni chez l'hote ni dans sa sauvegarde (SatsumaOdo), perdus au rechargement (audit MSC 02/11). Odo (metres depuis la
+            // derniere dizaine de km) et OdometerReading (dizaines de km) suivent celui qui la mene, comme la batterie. Jamais la
+            // vitesse elle-meme sur la copie : SpeedKMH sert aussi aux pieces mal serrees qui tombent (« BREAK » au-dela de 33-50 km/h).
+            new[] { "Data", "Odometer", "Odo", "OdometerReading" },
             new[] { "Use", "ButtonChoke", "Choke" },                                  // tirette de starter (commande)
             new[] { "FuelLine", "", "Choke" },
             new[] { "Mixture", "", "Choke", "Choke2" },
         };
-        const int FirstControlRow = 8;
+        const int FirstControlRow = 9, OdoRow = 8;
 
         static readonly List<Car> cars = new List<Car>();
         static readonly List<Car> byNet = new List<Car>();         // numero reseau -> voiture d'ici (null : absente ici)
@@ -177,6 +188,13 @@ namespace MWCoop
         static int generation;
         static FsmString curVehicle;
         public static int LocalDriving = -1;    // rang local de la voiture conduite ici
+        // Double conducteur (audit MSC 02/11) : deux joueurs qui prennent le meme volant a moins d'un aller-retour reseau d'ecart
+        // restaient conducteurs tous les deux (chacun ignorait le mode 1 de l'autre : « je la conduis ») -- deux poses, passagers et
+        // objets transportes qui sautaient de l'une a l'autre chez un troisieme, jusqu'a la sortie de l'un. Dans les 2,5 s qui suivent
+        // la prise du volant, un flux de conduite de l'autre (au moins 0,15 s : jamais un paquet en retard isole) departage : le plus
+        // petit numero garde la main (l'hote gagne toujours). Un conducteur installe depuis plus de 2,5 s n'est jamais ejecte.
+        static float drivingSince = -10f, dupFirst;
+        static int dupWho = -1;
         // Voiture garee que NOTRE voiture fait bouger (poussee pare-chocs contre carrosserie, retour de Донской, 12/10 : la
         // CORRIS poussee par la voiture de l'invite revenait a sa place -- l'hote la gardait ; seule la poussee a pied la
         // donnait) : on l'envoie (etat 2) tant qu'elle roule, puis derniere pose (etat 0) -- comme une poussee a la main.
@@ -237,7 +255,7 @@ namespace MWCoop
             {
                 bool still = false;
                 foreach (KeyValuePair<int, int> kv in found) if (h.Key == kv.Key && h.Value == kv.Value) still = true;
-                if (!still) Log.Info("attelage defait : " + cars[h.Key].Key + " <-> " + cars[h.Value].Key);
+                if (!still && h.Key < cars.Count && h.Value < cars.Count) Log.Info("attelage defait : " + cars[h.Key].Key + " <-> " + cars[h.Value].Key);
             }
             hitches.Clear();
             hitches.AddRange(found);
@@ -363,7 +381,7 @@ namespace MWCoop
                 }
             foreach (int i in want) Send(cars[i], 2);
             foreach (int i in hitchSent)
-                if (!want.Contains(i) && cars[i].Body != null) { Send(cars[i], 0); cars[i].AuthorityUntil = now + 5f; Log.Info("attelage : " + cars[i].Key + " rendue"); }
+                if (i >= 0 && i < cars.Count && !want.Contains(i) && cars[i].Body != null) { Send(cars[i], 0); cars[i].AuthorityUntil = now + 5f; Log.Info("attelage : " + cars[i].Key + " rendue"); }
             hitchSent.Clear();
             foreach (int i in want) hitchSent.Add(i);
         }
@@ -381,6 +399,11 @@ namespace MWCoop
             cars.Clear(); under.Clear(); byNet.Clear(); netKeys.Clear(); missingLogged.Clear(); proposedAt.Clear(); proposalLog.Clear(); nextPropose = 0;
             scanned = false; tableSeen = false; inCarWas = false; curVehicle = null; curVehicleLooked = false;
             LocalDriving = -1; owned = -1; idling = -1; moving = null; bumped = -1;
+            // (audit MSC 02/11 : attelages, remorques envoyees et voiture poussee gardaient les rangs de la partie d'avant -- retour au
+            // menu puis Continuer dans la meme session : « attelage : ... rendue » et « attelage defait » sur la voiture qui porte ce
+            // rang dans la nouvelle liste, et une voiture moteur tournant prise pour la voiture poussee)
+            hitches.Clear(); hitchSent.Clear(); hitchWant.Clear(); hitchedMemo.Clear(); pushCar = -1; pushUntil = 0f;
+            drivingSince = -10f; dupWho = -1;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
             tStep = 0; tRec = 0;
         }
@@ -701,14 +724,18 @@ namespace MWCoop
                 {
                     string[] sv = SimVars[row];
                     if (f.FsmName != sv[0] || (sv[1].Length > 0 && !f.gameObject.name.StartsWith(sv[1]))) continue;
+                    // (compteur : My Summer Car seulement -- sur My Winter Car le compteur du taxi a d'autres etats, non verifie ;
+                    // [Test] CompteurSuivi=0 : comme avant)
+                    if (row == OdoRow && (!Game.Msc || Config.GetInt("Test", "CompteurSuivi", 1) == 0)) continue;
                     for (int i = 2; i < sv.Length; i++)
                     {
                         FsmFloat v = f.FsmVariables.FindFsmFloat(sv[i]);
-                        if (v == null) continue;
+                        FsmInt iv = v == null && row == OdoRow ? f.FsmVariables.FindFsmInt(sv[i]) : null;
+                        if (v == null && iv == null) continue;
                         string key = RelPath(c.T, f.transform) + ":" + f.FsmName + "." + sv[i];
                         int k; seen.TryGetValue(key, out k); seen[key] = k + 1;
                         if (k > 0) key += "#" + k;
-                        list.Add(new Sim { Key = key, Hash = Hash(key), Var = v, Control = row >= FirstControlRow });
+                        list.Add(new Sim { Key = key, Hash = Hash(key), Var = v, Int = iv, Fsm = f, Control = row >= FirstControlRow });
                     }
                 }
             }
@@ -989,6 +1016,7 @@ namespace MWCoop
                 }
                 if (driving >= 0) owned = -1;
                 if (driving >= 0 && driving == idling) idling = -1;
+                if (driving >= 0) { drivingSince = now; dupWho = -1; }
                 LocalDriving = driving;
             }
             if (LocalDriving >= 0 && now >= nextSeatCheck) { nextSeatCheck = now + 0.5f; SeatGuard(cars[LocalDriving]); }
@@ -1990,6 +2018,33 @@ namespace MWCoop
             Log.Warn("voiture " + c.Key + " copie remise en physique par un autre code (" + c.KinLost + " fois) : refigee ; automate du jeu en cause :" + (sb.Length > 0 ? sb.ToString() : " aucun trouve"));
         }
 
+        // BOAT a la fin de la copie (audit MSC 02/11) : pas de Drivetrain, donc pas de reprise a chaud (HotStart) ; « Sound Engine »
+        // (BOAT/GFX/Audio) reprenait son etat d'avant la copie. Barre prise moteur tournant chez l'autre : Start restait faux ici,
+        // moteur mort (en solo il tourne toujours) ; ancien meneur qui sort de la copie (barque rendue moteur coupe) : Start restait
+        // vrai, le moteur repartait chez lui seul (bruit, poussee, essence consommee). Start suit le moteur recu : sources allumees
+        // chez celui qui la menait (masque des sons). [Test] BateauMoteurRepris=0 : comme avant.
+        static void BoatAfterCopy(Car c, GameObject audio)
+        {
+            if (Config.GetInt("Test", "BateauMoteurRepris", 1) == 0) return;
+            PlayMakerFSM se = Game.FsmOn(audio, "Sound Engine");
+            FsmBool start = se != null ? se.FsmVariables.FindFsmBool("Start") : null;
+            if (start == null) return;
+            bool fresh = Time.realtimeSinceStartup - c.LastRemote < 2f;
+            string st = se.ActiveStateName;
+            if (c.Index == LocalDriving && fresh && c.SoundMask != 0)
+            {
+                if (start.Value && st != "Wait ignition" && st != "Reset thrust") return;
+                start.Value = true;
+                Game.SetState(se, "Actiave sim");
+                Log.Info("voiture " + c.Key + " : barre prise moteur tournant, moteur repris ici (etait " + st + ")");
+            }
+            else if (c.SoundMask == 0 && (start.Value || st == "0-2000rpm" || st == "1000-4000" || st == "Actiave sim"))
+            {
+                Game.SetState(se, "Shut off");
+                Log.Info("voiture " + c.Key + " : fin de la copie, moteur coupe chez celui qui la menait : coupe ici aussi (etait " + st + ")");
+            }
+        }
+
         static void SetKinematic(Car c, bool on)
         {
             if (c.Body == null || c.Kinematic == on) return;
@@ -2032,6 +2087,7 @@ namespace MWCoop
                     else if (par.gameObject.activeSelf != c.SoundParWas) par.gameObject.SetActive(c.SoundParWas);
                 }
             }
+            if (!on) foreach (GameObject s in c.SoundObjs) if (BoatEngineSource(s)) { BoatAfterCopy(c, s.transform.parent.parent.gameObject); break; }
             if (on) { c.WheelsWas = new bool[c.Wheels.Length]; for (int i = 0; i < c.Wheels.Length; i++) if (c.Wheels[i] != null) { c.WheelsWas[i] = c.Wheels[i].enabled; c.Wheels[i].enabled = false; } }
             else for (int i = 0; i < c.Wheels.Length; i++) if (c.Wheels[i] != null) c.Wheels[i].enabled = c.WheelsWas == null || c.WheelsWas[i];
             if (on)
@@ -3231,6 +3287,22 @@ namespace MWCoop
                 foreach (Wheel w in frozenWheels) if (w != null) { w.brake = 1f; w.handbrake = 1f; }
         }
 
+        // Mode 1 recu d'un autre pour la voiture conduite ici (voir drivingSince) : sortie forcee du perdant, qui devient copie comme
+        // d'habitude (Release, ou moteur garde puis cede au mode 1 suivant du gagnant). [Test] DoubleConducteur=0 : comme avant.
+        static int dupLogs;
+        static void DoubleDriver(Car c, int who)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (who == Session.LocalId || who < 0 || now - drivingSince > 2.5f) return;
+            if (Config.GetInt("Test", "DoubleConducteur", 1) == 0) return;
+            if (dupWho != who) { dupWho = who; dupFirst = now; return; }
+            if (now - dupFirst < 0.15f) return;
+            bool lose = who < Session.LocalId;
+            if (dupLogs++ < 10) Log.Warn("double conducteur : " + c.Key + " aussi conduite par #" + who + (lose ? " (numero plus petit) : sortie forcee ici" : " : on garde la main, il sortira chez lui"));
+            dupWho = -1; drivingSince = -10f;   // (une fois par prise de volant)
+            if (lose) ExitLocal();
+        }
+
         public static bool ExitLocal()
         {
             if (LocalDriving < 0 || LocalDriving >= cars.Count) return false;
@@ -3502,7 +3574,7 @@ namespace MWCoop
             {
                 if (!controls && s.Control) continue;
                 if (k++ >= n) break;
-                w.I32((int)s.Hash).F32(s.Var.Value);
+                w.I32((int)s.Hash).F32(s.Value);
             }
             Session.SendAll(w, reliable);
             if ((flags & SimFinal) != 0) Log.Info("voiture " + c.Key + " rendue : etat du moteur envoye (" + SimSummary(c) + ")");
@@ -3522,7 +3594,7 @@ namespace MWCoop
                 float v = r.F32();
                 if (skip) continue;
                 if (!Finite(v)) { if (now >= nanLogAt) { nanLogAt = now + 5f; Log.Warn("voitures : " + c.Key + " etat du moteur de #" + who + " : valeur non finie ignoree"); } continue; }   // (« chaleur ? (recue NaN) » : jamais appliquee)
-                foreach (Sim s in c.Sims) if (s.Hash == h) { s.Var.Value = v; break; }
+                foreach (Sim s in c.Sims) if (s.Hash == h) { if (s.Int != null) SetSimInt(c, s, v); else s.Var.Value = v; break; }
             }
             if (skip) return;
             if ((flags & SimFinal) != 0) Log.Info("voiture " + c.Key + " rendue par #" + who + " : etat du moteur repris (" + SimSummary(c) + ")");
@@ -3538,9 +3610,24 @@ namespace MWCoop
             {
                 string k = s.Key.Substring(s.Key.LastIndexOf(':') + 1);
                 if (sb.Length > 0) sb.Append(' ');
-                sb.Append(k).Append('=').Append(s.Var.Value.ToString("F2"));
+                sb.Append(k).Append('=').Append(s.Int != null ? s.Int.Value.ToString() : s.Var.Value.ToString("F2"));
             }
             return sb.ToString();
+        }
+
+        // Variable entiere recue (compteur kilometrique : OdometerReading, en dizaines de km). Les rouleaux des dizaines ne sont
+        // redessines par l'automate qu'en passant par « Convert » (le rouleau des km suit Odo a chaque image) : relance depuis
+        // « Calculate distance » quand la valeur change -- comme au chargement de la partie.
+        static int odoLogs;
+        static void SetSimInt(Car c, Sim s, float v)
+        {
+            if (v < int.MinValue || v > int.MaxValue) return;
+            int iv = Mathf.RoundToInt(v);
+            if (s.Int.Value == iv) return;
+            int was = s.Int.Value;
+            s.Int.Value = iv;
+            if (s.Fsm != null && s.Fsm.Fsm != null && s.Fsm.ActiveStateName == "Calculate distance" && s.Fsm.Fsm.GetState("Convert") != null) Game.SetState(s.Fsm, "Convert");
+            if (odoLogs++ < 10) Log.Info("voiture " + c.Key + " : " + s.Key.Substring(s.Key.LastIndexOf(':') + 1) + " " + was + " -> " + iv + " (celui qui la mene)");
         }
 
         // Avatar d'un joueur qui conduit chez lui : position et rotation dans la copie locale de la
@@ -3684,7 +3771,7 @@ namespace MWCoop
             if (!scanned) return;
             Car c = ByNet(idx);
             if (c == null || c.Body == null) { if (driven) Missing(idx, true); return; }
-            if (c.Index == LocalDriving) return;              // je la conduis : je garde la main
+            if (c.Index == LocalDriving) { if (mode == 1) DoubleDriver(c, who); return; }   // je la conduis : je garde la main (sauf double conducteur perdu)
             // (voiture gardee ici sans conducteur, reclamee par la voiture de #who qui la touche : cedee -- dossier #24)
             if (Kept(c) && mode == 2 && c.Index != LocalDriving && ClaimedBy(c, who))
             {
@@ -4075,6 +4162,39 @@ namespace MWCoop
             return c.Key + " en " + c.T.position.ToString("F2") + " v " + c.Body.velocity.magnitude.ToString("F2") + " w " + c.Body.angularVelocity.magnitude.ToString("F2")
                    + (c.Body.isKinematic ? " (cinematique)" : "") + (c.RemoteBy >= 0 ? " menee par #" + c.RemoteBy + (c.RemoteDriver >= 0 ? " au volant" : "") : "")
                    + (c.Index == owned ? " (owned)" : "") + (c.Index == idling ? " (idling)" : "") + (c.Index == bumped ? " (poussee d'ici)" : "") + (c.Index == LocalDriving ? " (conduite ici)" : "");
+        }
+
+        // Essais de l'audit MSC 02/11 : double conducteur (role, sorties forcees), compteur kilometrique suivi, moteur du BOAT.
+        public static string TestDoubleVolant(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return name + " ?";
+            return "double conducteur : " + TaxiState(name) + " ; conflits journalises " + dupLogs + ", conduite ici " + (LocalDrivingKey ?? "aucune");
+        }
+        public static string TestOdometre(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return name + " ?";
+            var sb = new System.Text.StringBuilder("compteur " + c.Key + " :");
+            foreach (Sim s in c.Sims)
+                if (s.Key.Contains(":Data.Odo")) sb.Append(' ').Append(s.Key.Substring(s.Key.LastIndexOf('.') + 1)).Append('=').Append(s.Int != null ? s.Int.Value.ToString() : s.Var.Value.ToString("F1"));
+            if (sb[sb.Length - 1] == ':') sb.Append(" non suivi (dashboard meters pas monte, ou [Test] CompteurSuivi=0)");
+            return sb.Append(c.Index == LocalDriving ? " (conduite ici)" : Remote(c, Time.realtimeSinceStartup) ? " (copie, menee par #" + c.RemoteBy + ")" : " (garee)").ToString();
+        }
+        public static string TestBateauMoteur()
+        {
+            Car c = Named("BOAT");
+            if (c == null) return "BOAT ?";
+            foreach (GameObject s in c.SoundObjs)
+                if (BoatEngineSource(s))
+                {
+                    GameObject audio = s.transform.parent.parent.gameObject;
+                    PlayMakerFSM se = Game.FsmOn(audio, "Sound Engine");
+                    FsmBool start = se != null ? se.FsmVariables.FindFsmBool("Start") : null;
+                    return "BOAT : Sound Engine " + (se != null ? se.ActiveStateName : "?") + ", Start " + (start != null ? start.Value.ToString() : "?") + ", Engine " + (s.transform.parent.gameObject.activeSelf ? "allume" : "eteint")
+                           + (c.Index == LocalDriving ? " (conduite ici)" : Remote(c, Time.realtimeSinceStartup) ? " (copie, menee par #" + c.RemoteBy + ", masque " + c.SoundMask + ")" : Kept(c) ? " (moteur garde ici)" : " (garee)");
+                }
+            return "BOAT : pas de source moteur";
         }
 
         public static string Describe(string name) { return TaxiState(name); }
