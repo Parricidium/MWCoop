@@ -629,6 +629,7 @@ namespace MWCoop
             Log.Info("montage : " + id + " sur " + p.Key);
             VehicleSync.CalmAfterPart(p.Fsm.transform);
             mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
+            CarDoors.SoonScan(part);   // portiere, capot, coffre : suivis par CarDoors des maintenant (desync du 02/11)
             // ([Test] PerteMontage=1 : le premier montage d'ici n'est pas envoye -- message perdu -- pour voir l'empreinte le rattraper, Autotest=mscperte)
             if (Config.GetInt("Test", "PerteMontage", 0) != 0 && !mscLostOnce) { mscLostOnce = true; Log.Warn("montage : " + id + " sur " + p.Key + " : message NON envoye (essai de perte)"); return; }
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
@@ -663,6 +664,7 @@ namespace MWCoop
             string click = ClickFor(p, part);
             Game.SetState(p.Fsm, click);
             Freshen(part, p.Fsm, id);
+            CarDoors.SoonScan(part);   // (comme au montage d'ici, desync du 02/11)
             Log.Info("piece " + id + " montee sur " + key + " (joueur #" + who + (click != p.Click ? ", branche " + click : "") + ")");
         }
 

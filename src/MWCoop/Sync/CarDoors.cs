@@ -318,6 +318,21 @@ namespace MWCoop
             return Vector3.Dot(ax, HingeAxis(d)) < 0f ? -a : a;
         }
 
+        // Ouvrant d'une piece demontable tout juste monte (PartsMsc : montage d'ici ou recu) : releve dans 1,5 s (apres la fenetre
+        // de montage de 1 s, la charniere de 'Set joint 2' posee) au lieu d'attendre le releve suivant (desync du 02/11, JD et GG :
+        // le monde ne prend plus la portiere libre au chargement, personne ne la suivait jusqu'a 30 s apres son montage -- ouverte
+        // d'un seul cote, et sur la copie son verrou 'Set lock 2' pas reconnu, rendu incassable : on ouvrait sans pouvoir refermer).
+        // [Test] PortesMontees=0 : comme avant.
+        public static bool SoonScan(GameObject part)
+        {
+            if (nextScan < 0 || part == null || !Game.Msc || Config.GetInt("Test", "PortesMontees", 1) == 0) return false;
+            bool door = false;
+            foreach (PlayMakerFSM f in part.GetComponentsInChildren<PlayMakerFSM>(true)) if (DoorLike(f)) { door = true; break; }
+            if (!door) return false;
+            nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1.5f);
+            return true;
+        }
+
         public static void Update()
         {
             if (!Session.Active || nextScan < 0) return;
@@ -1080,6 +1095,15 @@ namespace MWCoop
         }
 
         // Essais : cles des portieres, coffres et capots suivis sur la voiture 'car'.
+        // Essai de SoonScan : la piece (chemin complet, ex. CARPARTS/PartsCar/door left(Clone)) avance-t-elle le releve ?
+        public static string TestSoonScan(string path)
+        {
+            GameObject part = Game.FindAny(path);
+            if (part == null) return "pas de piece " + path;
+            bool soon = SoonScan(part);
+            return path + " : " + (soon ? "releve avance" : "releve pas avance") + ", dans " + (nextScan < 0 ? "jamais" : (nextScan - Time.realtimeSinceStartup).ToString("0.0") + " s");
+        }
+
         public static string ListFor(string car)
         {
             Scan();
