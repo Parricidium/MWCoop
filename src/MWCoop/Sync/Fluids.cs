@@ -41,6 +41,7 @@ namespace MWCoop
         static readonly HashSet<string> SkipFsm = new HashSet<string> {
             "Scale", "Explosion", "Temp", "Assembly", "Flicker", "Jumping", "Paint", "Pressure", "Starter" };
         static readonly HashSet<string> TimingPoints = new HashSet<string> { "VINP_CrankPulley", "VINP_CamshaftSprocket" };
+        static bool tightOn, battItemOn;   // (audit MSC 02/11 : serrage filtre/bougies, charge de la batterie demontee -- voir Scan)
 
         class Watch
         {
@@ -52,6 +53,8 @@ namespace MWCoop
             public bool Septic;   // fosse ou citerne : envoyee par l'autorite de la GIFU seulement
             public float Pending, NextDelta;   // remplissage fait ici, pas encore envoye (valeur que l'on n'envoie pas)
             public float Auth; public bool HasAuth;   // derniere valeur recue de celui qui fait autorite
+            public bool Gesture; public PlayMakerFSM Screw;   // serrage a la main (filtre a huile, bougies, MSC) : un geste, toujours a nous ; vis recalee a la reception
+            public FsmBool Installed;    // charge d'une batterie (MSC, Use.Charge) : suivie seulement demontee
         }
 
         static float Val(Watch x)
@@ -73,13 +76,29 @@ namespace MWCoop
         // Valeur d'une voiture conduite par un autre. My Summer Car : les liquides et l'usure de la SATSUMA sont dans Database/*
         // (racine a part, pas sous la voiture) -- comptes comme ceux de la SATSUMA.
         static Transform satsuma;
-        static bool Driven(Transform t)
+        static Transform CarT(Transform t)
         {
             if (Game.Msc && t != null && t.root.name == "Database")
             {
                 if (satsuma == null) { GameObject s = Game.FindAny("SATSUMA(557kg, 248)"); satsuma = s != null ? s.transform : null; }
-                if (satsuma != null) t = satsuma;
+                if (satsuma != null) return satsuma;
             }
+            return t;
+        }
+        // (audit MSC 02/11 : les regles « geste d'ici » de NotOurs -- nettoyage, plein/vidange, reglages -- demandaient
+        // RemotelyDriven sur le transform Database/*, hors de la SATSUMA : toujours faux. Invite au volant, la copie de l'hote
+        // consommait l'essence, l'eau, l'huile et envoyait sa derive ; les deux cotes envoyaient, valeur « disputee », puis seul
+        // l'hote faisait foi : le niveau du conducteur suivait la simulation de la copie. Meme renvoi vers la SATSUMA que
+        // Driven. [Test] RenvoiDatabase=0 : comme avant.)
+        static int renvoiDb = -1;
+        static Transform RemoteCarT(Transform t)
+        {
+            if (renvoiDb < 0) renvoiDb = Config.GetInt("Test", "RenvoiDatabase", 1);
+            return renvoiDb != 0 ? CarT(t) : t;
+        }
+        static bool Driven(Transform t)
+        {
+            t = CarT(t);
             if (VehicleSync.RemotelyDriven(t)) return true;
             // Voiture garee (personne ne la mene) : chacun la consommait chez lui -- batterie videe par les phares, la radio, le
             // demarreur rejoue chez l'invite -- et envoyait sa valeur, qui ecrasait celle de l'autre : deux consommations pour une,
@@ -93,15 +112,29 @@ namespace MWCoop
         // (nettoyage : Dirt qui baisse sur une voiture garee, lavee ici -- garde comme un geste d'ici)
         static bool NotOurs(Watch x, float v)
         {
-            if (x.Var != null && x.Var.Name == "Dirt" && v < x.Last && !VehicleSync.RemotelyDriven(x.Fsm.transform)) return false;
+            // (serrage du filtre a huile et des bougies : un geste a la main, jamais une consommation -- toujours a nous)
+            if (x.Gesture) return false;
+            Transform car = RemoteCarT(x.Fsm.transform);
+            if (x.Var != null && x.Var.Name == "Dirt" && v < x.Last && !VehicleSync.RemotelyDriven(car)) return false;
+            // (audit MSC 02/11 : vidange faite par un invite sur la SATSUMA garee -- l'huile neuve versee fait baisser
+            // Oilpan.OilContamination de 3,2/s, CapTrigger_MotorOil 'Pouring' -- : la baisse n'etait jamais envoyee et la valeur de
+            // l'hote la remettait, huile toujours sale chez lui (usure des bougies, frottement) et dans sa sauvegarde. Une baisse
+            // nette (> 0,5 par releve : le filtre, moteur en marche, n'en fait que quelques milliemes) est un geste d'ici.
+            // [Test] VidangePropre=0 : comme avant.)
+            if (x.Var != null && x.Var.Name == "OilContamination" && x.Last - v > 0.5f && !VehicleSync.RemotelyDriven(car))
+            {
+                if (vidangePropre < 0) vidangePropre = Config.GetInt("Test", "VidangePropre", 1);
+                if (vidangePropre != 0) return false;
+            }
             // (liquides qu'on verse ou qu'on vidange -- huile, eau, liquide de frein, essence -- sur une voiture garee : vidange faite ici,
             // un geste, comme le plein ; moteur coupe, rien ne les consomme -- regle d'avant. Retour de [MWC] 27/10 : la vidange du
             // radiateur d'une voiture garee par un invite etait annulee.)
-            if (Fill(x) && !VehicleSync.RemotelyDriven(x.Fsm.transform)) return false;
+            if (Fill(x) && !VehicleSync.RemotelyDriven(car)) return false;
             // (reglages a la main -- jeu aux soupapes, calage -- : des gestes, pas une consommation ; regle d'avant)
-            if (x.List != null || x.Rot != null) return VehicleSync.RemotelyDriven(x.Fsm.transform);
+            if (x.List != null || x.Rot != null) return VehicleSync.RemotelyDriven(car);
             return Driven(x.Fsm.transform);
         }
+        static int vidangePropre = -1;
 
         static bool Changed(Watch x, float v)
         {
@@ -170,6 +203,13 @@ namespace MWCoop
             // (My Summer Car : liquides de la SATSUMA dans Database/* 'Data' -- embrayage, qualite d'huile, bidons)
             if (Game.Msc) SkipFsm.Add("Obstacle");   // (MSC : Obstacle.WaterLevel des PNJ, passagers du bus)
             if (Game.Msc) foreach (string n in new[] { "ClutchFluid", "OilContamination", "OilGrade", "FluidGasoline", "FluidDiesel", "FluidOil", "FluidCoolant" }) Names.Add(n);
+            // (audit MSC 02/11 : le liquide d'embrayage verse par celui qui ne fait pas autorite -- invite sur la SATSUMA garee, hote
+            // quand un invite conduit -- etait remis a la valeur de l'autre, jamais envoye : maitre-cylindre vide chez l'hote,
+            // Transmission 'Lining Leak' -> voiture qui ne roule plus. Un niveau qu'on remplit, comme BrakeFluidF/R : en ajout.
+            // [Test] EmbrayageVerse=0 : comme avant.)
+            if (Game.Msc && Config.GetInt("Test", "EmbrayageVerse", 1) != 0) FillNames.Add("ClutchFluid");
+            tightOn = Game.Msc && Config.GetInt("Test", "SerrageFiltreBougies", 1) != 0;
+            battItemOn = Game.Msc && Config.GetInt("Test", "ChargeBatterieDemontee", 1) != 0;
             satsuma = null;
             byKey.Clear(); watches.Clear(); seen.Clear(); ambiguous.Clear(); snapshots.Clear();
             gifu = null;
@@ -207,9 +247,26 @@ namespace MWCoop
                     // (et l'usure des pneus de la SATSUMA, wheel_regula::Use.TireHealth -- cle = ID de la roue, wheel_steel1... ; comptee par
                     // Condition chez celui qui mene, tiree au sort a l'achat)
                     bool tire = Game.Msc && f.FsmName == "Use" && v.Name == "TireHealth";
-                    if (!Names.Contains(v.Name) && !septic && !battery && !wearSim && !tire) continue;
+                    // (audit MSC 02/11 : serrage du filtre a huile et des bougies, oilfilter*/sparkplug*::Use.Tightness -- la valeur
+                    // sauvee, recopiee chaque seconde dans Database/PartsStatus. Leurs automates 'Screw' ne sont pas des boulons pour
+                    // Parts/PartsMsc (ni BoltTightness ni PartAssembled), Jobs ecarte les « (Clone) », WorldFsms tout ce qui est sous
+                    // la SATSUMA : jamais envoye. Filtre serre par l'invite, 0 chez l'hote : Oil 'Oilfilter leak' (8 - Tightness)/800
+                    // vidait le carter chez l'autorite, bougies desserrees -> rates (Cylinders), et la sauvegarde de l'hote gardait 0.
+                    // [Test] SerrageFiltreBougies=0 : comme avant.)
+                    bool tight = tightOn && f.FsmName == "Use" && v.Name == "Tightness" && f.FsmVariables.FindFsmBool("Consumed") != null
+                                 && (owner.StartsWith("oilfilter") || owner.StartsWith("sparkplug"));
+                    // (audit MSC 02/11 : charge de la batterie demontee, battery*::Use.Charge -- le chargeur du garage la remplit chez
+                    // celui qui l'y pose (sa main seulement : TriggerCharger 'Find battery'), les autres la gardaient vide ; remontee,
+                    // 'Set data' recopiait chez chacun SA charge dans Database/PartsStatus/Battery, et la valeur de l'hote (vide)
+                    // faisait foi. Montee, Use.Charge n'est qu'une copie de Database (suivie par la regle 'Data'.Charge) : pas suivie.
+                    // [Test] ChargeBatterieDemontee=0 : comme avant.)
+                    bool battItem = battItemOn && f.FsmName == "Use" && v.Name == "Charge" && owner.StartsWith("battery")
+                                    && f.FsmVariables.FindFsmFloat("ChargeMax") != null && f.FsmVariables.FindFsmBool("Installed") != null;
+                    if (!Names.Contains(v.Name) && !septic && !battery && !wearSim && !tire && !tight && !battItem) continue;
                     if (septic && f.FsmName == "Waste") gifu = f.transform.root.GetComponent<Rigidbody>();
-                    Add(new Watch { Key = owner + ":" + f.FsmName + "." + v.Name, Fsm = f, Var = v, Last = v.Value, Septic = septic });
+                    Add(new Watch { Key = owner + ":" + f.FsmName + "." + v.Name, Fsm = f, Var = v, Last = v.Value, Septic = septic,
+                                    Gesture = tight, Screw = tight ? Game.FsmOn(f.gameObject, "Screw") : null,
+                                    Installed = battItem ? f.FsmVariables.FindFsmBool("Installed") : null });
                 }
                 if (f.FsmName != "Data") continue;
                 // Jeu aux soupapes (liste 'Valves' de la culasse) et calage (sprockets) : voir l'en-tete.
@@ -291,6 +348,7 @@ namespace MWCoop
             {
                 if (x.Fsm == null) continue;
                 float v = Val(x);
+                if (x.Installed != null && x.Installed.Value) { x.Last = v; continue; }   // (batterie montee : copie de Database, voir Scan)
                 if (x.Contested && now - x.WindowStart > 30f) x.Contested = false;   // plus de conflit depuis 30 s
                 if (x.Pending > 0.02f && now >= x.NextDelta && !alone)
                 {
@@ -381,30 +439,87 @@ namespace MWCoop
                 if (Fill(x) && here > x.Last && (Driven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += here - x.Last;
                 SetVal(x, v + (Fill(x) ? x.Pending : 0f));
                 x.Last = Val(x); x.Auth = x.Last; x.HasAuth = true;
+                if (x.Screw != null) ScrewSync(x);
                 Tally(x, false, now);
                 if (++applied % 200 == 1) Log.Info("liquides et usure : " + applied + " valeurs recues (" + key + " = " + v + ", joueur #" + who + ")");
             }
             if (relay != null) Session.Broadcast(relay, true, who);
         }
 
+        // Serrage recu (filtre a huile, bougies) : l'automate 'Screw' garde son cran (Stage) et la position de la piece ; sans
+        // recalage, le prochain cran d'ici repartait de la valeur recue avec une piece visuellement desserree. Pas au milieu d'un
+        // cran d'ici (Wait..., AddFsmFloat deja joue), ni automate coupe (piece demontee : 'Setup' relira la valeur au montage).
+        //  - bougies : 'Save data' relit Use.Tightness dans Stage, 'Stages 2' tourne la bougie, puis 'Idle' ;
+        //  - filtre : 'Save data' finirait dans 'Get scroll', qui lit la molette d'ici a son entree -- un joueur qui serre un boulon
+        //    ailleurs a cet instant donnerait un cran au filtre. Cran et position poses directement, comme ses etats '1'..'8'
+        //    (SetPosition Self x=0 y=0 z=-0,0025 par cran) ; TIGHTEN n'y est pas global, pas de rejeu par evenement.
+        static void ScrewSync(Watch x)
+        {
+            PlayMakerFSM s = x.Screw;
+            if (s == null || !s.enabled) return;
+            FsmBool inst = x.Fsm.FsmVariables.FindFsmBool("Installed");   // (piece libre : sa position locale serait celle du monde)
+            if (inst == null || !inst.Value) return;
+            FsmInt stage = s.FsmVariables.FindFsmInt("Stage");
+            int want = Mathf.Clamp(Mathf.RoundToInt(x.Var.Value), 0, 8);
+            if (stage == null || stage.Value == want) return;
+            string st = s.ActiveStateName ?? "";
+            if (st == "Wait" || st == "Wait 2" || st == "Wait 3" || st == "Wait 4") return;
+            if (s.Fsm.GetState("Get scroll") != null) { stage.Value = want; s.transform.localPosition = new Vector3(0f, 0f, -0.0025f * want); }
+            else Game.SetState(s, "Save data");
+        }
+
+        // Essais (audit MSC 02/11, filtre a huile et bougies) : serrage suivi (Use.Tightness) et cran de la vis (Screw.Stage, etat).
+        public static string TestScrew(string part)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Watch x in watches)
+            {
+                if (x.Fsm == null || !x.Gesture || !x.Key.Contains(part)) continue;
+                FsmInt stage = x.Screw != null ? x.Screw.FsmVariables.FindFsmInt("Stage") : null;
+                sb.Append(sb.Length > 0 ? " ; " : "").Append(x.Key).Append(" = ").Append(x.Var.Value.ToString("F0"))
+                  .Append(" (Stage=").Append(stage != null ? stage.Value.ToString() : "?")
+                  .Append(", ").Append(x.Screw != null ? (x.Screw.enabled ? x.Screw.ActiveStateName : "coupe") : "sans Screw").Append(')');
+            }
+            return sb.Length > 0 ? sb.ToString() : "aucun serrage '" + part + "' (" + watches.Count + " suivies)";
+        }
+
+        // Essais : un cran de molette sur la 1re piece serree dont la cle contient 'part' (etat 'Screw' du filtre, 'Screw 2' des
+        // bougies : Stage +1 puis AddFsmFloat Use.Tightness +1, comme le jeu).
+        public static string TestNotch(string part)
+        {
+            foreach (Watch x in watches)
+            {
+                if (x.Fsm == null || !x.Gesture || x.Screw == null || !x.Key.Contains(part)) continue;
+                if (!x.Screw.enabled) return x.Key + " : automate Screw coupe (piece demontee ?)";
+                string st = x.Screw.Fsm.GetState("Screw") != null ? "Screw" : "Screw 2";
+                Game.SetState(x.Screw, st);
+                return x.Key + " : cran (" + st + "), Tightness avant = " + x.Var.Value.ToString("F0");
+            }
+            return "aucun serrage '" + part + "'";
+        }
+
         // [Test] Autotest=plein : l'hote au volant de la SORBET (15/20 s, moteur tenu a 1500 tr/min) ; l'invite verse 5 l dans
         // son reservoir de 30 a 35 s (0,25 l toutes les 0,25 s, comme le pistolet) ; chacun note le niveau a 28 et 45 s.
+        // (audit MSC 02/11 : aussi sur My Summer Car -- SATSUMA, reservoir Database/DatabaseMechanics/FuelTank ; [Test] PleinVoiture,
+        // PleinCle, PleinRegime pour changer de voiture, de valeur, de regime ; PleinInviteVolant=1 : l'invite conduit, l'hote verse.)
         static int fuelStep; static float fuelNext;
         public static void TestFill(string mode, float t)
         {
             if (mode != "plein") return;
-            const string Part = "FuelTankSorbett:Data.FuelLevel";
-            if (Session.IsHost)
+            string car = Config.Get("Test", "PleinVoiture", Game.Msc ? "SATSUMA(557kg, 248)" : "SORBET(190-200psi)");
+            string Part = Config.Get("Test", "PleinCle", Game.Msc ? "FuelTank:Data.FuelLevel" : "FuelTankSorbett:Data.FuelLevel");
+            bool driver = Config.GetInt("Test", "PleinInviteVolant", 0) != 0 ? !Session.IsHost : Session.IsHost;
+            if (driver)
             {
-                if (t > 15f && fuelStep == 0) { fuelStep = 1; Log.Info("autotest : plein, " + VehicleSync.TestEnter("SORBET(190-200psi)", false)); }
-                if (t > 20f && fuelStep == 1) { fuelStep = 2; Log.Info("autotest : plein, volant -> " + VehicleSync.TestEnter("SORBET(190-200psi)", true)); }
-                VehicleSync.TestEngine(t > 21f && t < 70f ? 1500f : -1f, 0.2f);
+                if (t > 15f && fuelStep == 0) { fuelStep = 1; Log.Info("autotest : plein, " + VehicleSync.TestEnter(car, false)); }
+                if (t > 20f && fuelStep == 1) { fuelStep = 2; Log.Info("autotest : plein, volant -> " + VehicleSync.TestEnter(car, true)); }
+                VehicleSync.TestEngine(t > 21f && t < 70f ? Config.GetFloat("Test", "PleinRegime", 1500f) : -1f, 0.2f);
             }
             else if (t > 30f && t < 35f && Time.realtimeSinceStartup >= fuelNext) { fuelNext = Time.realtimeSinceStartup + 0.25f; TestBump(Part, 0.25f); }
-            if (t > 28f && fuelLog == 0 || t > (Session.IsHost ? 60f : 45f) && fuelLog == 1)
+            if (t > 28f && fuelLog == 0 || t > (driver ? 60f : 45f) && fuelLog == 1)
             {
                 fuelLog++;
-                foreach (Watch x in watches) if (x.Fsm != null && x.Key.Contains(Part)) Log.Info("autotest : plein, " + x.Key + " = " + Val(x).ToString("F2") + (x.Contested ? " (disputee)" : "") + (VehicleSync.RemotelyDriven(x.Fsm.transform) ? " (conduite par un autre)" : ""));
+                foreach (Watch x in watches) if (x.Fsm != null && x.Key.Contains(Part)) Log.Info("autotest : plein, " + x.Key + " = " + Val(x).ToString("F2") + (x.Contested ? " (disputee)" : "") + (VehicleSync.RemotelyDriven(RemoteCarT(x.Fsm.transform)) ? " (conduite par un autre)" : ""));
             }
         }
         static int fuelLog;
