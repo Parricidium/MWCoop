@@ -194,8 +194,10 @@ namespace MWCoop
         // droite contact, starter, phares, warning (capture annotee de JD, 21/10). Tenue de route : 300 ch a 5 500 tr/min,
         // 470 Nm a 4 000, rupteur 7 500, 1 130 kg (Mass du .hdv rFactor), 60 % sur l'avant, braquage 35.
         static readonly Vector3 ImpFace = new Vector3(0f, 0.50f, -0.87f).normalized;
+        // (02/11 : modele de Rallyworld, Impreza 555 -- yeux du conducteur (-0,32 ; 1,01 ; -0,05) d'apres la tete du copilote du modele, en
+        // miroir ; pivot de tete 27 cm derriere)
         public static readonly Model Imp96 = new Model { Id = ModelImp, Folder = "imp96", Name = "Imprezza 95",
-            Head = new Vector3(-0.306f, 1.023f, -0.278f), SeatEyes = true, EyeDrop = -0.10f, SoloEyeDrop = 0.06f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.55f),
+            Head = new Vector3(-0.32f, 1.10f, -0.32f), SeatEyes = true, EyeDrop = -0.10f, SoloEyeDrop = 0.06f, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.55f),
             BrakePivot = new Vector3(0f, 0.36f, -0.10f), BrakeGrip = new Vector3(0f, 0.47f, 0.10f),
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.065f, 0.653f, 0.424f)),
@@ -253,8 +255,9 @@ namespace MWCoop
         // colonne sur la face de la planche (z 0,518, tournee vers le pilote) juste a droite du volant. Tenue de route : celle de
         // l'Ebo 1 validee par JD, moteur et masse de l'Evo 2 : 450 ch a 7 500 tr/min, 490 Nm a 5 500, rupteur 8 000, 910 kg (Mass
         // du .hdv rFactor) ; frein a main de la Sport Quatro (6 000 N.m).
+        // (02/11 : modele de Rallyworld -- yeux du conducteur (-0,34 ; 1,08 ; -0,15) : assise a 0,45, pavillon a 1,27, volant 36 cm devant)
         public static readonly Model T16b = new Model { Id = ModelT16b, Folder = "t16e2", Name = "205 Ebo 2",
-            Head = new Vector3(-0.32f, 0.969f, -0.291f), EyeDrop = 0.04f, SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.85f),
+            Head = new Vector3(-0.34f, 1.11f, -0.42f), EyeDrop = 0.04f, SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.012f, 0.297f, -0.125f), BrakeGrip = new Vector3(-0.012f, 0.349f, 0.095f),
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.05f, 0.640f, 0.511f)),
