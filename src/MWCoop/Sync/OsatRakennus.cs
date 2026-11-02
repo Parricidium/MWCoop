@@ -98,7 +98,7 @@ namespace MWCoop
             Mat("os_puna", "paint_black_matte", 1f, new Color(0.75f, 0.1f, 0.09f));
             Mat("os_harmaa", "paint_black_matte", 1f, new Color(0.55f, 0.57f, 0.6f));
             Mat("os_valko", "paint_black_matte", 1f, new Color(0.95f, 0.95f, 0.94f));
-            OwnMat("os_kyltti", "osat-kyltti.png", true);
+            OwnMat("os_kyltti", "osat-kyltti.png");
             OwnMat("os_cardinal", "osat-cardinal.png", true);
             OwnMat("os_kaytetyt", "osat-kaytetyt.png", true);
             OwnMat("os_nouto", "osat-nouto.png", true);
@@ -215,9 +215,10 @@ namespace MWCoop
 
         static void OsatFront()
         {
-            // enseigne au-dessus de la porte : CARDINAL VARAOSAT (texture lumineuse, 4 x 1), cadre blanc
+            // enseigne au-dessus de la porte : CARDINAL VARAOSAT peint sur tole (4 x 1, comme les enseignes de Teimo et de Fleetari,
+            // store_banners), sur un chassis de tole galvanisee
             float sw = 3.6f, sh = sw * 512f / 2048f, sy0 = 2.32f, sz = OD + 0.06f;
-            Box(new Vector3(-sw / 2 - 0.08f, sy0 - 0.08f, OD), new Vector3(sw / 2 + 0.08f, sy0 + sh + 0.08f, sz), "lista", "lista", "lista", "lista", null, null, false);
+            Box(new Vector3(-sw / 2 - 0.025f, sy0 - 0.025f, OD), new Vector3(sw / 2 + 0.025f, sy0 + sh + 0.025f, sz), "metalli", "metalli", "metalli", "metalli", null, null, false);
             Quad("os_kyltti", new Vector3(sw / 2, sy0, sz + 0.003f), new Vector3(-sw / 2, sy0, sz + 0.003f), new Vector3(-sw / 2, sy0 + sh, sz + 0.003f), new Vector3(sw / 2, sy0 + sh, sz + 0.003f),
                  new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
             // lampes « col de cygne » au-dessus de l'enseigne (comme la s21)
@@ -549,14 +550,47 @@ namespace MWCoop
             if (now < osatShotsAt) return;
             osatShotsAt = float.MaxValue;
             if (Config.GetInt("Test", "OsatSonde", 0) != 0) OsatProbe();
+            if (Config.GetInt("Test", "OsatTeimo", 0) != 0) OsatSignProbe();
             OsatShot("ulko", new Vector3(2.5f, 2.0f, 13f), new Vector3(0f, 2.0f, 0f), 55f);
             OsatShot("ulko2", new Vector3(-11f, 3.5f, 10f), new Vector3(0f, 1.8f, 0f), 55f);
+            OsatShot("kyltti", new Vector3(0.6f, 1.8f, 8.5f), new Vector3(0f, 2.55f, OD), 40f);
             OsatShot("sisa", new Vector3(0f, 1.65f, OD - 0.4f), new Vector3(0f, 1.1f, -OD), 70f);
             OsatShot("sisa2", new Vector3(OL - 0.8f, 1.65f, -1.0f), new Vector3(-OL, 1.0f, 1.8f), 70f);
             OsatShot("sisa3", new Vector3(-OL + 0.8f, 1.65f, -1.0f), new Vector3(OL, 1.0f, 1.8f), 70f);
         }
         // ([Test] OsatSonde=1 : meubles et produits du jeu candidats -- copies posees derriere le magasin, taille, matieres, niveaux des
         // faces horizontales (tablettes) dans le repere du magasin)
+        // ([Test] OsatTeimo=1 : matieres des enseignes des magasins du jeu -- liste au journal, textures dans dumps\tex-*.png)
+        static void OsatSignProbe()
+        {
+            foreach (string rootName in new[] { "PERAPORTTI", "STORE_AREA" })
+            {
+                GameObject src = FindPath(rootName);
+                if (src == null) { L("sonde enseigne : " + rootName + " introuvable"); continue; }
+                var seen = new HashSet<string>();
+                Bounds wb = new Bounds(src.transform.position, Vector3.zero);
+                foreach (MeshRenderer r in src.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    if (r.bounds.size.magnitude < 60f) wb.Encapsulate(r.bounds);
+                    foreach (Material m in r.sharedMaterials)
+                    {
+                        if (m == null || !seen.Add(m.name)) continue;
+                        L("sonde enseigne : " + rootName + " " + r.name + " mat " + m.name + " tex " + (m.mainTexture != null ? m.mainTexture.name + " " + m.mainTexture.width + "x" + m.mainTexture.height : "-")
+                          + " y " + (r.bounds.center.y - src.transform.position.y).ToString("0.0"));
+                    }
+                }
+                L("sonde enseigne : " + rootName + " boite " + wb.center + " " + wb.size);
+                int k = 0;
+                foreach (Vector3 dir in new[] { Vector3.forward, Vector3.back, Vector3.left, Vector3.right })
+                {
+                    Vector3 from = wb.center + dir * (Mathf.Max(wb.extents.x, wb.extents.z) + 12f); from.y = wb.min.y + 3f;
+                    WorldShot("teimo-" + rootName + "-" + (k++), from, wb.center, 60f);
+                }
+            }
+            foreach (string t in Config.Get("Test", "OsatTex", "").Split(','))
+                if (t.Trim().Length > 0) DumpTex(t.Trim());
+        }
+
         static void OsatProbe()
         {
             string[] paths = { "PERAPORTTI/Building/LOD100/Store/GFX/store_shelf", "PERAPORTTI/Building/LOD100/Store/GFX/store_shelf_corner",
@@ -614,13 +648,17 @@ namespace MWCoop
 
         static void OsatShot(string name, Vector3 from, Vector3 at, float fov)
         {
+            WorldShot(name, osat.transform.TransformPoint(from), osat.transform.TransformPoint(at), fov);
+        }
+        static void WorldShot(string name, Vector3 from, Vector3 at, float fov)
+        {
             var go = new GameObject("osat_kuva");
             try
             {
                 var cam = go.AddComponent<Camera>(); cam.enabled = false;
                 if (Game.MainCam != null) cam.CopyFrom(Game.MainCam);
                 cam.fieldOfView = fov; cam.nearClipPlane = 0.05f; cam.farClipPlane = 800f;
-                go.transform.position = osat.transform.TransformPoint(from); go.transform.LookAt(osat.transform.TransformPoint(at));
+                go.transform.position = from; go.transform.LookAt(at);
                 var rt = new RenderTexture(1280, 720, 24); cam.targetTexture = rt; cam.Render();
                 RenderTexture.active = rt; var tex = new Texture2D(1280, 720, TextureFormat.RGB24, false); tex.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); tex.Apply();
                 RenderTexture.active = null; cam.targetTexture = null;
