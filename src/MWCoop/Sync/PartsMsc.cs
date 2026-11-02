@@ -215,7 +215,7 @@ namespace MWCoop
             apresControle = Config.GetInt("Test", "MontageApresControle", 1) != 0;
             detachRemise = Config.GetInt("Test", "DetachRemise", 1) != 0;
             casseApresMontage = Config.GetInt("Test", "CasseApresMontage", 1) != 0;
-            copyAsked.Clear(); hingeRemovals.Clear(); keptForce.Clear(); pendingRemovals.Clear(); dbDiffLogged.Clear(); casseStep = 0;
+            copyAsked.Clear(); hostWaits.Clear(); hingeRemovals.Clear(); keptForce.Clear(); pendingRemovals.Clear(); dbDiffLogged.Clear(); casseStep = 0;
             remoteRemoval.Clear(); mscIn.Clear(); listLogs = 0;
             mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear(); keptJoints.Clear();
             mscDb.Clear(); mscDbByHash = null; nextPrint = lastListAsk = lastListSent = 0f; printMiss = 0; mscLostOnce = false;
@@ -968,6 +968,15 @@ namespace MWCoop
 
         static bool casseCopieGeste = true;
         static readonly Dictionary<uint, float> copyAsked = new Dictionary<uint, float>();   // (point redemande apres une casse sur la copie : 2 s, pas les 60 s d'AskedLately)
+        static readonly Dictionary<uint, float> hostWaits = new Dictionary<uint, float>();   // (hote : point vide apres une casse refusee sur sa copie, 25 s)
+        // Hote : ce point attend-il l'etat du conducteur ? Fini des qu'il tient une piece, a tout geste ou message apres la casse (Touch), ou au bout de 25 s.
+        static bool MscWaitsDriver(uint h, string id, float now)
+        {
+            float at, tt;
+            if (!hostWaits.TryGetValue(h, out at)) return false;
+            if (id.Length > 0 || now - at > 25f || touched.TryGetValue(h, out tt) && tt >= at) { hostWaits.Remove(h); return false; }
+            return true;
+        }
         static void MscLocalRemove(PlayMakerFSM rem, bool breakoff)
         {
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;
@@ -1003,6 +1012,15 @@ namespace MWCoop
                             copyAsked[hk] = now;
                             Session.SendToHost(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@piecesdemande").I32((int)hk), true);
                             Log.Info("piece " + id + " : point " + key + " redemande a l'hote");
+                        }
+                        // Hote (relecture du lot) : la casse refusee laissait le point vide ici sans rien pour le remettre, et son controle
+                        // annoncait ce vide a un conducteur qui n'y avait jamais touche (age 1e6 des deux cotes) -- la portiere tombait chez
+                        // celui qui mene la voiture. Le point attend l'etat du conducteur : MscDigest l'annonce « plus ancien que tout », le
+                        // conducteur renvoie son montage (chemin « plus recent que chez l'hote »).
+                        if (Session.IsHost)
+                        {
+                            if (!hostWaits.ContainsKey(hk)) Log.Info("piece " + id + " : point " + key + " vide ici, montage attendu du conducteur #" + VehicleSync.Authority(cb) + " au controle");
+                            hostWaits[hk] = now;
                         }
                     }
                     return;
@@ -1415,6 +1433,8 @@ namespace MWCoop
         //    rompue pendant le montage) ; =2 : et la casse envoyee tout de suite (arrive chez l'autre pendant sa chaine rejouee).
         //  - [Test] CasseCopieA=s, CasseCopieQui=n (2) : chez le joueur n, a s, la charniere (sinon la 1re attache) de la piece montee rompue
         //    par la physique (limites 0,001) ; a s+5 il note ses attaches et le point (casse sur la copie).
+        //  - [Test] MeneQui=n, MeneDe=s, MeneA=s : de MeneDe a MeneA, le joueur n garde la voiture de la piece comme un moteur laisse tournant
+        //    (casse sur la copie de l'hote : CasseCopieQui=0, MeneQui=2 ; Monteur=9 pour une piece jamais touchee de la session).
         //  - [Test] Clic2=<fin du point>|<cle de piece>, Clic2Qui=n (2), Clic2A=s (70) : clic de montage par le joueur n a s ; a s+10 chacun
         //    note les deux points et {Detach} de [Test] Piece (piston clique sur un vilebrequin remonte pas serre).
         static int remStep, verStep, copStep, clic2Step; static string clic2Point;
@@ -1458,6 +1478,12 @@ namespace MWCoop
                 Log.Info("autotest mscremonte : verrou " + (cb != null ? "pose" : "pas pose (pas dans une voiture)") + ", " + TestJoints(partKey));
             }
             if (verStep == 1 && t > 45f) { verStep = 2; Log.Info("autotest mscremonte : apres le demontage, " + TestJoints(partKey)); }
+            if (Session.LocalId == Config.GetInt("Test", "MeneQui", -1) && t > Config.GetFloat("Test", "MeneDe", 60f) && t < Config.GetFloat("Test", "MeneA", 110f))
+            {
+                GameObject part = MscFindPart(partKey);
+                Transform car = part != null ? VehicleSync.CarRoot(part.transform) : null;
+                if (car != null) { VehicleSync.TestKeepRunning(car.name); VehicleSync.TestOwn(car.name); }
+            }
             float cca = Config.GetFloat("Test", "CasseCopieA", 0f);
             if (cca > 0f && copStep == 0 && t > cca && Session.LocalId == Config.GetInt("Test", "CasseCopieQui", 2))
             {
@@ -1915,7 +1941,9 @@ namespace MWCoop
                 if (id.Length > 0) mounted++;
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
                 uint hk = H(p.Key);
-                w.I32((int)hk).Str(id).F32(Age(hk, now)); n++; total++;
+                // (point vide apres une casse refusee sur la copie : annonce plus ancien que tout -- 1e7, un age jamais touche est 1e6 --,
+                // celui qui y a la piece la renvoie ; relecture du lot P, desync du 02/11)
+                w.I32((int)hk).Str(id).F32(hostWaits.Count > 0 && MscWaitsDriver(hk, id, now) ? 1e7f : Age(hk, now)); n++; total++;
                 // (coupe aussi a la taille : 40 points aux cles longues d'une SATSUMA montee depassaient Transport.MaxPayload,
                 // l'envoi levait et tout le controle de ce tour etait perdu, vis comprises -- 24/10)
                 if (n >= 40 || w.Length > 900) { Session.SendAll(w, true); w = null; }
