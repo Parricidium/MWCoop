@@ -57,6 +57,9 @@ namespace MWCoop
                 // (HandTools : outils dans la main des avatars -- manquait sur MSC, la hache des autres restait invisible : Markos et Squier, 24/10)
                 try { CarVisuals.LateUpdate(); HandTools.LateUpdate(); PlayerSync.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); Studio.LateUpdate(); }
                 catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
+                // (audit MSC 02/11 : table du ventti du chalet -- cartes du joueur posees chez le spectateur, Machines)
+                try { Machines.LateUpdate(); }
+                catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("machines (pose) : " + e.Message); }
                 // (24/10 : ombres des phares et des lampadaires, halos, portee -- reglages [Graphismes] deja proposes sur MSC par le
                 // lanceur, sans effet jusqu'ici ; memes noms que MWC : MAP/StreetLights, SUN, phares en Spot sous CarDynamics)
                 try { Lights.LateUpdate(); }
@@ -265,11 +268,18 @@ namespace MWCoop
                 skip = new System.Collections.Generic.HashSet<string>();
                 foreach (string s in Config.Get("Test", "SautModules", "").Split(',')) if (s.Trim().Length > 0) skip.Add(s.Trim());
                 skipAll = skip.Contains("*");
+                string tm = Config.Get("Test", "LeverModule", "").Trim();
+                throwModule = tm.Length > 0 ? tm : null;
             }
             if (skip.Count > 0 && PlayerSync.InGame && Time.timeSinceLevelLoad > 60f && (skip.Contains(what) || skipAll && what != "session" && what != "joueurs" && what != "deroule" && what != "autotest")) return;
             long mem = Perf.MemNow();
             watch.Reset(); watch.Start();
-            try { a(); } catch (System.Exception e) { Log.Error(what + " : " + e); }
+            try
+            {
+                if (throwModule != null && what == throwModule) TestThrow();
+                a();
+            }
+            catch (System.Exception e) { StepError(what, e); }
             watch.Stop();
             Perf.Add(what, watch.Elapsed.TotalMilliseconds);
             Perf.AddAlloc(what, mem);
@@ -282,6 +292,45 @@ namespace MWCoop
                     Log.Warn("lent : " + what + " " + watch.ElapsedMilliseconds + " ms");
                 }
             }
+        }
+
+        // Exception d'un module : bornee (audit MSC 02/11 : un module qui levait a chaque image ecrivait ~60 piles par seconde,
+        // ecriture disque synchrone -- images perdues, journal de centaines de Mo, rapports du lanceur trop gros pour le site).
+        // Les 3 premieres avec la pile ; ensuite au plus une ligne par module toutes les 10 s, avec le nombre d'exceptions
+        // tues depuis (pile complete si l'exception differe de la precedente). [Test] ErreursBornees=0 : comme avant.
+        class StepErr { public int Logged, Hidden; public float LastAt; public string Last; }
+        static readonly System.Collections.Generic.Dictionary<string, StepErr> stepErrs = new System.Collections.Generic.Dictionary<string, StepErr>();
+        static int boundErrors = -1;
+        static void StepError(string what, System.Exception e)
+        {
+            if (boundErrors < 0) boundErrors = Config.GetInt("Test", "ErreursBornees", 1);
+            if (boundErrors == 0) { Log.Error(what + " : " + e); return; }
+            StepErr s;
+            if (!stepErrs.TryGetValue(what, out s)) { s = new StepErr(); stepErrs[what] = s; }
+            float now = Time.realtimeSinceStartup;
+            string sig = e.GetType().Name + ": " + e.Message;
+            if (s.Logged < 3) { s.Logged++; s.LastAt = now; s.Last = sig; Log.Error(what + " : " + e + (s.Logged == 3 ? " (suivantes : au plus une ligne / 10 s)" : "")); return; }
+            if (now - s.LastAt < 10f) { s.Hidden++; return; }
+            bool same = sig == s.Last;
+            Log.Error(what + " : " + (same ? sig : e.ToString()) + " (" + s.Hidden + " autre(s) tue(s) en " + (now - s.LastAt).ToString("F0") + " s)");
+            s.Logged++; s.Hidden = 0; s.LastAt = now; s.Last = sig;
+        }
+
+        // [Test] LeverModule=<nom du module> (« marqueurs »...) : ce module leve a chaque image de 40 a 70 s de jeu -- verifie que
+        // le journal reste borne (StepError). Attendu : 3 lignes « ERREUR <module> : ...LeverModule... » avec la pile, puis une
+        // ligne courte toutes les 10 s « (N autre(s) tue(s) en 10 s) », environ 6 lignes en tout au lieu de ~1800.
+        static string throwModule;
+        static void TestThrow()
+        {
+            if (!PlayerSync.InGame || Time.timeSinceLevelLoad < 40f || Time.timeSinceLevelLoad > 70f) return;
+            throw new System.InvalidOperationException("essai [Test] LeverModule=" + throwModule);
+        }
+        public static string TestErreurs()
+        {
+            var sb = new System.Text.StringBuilder("erreurs des modules :");
+            foreach (System.Collections.Generic.KeyValuePair<string, StepErr> kv in stepErrs)
+                sb.Append(' ').Append(kv.Key).Append(" = ").Append(kv.Value.Logged).Append(" ecrite(s), ").Append(kv.Value.Hidden).Append(" tue(s) en attente ;");
+            return sb.ToString();
         }
 
         void OnLevelWasLoaded(int level)
@@ -420,7 +469,10 @@ namespace MWCoop
                                     WorldFsms.OnLevelLoaded, GuestSlot.OnLevelLoaded, Races.OnLevelLoaded, RallyMsc.OnLevelLoaded, WiringGuard.OnLevelLoaded, WoodCarriers.OnLevelLoaded,   // (22/10 : difficulte de depart -- manquait ici, jamais appliquee sur MSC en 1.8.8 ; ronflements)
                                     // (24/10 : boutique s21, coin video, musee, sacs de couchage, casques achetes ; terrain defriche ; sauvegarde de leurs objets)
                                     Wear.OnLevelLoaded, SleepingBags.OnLevelLoaded, Kauppa.OnLevelLoaded, Clearing.OnLevelLoaded, SaveHook.OnLevelLoaded,
-                                    Vaz.OnLevelLoaded, RallyMscVaz.OnLevelLoaded, DragMsc.OnLevelLoaded, Lights.OnLevelLoaded };   // (24/10 : voitures VAZ et addons sur la Ruscko)
+                                    Vaz.OnLevelLoaded, RallyMscVaz.OnLevelLoaded, DragMsc.OnLevelLoaded, Lights.OnLevelLoaded,   // (24/10 : voitures VAZ et addons sur la Ruscko)
+                                    // (audit MSC 02/11 : ventti du chalet et nasse -- Machines, rien d'autre de ses machines sur MSC ;
+                                    // vitrines du magasin et du pub -- Vitrines, generique)
+                                    Machines.OnLevelLoaded, Vitrines.OnLevelLoaded };
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -477,6 +529,10 @@ namespace MWCoop
             "phares", "capots du pack", "cablage", "porte-buches",   // (24/10 : faisceau tenu par un autre, Markos -- WiringGuard)
               // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)
             "vaz-2108", "panneau vaz",   // (24/10, JD : les voitures addons sur MSC -- VazCar copie la RUSCKO, onglet Voitures du F10)
+            // (audit MSC 02/11) ventti du chalet (CABIN/Cabin/Ventti/Table : verrou, cartes, enjeux voiture / maison / chalet
+            // rejoues chez tous) et poissons de la nasse (l'hote fait foi) -- Machines, seulement ca sur MSC ; vitrines du magasin
+            // et du pub (seul celui qui casse paie les 2760 mk) -- Vitrines.
+            "machines", "vitrines",
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;

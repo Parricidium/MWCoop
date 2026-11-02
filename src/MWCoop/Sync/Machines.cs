@@ -50,6 +50,11 @@ namespace MWCoop
     //    (toujours) ; les boutons y sont DETRUITS (DestroyObject), la table et la chaise lachees (SetIsKinematic faux) ;
     //    chez les autres l'automate repart de la (lache 1 s apres par le joueur, qui rend le verrou : Broken, plus suivie),
     //    la table est un corps du monde que Props recale (PERAJARVI : cle par chemin).
+    // My Summer Car (audit MSC 02/11) : le module ne tournait pas (Core.MscModules) -- ventti du chalet (CABIN/Cabin/Ventti/Table,
+    // memes etats du GameManager 'Use' : 'Win car', 'Lose car', 'Lose house', 'Win house', 'Delay'...) joue chez un seul : cle de la
+    // Ruscko, chalet, maison perdue n'existaient que chez lui, la sauvegarde de l'hote n'en gardait rien. Sur MSC seuls le ventti
+    // (IsMachine) et la nasse (voir « nasse » plus bas) tournent ici : pompes a PumpsMsc, ni ordinateur (pas de COMPUTER), ni
+    // machines a sous / video-poker du magasin (STORE/LOD : a voir a part). [Test] VenttiMsc=0 : comme avant (module inerte sur MSC).
     public static class Machines
     {
         class Part
@@ -92,7 +97,7 @@ namespace MWCoop
         }
 
         const float Lease = 20f, Reach = 3.5f, SpinSpeed = 720f, KeepMoney = 5f;
-        const int L_FREE = 0, L_ASK = 1, L_HELD = 2, L_REFUSED = 3, L_GAME = 4, L_POWER = 5, L_STATE = 6;   // Msg.MachineLock
+        const int L_FREE = 0, L_ASK = 1, L_HELD = 2, L_REFUSED = 3, L_GAME = 4, L_POWER = 5, L_STATE = 6, L_FISH = 7;   // Msg.MachineLock
 
         static readonly Dictionary<string, Machine> machines = new Dictionary<string, Machine>();
         static readonly List<Machine> lockables = new List<Machine>();
@@ -105,7 +110,8 @@ namespace MWCoop
             Session.PlayerLeft += OnPlayerLeft;
         }
 
-        static bool IsMachine(Transform t) { string n = t.name; return n.StartsWith("FuelPumps_") || IsLockable(n) || IsVentti(t); }
+        // (MSC : la table du ventti seule -- pompes, machines a sous et video-poker de My Summer Car pas verifies ici)
+        static bool IsMachine(Transform t) { string n = t.name; return Game.Msc ? IsVentti(t) : n.StartsWith("FuelPumps_") || IsLockable(n) || IsVentti(t); }
         static bool IsLockable(string n) { return n == "VideoPoker" || n.StartsWith("SlotMachine"); }   // SlotMachine (station), SlotMachinePub (bar)
         // Table du ventti (.../RoomVenttiPig/Ventti/Table) : reconnue par son chemin, 'Table' seul ne dit rien.
         static bool IsVentti(Transform t) { return t.name == "Table" && t.parent != null && t.parent.name == "Ventti"; }
@@ -123,7 +129,10 @@ namespace MWCoop
             testStep = 0; testNextLog = 0; testSeq = null; testRefus = null; testMoneyBase = testMoneyDone = false;
             venttiStep = 0; venttiNext = venttiLastAt = venttiMoney0 = venttiCheck = 0f; venttiGone = venttiOpened = venttiMoneyDone = false; venttiSeq = null;
             v2Step = 0; v2Money0 = -1f;
-            nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
+            trapLogic = null; trapFishes = trapHidden = null; nextTrap = nextTrapFull = trapHoldUntil = 0f; trapSent = trapHost = trapHostIdx = trapApplied = -1; trapFixed = 0; nasseStep = 0; nasseLog = 0f;
+            TrapOn = Config.GetInt("Test", "NasseMsc", 1) != 0;
+            bool on = !Game.Msc || Config.GetInt("Test", "VenttiMsc", 1) != 0;
+            nextScan = PlayerSync.InGame && on ? Time.realtimeSinceStartup + 15f : -1;
             nextComputer = Time.realtimeSinceStartup + 20f;
         }
 
@@ -269,10 +278,11 @@ namespace MWCoop
         public static void Update()
         {
             if (mirroring && (!Session.Active || !PlayerSync.InGame)) StopMirror(GameWantsOn());   // fin de partie : l'ecran copie est rendu
+            if (Game.Msc && Session.Active && PlayerSync.InGame && TrapOn) FishTrap(Time.realtimeSinceStartup);   // (nasse de MSC, voir plus bas)
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = machines.Count == 0 ? now + 30f : float.MaxValue; Scan(); }
-            Computer(now);
+            if (!Game.Msc) Computer(now);   // (ordinateur de la maison : My Winter Car seulement, pas de racine COMPUTER sur MSC)
             if (machines.Count == 0) return;
             if (player == null) { GameObject g = Game.PlayerGo; if (g == null) return; player = g.transform; }
             if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || CodeKey()) lastInput = now;   // (pas les deplacements : se servir de la machine)
@@ -606,6 +616,8 @@ namespace MWCoop
         // "1" allume a l'invite DOS, "1|<enfant de COMPUTER/SYSTEM>" allume sur ce programme : "1|Kaappis-Fishgame", "1|TELEBBS").
         // L_STATE (ventti, fiable) : + Str etat du GameManager ('Win car', 'Lose car', 'Lose house', 'Win house', 'Delay', 'Delay 2'),
         // U8 numero d'envoi (dedoublonnage) ; l'hote le rejoue et le relaie aux autres -- sauf un enjeu si [Coop] VenttiEnjeux=0.
+        // L_FISH (MSC, hote -> invites, non fiable, a chaque changement et toutes les 10 s) : Str "nasse", + U8 Fishes, U8 Index
+        // de ITEMS/fish trap(itemx)/Logic (une ancienne version l'ignore : operation inconnue).
         public static void OnLock(Peer from, NetReader r)
         {
             int op = r.U8(), who = r.U8();
@@ -624,6 +636,7 @@ namespace MWCoop
                     Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_STATE).U8(who).Str(key).Str(state).U8(seq), true, who);
                     ApplyState(who, key, state, seq);
                 }
+                // (L_FISH : seul l'hote l'envoie, il fait foi -- celui d'un invite est ignore)
                 return;
             }
             if (op == L_HELD) SetOwner(key, who, "hote");
@@ -632,6 +645,7 @@ namespace MWCoop
             else if (op == L_GAME) Played(who, key);
             else if (op == L_POWER) Powered(who, key);
             else if (op == L_STATE) { string state = r.Str(); ApplyState(who, key, state, r.U8()); }
+            else if (op == L_FISH) { int fishes = r.U8(); OnTrap(fishes, r.U8()); }
         }
 
         // ---------------------------------------------------------------- ventti : enjeux et cochon fache
@@ -1368,6 +1382,130 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // ---------------------------------------------------------------- nasse (My Summer Car)
+        // Audit MSC 02/11 : sur MSC la nasse PECHE (ITEMS/fish trap(itemx)/Logic : 'Wait' de 1200 a 3600 s tires au hasard, puis
+        // 'Check level' -> 'Trap fish' : Fishes +1, un brochet de HiddenFish passe sous Fishes ; PickFish 'Use' (USE) en reprend
+        // un : Fishes -1, Index -1 ; Fishes sauve sous FishtrapFishes). Le tirage se faisait chez chacun : l'hote voyait 3 brochets,
+        // l'invite aucun -- et ne pouvait rien prendre ('Check fish' lit SON Fishes) ; la sauvegarde de l'hote ignorait ses prises.
+        // L'hote fait foi : il envoie Fishes et Index (L_FISH) a chaque changement et toutes les 10 s. Chez l'invite, 1 fois par
+        // seconde, ses valeurs et les brochets visibles (enfants de Fishes / HiddenFish) sont recales sur ceux de l'hote : une
+        // prise de sa propre nasse est defaite ; un poisson pris ici (Fishes plus bas) attend 4 s que l'hote rejoue la prise
+        // (le monde rejoue PickFish) avant le recalage. [Test] NasseMsc=0 : comme avant (chacun sa nasse).
+        static PlayMakerFSM trapLogic;
+        static Transform trapFishes, trapHidden;
+        static float nextTrap, nextTrapFull, trapHoldUntil;
+        static int trapSent = -1, trapHost = -1, trapHostIdx = -1, trapApplied = -1, trapFixed;
+        static bool TrapOn;   // ([Test] NasseMsc, lu au chargement)
+
+        static FsmInt TrapInt(string name) { return trapLogic != null ? trapLogic.FsmVariables.FindFsmInt(name) : null; }
+
+        static void FishTrap(float now)
+        {
+            if (now < nextTrap) return;
+            nextTrap = now + 1f;
+            if (trapLogic == null)
+            {
+                // (tenue en main, elle n'est plus sous ITEMS : la reference trouvee une fois est gardee)
+                GameObject g = Game.FindAny("ITEMS/fish trap(itemx)");
+                Transform lg = g != null ? g.transform.Find("Logic") : null;
+                trapLogic = lg != null ? Game.FsmOn(lg.gameObject, "Logic") : null;
+                if (trapLogic == null || TrapInt("Fishes") == null) { trapLogic = null; nextTrap = now + 10f; return; }
+                trapFishes = g.transform.Find("Fishes"); trapHidden = g.transform.Find("HiddenFish");
+                Log.Info("nasse : suivie, " + (Session.IsHost ? "l'hote fait foi" : "recalee sur l'hote") + " (" + TrapState() + ")");
+            }
+            FsmInt fv = TrapInt("Fishes");
+            if (fv == null) return;
+            if (Session.IsHost)
+            {
+                if (Session.RemoteCount == 0) { trapSent = -1; return; }
+                if (fv.Value == trapSent && now < nextTrapFull) return;
+                if (fv.Value != trapSent) Log.Info("nasse : " + fv.Value + " poisson(s) ici, envoye aux autres");
+                FsmInt iv = TrapInt("Index");
+                trapSent = fv.Value; nextTrapFull = now + 10f;
+                Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_FISH).U8(Session.LocalId).Str("nasse")
+                                  .U8(Mathf.Clamp(fv.Value, 0, 255)).U8(iv != null ? Mathf.Clamp(iv.Value, 0, 255) : 0), false);
+                return;
+            }
+            if (trapHost < 0) return;   // rien recu de l'hote (ancienne version) : chacun la sienne
+            int local = fv.Value;
+            if (local == trapHost) { trapApplied = local; trapHoldUntil = 0f; return; }
+            if (trapApplied >= 0 && local < trapApplied && trapHoldUntil <= 0f) { trapHoldUntil = now + 4f; return; }   // pris ici : l'hote va le rejouer
+            if (trapHoldUntil > 0f && now < trapHoldUntil) return;
+            SetTrap(trapHost, trapHostIdx, local);
+        }
+
+        // Invite : l'etat de la nasse de l'hote (L_FISH), applique au prochain tour (FishTrap).
+        static void OnTrap(int fishes, int index)
+        {
+            if (Session.IsHost || !Game.Msc || !TrapOn) return;
+            trapHost = fishes; trapHostIdx = index; nextTrap = 0f;
+        }
+
+        static void SetTrap(int fishes, int index, int local)
+        {
+            FsmInt fv = TrapInt("Fishes"), iv = TrapInt("Index");
+            if (fv == null) return;
+            fv.Value = fishes;
+            if (iv != null) iv.Value = index;
+            int moved = 0;
+            if (trapFishes != null && trapHidden != null)
+            {
+                // (comme 'Trap fish' / PickFish : un brochet passe d'un parent a l'autre, sa pose du monde gardee)
+                while (trapFishes.childCount < fishes && trapHidden.childCount > 0) { trapHidden.GetChild(Random.Range(0, trapHidden.childCount)).parent = trapFishes; moved++; }
+                while (trapFishes.childCount > fishes && trapFishes.childCount > 0) { trapFishes.GetChild(trapFishes.childCount - 1).parent = trapHidden; moved++; }
+            }
+            trapApplied = fishes; trapHoldUntil = 0f;
+            if (++trapFixed <= 10 || trapFixed % 50 == 0) Log.Info("nasse : recalee sur l'hote, " + local + " -> " + fishes + " poisson(s), " + moved + " brochet(s) deplace(s)");
+        }
+
+        public static string TrapState()
+        {
+            if (trapLogic == null) return Game.Msc ? "nasse pas (encore) suivie" : "nasse : My Summer Car seulement";
+            FsmInt fv = TrapInt("Fishes"), iv = TrapInt("Index");
+            var sb = new System.Text.StringBuilder("Fishes ");
+            sb.Append(fv != null ? fv.Value.ToString() : "-").Append(", Index ").Append(iv != null ? iv.Value.ToString() : "-")
+              .Append(", brochets visibles ").Append(trapFishes != null ? trapFishes.childCount.ToString() : "-")
+              .Append(", caches ").Append(trapHidden != null ? trapHidden.childCount.ToString() : "-")
+              .Append(", Logic ").Append(trapLogic.ActiveStateName);
+            if (!Session.IsHost) sb.Append(", hote ").Append(trapHost).Append(trapHoldUntil > 0f ? " (prise d'ici en attente)" : "").Append(", recalages ").Append(trapFixed);
+            return sb.ToString();
+        }
+
+        // [Test] Autotest=nasse (MSC, 2 joueurs). Hote : a 30, 32 et 34 s force 'Trap fish' (une prise chacun). Invite : a 44 s force sa
+        // propre 'Trap fish' (prise tiree chez lui seul) ; a 50 s prend un poisson comme PickFish (Fishes -1, un brochet cache) sans
+        // que l'hote le rejoue. Les deux notent la nasse toutes les 5 s de 25 a 65 s (« autotest nasse : ... »). Attendu : a 40 s
+        // Fishes 3 et 3 brochets visibles des deux cotes ; a 46 s l'invite revenu a 3 (« nasse : recalee sur l'hote, 4 -> 3 ») ;
+        // de 50 a 54 s « prise d'ici en attente » chez l'invite (Fishes 2), puis recale a 3 vers 55 s (l'hote n'a rien rejoue).
+        static int nasseStep;
+        static float nasseLog;
+        static void TestNasse(float t)
+        {
+            if (trapLogic != null && Session.IsHost && nasseStep < 3 && t >= 30f + 2f * nasseStep)
+            {
+                nasseStep++;
+                Game.SetState(trapLogic, "Trap fish");
+                Log.Info("autotest nasse : l'hote force 'Trap fish' (" + nasseStep + "/3) : " + TrapState());
+            }
+            if (trapLogic != null && !Session.IsHost && nasseStep == 0 && t >= 44f)
+            {
+                nasseStep = 1;
+                Game.SetState(trapLogic, "Trap fish");
+                Log.Info("autotest nasse : l'invite force sa propre 'Trap fish' : " + TrapState());
+            }
+            if (trapLogic != null && !Session.IsHost && nasseStep == 1 && t >= 50f)
+            {
+                nasseStep = 2;
+                FsmInt fv = TrapInt("Fishes"), iv = TrapInt("Index");
+                if (fv != null && fv.Value > 0)
+                {
+                    fv.Value--; if (iv != null) iv.Value--;
+                    if (trapFishes != null && trapHidden != null && trapFishes.childCount > 0) trapFishes.GetChild(0).parent = trapHidden;
+                }
+                Log.Info("autotest nasse : l'invite prend un poisson (comme PickFish, pas rejoue chez l'hote) : " + TrapState());
+            }
+            if (t >= 25f && t <= 65f && t >= nasseLog) { nasseLog = t + 5f; Log.Info("autotest nasse : " + TrapState()); }
+        }
+
         // [Test] Autotest=ordinateur. Hote : a 25 s presse l'interrupteur comme un clic (ButtonPower 'Use' -> Press, ou
         // Press 2 a l'appartement), a 45 s lance la peche (SYSTEM/POS/Command 'Typer' -> Fishgame) si l'invite DOS est
         // prete ; etat de l'ordinateur toutes les 5 s de 30 a 60 s. Invite : etat toutes les 5 s de 40 a 70 s (copie de
@@ -1538,6 +1676,7 @@ namespace MWCoop
             if (mode == "ordinateur") { TestComputer(t); return; }
             if (mode == "ventti") { TestVentti(t); return; }
             if (mode == "ventti2") { TestVentti2(t); return; }
+            if (mode == "nasse") { TestNasse(t); return; }
             if (mode != "machine") return;
             if (t > 20f && t >= testNextLog)
             {
@@ -1574,7 +1713,8 @@ namespace MWCoop
         // (le cochon joue, puis Win / Lose chez l'hote) ; etat toutes les 2 s de 26 a 56 s, liquide avant le premier appui
         // et 16 s apres le dernier (gain ou perte a lui seul). Invite : de 35 a 55 s, toutes les 2 s, qui tient le verrou,
         // ses automates du ventti (arretes ?), les cartes visibles, son liquide ("autotest ventti : ...").
-        const string VenttiTable = "PERAJARVI/Kunnalliskoti/Functions/RoomVenttiPig/Ventti/Table";
+        // (MSC, audit 02/11 : la table est au chalet, CABIN/Cabin/Ventti/Table ; son 'OpeningHours' est sur la racine CABIN)
+        static string VenttiTable { get { return Game.Msc ? "CABIN/Cabin/Ventti/Table" : "PERAJARVI/Kunnalliskoti/Functions/RoomVenttiPig/Ventti/Table"; } }
         static int venttiStep;
         static float venttiNext, venttiLastAt, venttiMoney0, venttiCheck;
         static bool venttiGone, venttiOpened, venttiMoneyDone;
@@ -1735,7 +1875,7 @@ namespace MWCoop
         {
             GameObject table = Game.FindAny(VenttiTable);
             if (table == null) return "table introuvable (" + VenttiTable + ")";
-            GameObject fn = Game.FindAny("PERAJARVI/Kunnalliskoti/Functions");
+            GameObject fn = Game.FindAny(Game.Msc ? "CABIN" : "PERAJARVI/Kunnalliskoti/Functions");
             PlayMakerFSM oh = fn != null ? Game.FsmOn(fn, "OpeningHours") : null;
             FsmBool open = oh != null ? oh.FsmVariables.FindFsmBool("CabinVentti") : null;
             if (open != null) open.Value = true;
