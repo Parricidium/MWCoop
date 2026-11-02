@@ -129,8 +129,9 @@ namespace MWCoop
             testStep = 0; testNextLog = 0; testSeq = null; testRefus = null; testMoneyBase = testMoneyDone = false;
             venttiStep = 0; venttiNext = venttiLastAt = venttiMoney0 = venttiCheck = 0f; venttiGone = venttiOpened = venttiMoneyDone = false; venttiSeq = null;
             v2Step = 0; v2Money0 = -1f;
-            trapLogic = null; trapFishes = trapHidden = null; nextTrap = nextTrapFull = trapHoldUntil = 0f; trapSent = trapHost = trapHostIdx = trapApplied = -1; trapFixed = 0; nasseStep = 0; nasseLog = 0f;
+            trapLogic = trapSpawn = null; trapFishes = trapHidden = null; nextTrap = nextTrapFull = trapHoldUntil = 0f; trapSent = trapHost = trapHostIdx = trapApplied = trapPickFrom = -1; trapFixed = 0; trapAsked = false; nasseStep = 0; nasseLog = 0f;
             TrapOn = Config.GetInt("Test", "NasseMsc", 1) != 0;
+            TrapAsk = Config.GetInt("Test", "NasseDemande", 1) != 0;
             bool on = !Game.Msc || Config.GetInt("Test", "VenttiMsc", 1) != 0;
             nextScan = PlayerSync.InGame && on ? Time.realtimeSinceStartup + 15f : -1;
             nextComputer = Time.realtimeSinceStartup + 20f;
@@ -617,7 +618,8 @@ namespace MWCoop
         // L_STATE (ventti, fiable) : + Str etat du GameManager ('Win car', 'Lose car', 'Lose house', 'Win house', 'Delay', 'Delay 2'),
         // U8 numero d'envoi (dedoublonnage) ; l'hote le rejoue et le relaie aux autres -- sauf un enjeu si [Coop] VenttiEnjeux=0.
         // L_FISH (MSC, hote -> invites, non fiable, a chaque changement et toutes les 10 s) : Str "nasse", + U8 Fishes, U8 Index
-        // de ITEMS/fish trap(itemx)/Logic (une ancienne version l'ignore : operation inconnue).
+        // de ITEMS/fish trap(itemx)/Logic (une ancienne version l'ignore : operation inconnue). Invite -> hote (fiable) : + U8 Fishes
+        // d'avant SA prise, que le monde n'a pas rejouee chez l'hote (voir FishTrap) -- l'hote la rejoue s'il en est encore la.
         public static void OnLock(Peer from, NetReader r)
         {
             int op = r.U8(), who = r.U8();
@@ -636,7 +638,8 @@ namespace MWCoop
                     Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_STATE).U8(who).Str(key).Str(state).U8(seq), true, who);
                     ApplyState(who, key, state, seq);
                 }
-                // (L_FISH : seul l'hote l'envoie, il fait foi -- celui d'un invite est ignore)
+                // (L_FISH : l'hote fait foi -- celui d'un invite n'est que la demande de rejouer sa prise, voir HostPick)
+                else if (op == L_FISH) HostPick(who, r.U8());
                 return;
             }
             if (op == L_HELD) SetOwner(key, who, "hote");
@@ -1391,11 +1394,19 @@ namespace MWCoop
         // seconde, ses valeurs et les brochets visibles (enfants de Fishes / HiddenFish) sont recales sur ceux de l'hote : une
         // prise de sa propre nasse est defaite ; un poisson pris ici (Fishes plus bas) attend 4 s que l'hote rejoue la prise
         // (le monde rejoue PickFish) avant le recalage. [Test] NasseMsc=0 : comme avant (chacun sa nasse).
-        static PlayMakerFSM trapLogic;
+        // Le brochet pris : PickFish 'Bool test' envoie SPAWNITEM a Spawn::Fish ('Create product', jamais rejoue lui-meme --
+        // createur, voir WorldFsms.Skip) ; rejouee chez tous, la prise y cree le MEME pikexN (compteur pikexID de la sauvegarde
+        // de l'hote, avance d'un cran chez chacun) : un seul brochet pour Props, pas un double (relecture du 02/11).
+        // Prise d'un invite que le monde n'a PAS rejouee chez l'hote (PickFish pas encore accroche, nasse ouverte il y a moins de
+        // 2 s...) : apres les 4 s, l'invite le dit a l'hote (L_FISH, + Fishes d'avant) ; l'hote, s'il en est encore la, refait
+        // la prise (brochet cache, Fishes / Index -1, SPAWNITEM : meme pikexN) au lieu que l'invite retrouve le poisson dans sa
+        // nasse en gardant le sien (prise sans fin, et la sauvegarde de l'hote ne perdait rien). Hote d'avant (demande ignoree) :
+        // recalage 4 s plus tard, comme avant. [Test] NasseDemande=0 : comme avant (recale sans rien demander).
+        static PlayMakerFSM trapLogic, trapSpawn;
         static Transform trapFishes, trapHidden;
         static float nextTrap, nextTrapFull, trapHoldUntil;
-        static int trapSent = -1, trapHost = -1, trapHostIdx = -1, trapApplied = -1, trapFixed;
-        static bool TrapOn;   // ([Test] NasseMsc, lu au chargement)
+        static int trapSent = -1, trapHost = -1, trapHostIdx = -1, trapApplied = -1, trapPickFrom = -1, trapFixed;
+        static bool TrapOn, TrapAsk, trapAsked;   // ([Test] NasseMsc, NasseDemande, lus au chargement)
 
         static FsmInt TrapInt(string name) { return trapLogic != null ? trapLogic.FsmVariables.FindFsmInt(name) : null; }
 
@@ -1411,6 +1422,8 @@ namespace MWCoop
                 trapLogic = lg != null ? Game.FsmOn(lg.gameObject, "Logic") : null;
                 if (trapLogic == null || TrapInt("Fishes") == null) { trapLogic = null; nextTrap = now + 10f; return; }
                 trapFishes = g.transform.Find("Fishes"); trapHidden = g.transform.Find("HiddenFish");
+                Transform sp = g.transform.Find("Spawn");
+                trapSpawn = sp != null ? Game.FsmOn(sp.gameObject, "Fish") : null;
                 Log.Info("nasse : suivie, " + (Session.IsHost ? "l'hote fait foi" : "recalee sur l'hote") + " (" + TrapState() + ")");
             }
             FsmInt fv = TrapInt("Fishes");
@@ -1428,10 +1441,49 @@ namespace MWCoop
             }
             if (trapHost < 0) return;   // rien recu de l'hote (ancienne version) : chacun la sienne
             int local = fv.Value;
-            if (local == trapHost) { trapApplied = local; trapHoldUntil = 0f; return; }
-            if (trapApplied >= 0 && local < trapApplied && trapHoldUntil <= 0f) { trapHoldUntil = now + 4f; return; }   // pris ici : l'hote va le rejouer
+            if (local == trapHost) { trapApplied = local; trapHoldUntil = 0f; trapAsked = false; return; }
+            if (trapApplied >= 0 && local < trapApplied && trapHoldUntil <= 0f) { trapHoldUntil = now + 4f; trapPickFrom = trapApplied; return; }   // pris ici : l'hote va le rejouer
             if (trapHoldUntil > 0f && now < trapHoldUntil) return;
+            // (prise d'ici pas rejouee chez l'hote : il en est encore au compte d'avant -- il la refait, voir HostPick)
+            if (TrapAsk && !trapAsked && trapHoldUntil > 0f && trapPickFrom > 0 && trapHost == trapPickFrom && local < trapHost)
+            {
+                trapAsked = true; trapHoldUntil = now + 4f;
+                Session.SendToHost(new NetWriter(Msg.MachineLock).U8(L_FISH).U8(Session.LocalId).Str("nasse").U8(Mathf.Clamp(trapPickFrom, 0, 255)), true);
+                Log.Info("nasse : prise d'ici pas rejouee chez l'hote (" + trapHost + " poisson(s) chez lui, " + local + " ici), demandee a l'hote");
+                return;
+            }
+            trapAsked = false;
             SetTrap(trapHost, trapHostIdx, local);
+        }
+
+        // La prise comme PickFish 'Bool test' (sans son ni texte) : un brochet de Fishes repasse sous HiddenFish, Fishes et
+        // Index -1, SPAWNITEM a Spawn::Fish (pikexN suivant). Sous Replay.Depth : rien n'en part vers les autres.
+        static bool PickHere()
+        {
+            FsmInt fv = TrapInt("Fishes"), iv = TrapInt("Index");
+            if (fv == null || fv.Value <= 0) return false;
+            Replay.Depth++;
+            try
+            {
+                if (trapFishes != null && trapHidden != null && trapFishes.childCount > 0) trapFishes.GetChild(Random.Range(0, trapFishes.childCount)).parent = trapHidden;
+                fv.Value--; if (iv != null) iv.Value--;
+                if (trapSpawn != null) trapSpawn.SendEvent("SPAWNITEM");
+            }
+            finally { Replay.Depth--; }
+            return true;
+        }
+
+        // Hote : un invite a pris un poisson quand sa nasse avait 'from' poissons, et le monde ne l'a pas rejoue ici. Refaite
+        // seulement si la nasse d'ici en est encore la (prise deja rejouee, message L_FISH perdu : rien, l'etat repart).
+        static void HostPick(int who, int from)
+        {
+            if (!Game.Msc || !TrapOn || trapLogic == null) return;
+            FsmInt fv = TrapInt("Fishes");
+            if (fv == null) return;
+            trapSent = -1; nextTrap = 0f;   // etat renvoye au prochain tour, quoi qu'il arrive
+            if (fv.Value != from || from <= 0) { Log.Info("nasse : prise de " + NameOf(who) + " (" + from + " -> " + (from - 1) + ") deja vue ici (" + fv.Value + " poisson(s)), etat renvoye"); return; }
+            bool ok = PickHere();
+            Log.Info("nasse : prise de " + NameOf(who) + " pas rejouee par le monde, refaite ici : " + (ok ? TrapState() : "impossible"));
         }
 
         // Invite : l'etat de la nasse de l'hote (L_FISH), applique au prochain tour (FishTrap).
@@ -1467,15 +1519,21 @@ namespace MWCoop
               .Append(", brochets visibles ").Append(trapFishes != null ? trapFishes.childCount.ToString() : "-")
               .Append(", caches ").Append(trapHidden != null ? trapHidden.childCount.ToString() : "-")
               .Append(", Logic ").Append(trapLogic.ActiveStateName);
-            if (!Session.IsHost) sb.Append(", hote ").Append(trapHost).Append(trapHoldUntil > 0f ? " (prise d'ici en attente)" : "").Append(", recalages ").Append(trapFixed);
+            // (compteur des brochets crees, pikexID : le meme chez tous tant que chaque prise est rejouee partout)
+            FsmInt cnt = trapSpawn != null ? trapSpawn.FsmVariables.FindFsmInt("ObjectNumberInt") : null;
+            sb.Append(", compteur pikex ").Append(cnt != null ? cnt.Value.ToString() : "-");
+            if (!Session.IsHost) sb.Append(", hote ").Append(trapHost).Append(trapHoldUntil > 0f ? (trapAsked ? " (prise d'ici demandee a l'hote)" : " (prise d'ici en attente)") : "").Append(", recalages ").Append(trapFixed);
             return sb.ToString();
         }
 
         // [Test] Autotest=nasse (MSC, 2 joueurs). Hote : a 30, 32 et 34 s force 'Trap fish' (une prise chacun). Invite : a 44 s force sa
-        // propre 'Trap fish' (prise tiree chez lui seul) ; a 50 s prend un poisson comme PickFish (Fishes -1, un brochet cache) sans
-        // que l'hote le rejoue. Les deux notent la nasse toutes les 5 s de 25 a 65 s (« autotest nasse : ... »). Attendu : a 40 s
-        // Fishes 3 et 3 brochets visibles des deux cotes ; a 46 s l'invite revenu a 3 (« nasse : recalee sur l'hote, 4 -> 3 ») ;
-        // de 50 a 54 s « prise d'ici en attente » chez l'invite (Fishes 2), puis recale a 3 vers 55 s (l'hote n'a rien rejoue).
+        // propre 'Trap fish' (prise tiree chez lui seul) ; a 50 s prend un poisson comme PickFish (Fishes -1, un brochet cache,
+        // SPAWNITEM : pikexN) sans que le monde le rejoue chez l'hote. Les deux notent la nasse toutes les 5 s de 25 a 65 s
+        // (« autotest nasse : ... »). Attendu : a 40 s Fishes 3 et 3 brochets visibles des deux cotes, meme « compteur pikex » ;
+        // a 46 s l'invite revenu a 3 (« nasse : recalee sur l'hote, 4 -> 3 ») ; de 50 a 54 s « prise d'ici en attente » chez
+        // l'invite (Fishes 2, compteur pikex +1), vers 54 s « demandee a l'hote » ; l'hote « prise de <invite> pas rejouee par le
+        // monde, refaite ici » : des 56 s Fishes 2 et le meme compteur pikex des deux cotes (un seul pikexN, pas de poisson
+        // rendu a l'invite). Avec [Test] NasseDemande=0 chez l'invite : recale a 3 vers 55 s (comme avant), compteurs ecartes.
         static int nasseStep;
         static float nasseLog;
         static void TestNasse(float t)
@@ -1495,13 +1553,8 @@ namespace MWCoop
             if (trapLogic != null && !Session.IsHost && nasseStep == 1 && t >= 50f)
             {
                 nasseStep = 2;
-                FsmInt fv = TrapInt("Fishes"), iv = TrapInt("Index");
-                if (fv != null && fv.Value > 0)
-                {
-                    fv.Value--; if (iv != null) iv.Value--;
-                    if (trapFishes != null && trapHidden != null && trapFishes.childCount > 0) trapFishes.GetChild(0).parent = trapHidden;
-                }
-                Log.Info("autotest nasse : l'invite prend un poisson (comme PickFish, pas rejoue chez l'hote) : " + TrapState());
+                bool took = PickHere();
+                Log.Info("autotest nasse : l'invite prend un poisson (comme PickFish, pas rejoue chez l'hote)" + (took ? "" : " -- nasse vide") + " : " + TrapState());
             }
             if (t >= 25f && t <= 65f && t >= nasseLog) { nasseLog = t + 5f; Log.Info("autotest nasse : " + TrapState()); }
         }
