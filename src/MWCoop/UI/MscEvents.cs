@@ -55,11 +55,47 @@ namespace MWCoop
                                   : Lang.T("Le rallye du week-end · samedi et dimanche · qui y est", "The weekend rally · Saturday and Sunday · who is there");
         }
 
-        // Lieu de l'evenement (pour « qui y est ») : la piste, ou le depart du rallye.
-        static Vector3? Place(Kind k)
+        // Lieux de l'evenement (pour « qui y est ») : les deux bouts de la piste, ou le depart du rallye. (audit MSC 02/11 :
+        // DRAGRACE/DistancePoint seul est au-dela de l'arrivee -- la ligne de depart a 413 m, la file d'attente a 492 m : les
+        // joueurs au depart n'etaient jamais comptes ; DRAGRACE/SpawnToDrag, pres de la file, en plus.)
+        static readonly List<Vector3> places = new List<Vector3>();
+        static readonly string[] DragPlaces = { "DRAGRACE/DistancePoint", "DRAGRACE/SpawnToDrag" }, RallyPlaces = { "RALLY/SpawnToRally" };
+        static List<Vector3> Places(Kind k)
         {
-            GameObject g = k == Kind.Drag ? Game.FindAny("DRAGRACE/DistancePoint") : Game.FindAny("RALLY/SpawnToRally");
-            return g != null ? g.transform.position : (Vector3?)null;
+            places.Clear();
+            foreach (string p in k == Kind.Drag ? DragPlaces : RallyPlaces)
+            {
+                GameObject g = Game.FindAny(p);
+                if (g != null) places.Add(g.transform.position);
+            }
+            return places;
+        }
+
+        static bool Near(List<Vector3> at, Vector3 p)
+        {
+            foreach (Vector3 a in at) if ((p - a).magnitude < 400f) return true;
+            return false;
+        }
+
+        // Qui y est : soi (« Toi ») et les avatars a moins de 400 m d'un des lieux.
+        public static List<string> Here(Kind k)
+        {
+            List<Vector3> at = Places(k);
+            var here = new List<string>();
+            if (at.Count == 0 || !PlayerSync.InGame) return here;
+            GameObject me = Game.FindAny("PLAYER");
+            if (me != null && Near(at, me.transform.position)) here.Add(Lang.T("Toi", "You"));
+            foreach (Avatar a in PlayerSync.Avatars)
+                if (a != null && a.Root != null && a.Player != null && Near(at, a.Root.transform.position)) here.Add(a.Player.Name);
+            return here;
+        }
+
+        // [Test] (audit MSC 02/11) : « qui y est » des dragsters, a journaliser apres avoir pose le joueur sur DRAGRACE/SpawnToDrag.
+        public static string TestHere()
+        {
+            string r = "autotest : dragsters, qui y est : " + string.Join(", ", Here(Kind.Drag).ToArray()) + " (" + places.Count + " lieu(x))";
+            Log.Info(r);
+            return r;
         }
 
         public static void DrawTab(Rect v, Kind k)
@@ -85,15 +121,7 @@ namespace MWCoop
             y += P(34);
 
             Kit.Section(new Rect(v.x, y, w, P(20)), Lang.T("QUI Y EST", "WHO IS THERE")); y += P(24);
-            Vector3? at = Place(k);
-            var here = new List<string>();
-            if (at.HasValue && PlayerSync.InGame)
-            {
-                GameObject me = Game.FindAny("PLAYER");
-                if (me != null && (me.transform.position - at.Value).magnitude < 400f) here.Add(Lang.T("Toi", "You"));
-                foreach (Avatar a in PlayerSync.Avatars)
-                    if (a != null && a.Root != null && a.Player != null && (a.Root.transform.position - at.Value).magnitude < 400f) here.Add(a.Player.Name);
-            }
+            List<string> here = Here(k);
             if (here.Count == 0) Style.Text(new Rect(v.x, y, w, P(20)), Lang.T("Personne pour l'instant", "Nobody yet"), 13, TextAnchor.MiddleLeft, Kit.Faint, false);
             foreach (string n in here)
             {
