@@ -47,7 +47,21 @@ namespace MWCoop
         // toute piece demontee depuis le chargement revenait ainsi. Laisse dans l'etat de la sauvegarde (terminal aussi : « Load
         // transform »). [Test] SauveRallumeTout=1 : comme avant.
         static Dictionary<PlayMakerFSM, List<GameObject>> wasOff;
+        static List<KeyValuePair<HutongGames.PlayMaker.FsmBool, bool>> setupWas;   // {Setup} des points de montage avant SAVEGAME
         static float restoreAt;
+
+        // {Setup} des points remis a leur valeur d'avant SAVEGAME : tout de suite (chaine des Data jouee dans la meme image) et a la
+        // remise des automates (2,5 s apres, si elle a ete jouee plus tard). 'last' : liste videe, total journalise.
+        static int setupFixed;
+        static void RestoreSetup(bool last)
+        {
+            if (setupWas == null) return;
+            foreach (KeyValuePair<HutongGames.PlayMaker.FsmBool, bool> kv in setupWas)
+                if (kv.Key != null && kv.Key.Value != kv.Value) { kv.Key.Value = kv.Value; setupFixed++; }
+            if (!last) return;
+            if (setupFixed > 0) Log.Info("sauvegarde en jeu : " + setupFixed + " point(s) de montage remis a {Setup} d'avant (sinon remontage fantome au prochain demontage)");
+            setupWas = null; setupFixed = 0;
+        }
         public static bool Saving { get { return restore != null; } }
         const string HoldState = "(MWCoop : sauvegarde en jeu)";   // nom d'etat absent : transition sans effet
 
@@ -89,8 +103,27 @@ namespace MWCoop
                 if (held == null) { restore.Add(new KeyValuePair<PlayMakerFSM, string>(setup, setup.ActiveStateName)); setup = null; odd = true; }
                 else held.ToState = HoldState;
             }
+            // Points de montage (automates 'Assembly') : SAVEGAME fait relire la sauvegarde a l'automate Data de chaque piece de la
+            // Database ('Save game' -> 'Check data' -> 'Load game' -> 'Basic state' -> 'Assemble'), qui pose {Setup} vrai et {Part} sur
+            // le point de chaque piece montee -- le montage du chargement de la partie. Le point etant eteint (piece montee), rien ne
+            // se passait... jusqu'au demontage suivant : 'Remove part' rallume le point, 'Check Assembly' lit {Setup} vrai et remonte
+            // aussitot la piece qu'on vient d'enlever (charniere absente, casse, point eteint par 'End' : piece par terre que le point
+            // croit tenir) -- chez l'hote, apres la sauvegarde faite a l'arrivee d'un invite (desync du 02/11, JD et GG : portiere,
+            // ailes, montage impossible des minutes durant, empreinte en boucle). {Setup} remis a sa valeur d'avant la sauvegarde.
+            // [Test] SauveSetup=0 : comme avant.
+            setupWas = null;
+            if (Config.GetInt("Test", "SauveSetup", 1) != 0)
+            {
+                setupWas = new List<KeyValuePair<HutongGames.PlayMaker.FsmBool, bool>>();
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                {
+                    if (f == null || f.FsmName != "Assembly" || f.Fsm == null) continue;
+                    HutongGames.PlayMaker.FsmBool su = f.FsmVariables.FindFsmBool("Setup");
+                    if (su != null) setupWas.Add(new KeyValuePair<HutongGames.PlayMaker.FsmBool, bool>(su, su.Value));
+                }
+            }
             try { SaveBatchMsc.Begin(restore, setup); PlayMakerFSM.BroadcastEvent("SAVEGAME"); }
-            finally { if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); }
+            finally { if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); RestoreSetup(false); }
             afterSave = new Dictionary<PlayMakerFSM, string>();
             foreach (KeyValuePair<PlayMakerFSM, string> kv in restore) if (kv.Key != null) afterSave[kv.Key] = kv.Key.ActiveStateName;
             restoreAt = Time.realtimeSinceStartup + 2.5f;
@@ -129,6 +162,7 @@ namespace MWCoop
                 catch (System.Exception e) { Log.Warn("sauvegarde en jeu : " + kv.Key.name + " -> " + kv.Value + " : " + e.Message); }
             }
             restore = null; afterSave = null; wasOff = null;
+            RestoreSetup(true);
             if (deadly > 0) Respawn.RestartNeeds("sauvegarde en jeu");
             Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant" + (kept > 0 ? ", " + kept + " laisses (etat d'avant terminal : ses actions ne sont pas rejouees)" : "")
                      + (stale > 0 ? ", " + stale + " laisses (etat d'avant qui rallumerait un objet eteint depuis :" + staleNames + (stale > 5 ? " ..." : "") + ")" : ""));

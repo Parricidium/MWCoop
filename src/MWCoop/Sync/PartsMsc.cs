@@ -1450,6 +1450,9 @@ namespace MWCoop
                 remStep = 1;
                 GameObject part = MscFindPart(partKey);
                 PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                // ([Test] TracePoint=1 : etats du point et du Removal suivis 8 s -- point qui se remonte tout seul apres le demontage)
+                if (Config.GetInt("Test", "TracePoint", 0) != 0)
+                    foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith(pointEnd) && kv.Value.Fsm != null) { FsmBool su = kv.Value.Fsm.FsmVariables.FindFsmBool("Setup"); Log.Info("autotest mscremonte : point " + kv.Key + " Setup=" + (su != null ? su.Value.ToString() : "?") + ", actif " + kv.Value.Fsm.gameObject.activeSelf); Trace.Watch(kv.Value.Fsm, "point " + kv.Key, 8f); if (rem != null) Trace.Watch(rem, "piece " + partKey, 8f); }
                 if (me && rem != null) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); }
                 Log.Info("autotest mscremonte : " + (me ? "demontage de " + partKey + " (" + (rem != null ? "Removal " + rem.ActiveStateName : "introuvable") + ")" : "attente du demontage"));
             }
