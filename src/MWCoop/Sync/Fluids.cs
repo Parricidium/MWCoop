@@ -55,6 +55,7 @@ namespace MWCoop
             public float Auth; public bool HasAuth;   // derniere valeur recue de celui qui fait autorite
             public bool Gesture; public PlayMakerFSM Screw;   // serrage a la main (filtre a huile, bougies, MSC) : un geste, toujours a nous ; vis recalee a la reception
             public FsmBool Installed;    // charge d'une batterie (MSC, Use.Charge) : suivie seulement demontee
+            public float GestureUntil;   // vidange faite ici (OilContamination, MSC) : fin de la fenetre ou toute baisse reste a nous
         }
 
         static float Val(Watch x)
@@ -120,11 +121,14 @@ namespace MWCoop
             // Oilpan.OilContamination de 3,2/s, CapTrigger_MotorOil 'Pouring' -- : la baisse n'etait jamais envoyee et la valeur de
             // l'hote la remettait, huile toujours sale chez lui (usure des bougies, frottement) et dans sa sauvegarde. Une baisse
             // nette (> 0,5 par releve : le filtre, moteur en marche, n'en fait que quelques milliemes) est un geste d'ici.
-            // [Test] VidangePropre=0 : comme avant.)
-            if (x.Var != null && x.Var.Name == "OilContamination" && x.Last - v > 0.5f && !VehicleSync.RemotelyDriven(car))
+            // Puis 3 s pendant lesquelles toute baisse reste un geste : le dernier releve du versement (arret en cours de seconde,
+            // butee FloatClamp min 1 de Oilpan 'Data') baisse de moins de 0,5 ; il tombait dans Driven et Update remettait l'huile
+            // sale recue avant le versement (relecture du 02/11). [Test] VidangePropre=0 : comme avant.)
+            float vNow = Time.realtimeSinceStartup;
+            if (x.Var != null && x.Var.Name == "OilContamination" && v < x.Last && (x.Last - v > 0.5f || vNow < x.GestureUntil) && !VehicleSync.RemotelyDriven(car))
             {
                 if (vidangePropre < 0) vidangePropre = Config.GetInt("Test", "VidangePropre", 1);
-                if (vidangePropre != 0) return false;
+                if (vidangePropre != 0) { if (x.Last - v > 0.5f) x.GestureUntil = vNow + 3f; return false; }
             }
             // (liquides qu'on verse ou qu'on vidange -- huile, eau, liquide de frein, essence -- sur une voiture garee : vidange faite ici,
             // un geste, comme le plein ; moteur coupe, rien ne les consomme -- regle d'avant. Retour de [MWC] 27/10 : la vidange du
@@ -381,6 +385,9 @@ namespace MWCoop
                 }
                 x.Last = v;
                 x.NextSend = now + 1f;
+                // (vidange d'ici envoyee : c'est desormais la valeur qui fait foi chez l'hote, qui ne la renvoie pas. Sans ca, le
+                // premier releve « pas a nous » apres la fenetre remettait l'huile sale recue avant le versement.)
+                if (x.HasAuth && now < x.GestureUntil) x.Auth = v;
                 Tally(x, true, now);
                 // Lots limites en octets (un message fiable tient dans un paquet de 1150 octets).
                 if (w != null && w.Length + 6 + System.Text.Encoding.UTF8.GetByteCount(x.Key) > 1000) { Session.SendAll(w, true); w = null; }
@@ -505,6 +512,7 @@ namespace MWCoop
         static int fuelStep; static float fuelNext;
         public static void TestFill(string mode, float t)
         {
+            if (mode == "vidange") { TestDrain(t); return; }
             if (mode != "plein") return;
             string car = Config.Get("Test", "PleinVoiture", Game.Msc ? "SATSUMA(557kg, 248)" : "SORBET(190-200psi)");
             string Part = Config.Get("Test", "PleinCle", Game.Msc ? "FuelTank:Data.FuelLevel" : "FuelTankSorbett:Data.FuelLevel");
@@ -523,6 +531,24 @@ namespace MWCoop
             }
         }
         static int fuelLog;
+
+        // [Test] Autotest=vidange (audit MSC 02/11, relecture) : l'invite verse de l'huile neuve dans la SATSUMA garee -- baisse de
+        // OilContamination de 3,2/s comme CapTrigger_MotorOil 'Pouring', butee a 1 comme FloatClamp de Oilpan 'Data' -- de 40 s
+        // a 40 + VidangeDuree s (6,1 par defaut : arret en cours de releve) ; chacun note la valeur 5 s apres l'arret puis 15 s apres.
+        static int drainLog;
+        static void TestDrain(float t)
+        {
+            string part = Config.Get("Test", "VidangeCle", "Oilpan:Data.OilContamination");
+            float end = 40f + Config.GetFloat("Test", "VidangeDuree", 6.1f);
+            if (!Session.IsHost && t > 40f && t < end)
+                foreach (Watch x in watches)
+                    if (x.Fsm != null && x.Var != null && x.Key.Contains(part)) { SetVal(x, Mathf.Max(1f, Val(x) - 3.2f * Time.deltaTime)); break; }
+            if (t > 38f && drainLog == 0 || t > end + 5f && drainLog == 1 || t > end + 15f && drainLog == 2)
+            {
+                drainLog++;
+                Log.Info("autotest : vidange " + (drainLog == 1 ? "avant, " : "") + TestState(part));
+            }
+        }
 
         // Essais : ajoute 3 a la premiere valeur Fluid/FuelLevel non nulle la plus proche du joueur.
         public static string TestNearest(string name)
