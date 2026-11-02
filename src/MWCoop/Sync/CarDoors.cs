@@ -118,6 +118,17 @@ namespace MWCoop
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
 
+        // Automate 'Use' que Scan prendrait (memes etats : portiere, capot, hayon), meme pas encore sous une voiture -- portiere
+        // de la SATSUMA demontee au chargement, que WorldFsms doit laisser libre pour ce module (desync du 02/11, voir WorldFsms.Skip).
+        public static bool DoorLike(PlayMakerFSM f)
+        {
+            if (f == null || f.FsmName != "Use") return false;
+            Fsm m = f.Fsm;
+            return m.GetState("Open door") != null && (m.GetState("Open door 2") != null || m.GetState("Open door 3") != null) && m.GetState("Close door") != null
+                   || m.GetState("Open hood") != null && m.GetState("Close hood") != null
+                   || m.GetState("Open hood 2") != null && m.GetState("Close hood 2") != null;
+        }
+
         // Attache posee par le verrou du jeu ("Set lock 2", reperee en fin d'etat, avant tout passage de
         // VehicleSync.ProtectJoints) : laissee cassable sur la copie -- incassable, elle soudait la portiere et le
         // clic suivant (qui la casse en tirant) ne l'ouvrait plus. Seulement elle : la charniere, le loquet de la
@@ -305,6 +316,21 @@ namespace MWCoop
             rel.ToAngleAxis(out a, out ax);
             if (a > 180f) a -= 360f;
             return Vector3.Dot(ax, HingeAxis(d)) < 0f ? -a : a;
+        }
+
+        // Ouvrant d'une piece demontable tout juste monte (PartsMsc : montage d'ici ou recu) : releve dans 1,5 s (apres la fenetre
+        // de montage de 1 s, la charniere de 'Set joint 2' posee) au lieu d'attendre le releve suivant (desync du 02/11, JD et GG :
+        // le monde ne prend plus la portiere libre au chargement, personne ne la suivait jusqu'a 30 s apres son montage -- ouverte
+        // d'un seul cote, et sur la copie son verrou 'Set lock 2' pas reconnu, rendu incassable : on ouvrait sans pouvoir refermer).
+        // [Test] PortesMontees=0 : comme avant.
+        public static bool SoonScan(GameObject part)
+        {
+            if (nextScan < 0 || part == null || !Game.Msc || Config.GetInt("Test", "PortesMontees", 1) == 0) return false;
+            bool door = false;
+            foreach (PlayMakerFSM f in part.GetComponentsInChildren<PlayMakerFSM>(true)) if (DoorLike(f)) { door = true; break; }
+            if (!door) return false;
+            nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1.5f);
+            return true;
         }
 
         public static void Update()
@@ -1069,6 +1095,15 @@ namespace MWCoop
         }
 
         // Essais : cles des portieres, coffres et capots suivis sur la voiture 'car'.
+        // Essai de SoonScan : la piece (chemin complet, ex. CARPARTS/PartsCar/door left(Clone)) avance-t-elle le releve ?
+        public static string TestSoonScan(string path)
+        {
+            GameObject part = Game.FindAny(path);
+            if (part == null) return "pas de piece " + path;
+            bool soon = SoonScan(part);
+            return path + " : " + (soon ? "releve avance" : "releve pas avance") + ", dans " + (nextScan < 0 ? "jamais" : (nextScan - Time.realtimeSinceStartup).ToString("0.0") + " s");
+        }
+
         public static string ListFor(string car)
         {
             Scan();

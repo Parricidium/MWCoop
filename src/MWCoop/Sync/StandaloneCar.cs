@@ -50,6 +50,8 @@ namespace MWCoop
             // (portieres libres comme celles du jeu : vitesse angulaire, boite joueur ; hayon et plage arriere sur charniere ; tete gardee
             // ou elle etait en montant -- StandaloneDrive, JD 31/10)
             public float[] DoorVel = new float[2]; public BoxCollider[] DoorCol = new BoxCollider[2]; public Vector3 LastVel; public float LastVelT;
+            // (heure du dernier clic sur une portiere de la copie menee par un autre : etat recu contraire ignore 1 s -- StandaloneDrive)
+            public float[] DoorLocalT = { -9f, -9f };
             public Transform Hatch, Shelf; public Vector3 HatchCenter, ShelfCenter; public bool HatchOpen, ShelfUp; public float HatchAngle, ShelfAngle;
             public bool HasEyeHold; public Vector3 EyeHold;
             // (boutons du modele -- infos.txt boutons_modele : pas de boutons de couleur, warning au lieu du klaxon ; voyant du frein a main)

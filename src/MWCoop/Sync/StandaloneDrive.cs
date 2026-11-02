@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
@@ -650,9 +650,28 @@ namespace MWCoop
             if (hit >= 4) { st.Folded[hit - 4] = !st.Folded[hit - 4]; SendState(b, st); Log.Info("standalone : dossier " + (hit == 4 ? "gauche" : "droit") + (st.Folded[hit - 4] ? " rabattu" : " releve")); return; }
             if (hit == 2) { st.HatchOpen = !st.HatchOpen; SendState(b, st); Log.Info("standalone : hayon " + (st.HatchOpen ? "ouvert" : "ferme")); return; }
             if (hit == 3) { st.ShelfUp = !st.ShelfUp; Log.Info("standalone : plage arriere " + (st.ShelfUp ? "relevee" : "baissee")); return; }
-            // (portiere : ouverte = lancee sur sa charniere ; fermee = poussee vers le pene -- elle se verrouille en y arrivant)
-            if (!st.DoorOpen[hit]) { st.DoorOpen[hit] = true; st.DoorVel[hit] = 260f; SendState(b, st); Log.Info("standalone : portiere " + (hit == 0 ? "conducteur" : "passager") + " ouverte"); }
-            else st.DoorVel[hit] = -420f;
+            ToggleDoor(b, st, hit);
+        }
+        // (portiere : ouverte = lancee sur sa charniere ; fermee = poussee vers le pene -- elle se verrouille en y arrivant)
+        static void ToggleDoor(VazCar.Built b, State st, int hit)
+        {
+            string side = hit == 0 ? "conducteur" : "passager";
+            if (!st.DoorOpen[hit])
+            {
+                st.DoorOpen[hit] = true; st.DoorVel[hit] = 260f;
+                if (b.Rb.isKinematic) st.DoorLocalT[hit] = Time.realtimeSinceStartup;
+                SendState(b, st); Log.Info("standalone : portiere " + side + " ouverte");
+            }
+            // (desync du 02/11, JD et GG : passager de la VAZ menee par l'autre, « CLOSE DOOR » ne faisait rien -- la vitesse de charniere
+            // ne sert que sur une voiture physique ici ; la copie cinematique suit DoorOpen, reste vrai, et rien n'etait envoye : ouverte
+            // chez tous jusqu'a ce que l'inertie de la voiture du conducteur la referme. Copie : fermee ici et envoyee, celui qui mene la
+            // voiture la pousse vers le pene a la reception. [Test] PortiereCopieFermee=0 : comme avant)
+            else if (b.Rb.isKinematic && Config.GetInt("Test", "PortiereCopieFermee", 1) != 0)
+            {
+                st.DoorOpen[hit] = false; st.DoorVel[hit] = 0f; st.DoorLocalT[hit] = Time.realtimeSinceStartup;
+                SendState(b, st); Log.Info("standalone : portiere " + side + " fermee (copie menee par un autre)");
+            }
+            else { st.DoorVel[hit] = -420f; Log.Info("standalone : portiere " + side + " fermeture demandee"); }
         }
         // Portieres comme celles du jeu (charniere physique, JD 31/10) : libres une fois ouvertes -- elles suivent l'inertie de la voiture
         // (freinage : elles s'ouvrent, acceleration : elles se ferment), rebondissent en butee a 70 degres, se verrouillent en revenant
@@ -1220,6 +1239,9 @@ namespace MWCoop
                     {
                         // (portiere libre ici : ouverte ou fermee par un autre joueur -- lancee sur sa charniere, comme au clic)
                         bool o = (f & (4 << k)) != 0;
+                        // (copie menee par un autre, portiere cliquee ici il y a moins d'1 s : l'etat periodique du conducteur parti avant
+                        // le clic ne la rouvre / referme pas -- desync du 02/11, JD et GG ; [Test] PortiereCopieFermee=0 : comme avant)
+                        if (b.Rb.isKinematic && o != st.DoorOpen[k] && Time.realtimeSinceStartup - st.DoorLocalT[k] < 1f && Config.GetInt("Test", "PortiereCopieFermee", 1) != 0) continue;
                         if (!b.Rb.isKinematic) { if (o && !st.DoorOpen[k]) st.DoorVel[k] = 260f; else if (!o && st.DoorOpen[k]) { st.DoorVel[k] = -420f; continue; } }
                         st.DoorOpen[k] = o;
                     }
@@ -2022,6 +2044,59 @@ namespace MWCoop
         }
         static List<GameObject> cObjets; static int cObjLog;
         static float wLog; static bool wDump;
+        // (essai des portieres d'une copie menee par un autre, desync du 02/11 : meme chemin que le clic -- k 0 conducteur, 1 passager)
+        public static string TestDoor(string car, int k)
+        {
+            foreach (VazCar.Built x in cars)
+            {
+                State st;
+                if (x.Car == null || !x.Car.name.StartsWith(car) || !states.TryGetValue(x, out st) || st.Doors == null || st.Doors[k] == null) continue;
+                ToggleDoor(x, st, k);
+                return DoorState(x, st, k);
+            }
+            return "pas de portiere " + k + " sur " + car;
+        }
+        static string DoorState(VazCar.Built b, State st, int k)
+        {
+            return "portiere " + (k == 0 ? "conducteur" : "passager") + " de " + b.Car.name + " DoorOpen=" + st.DoorOpen[k] + " angle=" + st.DoorAngle[k].ToString("F0") + " cinematique=" + b.Rb.isKinematic;
+        }
+        static int cDoor; static float cDoorAt, cDoorLog; static bool cDoorSeen, cDoorWas;
+
+        // [Test] Autotest=queteportiere (2 joueurs, voiture de la quete s21 ; My Winter Car surtout, ou elle est la seule voiture
+        // standalone) : 20 s apres l'arrivee de l'autre, l'hote prend le volant (T+0) et reste a l'arret ; l'invite s'assoit en passager
+        // (T+5), ouvre sa portiere (T+8) et la referme (T+12), meme chemin que le clic (ToggleDoor) ; chacun note la portiere passager
+        // toutes les 0,5 s de T+8 a T+18. Attendu : fermee, angle 0, des deux cotes ; [Test] PortiereCopieFermee=0 : ouverte (bug).
+        static float qdT0 = -1, qdLog; static int qdStep;
+        public static void QuestDoorTest(float t)
+        {
+            if (!Net.Session.Active) return;
+            float now = Time.realtimeSinceStartup;
+            if (qdT0 < 0) { if (!Jobs.OtherInGame(20f)) return; qdT0 = now; }
+            float d = now - qdT0;
+            VazCar.Built b = null; State st = null;
+            foreach (VazCar.Built x in cars) if (QueteGolf.IsQuestCar(x) && x.Car != null) { b = x; states.TryGetValue(x, out st); }
+            if (b == null || st == null || st.Doors == null || st.Doors[1] == null) { if (qdStep == 0) { qdStep = -1; Log.Info("autotest : queteportiere, voiture de la quete absente ou sans portiere passager"); } return; }
+            GameObject pl = Game.PlayerGo;
+            if (pl == null) return;
+            bool host = Net.Session.IsHost;
+            if (host && qdStep == 0)
+            {
+                qdStep = 1;
+                var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = b.Car.transform.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
+                if (cc != null) cc.enabled = true;
+                Enter(b, st); SendState(b, st);
+                Log.Info("autotest : queteportiere, hote au volant de " + b.Car.name);
+            }
+            if (!host && qdStep == 0 && d > 5f) { qdStep = 1; Log.Info("autotest : queteportiere, invite passager -> " + Seats.TestSit(b.Car.name, 0) + ", copie " + (b.Rb.isKinematic ? "cinematique" : "PHYSIQUE")); }
+            if (!host && qdStep == 1 && d > 8f) { qdStep = 2; ToggleDoor(b, st, 1); Log.Info("autotest : queteportiere, invite ouvre : " + DoorState(b, st, 1)); }
+            if (!host && qdStep == 2 && d > 12f) { qdStep = 3; ToggleDoor(b, st, 1); Log.Info("autotest : queteportiere, invite ferme : " + DoorState(b, st, 1)); }
+            if (d > 8f && d < 18f && now >= qdLog)
+            {
+                qdLog = now + 0.5f;
+                Log.Info("autotest : queteportiere T+" + d.ToString("F1") + " (" + (host ? "hote" : "invite") + ") : " + DoorState(b, st, 1));
+            }
+        }
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -2089,6 +2164,24 @@ namespace MWCoop
             }
             // ([Test] StandaloneCeinturePassager=1 : l'invite boucle sa ceinture 1 s apres s'etre assis -- photos de l'hote avec la ceinture)
             if (!host && cStep >= 3 && !cBeltDone && t > 45f && Config.GetInt("Test", "StandaloneCeinturePassager", 0) != 0) { cBeltDone = true; Log.Info("standalone : coop, invite : " + Seats.TestStandaloneBelt()); }
+            // ([Test] StandalonePortierePassager=1, desync du 02/11 : l'invite assis (StandalonePlace=-1 : reste a pied sur la piste) ouvre
+            // la portiere passager de sa copie 3 s apres, la referme 7 s apres (meme chemin que le clic), angle toutes les 0,5 s jusqu'a
+            // 11 s ; l'hote, au volant a l'arret, note chaque changement de la portiere et ne roule qu'apres l'avoir vue refermee (115 s au
+            // plus). Attendu : fermee et angle 0 des deux cotes ; PortiereCopieFermee=0 : ouverte des deux cotes (bug))
+            bool portTest = Config.GetInt("Test", "StandalonePortierePassager", 0) != 0 && b != null && st != null && st.Doors != null && st.Doors[1] != null;
+            if (portTest && !host && cStep >= 3)
+            {
+                if (cDoor == 0) { cDoor = 1; cDoorAt = t; }
+                if (cDoor == 1 && t > cDoorAt + 3f) { cDoor = 2; ToggleDoor(b, st, 1); Log.Info("standalone : coop, invite ouvre : " + DoorState(b, st, 1)); }
+                if (cDoor == 2 && t > cDoorAt + 5f) { cDoor = 3; Log.Info("standalone : coop, invite, ouverte depuis 2 s : " + DoorState(b, st, 1)); }
+                if (cDoor == 3 && t > cDoorAt + 7f) { cDoor = 4; ToggleDoor(b, st, 1); Log.Info("standalone : coop, invite ferme : " + DoorState(b, st, 1)); cDoorLog = t + 0.5f; }
+                if (cDoor == 4 && t >= cDoorLog) { cDoorLog = t + 0.5f; Log.Info("standalone : coop, invite, " + (t - cDoorAt - 7f).ToString("F1") + " s apres la fermeture : " + DoorState(b, st, 1)); if (t > cDoorAt + 11f) cDoor = 5; }
+            }
+            if (portTest && host && cStep >= 3)
+            {
+                if (st.DoorOpen[1] != cDoorWas) { if (cDoorWas) { cDoorSeen = true; cDoorAt = t; } cDoorWas = st.DoorOpen[1]; Log.Info("standalone : coop, hote voit : " + DoorState(b, st, 1)); }
+                if (cDoorSeen && cDoor == 0 && t > cDoorAt + 2f) { cDoor = 1; Log.Info("standalone : coop, hote, 2 s apres la fermeture : " + DoorState(b, st, 1)); }
+            }
             // ([Test] StandalonePhotosPlaces=1 : a 58 s, les avatars assis -- chez l'hote, le passager (l'invite) ; chez l'invite, le
             // conducteur (l'hote) : par la vitre de cote, par le pare-brise, de l'arriere ; StandalonePhotosHote=s : heure des photos de l'hote,
             // 73 par defaut -- l'invite s'assoit a ses 44 s, parfois apres les 73 s de l'hote)
@@ -2178,7 +2271,7 @@ namespace MWCoop
             }
             if (host && wOn > 0f && st != null && t > wOn + 2f && Time.time >= wLog) { wLog = Time.time + 1f; Log.Info("standalone : coop, essuie-glaces " + st.WipersOn + " phase " + st.WiperPhase.ToString("F2") + " balai " + (st.Wipers[0] != null ? st.Wipers[0].localEulerAngles.ToString("F0") : "absent") + " dt " + Time.deltaTime.ToString("F3")); }
             if (host && cStep == 3 && t > 75f && t < 76.5f) SetHorn(b, st, true, true);
-            if (host && cStep == 3 && t > 78f)
+            if (host && cStep == 3 && t > 78f && !(portTest && !cDoorSeen && t < 115f))
             {
                 cStep = 4; cAt = t; SetHorn(b, st, false, true); var d = (StandaloneDriver)b.Axis; d.Keys = false; d.Handbrake = 0f; d.Gear = 2; d.Throttle = 0.6f;
                 // ([Test] StandaloneFrein=1 : frein a main serre au levier les 2,5 premieres secondes, gaz ouverts -- puis desserre)

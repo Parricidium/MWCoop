@@ -26,7 +26,7 @@ namespace MWCoop
     //    sienne. Avant : « piece w:... introuvable ici », pieces restees par terre chez l'hote, 551 vis refusees.
     public static partial class Parts
     {
-        class MscPoint { public string Key; public PlayMakerFSM Fsm; public string Click; public bool Swap; }
+        class MscPoint { public string Key; public PlayMakerFSM Fsm; public string Click; public bool Swap; public bool Checked; }
         static readonly Dictionary<string, MscPoint> mscPoints = new Dictionary<string, MscPoint>();
         static readonly Dictionary<PlayMakerFSM, MscPoint> mscPointOf = new Dictionary<PlayMakerFSM, MscPoint>();
         static readonly HashSet<PlayMakerFSM> mscRemovals = new HashSet<PlayMakerFSM>();
@@ -38,15 +38,33 @@ namespace MWCoop
         {
             public override string Module { get { return "pieces"; } }
             public MscPoint P;
+            public bool AfterCheck;   // (etat atteint par 'Check bolts' -ASSEMBLE-> : CheckedTarget)
             public override void OnEnter()
             {
                 try
                 {
                     FsmState prev = P.Fsm.Fsm.PreviousActiveState;
                     // (« Wait for assembly 2 », « 3 »... : points a plusieurs pieces, ClickFor)
-                    if (!applying && Replay.Depth == 0 && prev != null && (prev.Name.StartsWith("Wait for assembly") || P.Swap && prev.Name == "Check bolts")) MscLocalInstall(P);
+                    if (!applying && Replay.Depth == 0 && prev != null && (AfterCheck ? prev.Name == "Check bolts" : prev.Name.StartsWith("Wait for assembly") || P.Swap && prev.Name == "Check bolts")) MscLocalInstall(P);
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // En tete de 'Set joint' / 'Set joint 2' d'un point (desync du 02/11, JD et GG : un verrou du 'Use' -- FixedJoint relie a la
+        // SATSUMA, 'State 1' 12000 ou 'Set lock 2' -- ou une vieille garde de MscKeepOnCopy survivait a 'Remove part', qui ne detruit que la
+        // charniere ; au remontage, 'Assemble 2' (SetJointConnectedBody : le PREMIER joint) rebranchait ce vieux joint a la voiture et la
+        // charniere neuve restait ancree au monde -- « door right(Clone) ancre au monde (HingeJoint) ... ecart 0.91 m » chez l'invite, et
+        // BoltCheck serrait le mauvais joint). Ici les attaches de la piece vers la voiture du point ou vers le monde sont retirees avant
+        // l'AddComponent du jeu, en local comme en rejoue. [Test] JointsPerimes=0 : comme avant.
+        class MscJointHook : ModHook
+        {
+            public override string Module { get { return "pieces"; } }
+            public MscPoint P;
+            public override void OnEnter()
+            {
+                try { MscDropStaleJoints(P); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -78,6 +96,8 @@ namespace MWCoop
                         if (breakoff && MscKeepOnCopy(F)) { Finish(); return; }
                         MscLocalRemove(F, breakoff);
                     }
+                    // (la piece sort vraiment ici, geste d'ici ou rejoue : ses verrous vers la voiture avec elle -- MscDropCarJoints)
+                    if (verrouDemontage && Session.Active && HingeRemoval(F)) MscDropCarJoints(F, "demontage");
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
@@ -182,6 +202,20 @@ namespace MWCoop
             chanceConducteur = Config.GetInt("Test", "ChanceConducteur", 1) != 0;
             housses = Config.GetInt("Test", "HoussesDemontage", 1) != 0;
             libreCle = Config.GetInt("Test", "LibreCleDb", 1) != 0;
+            // (desync du 02/11, JD et GG : une cle de repli par correction, lues ici comme les autres)
+            casseCopieGeste = Config.GetInt("Test", "CasseCopieGeste", 1) != 0;
+            gardeCharniere = Config.GetInt("Test", "GardeCharniere", 1) != 0;
+            jointsPerimes = Config.GetInt("Test", "JointsPerimes", 1) != 0;
+            verrouDemontage = Config.GetInt("Test", "VerrouDemontage", 1) != 0;
+            tenueInstalled = Config.GetInt("Test", "TenueInstalled", 1) != 0;
+            montageAvorte = Config.GetInt("Test", "MontageAvorte", 1) != 0;
+            empreinteListe = Config.GetInt("Test", "EmpreinteListeComplete", 1) != 0;
+            calandrePivot = Config.GetInt("Test", "CalandrePivot", 1) != 0;
+            casseJournal = Config.GetInt("Test", "CasseJournalLimite", 1) != 0;
+            apresControle = Config.GetInt("Test", "MontageApresControle", 1) != 0;
+            detachRemise = Config.GetInt("Test", "DetachRemise", 1) != 0;
+            casseApresMontage = Config.GetInt("Test", "CasseApresMontage", 1) != 0;
+            copyAsked.Clear(); hostWaits.Clear(); hingeRemovals.Clear(); keptForce.Clear(); pendingRemovals.Clear(); dbDiffLogged.Clear(); casseStep = 0;
             remoteRemoval.Clear(); mscIn.Clear(); listLogs = 0;
             mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear(); keptJoints.Clear();
             mscDb.Clear(); mscDbByHash = null; nextPrint = lastListAsk = lastListSent = 0f; printMiss = 0; mscLostOnce = false;
@@ -250,9 +284,26 @@ namespace MWCoop
         }
 
         // Point « echange » : ni {Parent} ni 'Assemble 2', un etat 'Assemble' (la piece montee est deja dans la voiture).
+        // Sauf si 'Assemble' rattache la piece elle-meme (SetParent) sur un {Pivot1} : calandre de la SATSUMA (trigger_grille, 'Wait for
+        // assembly' -ASSEMBLE-> 'Wait' -> 'Assemble', branche GT 'Wait 2' -> 'Assemble 3'), un point ordinaire. Prise pour un point « echange »
+        // (desync du 02/11, JD et GG) : crochet sur 'Assemble' dont l'etat d'avant est 'Wait', jamais envoyee ; sautee par le controle des
+        // points et sans entree au controle Database (pas de db_ThisPart) -- calandre montee et vissee chez l'hote, par terre chez l'invite,
+        // 16 « vis Grille ... introuvable ici » et l'empreinte differente 3 min. Parmi les 81 points « echange » du vidage, seule la calandre a
+        // un {Pivot1} (SetParent aussi dans trigger_disc -- RadioMsc --, TriggerDiskette et le couvercle du seau : laisses). [Test] CalandrePivot=0 :
+        // comme avant.
+        static bool calandrePivot = true;
         static bool IsSwapPoint(PlayMakerFSM f)
         {
-            return f.FsmVariables.FindFsmGameObject("Parent") == null && f.Fsm.GetState("Assemble") != null && f.Fsm.GetState("Assemble 2") == null;
+            if (f.FsmVariables.FindFsmGameObject("Parent") != null || f.Fsm.GetState("Assemble 2") != null) return false;
+            FsmState a = f.Fsm.GetState("Assemble");
+            if (a == null) return false;
+            if (calandrePivot && f.FsmVariables.FindFsmGameObject("Pivot1") != null)
+            {
+                FsmStateAction[] acts = null;
+                try { acts = a.Actions; } catch { }
+                if (acts != null) foreach (FsmStateAction x in acts) if (x != null && x.GetType().Name == "SetParent") return false;
+            }
+            return true;
         }
 
         // Etat ou mene le clic ('Wait for assembly' -ASSEMBLE->) : 'Wait' le plus souvent.
@@ -318,8 +369,32 @@ namespace MWCoop
         {
             string w = WaitStateFor(p.Fsm, part);
             FsmState ws = w != null ? p.Fsm.Fsm.GetState(w) : null;
-            if (ws != null) foreach (FsmTransition t in ws.Transitions) if (t.EventName == "ASSEMBLE") return t.ToState;
+            if (ws != null) foreach (FsmTransition t in ws.Transitions) if (t.EventName == "ASSEMBLE") return (p.Checked ? CheckedTarget(p.Fsm, t.ToState) : null) ?? t.ToState;
             return p.Click;
+        }
+
+        // Clic qui mene par FINISHED a un 'Check bolts' a deux sorties (ASSEMBLE -> 'Assemble', DISASSEMBLE -> 'Drop part') : pistons
+        // (vilebrequin serre ?), compteurs (tableau de bord), plateau d'embrayage. Le crochet sur 'Wait' envoyait le montage AVANT ce
+        // controle (desync du 02/11, JD et GG) : piston clique sur un vilebrequin pas serre -- refuse par le jeu, le joueur jure, 'Drop part'
+        // arme {Detach} du vilebrequin -- envoye quand meme ; chez l'autre 'Wait' -> 'Check bolts' -> 'Drop part' rejoue, vilebrequin decroche
+        // une 2e fois en course avec la casse recue, {Detach} reste arme sur un Removal eteint et le vilebrequin retombait tout seul au
+        // remontage suivant (« casse : Crankshaft » 26 ms apres « Crankshaft montee »). Ces points sont accroches et rejoues en 'Assemble'
+        // (la cible d'ASSEMBLE de 'Check bolts'), envoyes a son entree depuis 'Check bolts' comme les points « echange » : rien ne part si le jeu
+        // passe par 'Drop part'. null : point ordinaire. [Test] MontageApresControle=0 : comme avant (et DetachRemise=0, MscApplyMount).
+        static bool apresControle = true, detachRemise = true;
+        static string CheckedTarget(PlayMakerFSM f, string click)
+        {
+            FsmState cs = click != null ? f.Fsm.GetState(click) : null;
+            if (cs == null || cs.Transitions.Length != 1 || cs.Transitions[0].EventName != "FINISHED" || cs.Transitions[0].ToState != "Check bolts") return null;
+            FsmState cb = f.Fsm.GetState("Check bolts");
+            string to = null; bool drop = false;
+            if (cb != null)
+                foreach (FsmTransition t in cb.Transitions)
+                {
+                    if (t.EventName == "ASSEMBLE") to = t.ToState;
+                    else if (t.EventName == "DISASSEMBLE") drop = true;
+                }
+            return drop && to != null && f.Fsm.GetState(to) != null ? to : null;
         }
 
         // Housses de siege, de volant, de tableau de bord (audit MSC 02/11) : leur 'Removal' n'a pas de 'Remove part' mais 'Mouse over'
@@ -445,24 +520,35 @@ namespace MWCoop
             bool swap = IsSwapPoint(f);
             // (echange : envoye a l'entree de 'Assemble' -- 'Check bolts' peut encore repartir en 'Drop part' ; rejoue en 'Assemble')
             string click = swap ? "Assemble" : ClickTarget(f);
+            // (clic suivi d'un 'Check bolts' : de meme, CheckedTarget)
+            string checkedTo = !swap && apresControle ? CheckedTarget(f, click) : null;
+            if (checkedTo != null) click = checkedTo;
             FsmState cs = click != null ? f.Fsm.GetState(click) : null;
             if (cs == null || !cs.IsInitialized) return false;
-            var p = new MscPoint { Key = MscPointKey(f.transform), Fsm = f, Click = click, Swap = swap };
+            var p = new MscPoint { Key = MscPointKey(f.transform), Fsm = f, Click = click, Swap = swap, Checked = checkedTo != null };
             // (toutes les branches d'un point a plusieurs pieces : 'Wait for assembly N' -ASSEMBLE-> 'Wait N')
             var hooked = new List<FsmState> { cs };
+            var afterCheck = new List<FsmState>();
+            if (checkedTo != null) afterCheck.Add(cs);
             if (!swap)
                 foreach (FsmState s in f.FsmStates)
                 {
                     if (!s.Name.StartsWith("Wait for assembly ")) continue;
                     foreach (FsmTransition t in s.Transitions)
                     {
-                        FsmState ts = t.EventName == "ASSEMBLE" ? f.Fsm.GetState(t.ToState) : null;
+                        string bt = t.EventName == "ASSEMBLE" && p.Checked ? CheckedTarget(f, t.ToState) : null;
+                        FsmState ts = t.EventName == "ASSEMBLE" ? f.Fsm.GetState(bt ?? t.ToState) : null;
                         if (ts == null || hooked.Contains(ts)) continue;
                         if (!ts.IsInitialized) return false;
                         hooked.Add(ts);
+                        if (bt != null) afterCheck.Add(ts);
                     }
                 }
-            foreach (FsmState hs in hooked) if (!Inject(hs, new MscPointHook { P = p })) return false;
+            foreach (FsmState hs in hooked) if (!Inject(hs, new MscPointHook { P = p, AfterCheck = afterCheck.Contains(hs) })) return false;
+            // (attaches perimees retirees avant 'Set joint' : MscJointHook)
+            if (!swap && jointsPerimes)
+                foreach (FsmState s in f.FsmStates)
+                    if (s.Name.StartsWith("Set joint") && s.IsInitialized) Inject(s, new MscJointHook { P = p });
             mscPoints[p.Key] = p; mscPointOf[f] = p;
             return true;
         }
@@ -543,6 +629,7 @@ namespace MWCoop
             Log.Info("montage : " + id + " sur " + p.Key);
             VehicleSync.CalmAfterPart(p.Fsm.transform);
             mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
+            CarDoors.SoonScan(part);   // portiere, capot, coffre : suivis par CarDoors des maintenant (desync du 02/11)
             // ([Test] PerteMontage=1 : le premier montage d'ici n'est pas envoye -- message perdu -- pour voir l'empreinte le rattraper, Autotest=mscperte)
             if (Config.GetInt("Test", "PerteMontage", 0) != 0 && !mscLostOnce) { mscLostOnce = true; Log.Warn("montage : " + id + " sur " + p.Key + " : message NON envoye (essai de perte)"); return; }
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
@@ -569,9 +656,15 @@ namespace MWCoop
             Trace.Watch(p.Fsm, "point " + key, 8f);
             PlayMakerFSM prem = Game.FsmOn(part, "Removal");
             if (prem != null) Trace.Watch(prem, "piece " + id, 8f);
+            // ({Detach} laisse arme par un 'Drop part' rejoue -- vilebrequin, desync du 02/11 : 'End' rallume le Removal, 'Mouse off' -REMOVE->
+            // aussitot et la piece qu'on monte retombait ici en casse envoyee. Une piece qu'on monte n'a jamais de {Detach} a garder.
+            // [Test] DetachRemise=0 : comme avant)
+            FsmBool pdt = detachRemise && prem != null ? prem.FsmVariables.FindFsmBool("Detach") : null;
+            if (pdt != null && pdt.Value) { pdt.Value = false; Log.Warn("piece " + id + " : Detach arme ici remis a zero avant montage"); }
             string click = ClickFor(p, part);
             Game.SetState(p.Fsm, click);
             Freshen(part, p.Fsm, id);
+            CarDoors.SoonScan(part);   // (comme au montage d'ici, desync du 02/11)
             Log.Info("piece " + id + " montee sur " + key + " (joueur #" + who + (click != p.Click ? ", branche " + click : "") + ")");
         }
 
@@ -682,13 +775,19 @@ namespace MWCoop
         }
         static int listLogs;
         // Controle, genre 2 : Installed des entrees Database des pieces « echange » et des fils (le reste passe par les points et les vis).
+        // Et toutes les autres entrees, pour le journal seulement (desync du 02/11, JD et GG : empreinte differente toutes les 4 s pendant
+        // 7 min -- Door_Left Installed faux chez l'hote, vrai chez l'invite, meme « point tenu » des deux cotes ; ~70 listes renvoyees sans
+        // rien corriger, sans dire quelle entree differait). L'invite note les ecarts qu'aucun controle ne repare (MscOnDigestDb) ; un client
+        // d'avant ne fait que Touch sur ces lignes. [Test] EmpreinteListeComplete=0 : comme avant.
+        static bool empreinteListe = true;
+        static readonly Dictionary<uint, float> dbDiffLogged = new Dictionary<uint, float>();
         static void MscDigestDb()
         {
             if (mscDb.Count == 0) MscDbScan();
             NetWriter w = null; int n = 0;
             foreach (MscDbEntry en in mscDb)
             {
-                if (en.Installed == null || en.Swap == null && !en.Wire) continue;
+                if (en.Installed == null || en.Swap == null && !en.Wire && !empreinteListe) continue;
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(2); n = 0; }
                 w.I32((int)en.Hash).U8(en.Installed.Value ? (byte)1 : (byte)0); n++;
                 if (n >= 120) { Session.SendAll(w, true); w = null; }
@@ -699,12 +798,23 @@ namespace MWCoop
         {
             if (mscDb.Count == 0) MscDbScan();
             int fixedN = 0, unknown = 0;
+            System.Text.StringBuilder diff = null;
             while (r.More)
             {
                 uint h = (uint)r.I32(); bool inst = r.U8() != 0;
                 MscDbEntry en;
                 if (mscDbByHash == null || !mscDbByHash.TryGetValue(h, out en) || en.Installed == null) { unknown++; continue; }
                 if (en.Installed.Value == inst || Recent(h, now)) continue;
+                if (en.Swap == null && !en.Wire)
+                {
+                    // (entree hors de ce controle : notee, une fois par minute au plus -- reparee par les points, ou pas du tout)
+                    float at;
+                    if (dbDiffLogged.TryGetValue(h, out at) && now - at < 60f) continue;
+                    dbDiffLogged[h] = now;
+                    if (diff == null) diff = new System.Text.StringBuilder();
+                    if (diff.Length < 700) diff.Append(' ').Append(en.Key).Append(" (ici ").Append(en.Installed.Value ? 1 : 0).Append(", hote ").Append(inst ? 1 : 0).Append(')');
+                    continue;
+                }
                 Touch(h);
                 if (en.Wire)
                 {
@@ -728,6 +838,7 @@ namespace MWCoop
                 finally { applying = false; Replay.Depth--; }
             }
             if (fixedN > 0 || unknown > 0) Log.Info("pieces (MSC) : controle de l'hote (Database) : " + fixedN + " corrigee(s)" + (unknown > 0 ? ", " + unknown + " inconnue(s) ici" : ""));
+            if (diff != null) Log.Warn("pieces (MSC) : empreinte : ecarts Database hors controle (Installed) :" + diff);
         }
 
         // Attache (FixedJoint) d'une piece disparue ici alors que la voiture est menee par un autre : 'Mouse off' (HasComponent)
@@ -748,33 +859,101 @@ namespace MWCoop
             foreach (KeyValuePair<Joint, Rigidbody> kv in keptJoints)
             {
                 if (kv.Key != null && kv.Value != null && VehicleSync.Authority(kv.Value) != Session.LocalId) continue;
-                if (kv.Key != null && float.IsInfinity(kv.Key.breakForce)) { kv.Key.breakForce = 200f; kv.Key.breakTorque = 200f; }
+                float lim;
+                if (!keptForce.TryGetValue(kv.Key, out lim)) lim = 200f;
+                if (kv.Key != null && float.IsInfinity(kv.Key.breakForce)) { kv.Key.breakForce = lim; kv.Key.breakTorque = lim; }
                 if (done == null) done = new List<Joint>();
                 done.Add(kv.Key);
             }
-            if (done != null) foreach (Joint j in done) keptJoints.Remove(j);
+            if (done != null) foreach (Joint j in done) { keptJoints.Remove(j); keptForce.Remove(j); }
         }
+
+        // Pieces a charniere (portieres, capot, coffre : 'Remove part' detruit une HingeJoint, 'Mouse off' teste HasComponent HingeJoint).
+        static readonly Dictionary<PlayMakerFSM, bool> hingeRemovals = new Dictionary<PlayMakerFSM, bool>();
+        static bool HingeRemoval(PlayMakerFSM rem)
+        {
+            bool h;
+            if (rem == null) return false;
+            if (hingeRemovals.TryGetValue(rem, out h)) return h;
+            FsmState s = rem.Fsm != null ? rem.Fsm.GetState("Remove part") : null;
+            FsmStateAction[] acts = null;
+            try { acts = s != null ? s.Actions : null; } catch { }
+            if (acts != null)
+                foreach (FsmStateAction a in acts)
+                {
+                    if (a == null || a.GetType().Name != "DestroyComponent") continue;
+                    System.Reflection.FieldInfo cf = a.GetType().GetField("component");
+                    FsmString c = cf != null ? cf.GetValue(a) as FsmString : null;
+                    if (c != null && c.Value != null && c.Value.EndsWith("HingeJoint")) { h = true; break; }
+                }
+            hingeRemovals[rem] = h;
+            return h;
+        }
+        // Limite de montage du point de la piece ({InitialAttachForce} de son 'Assembly' : 1100 pour une portiere), sinon 'def'.
+        static float MscAttachForce(PlayMakerFSM rem, float def)
+        {
+            FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
+            PlayMakerFSM asm = trig != null && trig.Value != null ? Game.FsmOn(trig.Value, "Assembly") : null;
+            FsmFloat f = asm != null ? asm.FsmVariables.FindFsmFloat("InitialAttachForce") : null;
+            return f != null && f.Value > 0f && !float.IsInfinity(f.Value) && f.Value < 1e30f ? f.Value : def;
+        }
+
+        // Charniere rompue sur la copie (desync du 02/11, JD et GG) : la garde posait un FixedJoint, mais le 'Mouse off' d'une portiere teste
+        // HasComponent HingeJoint -- REMOVE repartait dans la meme image, le FixedJoint pose ici faisait echouer la garde ci-dessous et la
+        // portiere tombait chez l'invite seul (« attache disparue ... remise » puis « cassee ici sous l'autorite d'un autre (joints 1) » a la
+        // meme milliseconde), soudee au monde par ce FixedJoint incassable que 'Remove part' (SetJointConnectedBody : le premier joint)
+        // detachait de la voiture ; et un verrou du 'Use' (FixedJoint) present faisait refuser la garde d'emblee (« joints 3 »). Pour ces
+        // pieces : {Detach} reconnu a une charniere encore la, et c'est une charniere neuve qui est posee -- reglages de celle qui vient de
+        // rompre (PartWatch), relachee a {InitialAttachForce} quand la voiture redevient la notre. Sans charniere relevee a la rupture (moins
+        // de 1 s) : pas gardee, MscLocalRemove la redemande a l'hote. [Test] GardeCharniere=0 : comme avant.
+        static bool gardeCharniere = true;
+        static readonly Dictionary<Joint, float> keptForce = new Dictionary<Joint, float>();
         static bool MscKeepOnCopy(PlayMakerFSM rem)
         {
             if (!Session.Active) return false;
             Transform car = VehicleSync.CarRoot(rem.transform);
             Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
             if (cb == null || VehicleSync.Authority(cb) == Session.LocalId) return false;
-            if (rem.GetComponent<FixedJoint>() != null || rem.transform.parent == null) return false;   // (decrochage {Detach} du jeu, pas une attache disparue)
+            bool hinge = gardeCharniere && HingeRemoval(rem);
+            PartWatch pw = hinge ? rem.GetComponent<PartWatch>() : null;
+            if (hinge)
+            {
+                if (rem.GetComponent<HingeJoint>() != null || rem.transform.parent == null) return false;   // (decrochage {Detach} du jeu)
+                if (pw == null || Time.realtimeSinceStartup - pw.HingeAt > 1f) return false;
+            }
+            else if (rem.GetComponent<FixedJoint>() != null || rem.transform.parent == null) return false;   // (decrochage {Detach} du jeu, pas une attache disparue)
             Rigidbody to = rem.transform.parent.GetComponentInParent<Rigidbody>();
             if (to == null) to = cb;
             string id = MscPartKey(rem.gameObject);
             Rigidbody prb = rem.GetComponent<Rigidbody>();
             rem.transform.localPosition = Vector3.zero; rem.transform.localRotation = Quaternion.identity;
             if (prb != null) { prb.velocity = Vector3.zero; prb.angularVelocity = Vector3.zero; if (!prb.isKinematic) { prb.position = rem.transform.position; prb.rotation = rem.transform.rotation; } }
-            FixedJoint fj = rem.gameObject.AddComponent<FixedJoint>();
-            fj.connectedBody = to;
-            VehicleSync.AdoptJoint(cb, fj, new Vector2(200f, 200f));   // (InitialAttachForce du montage)
+            Joint fj;
+            float lim = 200f;
+            if (hinge)
+            {
+                // (vieilles gardes ancrees au monde laissees par un 'Remove part' d'avant)
+                foreach (FixedJoint old in rem.GetComponents<FixedJoint>()) if (old.connectedBody == null) { keptJoints.Remove(old); keptForce.Remove(old); Object.DestroyImmediate(old); }
+                // (pose de montage remise ci-dessus, comme 'Assemble 2' : le zero de la charniere neuve est la portiere fermee, comme au montage)
+                HingeJoint hj = rem.gameObject.AddComponent<HingeJoint>();
+                hj.axis = pw.HingeAxis; hj.anchor = pw.HingeAnchor; hj.useLimits = pw.HingeUseLimits; hj.limits = pw.HingeLimits;
+                hj.connectedBody = to;
+                fj = hj;
+                lim = MscAttachForce(rem, 1100f);
+            }
+            else
+            {
+                FixedJoint nf = rem.gameObject.AddComponent<FixedJoint>();
+                nf.connectedBody = to;
+                fj = nf;
+            }
+            VehicleSync.AdoptJoint(cb, fj, new Vector2(lim, lim));   // (InitialAttachForce du montage)
             // Voiture garee menee par l'autre, libre ici (pas une copie cinematique) : l'attache neuve a 200 recassait a chaque pas
-            // tant que la piece restait pressee (pare-chocs contre la porte du garage apres une poussee : 60 casses en 1 s, force
-            // 1,1e9, la caisse secouee ici -- partie de JD et Kristof, 24/10, rejoue par Autotest=mscmontage PousseA). Incassable
-            // tant qu'un autre la mene ; ses limites quand elle redevient la notre (MscTick).
-            if (!float.IsInfinity(fj.breakForce)) { fj.breakForce = Mathf.Infinity; fj.breakTorque = Mathf.Infinity; keptJoints[fj] = cb; }
+            // tant que la piece restait pressee (pare-chocs contre la porte du garage apres une poussee : 60 casses en 1 s, limite
+            // 200 -- la « force 1,1e9 » du journal etait cette limite lue en bits, PartWatch --, la caisse secouee ici -- partie de JD
+            // et Kristof, 24/10, rejoue par Autotest=mscmontage PousseA). Incassable tant qu'un autre la mene ; ses limites quand elle
+            // redevient la notre (MscTick).
+            if (!float.IsInfinity(fj.breakForce)) { fj.breakForce = Mathf.Infinity; fj.breakTorque = Mathf.Infinity; keptJoints[fj] = cb; if (hinge) keptForce[fj] = lim; }
             PlayMakerFSM bc = Game.FsmOn(rem.gameObject, "BoltCheck");
             FsmObject jv = bc != null ? bc.FsmVariables.FindFsmObject("Joint") : null;
             if (jv != null) jv.Value = fj;
@@ -784,18 +963,31 @@ namespace MWCoop
             if (dt != null) dt.Value = false;
             bool back = Game.SwitchLater(rem, "Mouse off");
             if (keepLogs++ < 40 || keepLogs % 50 == 0)
-                Log.Warn("piece " + id + " : attache disparue ici sur la copie (voiture menee par #" + VehicleSync.Authority(cb) + "), remise sur " + to.name
+                Log.Warn("piece " + id + " : attache disparue ici sur la copie (voiture menee par #" + VehicleSync.Authority(cb) + "), remise sur " + to.name + (hinge ? " (charniere)" : "")
                          + (prb != null ? ", corps " + (prb.isKinematic ? "cinematique" : "libre") : "") + (back ? "" : " (automate non renvoye en Mouse off)"));
             return back;
         }
 
+        static bool casseCopieGeste = true;
+        static readonly Dictionary<uint, float> copyAsked = new Dictionary<uint, float>();   // (point redemande apres une casse sur la copie : 2 s, pas les 60 s d'AskedLately)
+        static readonly Dictionary<uint, float> hostWaits = new Dictionary<uint, float>();   // (hote : point vide apres une casse refusee sur sa copie, 25 s)
+        // Hote : ce point attend-il l'etat du conducteur ? Fini des qu'il tient une piece, a tout geste ou message apres la casse (Touch), ou au bout de 25 s.
+        static bool MscWaitsDriver(uint h, string id, float now)
+        {
+            float at, tt;
+            if (!hostWaits.TryGetValue(h, out at)) return false;
+            if (id.Length > 0 || now - at > 25f || touched.TryGetValue(h, out tt) && tt >= at) { hostWaits.Remove(h); return false; }
+            return true;
+        }
         static void MscLocalRemove(PlayMakerFSM rem, bool breakoff)
         {
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;
             string id = MscPartKey(rem.gameObject);
             FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
             string key = trig != null && trig.Value != null ? MscPointKey(trig.Value.transform) : "";
-            if (key.Length > 0) Touch(H(key));
+            // (casse : Touch seulement une fois prise pour un geste d'ici -- ci-dessous)
+            bool copieGeste = casseCopieGeste && breakoff;
+            if (key.Length > 0 && !copieGeste) Touch(H(key));
             if (breakoff)
             {
                 // Casse : envoyee seulement par celui qui fait autorite sur la voiture (sa copie ici a pu s'emballer) -- comme MWC.
@@ -806,8 +998,36 @@ namespace MWCoop
                     Rigidbody prb = rem.GetComponent<Rigidbody>();
                     Log.Warn("piece " + id + " cassee ici sous l'autorite d'un autre : pas envoyee (joints " + rem.GetComponents<Joint>().Length + ", parent "
                              + (rem.transform.parent != null ? rem.transform.parent.name : "aucun") + (prb != null ? ", corps " + (prb.isKinematic ? "cinematique" : "libre") + " v " + prb.velocity.magnitude.ToString("F1") : "") + ")");
+                    // Pas un geste (desync du 02/11, JD et GG) : le Touch d'avant ce refus datait le point « touche ici maintenant », 6 s plus tard
+                    // le controle de l'hote trouvait ce « geste » plus recent que le sien et renvoyait la casse comme un demontage du joueur #2 --
+                    // portiere demontee chez l'hote, qui ne l'avait jamais cassee (17:47:05 et 17:52:53). Le point n'est plus du tout date ici
+                    // (jamais « plus recent »), et l'invite redemande tout de suite le point a l'hote, qui renvoie son montage. [Test]
+                    // CasseCopieGeste=0 : comme avant.
+                    if (copieGeste && key.Length > 0)
+                    {
+                        uint hk = H(key);
+                        touched.Remove(hk);
+                        float last;
+                        float now = Time.realtimeSinceStartup;
+                        if (!Session.IsHost && !(copyAsked.TryGetValue(hk, out last) && now - last < 2f))
+                        {
+                            copyAsked[hk] = now;
+                            Session.SendToHost(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@piecesdemande").I32((int)hk), true);
+                            Log.Info("piece " + id + " : point " + key + " redemande a l'hote");
+                        }
+                        // Hote (relecture du lot) : la casse refusee laissait le point vide ici sans rien pour le remettre, et son controle
+                        // annoncait ce vide a un conducteur qui n'y avait jamais touche (age 1e6 des deux cotes) -- la portiere tombait chez
+                        // celui qui mene la voiture. Le point attend l'etat du conducteur : MscDigest l'annonce « plus ancien que tout », le
+                        // conducteur renvoie son montage (chemin « plus recent que chez l'hote »).
+                        if (Session.IsHost)
+                        {
+                            if (!hostWaits.ContainsKey(hk)) Log.Info("piece " + id + " : point " + key + " vide ici, montage attendu du conducteur #" + VehicleSync.Authority(cb) + " au controle");
+                            hostWaits[hk] = now;
+                        }
+                    }
                     return;
                 }
+                if (copieGeste && key.Length > 0) Touch(H(key));
                 // (choc il y a moins de 2 s : 16 casses en 2 s -- avant, 3 par seconde meme dans un accident : la 4e casse n'etait jamais
                 // envoyee et restait cassee ici seulement -- dossier #25, reponts 29/10 : batterie tombee chez l'invite, montee chez l'hote.
                 // [Test] CasseRafaleAncienne=1 : comme avant)
@@ -820,6 +1040,56 @@ namespace MWCoop
             Log.Info((breakoff ? "casse : " : "demontage : ") + id + " de " + key);
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(false).Str(key).Str(id).U8(breakoff ? 1 : 0), true);
             Props.SettleHere(rem.gameObject);
+        }
+
+        // Portiere demontee encore tenue a la voiture (desync du 02/11, JD et GG) : 'Remove part' ne detruit que la charniere, le verrou du
+        // 'Use' (FixedJoint vers la SATSUMA, 'State 1' 12000 a la fermeture, 'Set lock 2' a l'ouverture) restait sur la portiere libre --
+        // en la portant JD trainait la voiture (557 kg) : « poussee : SATSUMA suit notre poussee », ailes pas vissees arrachees (limite
+        // 200, voiture v 1.19), jusqu'a ce que le verrou casse enfin portiere en main (« limite 12000, piece v 1.01 »). Et SetJointConnectedBody
+        // ('Remove part' : le PREMIER joint) pouvait detacher le verrou au lieu de la charniere : portiere soudee au monde. En tete de 'Remove part'
+        // d'une piece a charniere qui sort vraiment ici (geste d'ici, casse refusee comprise, ou rejoue) : ses attaches autres que la charniere
+        // vers sa voiture ou vers le monde sont retirees (DestroyImmediate : SetJointConnectedBody, dans la meme image, ne doit plus les trouver).
+        // [Test] VerrouDemontage=0 : comme avant.
+        static bool verrouDemontage = true;
+        static int dropLogs;
+        static void MscDropCarJoints(PlayMakerFSM rem, string why)
+        {
+            Transform car = VehicleSync.CarRoot(rem.transform);
+            FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
+            if (car == null && trig != null && trig.Value != null) car = VehicleSync.CarRoot(trig.Value.transform);
+            int n = 0; var sb = new System.Text.StringBuilder();
+            foreach (Joint j in rem.GetComponents<Joint>())
+            {
+                if (j == null || j is HingeJoint) continue;   // (la charniere : 'Remove part' la detache et la detruit lui-meme)
+                Rigidbody to = j.connectedBody;
+                if (to != null && (car == null || !to.transform.IsChildOf(car))) continue;
+                sb.Append(sb.Length > 0 ? ", " : "").Append(j.GetType().Name).Append(' ').Append(float.IsInfinity(j.breakForce) ? "Infinity" : j.breakForce.ToString("F0")).Append(to != null ? " vers " + to.name : " vers le monde");
+                keptJoints.Remove(j); keptForce.Remove(j);
+                Object.DestroyImmediate(j); n++;
+            }
+            if (n > 0 && (dropLogs++ < 40 || dropLogs % 50 == 0)) Log.Info("piece " + MscPartKey(rem.gameObject) + " : " + n + " attache(s) restee(s) retiree(s) au " + why + " (" + sb + ")");
+        }
+        // Meme chose pour la piece {Part} d'un point en tete de 'Set joint' (MscJointHook) : toutes ses attaches vers la voiture du point ou vers
+        // le monde, avant que le jeu n'ajoute la sienne.
+        static bool jointsPerimes = true;
+        static void MscDropStaleJoints(MscPoint p)
+        {
+            if (!Session.Active || p == null || p.Fsm == null) return;
+            FsmGameObject pv = p.Fsm.FsmVariables.FindFsmGameObject("Part");
+            GameObject part = pv != null ? pv.Value : null;
+            if (part == null) return;
+            Transform car = VehicleSync.CarRoot(p.Fsm.transform);
+            int n = 0; var sb = new System.Text.StringBuilder();
+            foreach (Joint j in part.GetComponents<Joint>())
+            {
+                if (j == null) continue;
+                Rigidbody to = j.connectedBody;
+                if (to != null && (car == null || !to.transform.IsChildOf(car))) continue;
+                sb.Append(sb.Length > 0 ? ", " : "").Append(j.GetType().Name).Append(' ').Append(float.IsInfinity(j.breakForce) ? "Infinity" : j.breakForce.ToString("F0")).Append(to != null ? " vers " + to.name : " vers le monde");
+                keptJoints.Remove(j); keptForce.Remove(j);
+                Object.DestroyImmediate(j); n++;
+            }
+            if (n > 0) Log.Warn("montage : " + n + " attache(s) perimee(s) retiree(s) de " + MscPartKey(part) + " sur " + p.Key + " (" + sb + ")");
         }
 
         // Temoin sur chaque piece de MSC (24/10, partie de JD et Kristof : aile gauche cassee 0,05 a 0,3 s apres chaque montage chez
@@ -836,7 +1106,19 @@ namespace MWCoop
                 at[next] = Time.realtimeSinceStartup; next = (next + 1) % what.Length;
             }
             public float LastBreak = -100f;
-            void OnJointBreak(float force) { LastBreak = Time.realtimeSinceStartup; try { OnPartJointBreak(this, force); } catch (System.Exception e) { Replay.HookError(e); } }
+            // (reglages de la charniere au moment d'une rupture -- elle existe encore pendant l'appel : MscKeepOnCopy en pose une pareille)
+            public float HingeAt = -100f; public Vector3 HingeAxis, HingeAnchor; public bool HingeUseLimits; public JointLimits HingeLimits;
+            void OnJointBreak(float force)
+            {
+                LastBreak = Time.realtimeSinceStartup;
+                try
+                {
+                    HingeJoint h = GetComponent<HingeJoint>();
+                    if (h != null) { HingeAt = LastBreak; HingeAxis = h.axis; HingeAnchor = h.anchor; HingeUseLimits = h.useLimits; HingeLimits = h.limits; }
+                    OnPartJointBreak(this, force);
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+            }
             public string Recent(float within)
             {
                 var sb = new System.Text.StringBuilder();
@@ -846,6 +1128,13 @@ namespace MWCoop
                 return sb.Length > 0 ? sb.ToString() : "aucun";
             }
         }
+        // La « force » d'OnJointBreak (Unity 5.0 de MSC) n'en est pas une (desync du 02/11, JD et GG) : sur 48 ruptures, 4 valeurs seulement,
+        // les bits IEEE du breakForce du joint rompu lus comme un entier -- 1128792000 = 200 (aile), 1149862000 = 1100 (charniere sans vis),
+        // 1178305000 = 12000 (verrou), 2139095000 = Infinity. Et la « limite » notee etait celle du PREMIER joint, pas forcement celui qui a
+        // rompu. Decodee ici, avec tous les joints de la piece (type, limite, vers quoi ; « <- rompu » pour celui de cette limite, « garde »
+        // pour une attache posee par MscKeepOnCopy). Journal seulement. [Test] CasseJournalLimite=0 : comme avant.
+        static bool casseJournal = true;
+        static string LimitText(float f) { return float.IsInfinity(f) ? "Infinity" : f.ToString("F0"); }
         static int breakLogs;
         static void OnPartJointBreak(PartWatch w, float force)
         {
@@ -854,7 +1143,23 @@ namespace MWCoop
             Rigidbody prb = w.GetComponent<Rigidbody>();
             Transform car = VehicleSync.CarRoot(w.transform);
             Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
-            Log.Info("piece " + MscPartKey(w.gameObject) + " : attache rompue, force " + force.ToString("F0") + (j != null ? " (limite " + j.breakForce.ToString("F0") + ")" : "")
+            // (repli : une valeur qui ne ressemble pas a des bits de limite -- autre Unity -- est notee comme avant)
+            float lim = casseJournal && force >= 1e8f && force < 2.1e9f ? System.BitConverter.ToSingle(System.BitConverter.GetBytes((int)force), 0) : float.NaN;
+            string what;
+            if (!float.IsNaN(lim) && lim >= 0f)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (Joint x in w.GetComponents<Joint>())
+                {
+                    if (x == null) continue;
+                    bool same = float.IsInfinity(lim) ? float.IsInfinity(x.breakForce) : Mathf.Abs(x.breakForce - lim) <= 1e-3f * Mathf.Max(1f, lim);
+                    sb.Append(sb.Length > 0 ? ", " : "").Append(x.GetType().Name).Append(' ').Append(LimitText(x.breakForce)).Append(x.connectedBody != null ? " vers " + x.connectedBody.name : " vers le monde")
+                      .Append(same ? " <- rompu" : "").Append(keptJoints.ContainsKey(x) ? " (garde)" : "");
+                }
+                what = "attache rompue, limite " + LimitText(lim) + " (joints : " + (sb.Length > 0 ? sb.ToString() : "aucun") + ")";
+            }
+            else what = "attache rompue, force " + force.ToString("F0") + (j != null ? " (limite " + j.breakForce.ToString("F0") + ")" : "");
+            Log.Info("piece " + MscPartKey(w.gameObject) + " : " + what
                      + (prb != null ? ", piece v " + prb.velocity.magnitude.ToString("F2") + (prb.isKinematic ? " cin" : "") : "")
                      + (cb != null ? ", voiture v " + cb.velocity.magnitude.ToString("F2") + " rot " + cb.angularVelocity.magnitude.ToString("F2") + (cb.isKinematic ? " cin" : "") + " menee par #" + VehicleSync.Authority(cb) : "")
                      + " ; contacts 1 s : " + w.Recent(1f));
@@ -1120,10 +1425,21 @@ namespace MWCoop
             }
         }
 
-        // [Test] Autotest=mscremonte (WIGA 25/10 : aile montee chez l'hote, arrachee 50 ms apres, force 1e9) : le joueur [Test] Monteur
-        // demonte [Test] Piece (Fender_Left) comme le joueur a 40 s, la remonte sur son point ([Test] Point, fin du chemin) a 50 s ;
-        // a 60 s chacun note si elle est montee (les casses sont notees par PartWatch).
-        static int remStep;
+        // [Test] Autotest=mscremonte (WIGA 25/10 : aile montee chez l'hote, arrachee 50 ms apres -- « force 1e9 » : la limite 200 lue en
+        // bits, PartWatch) : le joueur [Test] Monteur demonte [Test] Piece (Fender_Left) comme le joueur a 40 s, la remonte sur son point
+        // ([Test] Point, fin du chemin) a 50 s ; a 60 s chacun note si elle est montee (les casses sont notees par PartWatch).
+        // Essais du desync du 02/11 (JD et GG), sur la meme horloge (decalee de RemonteA) :
+        //  - [Test] RemonteVerrou=1 : a 35 s chacun pose sur la piece montee un verrou comme 'State 1' du 'Use' d'une portiere fermee
+        //    (FixedJoint vers la voiture, 12000) ; a 45 s chacun note ses attaches (aucune vers la voiture apres le demontage des 40 s).
+        //  - [Test] CasseAuMontage=1 : chez le Monteur, l'attache posee par 'Set joint 2' du clic des 50 s detruite en 'Wait 2' (charniere
+        //    rompue pendant le montage) ; =2 : et la casse envoyee tout de suite (arrive chez l'autre pendant sa chaine rejouee).
+        //  - [Test] CasseCopieA=s, CasseCopieQui=n (2) : chez le joueur n, a s, la charniere (sinon la 1re attache) de la piece montee rompue
+        //    par la physique (limites 0,001) ; a s+5 il note ses attaches et le point (casse sur la copie).
+        //  - [Test] MeneQui=n, MeneDe=s, MeneA=s : de MeneDe a MeneA, le joueur n garde la voiture de la piece comme un moteur laisse tournant
+        //    (casse sur la copie de l'hote : CasseCopieQui=0, MeneQui=2 ; Monteur=9 pour une piece jamais touchee de la session).
+        //  - [Test] Clic2=<fin du point>|<cle de piece>, Clic2Qui=n (2), Clic2A=s (70) : clic de montage par le joueur n a s ; a s+10 chacun
+        //    note les deux points et {Detach} de [Test] Piece (piston clique sur un vilebrequin remonte pas serre).
+        static int remStep, verStep, copStep, clic2Step; static string clic2Point;
         public static void TestRemount(float t)
         {
             string partKey = Config.Get("Test", "Piece", "db:Database/DatabaseBody/Fender_Left"), pointEnd = Config.Get("Test", "Point", "trigger_fender_left");
@@ -1134,6 +1450,9 @@ namespace MWCoop
                 remStep = 1;
                 GameObject part = MscFindPart(partKey);
                 PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                // ([Test] TracePoint=1 : etats du point et du Removal suivis 8 s -- point qui se remonte tout seul apres le demontage)
+                if (Config.GetInt("Test", "TracePoint", 0) != 0)
+                    foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith(pointEnd) && kv.Value.Fsm != null) { FsmBool su = kv.Value.Fsm.FsmVariables.FindFsmBool("Setup"); Log.Info("autotest mscremonte : point " + kv.Key + " Setup=" + (su != null ? su.Value.ToString() : "?") + ", actif " + kv.Value.Fsm.gameObject.activeSelf); Trace.Watch(kv.Value.Fsm, "point " + kv.Key, 8f); if (rem != null) Trace.Watch(rem, "piece " + partKey, 8f); }
                 if (me && rem != null) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); }
                 Log.Info("autotest mscremonte : " + (me ? "demontage de " + partKey + " (" + (rem != null ? "Removal " + rem.ActiveStateName : "introuvable") + ")" : "attente du demontage"));
             }
@@ -1143,12 +1462,103 @@ namespace MWCoop
             {
                 remStep = 2;
                 Log.Info("autotest mscremonte : point " + (pk ?? "?") + (me && pk != null ? ", " + MscTestClick(pk, partKey) : ""));
+                int ca = Config.GetInt("Test", "CasseAuMontage", 0);
+                if (me && pk != null && ca != 0)
+                {
+                    casseStep = 1; casseFsm = mscPoints[pk].Fsm; cassePart = MscFindPart(partKey); casseKey = pk; casseSend = ca == 2; casseUntil = Time.realtimeSinceStartup + 3f;
+                }
             }
             if (remStep == 2 && t > 60f)
             {
                 remStep = 3;
-                Log.Info("autotest mscremonte : " + (pk != null ? MscTestHolds(pk) : "point introuvable"));
+                Log.Info("autotest mscremonte : " + (pk != null ? MscTestHolds(pk) : "point introuvable") + " ; " + TestJoints(partKey));
             }
+            if (verStep == 0 && t > 35f && Config.GetInt("Test", "RemonteVerrou", 0) != 0)
+            {
+                verStep = 1;
+                GameObject part = MscFindPart(partKey);
+                Transform car = part != null ? VehicleSync.CarRoot(part.transform) : null;
+                Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+                if (cb != null) { FixedJoint fj = part.AddComponent<FixedJoint>(); fj.connectedBody = cb; fj.breakForce = 12000f; fj.breakTorque = 12000f; }
+                Log.Info("autotest mscremonte : verrou " + (cb != null ? "pose" : "pas pose (pas dans une voiture)") + ", " + TestJoints(partKey));
+            }
+            if (verStep == 1 && t > 45f) { verStep = 2; Log.Info("autotest mscremonte : apres le demontage, " + TestJoints(partKey)); }
+            if (Session.LocalId == Config.GetInt("Test", "MeneQui", -1) && t > Config.GetFloat("Test", "MeneDe", 60f) && t < Config.GetFloat("Test", "MeneA", 110f))
+            {
+                GameObject part = MscFindPart(partKey);
+                Transform car = part != null ? VehicleSync.CarRoot(part.transform) : null;
+                if (car != null) { VehicleSync.TestKeepRunning(car.name); VehicleSync.TestOwn(car.name); }
+            }
+            float cca = Config.GetFloat("Test", "CasseCopieA", 0f);
+            if (cca > 0f && copStep == 0 && t > cca && Session.LocalId == Config.GetInt("Test", "CasseCopieQui", 2))
+            {
+                copStep = 1;
+                GameObject part = MscFindPart(partKey);
+                Joint j = part != null ? part.GetComponent<HingeJoint>() : null;
+                if (j == null && part != null) j = part.GetComponent<Joint>();
+                if (j != null) { j.breakForce = 0.001f; j.breakTorque = 0.001f; Rigidbody rb = part.GetComponent<Rigidbody>(); if (rb != null) rb.WakeUp(); }
+                Transform car = part != null ? VehicleSync.CarRoot(part.transform) : null;
+                Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+                Log.Info("autotest mscremonte : casse sur la copie, " + (j != null ? j.GetType().Name + " a 0,001" : "pas d'attache") + (cb != null ? ", voiture menee par #" + VehicleSync.Authority(cb) : ""));
+            }
+            if (copStep == 1 && t > cca + 5f) { copStep = 2; Log.Info("autotest mscremonte : apres la casse sur la copie, " + TestJoints(partKey) + " ; " + (pk != null ? MscTestHolds(pk) : "point introuvable")); }
+            string c2 = Config.Get("Test", "Clic2", "");
+            float c2a = Config.GetFloat("Test", "Clic2A", 70f);
+            if (c2.Length > 0 && clic2Step == 0 && t > c2a)
+            {
+                clic2Step = 1;
+                string[] cp = c2.Split('|');
+                if (cp.Length == 2) foreach (KeyValuePair<string, MscPoint> kv in mscPoints) if (kv.Key.EndsWith(cp[0])) clic2Point = kv.Key;
+                bool me2 = Session.LocalId == Config.GetInt("Test", "Clic2Qui", 2);
+                Log.Info("autotest mscremonte : 2e clic, point " + (clic2Point ?? "?") + (me2 && clic2Point != null ? ", " + MscTestClick(clic2Point, cp[1]) : ""));
+            }
+            if (clic2Step == 1 && t > c2a + 10f)
+            {
+                clic2Step = 2;
+                GameObject part = MscFindPart(partKey);
+                PlayMakerFSM rem = part != null ? Game.FsmOn(part, "Removal") : null;
+                FsmBool dt = rem != null ? rem.FsmVariables.FindFsmBool("Detach") : null;
+                Log.Info("autotest mscremonte : apres le 2e clic, " + (clic2Point != null ? MscTestHolds(clic2Point) : "point introuvable") + " ; " + (pk != null ? MscTestHolds(pk) : "point introuvable")
+                         + " ; Detach de " + partKey + " " + (dt != null ? dt.Value.ToString() : "?"));
+            }
+        }
+
+        // Essais (CasseAuMontage, MscTick) : l'attache de la piece rompue des que son point passe en 'Wait 2'.
+        static int casseStep; static PlayMakerFSM casseFsm; static GameObject cassePart; static string casseKey; static float casseUntil; static bool casseSend;
+        static void TestCasseTick()
+        {
+            if (casseFsm == null || cassePart == null || Time.realtimeSinceStartup > casseUntil)
+            {
+                casseStep = 0;
+                Log.Info("autotest : casse au montage pas faite (point " + (casseFsm != null ? "en " + casseFsm.ActiveStateName : "introuvable") + ")");
+                return;
+            }
+            if (casseFsm.ActiveStateName != "Wait 2") return;
+            casseStep = 0;
+            Joint j = cassePart.GetComponent<HingeJoint>();
+            if (j == null) j = cassePart.GetComponent<Joint>();
+            string what = j != null ? j.GetType().Name : "pas d'attache";
+            if (j != null) Object.Destroy(j);
+            string id = MscPartKey(cassePart);
+            if (casseSend && Session.Active) Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(false).Str(casseKey).Str(id).U8(1), true);
+            Log.Info("autotest : attache de " + id + " rompue en 'Wait 2' du montage (" + what + ")" + (casseSend ? ", casse envoyee tout de suite" : ""));
+        }
+
+        // Essais : attaches de la piece (type, limite, vers quoi, garde de MscKeepOnCopy) et son parent.
+        public static string TestJoints(string partKey)
+        {
+            GameObject part = MscFindPart(partKey);
+            if (part == null) return partKey + " introuvable";
+            var sb = new System.Text.StringBuilder("attaches de " + partKey + " :");
+            int n = 0;
+            foreach (Joint j in part.GetComponents<Joint>())
+            {
+                n++;
+                sb.Append(' ').Append(j.GetType().Name).Append(' ').Append(LimitText(j.breakForce)).Append(j.connectedBody != null ? " vers " + j.connectedBody.name : " vers le monde").Append(keptJoints.ContainsKey(j) ? " (garde)" : "").Append(',');
+            }
+            if (n == 0) sb.Append(" aucune,");
+            sb.Append(" parent ").Append(part.transform.parent != null ? part.transform.parent.name : "aucun");
+            return sb.ToString();
         }
 
         // Essais (Autotest=mscmontage, [Test] MontageVisser=1) : serre ici, comme le joueur (envoye aux autres), toutes les vis de la
@@ -1268,6 +1678,8 @@ namespace MWCoop
             MscCheckKept(Time.realtimeSinceStartup);
             MscPrintTick(Time.realtimeSinceStartup);
             if (mscIn.Count > 0) MscCheckIn(Time.realtimeSinceStartup);
+            if (pendingRemovals.Count > 0) MscCheckPendingRemovals(Time.realtimeSinceStartup);
+            if (casseStep > 0) TestCasseTick();
             if (mscOut.Count == 0) return;
             foreach (MscOut o in mscOut)
             {
@@ -1305,11 +1717,63 @@ namespace MWCoop
             Log.Info("piece " + id + " montee (echange) sur " + key + " (joueur #" + who + (part == null ? ", pas de copie libre ici" : "") + ")");
         }
 
+        // Montage avorte (desync du 02/11, JD et GG) : la charniere de Door_Left, posee par 'Set joint 2', a rompu chez l'hote pendant 'Wait 2'
+        // (0,1 s) ; Removal, eteint par le demontage d'avant, n'a joue 'Remove part' (point rallume, piece detachee, Installed=false) qu'au
+        // EnableFSM de 'End' -- qui eteint ensuite le point. Point eteint, {Part} = la portiere par terre, Installed faux : « tenue » pour
+        // MscHolds, le controle annoncait Door_Left montee des deux cotes, l'empreinte differait toutes les 4 s pendant 7 min, et JD ne pouvait
+        // plus la remonter (point eteint, 14 prises en main sans montage). Point eteint dont la piece n'est pas sous {Parent} et dont l'entree
+        // {db_ThisPart} dit Installed faux : piece pas montee (MscHolds, [Test] TenueInstalled=0 : comme avant), point rouvert a la fin de la fenetre de
+        // montage (MscAbortedMount, et au montage recu : [Test] MontageAvorte=0 : comme avant). Sans {Parent} ou {db_ThisPart} : rien ne change.
+        static bool tenueInstalled = true, montageAvorte = true;
+        static bool MscStale(PlayMakerFSM point, GameObject part)
+        {
+            if (point == null || part == null || point.gameObject.activeSelf) return false;
+            FsmGameObject pv = point.FsmVariables.FindFsmGameObject("Parent"), db = point.FsmVariables.FindFsmGameObject("db_ThisPart");
+            if (pv == null || pv.Value == null || part.transform.parent == pv.Value.transform || db == null || db.Value == null) return false;
+            PlayMakerFSM d = Game.FsmOn(db.Value, "Data");
+            FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+            return inst != null && !inst.Value;
+        }
+        // Point eteint qui « tient » une piece libre (MscStale) : rallume, comme 'Remove part' (ActivateGameObject : l'automate repart de
+        // 'Check for Part collision'), rien d'envoye. Vrai s'il l'a ete.
+        static bool MscReopen(MscPoint p, string why)
+        {
+            if (!montageAvorte || p == null || p.Fsm == null || p.Swap) return false;
+            FsmGameObject pv = p.Fsm.FsmVariables.FindFsmGameObject("Part");
+            GameObject part = pv != null ? pv.Value : null;
+            if (part == null || !MscStale(p.Fsm, part)) return false;
+            pv.Value = null;
+            p.Fsm.gameObject.SetActive(true);
+            Log.Warn("point " + p.Key + " rouvert : " + MscPartKey(part) + " libre, Installed faux, point eteint (" + why + ")");
+            return true;
+        }
+        // Fin de la fenetre de montage (Parts.CheckMounting, 1 s apres) : montage d'ici avorte -> point rouvert, et le demontage envoye si
+        // la voiture est la notre (comme une casse : MscLocalRemove) ; montage rejoue avorte -> point rouvert seulement.
+        static void MscAbortedMount(GameObject part, Transform pt)
+        {
+            if (!montageAvorte || part == null || pt == null) return;
+            PlayMakerFSM f = Game.FsmOn(pt.gameObject, "Assembly");
+            MscPoint p;
+            if (f == null || !mscPointOf.TryGetValue(f, out p)) return;
+            FsmGameObject pv = f.FsmVariables.FindFsmGameObject("Part");
+            if (pv == null || pv.Value != part) return;
+            RemoteMount rmt;
+            bool remote = remoteMounts.TryGetValue(part, out rmt) && rmt.Point == p && Time.realtimeSinceStartup - rmt.At < 3f;
+            if (!MscReopen(p, "montage " + (remote ? "rejoue" : "d'ici") + " avorte, attache rompue pendant le montage")) return;
+            Transform car = VehicleSync.CarRoot(pt);
+            Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+            if (remote || !Session.Active || cb != null && VehicleSync.Authority(cb) != Session.LocalId) return;
+            string id = MscPartKey(part);
+            Touch(H(p.Key));
+            Log.Info("demontage : " + id + " de " + p.Key + " (montage avorte)");
+            Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(false).Str(p.Key).Str(id).U8(0), true);
+        }
+
         static bool MscHolds(PlayMakerFSM point, GameObject part)
         {
             FsmGameObject p = point.FsmVariables.FindFsmGameObject("Part");
             if (p == null || p.Value != part || part == null) return false;
-            if (!point.gameObject.activeSelf) return true;   // (declencheur eteint par 'End' : piece montee)
+            if (!point.gameObject.activeSelf) return !(tenueInstalled && MscStale(point, part));   // (declencheur eteint par 'End' : piece montee)
             // 'End' eteint parfois un GROUPE de declencheurs et pas le declencheur lui-meme (SATSUMA/MiscParts/Triggers Exhaust Pipes :
             // tuyau d'echappement, silencieux) : la piece y etait toujours « pas montee », des deux cotes, et le controle ne voyait
             // jamais qu'elle manquait chez l'invite (essai feux 27/10 : echappement demonte chez l'invite arrive pendant que l'hote
@@ -1347,43 +1811,81 @@ namespace MWCoop
                     if (p.Swap) { MscSwapInstall(p, part, id, key, who); return; }
                     if (part == null) { Log.Warn("piece " + id + " introuvable ici"); return; }
                     if (MscHolds(p.Fsm, part)) { Log.Info("piece " + id + " deja montee"); return; }
+                    if (!p.Fsm.gameObject.activeSelf) MscReopen(p, "montage recu de #" + who);   // (point bloque par un montage avorte ici : MscStale)
                     if (!p.Fsm.gameObject.activeInHierarchy) { Log.Warn("point " + key + " eteint ici (deja occupe ?) : " + id + " pas montee"); return; }
                     MscApplyMount(p, part, id, key, who);
                     remoteMounts[part] = new RemoteMount { Point = p, Who = who, At = Time.realtimeSinceStartup };
                 }
-                else
-                {
-                    if (part == null) { Log.Warn("piece " + id + " introuvable ici"); return; }
-                    PlayMakerFSM rem = Game.FsmOn(part, "Removal");
-                    if (rem == null) { Log.Warn("piece " + id + " sans Removal ici"); return; }
-                    FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
-                    // Piece « echange » (SpawnPart : la piece montee s'eteint au demontage) : demontee si elle est eteinte. Son declencheur peut
-                    // rester allume piece montee (trigger_radiator : 'Already installed' boucle depuis le chargement) -- le demontage du radiateur
-                    // par l'invite etait ignore chez l'hote (dossier #36, xZOTIK 31/10). [Test] RadiateurAncien=1 : comme avant.
-                    bool swapPart = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null && Config.GetInt("Test", "RadiateurAncien", 0) == 0;
-                    if (swapPart ? !part.activeSelf : trig != null && trig.Value != null && trig.Value.activeSelf) { Log.Info("piece " + id + " deja demontee"); return; }
-                    // Casse (flags 1) : d'abord 'Break off' comme chez celui qui mene (BoltCheck, ou 'Use' d'une roue) -- Bolted=false, crans a
-                    // zero, Tightness 0, Detach. Avant : 'Remove part' seul, la piece par terre ici mais encore « serree » (audit Satsuma 27/10).
-                    if ((flags & 1) != 0)
-                        foreach (PlayMakerFSM bf in part.GetComponents<PlayMakerFSM>())
-                            if ((bf.FsmName == "BoltCheck" || bf.FsmName == "Use") && bf.Fsm != null && bf.Fsm.GetState("Break off") != null) Game.SetState(bf, "Break off");
-                    rem.enabled = true;
-                    // (housse : 'What part' relit les Installed d'ici et choisit sa branche 'Remove part N' -- audit MSC 02/11)
-                    bool multi = housses && MultiRemoval(rem);
-                    if (multi && !MultiInstalled(rem)) { Log.Warn("housse " + id + " : aucune entree montee ici, pas demontee"); return; }
-                    FsmGameObject lv = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null || multi ? rem.FsmVariables.FindFsmGameObject("Part") : null;
-                    GameObject before = lv != null ? lv.Value : null;
-                    if (multi) { remoteRemoval[rem] = Time.realtimeSinceStartup + 1f; Game.SetState(rem, WhatPart(rem).Name); }
-                    else Game.SetState(rem, "Remove part");
-                    // (echange : la nouvelle piece libre d'ici prend la cle de celle de l'autre et suit sa chute)
-                    GameObject loose = lv != null && lv.Value != null && lv.Value != part && (!multi || lv.Value != before) ? lv.Value : null;
-                    if (loose != null && outKey.Length > 0) { Props.Adopt(loose, outKey); Props.HoldFromRemote(loose, who); }
-                    else if (multi && outKey.Length > 0) mscIn.Add(new MscIn { Rem = rem, Before = before, Key = outKey, Who = who, Until = Time.realtimeSinceStartup + 1f });
-                    else Props.HoldFromRemote(part, who);
-                    Log.Info("piece " + id + ((flags & 1) != 0 ? " cassee de " : " demontee de ") + key + " (joueur #" + who + ")");
-                }
+                else MscApplyRemoval(part, key, id, who, flags, outKey, false);
             }
             finally { applying = false; Replay.Depth--; }
+        }
+
+        // Casse ou demontage recu pendant la chaine de montage rejouee de la meme piece (desync du 02/11, JD et GG) : montage de Door_Left
+        // chez l'hote, charniere rompue 41 ms apres, casse envoyee 145 ms apres le montage ; chez l'invite elle arrivait en 'Wait 2' de son
+        // montage rejoue, declencheur encore allume (seul 'End' l'eteint, ~150 ms) : « deja demontee », jetee, puis 'Assemble 2' montait la
+        // portiere -- montee chez l'invite, par terre chez l'hote. Gardee et rejouee quand la chaine est finie (point eteint ou piece tenue),
+        // 2 s au plus ; seulement apres un montage RECU (remoteMounts) sur ce point. [Test] CasseApresMontage=0 : comme avant.
+        class PendingRemoval { public GameObject Part; public string Key, Id, OutKey; public int Who, Flags; public MscPoint Point; public float MountAt, Until; }
+        static readonly List<PendingRemoval> pendingRemovals = new List<PendingRemoval>();
+        static bool casseApresMontage = true;
+        static void MscCheckPendingRemovals(float now)
+        {
+            for (int i = pendingRemovals.Count - 1; i >= 0; i--)
+            {
+                PendingRemoval q = pendingRemovals[i];
+                RemoteMount rmt;
+                bool gone = q.Part == null || q.Point == null || q.Point.Fsm == null || !remoteMounts.TryGetValue(q.Part, out rmt) || rmt.At != q.MountAt;   // (detruite, ou remontee depuis)
+                if (!gone && q.Point.Fsm.gameObject.activeSelf && !MscHolds(q.Point.Fsm, q.Part) && now < q.Until) continue;
+                pendingRemovals.RemoveAt(i);
+                if (gone) continue;
+                applying = true; Replay.Depth++;
+                try { MscApplyRemoval(q.Part, q.Key, q.Id, q.Who, q.Flags, q.OutKey, true); }
+                finally { applying = false; Replay.Depth--; }
+            }
+        }
+
+        // Demontage ou casse recu (ou rejoue par MscCheckPendingRemovals), sous applying.
+        static void MscApplyRemoval(GameObject part, string key, string id, int who, int flags, string outKey, bool noDefer)
+        {
+            if (part == null) { Log.Warn("piece " + id + " introuvable ici"); return; }
+            PlayMakerFSM rem = Game.FsmOn(part, "Removal");
+            if (rem == null) { Log.Warn("piece " + id + " sans Removal ici"); return; }
+            FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
+            // Piece « echange » (SpawnPart : la piece montee s'eteint au demontage) : demontee si elle est eteinte. Son declencheur peut
+            // rester allume piece montee (trigger_radiator : 'Already installed' boucle depuis le chargement) -- le demontage du radiateur
+            // par l'invite etait ignore chez l'hote (dossier #36, xZOTIK 31/10). [Test] RadiateurAncien=1 : comme avant.
+            bool swapPart = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null && Config.GetInt("Test", "RadiateurAncien", 0) == 0;
+            RemoteMount rmt; FsmGameObject rpv;
+            if (!noDefer && !swapPart && casseApresMontage && remoteMounts.TryGetValue(part, out rmt) && rmt.Point != null && rmt.Point.Fsm != null && rmt.Point.Key == key
+                && Time.realtimeSinceStartup - rmt.At < 2f && rmt.Point.Fsm.gameObject.activeSelf && !MscHolds(rmt.Point.Fsm, part)
+                && (rpv = rmt.Point.Fsm.FsmVariables.FindFsmGameObject("Part")) != null && rpv.Value == part)
+            {
+                foreach (PendingRemoval q in pendingRemovals) if (q.Part == part) return;   // (deja en attente : rejouee une fois)
+                pendingRemovals.Add(new PendingRemoval { Part = part, Key = key, Id = id, OutKey = outKey, Who = who, Flags = flags, Point = rmt.Point, MountAt = rmt.At, Until = Time.realtimeSinceStartup + 2f });
+                Log.Info("piece " + id + " : " + ((flags & 1) != 0 ? "casse" : "demontage") + " de #" + who + " recu pendant son montage (point " + rmt.Point.Fsm.ActiveStateName + "), rejoue a la fin");
+                return;
+            }
+            if (swapPart ? !part.activeSelf : trig != null && trig.Value != null && trig.Value.activeSelf) { Log.Info("piece " + id + " deja demontee"); return; }
+            // Casse (flags 1) : d'abord 'Break off' comme chez celui qui mene (BoltCheck, ou 'Use' d'une roue) -- Bolted=false, crans a
+            // zero, Tightness 0, Detach. Avant : 'Remove part' seul, la piece par terre ici mais encore « serree » (audit Satsuma 27/10).
+            if ((flags & 1) != 0)
+                foreach (PlayMakerFSM bf in part.GetComponents<PlayMakerFSM>())
+                    if ((bf.FsmName == "BoltCheck" || bf.FsmName == "Use") && bf.Fsm != null && bf.Fsm.GetState("Break off") != null) Game.SetState(bf, "Break off");
+            rem.enabled = true;
+            // (housse : 'What part' relit les Installed d'ici et choisit sa branche 'Remove part N' -- audit MSC 02/11)
+            bool multi = housses && MultiRemoval(rem);
+            if (multi && !MultiInstalled(rem)) { Log.Warn("housse " + id + " : aucune entree montee ici, pas demontee"); return; }
+            FsmGameObject lv = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null || multi ? rem.FsmVariables.FindFsmGameObject("Part") : null;
+            GameObject before = lv != null ? lv.Value : null;
+            if (multi) { remoteRemoval[rem] = Time.realtimeSinceStartup + 1f; Game.SetState(rem, WhatPart(rem).Name); }
+            else Game.SetState(rem, "Remove part");
+            // (echange : la nouvelle piece libre d'ici prend la cle de celle de l'autre et suit sa chute)
+            GameObject loose = lv != null && lv.Value != null && lv.Value != part && (!multi || lv.Value != before) ? lv.Value : null;
+            if (loose != null && outKey.Length > 0) { Props.Adopt(loose, outKey); Props.HoldFromRemote(loose, who); }
+            else if (multi && outKey.Length > 0) mscIn.Add(new MscIn { Rem = rem, Before = before, Key = outKey, Who = who, Until = Time.realtimeSinceStartup + 1f });
+            else Props.HoldFromRemote(part, who);
+            Log.Info("piece " + id + ((flags & 1) != 0 ? " cassee de " : " demontee de ") + key + " (joueur #" + who + ")");
         }
 
         // ---------------------------------------------------------------- vis
@@ -1444,7 +1946,9 @@ namespace MWCoop
                 if (id.Length > 0) mounted++;
                 if (w == null) { w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pieces").U8(0); n = 0; }
                 uint hk = H(p.Key);
-                w.I32((int)hk).Str(id).F32(Age(hk, now)); n++; total++;
+                // (point vide apres une casse refusee sur la copie : annonce plus ancien que tout -- 1e7, un age jamais touche est 1e6 --,
+                // celui qui y a la piece la renvoie ; relecture du lot P, desync du 02/11)
+                w.I32((int)hk).Str(id).F32(hostWaits.Count > 0 && MscWaitsDriver(hk, id, now) ? 1e7f : Age(hk, now)); n++; total++;
                 // (coupe aussi a la taille : 40 points aux cles longues d'une SATSUMA montee depassaient Transport.MaxPayload,
                 // l'envoi levait et tout le controle de ce tour etait perdu, vis comprises -- 24/10)
                 if (n >= 40 || w.Length > 900) { Session.SendAll(w, true); w = null; }
