@@ -4050,6 +4050,7 @@ namespace MWCoop
                 Log.Info("autotest : sondeusine2 ecrite (" + sbf.Length + " car.)");
             }
             if (mode == "tremble" && !Game.Msc) Tremble();   // (voiture qui tremble chez l'autre, dossier #38 : My Winter Car aussi)
+            if (mode == "queteportiere") StandaloneCar.QuestDoorTest(t);   // (portiere passager de la voiture de la quete sur une copie)
             if (mode == "kekremorque") Jobs.TestTrailer();   // (attelage du KEKMET, comme Autotest=remorque sur MSC ; [Test] RemorqueActeur=invite -- Донской 01/11)
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t); Gestures.TestPena(mode, t);

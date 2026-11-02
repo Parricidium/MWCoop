@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
@@ -2061,6 +2061,42 @@ namespace MWCoop
             return "portiere " + (k == 0 ? "conducteur" : "passager") + " de " + b.Car.name + " DoorOpen=" + st.DoorOpen[k] + " angle=" + st.DoorAngle[k].ToString("F0") + " cinematique=" + b.Rb.isKinematic;
         }
         static int cDoor; static float cDoorAt, cDoorLog; static bool cDoorSeen, cDoorWas;
+
+        // [Test] Autotest=queteportiere (2 joueurs, voiture de la quete s21 ; My Winter Car surtout, ou elle est la seule voiture
+        // standalone) : 20 s apres l'arrivee de l'autre, l'hote prend le volant (T+0) et reste a l'arret ; l'invite s'assoit en passager
+        // (T+5), ouvre sa portiere (T+8) et la referme (T+12), meme chemin que le clic (ToggleDoor) ; chacun note la portiere passager
+        // toutes les 0,5 s de T+8 a T+18. Attendu : fermee, angle 0, des deux cotes ; [Test] PortiereCopieFermee=0 : ouverte (bug).
+        static float qdT0 = -1, qdLog; static int qdStep;
+        public static void QuestDoorTest(float t)
+        {
+            if (!Net.Session.Active) return;
+            float now = Time.realtimeSinceStartup;
+            if (qdT0 < 0) { if (!Jobs.OtherInGame(20f)) return; qdT0 = now; }
+            float d = now - qdT0;
+            VazCar.Built b = null; State st = null;
+            foreach (VazCar.Built x in cars) if (QueteGolf.IsQuestCar(x) && x.Car != null) { b = x; states.TryGetValue(x, out st); }
+            if (b == null || st == null || st.Doors == null || st.Doors[1] == null) { if (qdStep == 0) { qdStep = -1; Log.Info("autotest : queteportiere, voiture de la quete absente ou sans portiere passager"); } return; }
+            GameObject pl = Game.PlayerGo;
+            if (pl == null) return;
+            bool host = Net.Session.IsHost;
+            if (host && qdStep == 0)
+            {
+                qdStep = 1;
+                var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = b.Car.transform.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
+                if (cc != null) cc.enabled = true;
+                Enter(b, st); SendState(b, st);
+                Log.Info("autotest : queteportiere, hote au volant de " + b.Car.name);
+            }
+            if (!host && qdStep == 0 && d > 5f) { qdStep = 1; Log.Info("autotest : queteportiere, invite passager -> " + Seats.TestSit(b.Car.name, 0) + ", copie " + (b.Rb.isKinematic ? "cinematique" : "PHYSIQUE")); }
+            if (!host && qdStep == 1 && d > 8f) { qdStep = 2; ToggleDoor(b, st, 1); Log.Info("autotest : queteportiere, invite ouvre : " + DoorState(b, st, 1)); }
+            if (!host && qdStep == 2 && d > 12f) { qdStep = 3; ToggleDoor(b, st, 1); Log.Info("autotest : queteportiere, invite ferme : " + DoorState(b, st, 1)); }
+            if (d > 8f && d < 18f && now >= qdLog)
+            {
+                qdLog = now + 0.5f;
+                Log.Info("autotest : queteportiere T+" + d.ToString("F1") + " (" + (host ? "hote" : "invite") + ") : " + DoorState(b, st, 1));
+            }
+        }
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
