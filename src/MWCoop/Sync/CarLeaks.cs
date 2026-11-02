@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -10,7 +10,7 @@ namespace MWCoop
     //    particules, posees sous la fuite (vidange, durite, joint) ;
     //  - <voiture>/.../SteamFountain* : la vapeur du radiateur qui bout.
     // Chez les autres, la simulation de la copie ne les allumait pas (ou autrement). L'autorite de la voiture (conducteur,
-    // moteur laisse tournant, sinon l'hote ; la CORRIS pour Systems/Leaks) envoie leur etat a chaque changement et toutes
+    // moteur laisse tournant, sinon l'hote ; la CORRIS -- la SATSUMA sur My Summer Car -- pour Systems/Leaks) envoie leur etat a chaque changement et toutes
     // les 5 s (@fuite : allume, pose, taille de la flaque) ; ailleurs il est tenu tel quel.
     public static class CarLeaks
     {
@@ -23,8 +23,9 @@ namespace MWCoop
         static readonly List<Item> items = new List<Item>();
         static readonly Dictionary<string, Item> byKey = new Dictionary<string, Item>();
         static float nextScan, nextSend, nextFull;
+        static int leaksLater;   // (MSC : SATSUMA pas encore enregistree au balayage, Systems/Leaks rattache au suivant ; essais restants)
 
-        public static void OnLevelLoaded() { items.Clear(); byKey.Clear(); nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 20f : 0f; }
+        public static void OnLevelLoaded() { items.Clear(); byKey.Clear(); leaksLater = 0; nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 20f : 0f; }
 
         static void Add(Transform t, Rigidbody car)
         {
@@ -36,9 +37,26 @@ namespace MWCoop
 
         static void Scan()
         {
+            int before = items.Count;
             GameObject leaks = Game.FindAny("Systems/Leaks");
-            Rigidbody corris = VehicleSync.Body("CORRIS");
-            if (leaks != null) foreach (Transform c in leaks.transform) Add(c, corris);
+            // (audit MSC 02/11 : sur My Summer Car, Systems/Leaks (LeakOil, LeakOilDrain, LeakFuel, LeakCoolant, LeakBrake, LeakClutch) est
+            // tenu par la SATSUMA -- SATSUMA/CarSimulation/Engine/Oil, coupe par MecaMsc hors de son autorite, et ses pieces CARPARTS
+            // (carter, reservoir). Rattache a la CORRIS, absente : l'hote seul faisait foi. Invite au volant d'une SATSUMA qui fuit, la
+            // flaque n'existait que chez lui, ou il etait force a l'etat fige de l'hote. Rattache a la SATSUMA : son autorite (le
+            // conducteur, sinon l'hote), la meme regle que MecaMsc. [Test] FuitesSatsuma=0 : comme avant.)
+            bool sats = Game.Msc && Config.GetInt("Test", "FuitesSatsuma", 1) != 0;
+            Rigidbody owner = VehicleSync.Body(sats ? "SATSUMA" : "CORRIS");
+            bool wait = false;
+            if (sats && leaks != null && owner == null)
+            {
+                if (leaksLater == 0) leaksLater = 20;   // (20 balayages, 5 min ; ensuite a l'hote, comme avant)
+                wait = --leaksLater > 0;
+            }
+            if (!wait)
+            {
+                leaksLater = 0;
+                if (leaks != null) foreach (Transform c in leaks.transform) Add(c, owner);
+            }
             // Vapeur : tout SteamFountain* sous une voiture suivie.
             foreach (string car in Game.Msc ? new[] { "SATSUMA", "HAYOSIKO", "KEKMET", "GIFU", "FERNDALE", "RCO_RUSCKO12", "FLATBED" } : new[] { "CORRIS", "SORBET", "BACHGLOTZ", "KEKMET", "GIFU", "MACHTWAGEN" })
             {
@@ -47,7 +65,7 @@ namespace MWCoop
                 foreach (Transform t in rb.GetComponentsInChildren<Transform>(true))
                     if (t.name.StartsWith("SteamFountain")) Add(t, rb);
             }
-            if (items.Count > 0) Log.Info("fuites et vapeur : " + items.Count + " suivies (" + (leaks != null ? leaks.transform.childCount + " fuites, " : "") + "vapeur des radiateurs)");
+            if (items.Count > 0 && items.Count != before) Log.Info("fuites et vapeur : " + items.Count + " suivies (" + (leaks != null && !wait ? leaks.transform.childCount + " fuites" + (owner != null ? " a " + owner.name : "") + ", " : "") + "vapeur des radiateurs)");
         }
 
         static bool Mine(Item it) { return it.Car == null ? Session.IsHost : VehicleSync.Authority(it.Car) == Session.LocalId; }
@@ -56,7 +74,7 @@ namespace MWCoop
         {
             if (!Session.Active || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
-            if (items.Count == 0) { if (now >= nextScan) { nextScan = now + 15f; Scan(); } return; }
+            if (items.Count == 0 || leaksLater > 0) { if (now >= nextScan) { nextScan = now + 15f; Scan(); } if (items.Count == 0) return; }
             if (now >= nextSend && Session.RemoteCount > 0)
             {
                 nextSend = now + 0.25f;
@@ -109,6 +127,7 @@ namespace MWCoop
         static int testStep;
         public static void Test(string mode, float t)
         {
+            if (mode == "fuiteconducteur") { TestDriver(t); return; }
             if (mode != "fuite") return;
             Item it = null;
             foreach (Item x in items) if (x.T != null && x.T.name == "LeakOilDrain") it = x;
@@ -123,5 +142,37 @@ namespace MWCoop
             if (t > 38f && testStep % 10 < 3 && (testStep == 1 || !Session.IsHost && testStep == 0)) { Log.Info("autotest : fuite LeakOilDrain " + (it.T.gameObject.activeSelf ? "allumee en " + it.T.position.ToString("F1") + " flaque " + (it.Mesh != null ? it.Mesh.localScale.x.ToString("F2") : "?") : "eteinte")); testStep += 10; }
             if (t > 52f && testStep < 20 && testStep >= 10) { Log.Info("autotest : fuite LeakOilDrain " + (it.T.gameObject.activeSelf ? "allumee" : "eteinte")); testStep += 10; }
         }
+
+        // [Test] Autotest=fuiteconducteur (audit MSC 02/11, My Summer Car) : l'invite monte au volant de la SATSUMA (15/20 s) et
+        // tient LeakOil allumee devant lui, flaque a 0,4, de 30 a 45 s (comme Engine/Oil chez l'autorite) ; chacun note a 38 et 52 s
+        // l'etat de LeakOil, sa voiture de rattachement et qui fait foi. Attendu : allumee chez l'hote a la position de l'invite,
+        // « a nous » chez l'invite seulement ; eteinte des deux cotes a 52 s.
+        static int drvStep;
+        static void TestDriver(float t)
+        {
+            Item it = null;
+            foreach (Item x in items) if (x.T != null && x.T.name == "LeakOil") it = x;
+            if (it == null) return;
+            const string Car = "SATSUMA(557kg, 248)";
+            if (!Session.IsHost)
+            {
+                if (t > 15f && drvStep == 0) { drvStep = 1; Log.Info("autotest : fuiteconducteur, " + VehicleSync.TestEnter(Car, false)); }
+                if (t > 20f && drvStep == 1) { drvStep = 2; Log.Info("autotest : fuiteconducteur, volant -> " + VehicleSync.TestEnter(Car, true)); }
+                if (t > 30f && t < 45f && drvStep >= 2)
+                {
+                    if (drvStep == 2) { drvStep = 3; Transform pl = Game.PlayerT; it.T.position = pl.position + pl.forward * 1.5f; }
+                    if (!it.T.gameObject.activeSelf) it.T.gameObject.SetActive(true);
+                    if (it.Mesh != null) it.Mesh.localScale = new Vector3(0.4f, 0.4f, it.Mesh.localScale.z);
+                }
+                if (t > 45f && drvStep == 3) { drvStep = 4; it.T.gameObject.SetActive(false); }
+            }
+            if (t > 38f && drvLog == 0 || t > 52f && drvLog == 1)
+            {
+                drvLog++;
+                Log.Info("autotest : fuiteconducteur LeakOil " + (it.T.gameObject.activeSelf ? "allumee en " + it.T.position.ToString("F1") + " flaque " + (it.Mesh != null ? it.Mesh.localScale.x.ToString("F2") : "?") : "eteinte")
+                         + ", rattachee a " + (it.Car != null ? it.Car.name : "aucune voiture (hote)") + (Mine(it) ? ", a nous" : ", tenue par l'autre"));
+            }
+        }
+        static int drvLog;
     }
 }
