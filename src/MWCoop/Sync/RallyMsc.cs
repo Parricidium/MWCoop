@@ -382,7 +382,7 @@ namespace MWCoop
 
         // [Test] Autotest=mscpodium (24/10, attente du podium, a deux) : RALLY/ResultsWeekend allume (hors week-end) ; l'invite
         // annonce un faux temps du samedi a 35 s et celui du dimanche a [Test] PodiumDimanche s (75 par defaut, 0 = jamais) ; l'hote
-        // entre dans 'Hash to array' a 50 s : il doit attendre l'invite (ou le delai), puis classer.
+        // entre dans 'Hash to array' a [Test] PodiumA s (50) : il doit attendre l'invite (ou le delai), puis classer.
         static int pStep;
         public static void TestPodium(float t)
         {
@@ -399,7 +399,7 @@ namespace MWCoop
                 if (pStep == 1 && d2 > 0f && t > d2) { pStep = 2; SendTime(2, 1400f); }
                 return;
             }
-            if (pStep == 0 && t > 50f && data != null)
+            if (pStep == 0 && t > Config.GetFloat("Test", "PodiumA", 50f) && data != null)   // ([Test] PodiumA=s, audit MSC 02/11 : 50 par defaut)
             {
                 pStep = 1;
                 Log.Info("autotest mscpodium : humains " + humans.Count + ", attendus " + Names(Pending()) + ", classe " + Cls() + " ; entree dans Hash to array");

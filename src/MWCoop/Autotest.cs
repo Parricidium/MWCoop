@@ -262,7 +262,14 @@ namespace MWCoop
         // [Test] Autotest=mscreste (19/10) -- l'invite : 60 s decroche la fosse 2 (objectif de carte a lui) ; 65 s sert la boite aux lettres
         // 3 (tracts) ; 70 s va a la station de Teimo, 75 s prend le pistolet 98, 85 s le repose ; 90 s va chez Fleetari, 100 s y achete
         // un alternateur ; 110 s commande des travaux et rentre ; 115 s commande par la poste. Chacun note toutes les 10 s.
-        static int rsStep; static float rsLog;
+        // (audit MSC 02/11, lots A et B -- chacun sur son horloge : l'invite est en jeu ~50 s apres l'hote) : a 60 s chacun note si les
+        // automates des fraises (#5) et de l'ordinateur (#54) sont ecartes ; a 62 s chacun prend le boulot des tracts ici (#4,
+        // TractsMsc.TestAccept : JOBS/TeimoADs::Data en 'Wait player', comme la pile emportee ; [Test] TractsAccepte=0 : non).
+        // [Test] TractsPaie=1 (#3) : l'invite sert aussi les boites 4 et 5 a 66 et 67 s, l'hote la boite 6 a 70 s ; l'hote va au magasin a
+        // 125 s et prend l'enveloppe des tracts a 130 s (PayMoneyAdvert 'Wait button' puis 'State 3', comme le clic) ; le releve des 10 s
+        // donne les parts et le liquide. [Test] TeimoDette=1 (B #13) : l'invite note Wallet.TestOwnState a 30 s, pose FuelPurchase=50 a la
+        // caisse de Teimo a 110 s et la note (2e session de suite, meme mode : la ligne de 30 s montre la dette remise).
+        static int rsStep, rsAudit, rsPay, rsDebt; static float rsLog;
         static void Teleport(string path, Vector3 off)
         {
             GameObject g = Game.FindAny(path), pl = Game.PlayerGo;
@@ -273,6 +280,43 @@ namespace MWCoop
         static void MscReste(float t)
         {
             bool host = Net.Session.IsHost;
+            if (t > 60f && rsAudit == 0)
+            {
+                rsAudit = 1;
+                Log.Info("autotest : mscreste, fraises : " + WorldFsms.TestSkip("JOBS/StrawberryField/LOD/Functions/PickABox", "Pick") + " | " + WorldFsms.TestSkip("JOBS/StrawberryField/Rows/Row1/1/BerryTrigger", "Pick"));
+                Log.Info("autotest : mscreste, ordinateur : " + WorldFsms.TestSkip("YARD/Building/BEDROOM1/COMPUTER/SYSTEM/POS/CommandPrompt", "Typer") + " | " + WorldFsms.TestSkip("YARD/Building/BEDROOM1/COMPUTER/Computer/Meshes/386_case(xxxxx)/ButtonPower", "Use")
+                         + " | " + WorldFsms.TestSkip("YARD/Building/BEDROOM1/COMPUTER/TriggersAssembly/TriggerCase", "Assembly"));
+            }
+            if (t > 62f && rsAudit == 1) { rsAudit = 2; if (Config.GetInt("Test", "TractsAccepte", 1) != 0) Log.Info("autotest : mscreste, " + TractsMsc.TestAccept()); }
+            if (Config.GetInt("Test", "TractsPaie", 0) != 0)
+            {
+                if (!host && t > 66f && rsPay == 0) { rsPay = 1; Log.Info("autotest : mscreste, " + TractsMsc.TestDeliver(4)); }
+                if (!host && t > 67f && rsPay == 1) { rsPay = 2; Log.Info("autotest : mscreste, " + TractsMsc.TestDeliver(5)); }
+                if (host && t > 70f && rsPay == 0) { rsPay = 1; Log.Info("autotest : mscreste, hote : " + TractsMsc.TestDeliver(6)); }
+                if (host && t > 125f && rsPay == 1) { rsPay = 2; PutPlayer(new Vector3(-1539.1f, 4.4f, 1190.6f)); Log.Info("autotest : mscreste, hote au magasin"); }
+                if (host && t > 130f && rsPay == 2)
+                {
+                    rsPay = 3;
+                    GameObject pa = Game.FindAny("STORE/LOD/ActivateStore/PayMoneyAdvert");
+                    LightUp(pa);
+                    PlayMakerFSM pu = pa != null ? Game.FsmOn(pa, "Use") : null;
+                    if (pu != null) { Game.SetState(pu, "Wait button"); Game.SetState(pu, "State 3"); }
+                    Log.Info("autotest : mscreste, hote prend l'enveloppe des tracts -> " + (pu != null ? pu.ActiveStateName : "PayMoneyAdvert introuvable") + " ; " + TractsMsc.State() + " | " + Wallet.State());
+                }
+            }
+            if (!host && Config.GetInt("Test", "TeimoDette", 0) != 0)
+            {
+                if (t > 30f && rsDebt == 0) { rsDebt = 1; Log.Info("autotest : mscreste, " + Wallet.TestOwnState()); }
+                if (t > 110f && rsDebt == 1)
+                {
+                    rsDebt = 2;
+                    GameObject rg = Game.FindAny("STORE/StoreCashRegister/Register");
+                    PlayMakerFSM reg = rg != null ? Game.FsmOn(rg, "Data") : null;
+                    FsmFloat fp = reg != null ? reg.FsmVariables.FindFsmFloat("FuelPurchase") : null;
+                    if (fp != null) fp.Value = 50f;
+                    Log.Info("autotest : mscreste, FuelPurchase " + (fp != null ? "= 50 pose ici" : "introuvable") + " ; " + Wallet.TestOwnState());
+                }
+            }
             if (!host)
             {
                 if (t > 60f && rsStep == 0) { rsStep = 1; Log.Info("autotest : mscreste, " + PhoneMsc.TestAnswer("SHIT2")); }
@@ -1517,6 +1561,347 @@ namespace MWCoop
             return;
         }
 
+        // ---------------------------------------------------------------- essais de l'audit MSC 02/11 (a deux)
+        // Horloge commune (comme Autotest=tremble / roues) : secondes depuis que l'autre joueur est en jeu depuis 20 s. L'invite, lance
+        // ~50 s apres l'hote, y a la meme heure que lui a une demi-seconde pres (heure murale de T+0 au journal, meme machine) ; -1 avant.
+        static float auditT0 = -1f; static bool auditPosDone;
+        static float AuditT()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (auditT0 < 0f)
+            {
+                if (!Jobs.OtherInGame(20f)) return -1f;
+                auditT0 = now;
+                Log.Info("autotest : horloge commune T+0 a " + System.DateTime.Now.ToString("HH:mm:ss.fff") + " (l'autre joueur en jeu depuis 20 s)");
+            }
+            return now - auditT0;
+        }
+        static void LightUp(GameObject g) { for (Transform x = g != null ? g.transform : null; x != null; x = x.parent) if (!x.gameObject.activeSelf) x.gameObject.SetActive(true); }
+        static void PutPlayer(Vector3 at) { GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null; if (cc == null) return; cc.enabled = false; pl.transform.position = at; cc.enabled = true; }
+        static PlayMakerFSM FleetariRegister() { GameObject rg = Game.FindAny("REPAIRSHOP/LOD/Store/ShopCashRegister/Register"); return rg != null ? Game.FsmOn(rg, "Data") : null; }
+
+        // ([Test] ReglagesEssai=amorti,parallelisme,ralenti,allumage avec Autotest=mscreglages, 2 joueurs, audit MSC 02/11 lot D #35/#36/
+        // #38/#43 ; vide : essai d'origine) : sur l'horloge commune, chacun note les reglages a T+5 ; l'hote pose a T+10 ceux demandes --
+        // amorti 3000 (Shock Rally RL), parallelisme FL 2,5, ralenti 15 (carburateur), allumage : avance 13 et calage 40 ; l'invite serre
+        // d'un cran (TIGHTEN, comme la molette) la vis du ralenti a T+16 et celle de l'amorti a T+25 ; chacun note a T+20 et T+35.
+        static int regStep;
+        static void ReglagesEssai(string list)
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            bool host = Net.Session.IsHost;
+            string l = "," + list.Replace(';', ',').Replace('|', ',').Replace(" ", "") + ",";
+            bool amorti = l.Contains(",amorti,"), para = l.Contains(",parallelisme,"), ralenti = l.Contains(",ralenti,"), allumage = l.Contains(",allumage,");
+            if (regStep == 0 && d > 5f) { regStep = 1; Log.Info("autotest : mscreglages T+5, " + Settings.TestMscState()); }
+            if (regStep == 1 && d > 10f)
+            {
+                regStep = 2;
+                if (host && amorti) Log.Info("autotest : mscreglages, " + Settings.TestMscSet("amorti", 3000f));
+                if (host && para) Log.Info("autotest : mscreglages, " + Settings.TestMscSet("parallelisme", 2.5f));
+                if (host && ralenti) Log.Info("autotest : mscreglages, " + Settings.TestMscSet("ralenti", 15f));
+                if (host && allumage) { Log.Info("autotest : mscreglages, " + Settings.TestMscSet("avance", 13f)); Log.Info("autotest : mscreglages, " + Settings.TestMscSet("calage", 40f)); }
+            }
+            if (regStep == 2 && d > 16f) { regStep = 3; if (!host && ralenti) Log.Info("autotest : mscreglages, " + Settings.TestMscScrew("ralenti", true)); }
+            if (regStep == 3 && d > 20f) { regStep = 4; Log.Info("autotest : mscreglages T+20, " + Settings.TestMscState()); }
+            if (regStep == 4 && d > 25f) { regStep = 5; if (!host && amorti) Log.Info("autotest : mscreglages, " + Settings.TestMscScrew("amorti", true)); }
+            if (regStep == 5 && d > 35f) { regStep = 6; Log.Info("autotest : mscreglages T+35, " + Settings.TestMscState()); }
+        }
+
+        // (Autotest=mscdrag, audit MSC 02/11 lots A/C) : a 20 s et a 40 s chacun note qui est aux dragsters (MscEvents.TestHere, #28 ;
+        // [Test] DragQui=1 : l'hote est d'abord pose sur DRAGRACE/SpawnToDrag a 20 s) ; a 40 s chacun note si les automates de la piste
+        // sont ecartes (#23 : Stageline2left Staging, Bluelane Trigger, dragcar1 ThrottleDrag) ; [Test] DragVolant=<voiture> : l'invite en
+        // prend le volant a 30/33 s ; [Test] DragSonde=<voiture> : l'hote note toutes les 10 s de 40 a 160 s si une manche de cette voiture
+        // serait annoncee ici (DragMsc.TestCopy, #24 : « conduite par un autre : manche pas annoncee ici » quand l'invite la mene).
+        static int drgStep, drgDrive; static float drgProbe;
+        static void MscDragAudit(float t)
+        {
+            bool host = Net.Session.IsHost;
+            if (t > 20f && drgStep == 0)
+            {
+                drgStep = 1;
+                if (host && Config.GetInt("Test", "DragQui", 0) != 0)
+                {
+                    GameObject sp = Game.FindAny("DRAGRACE/SpawnToDrag");
+                    if (sp != null) PutPlayer(sp.transform.position + Vector3.up * 0.5f);
+                    Log.Info("autotest : mscdrag, hote pose sur DRAGRACE/SpawnToDrag " + (sp != null ? sp.transform.position.ToString("F1") : "(introuvable)"));
+                }
+                MscEvents.TestHere();
+            }
+            if (t > 40f && drgStep == 1)
+            {
+                drgStep = 2;
+                Log.Info("autotest : mscdrag, " + WorldFsms.TestSkip("DRAGRACE/LOD/DRAGSTRIP/DragTiming/LaneLeft/Stageline2left", "Staging") + " | " + WorldFsms.TestSkip("DRAGRACE/LOD/DRAGSTRIP/DragTiming/LaneLeft/Bluelane", "Trigger")
+                         + " | " + WorldFsms.TestSkip("DRAGRACE/LOD/DRAGSTRIP/Drag1/dragcar1", "ThrottleDrag"));
+                MscEvents.TestHere();
+            }
+            string dv = Config.Get("Test", "DragVolant", "");
+            if (!host && dv.Length > 0 && t > 30f && drgDrive == 0) { drgDrive = 1; Log.Info("autotest : mscdrag, invite : " + VehicleSync.TestEnter(dv, false)); }
+            if (!host && dv.Length > 0 && t > 33f && drgDrive == 1) { drgDrive = 2; Log.Info("autotest : mscdrag, invite au volant de " + dv + " : " + VehicleSync.TestEnter(dv, true)); }
+            string ds = Config.Get("Test", "DragSonde", "");
+            if (host && ds.Length > 0 && t > 40f && t < 160f && t >= drgProbe) { drgProbe = t + 10f; DragMsc.TestCopy(ds); }
+        }
+
+        // ([Test] BoulonsRoule=<s>, chez l'hote -- Autotest=mscboulons et mscchance : il prend le volant de la SATSUMA a ce moment, la fait
+        // rouler a 4 m/s de s+3 a s+11 (copie chez l'invite), puis la lache et sort a s+16)
+        static int chStep;   // (Autotest=mscchance)
+        static void BoulonsRoule(float t)
+        {
+            float rl = Config.GetFloat("Test", "BoulonsRoule", 0f);
+            if (rl > 0f && Net.Session.IsHost)
+            {
+                Rigidbody cb = VehicleSync.Body("SATSUMA");
+                if (t > rl && boltStep == 0) { boltStep = 1; Log.Info("autotest : mscboulons, volant -> " + VehicleSync.TestEnter("SATSUMA", true)); }
+                if (cb != null && t > rl + 3f && t < rl + 11f) { Vector3 v = cb.transform.forward * 4f; cb.velocity = new Vector3(v.x, cb.velocity.y, v.z); if (boltStep == 1) { boltStep = 2; Log.Info("autotest : mscboulons, la voiture roule"); } }
+                if (t > rl + 16f && boltStep == 2) { boltStep = 3; Log.Info("autotest : mscboulons, sortie -> " + VehicleSync.TestExit("SATSUMA")); }
+            }
+        }
+
+        // ([Test] Autotest=doublevolant, 2 joueurs, audit MSC 02/11 F #49 : deux joueurs prennent le volant de la meme voiture dans la
+        // meme seconde) : sur l'horloge commune, chacun va a DoubleVoiture (SATSUMA, moteur coupe) a T+5 et prend le volant a T+10 (heure
+        // murale au journal : meme seconde des deux cotes) ; chacun note VehicleSync.TestDoubleVolant a T+13 et T+16.
+        static int dvStep;
+        static void DoubleVolant()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            string car = Config.Get("Test", "DoubleVoiture", "SATSUMA(557kg, 248)");
+            if (dvStep == 0 && d > 5f) { dvStep = 1; Log.Info("autotest : doublevolant, " + VehicleSync.TestEnter(car, false)); }
+            if (dvStep == 1 && d > 10f) { dvStep = 2; Log.Info("autotest : doublevolant, volant a " + System.DateTime.Now.ToString("HH:mm:ss.fff") + " -> " + VehicleSync.TestEnter(car, true)); }
+            if (dvStep == 2 && d > 13f || dvStep == 3 && d > 16f) { dvStep++; Log.Info("autotest : doublevolant T+" + d.ToString("F0") + " : " + VehicleSync.TestDoubleVolant(car)); }
+        }
+
+        // ([Test] Autotest=msccles, 2 joueurs, audit MSC 02/11 A #48 : cles des vehicules prises chez l'oncle, partagees) : sur l'horloge
+        // commune, a T+5 chacun allume YARD/UNCLE/Home/GifuKeys (et ses parents) et note les cles (WorldFsms.Keys) ; a T+10 l'auteur
+        // ([Test] ClesAuteur=hote|invite, hote par defaut) prend les cles comme le clic (GifuKeys 'Wait button' -USE-> 'State 4', envoye) ;
+        // l'autre va a la GIFU a T+12 et s'assoit a T+13 ; a T+15 chacun note les cles et l'autre tourne la cle de la GIFU ('Test') ; a
+        // T+17 il note son demarreur (StartProbe : ACC).
+        static int clStep;
+        static void MscCles()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            bool author = (Config.Get("Test", "ClesAuteur", "hote") == "invite") != Net.Session.IsHost;
+            const string gifu = "GIFU(750/450psi)";
+            if (clStep == 0 && d > 5f)
+            {
+                clStep = 1;
+                GameObject gk = Game.FindAny("YARD/UNCLE/Home/GifuKeys");
+                LightUp(gk);
+                Log.Info("autotest : msccles, GifuKeys " + (gk != null ? "allume" : "introuvable") + " ; " + WorldFsms.Keys());
+            }
+            if (clStep == 1 && d > 10f) { clStep = 2; if (author) Log.Info("autotest : msccles, auteur : " + WorldFsms.TestSend("GifuKeys", "Wait button", "USE", "State 4")); }
+            if (clStep == 2 && d > 12f) { clStep = 3; if (!author) Log.Info("autotest : msccles, l'autre : " + VehicleSync.TestEnter(gifu, false)); }
+            if (clStep == 3 && d > 13f) { clStep = 4; if (!author) Log.Info("autotest : msccles, l'autre au volant de la GIFU : " + VehicleSync.TestEnter(gifu, true)); }
+            if (clStep == 4 && d > 15f) { clStep = 5; Log.Info("autotest : msccles, " + WorldFsms.Keys()); if (!author) Log.Info("autotest : msccles, l'autre tourne la cle : " + VehicleSync.TestKey(gifu, "Test")); }
+            if (clStep == 5 && d > 17f) { clStep = 6; if (!author) Log.Info("autotest : msccles, GIFU " + VehicleSync.StartProbe(gifu)); }
+        }
+
+        // ([Test] Autotest=fleetpanier, 2 joueurs, audit MSC 02/11 B #7, TestPos=1554,6,739 chez les deux) : sur l'horloge commune, chacun
+        // note le panier de Fleetari a T+3 ; l'hote coche l'alternateur a T+5 (FleetariMsc.TestPick, sans payer) ; l'invite le coche a T+10
+        // et paie a T+11 ('Check money') ; chacun note le panier a T+20 et T+30.
+        static int flpStep;
+        static void FleetPanier()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            bool host = Net.Session.IsHost;
+            if (flpStep == 0 && d > 3f) { flpStep = 1; Log.Info("autotest : fleetpanier, avant : " + FleetariMsc.Basket()); }
+            if (flpStep == 1 && d > 5f) { flpStep = 2; if (host) Log.Info("autotest : fleetpanier, hote : " + FleetariMsc.TestPick("QAlternator")); }
+            if (flpStep == 2 && d > 10f) { flpStep = 3; if (!host) Log.Info("autotest : fleetpanier, invite : " + FleetariMsc.TestPick("QAlternator")); }
+            if (flpStep == 3 && d > 11f)
+            {
+                flpStep = 4;
+                if (!host) { PlayMakerFSM reg = FleetariRegister(); if (reg != null) Game.SetState(reg, "Check money"); Log.Info("autotest : fleetpanier, invite paie -> " + (reg != null ? reg.ActiveStateName : "caisse introuvable")); }
+            }
+            if (flpStep == 4 && d > 20f || flpStep == 5 && d > 30f) { flpStep++; Log.Info("autotest : fleetpanier T+" + d.ToString("F0") + " : " + FleetariMsc.Basket() + " ; " + Wallet.State()); }
+        }
+
+        // ([Test] Autotest=fleetcaisse, 2 joueurs, audit MSC 02/11 B #12, TestPos=1561,5.6,733 chez les deux, aux heures d'ouverture) : sur
+        // l'horloge commune, chacun note le panier a T+5 ; l'invite coche le demarreur (QStarter) et paie a T+10 ('Check money') ; chacun
+        // note le panier, la caisse et le bras de Fleetari toutes les 2 s de T+11 a T+35.
+        static int fcStep; static float fcLog;
+        static void FleetCaisse()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            if (fcStep == 0 && d > 5f) { fcStep = 1; Log.Info("autotest : fleetcaisse, avant : " + FleetariMsc.Basket()); }
+            if (fcStep == 1 && d > 10f)
+            {
+                fcStep = 2;
+                if (!Net.Session.IsHost)
+                {
+                    Log.Info("autotest : fleetcaisse, invite : " + FleetariMsc.TestPick("QStarter"));
+                    PlayMakerFSM reg = FleetariRegister();
+                    if (reg != null) Game.SetState(reg, "Check money");
+                    Log.Info("autotest : fleetcaisse, invite paie -> " + (reg != null ? reg.ActiveStateName : "caisse introuvable"));
+                }
+            }
+            if (fcStep == 2 && d > 11f && d < 36f && d >= fcLog) { fcLog = d + 2f; Log.Info("autotest : fleetcaisse T+" + d.ToString("F0") + " : " + FleetariMsc.Basket()); }
+        }
+
+        // ([Test] Autotest=fleettravaux, 2 joueurs, audit MSC 02/11 B #8 / #45 : invite parti avant ses travaux chez Fleetari) : sur
+        // l'horloge commune, l'invite commande des travaux longs a T+5 (FleetariMsc.TestOrder 3000 s) et quitte la session a T+15
+        // (Session.Stop : au revoir envoye, le jeu reste ouvert) ; l'hote note FleetariMsc.State a T+10, ecrit les travaux de l'invite
+        // dans sa sauvegarde a T+13 (TestSaveOrder), puis note State a T+17, T+30 et T+45. [Test] TravauxLoin=1 : l'hote part a la
+        // maison (a plus de 100 m de Fleetari) a T+12.
+        static int ftStep;
+        static void FleetTravaux()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            if (!Net.Session.IsHost)
+            {
+                if (ftStep == 0 && d > 5f) { ftStep = 1; Log.Info("autotest : fleettravaux, invite : " + FleetariMsc.TestOrder(3000f)); }
+                if (ftStep == 1 && d > 15f) { ftStep = 2; Log.Info("autotest : fleettravaux, l'invite quitte la session"); Net.Session.Stop(); }
+                return;
+            }
+            if (ftStep == 0 && d > 10f) { ftStep = 1; Log.Info("autotest : fleettravaux, hote T+10 : " + FleetariMsc.State()); }
+            if (ftStep == 1 && d > 12f) { ftStep = 2; if (Config.GetInt("Test", "TravauxLoin", 0) != 0) { Teleport("YARD/Building", new Vector3(0f, 1f, 0f)); Log.Info("autotest : fleettravaux, hote a la maison"); } }
+            if (ftStep == 2 && d > 13f) { ftStep = 3; Log.Info("autotest : fleettravaux, hote : " + FleetariMsc.TestSaveOrder()); }
+            if (ftStep >= 3 && ftStep < 6 && d > (ftStep == 3 ? 17f : ftStep == 4 ? 30f : 45f)) { ftStep++; Log.Info("autotest : fleettravaux, hote T+" + d.ToString("F0") + " : " + FleetariMsc.State()); }
+        }
+
+        // ([Test] Autotest=mscct, 2 joueurs, audit MSC 02/11 B #44 : controle technique passe par l'invite ; TestPos = lieu du controle) :
+        // [Test] HoteLoin=1 : l'hote part a la maison a T+2 ; sur l'horloge commune, l'invite passe le controle a T+10 (Shop.TestInspection
+        // vrai : resultat 'Pass' envoye comme Results) ; chacun note l'etat du controle et PlayerStress toutes les 5 s de T+5 a T+120.
+        static int ctStep; static float ctLog;
+        static void MscCt()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            bool host = Net.Session.IsHost;
+            if (ctStep == 0 && d > 2f) { ctStep = 1; if (host && Config.GetInt("Test", "HoteLoin", 0) != 0) { Teleport("YARD/Building", new Vector3(0f, 1f, 0f)); Log.Info("autotest : mscct, hote a la maison (HoteLoin=1)"); } }
+            if (ctStep == 1 && d > 10f) { ctStep = 2; if (!host) Log.Info("autotest : mscct, invite passe le controle : " + Shop.TestInspection(true)); }
+            if (d > 5f && d < 121f && d >= ctLog) { ctLog = d + 5f; Log.Info("autotest : mscct T+" + d.ToString("F0") + " : " + Shop.InspectionState() + ", PlayerStress " + Game.GlobalFloat("PlayerStress").ToString("F1")); }
+        }
+
+        // ([Test] Autotest=mscprix, 2 joueurs, audit MSC 02/11 B #15 : enveloppe du prix du rallye, personnelle) : sur l'horloge commune,
+        // chacun allume RALLY/Sunday/FinishArea/Stuff/PayMoney (et ses parents) a T+5 avec Use.Money=1000 ; a T+10 il note
+        // Wallet.TestOwnState et son liquide ; l'hote prend l'enveloppe a T+15 (Use 'Wait button' puis USE, comme le clic) ; chacun note a
+        // T+25 si son enveloppe est encore allumee et son liquide.
+        static int pxStep; static float pxCash;
+        static void MscPrix()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            GameObject pm = Game.FindAny("RALLY/Sunday/FinishArea/Stuff/PayMoney");
+            PlayMakerFSM use = pm != null ? Game.FsmOn(pm, "Use") : null;
+            if (pxStep == 0 && d > 5f)
+            {
+                pxStep = 1;
+                LightUp(pm);
+                FsmFloat m = use != null ? use.FsmVariables.FindFsmFloat("Money") : null;
+                if (m != null) m.Value = 1000f;
+                Log.Info("autotest : mscprix, enveloppe " + (pm == null ? "introuvable" : "allumee, Use [" + (use != null ? use.ActiveStateName : "?") + "] Money " + (m != null ? m.Value.ToString("F0") : "?")));
+            }
+            if (pxStep == 1 && d > 10f) { pxStep = 2; pxCash = Wallet.Cash; Log.Info("autotest : mscprix, " + Wallet.TestOwnState() + " ; liquide " + pxCash.ToString("F0")); }
+            if (pxStep == 2 && d > 15f) { pxStep = 3; if (Net.Session.IsHost && use != null) { Game.SetState(use, "Wait button"); use.SendEvent("USE"); Log.Info("autotest : mscprix, l'hote prend l'enveloppe -> Use [" + use.ActiveStateName + "]"); } }
+            if (pxStep == 3 && d > 25f) { pxStep = 4; Log.Info("autotest : mscprix, apres : enveloppe " + (pm == null ? "introuvable" : pm.activeSelf ? "allumee" : "eteinte") + ", liquide " + pxCash.ToString("F0") + " -> " + Wallet.Cash.ToString("F0") + " ; " + Wallet.TestOwnState()); }
+        }
+
+        // ([Test] Autotest=dancing, audit MSC 02/11 B #69, une session : reputation du dancing de chacun ; TestPos devant le dancing) :
+        // l'hote pose ReputationAlltime=30 sur DANCEHALL/Functions/GUARD/Guard::React a 30 s et sauvegarde en jeu (avant l'arrivee de
+        // l'invite, lance ~50 s plus tard), puis note sa valeur a 110 s ; l'invite note Wallet.TestOwnState a 40 s, pose sa reputation a 7
+        // a 50 s et la note a 55 s. (2e session de l'invite : meme mode, la ligne de 40 s doit montrer 7.)
+        static int dcStep;
+        static void Dancing(float t)
+        {
+            GameObject gg = Game.FindAny("DANCEHALL/Functions/GUARD/Guard");
+            PlayMakerFSM g = gg != null ? Game.FsmOn(gg, "React") : null;
+            FsmInt rep = g != null ? g.FsmVariables.FindFsmInt("ReputationAlltime") : null;
+            if (Net.Session.IsHost)
+            {
+                if (dcStep == 0 && t > 30f) { dcStep = 1; if (rep != null) rep.Value = 30; Game.SaveInPlace(); Log.Info("autotest : dancing, hote : ReputationAlltime " + (rep != null ? rep.Value.ToString() : "? (videur introuvable)") + ", sauvegarde en jeu faite"); }
+                if (dcStep == 1 && t > 110f) { dcStep = 2; Log.Info("autotest : dancing, hote : ReputationAlltime " + (rep != null ? rep.Value.ToString() : "?")); }
+                return;
+            }
+            if (dcStep == 0 && t > 40f) { dcStep = 1; Log.Info("autotest : dancing, " + Wallet.TestOwnState()); }
+            if (dcStep == 1 && t > 50f) { dcStep = 2; if (rep != null) rep.Value = 7; Log.Info("autotest : dancing, invite : ReputationAlltime " + (rep != null ? rep.Value.ToString() : "? (videur introuvable)")); }
+            if (dcStep == 2 && t > 55f) { dcStep = 3; Log.Info("autotest : dancing, " + Wallet.TestOwnState()); }
+        }
+
+        // ([Test] Autotest=odometre, 2 joueurs, audit MSC 02/11 F #67 : compteur kilometrique de la SATSUMA -- dashboard meters monte --
+        // conduite par l'invite) : sur l'horloge commune (comme Autotest=tremble), l'hote sort la voiture vide sur la route a T+3 (RouesX/Y/Z/
+        // Cap, comme TrembleSortie ; [Test] OdoSortie=0 : sur place) ; l'invite va a la voiture a T+5, prend le volant a T+10, lance le
+        // moteur a T+12 et la fait rouler roues libres (point mort, freins laches) a OdoVitesse m/s (20) en virage OdoVirage rad/s (0.3)
+        // de T+16 a T+16+OdoDuree (60), la freine 3 s puis sort ; chacun note VehicleSync.TestOdometre toutes les 10 s de T+10 a la fin,
+        // et 3 s apres la sortie de l'invite.
+        static int odStep; static float odLog; static bool odOut, odAfter;
+        static void Odometre()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            string car = Config.Get("Test", "OdoVoiture", "SATSUMA(557kg, 248)");
+            Rigidbody sb = VehicleSync.Body(car);
+            bool drv = !Net.Session.IsHost;
+            float end = 16f + Config.GetFloat("Test", "OdoDuree", 60f);
+            if (!drv && sb != null && d > 3f && !odOut && Config.GetInt("Test", "OdoSortie", 1) != 0)
+            {
+                odOut = true;
+                Vector3 to = new Vector3(Config.GetFloat("Test", "RouesX", 30f), Config.GetFloat("Test", "RouesY", 1.2f), Config.GetFloat("Test", "RouesZ", -55f));
+                sb.position = to; sb.transform.position = to; sb.rotation = Quaternion.Euler(0f, Config.GetFloat("Test", "RouesCap", 120f), 0f); sb.transform.rotation = sb.rotation;
+                sb.velocity = Vector3.zero; sb.angularVelocity = Vector3.zero;
+                Log.Info("autotest : odometre, voiture sortie en " + to.ToString("F1"));
+            }
+            if (drv && odStep == 0 && d > 5f) { odStep = 1; Log.Info("autotest : odometre, " + VehicleSync.TestEnter(car, false)); }
+            if (drv && odStep == 1 && d > 10f) { odStep = 2; Log.Info("autotest : odometre, volant -> " + VehicleSync.TestEnter(car, true)); }
+            if (drv && odStep == 2 && d > 12f) { odStep = 3; Log.Info("autotest : odometre, " + VehicleSync.TestStart(car)); }
+            if (drv && sb != null && odStep == 3 && d > 16f && d < end)
+            {
+                foreach (Wheel w in sb.GetComponentsInChildren<Wheel>()) { w.handbrake = 0f; w.brake = 0f; }
+                Drivetrain odt = sb.GetComponent<Drivetrain>();
+                if (odt != null && odt.gearRatios != null) { int nz = System.Array.IndexOf(odt.gearRatios, 0f); if (nz >= 0 && odt.gear != nz) odt.gear = nz; }
+                Vector3 f = sb.transform.forward; f.y = 0; f.Normalize();
+                sb.velocity = f * Config.GetFloat("Test", "OdoVitesse", 20f) + Vector3.up * Mathf.Min(sb.velocity.y, 0f);
+                sb.angularVelocity = new Vector3(sb.angularVelocity.x, Config.GetFloat("Test", "OdoVirage", 0.3f), sb.angularVelocity.z);
+            }
+            if (drv && sb != null && odStep == 3 && d > end && d < end + 3f) sb.velocity = Vector3.Lerp(sb.velocity, Vector3.zero, 0.15f);
+            if (drv && odStep == 3 && d > end + 4f) { odStep = 4; Log.Info("autotest : odometre, sortie -> " + VehicleSync.TestExit(car)); }
+            if (d > 10f && d < end + 30f && d >= odLog) { odLog = d + 10f; Log.Info("autotest : odometre T+" + d.ToString("F0") + " : " + VehicleSync.TestOdometre(car) + (sb != null ? ", v " + sb.velocity.magnitude.ToString("F1") + " m/s" : "")); }
+            if (!odAfter && d > end + 7f) { odAfter = true; Log.Info("autotest : odometre, apres la remise : " + VehicleSync.TestOdometre(car)); }
+        }
+
+        // ([Test] Autotest=mscbateau3, 2 joueurs, audit MSC 02/11 F #50, d'apres mscbateau2 : moteur de la barque repris tournant) : sur
+        // l'horloge commune, l'invite va a la barque a T+5 (barre a T+10), lance le moteur a T+14 et sort a T+30 sans le couper (barque
+        // arretee, au plus tard T+40) ; l'hote y va a T+36, prend la barre a T+38 (moteur encore tournant), coupe le moteur a T+48 et sort
+        // a T+50 (au plus tard T+58) ; chacun note VehicleSync.TestBateauMoteur toutes les 2 s jusqu'a T+70.
+        static int b3Step; static float b3Log;
+        static void MscBateau3()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            Rigidbody b = VehicleSync.Body("BOAT");
+            bool still = b != null && b.velocity.magnitude < 0.2f;
+            if (!Net.Session.IsHost)
+            {
+                if (b3Step == 0 && d > 5f) { b3Step = 1; Log.Info("autotest : mscbateau3, " + VehicleSync.TestEnter("BOAT", false)); }
+                if (b3Step == 1 && d > 10f) { b3Step = 2; Log.Info("autotest : mscbateau3, moteur -> " + VehicleSync.TestEnter("BOAT", true)); }
+                if (b3Step == 2 && d > 14f) { b3Step = 3; Log.Info("autotest : mscbateau3, lance : " + BoatStart(true)); }
+                if (b3Step == 3 && d > 30f && (still || d > 40f)) { b3Step = 4; Log.Info("autotest : mscbateau3, l'invite sort moteur tournant -> " + VehicleSync.TestExit("BOAT")); }
+            }
+            else
+            {
+                if (b3Step == 0 && d > 36f) { b3Step = 1; Log.Info("autotest : mscbateau3, hote : " + VehicleSync.TestEnter("BOAT", false)); }
+                if (b3Step == 1 && d > 38f) { b3Step = 2; Log.Info("autotest : mscbateau3, hote a la barre -> " + VehicleSync.TestEnter("BOAT", true)); }
+                if (b3Step == 2 && d > 48f) { b3Step = 3; Log.Info("autotest : mscbateau3, hote coupe le moteur : " + BoatStart(false)); }
+                if (b3Step == 3 && d > 50f && (still || d > 58f)) { b3Step = 4; Log.Info("autotest : mscbateau3, hote sort -> " + VehicleSync.TestExit("BOAT")); }
+            }
+            if (d < 70f && d >= b3Log) { b3Log = d + 2f; Log.Info("autotest : mscbateau3 T+" + d.ToString("F0") + " : " + VehicleSync.TestBateauMoteur()); }
+        }
+
+        // ([Test] Autotest=serrage, 2 joueurs, audit MSC 02/11 E #31 : serrage du filtre a huile / des bougies) : sur l'horloge commune,
+        // l'invite tourne la vis de [Test] SerrageCle (oilfilter ; sparkplug0...) d'un cran toutes les 0,5 s de T+10 a T+14,2 (Fluids.TestNotch,
+        // 8 crans) ; chacun note le serrage (Fluids.TestScrew) a T+25.
+        static int serLog; static float serNext;
+        static void Serrage()
+        {
+            float d = AuditT();
+            if (d < 0f) return;
+            string sc = Config.Get("Test", "SerrageCle", "oilfilter");
+            if (!Net.Session.IsHost && d > 10f && d < 14.2f && Time.realtimeSinceStartup >= serNext) { serNext = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : serrage " + Fluids.TestNotch(sc)); }
+            if (d > 25f && serLog == 0) { serLog = 1; Log.Info("autotest : serrage " + Fluids.TestScrew(sc)); }
+        }
+
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -1733,6 +2118,9 @@ namespace MWCoop
             // l'hote pose calage 123, parallelisme FL 2,5, pont 3,9, pneu wheel_steel1 a 42, et tord le coin FL (0, 5, 3) ; etat a EtatA s)
             if (mode == "mscreglages")
             {
+                // ([Test] ReglagesEssai=amorti,parallelisme,ralenti,allumage : essais de l'audit MSC 02/11 a la place, voir ReglagesEssai)
+                string rgx = Config.Get("Test", "ReglagesEssai", "");
+                if (rgx.Length > 0) { ReglagesEssai(rgx); return; }
                 float ma = Config.GetFloat("Test", "MoteurA", 70f), at = Config.GetFloat("Test", "EtatA", 90f);
                 if (t > ma && step == 0) { step = 1; Log.Info("autotest : mscreglages, " + (Net.Session.IsHost ? MscTestSettings() : "invite : attente des reglages de l'hote")); }
                 if (t > at && step == 1) { step = 2; MscEtat(); }
@@ -1776,14 +2164,18 @@ namespace MWCoop
                     else if (wheelAt == 0f) { wheelAt = t; float wt = Config.GetFloat("Test", "BoulonsRoueSerrage", -1f); if (wt >= 0f) wu.FsmVariables.GetFsmFloat("Tightness").Value = wt; Game.SetState(wu, "Chance"); Log.Info("autotest : mscboulons, roue : Chance (Tightness " + wu.FsmVariables.GetFsmFloat("Tightness").Value + ")"); }
                     else if (t > wheelAt + 0.5f) { Log.Info("autotest : mscboulons, roue : apres -> [" + wu.ActiveStateName + "], Tightness " + wu.FsmVariables.GetFsmFloat("Tightness").Value + ", sous " + (wu.transform.parent != null ? wu.transform.parent.name : "rien")); wheelAt = 0f; wheelTry++; }
                 }
-                float rl = Config.GetFloat("Test", "BoulonsRoule", 0f);
-                if (rl > 0f && Net.Session.IsHost)
-                {
-                    Rigidbody cb = VehicleSync.Body("SATSUMA");
-                    if (t > rl && boltStep == 0) { boltStep = 1; Log.Info("autotest : mscboulons, volant -> " + VehicleSync.TestEnter("SATSUMA", true)); }
-                    if (cb != null && t > rl + 3f && t < rl + 11f) { Vector3 v = cb.transform.forward * 4f; cb.velocity = new Vector3(v.x, cb.velocity.y, v.z); if (boltStep == 1) { boltStep = 2; Log.Info("autotest : mscboulons, la voiture roule"); } }
-                    if (t > rl + 16f && boltStep == 2) { boltStep = 3; Log.Info("autotest : mscboulons, sortie -> " + VehicleSync.TestExit("SATSUMA")); }
-                }
+                BoulonsRoule(t);
+                return;
+            }
+            // ([Test] Autotest=mscchance, 2 joueurs, audit MSC 02/11 D #30 : la casse d'une piece mal serree n'est tiree au sort que chez celui
+            // qui mene la voiture) : l'hote conduit la SATSUMA avec [Test] BoulonsRoule=<s> (comme mscboulons : volant a s, roule de s+3 a s+11,
+            // sort a s+16) ; avec [Test] ChanceForcer=1, a ChanceA s (60) la piece ChancePiece (db:Database/DatabaseMotor/Carburator) est mise en
+            // 'Chance' ici au serrage ChanceSerrage (1) -- Parts.TestChance note l'etat d'arrivee, Detach, l'autorite et le suivi des quetes.
+            if (mode == "mscchance")
+            {
+                if (t > Config.GetFloat("Test", "ChanceA", 60f) && chStep == 0 && Config.GetInt("Test", "ChanceForcer", 0) != 0)
+                { chStep = 1; Log.Info("autotest : chance " + Parts.TestChance(Config.Get("Test", "ChancePiece", "db:Database/DatabaseMotor/Carburator"), Config.GetFloat("Test", "ChanceSerrage", 1f))); }
+                BoulonsRoule(t);
                 return;
             }
             // ([Test] Autotest=mscpassager, 2 joueurs, Markos 26/10 -- voiture qui tremble et fait du bruit chez le passager) :
@@ -2405,7 +2797,22 @@ namespace MWCoop
                 return;
             }
             if (mode == "mscvolant") { Parts.TestVolant(t); return; }   // (volant stock monte chez l'autre et declare GT, Kamixak 24/10)
-            if (mode == "mscdrag") { DragMsc.Test(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10)
+            if (mode == "mscdrag") { DragMsc.Test(t); MscDragAudit(t); return; }   // (feuille RESULTS des dragsters avec les pilotes humains, 24/10 ; sondes de l'audit MSC 02/11)
+            // (audit MSC 02/11 : participation au rallye de l'invite gardee hors de la sauvegarde de l'hote, C #18/#58/#19 ; week-end
+            // suivant, temps des autres effaces, C #17/#19 -- RallyMsc journalise lui-meme)
+            if (mode == "mscrallyeinvite") { RallyMsc.TestGuestStore(t); return; }
+            if (mode == "mscpodiumsemaine") { RallyMsc.TestWeek(t); return; }
+            if (mode == "doublevolant") { DoubleVolant(); return; }   // (F #49)
+            if (mode == "msccles") { MscCles(); return; }   // (A #48)
+            if (mode == "fleetpanier") { FleetPanier(); return; }   // (B #7)
+            if (mode == "fleetcaisse") { FleetCaisse(); return; }   // (B #12)
+            if (mode == "fleettravaux") { FleetTravaux(); return; }   // (B #8, #45)
+            if (mode == "mscct") { MscCt(); return; }   // (B #44)
+            if (mode == "mscprix") { MscPrix(); return; }   // (B #15)
+            if (mode == "dancing") { Dancing(t); return; }   // (B #69, une session)
+            if (mode == "odometre") { Odometre(); return; }   // (F #67)
+            if (mode == "mscbateau3") { MscBateau3(); return; }   // (F #50)
+            if (mode == "serrage") { Serrage(); return; }   // (E #31)
             if (mode == "mscdepart") { RallyMsc.TestStart(t); return; }   // (chrono du depart du rallye, Jani 31/10)
             if (mode == "msctrophee") { RallyMsc.Test(t); return; }   // (trophee du podium du rallye cree chez un joueur : chez les autres ?)
             if (mode == "mscpodium") { RallyMsc.TestPodium(t); return; }   // (podium du rallye qui attend les autres humains, 24/10)
@@ -3294,6 +3701,24 @@ namespace MWCoop
                 LightsGuard.TestKey(mode, t);
                 if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
                 if (mode == "coupure") Home.Test(mode, t);   // (MSC aussi : coupures de l'orage, dossier #32 31/10)
+                // (audit MSC 02/11 : modules qui tournent aussi sur My Summer Car -- kilju et bidons (G #1/#51), ventti et nasse du chalet
+                // (G #2/#53/#65), vitrines (G #9), auto-stoppeurs (G #66), vidange et plein (E #40/#46), fuite du conducteur (E #47) ;
+                // chacun inerte hors de son mode)
+                if (mode == "kilju" || mode == "kiljuremplir") Home.Test(mode, t);
+                if (mode == "ventti" || mode == "ventti2" || mode == "nasse") Machines.Test(mode, t);
+                if (mode == "vitrine") Vitrines.Test(mode, t);
+                if (mode == "stop") Npcs.Test(mode, t);
+                if (mode == "vidange" || mode == "plein") Fluids.TestFill(mode, t);
+                if (mode == "fuiteconducteur") CarLeaks.Test(mode, t);
+                // ([Test] TestPos=x,y,z sur My Summer Car, pour ces essais de l'audit MSC 02/11 seulement : teleporte a 8 s, comme sur MWC)
+                if (!auditPosDone && t > 8f && Config.Get("Test", "TestPos", "").Length > 0
+                    && System.Array.IndexOf(new[] { "kilju", "kiljuremplir", "ventti", "ventti2", "nasse", "vitrine", "stop", "fleetpanier", "fleetcaisse", "mscct", "dancing" }, mode) >= 0)
+                {
+                    auditPosDone = true;
+                    string[] c = Config.Get("Test", "TestPos", "").Split(',');
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    if (c.Length >= 3) { PutPlayer(new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci))); Log.Info("autotest : teleporte en " + Config.Get("Test", "TestPos", "")); }
+                }
                 // ([Test] Autotest=mscleviers, Markos 28/10 : LeviersPilote=1 (l'invite) monte sur la JONNEZ a 30 s, coupe son AxisCarController a 40 s
                 // et tient gaz 0,8 / frein 0,5 / embrayage 0,6 comme la manette, jusqu'a 70 s ; chacun releve l'angle des trois leviers toutes les 5 s)
                 if (mode == "mscleviers") Leviers(t);
