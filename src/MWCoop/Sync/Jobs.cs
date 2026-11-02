@@ -94,6 +94,7 @@ namespace MWCoop
             public HashSet<string> RandomStates = new HashSet<string>();                     // etats qui tirent au sort
             public HashSet<string> ClickStates = new HashSet<string>();                      // etats qui attendent un clic
             public HashSet<string> HeldStates = new HashSet<string>();                       // MSC, 'Screw' : etats tenus (GetMouseButtonUp), voir OnLocal
+            public bool HeldHere;                                                            // ... etat tenu atteint ici (clic d'ici), pas pose par un rejeu
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();  // transitions prises ici
             public bool FromReplay;                                                          // cle : derniere position recue d'un autre
             public HashSet<string> InputStates = new HashSet<string>();                      // etats qui lisent la souris ou le clavier
@@ -212,7 +213,7 @@ namespace MWCoop
             public new string State;   // (nom de l'etat accroche ; masque FsmStateAction.State, que PlayMaker lit par son propre type)
             public override void OnEnter()
             {
-                try { if (Replay.Depth == 0) OnLocal(J, State); else J.Entered.Add(State); } catch (System.Exception e) { Replay.HookError(e); }
+                try { if (Replay.Depth == 0) OnLocal(J, State); else { J.Entered.Add(State); J.HeldHere = false; } } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -491,6 +492,9 @@ namespace MWCoop
         }
         static void OnLocal(Job j, string state)
         {
+            // Etat tenu atteint ici (entree locale, Depth 0) ; le crochet le remet a faux quand un rejeu pose l'automate (revue audit MSC 02/11).
+            bool heldHere = j.HeldHere;
+            j.HeldHere = j.HeldStates.Contains(state);
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 25f) return;
             FsmTransition tr = j.F.Fsm.LastTransition;
             if (tr == null || tr.ToState != state) return;
@@ -502,7 +506,10 @@ namespace MWCoop
             // idlethrottle et throttle a 1 a chaque image tant que le clic est tenu, -FINISHED-> 'Get scroll' au relachement ou a plus de 2 m) :
             // l'entree partait, jamais la sortie -- chez l'autre l'automate restait dans 'Screw', moteur a fond jusqu'a ce qu'il clique ou
             // s'eloigne (surregime, coussinets). Le relachement part aussi (audit MSC 02/11 ; [Test] TenuRelache=0 : comme avant).
-            if (!click && tr.EventName == "FINISHED" && j.Control && from != null && j.HeldStates.Contains(from.Name) && HeldRelease()) click = true;
+            // Seulement si l'etat tenu a ete atteint ICI (heldHere) : la copie posee dans 'Screw' par le rejeu en sort toute seule au
+            // premier relachement de clic gauche, n'importe ou, ou a plus de 2 m -- envoyee, cette sortie relachait l'accelerateur de
+            // celui qui tient encore la tringlerie (revue audit MSC 02/11).
+            if (!click && tr.EventName == "FINISHED" && j.Control && from != null && j.HeldStates.Contains(from.Name) && heldHere && HeldRelease()) click = true;
             if (Ignore.Contains(tr.EventName) && !click) return;
             if (j.Control && DoorEvents.Contains(tr.EventName)) return;   // (lumiere de l'habitacle : la portiere rejouee la mene deja chez les autres)
             if (!j.Control && Npcs.LedElsewhere(j.F.transform)) return;   // PNJ mene par un autre joueur (client du taxi) : sa logique fait foi
@@ -1169,7 +1176,8 @@ namespace MWCoop
         // Essais (audit MSC 02/11, etat tenu) : la commande 'part' (tringlerie : "throttle linkage") posee dans 'held' sans envoi, puis
         // relachee ici comme par le jeu (-FINISHED->) : le crochet l'envoie si c'est un etat tenu (journal « quete : ... Screw -FINISHED->
         // Get scroll » ici, « quete de #N : ... -> Get scroll » chez les autres). Retour : etats tenus et etat atteint.
-        public static string TestHeld(string part, string held)
+        // here=false : etat tenu pose comme par un rejeu (copie d'un autre) -- la sortie ne doit PAS partir (revue audit MSC 02/11).
+        public static string TestHeld(string part, string held, bool here = true)
         {
             foreach (Job j in jobs.Values)
                 if (j.F != null && j.Key.Contains(part))
@@ -1177,9 +1185,10 @@ namespace MWCoop
                     if (j.F.Fsm.GetState(held) == null) return j.Key + " : pas d'etat " + held;
                     applying = true; Replay.Depth++;
                     try { Game.SetState(j.F, held); } finally { applying = false; Replay.Depth--; }
+                    j.HeldHere = here;
                     string at = j.F.ActiveStateName;
                     j.F.SendEvent("FINISHED");
-                    return j.Key + " (etats tenus : " + string.Join(", ", new List<string>(j.HeldStates).ToArray()) + ") : " + at + " -FINISHED-> " + j.F.ActiveStateName;
+                    return j.Key + " (etats tenus : " + string.Join(", ", new List<string>(j.HeldStates).ToArray()) + (here ? ", tenu ici" : ", pose par rejeu") + ") : " + at + " -FINISHED-> " + j.F.ActiveStateName;
                 }
             return "rien pour " + part;
         }
