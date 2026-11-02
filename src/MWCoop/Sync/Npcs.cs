@@ -75,7 +75,8 @@ namespace MWCoop
         class Rule
         {
             public string Part, Fsm, Top = ""; public string[] Rest = new string[0]; public float Range; public bool Whole;
-            public string Drives;   // seulement si le joueur local mene cette voiture (au volant, ou moteur laisse tournant)
+            public string Drives;   // seulement si le joueur local mene cette voiture (au volant, ou moteur laisse tournant) ; "*" : une voiture quelconque
+            public bool Msc;        // regle de My Summer Car seulement
         }
 
         // Etats lus dans le vidage de la scene (GAME-auto.txt).
@@ -108,7 +109,21 @@ namespace MWCoop
             new Rule { Part = "TAXIJOB/Customer1/", Fsm = "Logic", Rest = new[] { "Idle", "Check Jokke", "Reset customer", "Randomize loca", "ID", "Call", "State 11",
                 "New location", "Activate", "Load", "Save?", "State 12", "Start walking", "Set mass 2", "Leave", "No pay", "State 13" }, Range = 30f,
                 Drives = "MACHTWAGEN" },
+            // Auto-stoppeurs de My Summer Car (audit MSC 02/11), meme cas que le client du taxi : leur logique lit le vehicule du
+            // joueur LOCAL ('Which car' : PlayerCurrentVehicle Satsuma / Ferndale / Ruscko / Van) et les range sous SA GetInPivot.
+            // Chez l'hote le PNJ restait au bord de la route et sa pose ecrasait celle de l'invite qui l'embarquait ; l'hote et
+            // les passagers ne le voyaient jamais dans la voiture. Celui qui conduit le mene maintenant (pose dans le repere de
+            // la voiture). La grand-mere de l'eglise (ChurchGrandma/GrannyHiker :: Logic), Jokke du demenagement
+            // (JOBS/HouseDrunk/Moving/JokkeHiker1 :: Hitch) et Jokke en stop (KILJUGUY/HikerPivot/JokkeHiker2 :: Logic) ; repos =
+            // attente, marche, approche a pied ('Which car' sans voiture reboucle aussitot). [Test] AutoStopMsc=0 : comme avant.
+            new Rule { Part = "ChurchGrandma/GrannyHiker/", Fsm = "Logic", Rest = new[] { "START", "Activate", "Distance 1", "Distance 2", "Which car", "Loop",
+                "Say hello", "Wandering", "Distance 4", "State 10" }, Range = 30f, Drives = "*", Msc = true },
+            new Rule { Part = "Moving/JokkeHiker1/", Fsm = "Hitch", Rest = new[] { "START", "Wait player", "Distance 2", "Which car", "State 2", "Idle",
+                "START 2", "Stop", "State 1", "State 10" }, Range = 30f, Drives = "*", Msc = true },
+            new Rule { Part = "HikerPivot/JokkeHiker2/", Fsm = "Logic", Rest = new[] { "START", "Call or no", "Call player", "State 5", "Wait reset", "Distance 1",
+                "Activate", "Distance 2", "Which car", "State 2", "Wandering", "Distance 4", "State 3", "State 9" }, Range = 30f, Drives = "*", Msc = true },
         };
+        static bool HikersMsc { get { return Game.Msc && Config.GetInt("Test", "AutoStopMsc", 1) != 0; } }
 
         // Logique qu'une voiture qui renverse le PNJ declenche (ragdoll, magasin ferme) : rejouee chez tous.
         // (pietons et client du taxi aussi -- Menor, 18/10 : « les PNJ morts n'apparaissent pas chez les invites » : leur
@@ -251,6 +266,7 @@ namespace MWCoop
             string top = "";
             foreach (Rule r in Rules)
             {
+                if (r.Msc && !HikersMsc) continue;
                 if (!n.Path.Contains(r.Part)) continue;
                 if (rl == null) { rl = new List<Rule>(); rf = new List<PlayMakerFSM>(); }
                 rl.Add(r);
@@ -498,7 +514,7 @@ namespace MWCoop
             {
                 Rule r = n.Rules[i];
                 if ((at - mp).sqrMagnitude > r.Range * r.Range) continue;
-                if (r.Drives != null) { Transform lead = VehicleSync.LocalLeadRoot; if (lead == null || lead.name != r.Drives) continue; }
+                if (r.Drives != null) { Transform lead = VehicleSync.LocalLeadRoot; if (lead == null || r.Drives != "*" && lead.name != r.Drives) continue; }
                 if (r.Fsm == null) return true;
                 PlayMakerFSM f = n.RuleFsms[i];
                 if (f == null || !f.enabled || !f.gameObject.activeInHierarchy) continue;
@@ -1359,6 +1375,41 @@ namespace MWCoop
 
         static string Role { get { return Session.IsHost ? "hote" : "invite"; } }
 
+        // [Test] Autotest=stop (MSC, 2 joueurs pres de la SATSUMA : TestPos ; audit 02/11, auto-stoppeurs). A 25 s chacun envoie HIKE
+        // a la grand-mere (ChurchGrandma/GrannyHiker :: Logic -> 'Activate', corps allume) ; l'invite va a la SATSUMA ([Test] StopVoiture)
+        // a 30 s, s'assied au volant a 32 s, et a 36 s sa grand-mere (ChurchGrandma, l'objet qui marche) est posee sur la GetInPivot :
+        // 'Which car' -> 'Satsuma' -> 'Towards pick point' -> 'Open door' (rangee dans la voiture). Les deux notent toutes les 2 s de
+        // 20 a 80 s la grand-mere et sa distance a la GetInPivot de LEUR SATSUMA. Attendu : invite « engage ici (Logic Open door...) »
+        // et « mene par #1 » ; hote « PNJ : ...GrannyHiker... confie a #1 » puis « suit #1 », a moins de 1,5 m de la GetInPivot.
+        static void TestHike(float t)
+        {
+            Npc n = Find("ChurchGrandma/GrannyHiker/");
+            PlayMakerFSM logic = n != null && n.Root != null ? Game.FsmOn(n.Root.gameObject, "Logic") : null;
+            string car = Config.Get("Test", "StopVoiture", "SATSUMA");
+            if (testStep == 0 && t > 25f)
+            {
+                testStep = 1;
+                if (logic != null) logic.SendEvent("HIKE");
+                Log.Info("autotest stop (" + Role + ") : HIKE -> " + (logic != null ? logic.ActiveStateName : "grand-mere introuvable (regles " + (HikersMsc ? "actives" : "coupees") + ")"));
+            }
+            if (!Session.IsHost && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest stop : invite a la voiture : " + (VehicleSync.TestEnter(car, false) ?? car + " introuvable")); }
+            if (!Session.IsHost && testStep == 2 && t > 32f) { testStep = 3; Log.Info("autotest stop : invite au volant : " + (VehicleSync.TestEnter(car, true) ?? car + " introuvable")); }
+            Transform pivot = null;
+            GameObject cg = Game.FindAny(car.StartsWith("SATSUMA") ? "SATSUMA(557kg, 248)/GetInPivot" : car + "/GetInPivot");
+            if (cg != null) pivot = cg.transform;
+            if (!Session.IsHost && testStep == 3 && t > 36f)
+            {
+                testStep = 4;
+                GameObject walker = Game.FindAny("ChurchGrandma");
+                if (walker != null && pivot != null) walker.transform.position = pivot.position;
+                Log.Info("autotest stop : grand-mere posee sur la GetInPivot (" + (walker != null && pivot != null ? "ok" : "walker ou GetInPivot introuvable") + "), Logic " + (logic != null ? logic.ActiveStateName : "-")
+                         + ", voiture menee ici " + (VehicleSync.LocalLeadRoot != null ? VehicleSync.LocalLeadRoot.name : "aucune"));
+            }
+            if (t < 20f || t > 80f || !Every2s(t)) return;
+            string d = n != null && pivot != null ? (n.Char.position - pivot.position).magnitude.ToString("F2") + " m" : "-";
+            Log.Info("autotest stop (" + Role + ") : " + State("ChurchGrandma/GrannyHiker/") + " ; a " + d + " de la GetInPivot");
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "pnj-bar") { TestBar(t); return; }
@@ -1366,6 +1417,7 @@ namespace MWCoop
             if (mode == "bagarre") { TestFight(t); return; }
             if (mode == "police") { TestCops(t); return; }
             if (mode == "pnj-tel") { TestInsult(t); return; }
+            if (mode == "stop") { TestHike(t); return; }
             if (mode != "pnjtel" && mode != "pnjfluide") return;
             string part = Config.Get("Test", "SuivrePNJ", "TeppoSarkain");
             float now = Time.realtimeSinceStartup;
