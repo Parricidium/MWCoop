@@ -332,7 +332,9 @@ namespace MWCoop
         // texture), _angles (degres depuis le haut, sens horaire), _valeurs. Face et aiguille sans eclairage (lisibles la nuit).
         public class Gauge
         {
-            public Transform Needle; public Vector3 Axis; public float A0, A1, V0, V1, Shown = -1f;
+            // (Shown tres bas au depart : le premier Set pose toujours l'aiguille -- avec -1, un compte-tours a 0 tr/min restait
+            // vertical, sous le seuil de 0,2 % de 9 000 ; JD 03/11)
+            public Transform Needle; public Vector3 Axis; public float A0, A1, V0, V1, Shown = -1e9f;
             // (face de nuit, <face>_nuit.png : graduations vertes avec les phares, comme le tableau de bord eclaire de la Golf -- JD 31/10)
             public Material Face; public Texture2D Day, Night; public bool Lit;
             public void Light(bool on)
