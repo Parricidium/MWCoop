@@ -50,11 +50,14 @@ namespace MWCoop
         static Dictionary<string, bool> paidQ;   // Q<X> au paiement (achat local en cours)
         static float paidDyno;
         static int orderer = -1;                  // joueur dont la commande de travaux est en cours (-1 : aucune, ou la notre)
+        static bool leftHooked, saveHooked;
+        static float waitSince = -1f, nextGuard;   // caisse en 'Wait tobacco' depuis (garde de l'encaissement)
 
         public static void OnLevelLoaded()
         {
-            points.Clear(); nextLook = 0f; paidQ = null; orderer = -1;
+            points.Clear(); nextLook = 0f; paidQ = null; orderer = -1; saveHooked = false; waitSince = -1f; nextGuard = 0f;
             if (!Game.Msc) return;
+            if (!leftHooked) { leftHooked = true; Session.PlayerLeft += OnPlayerLeft; }
             points.Add(new Point { Path = RegPath, Fsm = "Data", State = "Purchase", Make = () => new Act { Run = OnLocalPaid } });
             points.Add(new Point { Path = RegPath, Fsm = "Data", State = "State 1", Make = () => new Act { Run = OnLocalSpawned, Send = true } });
             points.Add(new Point { Path = "Sheets/ServiceBrochure/ButtonOrder", Fsm = "Button", State = "State 3", Make = () => new Act { Run = OnLocalOrder, Send = true } });
@@ -80,8 +83,11 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!Game.Msc || !PlayerSync.InGame || Time.realtimeSinceStartup < nextLook) return;
+            if (!Game.Msc || !PlayerSync.InGame) return;
+            if (Time.realtimeSinceStartup >= nextGuard) { nextGuard = Time.realtimeSinceStartup + 0.5f; CashGuard(); }
+            if (Time.realtimeSinceStartup < nextLook) return;
             nextLook = Time.realtimeSinceStartup + 2f;
+            if (!saveHooked) HookSave();
             foreach (Point p in points)
             {
                 if (p.Hooked) continue;
@@ -130,6 +136,23 @@ namespace MWCoop
             if (Session.Active) Session.SendAll(w, true);
         }
 
+        // Etats de la caisse hors encaissement (attente du joueur, son et anim de fin, magasin ferme).
+        static readonly HashSet<string> RegIdle = new HashSet<string> { "Wait player", "Wait button", "State 2", "State 4", "Check purchase", "State 6", "State 8", "Store Closed", "Teimo" };
+
+        // Piece q retiree du panier de la caisse d'ici (Q faux, Total moins le prix du bouton) ; texte pour le journal.
+        static string Unpick(PlayMakerFSM reg, bool idle, string q, Transform btn)
+        {
+            FsmBool qv = reg.FsmVariables.FindFsmBool(q);
+            if (qv == null || !qv.Value) return "";
+            if (!idle) return " (aussi dans le panier d'ici, caisse en " + reg.ActiveStateName + " : laissee)";
+            PlayMakerFSM bf = btn != null ? Game.FsmOn(btn.gameObject, "Buy") : null;
+            FsmFloat pr = bf != null ? bf.FsmVariables.FindFsmFloat("Price") : null;
+            FsmFloat tot = reg.FsmVariables.FindFsmFloat("Total");
+            qv.Value = false;
+            if (tot != null && pr != null) tot.Value = Mathf.Max(0f, tot.Value - pr.Value);
+            return " (retiree du panier d'ici, total " + (tot != null ? tot.Value.ToString("F0") : "?") + ")";
+        }
+
         public static void OnPurchase(int who, NetReader r)
         {
             int n = r.U8();
@@ -140,6 +163,15 @@ namespace MWCoop
             GameObject shop = Game.FindAny("REPAIRSHOP");
             Transform spawn = shop != null ? shop.transform.Find("LOD/Store/PartSpawn") : null;
             var done = new System.Text.StringBuilder();
+            // Panier d'ici (audit MSC 02/11) : la meme piece cochee ici avant l'achat de l'autre (BuyX::Buy 'Play anim 2' : Q<X> vrai et
+            // Total += Price dans NOTRE caisse) y restait apres la destruction du bouton -- payee une 2e fois au prochain passage, et
+            // 'Spawn' arrachait la piece unique que l'autre avait peut-etre deja montee. Retiree du panier (Q<X> faux, Total moins le
+            // prix du bouton), sauf caisse en plein encaissement (chaine Purchase/Spawn : l'achat d'ici suit son cours).
+            // [Test] FleetariPanier=0 : comme avant.
+            GameObject regGo = Config.GetInt("Test", "FleetariPanier", 1) != 0 ? Game.FindAny(RegPath) : null;   // (comptoir sous le LOD : eteint, panier garde)
+            PlayMakerFSM reg = regGo != null ? Game.FsmOn(regGo, "Data") : null;
+
+            bool regIdle = reg != null && (!reg.gameObject.activeInHierarchy || RegIdle.Contains(reg.ActiveStateName));
             applying = true; Replay.Depth++;
             try
             {
@@ -151,21 +183,26 @@ namespace MWCoop
                     if (wv != null && g.Value >= 0f) wv.Value = g.Value;
                     PlayMakerFSM db = Game.FindFsm("Database/DatabaseMotor/" + it[1], "Data");
                     GameObject part = null;
+                    bool mounted = false;
                     if (db != null)
                     {
                         FsmBool dmg = db.FsmVariables.FindFsmBool("Damaged"); if (dmg != null) dmg.Value = false;
                         db.SendEvent("REPAIR");
                         FsmGameObject tp = db.FsmVariables.FindFsmGameObject("ThisPart"); part = tp != null ? tp.Value : null;
+                        // (piece deja montee ici : jamais arrachee de la voiture -- Installed resterait vrai, piece hors du moteur)
+                        FsmBool inst = reg != null ? db.FsmVariables.FindFsmBool("Installed") : null;
+                        mounted = inst != null && inst.Value;
                     }
-                    if (part != null && spawn != null)
+                    if (part != null && spawn != null && !mounted)
                     {
                         part.transform.SetParent(spawn, false);
                         part.transform.localPosition = Vector3.zero; part.transform.localRotation = Quaternion.identity;
                         try { part.tag = "PART"; } catch { }
                     }
                     Transform btn = shop != null ? shop.transform.Find("LOD/Store/Parts/" + it[3]) : null;
+                    string basket = reg != null ? Unpick(reg, regIdle, it[0], btn) : "";
                     if (btn != null) Object.Destroy(btn.gameObject);
-                    done.Append(' ').Append(it[1]).Append(part == null ? " (piece introuvable)" : "");
+                    done.Append(' ').Append(it[1]).Append(part == null ? " (piece introuvable)" : mounted ? " (montee ici, laissee)" : "").Append(basket);
                 }
                 if (dyno > 0f && shop != null)
                 {
@@ -290,6 +327,94 @@ namespace MWCoop
             if (pt != null && paint >= 0) pt.Value = paint;
             orderer = -1;
             Log.Info("fleetari : resultats des travaux de #" + who + " pris ici");
+        }
+
+        // Acheteur parti avant ses travaux (audit MSC 02/11) : chez les autres l'automate Order restait arrete et la brochure cachee
+        // jusqu'au rechargement -- travaux payes jamais faits, plus rien a commander chez Fleetari, appel de la Ferndale fige. Hote :
+        // automate rendu ; il repart de 'Wait for work' avec la commande recue (ReadOrder : _Order, _OrderTime, cases), 'Distance
+        // player' recache la brochure, le compte a rebours d'ici finit les travaux et les envoie (orderer -1 : OnLocalWork). Autres
+        // invites : la commande passe a l'hote (son @fleettravail rallumera leur automate). [Test] FleetariDepart=0 : comme avant.
+        static void OnPlayerLeft(PlayerInfo p)
+        {
+            if (p == null || orderer < 0 || p.Id != orderer || !Game.Msc || Config.GetInt("Test", "FleetariDepart", 1) == 0) return;
+            if (!Session.IsHost) { orderer = 0; Log.Info("fleetari : #" + p.Id + " parti avant ses travaux, la commande passe a l'hote"); return; }
+            orderer = -1;
+            PlayMakerFSM o = Game.FindFsm("REPAIRSHOP/Order", "Data");
+            if (o != null && !o.enabled) o.enabled = true;
+            Log.Info("fleetari : #" + p.Id + " parti avant ses travaux, commande reprise ici (" + (o != null ? o.ActiveStateName : "Order introuvable") + ")");
+        }
+
+        // Sauvegarde pendant la commande d'un autre (audit MSC 02/11) : l'automate Order arrete ne recoit pas SAVEGAME (diffusion aux
+        // seuls automates allumes) -- la sauvegarde de l'hote, monde de tous, perdait les travaux payes par l'invite. Crochet au debut
+        // de « Save game » de Systems/Setup Game :: WaitPlayer (comme SaveHook) : les actions de « Save game » d'Order jouees a la
+        // main (SaveBool/SaveFloat/SaveColor/SaveInt ; groupees par SaveBatchMsc pendant une sauvegarde en jeu). Sans sortie
+        // FINISHED depuis l'etat ou il attend (seul 'Wait day' en a une, vers 'Distance player' : sans effet). [Test] FleetariSauve=0 :
+        // comme avant.
+        static void HookSave()
+        {
+            PlayMakerFSM f = Game.FindFsm("Setup Game", "WaitPlayer");
+            if (f == null || f.Fsm == null || !f.Fsm.Initialized) return;
+            FsmState s = f.Fsm.GetState("Save game");
+            saveHooked = true;
+            if (s == null) return;
+            try { FsmHooks.Prepend(s, new SaveAct()); } catch (System.Exception e) { Log.Warn("fleetari : sauvegarde des travaux pas suivie (" + e.Message + ")"); }
+        }
+
+        class SaveAct : ModHook
+        {
+            public override string Module { get { return "magasin (Fleetari, poste)"; } }
+            public override void OnEnter()
+            {
+                try { SaveOrder(); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static string SaveOrder()
+        {
+            PlayMakerFSM o = Game.FindFsm("REPAIRSHOP/Order", "Data");
+            if (o == null || o.enabled || orderer < 0 || Config.GetInt("Test", "FleetariSauve", 1) == 0) return "rien (Order " + (o == null ? "introuvable" : o.enabled ? "allume" : "arrete") + ", acheteur " + orderer + ")";
+            FsmBool ord = o.FsmVariables.FindFsmBool("_Order");
+            if (ord == null || !ord.Value) return "rien (pas de commande)";
+            FsmState st = o.Fsm.GetState("Save game");
+            if (st == null || !st.IsInitialized) return "rien (« Save game » absent)";
+            int n = 0;
+            foreach (FsmStateAction a in st.Actions)
+            {
+                if (a == null || !a.Enabled) continue;
+                try { a.OnEnter(); n++; } catch (System.Exception e) { Log.Warn("fleetari : sauvegarde des travaux : " + a.GetType().Name + " : " + e.Message); }
+            }
+            string msg = "travaux de #" + orderer + " ecrits dans la sauvegarde d'ici (" + n + " valeurs, Order arrete)";
+            Log.Info("fleetari : " + msg);
+            return msg;
+        }
+
+        // Caisse figee en 'Wait tobacco' (audit MSC 02/11) : elle attend CASH, envoye par Fleetari::Work 'Cash anim', atteint depuis
+        // 'Loop' seulement ; 'Tobacco' en sort a la fin du clip du bras. Quand un autre joueur pilote le corps de Fleetari (Npcs : clip
+        // tenu, rejoue a chaque image ici), le clip ne finit jamais : achat impossible tant qu'il est la (meme cause que TeimoWatch,
+        // Shop). Apres 4 s en 'Tobacco' : 'Cash anim' (chemin du jeu : CASH -> 'Purchase', CashOut faux) ; apres 10 s quoi qu'il en
+        // soit : CASH a la caisse et CashOut faux. [Test] FleetariGarde=0 : comme avant.
+        static void CashGuard()
+        {
+            PlayMakerFSM reg = Game.FindFsm(RegPath, "Data");
+            if (reg == null || !reg.gameObject.activeInHierarchy || reg.ActiveStateName != "Wait tobacco") { waitSince = -1f; return; }
+            float now = Time.realtimeSinceStartup;
+            if (waitSince < 0f) { waitSince = now; return; }
+            if (now - waitSince < 4f || !Session.Active || Config.GetInt("Test", "FleetariGarde", 1) == 0) return;
+            PlayMakerFSM work = Game.FindFsm("REPAIRSHOP/LOD/Office/Fleetari", "Work");
+            if (work != null && work.ActiveStateName == "Tobacco")
+            {
+                Game.SetState(work, "Cash anim");
+                Log.Info("fleetari : caisse restee en 'Wait tobacco' (bras de Fleetari suivi ailleurs) : encaissement (" + reg.ActiveStateName + ")");
+                waitSince = -1f;
+                return;
+            }
+            if (now - waitSince < 10f) return;
+            reg.SendEvent("CASH");
+            FsmBool co = work != null ? work.FsmVariables.FindFsmBool("CashOut") : null;
+            if (co != null) co.Value = false;
+            Log.Info("fleetari : caisse en 'Wait tobacco' depuis 10 s (Fleetari en " + (work != null ? work.ActiveStateName : "?") + ") : CASH envoye (" + reg.ActiveStateName + ")");
+            waitSince = -1f;
         }
 
         // ---------------------------------------------------------------- poste
@@ -478,16 +603,50 @@ namespace MWCoop
         }
 
         // Essais : commande de travaux (reglage du parallelisme, fini dans 1 s) envoyee comme le bouton de la brochure.
-        public static string TestOrder()
+        public static string TestOrder() { return TestOrder(1f); }
+        // (audit MSC 02/11 : 'time' long -- 3000 s -- pour quitter avant les travaux, Autotest=fleettravaux)
+        public static string TestOrder(float time)
         {
             PlayMakerFSM o = Game.FindFsm("REPAIRSHOP/Order", "Data");
             if (o == null) return "REPAIRSHOP/Order introuvable";
             FsmBool toe = o.FsmVariables.FindFsmBool("ToeAdjustment"), ord = o.FsmVariables.FindFsmBool("_Order");
             FsmFloat t = o.FsmVariables.FindFsmFloat("_OrderTime");
-            if (toe != null) toe.Value = true; if (t != null) t.Value = 1f; if (ord != null) ord.Value = true;
+            if (toe != null) toe.Value = true; if (t != null) t.Value = time; if (ord != null) ord.Value = true;
             OnLocalOrder();
-            return "travaux commandes ici (" + o.ActiveStateName + ")";
+            return "travaux commandes ici (" + o.ActiveStateName + ", " + time.ToString("F0") + " s)";
         }
+        // Essais (audit MSC 02/11) : ecriture a la main des travaux d'un autre (comme la sauvegarde la fait) ; acheteur en cours.
+        public static string TestSaveOrder() { return SaveOrder() + " ; acheteur " + orderer; }
+
+        // Essais (audit MSC 02/11, Autotest=fleetpanier) : la piece q (QAlternator...) cochee dans la caisse d'ici comme son bouton
+        // ('Play anim 2' : Q vrai, Total + prix), sans PURCHASE.
+        public static string TestPick(string q)
+        {
+            GameObject rg = Game.FindAny(RegPath), shop = Game.FindAny("REPAIRSHOP");
+            PlayMakerFSM reg = rg != null ? Game.FsmOn(rg, "Data") : null;
+            string[] it = System.Array.Find(Items, x => x[0] == q);
+            if (reg == null || it == null) return "caisse ou piece " + q + " introuvable";
+            Transform btn = shop != null ? shop.transform.Find("LOD/Store/Parts/" + it[3]) : null;
+            PlayMakerFSM bf = btn != null ? Game.FsmOn(btn.gameObject, "Buy") : null;
+            FsmFloat pr = bf != null ? bf.FsmVariables.FindFsmFloat("Price") : null, tot = reg.FsmVariables.FindFsmFloat("Total");
+            FsmBool qv = reg.FsmVariables.FindFsmBool(q);
+            if (qv == null || tot == null) return "variables de la caisse introuvables";
+            qv.Value = true; tot.Value += pr != null ? pr.Value : 0f;
+            return "coche ici : " + Basket();
+        }
+        // Essais : panier de la caisse de Fleetari ici (pieces cochees, total, etat) et etat du bras de Fleetari (garde 'Wait tobacco').
+        public static string Basket()
+        {
+            GameObject rg = Game.FindAny(RegPath);
+            PlayMakerFSM reg = rg != null ? Game.FsmOn(rg, "Data") : null, work = Game.FindFsm("REPAIRSHOP/LOD/Office/Fleetari", "Work");
+            if (reg == null) return "caisse introuvable";
+            var sb = new System.Text.StringBuilder();
+            foreach (string[] it in Items) { FsmBool q = reg.FsmVariables.FindFsmBool(it[0]); if (q != null && q.Value) sb.Append(' ').Append(it[0]); }
+            FsmFloat tot = reg.FsmVariables.FindFsmFloat("Total");
+            return "panier [" + sb.ToString().Trim() + "] total " + (tot != null ? tot.Value.ToString("F0") : "?") + ", caisse " + (reg.gameObject.activeInHierarchy ? reg.ActiveStateName : "eteinte")
+                   + ", Fleetari " + (work != null ? work.ActiveStateName : "?") + (waitSince >= 0f ? ", en 'Wait tobacco' depuis " + (Time.realtimeSinceStartup - waitSince).ToString("F1") + " s" : "");
+        }
+
         // Essais : colis 'n' (premier enfant de STORE/Boxes sinon) paye a la poste, envoye comme PostOrderBuy 'State 3'.
         public static string TestPost()
         {
