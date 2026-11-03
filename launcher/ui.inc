@@ -334,7 +334,7 @@ static bool AddonsOn(); static void AddonsGo(); static void AddonsLeave();   // 
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE || NavHidden(p)) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM || p == TAB_TOOLS || p == TAB_BUG;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM || p == TAB_TOOLS || p == TAB_BUG || p == TAB_RALLY;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -386,11 +386,12 @@ static const NavItem kNav[] = {
     { TAB_SKIN, IC_SHIRT, L"Personnage", L"Character" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" }, { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" },
     { TAB_GFX, IC_SLIDERS, L"Jeu", L"Game" }, { TAB_COOP, IC_GLOBE, L"Co-op", L"Co-op" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
     { TAB_ADDONS, IC_CAR, L"Addons", L"Add-ons" },   // (sous Mods : les voitures addons et la VAZ, chacune avec sa livree -- suggestion d'un joueur, 21/10)
+    { TAB_RALLY, IC_HEART, L"RallyWorld", L"RallyWorld" },   // (sous Addons, coeur rouge : la communaute qui nous prete ses voitures -- JD, 03/11 ; rallyworld.inc)
     { TAB_VHS, IC_FILM, L"VHS", L"VHS" }, { TAB_ALBUM, IC_IMAGE, L"Album", L"Album" },   // (MEDIA : media.inc, demande de JD, 13/10)
     { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" },   // (guide des joueurs, wiki.inc)
     { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 3, 3, 4, 4 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroupN[] = { 3, 3, 5, 4 };   // pages de chaque groupe, dans l'ordre de kNav
 static const int kNavGroups = 4;
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MOI", L"RÉGLAGES", L"MÉDIA & AIDE" }, *kNavGroupEn[] = { L"PLAY", L"ME", L"SETTINGS", L"MEDIA & HELP" };
 static Bitmap *g_logo;
@@ -444,7 +445,7 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
         SolidBrush b(on ? TH(cardSel) : TH(card)); g.FillPath(&b, &p);
         if (on) { Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p); }
     }
-    Icon(g, icon, r.X + 22, r.Y + r.Height / 2, 20, WithA(on ? kAcc : kInk, on ? 1.0f : a * 0.82f), 1.9f);
+    Icon(g, icon, r.X + 22, r.Y + r.Height / 2, 20, page == TAB_RALLY ? WithA(kRwRed, a) : WithA(on ? kAcc : kInk, on ? 1.0f : a * 0.82f), 1.9f);   // (RallyWorld : coeur rouge)
     Text(g, label, RectF(r.X + 44, r.Y, r.Width - 70, r.Height), 14.5f, on ? FontStyleBold : FontStyleRegular, WithA(kInk, on ? 1.0f : a * 0.9f), StringAlignmentNear);
     // pastilles
     float rx = r.X + r.Width - 12;
@@ -468,6 +469,8 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
         nw = nw || KuplaNew();   // (Kupla pas encore vu : modules.inc)
         if (up) { const wchar_t *s = L"UPDATE"; float w = PillW(s, 9) - 6; Pill(g, RectF(rx - w, r.Y + (r.Height - 18) / 2, w, 18), kWarn, s, Color(255, 255, 255, 255), 9); rx -= w + 4; }   // (etroites : les deux a cote du nom)
         if (nw) { const wchar_t *s = L"NEW"; float w = PillW(s, 9) - 6; Pill(g, RectF(rx - w, r.Y + (r.Height - 18) / 2, w, 18), kAcc, s, kOnAcc, 9); }
+    } else if (page == TAB_RALLY && en && !on && !RallySeen()) {
+        const wchar_t *s = L"NEW"; float w = PillW(s, 9) - 6; Pill(g, RectF(rx - w, r.Y + (r.Height - 18) / 2, w, 18), kAcc, s, kOnAcc, 9);
     } else if (page == TAB_NOTES && NotesUnseen() && !on) {
         const wchar_t *s = T(L"NOUV.", L"NEW");
         float w = PillW(s, 10);
@@ -713,6 +716,7 @@ static void DrawHeader(Graphics &g)
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: case TAB_GFX: title = T(L"Réglages", L"Settings"); sub = SetHeaderSub(); break;   // (gfx.inc : une page, des onglets)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
+    case TAB_RALLY: title = L"RallyWorld"; sub = T(L"Rallye et tout-terrain pour Assetto Corsa · la communauté qui nous prête ses voitures", L"Rally and off-road for Assetto Corsa · the community that lends us its cars"); break;
     case TAB_TOOLS: title = T(L"Outils", L"Tools"); sub = T(L"Des programmes à part pour aller plus loin, à télécharger d'un clic.", L"Separate programs to go further, downloaded in one click."); break;
     case TAB_VHS: case TAB_ALBUM:
         if (g_game == GAME_MSC) { title = T(L"Album", L"Album"); sub = T(L"Les photos prises au drone.", L"The photos taken with the drone."); break; }   // (pas de VHS sur MSC)
@@ -1656,6 +1660,7 @@ static void DrawUI(Graphics &g)
     case TAB_COOP: case TAB_GFX: DrawSettingsPage(g); break;   // (gfx.inc : Jeu, Image, Son, Co-op, Touches, Theme, Lanceur)
     case TAB_API: DrawApiPage(g); break;
     case TAB_TOOLS: DrawToolsPage(g); break;
+    case TAB_RALLY: DrawRallyPage(g); break;
     case TAB_CREDITS: DrawCreditsPage(g); break;
     case TAB_WIKI: DrawWikiPage(g); break;
     case TAB_VHS: DrawVhs(g); break;
@@ -1815,6 +1820,7 @@ static bool UiClick(int id)
     if ((id >= UI_LOBBY_PRIV && id < 3400) || (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 600)) { LobbyOptClick(id); return true; }   // (3300-3399 et 10400-10999 : salon.inc)
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
     if (id >= UI_TOOL_GET && id <= UI_TOOL_CV_DIR) { ToolsClick(id); return true; }
+    if (id >= UI_RALLY_SITE && id <= UI_RALLY_DON2) return RallyClick(id);   // (rallyworld.inc)
     if (id == UI_PLACES_OPEN || id == UI_PLACES_EXPORT) { PlacesClick(id); return true; }   // (page Outils : placement des sieges, outils-places.inc)
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
     if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)
