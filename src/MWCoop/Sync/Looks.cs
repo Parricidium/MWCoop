@@ -384,14 +384,15 @@ namespace MWCoop
             }
         }
 
-        static void SaveTexture(Material m, HashSet<string> done, List<string> colors)
+        // (vrai : une image ecrite -- l'etape qui coute : ReadPixels attend la carte graphique, puis PNG et disque)
+        static bool SaveTexture(Material m, HashSet<string> done, List<string> colors)
         {
-            if (m == null) return;
+            if (m == null) return false;
             string name = Clean(m.name);
-            if (!done.Add(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return;
+            if (!done.Add(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return false;
             if (m.HasProperty("_Color")) { Color c = m.color; colors.Add(name + "\t" + c.r.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + "," + c.g.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + "," + c.b.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)); }
             Texture t = m.mainTexture;
-            if (t == null) return;
+            if (t == null) return false;
             int w = Mathf.Min(256, t.width), h = Mathf.Max(1, t.height * w / Mathf.Max(1, t.width));
             var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32);
             RenderTexture prev = RenderTexture.active;
@@ -407,10 +408,22 @@ namespace MWCoop
             if (File.Exists(f)) File.Delete(f);
             File.Move(f + ".tmp", f);
             Object.Destroy(tex);
+            return true;
         }
 
         public static string Export(int layer)
         {
+            var e = ExportSteps(layer);
+            while (e.MoveNext()) { }
+            return ExportResult;
+        }
+
+        // Export par etapes (JD, 03/11 : gel de 450 ms une fois par version, ~30 s apres le chargement) : la main est rendue
+        // apres chaque image de matiere et chaque corps ; Studio en fait avancer quelques-unes par image. Resultat dans ExportResult.
+        public static string ExportResult;
+        public static System.Collections.IEnumerator ExportSteps(int layer)
+        {
+            ExportResult = null;
             Scan();
             Directory.CreateDirectory(TexDir);
             var done = new HashSet<string>();
@@ -425,7 +438,7 @@ namespace MWCoop
                 foreach (List<string> l in new[] { shirts, pants, faces })
                 {
                     w.Write((uint)l.Count);
-                    foreach (string s in l) { Str(w, s); if (!Tenues.Has(s)) SaveTexture(Avatar.FindMaterial(s), done, colors); }   // (offertes : le lanceur lit leur image)
+                    foreach (string s in l) { Str(w, s); if (!Tenues.Has(s) && SaveTexture(Avatar.FindMaterial(s), done, colors)) yield return null; }   // (offertes : le lanceur lit leur image)
                 }
                 var keys = new List<string>();
                 foreach (string k in bodies.Keys) keys.Add(k);
@@ -447,12 +460,13 @@ namespace MWCoop
                     defs.Add(smr.sharedMaterials);
                     heads.Add(a.HeadBone != null ? a.Root.transform.worldToLocalMatrix * Matrix4x4.TRS(a.HeadDelta, Quaternion.identity, Vector3.one) * a.HeadBone.localToWorldMatrix : Matrix4x4.identity);
                     models.Add(a);
+                    yield return null;
                 }
                 w.Write((uint)models.Count);
                 for (int i = 0; i < models.Count; i++)
                 {
                     Str(w, models[i].Body);
-                    for (int k = 0; k < 3; k++) { Material dm = defs[i].Length > k ? defs[i][k] : null; Str(w, dm != null ? Clean(dm.name) : ""); SaveTexture(dm, done, colors); }
+                    for (int k = 0; k < 3; k++) { Material dm = defs[i].Length > k ? defs[i][k] : null; Str(w, dm != null ? Clean(dm.name) : ""); if (SaveTexture(dm, done, colors)) yield return null; }
                     Mat(w, heads[i]);
                     Verts(w, skinned[i].Key, skinned[i].Value, meshes[i].uv);
                     Subs(w, meshes[i]);
@@ -465,7 +479,7 @@ namespace MWCoop
                     Str(w, ai.Key);
                     w.Write((byte)ai.Kind);
                     w.Write((uint)ai.Mats.Length);
-                    foreach (Material m in ai.Mats) { Str(w, Clean(m.name)); SaveTexture(m, done, colors); }
+                    foreach (Material m in ai.Mats) { Str(w, Clean(m.name)); if (SaveTexture(m, done, colors)) yield return null; }
                     Mat(w, Matrix4x4.TRS(ai.Pos, ai.Rot, ai.Scale));
                     Verts(w, ai.Mesh.vertices, ai.Mesh.normals, ai.Mesh.uv);
                     Subs(w, ai.Mesh);
@@ -475,7 +489,7 @@ namespace MWCoop
             File.WriteAllLines(Path.Combine(TexDir, "couleurs.txt"), colors.ToArray());
             if (File.Exists(PreviewPath)) File.Delete(PreviewPath);
             File.Move(tmp, PreviewPath);
-            return nb + " corps, " + na + " accessoires, " + done.Count + " matieres, " + PreviewPath;
+            ExportResult = nb + " corps, " + na + " accessoires, " + done.Count + " matieres, " + PreviewPath;
         }
     }
 }
