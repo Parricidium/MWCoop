@@ -41,6 +41,7 @@ namespace MWCoop
         static readonly HashSet<string> SkipFsm = new HashSet<string> {
             "Scale", "Explosion", "Temp", "Assembly", "Flicker", "Jumping", "Paint", "Pressure", "Starter" };
         static readonly HashSet<string> TimingPoints = new HashSet<string> { "VINP_CrankPulley", "VINP_CamshaftSprocket" };
+        static int septicFix = -1, septicLogs;   // (dossiers #41/#46 : derive d'une fosse ou de la citerne remise a l'autorite -- voir Update)
         static bool tightOn, battItemOn;   // (audit MSC 02/11 : serrage filtre/bougies, charge de la batterie demontee -- voir Scan)
 
         class Watch
@@ -204,6 +205,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
+            septicLogs = 0;
             // (My Summer Car : liquides de la SATSUMA dans Database/* 'Data' -- embrayage, qualite d'huile, bidons)
             if (Game.Msc) SkipFsm.Add("Obstacle");   // (MSC : Obstacle.WaterLevel des PNJ, passagers du bus)
             if (Game.Msc) foreach (string n in new[] { "ClutchFluid", "OilContamination", "OilGrade", "FluidGasoline", "FluidDiesel", "FluidOil", "FluidCoolant" }) Names.Add(n);
@@ -368,7 +370,20 @@ namespace MWCoop
                 if (x.Septic)
                 {
                     // Fosse, citerne : pas a nous, la derive d'ici ne part jamais (la valeur recue l'ecrase).
-                    if (!septicHere) { x.Last = v; continue; }
+                    // (dossiers #41 et #46, xZOTIK et Markos 03/11 : « la fosse n'est videe que chez le client » -- la copie de la pompe
+                    // d'ici, tuyau dans la fosse ici seulement, la vidait ; l'autorite, dont le niveau ne bougeait pas, n'envoyait rien qui
+                    // l'ecrase. Remise a la derniere valeur de l'autorite des qu'elle s'en ecarte. [Test] FosseDerive=1 : comme avant.)
+                    if (!septicHere)
+                    {
+                        if (septicFix < 0) septicFix = Config.GetInt("Test", "FosseDerive", 0) == 0 ? 1 : 0;
+                        if (septicFix == 1 && x.HasAuth && Mathf.Abs(v - x.Auth) > (x.Var != null && x.Var.Name == "Waste" ? 20f : 0.05f))
+                        {
+                            if (septicLogs++ < 10) Log.Info("liquides et usure : " + x.Key + " = " + v.ToString("F2") + " ici, remise a " + x.Auth.ToString("F2") + " (autorite #" + SepticAuthority() + ")");
+                            SetVal(x, x.Auth); x.Last = Val(x); continue;
+                        }
+                        x.Last = v; continue;
+                    }
+                    x.Auth = v; x.HasAuth = true;   // (la notre fait foi : reprise telle quelle si l'autorite passe a un autre)
                     if (now < x.NextSend) continue;
                 }
                 else if (NotOurs(x, v) || (x.Contested && !Session.IsHost) || now < x.NextSend)

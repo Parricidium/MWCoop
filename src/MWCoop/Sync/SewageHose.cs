@@ -46,7 +46,7 @@ namespace MWCoop
 
         static Transform Gifu() { Rigidbody b = VehicleSync.Body("GIFU(750/450psi)"); return b != null ? b.transform : null; }
 
-        public static void OnLevelLoaded() { logs = 0; leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; npcDone.Clear(); nextNpcLook = 0; }
+        public static void OnLevelLoaded() { logs = 0; leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; chainIn = null; chainOut = null; chainBy = -1; nextChain = 0f; hStep = 0; eLog = 0; wellIgnored.Clear(); wellCols.Clear(); nextWellCols = 0f; npcDone.Clear(); nextNpcLook = 0; }
 
         static bool Find()
         {
@@ -114,7 +114,7 @@ namespace MWCoop
             }
             wasOut = true;
             bool held = FireTools.Held() == end.gameObject || testHeld;
-            if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) Release(); } }
+            if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) Release(); } Jobs.HoseTakeover(end.transform); }
             // Bout lache ici (camion en copie), puis le camion s'en va : la pose figee d'ici etirait la chaine chez tous (15,7 m quand le
             // camion avait roule 24 m, [MWC] 28/10). Au-dela de sa longueur, la main est rendue : celui qui mene la GIFU reprend la pose
             // (sa chaine physique suit le camion), les autres la suivent.
@@ -136,7 +136,7 @@ namespace MWCoop
             Transform gt = Gifu();
             if (oldRule < 0) oldRule = Config.GetInt("Test", "TuyauAncien", 0);   // (essais : regle d'avant le 27/10)
             bool lead = oldRule == 0 && !mine && remoteBy < 0 && gt != null && VehicleSync.SimAuthority(gt);
-            if (lead && !leading) { leading = true; if (logs++ < 10) Log.Info("tuyau de la GIFU : sorti, pas encore en main : pose du bout envoyee d'ici (camion mene ici)"); }
+            if (lead && !leading) { leading = true; if (logs++ < 10) Log.Info("tuyau de la GIFU : sorti, pas encore en main : pose du bout envoyee d'ici (camion mene ici)"); Jobs.HoseTakeover(end.transform); }
             if (!lead) leading = false;
             // (chaine physique ici sur une copie du camion -- tenue ici : ses maillons ne heurtent plus les collisionneurs de la copie,
             // deplacee par les messages et pas par la physique)
@@ -145,6 +145,7 @@ namespace MWCoop
             {
                 nextSend = now + (held ? 0.1f : 0.5f);
                 Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@bout").Vec(end.position).Quat(end.rotation).Bool(held), false);
+                if (Chaine && gt != null) SendChain(gt, now, held);
             }
             if (remoteBy >= 0)
             {
@@ -214,6 +215,10 @@ namespace MWCoop
             Vector3 b = self ? end.transform.position : Vector3.Lerp(segs[segs.Length - 1].position, rp, 0.5f);
             int n = segs.Length;
             Vector3[] pts = Layout(a, b, chainLen, n);
+            // (forme de la source, dans le repere du camion : maillons tires vers elle, le bout reste sur sa pose a 10/s)
+            Transform gc = self ? null : Gifu();
+            bool useChain = gc != null && Chaine && chainIn != null && chainIn.Length == n && chainBy == remoteBy && Time.realtimeSinceStartup - chainAt < 1.5f;
+            if (useChain) for (int i = 0; i < n - 1; i++) pts[i + 1] = Vector3.Lerp(segs[i].transform.position, gc.TransformPoint(chainIn[i]), 0.35f);
             // (le bout est l'enfant du maillon d'avant tant que la main ne l'a pas repris : sa pose gardee et remise apres la passe)
             Vector3 ep = end.transform.position; Quaternion eq = end.transform.rotation;
             for (int i = 0; i < (self ? n - 1 : n); i++)
@@ -225,6 +230,32 @@ namespace MWCoop
                 else if ((q - p).sqrMagnitude > 1e-6f) t.rotation = Quaternion.LookRotation(q - p, Vector3.up);
             }
             if (self) { end.transform.position = ep; end.transform.rotation = eq; }
+            IgnoreWells(!self && Jobs.HoseReprise);
+        }
+
+        // Copie du bout (chaine posee d'apres l'autre) : elle ne touche plus les declencheurs des fosses d'ici. Sinon, a une pose un
+        // peu differente de celle de l'autre, elle y entrait et en sortait, la fosse d'ici en suivant -- remise sans cesse a l'etat de
+        // celui qui tient le tuyau (Jobs.FixWells), la pompe d'ici allumee une image sur deux. Rendu au rangement et a la prise en main.
+        static readonly System.Collections.Generic.List<Collider> wellCols = new System.Collections.Generic.List<Collider>(), wellIgnored = new System.Collections.Generic.List<Collider>();
+        static float nextWellCols;
+        static void IgnoreWells(bool on)
+        {
+            if (cols == null || end == null) return;
+            if (!on)
+            {
+                if (wellIgnored.Count == 0) return;
+                foreach (Collider c in cols) if (c != null && c.transform.IsChildOf(end.transform)) foreach (Collider w in wellIgnored) if (w != null) Physics.IgnoreCollision(c, w, false);
+                wellIgnored.Clear();
+                return;
+            }
+            float now = Time.realtimeSinceStartup;
+            if (now >= nextWellCols) { nextWellCols = now + 5f; wellCols.Clear(); Jobs.WellColliders(wellCols); }
+            foreach (Collider w in wellCols)
+            {
+                if (w == null || (w.transform.position - end.transform.position).sqrMagnitude > 400f) continue;
+                foreach (Collider c in cols) if (c != null && c.enabled && c.transform.IsChildOf(end.transform)) Physics.IgnoreCollision(c, w, true);   // (a refaire : un collisionneur eteint puis rallume l'oublie)
+                if (!wellIgnored.Contains(w)) wellIgnored.Add(w);
+            }
         }
 
         // Pose de la chaine (n maillons, longueur L) du raccord a au bout b : pendante (parabole) si son mou tient au-dessus du sol ;
@@ -238,6 +269,43 @@ namespace MWCoop
         // arc, et chaque maillon (sauf a 0,6 m du bout, qui entre dans la fosse) remonte au-dessus du sol sous lui. [Test] TuyauSolAncien=1 :
         // comme avant.
         public static bool LaidFromRemote { get { return following && !selfMode; } }
+        public static Vector3 EndPos { get { return end != null ? end.transform.position : Vector3.zero; } }
+
+        // Forme de la chaine (dossiers #41 et #46, xZOTIK et Markos 03/11 : « apres que l'hote l'a ajuste, le tuyau est tantot normal,
+        // tantot tordu » ; « quand le client le reprend, chez l'hote le tuyau devient tordu »). Chez celui qui suit, la chaine etait
+        // recalculee (Layout) du raccord au bout recu : parabole ou chaine au sol avec sa boucle sur le cote selon la pose du bout, a
+        // quelques centimetres pres -- pas la forme de la chaine physique de l'autre, et elle sautait d'une forme a l'autre. La source
+        // (celui qui tient ou a lache le bout, ou le camion mene sans personne au bout) envoie maintenant ses maillons, dans le repere
+        // du camion, 5 fois/s tenu, 2 fois/s pose s'ils bougent (toutes les 2 s sinon) ; ailleurs ils sont poses dessus.
+        // [Test] TuyauChaine=0 : comme avant.
+        static Vector3[] chainIn, chainOut, chainCur; static float chainAt, nextChain, chainKeep; static int chainBy = -1, chaineOn = -1;
+        static bool Chaine { get { if (chaineOn < 0) chaineOn = Config.GetInt("Test", "TuyauChaine", 1); return chaineOn != 0; } }
+        static int Cm(float v) { return Mathf.Clamp(Mathf.RoundToInt(v * 100f) + 32768, 0, 65535); }
+        static float FromCm(int v) { return (v - 32768) * 0.01f; }
+
+        static void SendChain(Transform gt, float now, bool held)
+        {
+            if (now < nextChain || segs == null || segs.Length == 0 || segs.Length > 200) return;
+            int n = segs.Length;
+            if (chainOut == null || chainOut.Length != n) { chainOut = new Vector3[n]; chainCur = new Vector3[n]; chainKeep = 0f; }
+            float moved = 0f;
+            for (int i = 0; i < n; i++) { chainCur[i] = gt.InverseTransformPoint(segs[i].position); moved = Mathf.Max(moved, (chainCur[i] - chainOut[i]).sqrMagnitude); }
+            if (moved < 0.0009f && now < chainKeep) return;
+            nextChain = now + (held ? 0.2f : 0.5f); chainKeep = now + 2f;
+            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@chaine").U8(n);
+            for (int i = 0; i < n; i++) { chainOut[i] = chainCur[i]; w.U16(Cm(chainCur[i].x)).U16(Cm(chainCur[i].y)).U16(Cm(chainCur[i].z)); }
+            Session.SendAll(w, false);
+        }
+
+        public static void OnChain(int who, NetReader r)
+        {
+            int n = r.U8();
+            if (!Find() || !root.activeInHierarchy || mine || FireTools.Held() == end.gameObject || testHeld || segs == null || n != segs.Length) return;
+            if (chainIn == null || chainIn.Length != n) chainIn = new Vector3[n];
+            for (int i = 0; i < n; i++) { float x = FromCm(r.U16()), y = FromCm(r.U16()); chainIn[i] = new Vector3(x, y, FromCm(r.U16())); }
+            if (chainBy != who && logs++ < 10) Log.Info("tuyau de la GIFU : forme de la chaine de #" + who + " suivie (" + n + " maillons)");
+            chainAt = Time.realtimeSinceStartup; chainBy = who;
+        }
         static int solAncien = -1;
         static Vector3[] Layout(Vector3 a, Vector3 b, float L, int n)
         {
@@ -401,6 +469,7 @@ namespace MWCoop
             if (couplerRb != null) couplerRb.isKinematic = couplerKin;   // (colliders rallumes : IgnoreCollision a refaire)
             if (segs != null) foreach (Rigidbody r in segs) if (r != null) { if (wasSelf && r == end) { r.isKinematic = endKin; continue; } r.isKinematic = false; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
             if (cols != null) foreach (Collider c in cols) if (c != null) c.enabled = true;
+            IgnoreWells(false);
         }
 
         // [Test] Autotest=fossepaie (2 joueurs, places loin de HouseShit3 par TestPos) : 40 s apres l'arrivee de l'autre,
@@ -417,6 +486,53 @@ namespace MWCoop
         static int fosseOn = -1, fStep; static float nextFosseLog; static Vector3 wellAt; static GameObject wellGo; static float nextNudge; static bool nudgeOut;
         static bool fosseTest { get { if (fosseOn < 0) fosseOn = Config.GetInt("Test", "TuyauDansFosse", 0); return fosseOn != 0; } }
         static float HoseBack { get { return fosseTest ? 70f : 50f; } }
+        // ([Test] TuyauEchange=1 avec TuyauDansFosse=1, dossiers #41/#46 : la main passe de l'un a l'autre, le bout pres de la fosse. Chez
+        // l'invite la fosse est decalee de TuyauDecalage m (3 par defaut) sur le cote -- poses un peu differentes d'un jeu a l'autre :
+        //  +2..+12 l'invite tient le bout dans SA fosse puis le lache ; +15 l'hote le prend sur place (hors de SA fosse), +19 le lache ;
+        //  +26 l'invite le reprend sur place (dans la sienne), +34 le lache ; +30 l'invite fausse le niveau de la fosse ici (-1 ou +1).
+        // Chacun note a +13, +18, +24, +30, +33 et +38 l'etat des fosses, la pompe et trois maillons dans le repere du camion.)
+        static int echangeOn = -1, hStep, eLog; static Vector3 wellOff;
+        static bool Echange { get { if (echangeOn < 0) echangeOn = Config.GetInt("Test", "TuyauEchange", 0); return fosseTest && echangeOn != 0; } }
+        static readonly float[] eAt = { 13f, 18f, 24f, 30f, 33f, 38f };
+        static void TakeTest()
+        {
+            Release(); remoteBy = -1; testHeld = true; end.isKinematic = true;
+            testHand = new GameObject("MWCoopTestHand").transform; testHand.position = end.transform.position; endParent = end.transform.parent; end.transform.parent = testHand;
+        }
+        static void DropTest()
+        {
+            testHeld = false; end.isKinematic = false;
+            if (testHand != null) { end.transform.parent = endParent; Object.Destroy(testHand.gameObject); testHand = null; }
+        }
+        static string ChainShape()
+        {
+            Transform g = Gifu();
+            if (g == null || segs == null || segs.Length < 18) return "?";
+            return g.InverseTransformPoint(segs[5].transform.position).ToString("F2") + " " + g.InverseTransformPoint(segs[11].transform.position).ToString("F2") + " " + g.InverseTransformPoint(segs[17].transform.position).ToString("F2")
+                   + " bout " + g.InverseTransformPoint(end.transform.position).ToString("F2");
+        }
+        static void EchangeTest(float k)
+        {
+            if (Session.IsHost && end != null)
+            {
+                if (hStep == 0 && k > 15f) { hStep = 1; TakeTest(); Log.Info("autotest : tuyau, echange : l'hote prend le bout"); }
+                if (hStep == 1 && k > 19f) { hStep = 2; DropTest(); Log.Info("autotest : tuyau, echange : l'hote lache le bout"); }
+            }
+            if (!Session.IsHost && k > 30f && eLog == 3)
+            {
+                string part = TestWell + ":Level.ShitLevel";
+                string st = Fluids.TestState(part);
+                float lv; int eq = st.LastIndexOf("= ");
+                bool up = eq >= 0 && float.TryParse(st.Substring(eq + 2), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lv) && lv < 1.5f;
+                Log.Info("autotest : tuyau, echange : niveau fausse ici : " + Fluids.TestBump(part, up ? 1f : -1f));
+            }
+            if (eLog < eAt.Length && k > eAt[eLog])
+            {
+                eLog++;
+                Log.Info("autotest : tuyau, echange +" + eAt[eLog - 1].ToString("F0") + " s : " + Jobs.WellsNear(EndPos) + " ; " + Fluids.SepticState() + " ; " + Fluids.TestState(TestWell + ":Level.ShitLevel")
+                         + " ; " + (mine ? "a nous" : remoteBy >= 0 ? "suivi sur #" + remoteBy : "?") + (LaidFromRemote ? ", chaine posee d'apres l'autre" : "") + " ; maillons 6/12/18 " + ChainShape());
+            }
+        }
         static void TestHose(float now)
         {
             // ([Test] TuyauVolant=1 : l'hote au volant de la GIFU des 30 s, moteur lance -- rapport de JD 27/10 ; TuyauTenu=0 : l'invite sort
@@ -444,12 +560,14 @@ namespace MWCoop
                 wellGo = Game.FindAny(TestWell);
                 Transform g = Gifu(), ha = g != null ? g.Find("ActivateHose") : null;
                 if (ha != null) { wellAt = ha.position + ha.right * 3f; wellAt.y = GroundY(wellAt + Vector3.up * 3f) + 0.2f; }
+                if (ha != null && Echange) { Vector3 o = ha.right * Config.GetFloat("Test", "TuyauDecalage", 3f); Vector3 q = wellAt + o; q.y = GroundY(q + Vector3.up * 3f) + 0.2f; wellOff = q - wellAt; }
                 Log.Info("autotest : tuyau, fosse " + (wellGo == null ? "introuvable" : ha == null ? "trouvee, raccord introuvable" : "amenee en " + wellAt.ToString("F1") + (wellGo.activeInHierarchy ? "" : " (eteinte)")));
             }
-            if (fosseTest && fStep == 1 && wellGo != null && wellAt != Vector3.zero) wellGo.transform.position = wellAt;   // (chaque image : l'automate du niveau deplace la fosse)
+            if (fosseTest && fStep == 1 && wellGo != null && wellAt != Vector3.zero) wellGo.transform.position = wellAt + (Session.IsHost ? Vector3.zero : wellOff);   // (chaque image : l'automate du niveau deplace la fosse)
             if (fosseTest && fStep == 1 && now >= nextFosseLog) { nextFosseLog = now + 10f; Log.Info("autotest : tuyau, fosse : passages ici " + Jobs.HoseSeen + ", annonces " + Jobs.HoseSent + ", recus " + Jobs.HoseGot + (LaidFromRemote ? " (chaine posee d'apres l'autre)" : "")); }
             if (tStep == 0 && Jobs.OtherInGame(40f)) { tStep = 1; tAt = now; }
             if (tStep == 0) return;
+            if (Echange) EchangeTest(now - tAt);
             // (TuyauDepart=1 : l'hote, au volant, roule 6 s a +22 s -- apres le lacher de l'invite a +12 s ; [MWC] 28/10)
             if (Session.IsHost && Config.GetInt("Test", "TuyauDepart", 0) != 0 && tvStep == 6 && now - tAt > 22f) { tvStep = 7; tvAt = now; Log.Info("autotest : tuyau, la GIFU part (6 s)"); }
             if (tvStep == 7)
@@ -482,18 +600,20 @@ namespace MWCoop
                     Vector3 basePos = ah.transform.position + ah.transform.right * 3f;
                     // ([Test] TuyauFosse=m, dossier #41 : bout tenu m metres sous le raccord a cote du camion, comme plonge dans une fosse)
                     float fd = Config.GetFloat("Test", "TuyauFosse", 0f);
-                    if (testHand != null) testHand.position = fosseTest && wellAt != Vector3.zero ? wellAt : fd > 0f ? basePos + Vector3.down * fd : basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
+                    if (testHand != null) testHand.position = fosseTest && wellAt != Vector3.zero ? wellAt + wellOff : fd > 0f ? basePos + Vector3.down * fd : basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
                     if (k > 10f) { tStep = 4; testHeld = false; end.isKinematic = false; if (testHand != null) { end.transform.parent = endParent; Object.Destroy(testHand.gameObject); testHand = null; } }
                 }
                 // (TuyauDansFosse=1 : bout pose qui bouge un peu -- comme la physique chez MSC -- 1,5 m dans/hors de la fosse chaque seconde ; chez
                 // l'hote la chaine se repose d'apres lui a chaque fois)
-                if (fosseTest && tStep == 4 && end != null && wellAt != Vector3.zero && now - tAt < HoseBack - 3f && now >= nextNudge)
+                if (!Echange && fosseTest && tStep == 4 && end != null && wellAt != Vector3.zero && now - tAt < HoseBack - 3f && now >= nextNudge)
                 {
                     nextNudge = now + 1f; nudgeOut = !nudgeOut;
                     Transform ha = ah.transform;
                     end.transform.position = wellAt + (nudgeOut ? ha.right * 1.5f : Vector3.zero); end.position = end.transform.position;
                 }
-                if (tStep == 4 && now - tAt > HoseBack && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
+                if (Echange && tStep == 4 && now - tAt > 26f && end != null) { tStep = 6; TakeTest(); Log.Info("autotest : tuyau, echange : l'invite reprend le bout"); }
+                if (Echange && tStep == 6 && now - tAt > 34f && end != null) { tStep = 7; DropTest(); Log.Info("autotest : tuyau, echange : l'invite lache le bout"); }
+                if ((tStep == 4 || tStep == 7) && now - tAt > HoseBack && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
             }
             if (Find() && now >= nextTestLog && now - tAt < HoseBack + 6f)
             {
@@ -579,7 +699,7 @@ namespace MWCoop
         public static void OnRemote(int who, Vector3 p, Quaternion q, bool held)
         {
             if (!Find() || !root.activeInHierarchy) return;
-            if (FireTools.Held() == end.gameObject) return;   // (on le tient ici : le notre fait foi)
+            if (FireTools.Held() == end.gameObject || testHeld) return;   // (on le tient ici : le notre fait foi)
             if (remoteBy != who && logs++ < 10) Log.Info("tuyau de la GIFU : bout suivi sur #" + who + (held ? " (en main)" : " (pose)"));
             if (float.IsNaN(p.x + p.y + p.z) || float.IsInfinity(p.x + p.y + p.z) || (p - (coupler != null ? coupler.position : p)).sqrMagnitude > 900f) return;   // (rien de fou : 30 m au plus du camion)
             mine = false; remoteBy = who; rp = p; rq = q; lastRemote = Time.realtimeSinceStartup; remoteHeld = held;

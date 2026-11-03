@@ -223,7 +223,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             jobs.Clear(); hooked.Clear(); reserved.Clear(); classified.Clear(); jobCars.Clear(); waitingJobs.Clear(); waitingSet.Clear();
-            creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
+            creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear(); wellFix.Clear(); fixLogs = 0;
             SewageHose.OnLevelLoaded();
             Usine.OnLevelLoaded();
             PhoneMsc.OnLevelLoaded();
@@ -2115,6 +2115,16 @@ namespace MWCoop
         public static int HoseSeen, HoseSent, HoseGot;   // (essai Autotest=tuyau TuyauDansFosse=1 : passages ici, annonces, recus)
         static void HoseLocal(Well w, bool inWell)
         {
+            // (dossiers #41 et #46, xZOTIK et Markos 03/11 : « la fosse n'est videe que chez le client ». Chaine posee d'apres l'autre, la
+            // copie du bout entrait seule dans la fosse d'ici -- pose pas tout a fait la meme, fosse a une autre hauteur -- et la pompe
+            // d'ici pompait ; ou en sortait et celle de l'autorite s'arretait, le tuyau de l'autre toujours dedans. Ici la fosse suit
+            // celui qui tient le tuyau : son dernier « dans/sorti » est remis a l'image suivante. [Test] TuyauReprise=0 : comme avant.)
+            if (SewageHose.LaidFromRemote && HoseReprise)
+            {
+                if (w.LocalIn != inWell) { w.LocalIn = inWell; HoseSeen++; }
+                if (inWell != w.RemoteIn && !wellFix.Contains(w)) wellFix.Add(w);
+                return;
+            }
             if (w.LocalIn == inWell) return;
             w.LocalIn = inWell;
             HoseSeen++;
@@ -2145,6 +2155,79 @@ namespace MWCoop
             Log.Info("fosse : tuyau de #" + who + (inWell ? " dans " : " sorti de ") + key + " -> " + w.F.ActiveStateName);
         }
 
+        static int reprise = -1, fixLogs;
+        public static bool HoseReprise { get { if (reprise < 0) reprise = Config.GetInt("Test", "TuyauReprise", 1); return reprise != 0; } }
+        static readonly List<Well> wellFix = new List<Well>();
+
+        // Fosses d'ici remises a l'etat annonce par celui qui tient le tuyau (voir HoseLocal) -- hors du OnEnter du jeu.
+        static void FixWells()
+        {
+            for (int i = wellFix.Count - 1; i >= 0; i--)
+            {
+                Well w = wellFix[i]; wellFix.RemoveAt(i);
+                if (w.F == null || !w.F.gameObject.activeInHierarchy || !hooked.Contains(w.F) || !SewageHose.LaidFromRemote) continue;
+                if (HoseInStates.Contains(w.F.ActiveStateName) == w.RemoteIn) continue;
+                applying = true; Replay.Depth++;
+                try { Game.SetState(w.F, w.RemoteIn ? "Hose in" : "Wait 2"); }
+                finally { applying = false; Replay.Depth--; }
+                if (fixLogs++ < 10) Log.Info("fosse : " + w.Key + " remise " + (w.RemoteIn ? "tuyau dedans" : "tuyau dehors") + " comme chez celui qui le tient (copie du bout ici " + (w.LocalIn ? "dedans" : "dehors") + ")");
+            }
+        }
+
+        // Le tuyau devient a nous (pris en main, ou sorti et mene par le camion d'ici) : nous disons ou il est. Avant, une fosse deja
+        // « Hose in » ici -- copie du bout entree pendant que l'autre le tenait -- ne changeait plus d'etat a la prise en main : rien
+        // n'etait annonce, l'autorite ne pompait pas, la pompe d'ici si (dossiers #41/#46). Etat lu sur le bout : dans la boite du declencheur.
+        public static void HoseTakeover(Transform endT)
+        {
+            if (!HoseReprise || endT == null) return;
+            foreach (Well w in wells.Values)
+            {
+                if (w.F == null || !w.F.gameObject.activeInHierarchy || !hooked.Contains(w.F)) continue;
+                if ((w.F.transform.position - endT.position).sqrMagnitude > 900f && !w.RemoteIn && !w.LocalIn) continue;
+                bool inside = EndInWell(w.F, endT.position), isIn = HoseInStates.Contains(w.F.ActiveStateName);
+                if (isIn != inside)
+                {
+                    applying = true; Replay.Depth++;
+                    try { Game.SetState(w.F, inside ? "Hose in" : "Wait 2"); }
+                    finally { applying = false; Replay.Depth--; }
+                }
+                bool say = inside || isIn || w.RemoteIn;
+                w.LocalIn = inside; w.RemoteIn = inside;
+                if (!say) continue;
+                HoseSent++;
+                Log.Info("fosse : tuyau repris ici, " + (inside ? "dans " : "hors de ") + w.Key + (isIn != inside ? " (etat d'ici corrige : " + (isIn ? "dedans" : "dehors") + ")" : ""));
+                if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@tuyau").Str(w.Key).Bool(inside), true);
+            }
+        }
+
+        // Declencheurs des fosses suivies (SewageHose : la copie du bout ne les touche plus chez celui qui suit).
+        public static void WellColliders(List<Collider> into)
+        {
+            foreach (Well w in wells.Values) { Collider c = w.F != null ? w.F.GetComponent<Collider>() : null; if (c != null) into.Add(c); }
+        }
+
+        static bool EndInWell(PlayMakerFSM f, Vector3 p)
+        {
+            BoxCollider bc = f.GetComponent<BoxCollider>();
+            if (bc == null) return false;
+            Transform t = bc.transform;
+            Vector3 l = t.InverseTransformPoint(p) - bc.center, s = t.lossyScale, h = bc.size * 0.5f;
+            // (marge de 15 cm : le collisionneur du bout depasse son centre)
+            return Mathf.Abs(l.x) <= h.x + 0.15f / Mathf.Max(1e-3f, Mathf.Abs(s.x)) && Mathf.Abs(l.y) <= h.y + 0.15f / Mathf.Max(1e-3f, Mathf.Abs(s.y))
+                && Mathf.Abs(l.z) <= h.z + 0.15f / Mathf.Max(1e-3f, Mathf.Abs(s.z));
+        }
+
+        // Essais : etat des fosses suivies a moins de 30 m de p (cle -> etat, dedans ici / chez la source).
+        public static string WellsNear(Vector3 p)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Well w in wells.Values)
+                if (w.F != null && w.F.gameObject.activeInHierarchy && (w.F.transform.position - p).sqrMagnitude < 900f)
+                    sb.Append(sb.Length > 0 ? " ; " : "").Append(w.Key.Split('/').Length > 1 ? w.Key.Split('/')[1] : w.Key).Append(' ').Append(w.F.ActiveStateName)
+                      .Append(" (ici ").Append(w.LocalIn ? "dedans" : "dehors").Append(", source ").Append(w.RemoteIn ? "dedans" : "dehors").Append(", bout ").Append(EndInWell(w.F, SewageHose.EndPos) ? "DANS la boite" : "hors boite").Append(')');
+            return sb.Length > 0 ? sb.ToString() : "aucune fosse a 30 m";
+        }
+
         // ================================================================ messages @
         // Msg.Job dont la cle commence par '@' : (joueur, type, donnees).
         //  @cree   createur, ID, position, rotation   (fiable)
@@ -2152,6 +2235,7 @@ namespace MWCoop
         //  @parti  nombre, IDs                        (fiable)
         //  @benne  angle de la benne                  (non fiable, 4/s au plus)
         //  @tuyau  fosse, dedans                      (fiable)
+        //  @chaine maillons du tuyau (repere du camion) (non fiable)
         //  @etape  Stage atteint par la fendeuse      (fiable, U8)
         //  @tirages boulots a tirage arretes chez l'hote (fiable, hote -> invites, voir IdleStep)
         //  @puces  table des puces : vendeur, table active, vente d'un invite (fiable, voir Wallet.OnFleaSpecial)
@@ -2212,6 +2296,7 @@ namespace MWCoop
                 case "@postbox": FleetariMsc.OnPostBox(who, r); break;   // (MSC : enveloppe du catalogue postee au magasin)
                 case "@usine": Usine.OnMessage(who, r); break;   // (usine Futufon : caisses des bacs et pieces du travail)
                 case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
+                case "@chaine": SewageHose.OnChain(who, r); break;   // (forme de la chaine du tuyau de la GIFU, voir SewageHose)
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;
                 case "@accident": { string ac = r.Str(); Respawn.OnAccident(who, ac, r.More && r.Bool()); break; }
@@ -2293,6 +2378,7 @@ namespace MWCoop
         static void SpecialUpdate(float now)
         {
             CheckWaiting(now);
+            if (wellFix.Count > 0) FixWells();
             if (!specialsScanned) return;
             if (now >= nextSpecialWait && (creatorsWaiting.Count > 0 || wellsWaiting.Count > 0))
             {
