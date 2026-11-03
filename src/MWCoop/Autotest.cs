@@ -3762,6 +3762,7 @@ namespace MWCoop
                 }
                 LightsGuard.TestKey(mode, t);
                 if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
+                if (mode == "amener") VehicleSync.Test(mode, t);   // (MSC aussi : /voiture et attaches au monde, 2ce92fd de [MWC] 03/11)
                 if (mode == "coupure") Home.Test(mode, t);   // (MSC aussi : coupures de l'orage, dossier #32 31/10)
                 // (audit MSC 02/11 : modules qui tournent aussi sur My Summer Car -- kilju et bidons (G #1/#51), ventti et nasse du chalet
                 // (G #2/#53/#65), vitrines (G #9), auto-stoppeurs (G #66), vidange et plein (E #40/#46), fuite du conducteur (E #47) ;
@@ -3774,7 +3775,7 @@ namespace MWCoop
                 if (mode == "fuiteconducteur") CarLeaks.Test(mode, t);
                 // ([Test] TestPos=x,y,z sur My Summer Car, pour ces essais de l'audit MSC 02/11 seulement : teleporte a 8 s, comme sur MWC)
                 if (!auditPosDone && t > 8f && Config.Get("Test", "TestPos", "").Length > 0
-                    && System.Array.IndexOf(new[] { "kilju", "kiljuremplir", "ventti", "ventti2", "nasse", "vitrine", "stop", "fleetpanier", "fleetcaisse", "mscct", "dancing" }, mode) >= 0)
+                    && System.Array.IndexOf(new[] { "kilju", "kiljuremplir", "ventti", "ventti2", "nasse", "vitrine", "stop", "fleetpanier", "fleetcaisse", "mscct", "dancing", "amener" }, mode) >= 0)
                 {
                     auditPosDone = true;
                     string[] c = Config.Get("Test", "TestPos", "").Split(',');

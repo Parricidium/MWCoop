@@ -3985,7 +3985,27 @@ namespace MWCoop
         // [Test] Autotest=amener (hote, TestPos loin de la voiture ; [Test] AmenerVoiture=gifu) : a 40 s, /voiture comme par le joueur ;
         // releve des 12 images suivantes : vitesse de la voiture et des corps les plus rapides parmi les siens et ceux relies a elle
         // par une attache (dossier : GIFU emballee et pare-brise casses en l'amenant, 03/11).
-        static int bringStep, bringFrames;
+        static int bringStep, bringFrames, saveStep;
+        static string WorldJointsInfo(Car c)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Joint j in c.Body.GetComponentsInChildren<Joint>(true))
+            {
+                if (j == null || j.connectedBody != null) continue;
+                sb.Append(' ').Append(j.GetType().Name).Append(' ').Append(j.name).Append(j.gameObject.activeInHierarchy ? "" : " (eteint)").Append(" point ").Append(j.connectedAnchor.ToString("F1"))
+                  .Append(" a ").Append((j.transform.TransformPoint(j.anchor) - j.connectedAnchor).magnitude.ToString("F2")).Append(" m");
+            }
+            // attaches internes tendues (ecart > 5 cm entre les deux points d'ancrage)
+            foreach (Joint j in c.Body.GetComponentsInChildren<Joint>(true))
+            {
+                if (j == null || j.connectedBody == null) continue;
+                Vector3 wa = j.transform.TransformPoint(j.anchor), wb = j.connectedBody.transform.TransformPoint(j.connectedAnchor);
+                Vector3 pa = j.GetComponent<Rigidbody>() != null ? j.GetComponent<Rigidbody>().position : j.transform.position;
+                float gap = (wa - wb).magnitude, phys = (pa - j.transform.position).magnitude;
+                if (gap > 0.05f || phys > 0.05f) sb.Append(" | ").Append(j.GetType().Name).Append(' ').Append(j.name).Append(" -> ").Append(j.connectedBody.name).Append(" ecart ").Append(gap.ToString("F2")).Append(" m, corps/objet ").Append(phys.ToString("F2")).Append(" m");
+            }
+            return sb.Length > 0 ? sb.ToString() : " aucune";
+        }
         static List<Rigidbody> bringBodies;
         static Car bringCar;
         static void TestBringCar(float t)
@@ -4014,7 +4034,8 @@ namespace MWCoop
                 }
                 bringBodies = new List<Rigidbody>(set); bringCar = c;
                 Log.Info("autotest : amener, " + c.Key + " a " + c.Body.position.ToString("F1") + ", " + set.Count + " corps ; attaches vers l'exterieur :" + (sb.Length > 0 ? sb.ToString() : " aucune"));
-                string r = BringCar(arg);
+                // ([Test] AmenerSans=1 : pas de /voiture -- la voiture reste chez elle, poussee et sauvegarde comme apres l'avoir amenee)
+                string r = Config.GetInt("Test", "AmenerSans", 0) != 0 ? "pas amenee (AmenerSans)" : BringCar(arg);
                 Log.Info("autotest : amener, /voiture " + arg + (r != null ? " -> " + r : "") + ", posee en " + c.Body.position.ToString("F1"));
             }
             if (bringStep == 1 && t > 50f && bringCar != null && bringCar.Body != null)
@@ -4030,6 +4051,13 @@ namespace MWCoop
                 Rigidbody b = bringCar.Body;
                 if (t < 58f) { Vector3 f = b.transform.forward * Mathf.Sign(Config.GetFloat("Test", "AmenerRouler", 1f)); f.y = 0f; b.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
                 else { bringStep = 3; b.velocity = Vector3.zero; Log.Info("autotest : amener, poussee 6 s : " + bringCar.Key + " en " + b.position.ToString("F1")); }
+            }
+            // ([Test] AmenerSauve=1 : a 64 s, sauvegarde en jeu comme a l'arrivee d'un invite -- attaches au monde notees avant et 2 s apres,
+            // vitesses des 12 images suivantes ; GIFU amenee projetee a 43 m/s a l'arrivee de l'invite, essai MSC du 03/11)
+            if (Config.GetInt("Test", "AmenerSauve", 0) != 0 && bringCar != null && bringCar.Body != null)
+            {
+                if (saveStep == 0 && t > 64f) { saveStep = 1; Log.Info("autotest : amener, avant sauvegarde :" + WorldJointsInfo(bringCar)); Game.SaveInPlace(); bringFrames = 0; }
+                if (saveStep == 1 && t > 66f) { saveStep = 2; Log.Info("autotest : amener, apres sauvegarde : " + bringCar.Key + " en " + bringCar.Body.position.ToString("F1") + " ;" + WorldJointsInfo(bringCar)); }
             }
             if (bringStep >= 1 && bringBodies != null && bringFrames < 12)
             {
