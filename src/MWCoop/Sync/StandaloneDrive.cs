@@ -339,10 +339,16 @@ namespace MWCoop
             public Transform Needle; public Vector3 Axis; public float A0, A1, V0, V1, Max, Shown = -1e9f;   // (Max : pression maxi du turbo, cadran_t_valeurs z)
             // (face de nuit, <face>_nuit.png : graduations vertes avec les phares, comme le tableau de bord eclaire de la Golf -- JD 31/10)
             public Material Face; public Texture2D Day, Night; public bool Lit;
+            // (eclairage du tableau de bord, JD 03/11 : « qu'ils s'eclairent lorsque les phares sont allumes » -- phares eteints, face et
+            // aiguille eclairees par la scene comme la planche (sombres la nuit) ; phares allumes, sans eclairage de la scene, face de nuit
+            // s'il y en a une)
+            public MeshRenderer FaceR, NeedleR; public Material FaceOff, NeedleOff, NeedleOn;
             public void Light(bool on)
             {
-                if (Night == null || Face == null || on == Lit) return;
-                Lit = on; Face.mainTexture = on ? Night : Day;
+                if (on == Lit || FaceR == null) return;
+                Lit = on;
+                FaceR.sharedMaterial = on ? Face : FaceOff;
+                if (NeedleR != null) NeedleR.sharedMaterial = on ? NeedleOn : NeedleOff;
             }
 
             public static Gauge Make(VazCar.Built b, Dictionary<string, Vector3> inf, string k, string faceFile)
@@ -358,16 +364,25 @@ namespace MWCoop
                 // (face ronde a coins transparents -- 205 T16 : decoupee, la planche se voit autour)
                 bool round = face.GetPixel(1, 1).a < 0.5f && face.GetPixel(face.width - 2, face.height - 2).a < 0.5f;
                 Shader cut = round ? Shader.Find("Unlit/Transparent Cutout") : null;
-                var fm = new Material(cut ?? unlit) { mainTexture = face, color = new Color(0.85f, 0.85f, 0.85f) };
-                fq.GetComponent<MeshRenderer>().sharedMaterial = fm;
                 string nf = faceFile.Replace(".png", "_nuit.png");
                 Texture2D night = System.IO.File.Exists(System.IO.Path.Combine(b.M.Dir, nf)) ? Png(b.M, nf) : null;
+                // (allume : sans eclairage de la scene, face de nuit s'il y en a une ; eteint : eclaire par la scene)
+                var fm = new Material(cut ?? unlit) { mainTexture = night ?? face, color = new Color(0.85f, 0.85f, 0.85f) };
+                Shader litCut = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Transparent/Cutout/Diffuse");
+                Shader lit = Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Diffuse") ?? Shader.Find("Standard");
+                var fOff = new Material(round && litCut != null ? litCut : lit ?? unlit) { mainTexture = face, color = Color.white };
+                if (fOff.HasProperty("_Cutoff")) fOff.SetFloat("_Cutoff", 0.5f);
+                var fr = fq.GetComponent<MeshRenderer>(); fr.sharedMaterial = fOff;
                 var pivot = new GameObject("aiguille_" + k).transform;
                 pivot.SetParent(b.Body, false); pivot.localPosition = c - n * 0.003f;
                 var nq = Quad("pieces", pivot, Vector3.zero, Vector3.zero, up, right);
-                nq.GetComponent<MeshRenderer>().sharedMaterial = new Material(transp) { mainTexture = needle };
+                Shader litTr = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Transparent/Diffuse");
+                var nOn = new Material(transp) { mainTexture = needle };
+                var nOff = litTr != null ? new Material(litTr) { mainTexture = needle, color = Color.white } : nOn;
+                var nr = nq.GetComponent<MeshRenderer>(); nr.sharedMaterial = nOff;
                 Log.Info("standalone : compteur " + (k == "v" ? "vitesse" : k == "t" ? "turbo" : "regime") + " pose (" + val.x + "-" + val.y + ", " + ang.x + "-" + ang.y + " degres)");
-                return new Gauge { Needle = pivot, Axis = n, A0 = ang.x, A1 = ang.y, V0 = val.x, V1 = val.y, Max = val.z, Face = fm, Day = face, Night = night };
+                return new Gauge { Needle = pivot, Axis = n, A0 = ang.x, A1 = ang.y, V0 = val.x, V1 = val.y, Max = val.z, Face = fm, Day = face, Night = night,
+                                   FaceR = fr, NeedleR = nr, FaceOff = fOff, NeedleOff = nOff, NeedleOn = nOn };
             }
 
             public void Set(float value)
@@ -2284,7 +2299,11 @@ namespace MWCoop
                 b.Dt.gear = n0 + 4; st.GearShown = -99; GearDisplay(b, st); b.Dt.gear = g0;
                 if (st.RevLamp != null) st.RevLamp.SetActive(true);
                 Vector3 at = st.Tacho != null ? b.Car.transform.InverseTransformPoint(st.Tacho.Needle.position) : st.T.Yeux + Vector3.forward;
+                foreach (Gauge g in new[] { st.Speedo, st.Tacho, st.Turbo }) if (g != null) g.Light(false);
                 Photo(b, "planche", st.T.Yeux, at, 38f);
+                // (meme vue phares allumes : compteurs eclaires)
+                foreach (Gauge g in new[] { st.Speedo, st.Tacho, st.Turbo }) if (g != null) g.Light(true);
+                Photo(b, "planche-phares", st.T.Yeux, at, 38f);
                 Log.Info("standalone : planche figee (rapport affiche " + (st.GearTex != null) + ", voyant " + (st.RevLamp != null) + ", turbo " + (st.Turbo != null) + ")");
             }
             // ([Test] StandaloneRetros=1 : a 70 s, l'hote au volant, chaque glace vue de ses yeux, zoomee -- retroviseurs fonctionnels)

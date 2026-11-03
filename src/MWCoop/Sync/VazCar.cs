@@ -225,8 +225,10 @@ namespace MWCoop
         // suspension durcie a l'essai (JD 21/10 : trop molle, tonneaux trop faciles) : ressorts 52 000, amortisseurs 3 400,
         // barres antiroulis 22 000, centre de gravite 5 cm plus bas (le reglage plus dur de la 1.8.4 : « bizarre », retire) ;
         // frein a main 6 000 N.m sur les roues arriere (« plus fort, pour partir en travers ») -- a etendre aux autres addons
+        // (03/11 : modele de Rallyworld, Sport Quattro Gr. B -- yeux du conducteur (-0,37 ; 1,15 ; -0,13) : assise a 0,50, pavillon a 1,45,
+        // volant 35 cm devant)
         public static readonly Model Sq84 = new Model { Id = ModelSq, Folder = "sq84", Name = "Sport Quatro",
-            Head = new Vector3(-0.36f, 0.93f, -0.37f), SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.45f),
+            Head = new Vector3(-0.37f, 1.18f, -0.40f), SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, 1.45f),
             BrakePivot = new Vector3(-0.10f, 0.25f, -0.02f), BrakeGrip = new Vector3(-0.125f, 0.575f, 0.022f), BrakeAngle = 1.4f,
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.020f, 0.435f, 0.342f)),
