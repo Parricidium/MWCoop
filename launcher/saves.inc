@@ -1314,7 +1314,25 @@ static bool GameProcessRunning(DWORD *pidOut);
 static bool GameSet(int game, bool host)
 {
     if (game == g_game || game < 0 || game > 1) return false;
-    if (g_busy || GameProcessRunning(NULL)) {
+    DWORD pid = 0;
+    bool running = !g_busy && GameProcessRunning(&pid);
+    if (running && pid) {
+        // Reste du jeu qu'on ne peut meme pas ouvrir, sans fenetre, mod muet (dossier #44, Matilda, 03/11 : processus coince en
+        // fin de vie, erreur 5, que seul un redemarrage du PC efface -- le switch refusait a chaque clic, sans rien au journal ;
+        // LANCER, lui, propose de lancer quand meme) : il ne tient rien du jeu choisi, le changement de jeu passe.
+        WndFind f = { pid, false };
+        EnumWindows(FindPidWindow, (LPARAM)&f);
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        DWORD err = h ? 0 : GetLastError();
+        if (h) CloseHandle(h);
+        long long beat = -1; NewestHeartbeat(&beat);
+        if (!h && !f.found && (beat < 0 || beat > 15)) {
+            LaunchLog("jeu %lu : ouverture impossible (erreur %lu), sans fenetre, mod muet : reste d'un jeu coince, changement de jeu quand meme", pid, err);
+            running = false;
+        }
+    }
+    if (g_busy || running) {
+        LaunchLog("changement de jeu refuse : %s", g_busy ? "mise a jour en cours" : ("jeu " + std::to_string(pid) + " en cours").c_str());
         SetStatus(K_WARN, T(L"Ferme le jeu et attends la fin de la mise à jour pour changer de jeu", L"Close the game and wait for the update to finish to switch games"));
         return false;
     }
