@@ -24,8 +24,8 @@ namespace MWCoop
         // la Golf pour MWC ») -- seulement elle sur MWC, les copies y restent des copies ; [Test] QueteMwc=0 : pas de quete sur MWC
         public static bool Quest { get { return Game.Msc || Config.GetInt("Test", "QueteMwc", 1) != 0; } }
         // copies passees en standalone sur My Winter Car aussi (JD 02/11 : « standalone partout » -- l'Imprezza, la 205 Ebo 2 et la Sport
-        // Quatro (03/11), modeles de Rallyworld) ; [Test] StandaloneMwc=0 : les copies comme avant
-        public static bool OnMwc(int copy) { return !Game.Msc && (copy == VazCar.ModelImp || copy == VazCar.ModelT16b || copy == VazCar.ModelSq) && Config.GetInt("Test", "StandaloneMwc", 1) != 0; }
+        // Quatro (03/11), modeles de Rallyworld ; la Rihno 5 Maxi aussi, son ancien modele -- JD 03/11) ; [Test] StandaloneMwc=0 : les copies comme avant
+        public static bool OnMwc(int copy) { return !Game.Msc && (copy == VazCar.ModelImp || copy == VazCar.ModelT16b || copy == VazCar.ModelSq || copy == VazCar.ModelR5) && Config.GetInt("Test", "StandaloneMwc", 1) != 0; }
         // copie remplacee par sa standalone ici : toutes (la R5 depuis le 29/10 midi, les autres validees par JD en jeu le 29/10 soir)
         public static bool Ready(int copy)
         {
