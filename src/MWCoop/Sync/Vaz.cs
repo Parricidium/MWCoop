@@ -499,12 +499,11 @@ namespace MWCoop
         static void Livery(Rent r, Slot s)
         {
             if (r.Car == null || r.Car.Car == null) return;   // (la VAZ aussi, 21/10)
-            string want = s.Livery ?? "";
-            if ((r.Car.LiveryHash ?? "") == want && (want.Length == 0 || r.LiveryGen == EvoLivery.Generation)) return;
-            Texture2D t = want.Length > 0 ? EvoLivery.Get(want) : null;
+            string want = s.Livery ?? "", liv, win;   // (« <livree>|<vitres> » depuis le 04/11 : EvoLivery.Split)
+            EvoLivery.Split(want, out liv, out win);
+            if ((r.Car.LiveryHash ?? "") == liv && (r.Car.WindowsHash ?? "") == win) return;
             r.LiveryGen = EvoLivery.Generation;
-            if (want.Length > 0 && t == null) { if (r.Car.LiveryHash != null) VazCar.SetLivery(r.Car, null, null); return; }
-            if ((r.Car.LiveryHash ?? "") != want) VazCar.SetLivery(r.Car, t, want.Length > 0 ? want : null);
+            VazCar.ApplyLooks(r.Car, want);
         }
 
         // ---------------------------------------------------------------- autotest "vaz"
@@ -1360,7 +1359,7 @@ namespace MWCoop
             {
                 Transform c = r.Car != null && r.Car.Car != null ? r.Car.Car.transform : null;
                 if (c == null) { sb.Append(" ; n " + r.Number + " pas construite"); continue; }
-                sb.Append(" ; modele " + (r.Car.M != null ? r.Car.M.Name : "?") + ", livree " + (r.Car.LiveryHash ?? "aucune"));
+                sb.Append(" ; modele " + (r.Car.M != null ? r.Car.M.Name : "?") + ", livree " + (r.Car.LiveryHash ?? "aucune") + ", vitres " + (r.Car.WindowsHash ?? "d'origine"));
                 Rigidbody rb = c.GetComponent<Rigidbody>(); Drivetrain dt = c.GetComponent<Drivetrain>();
                 sb.Append(" ; " + c.name + " en " + c.position.ToString("F1") + ", " + (dt != null ? dt.maxPower.ToString("F0") + " ch " + dt.transmission : "?") + (rb != null ? ", " + rb.mass.ToString("F0") + " kg" : "")
                           + ", VehicleSync " + (VehicleSync.RootByKey(c.name) != null ? "connue" : "inconnue"));

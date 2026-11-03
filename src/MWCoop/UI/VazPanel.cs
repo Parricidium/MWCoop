@@ -161,8 +161,7 @@ namespace MWCoop
             }
             if (pvHold != null && sm != VazCar.ModelVaz && pvLivery != sl)
             {
-                Texture2D lt = sl.Length > 0 ? EvoLivery.Get(sl) : null;
-                if (sl.Length == 0 || lt != null) { VazCar.SetLivery(pvHold, lt, sl.Length > 0 ? sl : null); pvLivery = sl; }
+                if (VazCar.ApplyLooks(pvHold, sl)) pvLivery = sl;   // (livree et vitres, 04/11)
             }
             float dt = Mathf.Clamp(now - pvT, 0f, 0.1f);
             pvT = now;

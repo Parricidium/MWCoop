@@ -432,6 +432,7 @@ namespace MWCoop
             public Transform ChokeKnob; public Vector3 ChokeRest, ChokeDir; public FsmFloat ChokeVal; public Transform ChokeButton;
             public Color Paint = Color.white;
             public string LiveryHash;   // livree posee (empreinte), null : couleur du joueur
+            public string WindowsHash;  // vitres posees (empreinte « v... »), null : celles du modele
         }
 
         // ---------------------------------------------------------------- fichiers
@@ -1302,6 +1303,47 @@ namespace MWCoop
             }
             b.LiveryHash = tex != null ? hash : null;
             Log.Info("vaz : " + (b.Car != null ? b.Car.name : "apercu") + " : " + (tex != null ? "livree " + hash : "couleur du joueur") + " (" + n + " matiere(s))");
+        }
+
+        // Vitres du joueur (JD 04/11, EvoLivery) : la couche de details des vitres (matieres « fade » de texture <...>_vitre -- vitres
+        // texturees des modeles Rallyworld, ac2p205 vitres) prend l'image ; tex null : retour a la texture du modele. Le verre teinte
+        // dessous ne change pas (pluie).
+        public static void SetWindows(Built b, Texture2D tex, string hash)
+        {
+            if (b == null) return;
+            cur = b.M;
+            int n = 0;
+            foreach (KeyValuePair<string, Material> kv in b.Mats)
+            {
+                MatDef d;
+                if (kv.Value == null || !matDefs.TryGetValue(cur.Folder + "|" + kv.Key, out d) || d.Kind != "fade" || d.Tex == null || !d.Tex.EndsWith("_vitre")) continue;
+                kv.Value.mainTexture = tex != null ? tex : Tex(d.Tex);
+                n++;
+            }
+            b.WindowsHash = tex != null ? hash : null;
+            Log.Info("vaz : " + (b.Car != null ? b.Car.name : "apercu") + " : " + (tex != null ? "vitres " + hash : "vitres d'origine") + " (" + n + " matiere(s))");
+        }
+
+        // Livree et vitres d'une place (« <livree>|<vitres> », EvoLivery.Split) ; vrai si tout ce qui est voulu est pose (faux : images
+        // pas encore recues -- la livree en attente laisse la couleur du joueur, les vitres celles du modele).
+        public static bool ApplyLooks(Built b, string want)
+        {
+            if (b == null) return false;
+            string liv, win; EvoLivery.Split(want, out liv, out win);
+            bool ok = true;
+            if ((b.LiveryHash ?? "") != liv)
+            {
+                Texture2D t = liv.Length > 0 ? EvoLivery.Get(liv) : null;
+                if (liv.Length > 0 && t == null) { ok = false; if (b.LiveryHash != null) SetLivery(b, null, null); }
+                else SetLivery(b, t, liv.Length > 0 ? liv : null);
+            }
+            if ((b.WindowsHash ?? "") != win)
+            {
+                Texture2D t = win.Length > 0 ? EvoLivery.Get(win) : null;
+                if (win.Length > 0 && t == null) { ok = false; if (b.WindowsHash != null) SetWindows(b, null, null); }
+                else SetWindows(b, t, win.Length > 0 ? win : null);
+            }
+            return ok;
         }
 
         // ---------------------------------------------------------------- vie de la voiture (chaque image)
