@@ -88,20 +88,21 @@ static void DrawRallyPage(Graphics &g)
             for (float sx = h.X - h.Height; sx < h.X + h.Width; sx += 24) g.DrawLine(&sp, PointF(sx, h.Y + h.Height), PointF(sx + h.Height * 0.47f, h.Y));
             g.Restore(s2);
         }
-        // embleme (boussole Gravel)
-        float ex = h.X + 34 + 64, ey = h.Y + h.Height / 2 + 6;
-        SolidBrush eb(Color(255, 17, 17, 17)); g.FillEllipse(&eb, ex - 64, ey - 64, 128.0f, 128.0f);
-        Pen ep(white, 5.0f); g.DrawEllipse(&ep, ex - 64, ey - 64, 128.0f, 128.0f);
-        Text(g, L"N", RectF(ex - 20, ey - 94, 40, 24), 15, FontStyleBold, white);
-        {
-            GraphicsState s3 = g.Save();
-            g.TranslateTransform(ex, ey); g.RotateTransform(-6);
-            RectF tag(-50, -17, 100, 34);
-            RwBox(g, tag, kRwRed, 6);
-            Text(g, L"GRAVEL", tag, 17, FontStyleBold, white);
-            g.Restore(s3);
-        }
-        float tx = h.X + 196, tw = h.X + h.Width - 24 - tx;
+        // logos officiels (JD, 03/11 : fournis par RallyWorld ; launcher\rallyworld, ressources 60 et 61) : la boussole Gravel
+        // a gauche sur un disque blanc, le carre RallyWorld a droite quand le bandeau est assez large
+        static Bitmap *gravel = LoadPngRes(60), *rw = LoadPngRes(61);
+        float ex = h.X + 34 + 70, ey = h.Y + h.Height / 2;
+        SolidBrush eb(white); g.FillEllipse(&eb, ex - 70, ey - 70, 140.0f, 140.0f);
+        { Pen ep(Color(60, 0, 0, 0), 2.0f); g.DrawEllipse(&ep, ex - 70, ey - 70, 140.0f, 140.0f); }
+        InterpolationMode im = g.GetInterpolationMode();
+        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        if (gravel) g.DrawImage(gravel, RectF(ex - 62, ey - 62, 124, 124));
+        else Text(g, L"GRAVEL", RectF(ex - 60, ey - 17, 120, 34), 17, FontStyleBold, kRwRed);
+        bool rwShown = rw && h.Width >= 980;
+        RectF rr(h.X + h.Width - 24 - 140, h.Y + h.Height - 24 - 140, 140, 140);
+        if (rwShown) { RwBox(g, rr, white, 18); g.DrawImage(rw, RectF(rr.X + 8, rr.Y + 8, 124, 124)); }
+        g.SetInterpolationMode(im);
+        float tx = h.X + 204, tw = (rwShown ? rr.X - 24 : h.X + h.Width - 24) - tx;
         Text(g, T(L"COMMUNAUTÉ PARTENAIRE", L"PARTNER COMMUNITY"), RectF(tx, h.Y + 26, tw, 18), 11.5f, FontStyleBold, Color(255, 0xFF, 0xD7, 0xD9), StringAlignmentNear);
         float t1 = MeasureW(MeasureG(), L"RallyWorld", 32, FontStyleBold);
         Text(g, L"RallyWorld", RectF(tx, h.Y + 44, t1 + 8, 46), 32, FontStyleBold, white, StringAlignmentNear);
@@ -112,11 +113,11 @@ static void DrawRallyPage(Graphics &g)
             RwBox(g, gr, white, 7);
             Text(g, s, gr, 28, FontStyleBold, Color(255, 17, 17, 17));
         }
-        // (pastille « gratuit » en haut a droite, si la place le permet)
+        // (pastille « gratuit » en haut a droite, au-dessus du logo RallyWorld, si la place le permet)
         std::wstring fr = T(L"100 % gratuit · fait par des passionnés", L"100% free · made by enthusiasts");
         float fw = PillW(fr, 11);
-        if (tx + t1 + 200 + fw < h.X + h.Width - 20) {
-            RectF fp(h.X + h.Width - 20 - fw, h.Y + 18, fw, 26);
+        if (tx + t1 + 200 + fw < h.X + h.Width - 20 && (!rwShown || rr.Y >= h.Y + 48)) {
+            RectF fp(rwShown ? rr.X + rr.Width - fw : h.X + h.Width - 20 - fw, h.Y + 16, fw, 26);
             RwBox(g, fp, Color(100, 0, 0, 0), 13);
             Text(g, fr, fp, 11, FontStyleBold, white);
         }
