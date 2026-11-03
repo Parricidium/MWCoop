@@ -122,8 +122,20 @@ namespace MWCoop
                     if (su != null) setupWas.Add(new KeyValuePair<HutongGames.PlayMaker.FsmBool, bool>(su, su.Value));
                 }
             }
+            // Collisionneurs des vehicules eteints puis rallumes par SAVEGAME (GIFU(750/450psi) : 'Save game' -> 'Load game' (LoadTransform)
+            // -> 'Fix Collider', ActivateGameObject(GIFU/Colliders, false, resetOnExit) : retires puis remis dans la scene physique) :
+            // le camion qui reposait sur sa caisse (pousse sur un relief, essai Autotest=amener AmenerSauve=1 du 03/11) etait projete
+            // vers le haut a 6-43 m/s et ses pare-brise cassaient, a chaque sauvegarde faite a l'arrivee d'un invite. En solo, SAVEGAME
+            // ne vient qu'en quittant ou aux toilettes. Ces extinctions sont sautees pendant la sauvegarde en jeu ([Test] SauveCollisions=0 :
+            // comme avant).
+            List<HutongGames.PlayMaker.FsmStateAction> colliderOffs = Config.GetInt("Test", "SauveCollisions", 1) != 0 ? ColliderOffs(restore) : null;
             try { SaveBatchMsc.Begin(restore, setup); PlayMakerFSM.BroadcastEvent("SAVEGAME"); }
-            finally { if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); RestoreSetup(false); }
+            finally
+            {
+                if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); RestoreSetup(false);
+                if (colliderOffs != null) foreach (HutongGames.PlayMaker.FsmStateAction a in colliderOffs) a.Enabled = true;
+            }
+            if (colliderOffs != null && colliderOffs.Count > 0 && colliderLogs++ < 3) Log.Info("sauvegarde en jeu : " + colliderOffs.Count + " extinction(s) de collisionneurs de vehicule ('Fix Collider') sautee(s)");
             afterSave = new Dictionary<PlayMakerFSM, string>();
             foreach (KeyValuePair<PlayMakerFSM, string> kv in restore) if (kv.Key != null) afterSave[kv.Key] = kv.Key.ActiveStateName;
             restoreAt = Time.realtimeSinceStartup + 2.5f;
@@ -169,6 +181,29 @@ namespace MWCoop
         }
 
         // Objets ETEINTS maintenant qu'allumerait l'etat terminal 'state' (ActivateGameObject activate=true) ; null si aucun.
+        // Actions 'Fix Collider' qui eteignent les collisionneurs d'un vehicule (ActivateGameObject false) dans les automates qui
+        // ecoutent SAVEGAME ; rendues inactives ici, remises par l'appelant apres la diffusion.
+        static int colliderLogs;
+        static List<HutongGames.PlayMaker.FsmStateAction> ColliderOffs(List<KeyValuePair<PlayMakerFSM, string>> fsms)
+        {
+            var r = new List<HutongGames.PlayMaker.FsmStateAction>();
+            foreach (KeyValuePair<PlayMakerFSM, string> kv in fsms)
+            {
+                PlayMakerFSM f = kv.Key;
+                if (f == null || f.Fsm == null || f.GetComponent<Rigidbody>() == null) continue;
+                HutongGames.PlayMaker.FsmState st;
+                try { st = f.Fsm.GetState("Fix Collider"); } catch { continue; }
+                if (st == null || st.Actions == null) continue;
+                foreach (HutongGames.PlayMaker.FsmStateAction a in st.Actions)
+                {
+                    var ag = a as HutongGames.PlayMaker.Actions.ActivateGameObject;
+                    if (ag == null || !ag.Enabled || ag.activate == null || ag.activate.Value) continue;
+                    ag.Enabled = false; r.Add(ag);
+                }
+            }
+            return r;
+        }
+
         static List<GameObject> OffTargets(PlayMakerFSM f, string state)
         {
             HutongGames.PlayMaker.FsmState st;

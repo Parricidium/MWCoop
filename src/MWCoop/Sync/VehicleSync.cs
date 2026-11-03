@@ -4056,7 +4056,21 @@ namespace MWCoop
             // vitesses des 12 images suivantes ; GIFU amenee projetee a 43 m/s a l'arrivee de l'invite, essai MSC du 03/11)
             if (Config.GetInt("Test", "AmenerSauve", 0) != 0 && bringCar != null && bringCar.Body != null)
             {
-                if (saveStep == 0 && t > 64f) { saveStep = 1; Log.Info("autotest : amener, avant sauvegarde :" + WorldJointsInfo(bringCar)); Game.SaveInPlace(); bringFrames = 0; }
+                if (saveStep == 0 && t > 64f)
+                {
+                    saveStep = 1; Log.Info("autotest : amener, avant sauvegarde : corps " + bringCar.Body.position.ToString("F2") + " objet " + bringCar.Body.transform.position.ToString("F2") + " ;" + WorldJointsInfo(bringCar));
+                    var near0 = new HashSet<Collider>(Physics.OverlapSphere(bringCar.Body.position, 7f, ~0));
+                    Game.SaveInPlace();
+                    Log.Info("autotest : amener, juste apres SaveInPlace : corps " + bringCar.Body.position.ToString("F2") + " objet " + bringCar.Body.transform.position.ToString("F2"));
+                    // (collisionneurs apparus a moins de 7 m pendant SAVEGAME -- objets rallumes un instant sous la voiture ?)
+                    var sbn = new System.Text.StringBuilder();
+                    int nn = 0;
+                    foreach (Collider cl in Physics.OverlapSphere(bringCar.Body.position, 7f, ~0))
+                        if (cl != null && !near0.Contains(cl) && !cl.transform.IsChildOf(bringCar.Body.transform) && nn++ < 12)
+                            sbn.Append(" | ").Append(Recon.Path(cl.transform)).Append(cl.isTrigger ? " (declencheur)" : "").Append(" a ").Append((cl.bounds.center - bringCar.Body.position).ToString("F1"));
+                    Log.Info("autotest : amener, apparus pendant la sauvegarde : " + nn + sbn);
+                    bringFrames = 0;
+                }
                 if (saveStep == 1 && t > 66f) { saveStep = 2; Log.Info("autotest : amener, apres sauvegarde : " + bringCar.Key + " en " + bringCar.Body.position.ToString("F1") + " ;" + WorldJointsInfo(bringCar)); }
             }
             if (bringStep >= 1 && bringBodies != null && bringFrames < 12)
@@ -4066,6 +4080,14 @@ namespace MWCoop
                 bringBodies.Sort((x, y) => y.velocity.sqrMagnitude.CompareTo(x.velocity.sqrMagnitude));
                 var sb = new System.Text.StringBuilder("autotest : amener, image " + bringFrames + " :");
                 for (int i = 0; i < bringBodies.Count && i < 5; i++) sb.Append(' ').Append(bringBodies[i].name).Append(' ').Append(bringBodies[i].velocity.magnitude.ToString("F0")).Append(" m/s");
+                if (saveStep == 1)
+                {
+                    // (frein a main de la GIFU : Use / Add Joint, qui ajoute les SpringJoint au monde ; attaches au monde a cette image)
+                    Transform pb = bringCar.Body.transform.Find("Dashboard/Knobs/Parking Brake");
+                    PlayMakerFSM pu = pb != null ? Game.FsmOn(pb.gameObject, "Use") : null, pa = pb != null ? Game.FsmOn(pb.gameObject, "Add Joint") : null;
+                    sb.Append(" ; corps ").Append(bringCar.Body.position.ToString("F2")).Append(" objet ").Append(bringCar.Body.transform.position.ToString("F2")).Append(bringCar.Body.isKinematic ? " cin" : "");
+                    sb.Append(" ; frein ").Append(pu != null ? pu.ActiveStateName : "?").Append(" / ").Append(pa != null ? pa.ActiveStateName + (pa.enabled ? "" : " (coupe)") : "?").Append(" ;").Append(WorldJointsInfo(bringCar));
+                }
                 Log.Info(sb.ToString());
             }
         }
