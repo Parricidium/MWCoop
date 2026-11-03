@@ -2116,6 +2116,10 @@ namespace MWCoop
         {
             if (w.LocalIn == inWell) return;
             w.LocalIn = inWell;
+            // (dossier #41, 02/11 : chaine posee ici d'apres le bout de l'autre -- son collisionneur entrait et sortait de la fosse a chaque
+            // repose, 215 « tuyau dans/sorti » en une minute envoyes a celui qui mene la pompe. Seul celui qui tient le bout le dit.
+            // [Test] TuyauFosseCopie=1 : comme avant)
+            if (SewageHose.LaidFromRemote && Config.GetInt("Test", "TuyauFosseCopie", 0) == 0) return;
             Log.Info("fosse : tuyau " + (inWell ? "dans " : "sorti de ") + w.Key + " ici");
             if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@tuyau").Str(w.Key).Bool(inWell), true);
         }

@@ -35,7 +35,7 @@ namespace MWCoop
         static readonly HashSet<string> applyTypes = new HashSet<string> { "FloatClamp", "FloatOperator", "SetPosition", "SetRotation", "SetFsmFloat", "SetFloatValue" };
         static float nextHost;
 
-        public static void OnLevelLoaded() { knobs.Clear(); byKey.Clear(); refused.Clear(); snapshots.Clear(); parkedLog.Clear(); }
+        public static void OnLevelLoaded() { knobLogs = 0; knobs.Clear(); byKey.Clear(); refused.Clear(); snapshots.Clear(); parkedLog.Clear(); }
 
         // Jobs, a son releve, pour chaque automate 'Use' d'un vehicule : vrai si c'est une commande tenue (reservee ici).
         public static bool Adopt(PlayMakerFSM f, string path)
@@ -110,10 +110,11 @@ namespace MWCoop
                 if (k.F == null) continue;
                 if (Holding(k))
                 {
+                    if (!k.Mine) KnobLog(k, "tenue ici", k.Var.Value);
                     k.Mine = true;
                     if (now >= k.NextSend) { k.NextSend = now + 0.1f; Send(k, false); }
                 }
-                else if (k.Mine) { k.Mine = false; Send(k, true); }
+                else if (k.Mine) { k.Mine = false; Send(k, true); KnobLog(k, "lachee ici", k.Var.Value); }
             }
             if (Session.IsHost && Session.RemoteCount > 0 && now >= nextHost)
             {
@@ -122,6 +123,16 @@ namespace MWCoop
                 // en retard, la faisait reculer chez tous -- relecture du 15/10, 3.1)
                 foreach (Knob k in knobs) if (k.F != null && !k.Mine && now - k.RemoteAt > 1f) Send(k, true);
             }
+        }
+
+        // Journal des commandes tenues et recues (dossier #41, 02/11 : accelerateur a main de la GIFU sans effet quand l'invite conduit,
+        // rien dans le journal pour le dire) : au plus 60 lignes par partie.
+        static int knobLogs;
+        static void KnobLog(Knob k, string what, float v)
+        {
+            if (knobLogs >= 60) return;
+            knobLogs++;
+            Log.Info("molette " + k.Key + " : " + what + ", valeur " + v.ToString("F2") + (k.F != null ? ", etat " + k.F.ActiveStateName : ""));
         }
 
         static void Send(Knob k, bool final)
@@ -143,6 +154,7 @@ namespace MWCoop
             if (!byKey.TryGetValue(key, out k) || k.F == null || k.Mine || Holding(k)) return;
             k.RemoteAt = Time.realtimeSinceStartup;
             if (Mathf.Abs(k.Var.Value - v) < 0.001f && final) return;
+            if (final) KnobLog(k, "recue de #" + who + " (avant " + k.Var.Value.ToString("F2") + ")", v);
             // Son avatar tient la commande (retour de Menor, 11/10). Avant : l'avatar le plus proche, faute d'auteur -- le
             // passager tendait la main quand l'hote touchait la radio (Menor, 18/10).
             if (who != NoOne) PlayerSync.ReachFor(who, k.F.transform);
