@@ -18,7 +18,7 @@
 5 RCDATA "build\\version.dll"
 // 11 : notre logo (docs\img\logo-seasons.png, 760 x 497) : en-tete de la nouvelle interface (coque.inc ; demande de JD, 27/10)
 11 RCDATA "..\\docs\\img\\logo-seasons.png"
-// 40-47 : apercus des voitures addons (photos du studio de JD, 28/10 puis 03/11 pour les voitures Rallyworld, recadrees en
+// 40-48 : apercus des voitures addons (photos du studio de JD, 28/10 puis 03/11 pour les voitures Rallyworld, recadrees en
 // 1050 x 600 : voiture centree, sans etirement), les memes sur My Winter Car et My Summer Car, avant ceux des paquets et du
 // catalogue (voiture.inc AddonPic)
 40 RCDATA "apercus\\vaz.jpg"
@@ -29,6 +29,7 @@
 45 RCDATA "apercus\\imp96.jpg"
 46 RCDATA "apercus\\sq84.jpg"
 47 RCDATA "apercus\\delta8.jpg"
+48 RCDATA "apercus\\m3e30.jpg"
 // 60, 61 : logos officiels de RallyWorld (boussole Gravel, carre RallyWorld), fournis par eux a JD le 03/11 (AVIF
 // convertis en PNG) : page RallyWorld (rallyworld.inc)
 60 RCDATA "rallyworld\\gravel.png"
