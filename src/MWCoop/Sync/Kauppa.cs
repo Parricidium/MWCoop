@@ -31,6 +31,10 @@ namespace MWCoop
         public static bool StarterBags { get { return !ShopOn || Config.GetInt("Boutique", "SacsAuDepart", 0) != 0; } }
 
         static float buildAt = -1;
+        // Une construction par image (JD, 03/11 : boutique, musee et cinema faits d'un coup, 0,8 s de gel ~11 s apres le chargement) :
+        // etape 1 boutique, 2 musee, 3 cinema, 4 magasin de pieces ; [Test] BoutiqueEtapes=0 : tout dans la meme image comme avant.
+        static int buildStage;
+        static double buildMs;
         static bool offLogged;
         static bool built;
 
@@ -42,6 +46,7 @@ namespace MWCoop
             root = null; door = null; doorAngle = 0f; built = false; vendor = null; looked = null; testCam = null;
             gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null; guiSub = null;
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
+            buildStage = 0; buildMs = 0;
             ResetMuseo();
             ResetKino();
             ResetOsat();
@@ -62,21 +67,43 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (!built)
             {
-                if (now < buildAt || !Ajouts.Ready) return;   // (invite : les choix de l'hote d'abord)
-                // (coupes : en attente -- l'annonce de l'hote peut arriver apres le delai de Ajouts.Ready, 30 s, et les allumer)
-                if (!Active) { if (!offLogged) { offLogged = true; L("ajouts COOP coupes (lanceur, ou choix de l'hote) : rien a construire pour l'instant"); } return; }
-                built = true;
+                if (buildStage == 0)
+                {
+                    if (now < buildAt || !Ajouts.Ready) return;   // (invite : les choix de l'hote d'abord)
+                    // (coupes : en attente -- l'annonce de l'hote peut arriver apres le delai de Ajouts.Ready, 30 s, et les allumer)
+                    if (!Active) { if (!offLogged) { offLogged = true; L("ajouts COOP coupes (lanceur, ou choix de l'hote) : rien a construire pour l'instant"); } return; }
+                    buildStage = 1; buildMs = 0;
+                }
+                bool atOnce = Config.GetInt("Test", "BoutiqueEtapes", 1) == 0;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                if (ShopOn) try { Build(); } catch (Exception e) { L("construction : " + e); }
-                else L("boutique coupee (ajouts COOP : lanceur, ou choix de l'hote)");
-                if (Ajouts.Museum) try { if (!ShopOn) Materials(); BuildMuseo(); } catch (Exception e) { L("musee : " + e); }   // (materiaux communs, d'habitude faits par la boutique)
-                else L("musee coupe (ajouts COOP : lanceur, ou choix de l'hote)");
-                if (KinoOn) try { if (!ShopOn && !Ajouts.Museum) Materials(); BuildKino(); } catch (Exception e) { L("cinema : " + e); }
-                else L("cinema coupe (ajouts COOP : lanceur, ou choix de l'hote)");
-                // magasin de pieces CARDINAL VARAOSAT (JD, 23/10)
-                if (OsatOn) try { if (!ShopOn && !Ajouts.Museum && !KinoOn) Materials(); BuildOsat(); } catch (Exception e) { L("magasin de pieces : " + e); }
-                else L("magasin de pieces coupe (ajouts COOP : lanceur, ou choix de l'hote)");
-                L("construite en " + sw.ElapsedMilliseconds + " ms");
+                do
+                {
+                    switch (buildStage)
+                    {
+                        case 1:
+                            if (ShopOn) try { Build(); } catch (Exception e) { L("construction : " + e); }
+                            else L("boutique coupee (ajouts COOP : lanceur, ou choix de l'hote)");
+                            break;
+                        case 2:
+                            if (Ajouts.Museum) try { if (!ShopOn) Materials(); BuildMuseo(); } catch (Exception e) { L("musee : " + e); }   // (materiaux communs, d'habitude faits par la boutique)
+                            else L("musee coupe (ajouts COOP : lanceur, ou choix de l'hote)");
+                            break;
+                        case 3:
+                            if (KinoOn) try { if (!ShopOn && !Ajouts.Museum) Materials(); BuildKino(); } catch (Exception e) { L("cinema : " + e); }
+                            else L("cinema coupe (ajouts COOP : lanceur, ou choix de l'hote)");
+                            break;
+                        case 4:
+                            // magasin de pieces CARDINAL VARAOSAT (JD, 23/10)
+                            if (OsatOn) try { if (!ShopOn && !Ajouts.Museum && !KinoOn) Materials(); BuildOsat(); } catch (Exception e) { L("magasin de pieces : " + e); }
+                            else L("magasin de pieces coupe (ajouts COOP : lanceur, ou choix de l'hote)");
+                            break;
+                    }
+                    buildStage++;
+                } while (atOnce && buildStage <= 4);
+                buildMs += sw.Elapsed.TotalMilliseconds;
+                if (buildStage <= 4) return;
+                built = true;
+                L("construite en " + buildMs.ToString("F0") + " ms" + (atOnce ? "" : " (une construction par image)"));
                 t0 = now;
                 LoadScript();
                 if (root != null) LoadBags();

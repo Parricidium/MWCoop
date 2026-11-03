@@ -23,6 +23,30 @@ namespace MWCoop
             acc.TryGetValue(what, out v);
             acc[what] = v + ms;
             if (ms > 2.0 && (!peak.TryGetValue(what, out v) || ms > v)) peak[what] = ms;   // (pointes : a-coups)
+            if (ms > 2.0) frameParts.Add(new KeyValuePair<string, double>(what, ms));
+        }
+
+        // Gels image par image (JD, 03/11 : mini-gels en serie quelques secondes apres le chargement de MSC, puis plus rien) :
+        // chaque image de plus de 50 ms dans les 120 s qui suivent un chargement est notee avec ce que le mod y a passe
+        // (modules de plus de 2 ms) et si le ramasse-miettes y est passe. Au plus 60 lignes par niveau ; [Test] JournalGels=0 : non,
+        // =2 : toute la partie.
+        static readonly List<KeyValuePair<string, double>> frameParts = new List<KeyValuePair<string, double>>();
+        static int gelsOn = -1, gelsLogged, gelsLevel = -1;
+        static void LogFreeze(float dt, bool gcHere)
+        {
+            if (gelsOn < 0) gelsOn = Config.GetInt("Test", "JournalGels", 1);
+            if (gelsOn == 0) return;
+            if (gelsLevel != Application.loadedLevel) { gelsLevel = Application.loadedLevel; gelsLogged = 0; }
+            if (gelsOn == 1 && Time.timeSinceLevelLoad > 120f) return;
+            if (gelsLogged >= (gelsOn == 1 ? 60 : 400)) return;
+            gelsLogged++;
+            double mod = 0;
+            foreach (var kv in frameParts) if (!kv.Key.StartsWith("[")) mod += kv.Value;
+            frameParts.Sort((a, b) => b.Value.CompareTo(a.Value));
+            var sb = new StringBuilder("gel : " + (dt * 1000f).ToString("F0") + " ms a " + Time.timeSinceLevelLoad.ToString("F1") + " s du chargement, mod " + mod.ToString("F0") + " ms"
+                                       + (gcHere ? ", GC" : ""));
+            for (int i = 0; i < frameParts.Count && i < 6; i++) sb.Append(i == 0 ? " : " : ", ").Append(frameParts[i].Key).Append(' ').Append(frameParts[i].Value.ToString("F0"));
+            Log.Info(sb.ToString());
         }
         public static void Begin() { part.Reset(); part.Start(); if (AllocOn) partMem = System.GC.GetTotalMemory(false); }
 
@@ -146,7 +170,8 @@ namespace MWCoop
                 if (frameMem >= 0 && !gcHere && m > frameMem) frameAlloc += m - frameMem;
                 frameMem = m;
             }
-            if (now - lastFrame > 0.05f) { if (gcHere) slowGc++; else slowOther++; }
+            if (now - lastFrame > 0.05f) { if (gcHere) slowGc++; else slowOther++; LogFreeze(now - lastFrame, gcHere); }
+            frameParts.Clear();
             worst = Mathf.Max(worst, now - lastFrame);
             lastFrame = now;
             if (period < 0) period = Mathf.Max(5, Config.GetInt("Test", "JournalPerf", 60));
