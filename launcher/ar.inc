@@ -2695,6 +2695,7 @@ static const wchar_t *const kAr[][2] = {
     { L"Stable channel", L"قناة Stable" },
     { L"Stable or Nightly", L"Stable أو Nightly" },
     { L"In Settings, Updates: Stable, the recommended version; Nightly, the next version still in development, to try with friends. Unstable, and the same for everyone.", L"في الإعدادات، التحديثات: Stable هي النسخة الموصى بها؛ Nightly هي النسخة القادمة قيد التطوير، لتجربتها مع الأصدقاء. غير مستقرة، ويجب أن تكون نفسها لدى الجميع." },
+    { L"3D model by RallyWorld, lent for free · click: their page", L"نموذج ثلاثي الأبعاد من RallyWorld، مُعار مجاناً · انقر: صفحتهم" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"يوضع MWCoop في مجلد اللعبة، بجانب mywintercar.exe. والمشغّل (MWCoop.exe) يتولى الباقي: يثبّت التعديل ويحدّثه ويشغّل اللعبة." },
     { L"Install in 4 steps", L"التثبيت في 4 خطوات" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"في Steam: انقر بالزر الأيمن على My Winter Car > إدارة > استعراض الملفات المحلية. سيُفتح مجلد اللعبة." },

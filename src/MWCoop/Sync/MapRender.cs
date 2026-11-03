@@ -72,10 +72,10 @@ namespace MWCoop
             if (startAt > 0 && Time.realtimeSinceStartup >= startAt) { startAt = -1; Begin(); }
             if (forestJob != null) { DrainForests(); return; }
             if (todo == null) return;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            frameSw.Reset(); frameSw.Start();
             // (un collisionneur a la fois, par morceaux : les routes goudronnees ou l'herbe d'un seul tenant prenaient 120 a
             // 400 ms d'un coup)
-            while (sw.Elapsed.TotalMilliseconds < 4f)
+            while (frameSw.Elapsed.TotalMilliseconds < Budget)
             {
                 if (cur == null) { if (todoAt >= todo.Count) break; cur = Add(todo[todoAt++]); }
                 if (!cur.MoveNext()) cur = null;
@@ -198,7 +198,19 @@ namespace MWCoop
 
         static System.Collections.IEnumerator cur;
         static float waterY = -4.5f;
-        const int Step = 4000;   // (triangles ou sommets par morceau)
+        // Morceaux au temps, plus au nombre (JD, 03/11 : mini-gels en serie ~18 s apres le chargement de MSC) : 4000 triangles
+        // par morceau prenaient 35 a 190 ms par image pendant 4 s sur les grands triangles des champs et de l'herbe (couverture
+        // des forets : des centaines de cases par triangle). Les boucles rendent la main des que l'image a eu ses 4 ms
+        // ([Test] CarteBudget=ms ; 0 : morceaux de 4000 comme avant).
+        const int Step = 4000;
+        static readonly System.Diagnostics.Stopwatch frameSw = new System.Diagnostics.Stopwatch();
+        static float budget = -1f;
+        static float Budget { get { if (budget < 0f) budget = Config.GetFloat("Test", "CarteBudget", 4f); return budget > 0f ? budget : 4f; } }
+        static bool Due(int i, int step)
+        {
+            if (budget == 0f) return i % step == step - 1;
+            return (i & 63) == 63 && frameSw.Elapsed.TotalMilliseconds >= Budget;
+        }
         static System.Collections.IEnumerator Add(Collider c)
         {
             Kind k; bool lakeCheck;
@@ -221,12 +233,12 @@ namespace MWCoop
             yield return null;
             var w = new Vector3[v.Length];
             Matrix4x4 mx = t.localToWorldMatrix;
-            for (int i = 0; i < v.Length; i++) { w[i] = mx.MultiplyPoint3x4(v[i]); if (i % (Step * 4) == Step * 4 - 1) yield return null; }
+            for (int i = 0; i < v.Length; i++) { w[i] = mx.MultiplyPoint3x4(v[i]); if (Due(i, Step * 4)) yield return null; }
             // routes goudronnees : bordure foncee (aretes de bord du maillage, en bandes de 1,4 m), sous le jaune
             if (k.Y == Asphalt.Y) { var ed = Edges(w, tr, AsphaltEdge, 1.4f); while (ed.MoveNext()) yield return null; }
             for (int i = 0; i + 2 < tr.Length; i += 3)
             {
-                if (i % (Step * 3) == Step * 3 - 3) yield return null;
+                if (Due(i / 3, Step)) yield return null;
                 Vector3 a = w[tr[i]], b = w[tr[i + 1]], d = w[tr[i + 2]];
                 Kind kk = k;
                 if (lakeCheck && Game.Msc) { if (a.y < waterY && b.y < waterY && d.y < waterY) kk = Lake; }   // (eau libre : le fond, sous la surface)
@@ -263,12 +275,12 @@ namespace MWCoop
                 long q = ((long)Mathf.RoundToInt(w[i].x * 50f) << 32) ^ (uint)Mathf.RoundToInt(w[i].z * 50f);
                 int id; if (!ids.TryGetValue(q, out id)) { id = i; ids[q] = id; }
                 vid[i] = id;
-                if (i % (Step * 4) == Step * 4 - 1) yield return null;
+                if (Due(i, Step * 4)) yield return null;
             }
             var count = new Dictionary<long, int>();
             for (int i = 0; i + 2 < tr.Length; i += 3)
             {
-                if (i % (Step * 3) == Step * 3 - 3) yield return null;
+                if (Due(i / 3, Step)) yield return null;
                 for (int e = 0; e < 3; e++)
                 {
                     int a = vid[tr[i + e]], b = vid[tr[i + (e + 1) % 3]];
@@ -280,7 +292,7 @@ namespace MWCoop
             int done = 0;
             foreach (var kv in count)
             {
-                if (++done % (Step * 2) == 0) yield return null;
+                if (Due(++done, Step * 2)) yield return null;
                 if (kv.Value != 1) continue;
                 Vector3 a = w[(int)(kv.Key >> 32)], b = w[(int)(kv.Key & 0xffffffff)];
                 Vector3 d = new Vector3(b.x - a.x, 0f, b.z - a.z);

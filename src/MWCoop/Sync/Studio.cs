@@ -68,6 +68,8 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             EndJob();
+            StopExport();
+            exported = false;
             ReleaseLive();
             // Objets du studio : detruits avec la scene.
             gen = live = null;
@@ -79,8 +81,37 @@ namespace MWCoop
             checkAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 30f : -1;
         }
 
+        // Export de l'apercu du lanceur etale (JD, 03/11 : gel de ~450 ms une fois par version, ~30 s apres le chargement :
+        // 65 images de matieres lues sur la carte graphique d'un coup) : quelques etapes par image, 4 ms au plus
+        // ([Test] TenuesEtalees=0 : d'un coup, comme avant).
+        static System.Collections.IEnumerator exportSteps;
+        static bool exported;
+        static float exportT0;
+        static int exportFrames;
+        static readonly System.Diagnostics.Stopwatch exportSw = new System.Diagnostics.Stopwatch();
+        static void StepExport()
+        {
+            exportFrames++;
+            exportSw.Reset(); exportSw.Start();
+            bool more;
+            try { do more = exportSteps.MoveNext(); while (more && exportSw.Elapsed.TotalMilliseconds < 4.0); }
+            catch (System.Exception e) { Log.Warn("apparences : export de l'apercu : " + e); more = false; }
+            if (more) return;
+            StopExport();
+            if (Looks.ExportResult != null) Log.Info("apparences : apercu du lanceur exporte en " + exportFrames + " images (" + (Time.realtimeSinceStartup - exportT0).ToString("F1") + " s), " + Looks.ExportResult);
+            exported = true;   // (TryStart ne le refait pas, meme force)
+            TryStart(forcePending);
+        }
+        static void StopExport()
+        {
+            var d = exportSteps as System.IDisposable;
+            exportSteps = null;
+            if (d != null) try { d.Dispose(); } catch (System.Exception) { }   // (fichier .tmp ferme si la scene change en route)
+        }
+
         public static void Update()
         {
+            if (exportSteps != null) { if (PlayerSync.InGame) StepExport(); return; }
             if (!PlayerSync.InGame || todo != null || checkAt < 0 || Time.realtimeSinceStartup < checkAt) return;
             checkAt = -1;
             TryStart(forcePending);
@@ -95,12 +126,20 @@ namespace MWCoop
 
         static void TryStart(bool force)
         {
-            if (todo != null) return;
+            if (todo != null || exportSteps != null) return;
             bool forced = force || Config.GetInt("Test", "RefaireTenues", 0) != 0;
             forcePending = force;
-            if (forced || !Looks.PreviewFresh())   // corps, accessoires et matieres pour l'apercu 3D du lanceur (volet TENUE)
+            if (exported) exported = false;
+            else if (forced || !Looks.PreviewFresh())   // corps, accessoires et matieres pour l'apercu 3D du lanceur (volet TENUE)
             {
                 if (layer < 0) layer = PickLayer();
+                if (Config.GetInt("Test", "TenuesEtalees", 1) != 0)
+                {
+                    exportSteps = Looks.ExportSteps(layer);
+                    exportT0 = Time.realtimeSinceStartup;
+                    exportFrames = 0;
+                    return;   // (suite dans Update, l'export fini)
+                }
                 try { Log.Info("apparences : apercu du lanceur exporte, " + Looks.Export(layer)); }
                 catch (System.Exception e) { Log.Warn("apparences : export de l'apercu : " + e); }
             }
