@@ -80,6 +80,11 @@ namespace MWCoop
                 if (f.hideFlags != HideFlags.None || seen.Contains(f) || !f.transform.root.gameObject.activeInHierarchy) continue;
                 string root = Game.RootName(f.transform);
                 if (root == "PLAYER" || root == "GUI" || root.StartsWith("MWCoop")) continue;
+                // Colere de la grand-mere (dossier #42, Markos 02/11 : AngryPoint::Player, 'Distance' au joueur qui urine) : visant le joueur le
+                // plus proche, elle se fachait si QUELQU'UN etait a moins de 5 m quand un joueur urinait n'importe ou -- l'hote assis pres
+                // d'elle, l'invite a 12 m (« distance 1.8 », essai mscmamie). Distance du joueur local, comme en solo (WorldFsms la laisse
+                // a chacun). [Test] ColereMamie=0 : comme avant.
+                if (Game.Msc && f.FsmName == "Player" && f.gameObject.name == "AngryPoint" && Config.GetInt("Test", "ColereMamie", 1) != 0) { seen.Add(f); continue; }
                 FsmState[] states;
                 try { states = f.Fsm.States; } catch { continue; }
                 bool open = root == "JOBS" && VehicleSync.CarRoot(f.transform) == null;   // (pas le taxi range sous JOBS : vehicule)

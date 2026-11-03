@@ -1577,6 +1577,68 @@ namespace MWCoop
             return now - auditT0;
         }
         static void LightUp(GameObject g) { for (Transform x = g != null ? g.transform : null; x != null; x = x.parent) if (!x.gameObject.activeSelf) x.gameObject.SetActive(true); }
+        // [Test] Autotest=mscmamie (dossier #42, Markos 02/11 ; 2 joueurs), T = l'autre en jeu depuis 20 s : T+0 l'hote pres de la grand-mere
+        // (2 m de AngryPoint), l'invite a 12 m, grand-mere sortie ; T+15 chacun note si AngryPoint::Player et DrinkCoffee::Use sont suivis ;
+        // T+20 l'hote clique le cafe (DrinkCoffee 'Check drink', comme le joueur) ; T+26 l'invite passe AngryPoint::Player a 'Distance' (il
+        // urine, loin) ; T+32 chacun note TalkEngine Angry, l'etat du cafe et celui de l'automate Drink du joueur.
+        static float mamieT0 = -1; static int mamieStep;
+        static void Mamie()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (mamieT0 < 0) { if (!Jobs.OtherInGame(20f)) return; mamieT0 = now; }
+            float d = now - mamieT0;
+            bool host = Net.Session.IsHost;
+            if (mamieStep == 0)
+            {
+                mamieStep = 1;
+                PutPlayer(host ? new Vector3(459.6f, 4.2f, -1331.6f) : new Vector3(458.4f, 4.5f, -1345f));
+                // (grand-mere sortie chez les deux, comme quand elle attend au jardin : sinon ses automates restent en attente d'activation)
+                GameObject gr = Game.FindAny("JOBS/Mummola/LOD/GrannyTalking/Granny");
+                if (gr != null && !gr.activeSelf) gr.SetActive(true);
+                Log.Info("autotest : mscmamie, teleporte " + (host ? "a 2 m" : "a 12 m") + " de la grand-mere" + (gr != null ? ", grand-mere sortie" : ", grand-mere introuvable"));
+            }
+            if (mamieStep == 1 && d > 15f)
+            {
+                mamieStep = 2;
+                Log.Info("autotest : mscmamie, " + WorldFsms.TestSkip("JOBS/Mummola/LOD/GrannyTalking/Granny/AngryPoint", "Player") + " | " + WorldFsms.TestSkip("JOBS/Mummola/LOD/GrannyTalking/Granny/DrinkCoffee", "Use")
+                         + " | " + WorldFsms.TestSafe("Granny/DrinkCoffee", "Check drink"));
+            }
+            if (mamieStep == 2 && d > 19f)
+            {
+                mamieStep = 21;
+                if (host) Log.Info("autotest : mscmamie, cafe pret : " + WorldFsms.TestClick("Granny/DrinkCoffee", "Wait button"));
+            }
+            if (mamieStep == 21 && d > 20f)
+            {
+                mamieStep = 3;
+                if (host) Log.Info("autotest : mscmamie, cafe : " + WorldFsms.TestEvent("Granny/DrinkCoffee", "USE"));   // (clic du joueur : 'Wait button' -USE-> 'Check drink')
+            }
+            if (mamieStep == 3 && d > 26f)
+            {
+                mamieStep = 4;
+                if (!host)
+                {
+                    GameObject ap = Game.FindAny("JOBS/Mummola/LOD/GrannyTalking/Granny/AngryPoint");
+                    PlayMakerFSM f = ap != null ? Game.FsmOn(ap, "Player") : null;
+                    if (f != null) Game.SetState(f, "Distance");   // (ce que fait la touche Urinate : 'Wait piss' -PROCEED-> 'Distance', qui mesure)
+                    Log.Info("autotest : mscmamie, pipi a 12 m : " + (f != null ? "AngryPoint::Player -> " + f.ActiveStateName + ", distance " + f.FsmVariables.GetFsmFloat("Distance").Value.ToString("F1") : "AngryPoint introuvable"));
+                }
+            }
+            if (mamieStep == 4 && d > 32f)
+            {
+                mamieStep = 5;
+                GameObject te = Game.FindAny("JOBS/Mummola/TalkEngine");
+                PlayMakerFSM tf = te != null ? Game.FsmOn(te, "Granny") : null;
+                HutongGames.PlayMaker.FsmBool ang = tf != null ? tf.FsmVariables.FindFsmBool("Angry") : null;
+                GameObject dc = Game.FindAny("JOBS/Mummola/LOD/GrannyTalking/Granny/DrinkCoffee");
+                PlayMakerFSM df = dc != null ? Game.FsmOn(dc, "Use") : null;
+                GameObject dr = Game.FindAny("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/Drink");
+                PlayMakerFSM pf = dr != null ? Game.FsmOn(dr, "Drink") : null;
+                Log.Info("autotest : mscmamie, colere " + (ang != null ? ang.Value.ToString() : "?") + " (TalkEngine " + (tf != null ? tf.ActiveStateName : "?") + "), cafe " + (df != null ? df.ActiveStateName : "?")
+                         + ", Drink du joueur " + (pf != null ? pf.ActiveStateName : "?") + ", soif " + Game.GlobalFloat("PlayerThirst").ToString("F1"));
+            }
+        }
+
         static void PutPlayer(Vector3 at) { GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null; if (cc == null) return; cc.enabled = false; pl.transform.position = at; cc.enabled = true; }
         static PlayMakerFSM FleetariRegister() { GameObject rg = Game.FindAny("REPAIRSHOP/LOD/Store/ShopCashRegister/Register"); return rg != null ? Game.FsmOn(rg, "Data") : null; }
 
@@ -3700,6 +3762,7 @@ namespace MWCoop
                 }
                 LightsGuard.TestKey(mode, t);
                 if (mode == "tuyau") SewageHose.Test(mode, t);   // (MSC aussi : tuyau de la GIFU, rapport de JD 27/10)
+                if (mode == "amener") VehicleSync.Test(mode, t);   // (MSC aussi : /voiture et attaches au monde, 2ce92fd de [MWC] 03/11)
                 if (mode == "coupure") Home.Test(mode, t);   // (MSC aussi : coupures de l'orage, dossier #32 31/10)
                 // (audit MSC 02/11 : modules qui tournent aussi sur My Summer Car -- kilju et bidons (G #1/#51), ventti et nasse du chalet
                 // (G #2/#53/#65), vitrines (G #9), auto-stoppeurs (G #66), vidange et plein (E #40/#46), fuite du conducteur (E #47) ;
@@ -3712,7 +3775,7 @@ namespace MWCoop
                 if (mode == "fuiteconducteur") CarLeaks.Test(mode, t);
                 // ([Test] TestPos=x,y,z sur My Summer Car, pour ces essais de l'audit MSC 02/11 seulement : teleporte a 8 s, comme sur MWC)
                 if (!auditPosDone && t > 8f && Config.Get("Test", "TestPos", "").Length > 0
-                    && System.Array.IndexOf(new[] { "kilju", "kiljuremplir", "ventti", "ventti2", "nasse", "vitrine", "stop", "fleetpanier", "fleetcaisse", "mscct", "dancing" }, mode) >= 0)
+                    && System.Array.IndexOf(new[] { "kilju", "kiljuremplir", "ventti", "ventti2", "nasse", "vitrine", "stop", "fleetpanier", "fleetcaisse", "mscct", "dancing", "amener" }, mode) >= 0)
                 {
                     auditPosDone = true;
                     string[] c = Config.Get("Test", "TestPos", "").Split(',');
@@ -3722,6 +3785,7 @@ namespace MWCoop
                 // ([Test] Autotest=mscleviers, Markos 28/10 : LeviersPilote=1 (l'invite) monte sur la JONNEZ a 30 s, coupe son AxisCarController a 40 s
                 // et tient gaz 0,8 / frein 0,5 / embrayage 0,6 comme la manette, jusqu'a 70 s ; chacun releve l'angle des trois leviers toutes les 5 s)
                 if (mode == "mscleviers") Leviers(t);
+                if (mode == "mscmamie") Mamie();
                 // ([Test] Autotest=hierarchie, HierVoiture=JONNEZ, HierMots=handle,throttle,grip,brake,lever,gas : objets de la voiture dont le nom
                 // contient un mot (chemin, actif, composants Animation / automates), puis ce que CarVisuals en suit)
                 if (mode == "hierarchie" && step == 0 && t > 40f)

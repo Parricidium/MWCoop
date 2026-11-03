@@ -69,6 +69,60 @@ namespace MWCoop
             }
         }
 
+        // Point dont la chaine ajoute un FixedJoint a la piece sans jamais la rendre libre (batterie : 'Assemble 2' AddComponent FixedJoint,
+        // 'State 1' SetJointConnectedBody, ni SetIsKinematic ni DestroyComponent Rigidbody -- en solo, c'est la main du joueur qui la
+        // lache). Dossier #40 (Markos, 02/11) : le montage rejoue (MscApplyMount) la laisse cinematique, soudee par un joint de 400 a la
+        // voiture de 557 kg : le joint rompait aussitot (« attache rompue ... limite 400 ... cin »), la voiture etait secouee et l'hote
+        // envoyait la casse -- la batterie posee par un invite retombait a chaque fois. Rendue libre juste avant SetJointConnectedBody.
+        // [Test] BatterieLibre=0 : comme avant.
+        class MscFreeHook : ModHook
+        {
+            public override string Module { get { return "pieces"; } }
+            public MscPoint P;
+            public override void OnEnter()
+            {
+                try
+                {
+                    FsmGameObject pv = P.Fsm.FsmVariables.FindFsmGameObject("Part");
+                    Rigidbody rb = pv != null && pv.Value != null ? pv.Value.GetComponent<Rigidbody>() : null;
+                    if (rb != null && rb.isKinematic)
+                    {
+                        rb.isKinematic = false; rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
+                        if (freeLogs++ < 20) MWCoop.Log.Info("piece " + pv.Value.name + " sur " + P.Key + " : rendue libre avant son joint (le point ne le fait pas)");
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+        static int freeLogs;
+
+        // Etat ou brancher MscFreeHook : celui qui accroche le joint ajoute (SetJointConnectedBody), si la chaine ajoute un FixedJoint sans
+        // jamais rendre la piece libre ni lui retirer son corps ; null sinon.
+        static FsmState FreeState(PlayMakerFSM f)
+        {
+            bool addsJoint = false, frees = false;
+            FsmState connect = null;
+            foreach (FsmState s in f.FsmStates)
+            {
+                if (s.Actions == null) continue;
+                foreach (FsmStateAction a in s.Actions)
+                {
+                    if (a == null) continue;
+                    string n = a.GetType().Name;
+                    if (n == "SetIsKinematic") frees = true;
+                    else if (n == "DestroyComponent") frees = true;
+                    else if (n == "SetJointConnectedBody") { if (connect == null) connect = s; }
+                    else if (n == "AddComponent")
+                    {
+                        var ac = a as HutongGames.PlayMaker.Actions.AddComponent;
+                        if (ac != null && ac.component != null && ac.component.Value == "FixedJoint") addsJoint = true;
+                    }
+                }
+            }
+            return addsJoint && !frees && connect != null && connect.IsInitialized ? connect : null;
+        }
+
         class MscRemovalHook : ModHook
         {
             public override string Module { get { return "pieces"; } }
@@ -206,6 +260,7 @@ namespace MWCoop
             casseCopieGeste = Config.GetInt("Test", "CasseCopieGeste", 1) != 0;
             gardeCharniere = Config.GetInt("Test", "GardeCharniere", 1) != 0;
             jointsPerimes = Config.GetInt("Test", "JointsPerimes", 1) != 0;
+            batterieLibre = Config.GetInt("Test", "BatterieLibre", 1) != 0;
             verrouDemontage = Config.GetInt("Test", "VerrouDemontage", 1) != 0;
             tenueInstalled = Config.GetInt("Test", "TenueInstalled", 1) != 0;
             montageAvorte = Config.GetInt("Test", "MontageAvorte", 1) != 0;
@@ -549,6 +604,11 @@ namespace MWCoop
             if (!swap && jointsPerimes)
                 foreach (FsmState s in f.FsmStates)
                     if (s.Name.StartsWith("Set joint") && s.IsInitialized) Inject(s, new MscJointHook { P = p });
+            if (!swap && batterieLibre)
+            {
+                FsmState fs = FreeState(f);
+                if (fs != null && Inject(fs, new MscFreeHook { P = p })) Log.Info("pieces (MSC) : " + p.Key + " rend la piece libre avant son joint ('" + fs.Name + "')");
+            }
             mscPoints[p.Key] = p; mscPointOf[f] = p;
             return true;
         }
@@ -1071,7 +1131,7 @@ namespace MWCoop
         }
         // Meme chose pour la piece {Part} d'un point en tete de 'Set joint' (MscJointHook) : toutes ses attaches vers la voiture du point ou vers
         // le monde, avant que le jeu n'ajoute la sienne.
-        static bool jointsPerimes = true;
+        static bool jointsPerimes = true, batterieLibre = true;
         static void MscDropStaleJoints(MscPoint p)
         {
             if (!Session.Active || p == null || p.Fsm == null) return;

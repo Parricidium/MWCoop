@@ -46,7 +46,7 @@ namespace MWCoop
 
         static Transform Gifu() { Rigidbody b = VehicleSync.Body("GIFU(750/450psi)"); return b != null ? b.transform : null; }
 
-        public static void OnLevelLoaded() { leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; npcDone.Clear(); nextNpcLook = 0; }
+        public static void OnLevelLoaded() { logs = 0; leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; npcDone.Clear(); nextNpcLook = 0; }
 
         static bool Find()
         {
@@ -231,7 +231,88 @@ namespace MWCoop
         // sinon posee au sol -- descente sous le raccord, le long du sol, remontee au bout -- et la longueur en trop en boucle sur le
         // cote. Avant (27/10) le mou etait seulement borne au sol : bout pres du raccord, les 24 maillons (~6 m) tasses sur une
         // ligne courte, « tuyau replie en tube » chez le client (Markos, dossier #14, 28/10).
+        // Dossier #41 (xZOTIK et Markos, 02/11 : « chez le client le tuyau est dans le sol, chez l'hote tordu ») : bout plonge dans la fosse,
+        // GroundY(b) etait le fond de la fosse -- le plancher descendait sous le terrain, la parabole passait (son mou n'etait teste qu'au
+        // milieu) et la chaine allait du raccord a la fosse a travers le sol ; et la longueur en trop faisait un detour a angles droits
+        // sur le cote. Maintenant : parabole gardee seulement si aucun maillon n'est sous le sol, plancher pris sous le raccord, detour en
+        // arc, et chaque maillon (sauf a 0,6 m du bout, qui entre dans la fosse) remonte au-dessus du sol sous lui. [Test] TuyauSolAncien=1 :
+        // comme avant.
+        public static bool LaidFromRemote { get { return following && !selfMode; } }
+        static int solAncien = -1;
         static Vector3[] Layout(Vector3 a, Vector3 b, float L, int n)
+        {
+            if (solAncien < 0) solAncien = Config.GetInt("Test", "TuyauSolAncien", 0);
+            if (solAncien != 0) return LayoutOld(a, b, L, n);
+            var pts = new Vector3[n + 1];
+            pts[0] = a;
+            float d = (b - a).magnitude, sag = Mathf.Max(0f, L - d) * 0.5f;
+            bool under = false;
+            for (int i = 1; i <= n; i++)
+            {
+                float k = (float)i / n;
+                pts[i] = Vector3.Lerp(a, b, k) + Vector3.down * (sag * 4f * k * (1f - k));
+                if (!under && i < n && !NearEnd(pts[i], b) && pts[i].y < GroundUnder(pts[i]) + 0.02f) under = true;
+            }
+            if (L <= d * 1.02f || !under) { LiftAboveGround(pts, b); return pts; }
+            float ga = GroundUnder(a), floor = (ga > float.MinValue ? ga : GroundY(a)) + 0.05f;
+            Vector3 A = new Vector3(a.x, Mathf.Min(floor, a.y), a.z), B = new Vector3(b.x, Mathf.Max(floor, b.y), b.z);
+            float lp = Mathf.Max(0f, a.y - A.y) + (B - A).magnitude + Mathf.Max(0f, B.y - b.y);
+            var poly = new System.Collections.Generic.List<Vector3> { a, A };
+            float extra = L - lp;
+            Vector3 dir = B - A; dir.y = 0f;
+            float D = dir.magnitude;
+            if (extra > 0.05f)
+            {
+                Vector3 side = D > 1e-2f ? Vector3.Cross(Vector3.up, dir / D) : (Gifu() != null ? -Gifu().right : Vector3.right);
+                if (D < 0.5f) { poly.Add(A + side * (extra * 0.5f)); poly.Add(B + side * (extra * 0.5f)); }
+                else
+                {
+                    // arc en sinus sur le cote (longueur en plus ~ extra) au lieu de deux angles droits
+                    float h = Mathf.Min(extra * 0.5f, 2f * D / Mathf.PI * Mathf.Sqrt(extra / D));
+                    for (int j = 1; j < 8; j++) { float t = j / 8f; poly.Add(Vector3.Lerp(A, B, t) + side * (h * Mathf.Sin(Mathf.PI * t))); }
+                }
+            }
+            poly.Add(B); poly.Add(b);
+            float total = 0f;
+            for (int i = 1; i < poly.Count; i++) total += (poly[i] - poly[i - 1]).magnitude;
+            if (total < 1e-4f) { for (int i = 1; i <= n; i++) pts[i] = b; return pts; }
+            int seg = 1; float acc = 0f;
+            for (int i = 1; i <= n; i++)
+            {
+                float want = total * i / n;
+                while (seg < poly.Count - 1 && acc + (poly[seg] - poly[seg - 1]).magnitude < want) { acc += (poly[seg] - poly[seg - 1]).magnitude; seg++; }
+                float len = (poly[seg] - poly[seg - 1]).magnitude;
+                pts[i] = len > 1e-5f ? Vector3.Lerp(poly[seg - 1], poly[seg], (want - acc) / len) : poly[seg];
+            }
+            LiftAboveGround(pts, b);
+            return pts;
+        }
+        static bool NearEnd(Vector3 p, Vector3 b) { float dx = p.x - b.x, dz = p.z - b.z; return dx * dx + dz * dz < 0.36f; }
+        static void LiftAboveGround(Vector3[] pts, Vector3 b)
+        {
+            for (int i = 1; i < pts.Length - 1; i++)
+            {
+                if (NearEnd(pts[i], b)) continue;
+                float g = GroundUnder(pts[i]) + 0.05f;
+                if (pts[i].y < g) pts[i].y = g;
+            }
+        }
+        // Sol sous un point, cherche d'au-dessus (un maillon deja sous le terrain : GroundY, qui part de 0,3 m au-dessus, ne le
+        // trouvait pas) ; sans le tuyau, les joueurs ni la GIFU (le tuyau qui passe sous le camion reste sous lui).
+        static float GroundUnder(Vector3 p)
+        {
+            float best = float.MaxValue, y = float.MinValue;
+            foreach (RaycastHit h in Physics.RaycastAll(p + Vector3.up * 1.5f, Vector3.down, 8f, ~0))
+            {
+                if (h.collider == null || h.collider.isTrigger || (root != null && h.collider.transform.IsChildOf(root.transform)) || Game.UnderPlayer(h.collider.transform)) continue;
+                Transform gt = Gifu();
+                if (gt != null && h.collider.transform.IsChildOf(gt)) continue;
+                if (h.distance < best) { best = h.distance; y = h.point.y; }
+            }
+            return y;
+        }
+
+        static Vector3[] LayoutOld(Vector3 a, Vector3 b, float L, int n)
         {
             var pts = new Vector3[n + 1];
             pts[0] = a;
@@ -333,6 +414,9 @@ namespace MWCoop
         // part, rejoue chez l'hote) puis promene le bout 10 s (comme tenu : il l'envoie) ; chacun note la pose du bout toutes
         // les 2 s ; a +16 s l'invite le range (Put hose back).
         static bool testHeld;
+        static int fosseOn = -1, fStep; static float nextFosseLog; static Vector3 wellAt; static GameObject wellGo; static float nextNudge; static bool nudgeOut;
+        static bool fosseTest { get { if (fosseOn < 0) fosseOn = Config.GetInt("Test", "TuyauDansFosse", 0); return fosseOn != 0; } }
+        static float HoseBack { get { return fosseTest ? 70f : 50f; } }
         static void TestHose(float now)
         {
             // ([Test] TuyauVolant=1 : l'hote au volant de la GIFU des 30 s, moteur lance -- rapport de JD 27/10 ; TuyauTenu=0 : l'invite sort
@@ -351,6 +435,19 @@ namespace MWCoop
                 if (gb != null && now - tvAt < 6f) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); }
                 if (now - tvAt >= 6f) { tvStep = 6; if (gb != null) gb.velocity = Vector3.zero; Log.Info("autotest : tuyau, la GIFU s'arrete en " + (gb != null ? gb.position.ToString("F1") : "?")); }
             }
+            // ([Test] TuyauDansFosse=1, dossier #41 sur MWC : le declencheur de la fosse de HouseShit3 est amene a +25 s, chez les deux, au sol a
+            // 3 m du raccord de la GIFU -- la ou l'invite pose le bout ; deplacer la GIFU l'emballait. L'invite y tient le bout 10 s puis l'y
+            // lache (en le bougeant, plus bas), range a +70 s ; chacun note ses passages dans/hors de la fosse et ses annonces)
+            if (fosseTest && fStep == 0 && Jobs.OtherInGame(25f))
+            {
+                fStep = 1;
+                wellGo = Game.FindAny(TestWell);
+                Transform g = Gifu(), ha = g != null ? g.Find("ActivateHose") : null;
+                if (ha != null) { wellAt = ha.position + ha.right * 3f; wellAt.y = GroundY(wellAt + Vector3.up * 3f) + 0.2f; }
+                Log.Info("autotest : tuyau, fosse " + (wellGo == null ? "introuvable" : ha == null ? "trouvee, raccord introuvable" : "amenee en " + wellAt.ToString("F1") + (wellGo.activeInHierarchy ? "" : " (eteinte)")));
+            }
+            if (fosseTest && fStep == 1 && wellGo != null && wellAt != Vector3.zero) wellGo.transform.position = wellAt;   // (chaque image : l'automate du niveau deplace la fosse)
+            if (fosseTest && fStep == 1 && now >= nextFosseLog) { nextFosseLog = now + 10f; Log.Info("autotest : tuyau, fosse : passages ici " + Jobs.HoseSeen + ", annonces " + Jobs.HoseSent + ", recus " + Jobs.HoseGot + (LaidFromRemote ? " (chaine posee d'apres l'autre)" : "")); }
             if (tStep == 0 && Jobs.OtherInGame(40f)) { tStep = 1; tAt = now; }
             if (tStep == 0) return;
             // (TuyauDepart=1 : l'hote, au volant, roule 6 s a +22 s -- apres le lacher de l'invite a +12 s ; [MWC] 28/10)
@@ -368,7 +465,7 @@ namespace MWCoop
             if (Session.IsHost && use != null)
             {
                 if (tStep == 1) { tStep = 2; Game.SetState(use, "Remove part"); }
-                if (tStep == 2 && now - tAt > 50f) { tStep = 3; Game.SetState(use, "Put hose back"); }
+                if (tStep == 2 && now - tAt > HoseBack) { tStep = 3; Game.SetState(use, "Put hose back"); }
             }
             if (!Session.IsHost)
             {
@@ -383,12 +480,22 @@ namespace MWCoop
                 {
                     float k = now - tAt - 2f;
                     Vector3 basePos = ah.transform.position + ah.transform.right * 3f;
-                    if (testHand != null) testHand.position = basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
+                    // ([Test] TuyauFosse=m, dossier #41 : bout tenu m metres sous le raccord a cote du camion, comme plonge dans une fosse)
+                    float fd = Config.GetFloat("Test", "TuyauFosse", 0f);
+                    if (testHand != null) testHand.position = fosseTest && wellAt != Vector3.zero ? wellAt : fd > 0f ? basePos + Vector3.down * fd : basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
                     if (k > 10f) { tStep = 4; testHeld = false; end.isKinematic = false; if (testHand != null) { end.transform.parent = endParent; Object.Destroy(testHand.gameObject); testHand = null; } }
                 }
-                if (tStep == 4 && now - tAt > 50f && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
+                // (TuyauDansFosse=1 : bout pose qui bouge un peu -- comme la physique chez MSC -- 1,5 m dans/hors de la fosse chaque seconde ; chez
+                // l'hote la chaine se repose d'apres lui a chaque fois)
+                if (fosseTest && tStep == 4 && end != null && wellAt != Vector3.zero && now - tAt < HoseBack - 3f && now >= nextNudge)
+                {
+                    nextNudge = now + 1f; nudgeOut = !nudgeOut;
+                    Transform ha = ah.transform;
+                    end.transform.position = wellAt + (nudgeOut ? ha.right * 1.5f : Vector3.zero); end.position = end.transform.position;
+                }
+                if (tStep == 4 && now - tAt > HoseBack && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
             }
-            if (Find() && now >= nextTestLog && now - tAt < 56f)
+            if (Find() && now >= nextTestLog && now - tAt < HoseBack + 6f)
             {
                 nextTestLog = now + 4f;
                 float vmax = 0f, dmax = 0f;
@@ -398,9 +505,27 @@ namespace MWCoop
                 if (segs != null && segs.Length > 0) Log.Info("autotest : tuyau, maillons : ecart moyen " + (lsum / segs.Length).ToString("F2") + " m, min " + lmin.ToString("F2") + " m, longueur " + lsum.ToString("F1") + " m, plus bas " + ymin.ToString("F2") + (following ? " (suivi)" : ""));
                 Transform stt = Gifu() != null ? Gifu().Find("ShitTank") : null; Rigidbody stb = stt != null ? stt.GetComponent<Rigidbody>() : null;
                 if (stb != null) Log.Info("autotest : tuyau, ShitTank : corps a " + (stb.position - stt.position).magnitude.ToString("F2") + " m de son objet" + (stb.isKinematic ? " (cin)" : " (libre)") + ", raccord a " + (coupler != null ? (coupler.position - stt.position).magnitude.ToString("F2") : "?") + " m");
+                Log.Info("autotest : tuyau, maillons sous le sol " + TestUnder() + " (hors 0,6 m du bout), sol sous le bout " + (end != null ? GroundUnder(end.transform.position).ToString("F2") : "?"));
                 Log.Info("autotest : tuyau, maillons : vitesse max " + vmax.ToString("F1") + " m/s, ecart max au raccord " + dmax.ToString("F1") + " m" + (following ? " (suivi)" : "") + (ignoring ? " (chocs copie coupes)" : ""));
                 Log.Info("autotest : tuyau, " + (root.activeInHierarchy ? "sorti" : "range") + ", bout en " + end.position.ToString("F2") + (end.isKinematic ? " (cinematique)" : "") + (mine ? " a nous" : remoteBy >= 0 ? " suivi sur #" + remoteBy : "") + (following ? ", chaine posee" : "") + (cols != null && cols.Length > 0 && cols[0] != null && !cols[0].enabled ? ", sans collision" : "") + ", bout " + (EndGrabbable() ? "saisissable" : "insaisissable"));
             }
+        }
+        // Essai : maillons a plus de 10 cm sous le sol sous eux (sauf pres du bout, qui peut entrer dans une fosse), et coudes de plus de 60 degres.
+        static string TestUnder()
+        {
+            if (segs == null || end == null) return "?";
+            int under = 0, bends = 0;
+            Vector3 b = end.transform.position, prev = coupler != null ? coupler.position : segs[0].position, prevDir = Vector3.zero;
+            foreach (Rigidbody r in segs)
+            {
+                if (r == null) continue;
+                Vector3 p = r.transform.position;
+                if (r != end && !NearEnd(p, b)) { float g = GroundUnder(p); if (g > float.MinValue && p.y < g - 0.1f) under++; }
+                Vector3 dir = p - prev;
+                if (dir.sqrMagnitude > 1e-4f) { if (prevDir != Vector3.zero && Vector3.Angle(prevDir, dir) > 60f) bends++; prevDir = dir; }
+                prev = p;
+            }
+            return under + "/" + segs.Length + ", coudes > 60 deg " + bends;
         }
         static float nextTestLog, tvAt; static int tvStep;
         static bool EndGrabbable() { if (cols != null) foreach (Collider c in cols) if (c != null && c.enabled && !c.isTrigger && c.GetComponentInParent<Rigidbody>() == end) return true; return false; }
