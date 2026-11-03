@@ -108,6 +108,7 @@ namespace MWCoop
             }
             st.ModelButtons = inf.ContainsKey("boutons_modele");
             SetupBrakeLamp(b, st, inf);
+            SetupGearDisplay(b, st, inf);
             // boutons visibles du tableau de bord (cylindres colores, comme sur la copie)
             VazCar.Knob[] kns = KnobsOf(m);
             if (kns != null)
@@ -292,6 +293,7 @@ namespace MWCoop
             else Log.Warn("standalone : son du klaxon de la voiture du jeu introuvable");
             st.Speedo = Gauge.Make(b, inf, "v", "cadran_vitesse.png");
             st.Tacho = Gauge.Make(b, inf, "r", "cadran_regime.png");
+            st.Turbo = Gauge.Make(b, inf, "t", "cadran_turbo.png");
             SetupClock(b, inf);
             MakeMirrors(b, st, inf);
         }
@@ -334,7 +336,7 @@ namespace MWCoop
         {
             // (Shown tres bas au depart : le premier Set pose toujours l'aiguille -- avec -1, un compte-tours a 0 tr/min restait
             // vertical, sous le seuil de 0,2 % de 9 000 ; JD 03/11)
-            public Transform Needle; public Vector3 Axis; public float A0, A1, V0, V1, Shown = -1e9f;
+            public Transform Needle; public Vector3 Axis; public float A0, A1, V0, V1, Max, Shown = -1e9f;   // (Max : pression maxi du turbo, cadran_t_valeurs z)
             // (face de nuit, <face>_nuit.png : graduations vertes avec les phares, comme le tableau de bord eclaire de la Golf -- JD 31/10)
             public Material Face; public Texture2D Day, Night; public bool Lit;
             public void Light(bool on)
@@ -364,8 +366,8 @@ namespace MWCoop
                 pivot.SetParent(b.Body, false); pivot.localPosition = c - n * 0.003f;
                 var nq = Quad("pieces", pivot, Vector3.zero, Vector3.zero, up, right);
                 nq.GetComponent<MeshRenderer>().sharedMaterial = new Material(transp) { mainTexture = needle };
-                Log.Info("standalone : compteur " + (k == "v" ? "vitesse" : "regime") + " pose (" + val.x + "-" + val.y + ", " + ang.x + "-" + ang.y + " degres)");
-                return new Gauge { Needle = pivot, Axis = n, A0 = ang.x, A1 = ang.y, V0 = val.x, V1 = val.y, Face = fm, Day = face, Night = night };
+                Log.Info("standalone : compteur " + (k == "v" ? "vitesse" : k == "t" ? "turbo" : "regime") + " pose (" + val.x + "-" + val.y + ", " + ang.x + "-" + ang.y + " degres)");
+                return new Gauge { Needle = pivot, Axis = n, A0 = ang.x, A1 = ang.y, V0 = val.x, V1 = val.y, Max = val.z, Face = fm, Day = face, Night = night };
             }
 
             public void Set(float value)
@@ -453,6 +455,25 @@ namespace MWCoop
             float kmh = b.Rb.isKinematic ? st.RemoteKmh : Mathf.Abs(b.Car.transform.InverseTransformDirection(b.Rb.velocity).z) * 3.6f;
             if (st.Speedo != null) { st.Speedo.Set(kmh); st.Speedo.Light(st.LightsOn); }
             if (st.Tacho != null) { st.Tacho.Set(st.EngineOn ? b.Dt.rpm : 0f); st.Tacho.Light(st.LightsOn); }
+            if (st.Turbo != null)
+            {
+                // (pression du turbo simulee, JD 03/11 : moteur coupe 0 ; pied leve, depression du ralenti si le cadran descend sous 0 ;
+                // en charge, pression maxi x gaz x regime (pleine a partir de 5 500 tr/min) ; monte en ~1 s, retombe vite)
+                float tgt = 0f;
+                if (st.EngineOn && b.Dt != null)
+                {
+                    float thr = Mathf.Clamp01(b.Dt.throttle), boost = (st.Turbo.Max > 0f ? st.Turbo.Max : st.Turbo.V1 * 0.6f) * thr * Mathf.Clamp01((b.Dt.rpm - 2500f) / 3000f);
+                    tgt = st.Turbo.V0 < 0f ? Mathf.Lerp(-0.6f, 0f, thr) + boost : boost;
+                }
+                st.Boost = Mathf.MoveTowards(st.Boost, tgt, Time.deltaTime * (tgt > st.Boost ? 1.4f : 3.5f));
+                st.Turbo.Set(st.Boost); st.Turbo.Light(st.LightsOn);
+            }
+            GearDisplay(b, st);
+            if (st.RevLamp != null)
+            {
+                bool rv = st.EngineOn && b.Dt != null && b.Dt.rpm >= st.RevAt;
+                if (st.RevLamp.activeSelf != rv) st.RevLamp.SetActive(rv);
+            }
             Clock(b, st);
             if (st.BrakeLamp != null)
             {
@@ -482,6 +503,58 @@ namespace MWCoop
             q.GetComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("Unlit/Texture")) { mainTexture = t, name = "standalone_voyant_frein" };
             q.SetActive(false);
             st.BrakeLamp = q;
+        }
+
+        // afficheur du rapport engage (infos.txt rapport_centre / haut / droite : petit ecran du modele -- 205, JD 03/11) : R, N, 1..n en
+        // sept segments rouges, contact mis ; voyant de regime (voyant_regime_centre / haut / droite, voyant_regime_seuil) : pastille rouge
+        // allumee au-dessus du seuil
+        static void SetupGearDisplay(VazCar.Built b, State st, Dictionary<string, Vector3> inf)
+        {
+            Vector3 c, up, right, s;
+            if (inf.TryGetValue("rapport_centre", out c) && inf.TryGetValue("rapport_haut", out up) && inf.TryGetValue("rapport_droite", out right))
+            {
+                var q = Gauge.Quad("rapport", b.Body, c, Vector3.zero, up, right);
+                st.GearTex = new Texture2D(GW, GH, TextureFormat.RGB24, false) { name = "standalone_rapport", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+                q.GetComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("Unlit/Texture")) { mainTexture = st.GearTex, name = "standalone_rapport" };
+            }
+            if (inf.TryGetValue("voyant_regime_centre", out c) && inf.TryGetValue("voyant_regime_haut", out up) && inf.TryGetValue("voyant_regime_droite", out right))
+            {
+                var t = new Texture2D(32, 32, TextureFormat.RGBA32, false) { name = "standalone_voyant_regime", wrapMode = TextureWrapMode.Clamp };
+                var px = new Color[32 * 32];
+                for (int j = 0; j < 32; j++)
+                    for (int i = 0; i < 32; i++)
+                    {
+                        float d = Mathf.Sqrt((i - 15.5f) * (i - 15.5f) + (j - 15.5f) * (j - 15.5f)) / 15.5f;
+                        px[j * 32 + i] = new Color(1f, 0.12f + 0.5f * Mathf.Clamp01(0.5f - d), 0.08f, d < 1f ? 1f : 0f);
+                    }
+                t.SetPixels(px); t.Apply(false);
+                var q = Gauge.Quad("voyant_regime", b.Body, c, Vector3.zero, up, right);
+                q.GetComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("Unlit/Transparent") ?? Shader.Find("Unlit/Texture")) { mainTexture = t, name = "standalone_voyant_regime" };
+                q.SetActive(false); st.RevLamp = q;
+                st.RevAt = inf.TryGetValue("voyant_regime_seuil", out s) && s.x > 0f ? s.x : 7000f;
+            }
+        }
+        const int GW = 20, GH = 32;
+        static void GearDisplay(VazCar.Built b, State st)
+        {
+            if (st.GearTex == null || b.Dt == null || b.Dt.gearRatios == null) return;
+            bool lit = st.EngineOn || st.KeyPos > 0;
+            if (b.Dt.gear == st.GearShown && lit == st.GearLit) return;
+            st.GearShown = b.Dt.gear; st.GearLit = lit;
+            int n = Array.IndexOf(b.Dt.gearRatios, 0f), g = b.Dt.gear;
+            // (R : segments e et g ; N : c, e, g ; rapports : chiffres)
+            int seg = g == n ? 0x54 : g < n ? 0x50 : Seg[Mathf.Clamp(g - n, 0, 9)];
+            Color bg = new Color(0.05f, 0.02f, 0.02f), ink = new Color(1f, 0.16f, 0.10f), ghost = new Color(0.10f, 0.03f, 0.03f);
+            var px = new Color[GW * GH]; for (int i = 0; i < px.Length; i++) px[i] = bg;
+            for (int sg = 0; sg < 7; sg++) DrawSegIn(px, GW, GH, 3, 4, sg, lit && (seg & (1 << sg)) != 0 ? ink : ghost);
+            st.GearTex.SetPixels(px); st.GearTex.Apply(false);
+        }
+        static void DrawSegIn(Color[] px, int w, int h, int x, int y, int sg, Color c)
+        {
+            int[][] r = { new[] { x + 2, y, 10, 3 }, new[] { x + 11, y + 2, 3, 10 }, new[] { x + 11, y + 12, 3, 10 }, new[] { x + 2, y + 21, 10, 3 },
+                          new[] { x, y + 12, 3, 10 }, new[] { x, y + 2, 3, 10 }, new[] { x + 2, y + 10, 10, 3 } };
+            int[] q = r[sg];
+            for (int j = q[1]; j < q[1] + q[3]; j++) for (int i = q[0]; i < q[0] + q[2]; i++) if (i >= 0 && i < w && j >= 0 && j < h) px[(h - 1 - j) * w + i] = c;
         }
 
         public static void SetupClock(VazCar.Built b, Dictionary<string, Vector3> inf)
@@ -2034,7 +2107,7 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
             UnityEngine.Object.Destroy(go);
         }
-        static bool cFrein, cSeatShots, cMirrorShots, cBeltDone; static int cHeat; static float cHeatLog;
+        static bool cFrein, cSeatShots, cMirrorShots, cBeltDone, cPlanche; static int cHeat; static float cHeatLog;
         // (console du chauffage vue du milieu de l'habitacle, entre les sieges, avec une lampe le temps des photos)
         static void HeatShots(VazCar.Built b, State st, string tag)
         {
@@ -2198,6 +2271,21 @@ namespace MWCoop
                 Photo(b, w + "-cote", new Vector3(sx * 1.7f, 1.1f, -0.2f), new Vector3(sx * 0.33f, 0.8f, -0.2f));
                 Photo(b, w + "-face", new Vector3(sx * 0.3f, 1.25f, 1.7f), new Vector3(sx * 0.33f, 0.85f, -0.25f));
                 Photo(b, w + "-profil", new Vector3(-sx * 0.05f, 1.05f, 0.35f), new Vector3(sx * 0.4f, 0.75f, -0.35f));
+            }
+            // ([Test] StandalonePlanche=1 : a 42 s, l'hote au volant, planche figee -- 7 500 tr/min, 100 km/h, turbo aux 9/10 du maxi, 4e
+            // affichee, voyant de regime allume -- et vue de ses yeux vers le compte-tours : compteurs, afficheur et voyant, JD 03/11)
+            if (host && b != null && st != null && driving == b && t > 42f && !cPlanche && Config.GetInt("Test", "StandalonePlanche", 0) != 0)
+            {
+                cPlanche = true; gaugeFreeze = true; st.LightsOn = false;
+                if (st.Speedo != null) st.Speedo.Set(100f);
+                if (st.Tacho != null) st.Tacho.Set(7500f);
+                if (st.Turbo != null) st.Turbo.Set(st.Turbo.Max > 0f ? st.Turbo.Max * 0.9f : st.Turbo.V1 * 0.5f);
+                int n0 = b.Dt.gearRatios != null ? Array.IndexOf(b.Dt.gearRatios, 0f) : 1, g0 = b.Dt.gear;
+                b.Dt.gear = n0 + 4; st.GearShown = -99; GearDisplay(b, st); b.Dt.gear = g0;
+                if (st.RevLamp != null) st.RevLamp.SetActive(true);
+                Vector3 at = st.Tacho != null ? b.Car.transform.InverseTransformPoint(st.Tacho.Needle.position) : st.T.Yeux + Vector3.forward;
+                Photo(b, "planche", st.T.Yeux, at, 38f);
+                Log.Info("standalone : planche figee (rapport affiche " + (st.GearTex != null) + ", voyant " + (st.RevLamp != null) + ", turbo " + (st.Turbo != null) + ")");
             }
             // ([Test] StandaloneRetros=1 : a 70 s, l'hote au volant, chaque glace vue de ses yeux, zoomee -- retroviseurs fonctionnels)
             if (host && b != null && st != null && st.Mirrors != null && driving == b && t > 70f && !cMirrorShots && Config.GetInt("Test", "StandaloneRetros", 0) != 0)

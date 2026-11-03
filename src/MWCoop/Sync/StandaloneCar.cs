@@ -41,7 +41,9 @@ namespace MWCoop
             public StandaloneTenue T; public Transform Cog; public float NextGrip, NextFile;
             public Transform Pivot; public Animation Lean; public Matrix4x4 RestCarFromPivot; public string LeanOut, LeanIn, LeanBackOut, LeanBackIn; public int LeanState; public float HalfWidth; public bool EngineOn, LightsOn; public float CrankT = -1f; public Light[] Heads;   // (StandaloneDrive)
             public Transform[] Doors; public Vector3[] DoorCenter; public bool[] DoorOpen; public float[] DoorAngle;
-            public Gauge Speedo, Tacho;
+            public Gauge Speedo, Tacho, Turbo; public float Boost;   // (manometre du turbo : pression simulee, StandaloneDrive)
+            // (afficheur du rapport engage et voyant de regime -- 205 Rallyworld, JD 03/11)
+            public Texture2D GearTex; public int GearShown = -99; public bool GearLit; public GameObject RevLamp; public float RevAt;
             public Mirror[] Mirrors; public int MirrorNext; public bool MirrorsLive;   // (retroviseurs fonctionnels, StandaloneMirror)
             public Heater Heat;   // (chauffage, StandaloneHeater)
             public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;
