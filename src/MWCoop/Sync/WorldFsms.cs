@@ -322,6 +322,10 @@ namespace MWCoop
             portesPieces = Config.GetInt("Test", "PortesPieces", 1) != 0;
             zoneObjet = Config.GetInt("Test", "ZoneObjet", 1) != 0;
             outilsPerso = Config.GetInt("Test", "OutilsPerso", 1) != 0;
+            // (dossier #42, Markos 02/11 : voir Classify et MscPersonal -- [Test] <Nom>=0 : comme avant)
+            ciblesPerso = Config.GetInt("Test", "CiblesPerso", 1) != 0;
+            colereMamie = Config.GetInt("Test", "ColereMamie", 1) != 0;
+            ciblesLogged = 0;
             zoneLogged.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
@@ -330,7 +334,8 @@ namespace MWCoop
         public static void ScheduleSnapshot(Peer p) { snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 22f, p)); }
 
         static bool fraisesPerso = true, dragPerso = true, pcPerso = true, clesPartagees = true, aliasStrict = true;
-        static bool portesPieces = true, zoneObjet = true, outilsPerso = true;
+        static bool portesPieces = true, zoneObjet = true, outilsPerso = true, ciblesPerso = true, colereMamie = true;
+        static int ciblesLogged;
         static readonly HashSet<string> zoneLogged = new HashSet<string>();   // cles deja notees (zone propre / rejeu en erreur), une ligne chacune
 
         // Mode outils du joueur (desync du 02/11, JD et GG : PLAYER/.../SelectItem diffuse REPAIRMODE_ON/OFF a toute la scene quand on
@@ -365,6 +370,11 @@ namespace MWCoop
                 if (dragPerso && root.name == "DRAGRACE" && (pn == "DragTiming" || pn.StartsWith("dragcar", System.StringComparison.Ordinal))) return true;
                 if (pcPerso && p.parent != null && (pn == "SYSTEM" && p.parent.name == "COMPUTER" || pn == "TriggerPlayMode" && p.parent.name == "Computer")) return true;
             }
+            // Colere de la grand-mere (dossier #42, Markos 02/11) : 'Distance' mesure la distance au joueur LOCAL ({SavePlayer}) ; l'invite qui
+            // urinait envoyait 'Wait piss' -PROCEED-> 'Distance', et l'hote, qui mene la grand-mere pour tous, la recalculait par rapport a
+            // lui-meme -- assis a 2,6 m sur la chaise du jardin, il la mettait en colere (TalkEngine Angry : plus de SPEAKSTOP, jamais
+            // 'Give money'). A chacun sa distance.
+            if (colereMamie && n == "AngryPoint" && f.FsmName == "Player") return true;
             return false;
         }
 
@@ -490,6 +500,21 @@ namespace MWCoop
                         GameObject go = null;
                         if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
                         else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
+                        // Evenement envoye au joueur (dossier #42, Markos 02/11 : le cafe de la grand-mere, JOBS/Mummola/.../DrinkCoffee::Use 'Drink'
+                        // -> SendEventByName DRINKCOFFEEGRAN a PLAYER/.../FPSCamera/Drink) : la cible n'etait pas lue, l'etat passait pour sur et le
+                        // clic etait rejoue chez l'autre -- son joueur buvait aussi. My Summer Car, cible sous PLAYER seulement ([Test] CiblesPerso=0 :
+                        // comme avant).
+                        else if (v is FsmEventTarget && ciblesPerso && Game.Msc)
+                        {
+                            var et = (FsmEventTarget)v;
+                            if ((et.target == FsmEventTarget.EventTarget.GameObject || et.target == FsmEventTarget.EventTarget.GameObjectFSM) && et.gameObject != null
+                                && et.gameObject.OwnerOption != OwnerDefaultOption.UseOwner && et.gameObject.GameObject.Value != null
+                                && Game.RootName(et.gameObject.GameObject.Value.transform) == "PLAYER")
+                            {
+                                go = et.gameObject.GameObject.Value;
+                                if (ciblesLogged++ < 40) Log.Info("monde : " + Recon.Path(f.transform) + "::" + f.FsmName + " '" + st.Name + "' envoie a " + Recon.Path(go.transform) + " : etat personnel");
+                            }
+                        }
                         // Point d'insertion d'un CD : 'Find correct part' LIT la main du joueur (GetChild de ItemPivot) ;
                         // ce n'est pas agir sur lui, et sans cela la pose du CD (ASSEMBLE) n'etait jamais envoyee.
                         bool reads = f.gameObject.name.StartsWith("DiscTrigger") && a.GetType().Name.StartsWith("Get");
@@ -1474,6 +1499,14 @@ namespace MWCoop
                 }
             // Automates passes a Calls (createurs de commandes, cadrans, boite aux lettres) : l'essai 'colis' marche encore.
             return Calls.TestEvent(part, ev) ?? "rien pour " + part;
+        }
+
+        // Essai (dossier #42) : un clic qui mene a 'state' serait-il envoye aux autres (aucun etat personnel au bout de sa chaine) ?
+        public static string TestSafe(string part, string state)
+        {
+            foreach (W j in byKey.Values)
+                if (j.F != null && j.Key.Contains(part)) return j.Key + " '" + state + "' : " + (Safe(j, state) ? "envoye aux autres" : "personnel, pas envoye");
+            return "rien pour " + part;
         }
 
         // Comme si le joueur venait d'agir et que l'automate passait a 'state' (boitier de CD : 'Bool test').
