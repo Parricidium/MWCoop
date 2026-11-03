@@ -2112,14 +2112,17 @@ namespace MWCoop
         }
 
         // "Wait 2" suit aussi tout objet qui n'est pas le tuyau : seul le passage dedans -> dehors du tuyau compte.
+        public static int HoseSeen, HoseSent, HoseGot;   // (essai Autotest=tuyau TuyauDansFosse=1 : passages ici, annonces, recus)
         static void HoseLocal(Well w, bool inWell)
         {
             if (w.LocalIn == inWell) return;
             w.LocalIn = inWell;
+            HoseSeen++;
             // (dossier #41, 02/11 : chaine posee ici d'apres le bout de l'autre -- son collisionneur entrait et sortait de la fosse a chaque
             // repose, 215 « tuyau dans/sorti » en une minute envoyes a celui qui mene la pompe. Seul celui qui tient le bout le dit.
             // [Test] TuyauFosseCopie=1 : comme avant)
             if (SewageHose.LaidFromRemote && Config.GetInt("Test", "TuyauFosseCopie", 0) == 0) return;
+            HoseSent++;
             Log.Info("fosse : tuyau " + (inWell ? "dans " : "sorti de ") + w.Key + " ici");
             if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@tuyau").Str(w.Key).Bool(inWell), true);
         }
@@ -2129,6 +2132,7 @@ namespace MWCoop
             Well w;
             if (!wells.TryGetValue(key, out w) || w.F == null) { Log.Warn("fosse " + key + " introuvable ici"); return; }
             w.RemoteIn = inWell;
+            HoseGot++;
             bool isIn = HoseInStates.Contains(w.F.ActiveStateName);
             if (isIn == inWell || !w.F.gameObject.activeInHierarchy || !hooked.Contains(w.F))
             {

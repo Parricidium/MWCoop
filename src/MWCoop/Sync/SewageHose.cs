@@ -414,6 +414,9 @@ namespace MWCoop
         // part, rejoue chez l'hote) puis promene le bout 10 s (comme tenu : il l'envoie) ; chacun note la pose du bout toutes
         // les 2 s ; a +16 s l'invite le range (Put hose back).
         static bool testHeld;
+        static int fosseOn = -1, fStep; static float nextFosseLog; static Vector3 wellAt; static GameObject wellGo; static float nextNudge; static bool nudgeOut;
+        static bool fosseTest { get { if (fosseOn < 0) fosseOn = Config.GetInt("Test", "TuyauDansFosse", 0); return fosseOn != 0; } }
+        static float HoseBack { get { return fosseTest ? 70f : 50f; } }
         static void TestHose(float now)
         {
             // ([Test] TuyauVolant=1 : l'hote au volant de la GIFU des 30 s, moteur lance -- rapport de JD 27/10 ; TuyauTenu=0 : l'invite sort
@@ -432,6 +435,19 @@ namespace MWCoop
                 if (gb != null && now - tvAt < 6f) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); }
                 if (now - tvAt >= 6f) { tvStep = 6; if (gb != null) gb.velocity = Vector3.zero; Log.Info("autotest : tuyau, la GIFU s'arrete en " + (gb != null ? gb.position.ToString("F1") : "?")); }
             }
+            // ([Test] TuyauDansFosse=1, dossier #41 sur MWC : le declencheur de la fosse de HouseShit3 est amene a +25 s, chez les deux, au sol a
+            // 3 m du raccord de la GIFU -- la ou l'invite pose le bout ; deplacer la GIFU l'emballait. L'invite y tient le bout 10 s puis l'y
+            // lache (en le bougeant, plus bas), range a +70 s ; chacun note ses passages dans/hors de la fosse et ses annonces)
+            if (fosseTest && fStep == 0 && Jobs.OtherInGame(25f))
+            {
+                fStep = 1;
+                wellGo = Game.FindAny(TestWell);
+                Transform g = Gifu(), ha = g != null ? g.Find("ActivateHose") : null;
+                if (ha != null) { wellAt = ha.position + ha.right * 3f; wellAt.y = GroundY(wellAt + Vector3.up * 3f) + 0.2f; }
+                Log.Info("autotest : tuyau, fosse " + (wellGo == null ? "introuvable" : ha == null ? "trouvee, raccord introuvable" : "amenee en " + wellAt.ToString("F1") + (wellGo.activeInHierarchy ? "" : " (eteinte)")));
+            }
+            if (fosseTest && fStep == 1 && wellGo != null && wellAt != Vector3.zero) wellGo.transform.position = wellAt;   // (chaque image : l'automate du niveau deplace la fosse)
+            if (fosseTest && fStep == 1 && now >= nextFosseLog) { nextFosseLog = now + 10f; Log.Info("autotest : tuyau, fosse : passages ici " + Jobs.HoseSeen + ", annonces " + Jobs.HoseSent + ", recus " + Jobs.HoseGot + (LaidFromRemote ? " (chaine posee d'apres l'autre)" : "")); }
             if (tStep == 0 && Jobs.OtherInGame(40f)) { tStep = 1; tAt = now; }
             if (tStep == 0) return;
             // (TuyauDepart=1 : l'hote, au volant, roule 6 s a +22 s -- apres le lacher de l'invite a +12 s ; [MWC] 28/10)
@@ -449,7 +465,7 @@ namespace MWCoop
             if (Session.IsHost && use != null)
             {
                 if (tStep == 1) { tStep = 2; Game.SetState(use, "Remove part"); }
-                if (tStep == 2 && now - tAt > 50f) { tStep = 3; Game.SetState(use, "Put hose back"); }
+                if (tStep == 2 && now - tAt > HoseBack) { tStep = 3; Game.SetState(use, "Put hose back"); }
             }
             if (!Session.IsHost)
             {
@@ -466,12 +482,20 @@ namespace MWCoop
                     Vector3 basePos = ah.transform.position + ah.transform.right * 3f;
                     // ([Test] TuyauFosse=m, dossier #41 : bout tenu m metres sous le raccord a cote du camion, comme plonge dans une fosse)
                     float fd = Config.GetFloat("Test", "TuyauFosse", 0f);
-                    if (testHand != null) testHand.position = fd > 0f ? basePos + Vector3.down * fd : basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
+                    if (testHand != null) testHand.position = fosseTest && wellAt != Vector3.zero ? wellAt : fd > 0f ? basePos + Vector3.down * fd : basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
                     if (k > 10f) { tStep = 4; testHeld = false; end.isKinematic = false; if (testHand != null) { end.transform.parent = endParent; Object.Destroy(testHand.gameObject); testHand = null; } }
                 }
-                if (tStep == 4 && now - tAt > 50f && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
+                // (TuyauDansFosse=1 : bout pose qui bouge un peu -- comme la physique chez MSC -- 1,5 m dans/hors de la fosse chaque seconde ; chez
+                // l'hote la chaine se repose d'apres lui a chaque fois)
+                if (fosseTest && tStep == 4 && end != null && wellAt != Vector3.zero && now - tAt < HoseBack - 3f && now >= nextNudge)
+                {
+                    nextNudge = now + 1f; nudgeOut = !nudgeOut;
+                    Transform ha = ah.transform;
+                    end.transform.position = wellAt + (nudgeOut ? ha.right * 1.5f : Vector3.zero); end.position = end.transform.position;
+                }
+                if (tStep == 4 && now - tAt > HoseBack && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
             }
-            if (Find() && now >= nextTestLog && now - tAt < 56f)
+            if (Find() && now >= nextTestLog && now - tAt < HoseBack + 6f)
             {
                 nextTestLog = now + 4f;
                 float vmax = 0f, dmax = 0f;
