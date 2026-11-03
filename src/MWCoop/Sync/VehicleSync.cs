@@ -592,11 +592,32 @@ namespace MWCoop
             if (!kin) { b.position = pos; b.rotation = q; }
             foreach (Rigidbody rb in c.T.GetComponentsInChildren<Rigidbody>()) if (rb != b && !rb.isKinematic) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
             ThawParts(c);
+            int pinned = RepinWorldJoints(c);
             var up = new System.Text.StringBuilder();
             foreach (RaycastHit h in Physics.RaycastAll(pos + Vector3.up * 1.6f, Vector3.up, 60f)) up.Append(' ').Append(h.collider.name).Append('@').Append(h.distance.ToString("F1"));
             var down = new System.Text.StringBuilder();
             foreach (RaycastHit h in Physics.RaycastAll(pos + Vector3.up * 50f, Vector3.down, 52f)) down.Append(' ').Append(h.collider.name).Append('@').Append((50f - h.distance).ToString("F1"));
-            Log.Info("voitures : " + c.Key + " amenee en " + pos.ToString("F1") + " (triche /voiture)" + (Config.GetInt("Test", "SondeAmener", 0) != 0 ? " ; au-dessus :" + up + " ; de haut :" + down : ""));
+            Log.Info("voitures : " + c.Key + " amenee en " + pos.ToString("F1") + " (triche /voiture)" + (pinned > 0 ? ", " + pinned + " attache(s) au monde reposee(s)" : "") + (Config.GetInt("Test", "SondeAmener", 0) != 0 ? " ; au-dessus :" + up + " ; de haut :" + down : ""));
+        }
+
+        // Attaches au monde d'une voiture deplacee d'un coup (GIFU, 03/11 : ShitTank et MassEngine ont, en plus de leur attache a la
+        // GIFU, un SpringJoint sans corps relie -- ressort et amortisseur 500000, casse a 250 kN : la GIFU garee reste en place jusqu'a
+        // ce qu'on la bouge vraiment. Leur point restait a l'ancienne place : 200 m d'ecart pour /voiture, toute la voiture projetee a
+        // 140 m/s, pare-brise casses, puis remise a sa pose calme d'avant, donc pas amenee). Reaffecter le corps relie (vide) recalcule
+        // le point la ou la piece est maintenant ; poussee ensuite, elle s'en libere comme chez elle ([Test] AmenerAttaches=0 : comme avant).
+        static int amenerAttaches = -1;
+        static int RepinWorldJoints(Car c)
+        {
+            if (amenerAttaches < 0) amenerAttaches = Config.GetInt("Test", "AmenerAttaches", 1);
+            if (amenerAttaches == 0 || c.Body == null) return 0;
+            int n = 0;
+            foreach (Joint j in c.Body.GetComponentsInChildren<Joint>(true))
+            {
+                if (j == null || j.connectedBody != null) continue;
+                j.connectedBody = null; j.anchor = j.anchor;
+                n++;
+            }
+            return n;
         }
 
         static Car Named(string name)
@@ -3961,10 +3982,71 @@ namespace MWCoop
             return null;
         }
 
+        // [Test] Autotest=amener (hote, TestPos loin de la voiture ; [Test] AmenerVoiture=gifu) : a 40 s, /voiture comme par le joueur ;
+        // releve des 12 images suivantes : vitesse de la voiture et des corps les plus rapides parmi les siens et ceux relies a elle
+        // par une attache (dossier : GIFU emballee et pare-brise casses en l'amenant, 03/11).
+        static int bringStep, bringFrames;
+        static List<Rigidbody> bringBodies;
+        static Car bringCar;
+        static void TestBringCar(float t)
+        {
+            if (!Session.IsHost && Session.Active) return;
+            string arg = Config.Get("Test", "AmenerVoiture", "gifu");
+            if (bringStep == 0 && t > 40f)
+            {
+                bringStep = 1;
+                string key = arg.ToUpperInvariant();
+                foreach (string[] al in CarAliases) for (int i = 0; i < al.Length - 1; i++) if (al[i] == arg) key = al[al.Length - 1];
+                Car c = cars.Find(x => x.Body != null && (x.Name.StartsWith(key) || x.Key.StartsWith(key)));
+                if (c == null) { Log.Info("autotest : amener, " + arg + " introuvable"); return; }
+                var set = new HashSet<Rigidbody>(c.Body.GetComponentsInChildren<Rigidbody>(true));
+                var sb = new System.Text.StringBuilder();
+                foreach (Joint j in Object.FindObjectsOfType<Joint>())
+                {
+                    Rigidbody a = j.GetComponent<Rigidbody>(), b = j.connectedBody;
+                    bool ai = a != null && set.Contains(a), bi = b != null && set.Contains(b);
+                    if (ai == bi) continue;   // (dedans, ou sans rapport)
+                    Rigidbody other = ai ? b : a;
+                    sb.Append(' ').Append(j.GetType().Name).Append(' ').Append(j.name).Append(ai ? " -> " : " <- ").Append(other != null ? other.name + (other.isKinematic ? " (cin)" : "") : "monde");
+                    var sj = j as SpringJoint;
+                    if (other == null) { sb.Append(" (point ").Append(j.connectedAnchor.ToString("F1")).Append(", a ").Append((j.transform.TransformPoint(j.anchor) - j.connectedAnchor).magnitude.ToString("F2")).Append(" m"); if (sj != null) sb.Append(", ressort ").Append(sj.spring.ToString("F0")).Append(" amorti ").Append(sj.damper.ToString("F0")).Append(" dist ").Append(sj.minDistance.ToString("F2")).Append("-").Append(sj.maxDistance.ToString("F2")); sb.Append(')'); }
+                    if (other != null) set.Add(other);
+                }
+                bringBodies = new List<Rigidbody>(set); bringCar = c;
+                Log.Info("autotest : amener, " + c.Key + " a " + c.Body.position.ToString("F1") + ", " + set.Count + " corps ; attaches vers l'exterieur :" + (sb.Length > 0 ? sb.ToString() : " aucune"));
+                string r = BringCar(arg);
+                Log.Info("autotest : amener, /voiture " + arg + (r != null ? " -> " + r : "") + ", posee en " + c.Body.position.ToString("F1"));
+            }
+            if (bringStep == 1 && t > 50f && bringCar != null && bringCar.Body != null)
+            {
+                bringStep = 2;
+                Transform me = Game.PlayerT;
+                Log.Info("autotest : amener, 10 s apres : " + bringCar.Key + " en " + bringCar.Body.position.ToString("F1") + (me != null ? ", a " + (bringCar.Body.position - me.position).magnitude.ToString("F0") + " m du joueur" : "") + ", " + bringCar.Body.velocity.magnitude.ToString("F1") + " m/s");
+            }
+            // ([Test] AmenerRouler=1 / -1 : a 52 s la voiture amenee est poussee 6 s a 4 m/s, en avant / en arriere, comme Autotest=tuyau
+            // TuyauVolant -- ses attaches reposees cedent comme celles du jeu, garee chez elle)
+            if (bringStep == 2 && t > 52f && Config.GetInt("Test", "AmenerRouler", 0) != 0 && bringCar != null && bringCar.Body != null)
+            {
+                Rigidbody b = bringCar.Body;
+                if (t < 58f) { Vector3 f = b.transform.forward * Mathf.Sign(Config.GetFloat("Test", "AmenerRouler", 1f)); f.y = 0f; b.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                else { bringStep = 3; b.velocity = Vector3.zero; Log.Info("autotest : amener, poussee 6 s : " + bringCar.Key + " en " + b.position.ToString("F1")); }
+            }
+            if (bringStep >= 1 && bringBodies != null && bringFrames < 12)
+            {
+                bringFrames++;
+                bringBodies.RemoveAll(x => x == null);
+                bringBodies.Sort((x, y) => y.velocity.sqrMagnitude.CompareTo(x.velocity.sqrMagnitude));
+                var sb = new System.Text.StringBuilder("autotest : amener, image " + bringFrames + " :");
+                for (int i = 0; i < bringBodies.Count && i < 5; i++) sb.Append(' ').Append(bringBodies[i].name).Append(' ').Append(bringBodies[i].velocity.magnitude.ToString("F0")).Append(" m/s");
+                Log.Info(sb.ToString());
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "pousservoiture") { TestBump(t); return; }
             if (mode == "poussiere") { TestFx(t); return; }
+            if (mode == "amener") { TestBringCar(t); return; }
             if (mode != "taxi" && mode != "reprise") return;
             bool host = Session.IsHost;
             string name = mode == "taxi" ? "MACHTWAGEN" : Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
