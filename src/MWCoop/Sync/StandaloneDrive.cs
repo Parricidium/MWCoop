@@ -238,6 +238,7 @@ namespace MWCoop
                 var si0 = new GameObject("pieces").transform; si0.SetParent(sp0, false); si0.localPosition = -sc0;
                 VazCar.AddModel(b, si0, "comodo.p205");
                 st.Stalk = sp0; st.StalkAxis = sa0.normalized;
+                Vector3 tip0; if (inf.TryGetValue("comodo_bout", out tip0)) { st.HasStalkTip = true; st.StalkTip = tip0 - sc0; }
             }
             // ceintures (ceinture_<cg|cd|ag|ad>.p205 : sangle pendue au montant ; infos.txt ceinture_<k>_haut / _bas -- Golf, JD 31/10 :
             // « les ceintures fonctionnelles, avant et arriere ») : la sangle pendue cachee quand la place est bouclee, la bouclee
@@ -1394,7 +1395,7 @@ namespace MWCoop
             // comodo des essuie-glaces : vise, clic = marche / arret
             if (st.Stalk != null)
             {
-                Vector3 v = b.Body.TransformPoint(st.Stalk.localPosition + new Vector3(0.10f * Mathf.Sign(st.StalkAxis.z), 0f, 0f)) - cam.position;   // (bout du levier)
+                Vector3 v = b.Body.TransformPoint(StalkTipLocal(st)) - cam.position;   // (bout du levier)
                 float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
                 if (along > 0.15f && along < 1.3f && perp < 0.06f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KStalk; }
             }
@@ -1484,6 +1485,12 @@ namespace MWCoop
         // cle : visible mise, tournee sur son axe (contact 40 degres, demarreur 70, retour au contact) ; moteur demarre d'ailleurs (autre
         // joueur, essais) : cle mise au contact
         // essuie-glaces : aller-retour en 1,3 s (angle = maxi x (1 - cos) / 2), rangement en fin de course a l'arret ; comodo baisse en marche
+        // bout du comodo (repere de la caisse) : celui d'infos.txt (comodo_bout), tourne avec le levier ; sinon 10 cm sur le cote (Golf)
+        static Vector3 StalkTipLocal(State st)
+        {
+            if (st.HasStalkTip) return st.Stalk.localPosition + st.Stalk.localRotation * st.StalkTip;
+            return st.Stalk.localPosition + new Vector3(0.10f * Mathf.Sign(st.StalkAxis.z), 0f, 0f);
+        }
         static void WiperAnim(VazCar.Built b, State st)
         {
             if (st.Wipers[0] == null && st.Wipers[1] == null && st.Wipers[2] == null && st.Stalk == null) return;
@@ -2232,7 +2239,7 @@ namespace MWCoop
                     Photo(b, "banquette", new Vector3(1.35f, 1.05f, 0.15f), new Vector3(0.0f, 0.6f, -0.8f));
                     Photo(b, "ceintures", new Vector3(0.5f, 1.05f, 0.4f), new Vector3(-0.33f, 0.72f, -0.2f));
                     Photo(b, "arriere", new Vector3(0.12f, 1.1f, 0.05f), new Vector3(0f, 0.7f, -1.0f));
-                    Photo(b, "comodo", e + new Vector3(0.0f, -0.05f, 0.05f), st.Stalk != null ? st.Stalk.localPosition + new Vector3(0.10f * Mathf.Sign(st.StalkAxis.z), 0f, 0f) : e + Vector3.forward);
+                    Photo(b, "comodo", e + new Vector3(0.0f, -0.05f, 0.05f), st.Stalk != null ? StalkTipLocal(st) : e + Vector3.forward);
                     Photo(b, "roue", new Vector3(-1.6f, 0.45f, 1.25f), new Vector3(-0.7f, 0.3f, 1.25f));
                 }
                 Photo(b, "34av", new Vector3(-3.2f, 1.6f, 3.6f)); Photo(b, "34ar", new Vector3(3.0f, 1.8f, -3.8f));

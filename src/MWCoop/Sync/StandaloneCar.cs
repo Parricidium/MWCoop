@@ -66,6 +66,7 @@ namespace MWCoop
             public float[] WiperRest = new float[3], WiperSign = { 1f, 1f, -1f };   // (angle du repos par rapport au modele, sens de la course)
             public float RearWiperA0;   // (balai de la lunette au repos, angle du composant de pluie : 0 vers le haut, +90 vers la gauche)
             public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
+            public bool HasStalkTip; public Vector3 StalkTip;   // (bout du comodo a viser, infos.txt comodo_bout -- leviers droits des voitures Rallyworld, JD 03/11)
             public Component Rain, Rain2, RainSrc;   // (Rain2 : la lunette et son balai)
             // (ceintures : 0 conducteur, 1 passager avant, 2 arriere gauche, 3 arriere droite -- sangle pendue du modele, bouclee dessinee ;
             // dossiers avant rabattables, 0 gauche, 1 droite ; banquette : places arriere -- StandaloneDrive, JD 31/10)
