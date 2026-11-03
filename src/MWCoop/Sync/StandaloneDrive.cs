@@ -109,6 +109,7 @@ namespace MWCoop
             st.ModelButtons = inf.ContainsKey("boutons_modele");
             SetupBrakeLamp(b, st, inf);
             SetupGearDisplay(b, st, inf);
+            SetupLcd(b, st, inf);
             // boutons visibles du tableau de bord (cylindres colores, comme sur la copie)
             VazCar.Knob[] kns = KnobsOf(m);
             if (kns != null)
@@ -413,7 +414,7 @@ namespace MWCoop
                 return g;
             }
 
-            static Texture2D Png(VazCar.Model m, string file)
+            internal static Texture2D Png(VazCar.Model m, string file)
             {
                 string f = System.IO.Path.Combine(m.Dir, file);
                 if (!System.IO.File.Exists(f)) { Log.Info("standalone : " + file + " absent (compteurs du modele)"); return null; }
@@ -485,6 +486,7 @@ namespace MWCoop
                 st.Turbo.Set(st.Boost); st.Turbo.Light(st.LightsOn);
             }
             GearDisplay(b, st);
+            LcdDash(b, st);
             if (st.RevLamp != null)
             {
                 bool rv = st.EngineOn && b.Dt != null && b.Dt.rpm >= st.RevAt;
@@ -571,6 +573,82 @@ namespace MWCoop
                           new[] { x, y + 12, 3, 10 }, new[] { x, y + 2, 3, 10 }, new[] { x + 2, y + 10, 10, 3 } };
             int[] q = r[sg];
             for (int j = q[1]; j < q[1] + q[3]; j++) for (int i = q[0]; i < q[0] + q[2]; i++) if (i >= 0 && i < w && j >= 0 && j < h) px[(h - 1 - j) * w + i] = c;
+        }
+
+        // ecran LCD de planche numerique (infos.txt lcd_centre / _haut / _droite, lcd_led_<nn>, lcd_rapport, lcd_vitesse, lcd_max ; fond
+        // lcd.png -- outils/ac/lcd_ac.py) : LED du regime allumees en arc, rapport et vitesse en sept segments ; contact coupe : ecran vide ;
+        // eclaire avec les phares, eclaire par la scene sinon (comme les compteurs) -- Delta Evo II, JD 03/11
+        static void SetupLcd(VazCar.Built b, State st, Dictionary<string, Vector3> inf)
+        {
+            Vector3 c, up, right, v;
+            if (!inf.TryGetValue("lcd_centre", out c) || !inf.TryGetValue("lcd_haut", out up) || !inf.TryGetValue("lcd_droite", out right)) return;
+            Texture2D bg = Gauge.Png(b.M, "lcd.png");
+            if (bg == null) return;
+            var leds = new List<Vector2>();
+            for (int i = 0; i < 99 && inf.TryGetValue("lcd_led_" + i.ToString("00"), out v); i++) leds.Add(new Vector2(v.x, v.y));
+            st.LcdLeds = leds.ToArray();
+            st.LcdGear = inf.TryGetValue("lcd_rapport", out v) ? v : Vector3.zero;
+            st.LcdSpeed = inf.TryGetValue("lcd_vitesse", out v) ? v : Vector3.zero;
+            st.LcdMax = inf.TryGetValue("lcd_max", out v) && v.x > 0f ? v.x : 8000f;
+            st.LcdTex = new Texture2D(bg.width, bg.height, TextureFormat.RGB24, false) { name = "standalone_lcd", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            st.LcdBase = bg.GetPixels32();
+            st.LcdTex.SetPixels32(st.LcdBase); st.LcdTex.Apply(false);
+            var q = Gauge.Quad("lcd", b.Body, c, Vector3.zero, up, right);
+            st.LcdR = q.GetComponent<MeshRenderer>();
+            st.LcdOn = new Material(Shader.Find("Unlit/Texture")) { mainTexture = st.LcdTex, name = "standalone_lcd_allume" };
+            Shader lit = Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Diffuse") ?? Shader.Find("Unlit/Texture");
+            st.LcdOff = new Material(lit) { mainTexture = st.LcdTex, color = Color.white, name = "standalone_lcd" };
+            st.LcdR.sharedMaterial = st.LcdOff;
+            Log.Info("standalone : ecran LCD pose (" + st.LcdLeds.Length + " LED, " + st.LcdMax + " tr/min)");
+        }
+        static void LcdDash(VazCar.Built b, State st)
+        {
+            if (st.LcdTex == null || b.Dt == null) return;
+            if (st.LcdLit != st.LightsOn) { st.LcdLit = st.LightsOn; st.LcdR.sharedMaterial = st.LcdLit ? st.LcdOn : st.LcdOff; }
+            bool on = st.EngineOn || st.KeyPos > 0;
+            int n = st.LcdLeds.Length, nl = on ? Mathf.Clamp(Mathf.RoundToInt((st.EngineOn ? b.Dt.rpm : 0f) / st.LcdMax * n), 0, n) : -1;
+            int gi = -99;
+            if (on && b.Dt.gearRatios != null) { int n0 = Array.IndexOf(b.Dt.gearRatios, 0f); gi = b.Dt.gear == n0 ? -1 : b.Dt.gear < n0 ? -2 : b.Dt.gear - n0; }
+            int kmh = on ? Mathf.Clamp(Mathf.RoundToInt(Mathf.Abs(b.Car.transform.InverseTransformDirection(b.Rb.isKinematic ? Vector3.zero : b.Rb.velocity).z) * 3.6f + (b.Rb.isKinematic ? st.RemoteKmh : 0f)), 0, 999) : -1;
+            int key = (nl + 1) * 1000000 + (gi + 3) * 1000 + (kmh + 1);
+            if (key == st.LcdKey) return;
+            st.LcdKey = key;
+            int w = st.LcdTex.width, h = st.LcdTex.height;
+            var px = (Color32[])st.LcdBase.Clone();
+            if (on)
+            {
+                var ink = new Color32(22, 24, 18, 255);
+                for (int i = 0; i < nl; i++) Disc(px, w, h, st.LcdLeds[i], 4.5f, ink);
+                float s = st.LcdGear.z > 0f ? st.LcdGear.z / 30f : 3f;
+                int gs = gi == -1 ? 0x54 : gi == -2 ? 0x50 : gi >= 0 ? Seg[Mathf.Clamp(gi, 0, 9)] : 0;
+                Digit(px, w, h, st.LcdGear.x - 7f * s, st.LcdGear.y - 12f * s, s, gs, ink);
+                if (kmh >= 0 && st.LcdSpeed.z > 0f)
+                {
+                    float sv = st.LcdSpeed.z / 30f, dx = 17f * sv;
+                    string ks = kmh.ToString();
+                    for (int k = 0; k < ks.Length; k++)
+                        Digit(px, w, h, st.LcdSpeed.x + (k - ks.Length / 2f) * dx + 1.5f * sv, st.LcdSpeed.y - 12f * sv, sv, Seg[ks[k] - '0'], ink);
+                }
+            }
+            st.LcdTex.SetPixels32(px); st.LcdTex.Apply(false);
+        }
+        // (pixels de l'image, haut en 0 : ligne Unity = h - 1 - y)
+        static void Disc(Color32[] px, int w, int h, Vector2 p, float r, Color32 c)
+        {
+            for (int y = (int)(p.y - r); y <= (int)(p.y + r); y++)
+                for (int x = (int)(p.x - r); x <= (int)(p.x + r); x++)
+                    if (x >= 0 && x < w && y >= 0 && y < h && (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y) <= r * r) px[(h - 1 - y) * w + x] = c;
+        }
+        static void Digit(Color32[] px, int w, int h, float x, float y, float s, int seg, Color32 c)
+        {
+            float[][] r = { new[] { 2f, 0f, 10f, 3f }, new[] { 11f, 2f, 3f, 10f }, new[] { 11f, 12f, 3f, 10f }, new[] { 2f, 21f, 10f, 3f },
+                            new[] { 0f, 12f, 3f, 10f }, new[] { 0f, 2f, 3f, 10f }, new[] { 2f, 10f, 10f, 3f } };
+            for (int sg = 0; sg < 7; sg++)
+            {
+                if ((seg & (1 << sg)) == 0) continue;
+                int x0 = Mathf.RoundToInt(x + r[sg][0] * s), y0 = Mathf.RoundToInt(y + r[sg][1] * s), x1 = Mathf.RoundToInt(x + (r[sg][0] + r[sg][2]) * s), y1 = Mathf.RoundToInt(y + (r[sg][1] + r[sg][3]) * s);
+                for (int yy = y0; yy < y1; yy++) for (int xx = x0; xx < x1; xx++) if (xx >= 0 && xx < w && yy >= 0 && yy < h) px[(h - 1 - yy) * w + xx] = c;
+            }
         }
 
         public static void SetupClock(VazCar.Built b, Dictionary<string, Vector3> inf)

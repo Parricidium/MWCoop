@@ -25,7 +25,7 @@ namespace MWCoop
         public static bool Quest { get { return Game.Msc || Config.GetInt("Test", "QueteMwc", 1) != 0; } }
         // copies passees en standalone sur My Winter Car aussi (JD 02/11 : « standalone partout » -- l'Imprezza, la 205 Ebo 2 et la Sport
         // Quatro (03/11), modeles de Rallyworld ; la Rihno 5 Maxi aussi, son ancien modele -- JD 03/11) ; [Test] StandaloneMwc=0 : les copies comme avant
-        public static bool OnMwc(int copy) { return !Game.Msc && (copy == VazCar.ModelImp || copy == VazCar.ModelT16b || copy == VazCar.ModelSq || copy == VazCar.ModelR5) && Config.GetInt("Test", "StandaloneMwc", 1) != 0; }
+        public static bool OnMwc(int copy) { return !Game.Msc && (copy == VazCar.ModelImp || copy == VazCar.ModelT16b || copy == VazCar.ModelSq || copy == VazCar.ModelR5 || copy == VazCar.ModelDelta) && Config.GetInt("Test", "StandaloneMwc", 1) != 0; }
         // copie remplacee par sa standalone ici : toutes (la R5 depuis le 29/10 midi, les autres validees par JD en jeu le 29/10 soir)
         public static bool Ready(int copy)
         {
@@ -44,6 +44,9 @@ namespace MWCoop
             public Gauge Speedo, Tacho, Turbo; public float Boost;   // (manometre du turbo : pression simulee, StandaloneDrive)
             // (afficheur du rapport engage et voyant de regime -- 205 Rallyworld, JD 03/11)
             public Texture2D GearTex; public int GearShown = -99; public bool GearLit; public GameObject RevLamp; public float RevAt;
+            // (ecran LCD de planche numerique -- Delta Evo II Rallyworld, JD 03/11 : barre de LED du regime, rapport, vitesse)
+            public Texture2D LcdTex; public Color32[] LcdBase; public Vector2[] LcdLeds; public Vector3 LcdGear, LcdSpeed; public float LcdMax; public int LcdKey = -1;
+            public MeshRenderer LcdR; public Material LcdOn, LcdOff; public bool LcdLit;
             public Mirror[] Mirrors; public int MirrorNext; public bool MirrorsLive;   // (retroviseurs fonctionnels, StandaloneMirror)
             public Heater Heat;   // (chauffage, StandaloneHeater)
             public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;

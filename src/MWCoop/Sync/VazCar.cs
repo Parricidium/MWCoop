@@ -105,6 +105,7 @@ namespace MWCoop
         // Tenue de route d'un addon (VazHandling.Spec) : moteur, boite, masse, repartition (part sur l'avant), ressorts.
         public class Spec
         {
+            public Spec Copy() { return (Spec)MemberwiseClone(); }
             public string Name; public float Power, PowerRpm, Torque, TorqueRpm, MaxRpm, Inertia = 0.15f, Final = 4.4f, Clutch = 420f;
             public float Mass, Com, Steer, Spring, Damp; public float[] Gears;
             public float AntiRoll, ComDrop;   // barres antiroulis (N/m, 0 : celles du jeu) ; centre de gravite abaisse (m) -- JD 21/10, tonneaux trop faciles
@@ -122,6 +123,8 @@ namespace MWCoop
         public const int ModelEvoS = 8, ModelT16S = 9, ModelImpS = 10, ModelSqS = 11, ModelT16bS = 12;
         // standalones sans copie (leur numero est aussi leur « copie ») : Golf GTI 1983
         public const int ModelGolf = 13;
+        // nouvelles standalones (sans copie) : Lancia Delta Evo II de Rallyworld (JD 03/11)
+        public const int ModelDelta = 14;
         public static int StandaloneOf(int copy) { return copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
         public static int CopyOf(int id) { return id == ModelR5S ? ModelR5 : id >= ModelEvoS && id <= ModelT16bS ? id - ModelR5S : id; }
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
@@ -337,12 +340,24 @@ namespace MWCoop
             Dome = new Vector3(0f, 1.27f, -0.20f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "Golf GTI 1.8 (1983)", Power = 112f, PowerRpm = 5800f, Torque = 153f, TorqueRpm = 3500f, MaxRpm = 6600f, Inertia = 0.12f,
                             Final = 3.89f, Mass = 840f, Com = 0.61f, Steer = 33f, Gears = new[] { -3.17f, 0f, 3.45f, 2.12f, 1.44f, 1.13f, 0.91f }, Fwd = true } };
+        // Lancia Delta HF Integrale Evo II Gr. A8 de Rallyworld (AlexToR, JD 03/11) : standalone neuve sur les deux jeux, dossier delta8 ;
+        // poste et reglages de l'Impreza (integrale Gr. A comme elle), yeux du conducteur (-0,34 ; 1,06 ; -0,10) d'apres la tete du
+        // copilote du modele ; 295 ch a 6 000 tr/min, 450 N.m a 3 500, 1 210 kg, 59 % sur l'avant
+        public static readonly Model Delta8 = DeltaModel();
+        static Model DeltaModel()
+        {
+            var m = Imp96.CloneAs(ModelDelta, null);
+            m.Folder = "delta8"; m.Name = "Delta Ebo II"; m.Head = new Vector3(-0.34f, 1.09f, -0.37f); m.Engine = new Vector3(0f, 0.55f, 1.35f);
+            m.Sp = Imp96.Sp.Copy(); m.Sp.Name = "Delta HF Integrale Evo II Gr. A"; m.Sp.Power = 295f; m.Sp.PowerRpm = 6000f; m.Sp.Torque = 450f; m.Sp.TorqueRpm = 3500f;
+            m.Sp.MaxRpm = 7500f; m.Sp.Mass = 1210f; m.Sp.Com = 0.59f;
+            return m;
+        }
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
-                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83 };   // (rempli : Vaz2108 au constructeur statique)
+                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On || Models[id].QuestOnly && StandaloneCar.Quest : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On || StandaloneCar.OnMwc(id) || Models[id].QuestOnly && StandaloneCar.Quest : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
         // au F10 (installe, et pas reserve a une quete)
         public static bool InF10(int id) { return Has(id) && (!ModelOf(id).QuestOnly || Config.Testing && Config.GetInt("Test", "QueteF10", 0) != 0); }   // ([Test] QueteF10=1 : essais)
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
