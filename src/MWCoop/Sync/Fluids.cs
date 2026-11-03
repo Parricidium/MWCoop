@@ -509,9 +509,50 @@ namespace MWCoop
         // son reservoir de 30 a 35 s (0,25 l toutes les 0,25 s, comme le pistolet) ; chacun note le niveau a 28 et 45 s.
         // (audit MSC 02/11 : aussi sur My Summer Car -- SATSUMA, reservoir Database/DatabaseMechanics/FuelTank ; [Test] PleinVoiture,
         // PleinCle, PleinRegime pour changer de voiture, de valeur, de regime ; PleinInviteVolant=1 : l'invite conduit, l'hote verse.)
+        // [Test] Autotest=carburant (dossier #43, Matilda Prime 03/11 : « le reservoir se vide parfois alors qu'il avait ete rempli », en
+        // entrant dans la partie). CarburantEtape=1 (l'hote, seul ou non) : a 30 s chaque FuelLevel suivi passe a 12,34, a 38 s
+        // sauvegarde en jeu. CarburantEtape=2 (partie relancee, invite lance en retard -- essai -Delai) : l'hote note tous les FuelLevel
+        // a 25 s, puis chacun 5 s et 20 s apres l'arrivee de l'autre.
+        static int cbStep; static float cbAt;
+        static void TestFuelReentry(float t)
+        {
+            int etape = Config.GetInt("Test", "CarburantEtape", 1);
+            bool host = Session.IsHost || !Session.Active;
+            if (etape == 1)
+            {
+                if (host && cbStep == 0 && t > 30f)
+                {
+                    cbStep = 1; int n = 0;
+                    foreach (Watch x in watches) if (x.Fsm != null && x.Var != null && x.Var.Name == "FuelLevel") { SetVal(x, 12.34f); n++; }
+                    Log.Info("autotest : carburant, " + n + " reservoir(s) mis a 12.34 : " + FuelState());
+                }
+                // ([Test] CarburantSauve=jeu, en solo : la sauvegarde du jeu lui-meme -- SAVEGAME, comme aux toilettes, retour au menu)
+                if (host && cbStep == 1 && t > 38f)
+                {
+                    cbStep = 2;
+                    bool jeu = Config.Get("Test", "CarburantSauve", "") == "jeu";
+                    Log.Info("autotest : carburant, " + (jeu ? "sauvegarde du jeu (SAVEGAME)" : "sauvegarde en jeu") + " : " + FuelState());
+                    if (jeu) PlayMakerFSM.BroadcastEvent("SAVEGAME"); else Game.SaveInPlace();
+                }
+                return;
+            }
+            if (host && cbStep == 0 && t > 25f) { cbStep = 1; Log.Info("autotest : carburant, au chargement : " + FuelState()); }
+            if (cbStep <= 1 && Jobs.OtherInGame(5f)) { cbStep = 2; cbAt = Time.realtimeSinceStartup; Log.Info("autotest : carburant, 5 s apres l'arrivee de l'autre : " + FuelState()); }
+            float[] at = { 15f, 30f, 45f };
+            if (cbStep >= 2 && cbStep - 2 < at.Length && Time.realtimeSinceStartup - cbAt > at[cbStep - 2]) { Log.Info("autotest : carburant, " + (at[cbStep - 2] + 5f).ToString("F0") + " s apres l'arrivee de l'autre : " + FuelState()); cbStep++; }
+        }
+        static string FuelState()
+        {
+            var l = new List<string>();
+            foreach (Watch x in watches) if (x.Fsm != null && x.Var != null && x.Var.Name == "FuelLevel") l.Add(x.Key.Replace(":Data.FuelLevel", "").Replace("p:", "") + "=" + Val(x).ToString("F2"));
+            l.Sort(string.CompareOrdinal);
+            return l.Count + " : " + string.Join(" ", l.ToArray());
+        }
+
         static int fuelStep; static float fuelNext;
         public static void TestFill(string mode, float t)
         {
+            if (mode == "carburant") { TestFuelReentry(t); return; }
             if (mode == "vidange") { TestDrain(t); return; }
             if (mode != "plein") return;
             string car = Config.Get("Test", "PleinVoiture", Game.Msc ? "SATSUMA(557kg, 248)" : "SORBET(190-200psi)");
