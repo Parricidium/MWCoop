@@ -1992,7 +1992,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_RALLY, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_MAX, B_COUNT };   // (B_MAX : Agrandir, nouvelle interface seulement -- fenetre.inc)   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
@@ -2879,7 +2879,8 @@ static float AddonsMaxScroll();    // (voiture.inc)
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
 static float SigMaxScroll();   // (signalnatif.inc)
-static float MaxScroll(int t) { return t == TAB_BUG ? SigMaxScroll() : t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX || t == TAB_COOP ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : t == TAB_CAR ? AddonsMaxScroll() : 0.0f; }
+static float RallyMaxScroll();   // (rallyworld.inc)
+static float MaxScroll(int t) { return t == TAB_BUG ? SigMaxScroll() : t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX || t == TAB_COOP ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : t == TAB_CAR ? AddonsMaxScroll() : t == TAB_RALLY ? RallyMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -4947,6 +4948,7 @@ static void NetTest()
 
 #include "api.inc"
 #include "outils.inc"
+#include "rallyworld.inc"   // (page RallyWorld : la communaute qui nous prete ses voitures, 03/11)
 #include "gfx.inc"
 #include "media.inc"
 static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (plus bas ; Nouveautes, ui.inc, saves.inc)
@@ -8244,6 +8246,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // Capture d'un etat, sans fenetre (verification du rendu)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/capture")) {
         std::wstring st = argv[3];
+        g_rwFrozen = true;   // (rallyworld.inc : pastille NEW de la barre gardee)
         g_alpha = 1;
         g_time = 0.3f;
         if (g_localVer.empty()) g_localVer = L"0.1.0";
@@ -8443,6 +8446,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"sauvegardes-recommencer") { g_tab = TAB_SAVES; SavesScan(); g_saveModal = SM_RESTART; }
         else if (st == L"sauvegardes-nom") { g_tab = TAB_SAVES; SaveAskName(true); }
         else if (st == L"credits") g_tab = TAB_CREDITS;
+        else if (st == L"rallyworld" || st == L"rallyworld-bas" || st == L"rallyworld-survol") { g_tab = TAB_RALLY; g_rwFrozen = true; if (st == L"rallyworld-bas") g_rwBottom = true; if (st == L"rallyworld-survol") g_uiHot = UI_RALLY_DISCORD; }
         else if (st == L"credits-images" || st == L"credits-merci" || st == L"credits-supporters") { g_tab = TAB_CREDITS; g_credTab = st == L"credits-images" ? 1 : st == L"credits-merci" ? 2 : 3; }
         else if (!wcsncmp(st.c_str(), L"guide", 5) && st != L"guide-steam") {   // guide : guide-<article>-<defilement>
             g_tab = TAB_WIKI;

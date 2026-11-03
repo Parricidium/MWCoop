@@ -275,7 +275,7 @@ static void ShellDrawRail(Graphics &g)
         float a = en ? 1.0f : 0.38f;
         if (hot && !on) SoftShape(g, row.r, 13, WithA(g_soft.accSoft, 0.6f));
         float icx = collapsed ? row.r.X + row.r.Width / 2 : row.r.X + 26;
-        Icon(g, row.icon, icx, row.r.Y + row.r.Height / 2, 20, WithA(on ? g_soft.acc : hot ? g_soft.ink : g_soft.muted, a), 1.9f);
+        Icon(g, row.icon, icx, row.r.Y + row.r.Height / 2, 20, row.page == TAB_RALLY ? WithA(kRwRed, a) : WithA(on ? g_soft.acc : hot ? g_soft.ink : g_soft.muted, a), 1.9f);   // (RallyWorld : coeur rouge)
         if (labA > 0.02f && !collapsed) Text(g, T(row.fr, row.en), RectF(row.r.X + 48, row.r.Y, row.r.Width - 76, row.r.Height), 14, FontStyleBold, WithA(on ? g_soft.ink : hot ? g_soft.ink : g_soft.muted, a * labA), StringAlignmentNear);
         // pastilles (depliee) ou point (repliee)
         float rx = row.r.X + row.r.Width - 10, by = row.r.Y + (row.r.Height - 20) / 2;
@@ -285,6 +285,7 @@ static void ShellDrawRail(Graphics &g)
         else if (row.page == TAB_MODS && en) { int n = MscModCount(); if (n > 0) chip(std::to_wstring(n), SC_ACC); }
         else if (row.page == TAB_ADDONS && en && !on) { bool nw, up; AddonsBadges(nw, up); nw = nw || KuplaNew(); if (up) chip(L"UPDATE", SC_WARN); if (nw) chip(L"NEW", SC_ACC); }
         else if (row.page == TAB_NOTES && NotesUnseen() && !on) chip(T(L"NOUV.", L"NEW"), SC_ACC);
+        else if (row.page == TAB_RALLY && en && !on && !RallySeen()) chip(L"NEW", SC_ACC);
         RectF hz; if (en && RectF::Intersect(hz, row.r, view) && hz.Height > 0) HotZone(hz, UI_NAV + row.page);
         if (hot && collapsed) { hotPage = row.page; hotR = row.r; }
     }

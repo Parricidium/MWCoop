@@ -150,6 +150,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.16.11 (01/11) : ombre des nuages corrigee, Reglages > Image > Ombres (63)
     { L"Ombre des nuages corrigée", L"Réglages > Image > Ombres : l'ombre des nuages au sol n'a plus de grillage. Activée d'office ; coupée, l'ombre d'origine du jeu revient, tramée. Appliquée en direct, même en jeu.",
       L"Fixed cloud shadows", L"Settings > Image > Shadows: cloud shadows on the ground no longer have a grid pattern. On by default; turned off, the game's original dithered shadow comes back. Applied live, even in game.", "1.16.11" },
+    // lanceur-1.16.12 (03/11) : page RallyWorld dans la barre, sous Addons (64)
+    { L"RallyWorld", L"Nouvelle page dans la barre, sous Addons : RallyWorld, la communauté de rallye et de tout-terrain pour Assetto Corsa qui nous prête ses voitures. Leur site, leur Discord, et de quoi les soutenir.",
+      L"RallyWorld", L"New page in the bar, under Add-ons: RallyWorld, the rally and off-road community for Assetto Corsa that lends us its cars. Their website, their Discord, and a way to support them.", "1.16.12" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -252,6 +255,7 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 64: return g_navR[TAB_RALLY];                       // RallyWorld dans la barre (sous Addons : rallyworld.inc)
     case 63: return TutoSetTab(SET_IMAGE);                   // onglet Image (SetTutoTab l'ouvre) : ombre des nuages corrigee
     case 62: return g_btn[B_DISCORD].r;                      // le Discord est de retour (bouton de la barre)
     }
