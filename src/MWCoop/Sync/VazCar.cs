@@ -288,8 +288,10 @@ namespace MWCoop
         // (rouge), starter (bleu, tire / pousse), phares (blanc), warning (orange) ; le reste du tableau de bord coupe. Tenue de
         // route : moteur et masse du mod rFactor (maxi turbo engine.ini : 355 ch a 6 750 tr/min, 398 Nm a 5 500, rupteur 7 000 ;
         // 905 kg, 49 % sur l'avant, braquage 36), boite et reglages de rallye des autres addons (Ebo 2).
+        // (03/11 : modele de Rallyworld / joni77, R5 Turbo Maxi -- yeux du conducteur (-0,30 ; 1,10 ; -0,10) : pavillon a 1,36, volant 35 cm
+        // devant)
         public static readonly Model R5 = new Model { Id = ModelR5, Folder = "r5maxi", Name = "Rihno 5 Maxi",
-            Head = new Vector3(-0.32f, 0.95f, -0.32f), SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.90f),
+            Head = new Vector3(-0.30f, 1.13f, -0.37f), SeatEyes = true, SteerDeg = 450f, Engine = new Vector3(0f, 0.55f, -0.90f),
             BrakePivot = new Vector3(-0.07f, 0.245f, -0.027f), BrakeGrip = new Vector3(-0.095f, 0.57f, 0.015f), BrakeAngle = 1.4f,
             Controls = new[] {
                 new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.065f, 0.735f, 0.448f)),
