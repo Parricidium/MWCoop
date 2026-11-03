@@ -241,6 +241,9 @@ namespace MWCoop
                 st.Stalk = sp0; st.StalkAxis = sa0.normalized;
                 Vector3 tip0; if (inf.TryGetValue("comodo_bout", out tip0)) { st.HasStalkTip = true; st.StalkTip = tip0 - sc0; }
             }
+            // interrupteur d'essuie-glaces sans comodo (infos.txt bouton_essuie : pictogramme essuie-glace de la planche -- BMW M3 E30, JD 04/11)
+            Vector3 wb0;
+            if (st.Stalk == null && inf.TryGetValue("bouton_essuie", out wb0)) { st.HasWiperBtn = true; st.WiperBtn = wb0; Log.Info("standalone : interrupteur d'essuie-glaces " + wb0.ToString("F3")); }
             // ceintures (ceinture_<cg|cd|ag|ad>.p205 : sangle pendue au montant ; infos.txt ceinture_<k>_haut / _bas -- Golf, JD 31/10 :
             // « les ceintures fonctionnelles, avant et arriere ») : la sangle pendue cachee quand la place est bouclee, la bouclee
             // dessinee (BeltTick) ; 0 conducteur (gauche), 1 passager avant, 2 arriere gauche, 3 arriere droite
@@ -1476,6 +1479,12 @@ namespace MWCoop
                 Vector3 v = b.Body.TransformPoint(StalkTipLocal(st)) - cam.position;   // (bout du levier)
                 float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
                 if (along > 0.15f && along < 1.3f && perp < 0.06f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KStalk; }
+            }
+            else if (st.HasWiperBtn)
+            {
+                Vector3 v = b.Body.TransformPoint(st.WiperBtn) - cam.position;   // (interrupteur de la planche)
+                float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
+                if (along > 0.15f && along < 1.3f && perp < 0.035f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KStalk; }
             }
             if (hit == KStalk)
             {

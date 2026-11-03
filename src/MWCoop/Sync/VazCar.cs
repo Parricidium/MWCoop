@@ -125,6 +125,7 @@ namespace MWCoop
         public const int ModelGolf = 13;
         // nouvelles standalones (sans copie) : Lancia Delta Evo II de Rallyworld (JD 03/11)
         public const int ModelDelta = 14;
+        public const int ModelM3 = 15;   // (BMW M3 E30 Gr. A de Rallyworld, JD 04/11 : pas publiee avant l'essai de JD et d'alex_tor)
         public static int StandaloneOf(int copy) { return copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
         public static int CopyOf(int id) { return id == ModelR5S ? ModelR5 : id >= ModelEvoS && id <= ModelT16bS ? id - ModelR5S : id; }
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
@@ -352,8 +353,21 @@ namespace MWCoop
             m.Sp.MaxRpm = 7500f; m.Sp.Mass = 1210f; m.Sp.Com = 0.59f;
             return m;
         }
+        // BMW M3 E30 Gr. A de Rallyworld (JD 04/11) : standalone neuve sur les deux jeux, dossier m3e30, PROPULSION ; poste et reglages de
+        // la Delta, reglages de propulsion de la R5 (adherence arriere, frein a main, antiroulis) ; yeux du conducteur recales sur le volant
+        // du modele (volant 0,285 m plus en avant que celui de la Delta) ; S14 : 300 ch a 8 200 tr/min, 290 N.m a 6 500, 9 000 maxi, 1 100 kg
+        public static readonly Model M3e30 = M3Model();
+        static Model M3Model()
+        {
+            var m = Delta8.CloneAs(ModelM3, null);
+            m.Folder = "m3e30"; m.Name = "M3 E30"; m.Head = new Vector3(-0.35f, 1.10f, -0.09f); m.Engine = new Vector3(0f, 0.55f, 1.70f);
+            m.Sp = Delta8.Sp.Copy(); m.Sp.Name = "M3 E30 Gr. A"; m.Sp.Power = 300f; m.Sp.PowerRpm = 8200f; m.Sp.Torque = 290f; m.Sp.TorqueRpm = 6500f;
+            m.Sp.MaxRpm = 9000f; m.Sp.Mass = 1100f; m.Sp.Com = 0.52f;
+            m.Sp.Rwd = true; m.Sp.RearGrip = 1.12f; m.Sp.HandbrakeSlide = 0.5f; m.Sp.AntiRollFront = 24000f; m.Sp.AntiRollRear = 12000f; m.Sp.YawDamp = 0.6f; m.Sp.ComDrop = 0.04f;
+            return m;
+        }
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
-                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8 };   // (rempli : Vaz2108 au constructeur statique)
+                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)

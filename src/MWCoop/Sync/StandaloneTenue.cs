@@ -42,7 +42,7 @@ namespace MWCoop
             // (yeux : pivot de tete + hauteur et avance de EyeFromPivot du jeu, sans son decalage lateral -- 7 cm vers le centre sur
             // MSC : JD 28/10, « la place conducteur est mal centree par rapport a son vrai siege »)
             var t = new StandaloneTenue { File = Path.Combine(m.Dir, "tenue.ini"), Yeux = m.Head + new Vector3(0f, Seats.EyeFromPivot.y, Seats.EyeFromPivot.z), EntreeZ = m.Head.z };
-            t.FromSpec(m.Sp);
+            if (VazCar.CopyOf(m.Id) != VazCar.ModelR5) t.FromSpec(m.Sp);   // (la R5 garde ses valeurs d'origine, celles de la classe)
             t.Yeux.y -= m.SoloEyeDrop;
             try
             {
@@ -55,15 +55,16 @@ namespace MWCoop
         }
 
         // valeurs de depart des autres addons (JD 29/10, memes criteres que la R5) : celles de leur copie (VazCar.Spec) ; ressorts et
-        // amortisseurs de la R5 (base de la Satsuma sur My Summer Car) a la masse de la voiture. La R5 garde ses valeurs d'origine.
+        // amortisseurs de la R5 (base de la Satsuma sur My Summer Car) a la masse de la voiture. La R5 garde ses valeurs d'origine (Load) ;
+        // les autres propulsions prennent les leurs (BMW M3 E30, JD 04/11 : avant, toute propulsion gardait celles de la R5).
         void FromSpec(VazCar.Spec sp)
         {
-            if (sp == null || sp.Rwd) return;
+            if (sp == null) return;
             float k = sp.Mass / 905f;
             Masse = sp.Mass; CgAvant = sp.Com;
             Puissance = sp.Power; PuissanceRegime = sp.PowerRpm; Couple = sp.Torque; CoupleRegime = sp.TorqueRpm; Rupteur = sp.MaxRpm; InertieMoteur = sp.Inertia;
             if (sp.Gears != null) Rapports = (float[])sp.Gears.Clone();
-            Pont = sp.Final; Embrayage = sp.Clutch; Transmission = sp.Fwd ? "traction" : "integrale";
+            Pont = sp.Final; Embrayage = sp.Clutch; Transmission = sp.Rwd ? "propulsion" : sp.Fwd ? "traction" : "integrale";
             if (sp.Handbrake > 0f) FreinAMain = sp.Handbrake;
             BraquageMax = sp.Steer;
             foreach (Essieu e in new[] { Av, Ar }) { e.Ressort = 44573f * k; e.Compression = e.Detente = 7132f * k; }
