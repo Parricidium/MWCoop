@@ -134,6 +134,12 @@ namespace MWCoop
             {
                 if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); RestoreSetup(false);
                 if (colliderOffs != null) foreach (HutongGames.PlayMaker.FsmStateAction a in colliderOffs) a.Enabled = true;
+                // Fin de 'Fix Collider' comme dans le jeu (resetOnExit : collisionneurs allumes en sortant de l'etat), sans le passage par
+                // eteint : une voiture dont les collisionneurs etaient eteints avant la sauvegarde les retrouve comme en solo.
+                if (colliderTargets != null)
+                    foreach (GameObject g in colliderTargets)
+                        if (g != null && !g.activeSelf) { g.SetActive(true); Log.Info("sauvegarde en jeu : " + Recon.Path(g.transform) + " eteint avant la sauvegarde, rallume comme en fin de 'Fix Collider'"); }
+                colliderTargets = null;
             }
             if (colliderOffs != null && colliderOffs.Count > 0 && colliderLogs++ < 3) Log.Info("sauvegarde en jeu : " + colliderOffs.Count + " extinction(s) de collisionneurs de vehicule ('Fix Collider') sautee(s)");
             afterSave = new Dictionary<PlayMakerFSM, string>();
@@ -184,13 +190,15 @@ namespace MWCoop
         // Actions 'Fix Collider' qui eteignent les collisionneurs d'un vehicule (ActivateGameObject false) dans les automates qui
         // ecoutent SAVEGAME ; rendues inactives ici, remises par l'appelant apres la diffusion.
         static int colliderLogs;
+        static List<GameObject> colliderTargets;   // (objets que 'Fix Collider' rallume en sortant, resetOnExit)
         static List<HutongGames.PlayMaker.FsmStateAction> ColliderOffs(List<KeyValuePair<PlayMakerFSM, string>> fsms)
         {
             var r = new List<HutongGames.PlayMaker.FsmStateAction>();
+            colliderTargets = new List<GameObject>();
             foreach (KeyValuePair<PlayMakerFSM, string> kv in fsms)
             {
                 PlayMakerFSM f = kv.Key;
-                if (f == null || f.Fsm == null || f.GetComponent<Rigidbody>() == null) continue;
+                if (f == null || !f.enabled || !f.gameObject.activeInHierarchy || f.Fsm == null || f.GetComponent<Rigidbody>() == null) continue;   // (seulement ceux que SAVEGAME atteint)
                 HutongGames.PlayMaker.FsmState st;
                 try { st = f.Fsm.GetState("Fix Collider"); } catch { continue; }
                 if (st == null || st.Actions == null) continue;
@@ -199,6 +207,8 @@ namespace MWCoop
                     var ag = a as HutongGames.PlayMaker.Actions.ActivateGameObject;
                     if (ag == null || !ag.Enabled || ag.activate == null || ag.activate.Value) continue;
                     ag.Enabled = false; r.Add(ag);
+                    GameObject g = ag.gameObject != null ? f.Fsm.GetOwnerDefaultTarget(ag.gameObject) : null;
+                    if (g != null && ag.resetOnExit) colliderTargets.Add(g);
                 }
             }
             return r;

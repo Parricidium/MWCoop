@@ -4060,7 +4060,11 @@ namespace MWCoop
                 {
                     saveStep = 1; Log.Info("autotest : amener, avant sauvegarde : corps " + bringCar.Body.position.ToString("F2") + " objet " + bringCar.Body.transform.position.ToString("F2") + " ;" + WorldJointsInfo(bringCar));
                     var near0 = new HashSet<Collider>(Physics.OverlapSphere(bringCar.Body.position, 7f, ~0));
+                    // ([Test] AmenerCollOff=1 : collisionneurs de la voiture eteints juste avant -- rallumes en fin de 'Fix Collider' comme en solo ?)
+                    Transform colls = bringCar.Body.transform.Find("Colliders");
+                    if (Config.GetInt("Test", "AmenerCollOff", 0) != 0 && colls != null) { colls.gameObject.SetActive(false); Log.Info("autotest : amener, Colliders eteints avant la sauvegarde"); }
                     Game.SaveInPlace();
+                    if (colls != null) Log.Info("autotest : amener, Colliders " + (colls.gameObject.activeSelf ? "allumes" : "ETEINTS") + " apres la sauvegarde");
                     Log.Info("autotest : amener, juste apres SaveInPlace : corps " + bringCar.Body.position.ToString("F2") + " objet " + bringCar.Body.transform.position.ToString("F2"));
                     // (collisionneurs apparus a moins de 7 m pendant SAVEGAME -- objets rallumes un instant sous la voiture ?)
                     var sbn = new System.Text.StringBuilder();
