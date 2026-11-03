@@ -1127,9 +1127,25 @@ static Bitmap *AddonPic(const Addon &a)
 }
 // Etiquettes : NEW (pas installee, apparue au catalogue depuis la derniere visite d'avant cette session), UPDATE (installee,
 // plus ancienne que le catalogue).
-// Etiquette montree : EtiquetteMsc= sur My Summer Car (sinon Etiquette=), Etiquette= sur My Winter Car ; 24 caracteres au plus.
+// Etiquette montree : EtiquetteMsc= sur My Summer Car (sinon Etiquette=), Etiquette= sur My Winter Car. Plusieurs pastilles
+// separees par des virgules (« Standalone,RallyWorld » : [Addons], 03/11 ; un ancien lanceur en fait une seule), 4 au plus,
+// 24 caracteres chacune.
 static void SoftTooltip(Graphics &g, RectF anchor, const std::wstring &s);   // (soft.inc)
-static std::wstring AddonTag(const Addon &a) { std::wstring t = CarMsc() && !a.tagMsc.empty() ? a.tagMsc : a.tag; return t.size() > 24 ? t.substr(0, 24) : t; }
+static std::vector<std::wstring> AddonTags(const Addon &a)
+{
+    std::wstring t = CarMsc() && !a.tagMsc.empty() ? a.tagMsc : a.tag;
+    std::vector<std::wstring> out;
+    size_t p = 0;
+    while (p <= t.size() && out.size() < 4) {
+        size_t e = t.find(L',', p); if (e == std::wstring::npos) e = t.size();
+        std::wstring s = t.substr(p, e - p);
+        while (!s.empty() && iswspace(s.back())) s.pop_back();
+        while (!s.empty() && iswspace(s[0])) s.erase(0, 1);
+        if (!s.empty()) out.push_back(s.size() > 24 ? s.substr(0, 24) : s);
+        p = e + 1;
+    }
+    return out;
+}
 static bool AddonIsNew(const Addon &a) { AddonSeenLoad(); return !a.installed && !g_addonSeenStart.count(a.key); }
 static bool AddonHasUpdate(const Addon &a) { return a.installed && !a.builtin && !a.remoteVer.empty() && AddonCmpVer(a.remoteVer, a.ver) > 0; }
 // Barre (ui.inc) : NEW tant qu'une voiture du catalogue n'a pas ete vue, UPDATE si une installee a une mise a jour.
@@ -1416,25 +1432,34 @@ static void DrawAddonList(Graphics &g)
             br = RectF(r.X + 16, r.Y + 228, r.Width - 32, 34);
         }
         // etiquettes NEW / UPDATE (et celle de l'addon), en haut a gauche de l'image
-        RectF tagR(0, 0, 0, 0);
+        std::vector<std::wstring> tags = AddonTags(a);
+        RectF tagR[4];
         {
             float px = list ? r.X + 14 : r.X + 18, py = list ? r.Y + 14 : r.Y + 18;
             if (AddonIsNew(a)) { const wchar_t *s = L"NEW"; float w = PillW(s, 10); Pill(g, RectF(px, py, w, 20), kAcc, s, kOnAcc, 10); px += w + 6; }
             if (upd) { const wchar_t *s = L"UPDATE"; float w = PillW(s, 10); Pill(g, RectF(px, py, w, 20), kWarn, s, Color(255, 255, 255, 255), 10); px += w + 6; }
-            std::wstring tag = AddonTag(a);
-            if (!tag.empty()) {   // (neutre : sombre et translucide sur l'image ; texte tel quel, pas traduit)
-                float w = PillW(tag, 10); RectF tr(px, py, w, 20);
-                Pill(g, tr, Color(190, 24, 26, 32), tag, Color(255, 240, 240, 240), 10);
-                tagR = tr;
+            for (size_t k = 0; k < tags.size(); k++) {   // (neutre : sombre et translucide sur l'image ; texte tel quel, pas traduit ; RallyWorld : leur rouge)
+                float w = PillW(tags[k], 10);
+                if (px + w > r.X + r.Width - 14) break;   // (plus de place sur la carte)
+                RectF tr(px, py, w, 20);
+                bool rw = !_wcsicmp(tags[k].c_str(), L"RallyWorld");
+                Pill(g, tr, rw ? Color(235, 0xE3, 0x26, 0x2F) : Color(190, 24, 26, 32), tags[k], Color(255, 240, 240, 240), 10);
+                tagR[k] = tr; px += w + 6;
             }
         }
         // (zone cliquable : la partie visible de la carte seulement ; une carte pas installee n'ouvre rien)
         RectF hz = r; float top = max(hz.Y, ar.Y), bot = min(hz.Y + hz.Height, ar.Y + ar.Height);
         if (bot - top > 12 && a.installed) { hz.Y = top; hz.Height = bot - top; HotZone(hz, UI_ADDON_CARD + i); }
-        if (tagR.Width > 0 && i < 20 && tagR.Y >= ar.Y && tagR.Y + tagR.Height <= ar.Y + ar.Height) {   // (etiquette : info-bulle ; un clic ouvre la carte, comme ailleurs)
-            HotZone(tagR, UI_ADDON_TAG + i);
-            if (g_newUi && g_uiHot == UI_ADDON_TAG + i && !_wcsicmp(AddonTag(a).c_str(), L"Standalone"))
-                SoftTooltip(g, tagR, T(L"Construite par MWCoop, plus une copie d'une voiture du jeu", L"Built by MWCoop, no longer a copy of a game car"));
+        for (size_t k = 0; k < tags.size() && i < 20; k++) {   // (etiquette : info-bulle ; un clic ouvre la carte, comme ailleurs -- RallyWorld : leur page)
+            const RectF &tr = tagR[k];
+            if (tr.Width <= 0 || tr.Y < ar.Y || tr.Y + tr.Height > ar.Y + ar.Height) continue;
+            int id = UI_ADDON_TAG + i * 4 + (int)k;
+            HotZone(tr, id);
+            if (!g_newUi || g_uiHot != id) continue;
+            if (!_wcsicmp(tags[k].c_str(), L"Standalone"))
+                SoftTooltip(g, tr, T(L"Construite par MWCoop, plus une copie d'une voiture du jeu", L"Built by MWCoop, no longer a copy of a game car"));
+            else if (!_wcsicmp(tags[k].c_str(), L"RallyWorld"))
+                SoftTooltip(g, tr, T(L"Modèle 3D de RallyWorld, prêté gratuitement · clic : leur page", L"3D model by RallyWorld, lent for free · click: their page"));
         }
         if (get) {
             if (br.Y >= ar.Y && br.Y + br.Height <= ar.Y + ar.Height) UiButton(g, br, btn, UI_ADDON_GET + i, true, g_addonDlBusy ? -1 : IC_DOWNLOAD, btnOn, 10);
