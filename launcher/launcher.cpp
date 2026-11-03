@@ -8065,6 +8065,56 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         return 0;
     }
+    // Essai : /testvitres <dossier de jeu factice> <journal> -- vitres d'un addon (voiture.inc) sur un addon factice « vitretest »
+    // (gabarit-vitres.png 1024 x 512) : PNG transparent (alpha garde), PNG trop lourd (moitie de la taille), JPG (opaque),
+    // apercu, retrait. Tout dans le jeu factice et %LOCALAPPDATA%\MWCoop.
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/testvitres")) {
+        g_launcherLog = argv[3];
+        int fails = 0;
+        auto check = [&](bool ok, const char *what) { LaunchLog("testvitres : %s %s", ok ? "OK  " : "ECHEC", what); if (!ok) fails++; };
+        check(VitresFixture(WithSlash(argv[2])), "addon factice installe et ouvert");
+        const Addon *pa = AddonCur();
+        if (!pa) { LaunchLog("testvitres : fin, addon factice introuvable"); return 1; }
+        Addon a = *pa;
+        check(AddonHasGlass(a), "ligne Vitres : gabarit-vitres.png vu");
+        CLSID png, jpg; EncoderClsid(L"image/png", &png); EncoderClsid(L"image/jpeg", &jpg);
+        std::wstring dir = WithSlash(argv[2]);
+        auto size = [](const std::wstring &f) { WIN32_FILE_ATTRIBUTE_DATA at; return GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &at) ? (long long)at.nFileSizeLow : -1LL; };
+        auto alphaAt = [](const std::wstring &f, int &w, int &h) { int al = -1; w = h = 0; if (Bitmap *b = LoadAnyImage(f, NULL)) { w = (int)b->GetWidth(); h = (int)b->GetHeight(); Color c; b->GetPixel(w / 2, h / 2, &c); al = c.GetA(); delete b; } return al; };
+        std::wstring why; int w, h, al;
+        { Bitmap s(512, 256, PixelFormat32bppARGB); { Graphics sg(&s); sg.Clear(Color(128, 40, 80, 200)); } s.Save((dir + L"alpha.png").c_str(), &png, NULL); }
+        check(AddonGlassImportFile(a, dir + L"alpha.png", why), "PNG transparent importe");
+        al = alphaAt(AddonGlassFile(a), w, h);
+        LaunchLog("testvitres :      %d x %d, alpha %d, %lld octets", w, h, al, size(AddonGlassFile(a)));
+        check(w == 1024 && h == 512, "a la taille du gabarit (1024 x 512)");
+        check(al >= 124 && al <= 132, "alpha garde (128)");
+        check(AddonGlassOn(a), "[Coop] Vitres_vitretest = perso");
+        check(AddonGlassThumb(a) != NULL, "apercu sur damier");
+        {
+            Bitmap s(2048, 1024, PixelFormat32bppARGB);
+            BitmapData bd; Rect r(0, 0, 2048, 1024);
+            if (s.LockBits(&r, ImageLockModeWrite, PixelFormat32bppARGB, &bd) == Ok) {
+                unsigned int x = 12345;
+                for (int y = 0; y < 1024; y++) { unsigned int *row = (unsigned int *)((BYTE *)bd.Scan0 + y * bd.Stride); for (int i = 0; i < 2048; i++) { x = x * 1664525u + 1013904223u; row[i] = x; } }
+                s.UnlockBits(&bd);
+            }
+            s.Save((dir + L"lourd.png").c_str(), &png, NULL);
+        }
+        check(AddonGlassImportFile(a, dir + L"lourd.png", why), "PNG trop lourd importe quand meme");
+        al = alphaAt(AddonGlassFile(a), w, h);
+        LaunchLog("testvitres :      %d x %d, %lld octets", w, h, size(AddonGlassFile(a)));
+        check(w < 1024 && size(AddonGlassFile(a)) <= 1048576, "reduit (moitie) sous 1 Mo, toujours en PNG");
+        { Bitmap s(300, 150, PixelFormat24bppRGB); { Graphics sg(&s); sg.Clear(Color(255, 200, 30, 30)); } s.Save((dir + L"opaque.jpg").c_str(), &jpg, NULL); }
+        check(AddonGlassImportFile(a, dir + L"opaque.jpg", why), "JPG importe");
+        al = alphaAt(AddonGlassFile(a), w, h);
+        check(al == 255 && w == 1024, "JPG : vitres opaques, a la taille du gabarit");
+        check(!AddonGlassImportFile(a, dir + L"absent.png", why) && FileExists(AddonGlassFile(a)), "image illisible : refusee, vitres d'avant gardees");
+        g_addonSel = 0; while (g_addonSel < (int)g_addonList.size() && g_addonList[g_addonSel].key != L"vitretest") g_addonSel++;
+        AddonGlassRemove();
+        check(!FileExists(AddonGlassFile(a)) && !AddonGlassOn(a), "retirer : fichier supprime, cle videe");
+        LaunchLog("testvitres : fin, %d echec(s)", fails);
+        return fails ? 1 : 0;
+    }
     // Essai : /testjeuencours <journal> -- le jeu en cours vu d'ici (GameProcessRunning) et les copies de lancement suivies.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testjeuencours")) {
         g_launcherLog = argv[2];
@@ -8340,6 +8390,21 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (g_albView == 2) { for (size_t i = 0; i < g_alb.size() && i < 2; i++) g_albFav.insert(g_alb[i].name); if (!g_alb.empty()) g_albSel = 0; }
         }
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
+        else if (st == L"addon-vitres" || st == L"addon-vitres-perso" || st == L"addon-vitres-livree") {   // volet d'un addon factice avec vitres (04/11) : Vitres (gabarit / -perso : une image transparente importee), -livree : l'onglet Livree
+            g_tab = TAB_CAR; g_addonsTab = true; g_addonsPage = 1;
+            std::wstring root = LocalDir() + L"essai-vitres\\";
+            VitresFixture(root);
+            g_addonVitKey = L"vitretest"; g_addonVitTab = st != L"addon-vitres-livree";
+            if (const Addon *a = AddonCur()) {
+                if (st == L"addon-vitres-perso") {
+                    CLSID png; EncoderClsid(L"image/png", &png);
+                    Bitmap s(1024, 512, PixelFormat32bppARGB);
+                    { Graphics sg(&s); sg.Clear(Color(0, 0, 0, 0)); LinearGradientBrush lb(PointF(0, 0), PointF(1024, 0), Color(200, 255, 120, 0), Color(60, 0, 120, 255)); sg.FillRectangle(&lb, 30, 60, 964, 380); }
+                    s.Save((root + L"perso.png").c_str(), &png, NULL);
+                    std::wstring why; AddonGlassImportFile(*a, root + L"perso.png", why);
+                } else AddonGlassRemove();
+            }
+        }
         else if (st == L"addons-etiquette" || st == L"addons-etiquette-bulle" || st == L"addons-etiquette-rw") {   // etiquettes (29/10) : Standalone sur sq84 et r5maxi (EtiquetteMsc=), Beta sur evo3 (Etiquette=), Standalone + RallyWorld sur imp96 / t16e2 / sq84 (03/11) ; -bulle : info-bulle de la premiere Standalone, -rw : celle de la premiere RallyWorld
             g_tab = TAB_CAR; g_addonsTab = true; g_addonsPage = 1;
             g_addonCatT = g_addonCatGoT = ~0ull;

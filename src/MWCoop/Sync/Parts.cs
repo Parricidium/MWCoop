@@ -218,14 +218,32 @@ namespace MWCoop
             return false;
         }
 
+        // Cle prise a l'accrochage de la vis : une vis d'un sous-objet que le montage deplace (biellettes de la cremaillere VIN2091 :
+        // sous la piece libre, sous la voiture une fois montee -- TieRodFL/tierod_left) a « tierod_left/BoltPM#1/bolt4 » chez l'un
+        // et « CORRIS/.../TieRodFL/tierod_left/BoltPM#1/bolt4 » chez l'autre, selon le moment ou chacun l'a vue (dossier #45,
+        // NibaLlJ 03/11 : vis serrees par l'invite « introuvables » chez l'hote, laissees a 0 dans sa sauvegarde, desserrees a la
+        // reentree). Sans cle exacte : la vis de la meme piece dont la cle finit par l'autre (deux maillons au moins), si une seule
+        // ([Test] VisCheminSouple=0 : comme avant).
+        static int boltLoose = -1;
         static Bolt FindBolt(string part, string key)
         {
+            Bolt tail = null; int tails = 0;
+            if (boltLoose < 0) boltLoose = Config.GetInt("Test", "VisCheminSouple", 1);
             foreach (Bolt b in bolts)
             {
-                if (b.F == null || b.Key != key) continue;
-                if (PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) == part) return b;
+                if (b.F == null) continue;
+                bool exact = b.Key == key;
+                if (!exact && (boltLoose == 0 || !SameTail(b.Key, key))) continue;
+                if (PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) != part) continue;
+                if (exact) return b;
+                tail = b; tails++;
             }
-            return null;
+            return tails == 1 ? tail : null;
+        }
+        static bool SameTail(string a, string b)
+        {
+            string shortK = a.Length <= b.Length ? a : b, longK = a.Length <= b.Length ? b : a;
+            return shortK.IndexOf('/') > 0 && longK.Length > shortK.Length && longK.EndsWith("/" + shortK, System.StringComparison.Ordinal);
         }
 
         static bool ApplyBolt(int who, string part, string key, int target, bool last)
@@ -1125,8 +1143,70 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // [Test] Autotest=reentree (2 joueurs, dossier #45 : piece montee et vissee par l'invite, tombee apres sauvegarde et reentree ;
+        // TestPiece=VIN2091 par defaut, la cremaillere et ses biellettes). ReentreeEtape=1 : a +20 s l'invite demonte la piece, la
+        // remonte a +23 s (comme le clic), serre toutes ses vis (celles dont ThisPart est la piece, biellettes comprises) d'un cran
+        // toutes les 0,15 s pendant 3 s ; a +32 s chacun note ses vis, a +36 s l'hote sauvegarde en jeu. ReentreeEtape=2 (partie
+        // relancee sur cette sauvegarde) : a +20 s chacun note la piece (montee ?) et ses vis.
+        static int reStep; static float reAt, reNext; static bool reKeyed;
+        static void TestReentry(float t)
+        {
+            string id = Config.Get("Test", "TestPiece", "VIN2091");
+            int etape = Config.GetInt("Test", "ReentreeEtape", 1);
+            float now = Time.realtimeSinceStartup;
+            if (reStep == 0 && Jobs.OtherInGame(20f)) { reStep = 1; reAt = now; Log.Info("autotest : reentree, etape " + etape + ", " + id + " : " + PartReport(id)); }
+            if (reStep == 0) return;
+            if (etape == 2) { if (reStep == 1 && now - reAt > 4f) { reStep = 2; Log.Info("autotest : reentree, apres relance : " + PartReport(id) + " | vis " + BoltState(id)); } return; }
+            if (!Session.IsHost)
+            {
+                if (reStep == 1) { reStep = 2; Log.Info("autotest : reentree, invite : " + (PartMounted(id) ? TestToggle(id) : "deja demontee")); }
+                if (reStep == 2 && now - reAt > 3f) { reStep = 3; Log.Info("autotest : reentree, invite : " + TestToggle(id)); reNext = now + 1f; }
+                if (reStep == 3 && now >= reNext && now - reAt < 7f)
+                {
+                    reNext = now + 0.15f;
+                    GameObject part = FindById(id);
+                    foreach (Bolt b in bolts) if (b.F != null && b.F.FsmVariables.GetFsmGameObject("ThisPart").Value == part && b.F.FsmVariables.GetFsmInt("BoltTightness").Value < 8) b.F.SendEvent("TIGHTEN");
+                }
+            }
+            // ([Test] ReentreeCleRelative=1 : chez l'hote, juste apres le montage, cles des vis de biellette remises comme accrochees sur la
+            // piece libre -- « tierod_left/BoltPM#1/bolt4 », l'etat vu au premier essai et chez NibaLlJ ; l'ordre des releves le decide sinon)
+            if (Session.IsHost && !reKeyed && now - reAt > 3.5f && Config.GetInt("Test", "ReentreeCleRelative", 0) != 0)
+            {
+                reKeyed = true;
+                GameObject part = FindById(id);
+                var ks = new List<string>();
+                foreach (Bolt b in bolts)
+                    if (b.F != null && b.F.FsmVariables.GetFsmGameObject("ThisPart").Value == part && b.Key.IndexOf("/tierod_", System.StringComparison.Ordinal) > 0)
+                    { b.Key = b.Key.Substring(b.Key.IndexOf("/tierod_", System.StringComparison.Ordinal) + 1); ks.Add(b.Key); }
+                Log.Info("autotest : reentree, hote : cles de biellette relatives " + string.Join(" ", ks.ToArray()));
+            }
+            if (reStep <= 3 && now - reAt > 12f) { reStep = 4; Log.Info("autotest : reentree, " + (Session.IsHost ? "hote" : "invite") + " avant sauvegarde : " + PartReport(id) + " | vis " + BoltState(id)); }
+            if (Session.IsHost && reStep == 4 && now - reAt > 16f) { reStep = 5; Log.Info("autotest : reentree, sauvegarde en jeu"); Game.SaveInPlace(); }
+        }
+        static bool PartMounted(string id)
+        {
+            GameObject part = FindById(id);
+            PlayMakerFSM data = part != null ? Game.FsmOn(part, "Data") : null;
+            GameObject ip = data != null ? data.FsmVariables.GetFsmGameObject("InstallPoint").Value : null;
+            PlayMakerFSM asm = ip != null ? Game.FsmOn(ip, "Data") : null;
+            return asm != null && Holds(asm, part);
+        }
+        static string PartReport(string id)
+        {
+            GameObject part = FindById(id);
+            if (part == null) return id + " introuvable";
+            PlayMakerFSM data = Game.FsmOn(part, "Data");
+            FsmBool inst = data != null ? data.FsmVariables.FindFsmBool("Installed") : null;
+            GameObject ip = data != null ? data.FsmVariables.GetFsmGameObject("InstallPoint").Value : null;
+            Rigidbody rb = part.GetComponent<Rigidbody>();
+            return id + (PartMounted(id) ? " MONTEE" : " libre") + " (Installed " + (inst != null ? inst.Value.ToString() : "?") + ", etat " + (data != null ? data.ActiveStateName : "?")
+                   + ", parent " + (part.transform.parent != null ? part.transform.parent.name : "aucun") + ", corps " + (rb == null ? "aucun" : rb.isKinematic ? "cinematique" : "libre")
+                   + (ip != null ? ", a " + (part.transform.position - ip.transform.position).magnitude.ToString("F2") + " m du point" : "") + ", " + (part.activeInHierarchy ? "allumee" : "eteinte") + ")";
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "reentree") { TestReentry(t); return; }
             if (mode == "casse2") { TestCasse2(t); return; }
             if (mode != "boulons") return;
             string id = Config.Get("Test", "TestPiece", "VIN413C1");

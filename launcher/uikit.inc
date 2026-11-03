@@ -76,6 +76,7 @@ enum {
     UI_SET_INTERFACE = 10040, UI_SET_FENMEM = 10042, UI_SET_ANIMRED,          // REGLAGES > Lanceur > Fenetre du lanceur (fenetre.inc) : ancienne / nouvelle (+0/1), memoire de la taille, animations reduites
     UI_SET_THEMENOUV = 10044, UI_SET_SIGNALNATIF = 10047,                   // + 0..2 theme ; 10047 : Reglages > Lanceur > Depannage, signalement natif (signalnatif.inc, nouvelle interface)                                                 // + 0..2 : theme de la nouvelle interface, Clair / Sombre / Auto (soft.inc)
     UI_RALLY_SITE = 10080, UI_RALLY_DISCORD, UI_RALLY_DON, UI_RALLY_DON2,      // RALLYWORLD (rallyworld.inc) : leur site, leur Discord, leurs dons (bandeau, carte Les soutenir)
+    UI_ADDON_VIT_SEG = 10084, UI_ADDON_VIT_IMP = 10086, UI_ADDON_VIT_TPL, UI_ADDON_VIT_USE, UI_ADDON_VIT_DEL,   // ADDONS, volet : choix Livree / Vitres (+0/1), vitres de l'addon ouvert (importer, gabarit, utiliser, retirer)
     UI_RAIL_COLLAPSE = 10060, UI_STATUS_LOBBY, UI_PALETTE_OPEN, UI_PAL_ROW = 10070,   // COQUE (coque.inc) : replier la barre, salon de la barre d'etat, ouvrir la palette Ctrl+K, lignes de la palette (+ 0..7)
     UI_PLACES_OPEN = 10300, UI_PLACES_EXPORT,   // OUTILS : placement des sieges (cle d'acces) -- ouvrir l'outil, exporter mes voitures (outils-places.inc)
     UI_LOBBY_PRIV = 3300,         // + 0 public, 1 prive   (3300+ depuis 1.8.9 : 26 options x 3 debordaient sur 3260-3279, Marqueurs cliquait « Tous » des ajouts)

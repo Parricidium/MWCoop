@@ -1297,6 +1297,161 @@ static void AddonRemove()
     AddonLiveryUse(*a, false);
     LaunchLog("livree %ls retiree", a->key.c_str());
 }
+// Vitres (JD 04/11, [Addons]) : une texture des vitres au choix, en plus de la livree, pour les addons dont le dossier a un
+// gabarit-vitres.png (RGBA). Image du joueur : %LOCALAPPDATA%\MWCoop\<cle>-vitres.png, PNG RGBA (l'alpha est la
+// transparence de la vitre) a la taille du gabarit, 1 Mo au plus -- sinon moitie de la taille, jamais de JPEG (l'alpha
+// serait perdu) ; [Coop] Vitres_<cle> = perso. Le mod relit la cle et la date du fichier toutes les 2 s.
+static Bitmap *g_vitThumb; static std::wstring g_vitThumbOf;
+static bool g_addonVitTab; static std::wstring g_addonVitKey;   // (volet : Livree / Vitres, de nouveau Livree a chaque addon ouvert)
+static std::wstring AddonGlassTpl(const Addon &a) { return AddonDir(a) + L"gabarit-vitres.png"; }
+static bool AddonHasGlass(const Addon &a) { return a.installed && !a.dir.empty() && FileExists(AddonGlassTpl(a)); }
+static std::wstring AddonGlassFile(const Addon &a) { return LocalDir() + a.key + L"-vitres.png"; }
+static std::string AddonGlassKey(const Addon &a) { return "Vitres_" + Narrow(a.key); }
+static bool AddonGlassOn(const Addon &a)
+{
+    if (g_gameDir.empty()) return false;
+    char v[16] = "";
+    GetPrivateProfileStringA("Coop", AddonGlassKey(a).c_str(), "", v, sizeof(v), ModIniA().c_str());
+    return strcmp(v, "perso") == 0 && FileExists(AddonGlassFile(a));
+}
+static void AddonGlassUse(const Addon &a, bool on)
+{
+    if (g_gameDir.empty()) return;
+    EnsureModDir();
+    WritePrivateProfileStringA("Coop", AddonGlassKey(a).c_str(), on ? "perso" : "", ModIniA().c_str());
+    g_vitThumbOf.clear();
+}
+// Apercu (512 x 256) sur un damier : les vitres du joueur, sinon le gabarit.
+static Bitmap *AddonGlassThumb(const Addon &a)
+{
+    std::wstring f = AddonGlassOn(a) ? AddonGlassFile(a) : AddonGlassTpl(a);
+    WIN32_FILE_ATTRIBUTE_DATA at;
+    std::wstring key = f;
+    if (GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &at)) key += L"|" + std::to_wstring(at.ftLastWriteTime.dwLowDateTime);
+    if (key == g_vitThumbOf) return g_vitThumb;
+    g_vitThumbOf = key;
+    delete g_vitThumb; g_vitThumb = NULL;
+    if (Bitmap *b = LoadAnyImage(f, NULL)) {
+        g_vitThumb = new Bitmap(512, 256, PixelFormat32bppPARGB);
+        Graphics tg(g_vitThumb);
+        SolidBrush light(Color(255, 236, 236, 236)), dark(Color(255, 196, 196, 196));
+        tg.FillRectangle(&light, 0, 0, 512, 256);
+        for (int y = 0; y < 256; y += 16) for (int x = (y / 16) % 2 * 16; x < 512; x += 32) tg.FillRectangle(&dark, x, y, 16, 16);
+        tg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        tg.DrawImage(b, RectF(0, 0, 512, 256));
+        delete b;
+    }
+    return g_vitThumb;
+}
+// L'image choisie, a la taille du gabarit, en <cle>-vitres.png ; puis la moitie (deux fois au plus) si le PNG depasse 1 Mo.
+// L'alpha reste (JPG / BMP : opaque). Ecrite a cote puis mise en place : un echec garde les vitres d'avant.
+static bool AddonGlassImportFile(const Addon &a, const std::wstring &file, std::wstring &why)
+{
+    Bitmap *src = LoadAnyImage(file, &why);
+    bool ok = false;
+    if (src) {
+        int W = 1024, H = 512;
+        if (Bitmap *tpl = LoadAnyImage(AddonGlassTpl(a), NULL)) { W = (int)tpl->GetWidth(); H = (int)tpl->GetHeight(); delete tpl; }
+        CLSID png;
+        CreateDirectoryW(LocalDir().c_str(), NULL);
+        std::wstring tmp = AddonGlassFile(a) + L".tmp";
+        if (!EncoderClsid(L"image/png", &png)) why = T(L"enregistrement impossible", L"can't save it");
+        for (int div = 1; div <= 4 && why.empty(); div *= 2) {
+            int w = max(1, W / div), h = max(1, H / div);
+            Bitmap dst(w, h, PixelFormat32bppARGB);
+            {
+                Graphics dg(&dst);
+                dg.Clear(Color(0, 0, 0, 0));
+                dg.SetCompositingMode(CompositingModeSourceCopy);
+                dg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+                dg.SetPixelOffsetMode(PixelOffsetModeHalf);
+                dg.DrawImage(src, RectF(0, 0, (REAL)w, (REAL)h));
+            }
+            if (dst.Save(tmp.c_str(), &png, NULL) != Ok) { why = T(L"enregistrement impossible", L"can't save it"); break; }
+            WIN32_FILE_ATTRIBUTE_DATA at;
+            if (GetFileAttributesExW(tmp.c_str(), GetFileExInfoStandard, &at) && at.nFileSizeHigh == 0 && at.nFileSizeLow <= 1048576) {
+                if (!MoveFileExW(tmp.c_str(), AddonGlassFile(a).c_str(), MOVEFILE_REPLACE_EXISTING)) { why = T(L"enregistrement impossible", L"can't save it"); break; }
+                LaunchLog("vitres %ls importees : %d x %d, %lu octets", a.key.c_str(), w, h, at.nFileSizeLow);
+                ok = true; break;
+            }
+        }
+        DeleteFileW(tmp.c_str());
+        if (!ok && why.empty()) why = T(L"trop lourde, même réduite (plus de 1 Mo) : simplifie l'image", L"too heavy, even reduced (over 1 MB): simplify the image");
+    }
+    delete src;
+    if (ok) AddonGlassUse(a, true);
+    else LaunchLog("vitres %ls : echec (%ls)", a.key.c_str(), why.c_str());
+    return ok;
+}
+static void AddonGlassImport()
+{
+    const Addon *pa = AddonCur();
+    if (!pa || !AddonHasGlass(*pa)) return;
+    Addon a = *pa;
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW of = { sizeof(of) };
+    of.hwndOwner = g_wnd;
+    of.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.heic;*.heif;*.avif;*.jfif\0*.*\0*.*\0";
+    of.lpstrFile = file;
+    of.nMaxFile = MAX_PATH;
+    std::wstring init = LocalDir();
+    of.lpstrInitialDir = init.c_str();
+    std::wstring title = std::wstring(T(L"Choisir les vitres : ", L"Choose the windows: ")) + a.name + T(L" (PNG avec transparence, peint sur le gabarit)", L" (PNG with transparency, painted on the template)");
+    of.lpstrTitle = title.c_str();
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (!GetOpenFileNameW(&of)) return;
+    std::wstring why;
+    if (!AddonGlassImportFile(a, file, why)) {
+        std::wstring msg = std::wstring(T(L"Cette image n'a pas pu être utilisée : ", L"This image could not be used: ")) + why + L".";
+        MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
+    }
+}
+// Gabarit des vitres : copie de <cle>\gabarit-vitres.png dans %LOCALAPPDATA%\MWCoop, montree dans l'Explorateur.
+static void AddonGlassTemplate()
+{
+    const Addon *a = AddonCur();
+    if (!a || !AddonHasGlass(*a)) return;
+    std::wstring t = LocalDir() + L"gabarit-vitres-" + a->key + L".png";
+    CreateDirectoryW(LocalDir().c_str(), NULL);
+    if (!CopyFileW(AddonGlassTpl(*a).c_str(), t.c_str(), FALSE) && !FileExists(t)) {
+        std::wstring m = std::wstring(T(L"Gabarit introuvable (MWCoop\\", L"Template not found (MWCoop\\")) + a->key + T(L"\\gabarit-vitres.png) : réinstalle l'addon.", L"\\gabarit-vitres.png): reinstall the add-on.");
+        MessageBoxW(g_wnd, m.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
+        return;
+    }
+    std::wstring arg = L"/select,\"" + t + L"\"";
+    ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
+}
+// Essais (/testvitres, captures addon-vitres) : jeu factice <root> avec un addon « vitretest » (gabarit-vitres.png 1024 x 512
+// transparent a cadres, gabarit-livree.png), installe et ouvert.
+static bool VitresFixture(const std::wstring &root)
+{
+    g_gameDir = g_modRoot = root;
+    std::wstring d = AddonsRoot() + L"vitretest\\";
+    SHCreateDirectoryExW(NULL, d.c_str(), NULL);
+    { FILE *f = _wfopen((d + L"carrosserie.p205").c_str(), L"wb"); if (f) fclose(f); }
+    { FILE *f = _wfopen((d + L"addon.ini").c_str(), L"wb"); if (f) { fputs("Nom=Vitre test\r\nNomCourt=Vitre test\r\nLivree=1\r\nVersion=1.0\r\n", f); fclose(f); } }
+    CLSID png;
+    if (!EncoderClsid(L"image/png", &png)) return false;
+    {
+        Bitmap t(1024, 512, PixelFormat32bppARGB);
+        { Graphics tg(&t); tg.Clear(Color(0, 0, 0, 0)); Pen p(Color(255, 60, 60, 60), 10); SolidBrush b(Color(90, 120, 170, 210));
+          for (int i = 0; i < 4; i++) { RectF r(30.0f + i * 248, 60, 220, 380); tg.FillRectangle(&b, r); tg.DrawRectangle(&p, r); } }
+        if (t.Save((d + L"gabarit-vitres.png").c_str(), &png, NULL) != Ok) return false;
+    }
+    { Bitmap t(256, 256, PixelFormat24bppRGB); { Graphics tg(&t); tg.Clear(Color(255, 210, 210, 210)); } t.Save((d + L"gabarit-livree.png").c_str(), &png, NULL); }
+    g_addonScanT = 0; AddonsScan();
+    g_addonScanT = ~0ull;   // (plus de nouveau parcours pendant l'essai)
+    for (int i = 0; i < (int)g_addonList.size(); i++) if (g_addonList[i].key == L"vitretest") { g_addonSel = i; return true; }
+    return false;
+}
+static void AddonGlassRemove()
+{
+    const Addon *a = AddonCur();
+    if (!a) return;
+    DeleteFileW(AddonGlassFile(*a).c_str());
+    AddonGlassUse(*a, false);
+    LaunchLog("vitres %ls retirees", a->key.c_str());
+}
 // Image contenue (proportions gardees) et coins arrondis.
 // Sans image (My Summer Car, en attendant les photos de JD -- 24/10 : « pour le moment une vignette temporaire avec les noms
 // des voitures ») : degrade aux couleurs de l'edition, nom de la voiture en grand, « My Summer Car » dessous.
@@ -1478,15 +1633,52 @@ static void DrawAddonView(Graphics &g, const Addon &a)
     Glass(kCarCard);
     Glass(kCarPanel);
     RectF card = kCarCard;
-    Title(g, a.livery ? (std::wstring(T(L"Livrée : ", L"Livery: ")) + a.nameShort).c_str() : a.name.c_str(), RectF(card.X + 24, card.Y + 20, card.Width - 48 - 260, 30), 22, kInk);
+    if (g_addonVitKey != a.key) { g_addonVitKey = a.key; g_addonVitTab = false; }
+    bool glass = AddonHasGlass(a);
+    if (!glass || !a.livery) g_addonVitTab = glass;   // (sans gabarit de vitres : la livree seule ; sans livree : les vitres seules)
+    Title(g, glass && g_addonVitTab ? (std::wstring(T(L"Vitres : ", L"Windows: ")) + a.nameShort).c_str() : a.livery ? (std::wstring(T(L"Livrée : ", L"Livery: ")) + a.nameShort).c_str() : a.name.c_str(), RectF(card.X + 24, card.Y + 20, card.Width - 48 - 260, 30), 22, kInk);
     UiButton(g, RectF(card.X + card.Width - 24 - 140, card.Y + 18, 140, 34), T(L"‹ Addons", L"‹ Add-ons"), UI_ADDON_BACK, false, -1, true, 10);
     UiButton(g, RectF(card.X + card.Width - 24 - 140 - 10 - 96, card.Y + 18, 96, 34), T(L"Aide", L"Help"), UI_ADDON_HELP, false, IC_BOOK, true, 10);
-    if (a.livery) {
+    float top = 0;   // (decalage sous le choix Livree / Vitres)
+    if (glass && a.livery) {
+        UiSeg(g, RectF(card.X + 24, card.Y + 56, 280, 34), { T(L"Livrée", L"Livery"), T(L"Vitres", L"Windows") }, g_addonVitTab ? 1 : 0, UI_ADDON_VIT_SEG);
+        top = 46;
+    }
+    if (glass && g_addonVitTab) {
+        Para(g, T(L"Une texture pour les vitres, en plus de la livrée : la transparence de ton image est celle des vitres.",
+                  L"A texture for the windows, on top of the livery: the transparency of your image is the windows' transparency."),
+             RectF(card.X + 24, card.Y + 56 + top, card.Width - 48, 40), 12.5f, kGrey);
+        bool has = FileExists(AddonGlassFile(a)), on = AddonGlassOn(a);
+        RectF th(card.X + 24, card.Y + 104 + top, 300, 150);
+        GraphicsPath tp; RoundRect(tp, th, 14);
+        SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
+        if (Bitmap *b = AddonGlassThumb(a)) { g.SetClip(&tp); g.DrawImage(b, th); g.ResetClip(); }
+        else Icon(g, IC_IMAGE, th.X + th.Width / 2, th.Y + th.Height / 2, 40, WithA(kGrey, 0.6f), 1.4f);
+        Pen tpen(on ? kAcc : TH(fieldBorder), on ? 2.0f : 1.0f); g.DrawPath(&tpen, &tp);
+        Text(g, on ? T(L"Tes vitres", L"Your windows") : T(L"Gabarit (vitres d'origine)", L"Template (original windows)"),
+             RectF(th.X, th.Y + th.Height + 6, th.Width, 22), 12.5f, FontStyleBold, on ? kInk : kGrey, StringAlignmentCenter);
+        float bx = th.X + th.Width + 24, bw = card.X + card.Width - 24 - bx, by = th.Y;
+        UiButton(g, RectF(bx, by, bw, 44), T(L"Gabarit", L"Template"), UI_ADDON_VIT_TPL, false, IC_FOLDER); by += 56;
+        UiButton(g, RectF(bx, by, bw, 44), T(L"Mon image…", L"My image…"), UI_ADDON_VIT_IMP, true, IC_IMAGE); by += 56;
+        if (has) {
+            UiButton(g, RectF(bx, by, bw, 44), on ? T(L"Utilisées : oui", L"In use: yes") : T(L"Utilisées : non", L"In use: no"), UI_ADDON_VIT_USE, false, on ? IC_CHECK : -1); by += 56;
+            UiButton(g, RectF(bx, by, bw, 44), T(L"Retirer", L"Remove"), UI_ADDON_VIT_DEL, false, IC_TRASH); by += 56;
+        }
+        float sy = max(th.Y + th.Height + 44, by + 8);
+        const wchar_t *steps[] = {
+            T(L"1. Gabarit : les vitres de la voiture à plat, en PNG avec transparence. Garde sa taille.",
+              L"1. Template: the car's windows laid flat, as a PNG with transparency. Keep its size."),
+            T(L"2. Peins par-dessus (transparent : vitre claire), puis « Mon image… ». Un JPG ou un BMP donne des vitres opaques.",
+              L"2. Paint over it (transparent: clear glass), then \"My image…\". A JPG or BMP gives opaque windows."),
+            T(L"3. En jeu, elles s'appliquent toutes seules après quelques secondes.", L"3. In game, they apply by themselves after a few seconds."),
+        };
+        for (const wchar_t *st : steps) { Para(g, st, RectF(card.X + 24, sy, card.Width - 48, 48), 13, kInk); sy += 50; }
+    } else if (a.livery) {
         Para(g, T(L"Sans livrée, elle prend ta couleur et ton numéro, comme la VAZ. Avec, tous les joueurs voient la tienne.",
                   L"Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours."),
-             RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 12.5f, kGrey);
+             RectF(card.X + 24, card.Y + 56 + top, card.Width - 48, 40), 12.5f, kGrey);
         bool has = FileExists(AddonLiveryFile(a)), on = AddonLiveryOn(a);
-        RectF th(card.X + 24, card.Y + 104, 300, 300);
+        RectF th(card.X + 24, card.Y + 104 + top, 300, 300);
         GraphicsPath tp; RoundRect(tp, th, 14);
         SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
         if (Bitmap *b = AddonThumb(a)) { g.SetClip(&tp); g.DrawImage(b, th); g.ResetClip(); }
@@ -1533,6 +1725,12 @@ static void DrawAddonView(Graphics &g, const Addon &a)
         bool on = AddonLiveryOn(a);
         Text(g, T(L"Livrée", L"Livery"), RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
         Text(g, on ? T(L"la tienne (partagée)", L"yours (shared)") : T(L"aucune", L"none"), RectF(pn.X + 144, y, pn.Width - 168, 22), 12.5f, FontStyleBold, on ? kAcc : kGrey, StringAlignmentNear);
+        y += 30;
+    }
+    if (glass) {
+        bool on = AddonGlassOn(a);
+        Text(g, T(L"Vitres", L"Windows"), RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, on ? T(L"les tiennes", L"yours") : T(L"d'origine", L"the original ones"), RectF(pn.X + 144, y, pn.Width - 168, 22), 12.5f, FontStyleBold, on ? kAcc : kGrey, StringAlignmentNear);
     }
     if (!a.builtin) {   // (la VAZ : livree avec le mod, ni mise a jour ni desinstallation ici)
         bool upd = AddonHasUpdate(a);
