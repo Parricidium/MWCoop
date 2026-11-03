@@ -542,8 +542,10 @@ namespace MWCoop
             Texture2D t = key == "numero" ? Tex("numero-" + number.ToString("00"), true) : d != null ? Tex(d.Tex) : null;
             if ((kind == "glass" || kind == "fade" || kind == "lampfade") && transp != null)
             {
-                m = new Material(transp) { mainTexture = kind == "glass" ? null : t };
-                m.color = kind == "glass" ? d.Col : Color.white;
+                // (verre texture -- vitres des modeles Rallyworld, JD 03/11 : bordures, degivrage ; la teinte est dans la texture, la pluie
+                // du jeu le reconnait toujours comme verre)
+                m = new Material(transp) { mainTexture = kind == "glass" && t == null ? null : t };
+                m.color = kind == "glass" && t == null ? d.Col : kind == "glass" ? new Color(1f, 1f, 1f, d.Col.a > 0f ? d.Col.a : 1f) : Color.white;
             }
             else if ((kind == "cutout" || kind == "lampcut") && cutout != null)
             {

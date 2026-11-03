@@ -2304,6 +2304,10 @@ namespace MWCoop
                 // (meme vue phares allumes : compteurs eclaires)
                 foreach (Gauge g in new[] { st.Speedo, st.Tacho, st.Turbo }) if (g != null) g.Light(true);
                 Photo(b, "planche-phares", st.T.Yeux, at, 38f);
+                // ([Test] StandalonePlanche=2 : aussi la console, centree sur le contact et les phares -- commandes posees sur le modele)
+                VazCar.Knob[] kz = KnobsOf(b.M);
+                if (Config.GetInt("Test", "StandalonePlanche", 0) >= 2 && kz != null && kz.Length > 2)
+                    Photo(b, "planche-boutons", st.T.Yeux, (kz[0].At + kz[2].At + kz[kz.Length - 1].At) / 3f, 34f);
                 Log.Info("standalone : planche figee (rapport affiche " + (st.GearTex != null) + ", voyant " + (st.RevLamp != null) + ", turbo " + (st.Turbo != null) + ")");
             }
             // ([Test] StandaloneRetros=1 : a 70 s, l'hote au volant, chaque glace vue de ses yeux, zoomee -- retroviseurs fonctionnels)
