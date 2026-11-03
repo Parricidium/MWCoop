@@ -1,0 +1,15 @@
+L92-1	Choose the windows: 
+L92-2	 (PNG with transparency, painted on the template)
+L92-3	too heavy, even reduced (over 1 MB): simplify the image
+L92-4	This image could not be used: 
+L92-5	\\gabarit-vitres.png): reinstall the add-on.
+L92-6	Windows: 
+L92-7	A texture for the windows, on top of the livery: the transparency of your image is the windows' transparency.
+L92-8	Your windows
+L92-9	Template (original windows)
+L92-10	1. Template: the car's windows laid flat, as a PNG with transparency. Keep its size.
+L92-11	2. Paint over it (transparent: clear glass), then \"My image…\". A JPG or BMP gives opaque windows.
+L92-12	3. In game, they apply by themselves after a few seconds.
+L92-13	yours
+L92-14	the original ones
+L92-15	Windows (cars that have a windows template): in the car's panel, the Windows tab has its own template, a PNG with transparency: transparent stays clear glass. Same buttons as the livery; a JPG or BMP gives opaque windows.

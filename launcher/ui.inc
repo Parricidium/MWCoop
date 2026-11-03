@@ -1766,6 +1766,11 @@ static bool UiClick(int id)
     case UI_CAR_EVOTPL: AddonTemplate(); return true;
     case UI_CAR_EVOUSE: if (const Addon *a = AddonCur()) AddonLiveryUse(*a, !AddonLiveryOn(*a)); return true;
     case UI_CAR_EVODEL: AddonRemove(); return true;
+    case UI_ADDON_VIT_SEG: case UI_ADDON_VIT_SEG + 1: g_addonVitTab = id == UI_ADDON_VIT_SEG + 1; return true;
+    case UI_ADDON_VIT_IMP: AddonGlassImport(); return true;
+    case UI_ADDON_VIT_TPL: AddonGlassTemplate(); return true;
+    case UI_ADDON_VIT_USE: if (const Addon *a = AddonCur()) AddonGlassUse(*a, !AddonGlassOn(*a)); return true;
+    case UI_ADDON_VIT_DEL: AddonGlassRemove(); return true;
     case UI_ADDON_BACK: g_addonSel = -1; return true;
     case UI_ADDONS_CARS: g_addonsPage = 1; g_addonSel = -1; g_scroll[TAB_CAR] = 0; return true;   // (modules.inc : accueil -> les voitures)
     case UI_ADDONS_MODS: g_kuplaNewSession = false; return true;   // (les modules sont deja dessous ; NEW lu)

@@ -689,6 +689,8 @@ static const WikiBlock kW_Addons[] = {   // (1.5.1, JD : comment installer une v
             L"In game, your livery is sent to the other players: everyone sees it." },
     { WB_B, L"La VAZ-2108, livrée avec le mod, a aussi sa carte dans l'onglet Addons (raccourci Addons de la barre, sous Mods) : même gabarit, même livrée.",
             L"The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery." },
+    { WB_B, L"Vitres (voitures qui ont un gabarit de vitres) : dans le volet de la voiture, l'onglet Vitres a son propre gabarit, en PNG avec transparence : le transparent reste une vitre claire. Mêmes boutons que la livrée ; un JPG ou un BMP donne des vitres opaques.",
+            L"Windows (cars that have a windows template): in the car's panel, the Windows tab has its own template, a PNG with transparency: transparent stays clear glass. Same buttons as the livery; a JPG or BMP gives opaque windows." },
     { WB_GO, L"Ouvrir les addons",
             L"Open the add-ons", 2000 },
     { WB_H, L"Mods : les modules du mod co-op", L"Mods: the modules of the co-op mod", 0, WG_KUPLA },   // (27/10 : Kupla, cache avant sa sortie)

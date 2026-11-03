@@ -2476,3 +2476,17 @@ Rally and off-road for Assetto Corsa · the community that lends us its cars	Р�
 New page in the bar, under Add-ons: RallyWorld, the rally and off-road community for Assetto Corsa that lends us its cars. Their website, their Discord, and a way to support them.	Новая страница в панели, под «Дополнения»: RallyWorld, сообщество ралли и бездорожья для Assetto Corsa, которое делится с нами своими машинами. Их сайт, их Discord и способ их поддержать.
 3D model by RallyWorld, lent for free · click: their page	Модель 3D от RallyWorld, предоставлена бесплатно · клик: их страница
 In Add-ons: %s	В дополнениях: %s
+Choose the windows: 	Выбрать стёкла: 
+ (PNG with transparency, painted on the template)	 (PNG с прозрачностью, нарисованный по шаблону)
+too heavy, even reduced (over 1 MB): simplify the image	слишком тяжёлое даже после уменьшения (больше 1 МБ): упрости изображение
+This image could not be used: 	Это изображение нельзя использовать: 
+\\gabarit-vitres.png): reinstall the add-on.	\\gabarit-vitres.png): переустанови дополнение.
+Windows: 	Стёкла: 
+A texture for the windows, on top of the livery: the transparency of your image is the windows' transparency.	Текстура для стёкол, в дополнение к ливрее: прозрачность твоего изображения — это прозрачность стёкол.
+Your windows	Твои стёкла
+Template (original windows)	Шаблон (стандартные стёкла)
+1. Template: the car's windows laid flat, as a PNG with transparency. Keep its size.	1. Шаблон: стёкла машины в развёртке, PNG с прозрачностью. Сохрани его размер.
+2. Paint over it (transparent: clear glass), then \"My image…\". A JPG or BMP gives opaque windows.	2. Рисуй поверх (прозрачное — чистое стекло), затем «Моя картинка…». JPG или BMP дают непрозрачные стёкла.
+3. In game, they apply by themselves after a few seconds.	3. В игре они применяются сами через несколько секунд.
+yours	твои
+the original ones	стандартные
