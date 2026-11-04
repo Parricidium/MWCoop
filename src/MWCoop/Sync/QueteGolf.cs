@@ -282,8 +282,12 @@ namespace MWCoop
                     int nl = BitConverter.ToInt32(b, at); at += 4;
                     string name = System.Text.Encoding.UTF8.GetString(b, at, nl); at += nl;
                     int us = BitConverter.ToInt32(b, at), cs = BitConverter.ToInt32(b, at + 4); at += 8;
-                    if (name.IndexOfAny(new[] { '/', '\\', ':' }) >= 0 || name.StartsWith(".")) { at += cs; continue; }
-                    File.WriteAllBytes(Path.Combine(dir, name), Inflate.Run(b, at, cs, us));
+                    // (seul sous-dossier admis : sons/, son de la voiture -- JD 04/11)
+                    string sub = name.StartsWith("sons/") ? "sons" : null, leaf = sub != null ? name.Substring(5) : name;
+                    if (leaf.IndexOfAny(new[] { '/', '\\', ':' }) >= 0 || leaf.StartsWith(".")) { at += cs; continue; }
+                    string to = dir;
+                    if (sub != null) { to = Path.Combine(dir, sub); Directory.CreateDirectory(to); }
+                    File.WriteAllBytes(Path.Combine(to, leaf), Inflate.Run(b, at, cs, us));
                     at += cs;
                 }
                 File.WriteAllText(mark, want);

@@ -728,6 +728,54 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- chaque image
+        // Sons du jeu sur les voitures standalone (JD 04/11 : portes, frein a main, essuie-glaces, « pour les addons et la Golf ») : variantes du
+        // groupe MasterAudio CarFoley, les memes dans les deux jeux (open_door1, close_door1, open_trunk1, close_trunk1, handbrake_on / _off,
+        // wiper_loop, dash_button -- automates de la Ferndale et de la Ruscko). Declenches par l'etat, pas par le clic : tous les joueurs les
+        // entendent. (Source a nous : celles du groupe sont reglees pour 8 m, et MasterAudio ne dit pas qui les joue.)
+        static readonly System.Collections.Generic.Dictionary<string, AudioClip> foleyClips = new System.Collections.Generic.Dictionary<string, AudioClip>();
+        static readonly System.Collections.Generic.HashSet<string> foleyLogged = new System.Collections.Generic.HashSet<string>();
+        static AudioClip FoleyClip(string v)
+        {
+            AudioClip c;
+            if (foleyClips.TryGetValue(v, out c) && c != null) return c;
+            GameObject g = GameObject.Find("MasterAudio/CarFoley/" + v);
+            AudioSource src = g != null ? g.GetComponent<AudioSource>() : null;
+            c = src != null ? src.clip : null;
+            if (c != null) foleyClips[v] = c;
+            if (foleyLogged.Add("?" + v)) Log.Info("standalone : son du jeu CarFoley/" + v + (c != null ? ", " + c.name + " " + c.length.ToString("F1") + " s" : " INTROUVABLE"));
+            return c;
+        }
+        static AudioSource FoleySource(Transform parent, string name)
+        {
+            var go = new GameObject(name); go.transform.SetParent(parent, false);
+            AudioSource a = go.AddComponent<AudioSource>();
+            a.spatialBlend = 1f; a.minDistance = 1f; a.maxDistance = 30f; a.dopplerLevel = 0f; a.playOnAwake = false;
+            return a;
+        }
+        static void Foley(VazCar.Built b, string v, Vector3 at, float vol)
+        {
+            AudioClip c = FoleyClip(v);
+            if (c == null) return;
+            AudioSource a = FoleySource(b.Car.transform, "son_" + v);
+            a.transform.position = at; a.clip = c; a.volume = vol; a.Play();
+            UnityEngine.Object.Destroy(a.gameObject, c.length + 0.2f);
+            string k = v + (b.Rb.isKinematic ? " (copie)" : "");
+            if (foleyLogged.Add(k)) Log.Info("standalone : son " + k + " joue");
+        }
+        // frein a main : un son par cran serre ou desserre ; les autres le recoivent par l'etat
+        static void HandTick(VazCar.Built b, State st, StandaloneDriver d)
+        {
+            float act = d.HandAct;
+            if (st.HandPrev < 0f) { st.HandPrev = act; st.HandSent = act > 0.1f; return; }
+            if (Mathf.Abs(act - st.HandPrev) > 0.1f)
+            {
+                bool serre = act > st.HandPrev;
+                st.HandPrev = act;
+                if (Time.time - st.HandSndT > 0.2f) { st.HandSndT = Time.time; Foley(b, serre ? "handbrake_on" : "handbrake_off", b.BrakePivot != null ? b.BrakePivot.position : b.Car.transform.position, 1f); }
+            }
+            if (!b.Rb.isKinematic && (act > 0.1f) != st.HandSent) { st.HandSent = act > 0.1f; SendState(b, st); }
+        }
+
         static void Drive(VazCar.Built b, State st)
         {
             var d = b.Axis as StandaloneDriver;
@@ -740,6 +788,7 @@ namespace MWCoop
             WiperAnim(b, st);
             RainTick(b, st);
             DoorAnim(b, st);
+            HandTick(b, st, d);
             BeltTick(b, st);
             Gauges(b, st);
             HeaterTick(b, st);
@@ -903,12 +952,20 @@ namespace MWCoop
                 // (boite joueur de la portiere : seulement fermee -- ouverte, c'est la portiere qui s'ecarte devant le joueur)
                 if (st.DoorCol[i] != null) st.DoorCol[i].enabled = st.DoorAngle[i] < 1f;
                 st.Doors[i].localRotation = Quaternion.Euler(0f, s * st.DoorAngle[i], 0f);
+                // (son : ouverte des qu'elle quitte le pene, fermee en y revenant -- rien au premier passage, voiture chargee portiere ouverte)
+                bool shut = !st.DoorOpen[i] && st.DoorAngle[i] < 1f;
+                if (st.SndInit && shut != st.DoorShut[i]) Foley(b, shut ? "close_door1" : "open_door1", st.Doors[i].TransformPoint(st.DoorCenter[i] - st.Doors[i].localPosition), 1f);
+                st.DoorShut[i] = shut;
             }
             if (st.Hatch != null)
             {
                 st.HatchAngle = Mathf.MoveTowards(st.HatchAngle, st.HatchOpen ? 78f : 0f, 110f * dt);
                 st.Hatch.localRotation = Quaternion.Euler(st.HatchAngle, 0f, 0f);
+                bool shut = !st.HatchOpen && st.HatchAngle < 1f;
+                if (st.SndInit && shut != st.HatchShut) Foley(b, shut ? "close_trunk1" : "open_trunk1", st.Hatch.position, 1f);
+                st.HatchShut = shut;
             }
+            st.SndInit = true;
             for (int k = 0; k < 2; k++)
             {
                 if (st.SeatBack[k] == null) continue;
@@ -1387,9 +1444,9 @@ namespace MWCoop
             int f = (st.EngineOn ? 1 : 0) | (st.LightsOn ? 2 : 0) | (st.DoorOpen != null && st.DoorOpen[0] ? 4 : 0) | (st.DoorOpen != null && st.DoorOpen[1] ? 8 : 0) | (st.HornOn ? 16 : 0)
                   | (st.KeyIn ? 32 : 0) | (st.KeyPos > 0 ? 64 : 0) | (st.HatchOpen ? 128 : 0);   // (cle mise, contact, hayon ouvert)
             // (octet de plus : warnings -- les anciennes versions lisent les deux premiers et ignorent le reste)
-            // (octet de plus : warnings 1, essuie-glaces 2, ceinture du conducteur 4, dossiers rabattus 8 / 16)
+            // (octet de plus : warnings 1, essuie-glaces 2, ceinture du conducteur 4, dossiers rabattus 8 / 16, frein a main 32 : pour le son)
             // (puis le chauffage : marche 1, ventilateur x 2 (0-3) ; temperature et direction 0-255 -- StandaloneHeater)
-            var w = new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0) | (st.DriverBelted ? 4 : 0) | (st.Folded[0] ? 8 : 0) | (st.Folded[1] ? 16 : 0));
+            var w = new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0) | (st.DriverBelted ? 4 : 0) | (st.Folded[0] ? 8 : 0) | (st.Folded[1] ? 16 : 0) | ((b.Rb.isKinematic ? st.HandRemote : st.HandSent) ? 32 : 0));
             if (st.Heat != null) w.U8((st.Heat.On ? 1 : 0) | (st.Heat.FanStep << 1)).U8(Mathf.RoundToInt(st.Heat.TempPos * 255f)).U8(Mathf.RoundToInt(st.Heat.DirPos * 255f));
             Net.Session.SendAll(w, true);
         }
@@ -1424,6 +1481,12 @@ namespace MWCoop
                     st.Hazard = (extra[0] & 1) != 0; st.WipersOn = (extra[0] & 2) != 0;
                     if (driving != b) st.DriverBelted = (extra[0] & 4) != 0;
                     st.Folded[0] = (extra[0] & 8) != 0; st.Folded[1] = (extra[0] & 16) != 0;
+                    if (b.Rb.isKinematic && driving != b)
+                    {
+                        bool hb = (extra[0] & 32) != 0;
+                        if (st.HandRemoteSet && hb != st.HandRemote) Foley(b, hb ? "handbrake_on" : "handbrake_off", b.BrakePivot != null ? b.BrakePivot.position : b.Car.transform.position, 1f);
+                        st.HandRemote = hb; st.HandRemoteSet = true;
+                    }
                 }
                 if (extra.Length > 3 && st.Heat != null)
                 {
@@ -1581,12 +1644,23 @@ namespace MWCoop
         static void WiperAnim(VazCar.Built b, State st)
         {
             if (st.Wipers[0] == null && st.Wipers[1] == null && st.Wipers[2] == null && st.Stalk == null) return;
-            float dt = Time.deltaTime;
+            float dt = Time.deltaTime, ph0 = st.WiperPhase;
             if (st.WipersOn || st.WiperPhase % 1f > 0.0005f)
             {
                 float ph = st.WiperPhase + dt / 1.3f;
                 if (!st.WipersOn && Mathf.Floor(ph) > Mathf.Floor(st.WiperPhase)) ph = Mathf.Floor(ph);   // (arret : balais ranges)
                 st.WiperPhase = ph % 1000f;
+            }
+            Transform wp = st.Wipers[0] != null ? st.Wipers[0] : st.Wipers[1] != null ? st.Wipers[1] : st.Wipers[2];
+            if (st.WipersOn != st.WipersSnd) { st.WipersSnd = st.WipersOn; Foley(b, "dash_button", wp != null ? wp.position : st.Stalk != null ? st.Stalk.position : b.Car.transform.position, 0.4f); }
+            if (wp != null && st.WipersOn && (ph0 % 1f <= 0.0005f || Mathf.Floor(st.WiperPhase) != Mathf.Floor(ph0)) && Time.time - st.WiperSndT > 0.5f)
+            {
+                AudioClip wc = FoleyClip("wiper_loop");
+                if (wc != null)
+                {
+                    if (st.WiperSrc == null) { st.WiperSrc = FoleySource(wp.parent, "son_essuie"); st.WiperSrc.transform.position = wp.position; st.WiperSrc.clip = wc; st.WiperSrc.pitch = wc.length / 1.3f; Log.Info("standalone : son wiper_loop" + (b.Rb.isKinematic ? " (copie)" : "") + " joue"); }
+                    st.WiperSndT = Time.time; st.WiperSrc.Play();
+                }
             }
             float k = (1f - Mathf.Cos(st.WiperPhase * 2f * Mathf.PI)) * 0.5f;
             for (int i = 0; i < 3; i++)
@@ -2281,6 +2355,7 @@ namespace MWCoop
                 Log.Info("autotest : queteportiere T+" + d.ToString("F1") + " (" + (host ? "hote" : "invite") + ") : " + DoorState(b, st, 1));
             }
         }
+        static int cSon;
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -2477,6 +2552,21 @@ namespace MWCoop
                 }
             }
             if (host && wOn > 0f && st != null && t > wOn + 2f && Time.time >= wLog) { wLog = Time.time + 1f; Log.Info("standalone : coop, essuie-glaces " + st.WipersOn + " phase " + st.WiperPhase.ToString("F2") + " balai " + (st.Wipers[0] != null ? st.Wipers[0].localEulerAngles.ToString("F0") : "absent") + " dt " + Time.deltaTime.ToString("F3")); }
+            // ([Test] StandaloneSons=1 : l'hote au volant, voiture arretee : portiere, hayon, frein a main, essuie-glaces ; chaque joueur note au journal le son qu'il joue)
+            if (host && cStep == 3 && b != null && st != null && cSon < 8 && t > 48f + cSon * 3f && Config.GetInt("Test", "StandaloneSons", 0) != 0)
+            {
+                var ds = (StandaloneDriver)b.Axis;
+                switch (cSon)
+                {
+                    case 0: case 1: if (st.Doors != null && st.Doors[0] != null) ToggleDoor(b, st, 0); break;
+                    case 2: case 3: foreach (VazCar.Built bh in cars) { State sh; if (states.TryGetValue(bh, out sh) && sh.Hatch != null) { sh.HatchOpen = !sh.HatchOpen; SendState(bh, sh); Log.Info("standalone : coop, hayon de " + bh.Car.name + (sh.HatchOpen ? " ouvert" : " ferme")); } } break;
+                    case 4: ds.HandLatch = 1f; break;
+                    case 5: ds.HandLatch = 0f; break;
+                    case 6: st.WipersOn = true; SendState(b, st); break;
+                    case 7: Log.Info("standalone : coop, essuie-glaces, son " + (st.WiperSrc != null ? (st.WiperSrc.isPlaying ? "joue" : "ARRET") + " a " + st.WiperSrc.time.ToString("F2") + " s, hauteur " + st.WiperSrc.pitch.ToString("F2") : "ABSENT")); st.WipersOn = false; SendState(b, st); break;
+                }
+                cSon++;
+            }
             if (host && cStep == 3 && t > 75f && t < 76.5f) SetHorn(b, st, true, true);
             if (host && cStep == 3 && t > 78f && !(portTest && !cDoorSeen && t < 115f))
             {

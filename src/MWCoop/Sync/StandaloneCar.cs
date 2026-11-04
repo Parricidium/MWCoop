@@ -69,6 +69,7 @@ namespace MWCoop
             public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
             public float[] WiperRest = new float[3], WiperSign = { 1f, 1f, -1f };   // (angle du repos par rapport au modele, sens de la course)
             public float RearWiperA0;   // (balai de la lunette au repos, angle du composant de pluie : 0 vers le haut, +90 vers la gauche)
+            public bool SndInit, HatchShut, WipersSnd, HandSent, HandRemote, HandRemoteSet; public bool[] DoorShut = new bool[2]; public float HandPrev = -1f, HandSndT = -10f, WiperSndT = -10f; public AudioSource WiperSrc;   // (sons du jeu : portieres, hayon, frein a main, essuie-glaces, StandaloneDrive)
             public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
             public bool HasWiperBtn; public Vector3 WiperBtn;   // (interrupteur d'essuie-glaces sans comodo, infos.txt bouton_essuie -- BMW M3 E30, JD 04/11)
             public bool HasStalkTip; public Vector3 StalkTip;   // (bout du comodo a viser, infos.txt comodo_bout -- leviers droits des voitures Rallyworld, JD 03/11)
@@ -820,6 +821,7 @@ namespace MWCoop
         public float HandLatch;   // (frein a main tire a la main sur le levier, StandaloneDrive.Knobs : reste serre, s'ajoute a la touche ;
                                   // un appui sur la touche le desserre -- la touche agit ensuite tant qu'elle est tenue)
         float handKeyLast;
+        public float HandAct;   // (frein a main demande par le joueur, touche ou levier : le son ne suit pas le serrage automatique a la descente)
         public bool StartEngine;
         public int Gear = -1;   // (rapport voulu ; -1 : celui de la boite)
         public bool Keys;       // (au volant d'ici : touches du jeu par cInput, axes et rapports comme l'AxisCarController de la Ruscko)
@@ -833,13 +835,14 @@ namespace MWCoop
                 float hk = Mathf.Clamp01(StandaloneCar.Axis("Handbrake"));
                 if (hk > 0.5f && handKeyLast <= 0.5f && HandLatch > 0f) HandLatch = 0f;
                 handKeyLast = hk;
-                handbrakeInput = Mathf.Max(hk, HandLatch); clutchInput = Mathf.Clamp01(StandaloneCar.Axis("Clutch"));
+                handbrakeInput = HandAct = Mathf.Max(hk, HandLatch); clutchInput = Mathf.Clamp01(StandaloneCar.Axis("Clutch"));
                 int g = drivetrain != null ? drivetrain.gear : 0;
                 if (StandaloneCar.Down("ShiftUp")) g++;
                 if (StandaloneCar.Down("ShiftDown")) g--;
                 targetGear = drivetrain != null && drivetrain.gearRatios != null ? Mathf.Clamp(g, 0, drivetrain.gearRatios.Length - 1) : 0;
                 return;
             }
+            HandAct = HandLatch;
             throttleInput = Throttle; brakeInput = Brake; steerInput = Steer; handbrakeInput = Mathf.Max(Handbrake, HandLatch); clutchInput = Clutch;
             targetGear = Gear >= 0 && drivetrain != null && drivetrain.gearRatios != null && Gear < drivetrain.gearRatios.Length ? Gear : drivetrain != null ? drivetrain.gear : 0;
         }
