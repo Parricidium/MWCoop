@@ -1682,9 +1682,9 @@ MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%co
 Supporters	Поддержавшие
 Supporter	Спонсор
 For making a donation.	За пожертвование.
-Players' VAZ-2108 (F10)	VAZ-2108 игроков (F10)
-Drone, sleeping bags, s21 shop, museum, VAZ-2108	Дрон, спальные мешки, магазин s21, музей, VAZ-2108
-The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).	VAZ-2108 игроков (F10), по модели \"VAZ-2108 Rally\" автора matthew0451 на Sketchfab: sketchfab.com/matthew0451, лицензия CC BY-NC 4.0. Облегчена, ливрея убрана (у каждого игрока свой цвет и номер).
+Players' Fiad 131 (F10)	Fiad 131 игроков (F10)
+Drone, sleeping bags, s21 shop, museum, Fiad 131	Дрон, спальные мешки, магазин s21, музей, Fiad 131
+The players' Fiad 131 (F10): 3D model, textures and sounds by Rallyworld, lent for free with their permission. Converted for the game.	Fiad 131 игроков (F10): 3D-модель, текстуры и звуки от Rallyworld, предоставлены бесплатно с их согласия. Переделана для игры.
 Close the game and wait for the update to finish to switch games	Закрой игру и дождись конца обновления, чтобы сменить игру
 The host plays %s: you need the same game to play together.\n\nSwitch to %s? The launcher restarts.	Хост играет в %s: чтобы играть вместе, нужна та же игра.\n\nПерейти на %s? Лаунчер перезапустится.
 Leave the lobby to switch games	Выйди из лобби, чтобы сменить игру
@@ -1797,7 +1797,7 @@ Your livery	Твоя ливрея
 Colour + number	Цвет + номер
 Livery: 	Ливрея: 
 ‹ Add-ons	‹ Дополнения
-Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours.	Без ливреи она получает твой цвет и номер, как VAZ. С ливреей все игроки видят твою.
+Without a livery, it takes your colour and number, like the Fiad. With one, every player sees yours.	Без ливреи она получает твой цвет и номер, как Fiad. С ливреей все игроки видят твою.
 Template (colour + number)	Шаблон (цвет + номер)
 1. Template: the car laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it.	1. Шаблон: машина в развёртке (2048 x 2048). В заштрихованную красным зону ставится твой номер: не рисуй под ней ничего важного.
 3. In game, take it with F10 (Cars tab): everyone sees your livery.	3. В игре возьми её через F10 (вкладка «Машины»): все увидят твою ливрею.
@@ -1809,7 +1809,7 @@ unique per player	у каждого свой
 Number	Номер
 theirs, on the doors	свой, на дверях
 Without the add-on	Без дополнения
-others see a VAZ	другие видят VAZ
+others see a Fiad	другие видят Fiad
 Livery	Ливрея
 yours (shared)	твоя (у всех)
 Open the add-ons folder	Открыть папку дополнений
@@ -1819,7 +1819,7 @@ Help	Помощь
 Built in	Встроена
 into the mod: everyone has it	в мод: она есть у всех
 Add-ons in the sidebar	Дополнения в боковой панели
-Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).	Под «Моды»: машины-дополнения и VAZ, у каждой своя карточка и своя ливрея (шаблон, твоя картинка).
+Under Mods: the add-on cars and the Fiad, each with its card and its livery (template, your image).	Под «Моды»: машины-дополнения и Fiad, у каждой своя карточка и своя ливрея (шаблон, твоя картинка).
 Gallery	Галерея
 List	Список
 Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab).	Машины-дополнения: скачивай их здесь, обновляются в один клик. В игре бери их через F10 (вкладка «Машины»).
@@ -1837,11 +1837,11 @@ Uninstall \u201C	Удалить «
 \u201D?\n\nYour livery is kept. You can download it again from Add-ons (Download button).	»?\n\nТвоя ливрея сохранится. Ты сможешь скачать её снова в «Дополнениях» (кнопка «Скачать»).
 %s uninstalled	%s удалена
 %s: some files could not be deleted (open elsewhere?)	%s: некоторые файлы не удалось удалить (открыты где-то ещё?)
-Add-ons are extra cars, downloaded from the launcher. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.	Дополнения — это дополнительные машины, которые скачиваются из лаунчера. В игре каждый игрок берёт одну через F10, как VAZ: со своим цветом и номером или со своей ливреей.
+Add-ons are extra cars, downloaded from the launcher. In game, each player takes one with F10, like the Fiad: with their colour and number, or with their own livery.	Дополнения — это дополнительные машины, которые скачиваются из лаунчера. В игре каждый игрок берёт одну через F10, как Fiad: со своим цветом и номером или со своей ливреей.
 Character > Add-ons: each available car has a Download button (NEW tag when it has just arrived).	Персонаж > Дополнения: у каждой доступной машины есть кнопка «Скачать» (метка NEW, когда она только появилась).
 Click Download with the game closed: the car installs into MWCoop\\addons.	Нажми «Скачать», когда игра закрыта: машина установится в MWCoop\\addons.
 New version: UPDATE tag and Update button. To remove it: click the car, then Uninstall (your livery is kept).	Новая версия: метка UPDATE и кнопка «Обновить». Чтобы убрать машину: нажми на неё, затем «Удалить» (ливрея сохранится).
-By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	Можно и вручную: скопируй папку машины (ту, где лежит addon.ini) в папку дополнений. Каждый ставит те дополнения, которые хочет видеть: без дополнения на её месте видна VAZ того же цвета и с тем же номером.
+By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a Fiad of the same colour and number instead.	Можно и вручную: скопируй папку машины (ту, где лежит addon.ini) в папку дополнений. Каждый ставит те дополнения, которые хочет видеть: без дополнения на её месте видна Fiad того же цвета и с тем же номером.
 Voice: mute	Голос: выкл. микрофон
 Use (wardrobe)	Использовать (шкаф)
 Voice activation (else push-to-talk)	Активация голосом (иначе — по кнопке)
@@ -1972,8 +1972,8 @@ Ray tracing: set aside for now, it will come back later. The game's light and sh
 Light, shadows · in game: F10	Свет, тени · в игре: F10
 The whole Image tab	Вся вкладка «Изображение»
 everything max	всё на максимум
-Drone, bags, s21, museum, VAZ, cinema	Дрон, мешки, s21, музей, VAZ, кино
-Drone, bags, s21, museum, VAZ, cinema, CARDINAL	Дрон, мешки, s21, музей, VAZ, кино, CARDINAL
+Drone, bags, s21, museum, Fiad, cinema	Дрон, мешки, s21, музей, Fiad, кино
+Drone, bags, s21, museum, Fiad, cinema, CARDINAL	Дрон, мешки, s21, музей, Fiad, кино, CARDINAL
 Rear seat belts (host)	Ремни на задних местах (хост)
 Wardrobe: change outfit	Шкаф: сменить одежду
 Rear seat belts	Ремни на задних местах
@@ -2124,7 +2124,7 @@ Kupla: lighter rendering from the next game	Kupla: облегчённый рен
 Kupla: normal rendering from the next game	Kupla: обычный рендер со следующей игры
 Extension cars, and the modules shipped with the co-op mod.	Машины-дополнения и модули, которые идут вместе с кооп-модом.
 Cars	Машины
-The add-on cars and the VAZ-2108 (%d): download, update, liveries.	Машины-дополнения и VAZ-2108 (%d): скачать, обновить, ливреи.
+The add-on cars and the Fiad 131 (%d): download, update, liveries.	Машины-дополнения и Fiad 131 (%d): скачать, обновить, ливреи.
 Modules of the co-op mod	Модули кооп-мода
 MODULES OF THE CO-OP MOD	МОДУЛИ КООП-МОДА
 Co-op optimization · MWC and MSC	Оптимизация кооператива · MWC и MSC

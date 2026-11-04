@@ -89,7 +89,7 @@ static void DrawAddonsHome(Graphics &g)
         std::wstring sub;
         if (k == 0) {
             wchar_t s[160];
-            swprintf_s(s, T(L"Les voitures addons et la VAZ-2108 (%d) : télécharger, mettre à jour, livrées.", L"The add-on cars and the VAZ-2108 (%d): download, update, liveries."), (int)g_addonList.size());
+            swprintf_s(s, T(L"Les voitures addons et la Fiad 131 (%d) : télécharger, mettre à jour, livrées.", L"The add-on cars and the Fiad 131 (%d): download, update, liveries."), (int)g_addonList.size());
             sub = s;
         } else sub = T(L"Modules du mod co-op", L"Modules of the co-op mod");
         Para(g, sub, RectF(tx, r.Y + 56, tw - 20, 40), 12.5f, kGrey);

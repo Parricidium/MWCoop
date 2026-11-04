@@ -1,0 +1,13 @@
+ralenti 1100
+ralenti.wav 1100 charge 1 2000 1.00
+gaz2800.wav 2800 charge 1800 3500 1.00
+gaz4100.wav 4100 charge 3300 4700 1.00
+gaz5100.wav 5100 charge 4500 5700 1.00
+gaz6300.wav 6300 charge 5500 6700 1.00
+gaz7000.wav 7000 charge 6500 7500 1.00
+gaz8000.wav 8000 charge 7300 9000 1.00
+ralenti.wav 1100 frein 1 2000 1.00
+leve3600.wav 3600 frein 1800 4300 1.00
+leve5000.wav 5000 frein 4100 5700 1.00
+leve6400.wav 6400 frein 5500 9000 1.00
+demarreur.wav 0 demarreur

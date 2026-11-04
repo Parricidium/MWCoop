@@ -18,14 +18,14 @@ namespace MWCoop
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
         // Onglets (refonte du 18/10) : barre a gauche en trois groupes (PARTIE, MOI, AVANCE), icones assets/menu.
-        static readonly string[] tabsFr = { "Joueurs", "Tchat", "Course sur glace", "Rallye", "VAZ-2108", "Apparence", "HUD", "Graphismes", "Synchro" },
-                                 tabsEn = { "Players", "Chat", "Ice race", "Rally", "VAZ-2108", "Appearance", "HUD", "Graphics", "Sync" };
+        static readonly string[] tabsFr = { "Joueurs", "Tchat", "Course sur glace", "Rallye", "Fiad 131", "Apparence", "HUD", "Graphismes", "Synchro" },
+                                 tabsEn = { "Players", "Chat", "Ice race", "Rally", "Fiad 131", "Appearance", "HUD", "Graphics", "Sync" };
         static readonly string[] tabIcons = { "joueurs", "tchat", "course", "course", "voiture", "apparence", "hud", "graphismes", "synchro" };
         static readonly int[] tabGroup = { 0, 0, 0, 0, 0, 1, 1, 1, 2 };
         static readonly string[] groupsFr = { "PARTIE", "MOI", "AVANC\u00C9" }, groupsEn = { "GAME", "ME", "ADVANCED" };
         // My Summer Car (19/10) : Dragsters a la place de la course sur glace, le rallye du jeu, pas d'onglet VAZ (MscEvents).
-        static readonly string[] tabsMscFr = { "Joueurs", "Tchat", "Dragsters", "Rallye", "VAZ-2108", "Apparence", "HUD", "Graphismes", "Synchro" },
-                                 tabsMscEn = { "Players", "Chat", "Drag race", "Rally", "VAZ-2108", "Appearance", "HUD", "Graphics", "Sync" };
+        static readonly string[] tabsMscFr = { "Joueurs", "Tchat", "Dragsters", "Rallye", "Fiad 131", "Apparence", "HUD", "Graphismes", "Synchro" },
+                                 tabsMscEn = { "Players", "Chat", "Drag race", "Rally", "Fiad 131", "Appearance", "HUD", "Graphics", "Sync" };
         static string[] tabs
         {
             get

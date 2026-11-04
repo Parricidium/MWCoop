@@ -15,7 +15,7 @@ namespace MWCoop
         static int pick = -1;   // modele choisi ici pour la prochaine prise ([Coop] VoitureModele)
         static int Pick
         {
-            get { if (pick < 0) pick = Config.GetInt("Coop", "VoitureModele", 0); return VazCar.Has(pick) ? pick : VazCar.ModelVaz; }
+            get { if (pick < 0) pick = Config.GetInt("Coop", "VoitureModele", 0); return VazCar.Has(pick) ? pick : VazCar.Base; }
             set { pick = value; Config.Save("Coop", "VoitureModele", value.ToString()); }
         }
         static int pvModel = -1; static string pvLivery = "";
@@ -41,7 +41,7 @@ namespace MWCoop
             int id = Vaz.OwnerOf(n);
             model = id >= 0 ? Vaz.ModelOf(id) : Pick;
             livery = id >= 0 ? Vaz.LiveryOf(id) : EvoLivery.MyHash(model);
-            if (!VazCar.Has(model)) { model = VazCar.ModelVaz; livery = ""; }
+            if (!VazCar.Has(model)) { model = VazCar.Base; livery = ""; }
         }
         static bool shown, hooked;
         static int hi = 1;
@@ -105,7 +105,7 @@ namespace MWCoop
         static void OnChanged()
         {
             if (!shown || pending == 0) return;
-            if (Vaz.Mine == pending) { Note(Lang.T("La VAZ n\u00B0 ", "VAZ no. ") + pending + Lang.T(" est \u00E0 vous, \u00E0 c\u00F4t\u00E9 de vous", " is yours, right next to you"), false); pending = 0; }
+            if (Vaz.Mine == pending) { Note(Lang.T("La Fiad n\u00B0 ", "Fiad no. ") + pending + Lang.T(" est \u00E0 vous, \u00E0 c\u00F4t\u00E9 de vous", " is yours, right next to you"), false); pending = 0; }
             else if (!Vaz.IsFree(pending)) { Note(Lang.T("La n\u00B0 ", "No. ") + pending + Lang.T(" vient d'\u00EAtre prise", " was just taken"), true); pending = 0; }
         }
 
@@ -123,8 +123,8 @@ namespace MWCoop
 
         static void Act(int n)
         {
-            if (Vaz.Mine == n) { Vaz.Release(); Note(Lang.T("VAZ n\u00B0 ", "VAZ no. ") + n + Lang.T(" rendue", " given back"), false); return; }
-            if (!Vaz.Enabled) { Note(Lang.T("VAZ-2108 coup\u00E9e dans cette partie (lanceur, Ajouts)", "VAZ-2108 is off in this game (launcher, Add-ons)"), true); return; }
+            if (Vaz.Mine == n) { Vaz.Release(); Note(Lang.T("Fiad n\u00B0 ", "Fiad no. ") + n + Lang.T(" rendue", " given back"), false); return; }
+            if (!Vaz.Enabled) { Note(Lang.T("Fiad 131 coup\u00E9e dans cette partie (lanceur, Ajouts)", "Fiad 131 is off in this game (launcher, Add-ons)"), true); return; }
             if (Vaz.Mine != 0) { Note(Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + Vaz.Mine + Lang.T("", " first"), true); return; }
             if (!Vaz.IsFree(n)) { Note(Lang.T("La n\u00B0 ", "No. ") + n + Lang.T(" est d\u00E9j\u00E0 prise", " is already taken"), true); return; }
             pending = n; pendingAt = Time.realtimeSinceStartup;
@@ -136,7 +136,7 @@ namespace MWCoop
         {
             if (Vaz.Mine == 0) return;
             Vaz.Call();
-            Note(Lang.T("La VAZ arrive \u00E0 c\u00F4t\u00E9 de vous", "The VAZ is coming next to you"), false);
+            Note(Lang.T("La Fiad arrive \u00E0 c\u00F4t\u00E9 de vous", "The Fiad is coming next to you"), false);
         }
 
         // ---------------------------------------------------------------- apercu 3D
@@ -233,8 +233,8 @@ namespace MWCoop
             float top = left.y;
             if (!Vaz.Enabled)
             {
-                Style.Text(new Rect(left.x, top, left.width, P(40)), VazCar.HasFiles ? Lang.T("VAZ-2108 coup\u00E9e dans cette partie : lanceur, R\u00E9glages \u203A Co-op \u203A Ajouts.", "VAZ-2108 is off in this game: launcher, Settings \u203A Co-op \u203A Add-ons.")
-                                                                                     : Lang.T("Fichiers de la VAZ absents (MWCoop\\vaz) : r\u00E9installez MWCoop.", "VAZ files missing (MWCoop\\vaz): reinstall MWCoop."),
+                Style.Text(new Rect(left.x, top, left.width, P(40)), VazCar.HasFiles ? Lang.T("Fiad 131 coup\u00E9e dans cette partie : lanceur, R\u00E9glages \u203A Co-op \u203A Ajouts.", "Fiad 131 is off in this game: launcher, Settings \u203A Co-op \u203A Add-ons.")
+                                                                                     : Lang.T("Fichiers de la Fiad absents (MWCoop\\fiat131) : r\u00E9installez MWCoop.", "Fiad files missing (MWCoop\\fiat131): reinstall MWCoop."),
                            12, TextAnchor.UpperLeft, Kit.Amber, false, true);
                 top += P(44);
             }

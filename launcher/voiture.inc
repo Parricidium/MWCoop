@@ -1066,12 +1066,12 @@ static void AddonsScan()
         LeaveCriticalSection(&g_cs);
     }
     std::sort(v.begin(), v.end(), [](const Addon &x, const Addon &y) { return x.name < y.name; });
-    // La VAZ-2108, livree avec le mod (MWCoop\vaz, jamais dans addons\) : une carte comme les autres, avec sa livree (JD, 21/10 :
-    // « la VAZ reste compilee avec le mod, mais donne la possibilite de faire une livree »). Toujours en tete.
+    // La Fiat 131 (remplace la VAZ-2108, JD 04/11), livree avec le mod (MWCoop\fiat131, jamais dans addons\) : une carte comme les autres, avec sa livree
+    // (JD, 21/10 : « la VAZ reste compilee avec le mod, mais donne la possibilite de faire une livree »). Toujours en tete.
     if (!g_gameDir.empty()) {
-        std::wstring vd = g_modRoot + L"MWCoop\\vaz\\";
+        std::wstring vd = g_modRoot + L"MWCoop\\fiat131\\";
         if (FileExists(vd + L"carrosserie.p205")) {
-            Addon a; a.key = L"vaz"; a.dir = vd; a.name = L"VAZ-2108"; a.nameShort = L"VAZ"; a.livery = true; a.builtin = true; a.group = L"MWCoop";
+            Addon a; a.key = L"fiat131"; a.dir = vd; a.name = L"Fiad 131"; a.nameShort = L"Fiad 131"; a.livery = true; a.builtin = true; a.group = L"MWCoop"; a.tag = a.tagMsc = L"Standalone, RallyWorld";
             a.desc = L"Livrée avec le mod · la voiture de tout le monde · seize couleurs"; a.descEn = L"Ships with the mod · everyone's car · sixteen colours";
             v.insert(v.begin(), a);
         }
@@ -1106,7 +1106,7 @@ static Bitmap *AddonPic(const Addon &a)
     // (apercus integres au lanceur, launcher.rc 40-47 -- JD 28/10, puis 03/11 pour les voitures Rallyworld : « bien centrer et cadrer ces images ... pour les deux
     // versions MSC et MWC » : avant ceux du paquet et du catalogue, sur les deux jeux)
     static const struct { const wchar_t *key; int res; } kAddonPicRes[] = {
-        { L"vaz", 40 }, { L"r5maxi", 41 }, { L"evo3", 42 }, { L"t16", 43 }, { L"t16e2", 44 }, { L"imp96", 45 }, { L"sq84", 46 }, { L"delta8", 47 }, { L"m3e30", 48 } };
+        { L"fiat131", 40 }, { L"r5maxi", 41 }, { L"evo3", 42 }, { L"t16", 43 }, { L"t16e2", 44 }, { L"imp96", 45 }, { L"sq84", 46 }, { L"delta8", 47 }, { L"m3e30", 48 } };
     for (const auto &e : kAddonPicRes)
         if (a.key == e.key)
             if (Bitmap *b = LoadPngRes(e.res)) return g_addonPics[a.key] = b;
@@ -1674,8 +1674,8 @@ static void DrawAddonView(Graphics &g, const Addon &a)
         };
         for (const wchar_t *st : steps) { Para(g, st, RectF(card.X + 24, sy, card.Width - 48, 48), 13, kInk); sy += 50; }
     } else if (a.livery) {
-        Para(g, T(L"Sans livrée, elle prend ta couleur et ton numéro, comme la VAZ. Avec, tous les joueurs voient la tienne.",
-                  L"Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours."),
+        Para(g, T(L"Sans livrée, elle prend ta couleur et ton numéro, comme la Fiad. Avec, tous les joueurs voient la tienne.",
+                  L"Without a livery, it takes your colour and number, like the Fiad. With one, every player sees yours."),
              RectF(card.X + 24, card.Y + 56 + top, card.Width - 48, 40), 12.5f, kGrey);
         bool has = FileExists(AddonLiveryFile(a)), on = AddonLiveryOn(a);
         RectF th(card.X + 24, card.Y + 104 + top, 300, 300);
@@ -1714,7 +1714,7 @@ static void DrawAddonView(Graphics &g, const Addon &a)
         { T(L"Couleur", L"Colour"), T(L"unique par joueur", L"unique per player") },
         { T(L"Numéro", L"Number"), T(L"le sien, sur les portières", L"theirs, on the doors") },
         { a.builtin ? T(L"Intégrée", L"Built in") : T(L"Sans l'addon", L"Without the add-on"),
-          a.builtin ? T(L"au mod : tout le monde l'a", L"into the mod: everyone has it") : T(L"les autres voient une VAZ", L"others see a VAZ") },
+          a.builtin ? T(L"au mod : tout le monde l'a", L"into the mod: everyone has it") : T(L"les autres voient une Fiad", L"others see a Fiad") },
     };
     for (auto &rw : rows) {
         Text(g, rw[0], RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);

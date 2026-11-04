@@ -1170,16 +1170,16 @@ MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%co
 Supporters	الداعمون
 Supporter	داعم
 For making a donation.	لتقديمه تبرعًا.
-Players' VAZ-2108 (F10)	سيارات VAZ-2108 للاعبين (F10)
-Drone, sleeping bags, s21 shop, museum, VAZ-2108	الطائرة المسيّرة، أكياس النوم، متجر s21، المتحف، VAZ-2108
-The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).	سيارات VAZ-2108 للاعبين (F10)، عن نموذج \"VAZ-2108 Rally\" من matthew0451 على Sketchfab: sketchfab.com/matthew0451، ترخيص CC BY-NC 4.0. مخففة، بدون الطلاء الأصلي (لكل لاعب لون ورقم).
-Every player can have their own rally VAZ-2108, free: F10 > VAZ-2108 tab. Sixteen colours, one per player; the colour also gives the number painted on the doors.	يمكن لكل لاعب أن يحصل على سيارة VAZ-2108 للرالي خاصة به مجانًا: F10 > تبويب VAZ-2108. ستة عشر لونًا، لون لكل لاعب؛ واللون يحدد أيضًا الرقم المرسوم على الأبواب.
+Players' Fiad 131 (F10)	سيارات Fiad 131 للاعبين (F10)
+Drone, sleeping bags, s21 shop, museum, Fiad 131	الطائرة المسيّرة، أكياس النوم، متجر s21، المتحف، Fiad 131
+The players' Fiad 131 (F10): 3D model, textures and sounds by Rallyworld, lent for free with their permission. Converted for the game.	سيارة Fiad 131 للاعبين (F10): النموذج ثلاثي الأبعاد والخامات والأصوات من Rallyworld، مُعارة مجانًا بموافقتهم. مُحوَّلة للعبة.
+Every player can have their own rally Fiad 131, free: F10 > Fiad 131 tab. Sixteen colours, one per player; the colour also gives the number painted on the doors.	يمكن لكل لاعب أن يحصل على سيارة Fiad 131 للرالي خاصة به مجانًا: F10 > تبويب Fiad 131. ستة عشر لونًا، لون لكل لاعب؛ واللون يحدد أيضًا الرقم المرسوم على الأبواب.
 In the tab	في التبويب
 Pick a free colour then Take: the car appears next to you, for everyone.	اختر لونًا متاحًا ثم «أخذ»: تظهر السيارة بجانبك لدى الجميع.
 Bring here (or V): brings it back next to you, if nobody is driving it.	«إحضارها» (أو V): تعيدها بجانبك إذا لم يكن أحد يقودها.
 Give back: it disappears and its colour is free again. It also disappears when you leave the game: when you come back, or after loading, take one again in F10.	«إرجاع»: تختفي السيارة ويصبح لونها متاحًا من جديد. وتختفي أيضًا عندما تغادر اللعبة: عند عودتك أو بعد التحميل، خذ واحدة من جديد من F10.
-Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits).	يمكن إيقافها مثل الإضافات الأخرى: الإعدادات > اللعب الجماعي > إضافات MWCoop (اختيار المضيف يسري على الجميع). النموذج ثلاثي الأبعاد من matthew0451، ترخيص CC BY-NC 4.0 (الدليل > الشكر).
-The rally VAZ-2108	سيارة VAZ-2108 للرالي
+Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by Rallyworld (Guide > Credits).	سيارة Fiad 131 للاعبين (F10): النموذج ثلاثي الأبعاد والخامات والأصوات من Rallyworld، مُعارة مجانًا بموافقتهم. مُحوَّلة للعبة.
+The rally Fiad 131	سيارة Fiad 131 للرالي
 A colour and a number per player	لون ورقم لكل لاعب
 Close the game and wait for the update to finish to switch games	أغلق اللعبة وانتظر انتهاء التحديث لتغيير اللعبة
 The host plays %s: you need the same game to play together.\n\nSwitch to %s? The launcher restarts.	المضيف يلعب %s: تحتاج إلى اللعبة نفسها للعب معاً.\n\nالانتقال إلى %s؟ سيُعاد تشغيل المشغّل.
@@ -1287,7 +1287,7 @@ Third-person view (F5), drone camera (F8) and the Album, the summer M map (lakes
 The black and yellow HUD (no temperature or sweat: the game has none), the Drag race and Rally tabs of the F10 menu.	HUD الأسود والأصفر (بلا حرارة ولا عرق: اللعبة لا تحتويهما)، تبويبا سباق السرعة والرالي في قائمة F10.
 Mods: MSCLoader for My Summer Car (the official one, or MWCoop's from the Mods tab), sent by the host to their guests.	المودات: MSCLoader لـ My Summer Car (الرسمي، أو الخاص بـ MWCoop من تبويب المودات)، يرسلها المضيف إلى ضيوفه.
 Items, parts and bolts, money and the wallet (N), shops, jobs, NPCs and traffic, the host's time and weather, cheats (F7). They come over the next versions.	الأغراض، القطع والبراغي، المال والمحفظة (N)، المتاجر، الأعمال، الشخصيات والمرور، وقت المضيف وطقسه، الغش (F7). تأتي في النسخ القادمة.
-Ice race, VAZ-2108, OSUUSKAUPPA shop, museum, sleeping bags, camcorder and VHS tapes: additions made for My Winter Car, not in My Summer Car.	سباق الجليد، VAZ-2108، متجر OSUUSKAUPPA، المتحف، أكياس النوم، كاميرا الفيديو وأشرطة VHS: إضافات صُنعت لـ My Winter Car، غير موجودة في My Summer Car.
+Ice race, Fiad 131, OSUUSKAUPPA shop, museum, sleeping bags, camcorder and VHS tapes: additions made for My Winter Car, not in My Summer Car.	سباق الجليد، Fiad 131، متجر OSUUSKAUPPA، المتحف، أكياس النوم، كاميرا الفيديو وأشرطة VHS: إضافات صُنعت لـ My Winter Car، غير موجودة في My Summer Car.
 Something wrong? Send the logs zip on the Discord (#bug-reports): the BETA moves on with your reports.	هل هناك خطأ؟ أرسل ملف zip للسجلات على Discord (#bug-reports): تتقدم BETA بفضل بلاغاتكم.
 Switch game (MSC or MWC)	تغيير اللعبة (MSC أو MWC)
 Something wrong?	هل هناك خطأ؟
@@ -1594,7 +1594,7 @@ Your livery	طلاؤك
 Colour + number	اللون + الرقم
 Livery: 	الطلاء: 
 ‹ Add-ons	‹ الإضافات
-Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours.	بدون طلاء، تأخذ لونك ورقمك مثل VAZ. ومع الطلاء، يرى جميع اللاعبين طلاءك.
+Without a livery, it takes your colour and number, like the Fiad. With one, every player sees yours.	بدون طلاء، تأخذ لونك ورقمك مثل Fiad. ومع الطلاء، يرى جميع اللاعبين طلاءك.
 Template (colour + number)	القالب (اللون + الرقم)
 1. Template: the car laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it.	1. القالب: السيارة مفرودة (2048 x 2048). المنطقة المظللة بالأحمر يوضع عليها رقمك: لا ترسم تحتها شيئاً مهماً.
 3. In game, take it with F10 (Cars tab): everyone sees your livery.	3. في اللعبة، خذها عبر F10 (تبويب السيارات): يرى الجميع طلاءك.
@@ -1606,19 +1606,19 @@ unique per player	فريد لكل لاعب
 Number	الرقم
 theirs, on the doors	رقمه، على الأبواب
 Without the add-on	بدون الإضافة
-others see a VAZ	يرى الآخرون VAZ
+others see a Fiad	يرى الآخرون Fiad
 Livery	الطلاء
 yours (shared)	طلاؤك (مشترك)
-Add-ons are extra cars you install yourself. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.	الإضافات سيارات إضافية تثبّتها بنفسك. في اللعبة يأخذ كل لاعب واحدة عبر F10 مثل VAZ: بلونه ورقمه، أو بطلائه الخاص.
+Add-ons are extra cars you install yourself. In game, each player takes one with F10, like the Fiad: with their colour and number, or with their own livery.	الإضافات سيارات إضافية تثبّتها بنفسك. في اللعبة يأخذ كل لاعب واحدة عبر F10 مثل Fiad: بلونه ورقمه، أو بطلائه الخاص.
 Installing a car	تثبيت سيارة
 Character > Add-ons > Open the add-ons folder: the game's MWCoop\\addons folder opens.	الشخصية > الإضافات > فتح مجلد الإضافات: يُفتح مجلد MWCoop\\addons في مجلد اللعبة.
 Copy the car's folder (the one that contains addon.ini) into this folder.	انسخ مجلد السيارة (الذي يحتوي على addon.ini) إلى هذا المجلد.
 Go back to the Add-ons tab: the car shows up there with its picture.	عد إلى تبويب الإضافات: تظهر السيارة هناك مع صورتها.
-To turn an add-on off without deleting it, add a dot to its folder name (for example evo3.off). Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	لإيقاف إضافة دون حذفها، أضف نقطة إلى اسم مجلدها (مثلاً evo3.off). يثبّت كل لاعب الإضافات التي يريد رؤيتها: بدون الإضافة تُرى مكانها سيارة VAZ بنفس اللون والرقم.
+To turn an add-on off without deleting it, add a dot to its folder name (for example evo3.off). Everyone installs the add-ons they want to see: without the add-on, you see a Fiad of the same colour and number instead.	لإيقاف إضافة دون حذفها، أضف نقطة إلى اسم مجلدها (مثلاً evo3.off). يثبّت كل لاعب الإضافات التي يريد رؤيتها: بدون الإضافة تُرى مكانها سيارة Fiad بنفس اللون والرقم.
 Taking it in game	أخذها في اللعبة
 F10 > Cars tab: pick the model (button or M key) and a free colour, then Take.	F10 > تبويب السيارات: اختر الطراز (بالزر أو المفتاح M) ولوناً متاحاً، ثم خذ.
 Colour and number are unique across all players, whatever the model.	اللون والرقم فريدان بين جميع اللاعبين، أياً كان الطراز.
-Ice race and rally: you sign up with your players' car, VAZ or add-on.	سباق الجليد والرالي: تسجّل بسيارتك، VAZ أو إضافة.
+Ice race and rally: you sign up with your players' car, Fiad or add-on.	سباق الجليد والرالي: تسجّل بسيارتك، Fiad أو إضافة.
 Making your livery	صنع طلائك
 Add-ons tab: click the car, then Template. A copy of the template opens in Explorer.	تبويب الإضافات: انقر السيارة ثم القالب. تُفتح نسخة من القالب في المستكشف.
 Paint over it in your software, keeping the size (2048 x 2048). The red hatched area gets your number: draw nothing important there.	ارسم فوقه في برنامجك مع الحفاظ على الحجم (2048 x 2048). المنطقة المظللة بالأحمر يوضع عليها رقمك: لا ترسم فيها شيئاً مهماً.
@@ -1634,7 +1634,7 @@ Help	مساعدة
 Built in	مدمجة
 into the mod: everyone has it	في المود: الجميع يملكها
 Add-ons in the sidebar	الإضافات في الشريط الجانبي
-Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).	تحت «المودات»: سيارات الإضافات وVAZ، لكل منها بطاقتها وطلاؤها (قالب، صورتك).
+Under Mods: the add-on cars and the Fiad, each with its card and its livery (template, your image).	تحت «المودات»: سيارات الإضافات وFiad، لكل منها بطاقتها وطلاؤها (قالب، صورتك).
 Gallery	معرض
 List	قائمة
 Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab).	سيارات الإضافات: نزّلها من هنا، وتُحدَّث بنقرة واحدة. في اللعبة خذها عبر F10 (تبويب السيارات).
@@ -1653,11 +1653,11 @@ Uninstall \u201C	إلغاء تثبيت \u201C
 %s uninstalled	تم إلغاء تثبيت %s
 %s: some files could not be deleted (open elsewhere?)	%s: تعذّر حذف بعض الملفات (مفتوحة في مكان آخر؟)
 Uninstall	إلغاء التثبيت
-Add-ons are extra cars, downloaded from the launcher. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.	الإضافات سيارات إضافية تُنزَّل من المشغّل. في اللعبة، يأخذ كل لاعب واحدة عبر F10 مثل VAZ: بلونه ورقمه، أو بكسوته الخاصة.
+Add-ons are extra cars, downloaded from the launcher. In game, each player takes one with F10, like the Fiad: with their colour and number, or with their own livery.	الإضافات سيارات إضافية تُنزَّل من المشغّل. في اللعبة، يأخذ كل لاعب واحدة عبر F10 مثل Fiad: بلونه ورقمه، أو بكسوته الخاصة.
 Character > Add-ons: each available car has a Download button (NEW tag when it has just arrived).	الشخصية > الإضافات: لكل سيارة متاحة زر تنزيل (وسم NEW عندما تصل حديثاً).
 Click Download with the game closed: the car installs into MWCoop\\addons.	انقر تنزيل واللعبة مغلقة: تُثبَّت السيارة في MWCoop\\addons.
 New version: UPDATE tag and Update button. To remove it: click the car, then Uninstall (your livery is kept).	إصدار جديد: وسم UPDATE وزر تحديث. لإزالتها: انقر السيارة ثم إلغاء التثبيت (تبقى كسوتك محفوظة).
-By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	يمكن ذلك يدوياً أيضاً: انسخ مجلد السيارة (الذي يحتوي addon.ini) إلى مجلد الإضافات. كل لاعب يثبّت الإضافات التي يريد رؤيتها: بدون الإضافة ترى مكانها VAZ بنفس اللون والرقم.
+By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a Fiad of the same colour and number instead.	يمكن ذلك يدوياً أيضاً: انسخ مجلد السيارة (الذي يحتوي addon.ini) إلى مجلد الإضافات. كل لاعب يثبّت الإضافات التي يريد رؤيتها: بدون الإضافة ترى مكانها Fiad بنفس اللون والرقم.
 Voice: mute	الصوت: كتم الميكروفون
 Use (wardrobe)	استخدام (الخزانة)
 Voice activation (else push-to-talk)	تفعيل بالصوت (وإلا بالضغط على الزر)
@@ -2049,8 +2049,8 @@ The whole Image tab	علامة تبويب الصورة كاملة
 everything max	كل شيء بأقصى حد
 Ice race and CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car.	سباق الجليد ومتجر قطع CARDINAL: إضافات صُنعت لـ My Winter Car، غير موجودة في My Summer Car.
 The KINO TÄHTI cinema too, in the same place as in My Winter Car: by the road, east of the MAATALOUS silos.	وسينما KINO TÄHTI أيضاً، في المكان نفسه كما في My Winter Car: بجانب الطريق، شرق صوامع MAATALOUS.
-Drone, bags, s21, museum, VAZ, cinema	المسيّرة، الأكياس، s21، المتحف، VAZ، السينما
-Drone, bags, s21, museum, VAZ, cinema, CARDINAL	المسيّرة، الأكياس، s21، المتحف، VAZ، السينما، CARDINAL
+Drone, bags, s21, museum, Fiad, cinema	المسيّرة، الأكياس، s21، المتحف، Fiad، السينما
+Drone, bags, s21, museum, Fiad, cinema, CARDINAL	المسيّرة، الأكياس، s21، المتحف، Fiad، السينما، CARDINAL
 Rear seat belts (host)	أحزمة المقاعد الخلفية (المضيف)
 Wardrobe: change outfit	الخزانة: تغيير الملابس
 Rear seat belts	أحزمة المقاعد الخلفية
@@ -2255,7 +2255,7 @@ Under the version number, top left: pick your game, My Summer Car or My Winter C
 My Summer Car joins MWCoop: pick MSC under the version number, top left of the launcher.	تنضم My Summer Car إلى MWCoop: اختر MSC تحت رقم النسخة، أعلى يسار المشغّل.
 Under the version number, top left of the launcher: the game you play, My Summer Car (MSC) or My Winter Car (MWC). The launcher restarts on the chosen game: its folder, its saves and its Steam friends. Everyone must be on the same game to play together; when joining a host on the other game, the launcher offers to switch.	تحت رقم النسخة، أعلى يسار المشغّل: اللعبة التي تلعبها، My Summer Car (MSC) أو My Winter Car (MWC). يُعاد تشغيل المشغّل على اللعبة المختارة: مجلدها وحفظاتها وأصدقاؤها على Steam. يجب أن يكون الجميع على اللعبة نفسها للعب معاً؛ عند الانضمام إلى مضيف على اللعبة الأخرى، يقترح المشغّل التبديل.
 My Summer Car: nearly everything of My Winter Car is shared (players, cars, mechanics, money, jobs, radio, world). The details, and what exists only in My Winter Car: \"What works on My Summer Car\".	My Summer Car: تقريبًا كل ما في My Winter Car مشترك (اللاعبون، السيارات، الميكانيكا، المال، الأعمال، الراديو، العالم). التفاصيل، وما يوجد فقط في My Winter Car: \"ما يعمل في My Summer Car\".
-Players and their moves, their outfits and faces, voice, chat, markers, the cars (SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, the boat, the VAZ-2108 and the add-ons), the host's time and weather, traffic and NPCs, jobs, money, shops, mechanics, radio, drag races and the rally… The details: \"What works on My Summer Car\".	اللاعبون وحركاتهم، ملابسهم ووجوههم، الصوت، الدردشة، العلامات، السيارات (SATSUMA وGIFU وKEKMET وHAYOSIKO وFERNDALE وRUSCKO وJONNEZ وFLATBED والقارب وVAZ-2108 والإضافات)، وقت المضيف وطقسه، حركة المرور والشخصيات غير اللاعبة، الأعمال، المال، المتاجر، الميكانيكا، الراديو، سباقات التسارع والرالي… التفاصيل: \"ما يعمل في My Summer Car\".
+Players and their moves, their outfits and faces, voice, chat, markers, the cars (SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, the boat, the Fiad 131 and the add-ons), the host's time and weather, traffic and NPCs, jobs, money, shops, mechanics, radio, drag races and the rally… The details: \"What works on My Summer Car\".	اللاعبون وحركاتهم، ملابسهم ووجوههم، الصوت، الدردشة، العلامات، السيارات (SATSUMA وGIFU وKEKMET وHAYOSIKO وFERNDALE وRUSCKO وJONNEZ وFLATBED والقارب وFiad 131 والإضافات)، وقت المضيف وطقسه، حركة المرور والشخصيات غير اللاعبة، الأعمال، المال، المتاجر، الميكانيكا، الراديو، سباقات التسارع والرالي… التفاصيل: \"ما يعمل في My Summer Car\".
 Most MSCLoader mods work in co-op as long as they only do things for you. On My Summer Car, MWCoop doesn't sync any mod: the objects or vehicles a mod adds are only seen by the players who have it. Here are also the mods to avoid.	معظم مودات MSCLoader تعمل في اللعب الجماعي طالما أنها تفعل أشياء لك وحدك. في My Summer Car، لا يزامن MWCoop أي مود: الأغراض أو المركبات التي يضيفها مود لا يراها إلا من يملكه. وهذه أيضاً المودات التي يجب تجنبها.
 My Summer Car is played in MWCoop with the same launcher, the same lobby and the same F10 menu. To play together, everyone must be on MSC (top left of the launcher).	تُلعب My Summer Car في MWCoop بنفس المشغّل ونفس الردهة ونفس قائمة F10. للعب معاً، يجب أن يكون الجميع على MSC (أعلى يسار المشغّل).
 Since msc-1.15.1: drag race results with the other players' times, rally trophies for everyone, and a podium that waits for the other human drivers.	منذ msc-1.15.1: نتائج سباقات التسارع مع أوقات اللاعبين الآخرين، كؤوس الرالي للجميع، ومنصة تتويج تنتظر السائقين البشر الآخرين.
@@ -2267,7 +2267,7 @@ Kupla: lighter rendering from the next game	Kupla: عرض أخف بدءًا من
 Kupla: normal rendering from the next game	Kupla: عرض عادي بدءًا من اللعبة القادمة
 Extension cars, and the modules shipped with the co-op mod.	سيارات إضافية، والوحدات المرفقة مع مود اللعب الجماعي.
 Cars	السيارات
-The add-on cars and the VAZ-2108 (%d): download, update, liveries.	السيارات الإضافية وVAZ-2108 (%d): تنزيل، تحديث، طلاءات.
+The add-on cars and the Fiad 131 (%d): download, update, liveries.	السيارات الإضافية وFiad 131 (%d): تنزيل، تحديث، طلاءات.
 Modules of the co-op mod	وحدات مود اللعب الجماعي
 MODULES OF THE CO-OP MOD	وحدات مود اللعب الجماعي
 Co-op optimization · MWC and MSC	تحسين اللعب الجماعي · MWC وMSC
@@ -2281,7 +2281,7 @@ The world stays alive around every player	يبقى العالم حيًا حول 
 Add-ons: Cars and Mods	الإضافات: السيارات والتعديلات
 Add-ons now opens on two cards: Cars, the add-on cars as before, and Mods, the modules of the co-op mod. The first one: Kupla, the co-op optimization (beta).	تفتح الإضافات الآن على بطاقتين: السيارات، أي السيارات الإضافية كما من قبل، والتعديلات، أي وحدات مود اللعب الجماعي. أولها: Kupla، تحسين اللعب الجماعي (تجريبي).
 Mods: the modules of the co-op mod	التعديلات: وحدات مود اللعب الجماعي
-Add-ons opens on two cards: Cars (this page) and Mods. Mods come with the co-op mod itself, like the VAZ: nothing to download.	تفتح الإضافات على بطاقتين: السيارات (هذه الصفحة) والتعديلات. تأتي التعديلات مع مود اللعب الجماعي نفسه، مثل VAZ: لا شيء للتنزيل.
+Add-ons opens on two cards: Cars (this page) and Mods. Mods come with the co-op mod itself, like the Fiad: nothing to download.	تفتح الإضافات على بطاقتين: السيارات (هذه الصفحة) والتعديلات. تأتي التعديلات مع مود اللعب الجماعي نفسه، مثل Fiad: لا شيء للتنزيل.
 Kupla (beta): the co-op optimization, on My Winter Car and My Summer Car. The \"Rendering (for me)\" box lightens the display on your side only (view distance, shadows, mirrors); off, nothing changes.	Kupla (تجريبي): تحسين اللعب الجماعي، على My Winter Car وMy Summer Car. خانة \"العرض (لي)\" تخفف العرض عندك فقط (مسافة العرض، الظلال، المرايا)؛ عند إيقافها لا شيء يتغير.
 Co-op bubbles: the host decides, in the Lobby options; their guests follow.	فقاعات اللعب الجماعي: المضيف يقرر، في خيارات الردهة؛ ويتبعه ضيوفه.
 Both settings count when the game starts, never during play.	يُعتمد الإعدادان عند بدء اللعبة، لا أثناء اللعب أبدًا.
@@ -3211,8 +3211,8 @@ The mod didn't load? lanceur.log (LOGS) starts with a \"Wine\" line: the Proton 
 On Linux or Steam Deck (Proton), the cause is almost always the launch option: without WINEDLLOVERRIDES, Proton uses its own version.dll.	على Linux أو Steam Deck (Proton)، السبب دائمًا تقريبًا هو خيار التشغيل: بدون WINEDLLOVERRIDES يستخدم Proton ملف version.dll الخاص به.
 Linux and Steam Deck	Linux وSteam Deck
 Proton, launch option, limits	Proton، خيار التشغيل، القيود
-Ice race: your entry (with your VAZ and its number, the Rivett, or not registered), when to come to the track, the registered drivers and live timing. To race with your VAZ: on Friday 9 am - 3 pm, park it under 10 m from the inspection tent and fill in the form (150 mk); it takes an AI car's place. At the track, the timing also shows at the top right.	سباق الجليد: تسجيلك (بسيارتك VAZ ورقمها، أو بـ Rivett، أو غير مسجّل)، ومتى تأتي إلى الحلبة، والسائقون المسجّلون والتوقيت المباشر. للسباق بسيارتك VAZ: يوم الجمعة من 9 صباحًا إلى 3 مساءً، أوقفها على بعد أقل من 10 أمتار من خيمة الفحص واملأ الاستمارة (150 mk)؛ فتأخذ مكان سيارة ذكاء اصطناعي. عند الحلبة يظهر التوقيت أيضًا في أعلى اليمين.
-Rally: your entry (with your VAZ or the Rivett, your class), your SS1 / SS2 / SS3 start times, the drivers and your class standings. To race with your VAZ: on Saturday 8 am - 12 pm, park it under 40 m from Fleetari's tent and fill in his form (500 mk Junior, 1000 mk Amateur); stage starts and parc ferme follow it. Outside race weekends, both tabs tell in how many days the event starts.	الرالي: تسجيلك (بسيارتك VAZ أو بـ Rivett، وفئتك)، وأوقات انطلاقك في SS1 / SS2 / SS3، والسائقون وترتيب فئتك. للسباق بسيارتك VAZ: يوم السبت من 8 صباحًا إلى 12 ظهرًا، أوقفها على بعد أقل من 40 مترًا من خيمة Fleetari واملأ استمارته (500 mk للمبتدئين، 1000 mk للهواة)؛ ويتبعها انطلاق المراحل وال parc fermé. خارج عطلات السباق، يُظهر التبويبان بعد كم يومًا يبدأ الحدث.
+Ice race: your entry (with your Fiad and its number, the Rivett, or not registered), when to come to the track, the registered drivers and live timing. To race with your Fiad: on Friday 9 am - 3 pm, park it under 10 m from the inspection tent and fill in the form (150 mk); it takes an AI car's place. At the track, the timing also shows at the top right.	سباق الجليد: تسجيلك (بسيارتك Fiad ورقمها، أو بـ Rivett، أو غير مسجّل)، ومتى تأتي إلى الحلبة، والسائقون المسجّلون والتوقيت المباشر. للسباق بسيارتك Fiad: يوم الجمعة من 9 صباحًا إلى 3 مساءً، أوقفها على بعد أقل من 10 أمتار من خيمة الفحص واملأ الاستمارة (150 mk)؛ فتأخذ مكان سيارة ذكاء اصطناعي. عند الحلبة يظهر التوقيت أيضًا في أعلى اليمين.
+Rally: your entry (with your Fiad or the Rivett, your class), your SS1 / SS2 / SS3 start times, the drivers and your class standings. To race with your Fiad: on Saturday 8 am - 12 pm, park it under 40 m from Fleetari's tent and fill in his form (500 mk Junior, 1000 mk Amateur); stage starts and parc ferme follow it. Outside race weekends, both tabs tell in how many days the event starts.	الرالي: تسجيلك (بسيارتك Fiad أو بـ Rivett، وفئتك)، وأوقات انطلاقك في SS1 / SS2 / SS3، والسائقون وترتيب فئتك. للسباق بسيارتك Fiad: يوم السبت من 8 صباحًا إلى 12 ظهرًا، أوقفها على بعد أقل من 40 مترًا من خيمة Fleetari واملأ استمارته (500 mk للمبتدئين، 1000 mk للهواة)؛ ويتبعها انطلاق المراحل وال parc fermé. خارج عطلات السباق، يُظهر التبويبان بعد كم يومًا يبدأ الحدث.
 Map M: your objectives in gold, yours only (septic tank to pump out then get paid, firewood to deliver, uncle, taxi, flyer mailboxes), updated at every step, with the \"Your objectives\" list. A job belongs to whoever took it on the phone; a taxi ride, to its driver. During the rally, the route of the stages still to run and your start time; during the ice race, the track and your grid spot when your heat is near.	الخريطة M: أهدافك باللون الذهبي، لك وحدك (حفرة الصرف لتفريغها ثم قبض الأجر، الحطب لتوصيله، العم، التاكسي، صناديق البريد للمنشورات)، تتحدّث عند كل خطوة، مع قائمة «أهدافك». العمل لمن أخذه عبر الهاتف؛ ورحلة التاكسي لسائقها. أثناء الرالي: مسار المراحل المتبقية ووقت انطلاقك؛ وأثناء سباق الجليد: الحلبة ومكانك على خط الانطلاق عندما يقترب سباقك.
 A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to edit it. This first version (BETA) prepares it and lets you tour it freely in 3D; roads, 3D models and maps shared in co-op come next.	برنامج منفصل في الأدوات (المفتاح في أعلى اليمين): يفتح الخريطة الحقيقية لـ My Summer Car أو My Winter Car لتعديلها. يحضّرها هذا الإصدار الأول (BETA) ويتيح لك التجول فيها بحرية في 3D؛ وتأتي الطرق ونماذج 3D والخرائط المشتركة في اللعب الجماعي لاحقاً.
 Install and launch it	تثبيته وتشغيله
@@ -3249,7 +3249,7 @@ Water: a body of water to place and stretch (Move, Scale).	الماء: مسطح 
 Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face.	الخامات: في الخصائص «تغيير» — خامة من اللعبة أو صورتك (PNG، JPG…)، على الغرض كاملاً أو إحدى مواده؛ انقر نقراً مزدوجاً على نموذج مستورد لتكسو وجهاً واحداً فقط.
 Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.	التجميع ينشئ ملف .mwcmap صغيراً: نماذجك وطرقك وصورك فقط. تُعاد بناء النسخ وخامات اللعبة من لعبة كل لاعب: لا يُشارَك أي ملف من اللعبة.
 Objects, roads, water, textures, co-op	أغراض، طرق، ماء، خامات، لعب جماعي
-The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.	سيارة VAZ-2108 المرفقة مع المود لها أيضاً بطاقتها في تبويب الإضافات (اختصار الإضافات في الشريط الجانبي، تحت المودات): القالب نفسه والطلاء نفسه.
+The Fiad 131, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.	سيارة Fiad 131 المرفقة مع المود لها أيضاً بطاقتها في تبويب الإضافات (اختصار الإضافات في الشريط الجانبي، تحت المودات): القالب نفسه والطلاء نفسه.
 Several objects: Ctrl + click to pick them, Ctrl+A for all; the gizmo moves them together. Magnet (M): 1 m grid and 15° steps. Ctrl+C / Ctrl+V copy from one map to another.	عدة أغراض: Ctrl + نقرة لاختيارها، Ctrl+A للكل؛ يحرّكها المقبض معاً. المغناطيس (M): شبكة 1 م وخطوات 15°. Ctrl+C / Ctrl+V للنسخ من خريطة إلى أخرى.
 Light: colour, intensity, range; “only at night” turns it on when the sun goes down.	الضوء: اللون والشدة والمدى؛ «ليلاً فقط» يُضيئه عند غروب الشمس.
 Vegetation (B): a brush that plants trees and bushes from the game's forests; Shift to erase.	النباتات (B): فرشاة تزرع أشجاراً وشجيرات من غابات اللعبة؛ Shift للمحو.
@@ -3288,7 +3288,7 @@ Nothing is uploaded or shared: the tracks come from your Assetto Corsa and stay 
 At the airfield (My Winter Car: north of the cinema; My Summer Car: the old airport, near the landfill): TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track.	في المطار (My Winter Car: شمال السينما؛ My Summer Car: المطار القديم قرب المكب): تحدّث عند المكتب، ثم انقر لتقول نعم. تقلع طائرة Cessna وتصل إلى الحلبة.
 On My Summer Car: the same cars (the same download), built on the RUSCKO with their own gravel wheels and tyres, and the handling of the rally SATSUMA. Until their summer photos arrive, their cards show their name.	في My Summer Car: السيارات نفسها (التنزيل نفسه)، مبنية على RUSCKO بعجلاتها وإطاراتها الترابية الأصلية وبقيادة SATSUMA الرالي. إلى أن تصل صورها الصيفية، تعرض بطاقاتها أسماءها.
 Weekend rally (My Summer Car): bring your car to Fleetari's tent, closer than your SATSUMA. Registration, parc fermé and stages then go with it; helmet required, as usual.	رالي نهاية الأسبوع (My Summer Car): أحضر سيارتك إلى خيمة فليتاري، أقرب من SATSUMA. عندها يكون التسجيل والحظيرة المغلقة والمراحل الخاصة معها؛ الخوذة إلزامية كالعادة.
-Since 1.14: the VAZ-2108 and the add-on cars (F10 > Cars, launcher's Character > Add-ons page), built on the RUSCKO, with their gravel wheels and the rally SATSUMA's handling; the weekend rally with them.	منذ 1.14: VAZ-2108 وسيارات الإضافات (F10 > السيارات، وفي المشغّل الشخصية > الإضافات)، مبنية على RUSCKO بعجلاتها الترابية وبقيادة SATSUMA الرالي؛ ورالي نهاية الأسبوع بها.
+Since 1.14: the Fiad 131 and the add-on cars (F10 > Cars, launcher's Character > Add-ons page), built on the RUSCKO, with their gravel wheels and the rally SATSUMA's handling; the weekend rally with them.	منذ 1.14: Fiad 131 وسيارات الإضافات (F10 > السيارات، وفي المشغّل الشخصية > الإضافات)، مبنية على RUSCKO بعجلاتها الترابية وبقيادة SATSUMA الرالي؛ ورالي نهاية الأسبوع بها.
 Since 1.14: the OSUUSKAUPPA s21 shop and its video corner (camcorder, VCR, TV, editing), the Museum of Corsica, sleeping bags, helmets and the KARTTURI 2000 on MSC's stages, in the same place as in My Winter Car (Peräjärvi).	منذ 1.14: متجر OSUUSKAUPPA s21 وركن الفيديو (كاميرا الفيديو، جهاز الفيديو، التلفاز، المونتاج)، متحف كورسيكا، أكياس النوم، الخوذ وKARTTURI 2000 على مراحل MSC، في المكان نفسه كما في My Winter Car (بيرايارفي).
 Ice race, KINO TÄHTI cinema, CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car.	سباق الجليد، سينما KINO TÄHTI، متجر قطع CARDINAL: إضافات صُنعت لـ My Winter Car، غير موجودة في My Summer Car.
 Windows 7: Steam network, at your own risk	Windows 7: شبكة Steam، على مسؤوليتك

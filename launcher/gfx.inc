@@ -251,7 +251,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "AjoutBoutique", L"Boutique s21 (vidéo, KARTTURI)", L"s21 shop (video, KARTTURI)", 1, {}, {}, {}, 0, 15, "Coop" },
         { "AjoutMusee", L"Musée de la Corse", L"Museum of Corsica", 1, {}, {}, {}, 0, 15, "Coop" },
         // (VAZ-2108 Rally des joueurs, au F10 : une couleur et un numero chacun -- JD, 18/10 ; Sync/Vaz.cs)
-        { "AjoutVaz", L"VAZ-2108 des joueurs (F10)", L"Players' VAZ-2108 (F10)", 1, {}, {}, {}, 0, 15, "Coop" },
+        { "AjoutVaz", L"Fiad 131 des joueurs (F10)", L"Players' Fiad 131 (F10)", 1, {}, {}, {}, 0, 15, "Coop" },
         // (cinema KINO TAHTI, a l'est des silos MAATALOUS -- JD, 22/10 ; Sync/Kino*.cs)
         { "AjoutKino", L"Cinéma KINO TÄHTI", L"KINO TÄHTI cinema", 1, {}, {}, {}, 0, 15, "Coop" },
         // (magasin de pieces CARDINAL VARAOSAT, pres du camping de la station de ski -- JD, 23/10 ; Sync/Osat*.cs)
@@ -1221,7 +1221,7 @@ static const AjoutList kAjoutKeys = {};
 // le mod ne lit plus que les bits de l'hote) : en invite, le choix des Reglages est grise, « Réglé par l'hôte ».
 static bool AjoutsParHote() { return g_lobby == LB_GUEST || g_lobby == LB_CONNECTING; }
 #define kAjoutN (AjoutCount())
-static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse", L"VAZ-2108 (F10)", L"Cinéma", L"Pièces CARDINAL" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica", L"VAZ-2108 (F10)", L"Cinema", L"CARDINAL parts" };
+static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse", L"Fiad 131 (F10)", L"Cinéma", L"Pièces CARDINAL" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica", L"Fiad 131 (F10)", L"Cinema", L"CARDINAL parts" };
 static_assert(sizeof(kAjoutFr) / sizeof(kAjoutFr[0]) == sizeof(kAjoutAll) / sizeof(kAjoutAll[0]) && sizeof(kAjoutEn) / sizeof(kAjoutEn[0]) == sizeof(kAjoutAll) / sizeof(kAjoutAll[0]), "un nom FR/EN par ajout (1.10.0 : le 6e plantait la page Co-op)");
 static_assert(sizeof(kAjoutAll) / sizeof(kAjoutAll[0]) <= 9, "identifiants des ajouts : 2951-2959 (UI_SET_AJOUT)");
 static float g_chipW = 458;

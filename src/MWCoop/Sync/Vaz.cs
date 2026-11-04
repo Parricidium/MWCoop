@@ -180,11 +180,11 @@ namespace MWCoop
         // Prendre la couleur n (gratuit). Faux : refus connu d'avance (message a l'ecran).
         public static bool Request(int n, int model = VazCar.ModelVaz)
         {
-            if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coup\u00E9e (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
+            if (!Enabled) { Hud.Toast(Lang.T("Fiad 131 coup\u00E9e (lanceur, Ajouts)", "Fiad 131 is off (launcher, Add-ons)")); return false; }
             if (!PlayerSync.InGame) return false;
             if (n < 1 || n > Count) return false;
             model = VazCar.Current(model);
-            if (!VazCar.InF10(model)) model = VazCar.ModelVaz;   // (voiture de quete : pas au F10)
+            if (!VazCar.InF10(model)) model = VazCar.Base;   // (voiture de quete : pas au F10)
             if (wanted.ContainsKey(Me)) { Deny(2, n); return false; }
             if (!IsFree(n)) { Deny(1, n); return false; }
             Vector3 pos; float yaw; if (!SpotNearMe(out pos, out yaw)) { WetToast(); return false; }
@@ -201,7 +201,7 @@ namespace MWCoop
         static int atModel = -1, atNumber; static Vector3 atPos; static float atYaw, atUntil;
         public static bool RequestAt(int model, Vector3 pos, float yaw)
         {
-            if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coupée (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
+            if (!Enabled) { Hud.Toast(Lang.T("Fiad 131 coupée (lanceur, Ajouts)", "Fiad 131 is off (launcher, Add-ons)")); return false; }
             if (!PlayerSync.InGame || !VazCar.InF10(model)) return false;
             atModel = -1;
             Slot s; int n = 0;
@@ -362,7 +362,7 @@ namespace MWCoop
         {
             Rent r;
             if (!rents.TryGetValue(id, out r) || r.Car == null || r.Car.Car == null) return;
-            if (VehicleSync.RemotelyDriven(r.Car.Car.transform) || VehicleSync.LocalDrivingRoot == r.Car.Car.transform) { Hud.Toast(Lang.T("La VAZ est conduite", "The VAZ is being driven")); return; }
+            if (VehicleSync.RemotelyDriven(r.Car.Car.transform) || VehicleSync.LocalDrivingRoot == r.Car.Car.transform) { Hud.Toast(Lang.T("La Fiad est conduite", "The Fiad is being driven")); return; }
             Transform t = r.Car.Car.transform;
             t.position = pos; t.rotation = Quaternion.Euler(0f, yaw, 0f);
             if (r.Car.Rb != null) { r.Car.Rb.velocity = Vector3.zero; r.Car.Rb.angularVelocity = Vector3.zero; }
@@ -400,10 +400,10 @@ namespace MWCoop
 
         static void Deny(int why, int n)
         {
-            Hud.Toast(why == 1 ? Lang.T("VAZ n\u00B0 " + n + " d\u00E9j\u00E0 prise", "VAZ no. " + n + " already taken")
-                    : why == 2 ? Lang.T("Vous avez d\u00E9j\u00E0 une VAZ", "You already have a VAZ")
-                    : why == 4 ? Lang.T("VAZ-2108 coup\u00E9e chez l'h\u00F4te", "VAZ-2108 is off on the host")
-                    : Lang.T("VAZ : num\u00E9ro inconnu ", "VAZ: unknown number ") + n);
+            Hud.Toast(why == 1 ? Lang.T("Fiad n\u00B0 " + n + " d\u00E9j\u00E0 prise", "Fiad no. " + n + " already taken")
+                    : why == 2 ? Lang.T("Vous avez d\u00E9j\u00E0 une Fiad", "You already have a Fiad")
+                    : why == 4 ? Lang.T("Fiad 131 coup\u00E9e chez l'h\u00F4te", "Fiad 131 is off on the host")
+                    : Lang.T("Fiad : num\u00E9ro inconnu ", "Fiad: unknown number ") + n);
         }
 
         // ---------------------------------------------------------------- messages (Msg.Race 30-33)
@@ -415,7 +415,7 @@ namespace MWCoop
                 int model = r.More ? r.U8() : VazCar.ModelVaz; string liv = r.More ? r.Str() : "";
                 if (model <= VazCar.ModelVaz || model >= 64) { model = VazCar.ModelVaz; liv = ""; }   // (modele inconnu ici : garde, construit en VAZ)
                 model = VazCar.Current(model);   // (R5 copie demandee sur My Summer Car : la standalone)
-                if (VazCar.ModelOf(model).QuestOnly) { model = VazCar.ModelVaz; liv = ""; }   // (voiture de quete : jamais au F10)
+                if (VazCar.ModelOf(model).QuestOnly) { model = VazCar.Base; liv = ""; }   // (voiture de quete : jamais au F10)
                 if (n == 0) { if (wanted.Remove(from.Id)) { HostChanged("rendue par " + NameOf(from.Id)); } return; }
                 int why = !Enabled ? 4 : n < 1 || n > Count ? 3 : wanted.ContainsKey(from.Id) ? 2 : !IsFree(n) ? 1 : 0;
                 if (why != 0)
@@ -491,7 +491,7 @@ namespace MWCoop
             int m = VazCar.Current(s.Model);
             if (VazCar.Has(m)) return m;
             if (VazCar.ModelOf(m).Standalone && VazCar.Has(VazCar.CopyOf(m))) return VazCar.CopyOf(m);
-            return VazCar.ModelVaz;
+            return VazCar.Base;
         }
 
         // Livree de la place sur la voiture d'ici (Evo seulement ; image pas encore recue : couleur du joueur, reprise a son

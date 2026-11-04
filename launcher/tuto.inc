@@ -115,8 +115,8 @@ static const TutoStep kTuto[] = {
     // 1.2.0 (20/10) : page OUTILS, l'editeur de carte (51)
     { L"Outils", L"La clé en haut à droite, à gauche de l'étoile : des programmes à part. Le premier, l'éditeur de carte : un clic pour le télécharger, un autre pour le lancer, sur My Summer Car ou My Winter Car.",
       L"Tools", L"The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.", "1.2.0" },
-    { L"Addons dans la barre", L"Sous Mods : les voitures addons et la VAZ, chacune avec sa carte et sa livrée (gabarit, ton image).",
-      L"Add-ons in the sidebar", L"Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).", "1.6.6" },
+    { L"Addons dans la barre", L"Sous Mods : les voitures addons et la Fiad, chacune avec sa carte et sa livrée (gabarit, ton image).",
+      L"Add-ons in the sidebar", L"Under Mods: the add-on cars and the Fiad, each with its card and its livery (template, your image).", "1.6.6" },
     // 1.8.9 (22/10) : parler au micro (touche ou automatique), difficulte de depart sous « Nouvelle partie » (52, 53)
     { L"Parler : touche ou automatique", L"Réglages > Son & vocal, « Parler » : Appuyer sur V (tu parles en tenant la touche, comme avant) ou Automatique (le micro s'ouvre dès que tu parles ; seuil réglable, F6 le coupe). Aussi dans le salon, Options > Les miennes.",
       L"Talk: key or automatic", L"Settings > Sound & voice, \"Talk\": Press V (you talk while holding the key, as before) or Automatic (the mic opens as soon as you talk; adjustable threshold, F6 mutes it). Also in the lobby, Options > Mine.", "1.8.9" },

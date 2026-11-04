@@ -101,7 +101,7 @@ namespace MWCoop
             }
 
             // VAZ et addons installes : sortis un a un (comme le F10), exportes, rendus
-            var models = new List<int> { VazCar.ModelVaz };
+            var models = new List<int>(); if (VazCar.Has(VazCar.ModelVaz)) models.Add(VazCar.ModelVaz);
             for (int i = 1; i < VazCar.Models.Length; i++) if (VazCar.Has(i) && !VazCar.Models[i].QuestOnly) models.Add(i);   // (voiture de quete : pas au F10, plus bas)
             foreach (int id in models)
             {

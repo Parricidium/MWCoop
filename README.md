@@ -123,7 +123,7 @@ tour for every new button.
     <td width="50%"><img src="docs/img/jeu-f10-apparence.jpg" alt="F10 menu, appearance"></td>
   </tr>
   <tr>
-    <td align="center"><b>Ice race</b>: race with the VAZ-2108 or an add-on car</td>
+    <td align="center"><b>Ice race</b>: race with the Fiad 131 or an add-on car</td>
     <td align="center">Change your look in game with a live 3D preview</td>
   </tr>
   <tr>
@@ -269,7 +269,7 @@ Pick the network on the home page: **STEAM** (easiest) or **IP / VPN**.
 - **Voice chat**: proximity voice through Steam, held key (**V**), volume and range in the launcher.
 - **Cheats** (**F7**, or chat commands `/help`): go to a player, bring one, places, heal, money, time, snow — only if
   the host allows them, and each one is announced to everyone.
-- **Ice race**: race with the VAZ-2108 or an add-on car (F10 > Ice race).
+- **Ice race**: race with the Fiad 131 or an add-on car (F10 > Ice race).
 - **Drone camera** (**F8**): photo mode — your character stays put while a small drone flies around (viewfinder,
   zoom, tilt, flash); photos land in Pictures\CoopPictures. The others see the drone and its flash.
 - **OSUUSKAUPPA 𝔰21 shop** (Peräjärvi): a co-op village shop — sleeping bags and a **video corner**: VHS tapes, VCRs,
@@ -477,7 +477,7 @@ Choisissez le réseau sur l'accueil : **STEAM** (le plus simple) ou **IP / VPN**
 - **Carte** (**M**) : les autres joueurs en direct, les lieux et des marqueurs partagés (une couleur par joueur).
 - **Vocal** de proximité par Steam, touche tenue (**V**), volume et portée réglables.
 - **Triches** (**F7**, ou commandes du tchat `/aide`) : seulement si l'hôte les autorise, chacune annoncée à tous.
-- **Course sur glace** : avec la VAZ-2108 ou une voiture addon (F10 > Course sur glace).
+- **Course sur glace** : avec la Fiad 131 ou une voiture addon (F10 > Course sur glace).
 - **Caméra drone** (**F8**) : mode photo, viseur, zoom, flash ; photos dans Images\CoopPictures.
 - **Boutique OSUUSKAUPPA 𝔰21** (Peräjärvi) : sacs de couchage et **coin vidéo** (cassettes, magnétoscopes, télé, caméscope
   des années 90) ; guide : [docs/GUIDE-VIDEO.md](docs/GUIDE-VIDEO.md). **Musée de la Corse** à côté.

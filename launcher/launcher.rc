@@ -21,7 +21,7 @@
 // 40-48 : apercus des voitures addons (photos du studio de JD, 28/10 puis 03/11 pour les voitures Rallyworld, recadrees en
 // 1050 x 600 : voiture centree, sans etirement), les memes sur My Winter Car et My Summer Car, avant ceux des paquets et du
 // catalogue (voiture.inc AddonPic)
-40 RCDATA "apercus\\vaz.jpg"
+40 RCDATA "apercus\\fiat131.jpg"
 41 RCDATA "apercus\\r5maxi.jpg"
 42 RCDATA "apercus\\evo3.jpg"
 43 RCDATA "apercus\\t16.jpg"

@@ -126,7 +126,8 @@ namespace MWCoop
         // nouvelles standalones (sans copie) : Lancia Delta Evo II de Rallyworld (JD 03/11)
         public const int ModelDelta = 14;
         public const int ModelM3 = 15;   // (BMW M3 E30 Gr. A de Rallyworld, JD 04/11 : pas publiee avant l'essai de JD et d'alex_tor)
-        public static int StandaloneOf(int copy) { return copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
+        public const int ModelFiat = 16;   // (Fiat 131 Gr. 4 de Rallyworld, JD 04/11 : REMPLACE la VAZ-2108, livree avec le mod)
+        public static int StandaloneOf(int copy) { return copy == ModelVaz ? ModelFiat : copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
         public static int CopyOf(int id) { return id == ModelR5S ? ModelR5 : id >= ModelEvoS && id <= ModelT16bS ? id - ModelR5S : id; }
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
@@ -366,12 +367,27 @@ namespace MWCoop
             m.Sp.Rwd = true; m.Sp.RearGrip = 1.12f; m.Sp.HandbrakeSlide = 0.5f; m.Sp.AntiRollFront = 24000f; m.Sp.AntiRollRear = 12000f; m.Sp.YawDamp = 0.6f; m.Sp.ComDrop = 0.04f;
             return m;
         }
+        // Fiat 131 Gr. 4 de Rallyworld (JD 04/11 : « remplacer la VAZ par celle ci ») : standalone sur les deux jeux, dossier MWCoopiat131 livre
+        // avec le mod ; une demande de VAZ (n 0 : anciens choix, anciens clients) devient la Fiat (StandaloneOf). PROPULSION, reglages de propulsion
+        // de la M3 ; yeux d'apres DRIVEREYES du modele, recales comme ceux de la M3 (meme ecart au volant) ; 238 ch a 8 000 tr/min, 226 N.m a
+        // 5 250, 1 020 kg, 50 % sur l'avant, boite et pont de data/drivetrain.ini
+        public static readonly Model Fiat131 = FiatModel();
+        static Model FiatModel()
+        {
+            var m = M3e30.CloneAs(ModelFiat, null);
+            m.Folder = "fiat131"; m.Name = "Fiad 131"; m.Head = new Vector3(-0.315f, 1.09f, -0.12f); m.Engine = new Vector3(0f, 0.55f, 1.35f);
+            m.Sp = M3e30.Sp.Copy(); m.Sp.Name = "Fiat 131 Gr. 4"; m.Sp.Power = 238f; m.Sp.PowerRpm = 8000f; m.Sp.Torque = 226f; m.Sp.TorqueRpm = 5250f;
+            m.Sp.MaxRpm = 8500f; m.Sp.Mass = 1020f; m.Sp.Com = 0.50f; m.Sp.Final = 4.875f; m.Sp.Gears = new[] { -2.671f, 0f, 2.654f, 1.895f, 1.568f, 1.244f, 1f };
+            return m;
+        }
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
-                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30 };   // (rempli : Vaz2108 au constructeur statique)
-        public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
+                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30, Fiat131 };   // (rempli : Vaz2108 au constructeur statique)
+        public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Models[Base]; }
+        // voiture de base, livree avec le mod : la Fiat (la VAZ seulement si ses fichiers manquent et ceux de la VAZ sont la)
+        public static int Base { get { return StandaloneCar.Ready(ModelVaz) ? ModelFiat : ModelVaz; } }
         // addon installe ici (la VAZ l'est toujours)
         // (My Summer Car : la R5 copie retiree, la standalone a sa place ; My Winter Car : la copie, pas encore de standalone)
-        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On || StandaloneCar.OnMwc(id) || Models[id].QuestOnly && StandaloneCar.Quest : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
+        public static bool Has(int id) { return id == ModelVaz ? Base == ModelVaz : (id > 0 && id < Models.Length && !Models[id].Retired && Models[id].HasFiles && (!Models[id].Standalone || (CopyOf(id) == id ? StandaloneCar.On || StandaloneCar.OnMwc(id) || Models[id].QuestOnly && StandaloneCar.Quest : StandaloneCar.Ready(CopyOf(id)))) && !StandaloneCar.Ready(id)); }
         // au F10 (installe, et pas reserve a une quete)
         public static bool InF10(int id) { return Has(id) && (!ModelOf(id).QuestOnly || Config.Testing && Config.GetInt("Test", "QueteF10", 0) != 0); }   // ([Test] QueteF10=1 : essais)
         // modele demande pour cette partie : sur My Summer Car, la R5 copie (n 6, anciens clients, anciens choix) devient la standalone
@@ -379,7 +395,7 @@ namespace MWCoop
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
 
         public static string Dir { get { return Vaz2108.Dir; } }
-        public static bool HasFiles { get { return Vaz2108.HasFiles; } }
+        public static bool HasFiles { get { return Fiat131.HasFiles || Vaz2108.HasFiles; } }
 
         // Yeux du pilote, repere du modele : siege conducteur a x -0,35, toit interieur vers 1,33, volant en (-0,35 ; 0,86 ; 0,64).
         // DriverHeadPivot est pose 27 cm DERRIERE et 3 cm au-dessus (les yeux sont la, Seats.EyeFromPivot, mesure sur la
