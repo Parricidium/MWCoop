@@ -1022,6 +1022,7 @@ static void AddonsScan()
         if (h != INVALID_HANDLE_VALUE) {
             do {
                 if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || wcschr(fd.cFileName, L'.')) continue;   // (« evo3.off » : addon coupe)
+                if (!_wcsicmp(fd.cFileName, L"fiat131")) continue;   // (livree avec le mod, MWCoop\fiat131 : sa carte est plus bas -- avec son addon.ini, deux cartes, et « Desinstaller » sur la seconde)
                 std::wstring dir = root + fd.cFileName + L"\\";
                 std::vector<unsigned char> b;
                 if (!FileExists(dir + L"carrosserie.p205") || !ReadAll(dir + L"addon.ini", b)) continue;
