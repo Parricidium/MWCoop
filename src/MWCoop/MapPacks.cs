@@ -424,7 +424,7 @@ namespace MWCoop
                     go.transform.rotation = Q(f[4]);
                     go.transform.localScale = V3(f[5]);
                     Collide(go, f[6]);
-                    if (f[1] == "modele") LakeWater(go);
+                    if (f[1] == "modele") { LakeWater(go); RoadSurface(go); }
                     p.Objs++;
                     p.Last = go;
                     if (Config.Testing)
@@ -789,6 +789,34 @@ namespace MWCoop
 
         // aucune | boite (la boite du maillage) | forme (le maillage s'il est lisible, sinon celui de la collision de l'objet du
         // jeu, sinon la boite)
+        // Adherence : les roues lisent la PhysicMaterial du sol (Wheel.physicMaterial, CarDynamics.physicMaterials) ; une route de carte sans
+        // matiere passait pour de la terre, les voitures y glissaient (JD 04/11). Celle de la route goudronnee du jeu.
+        static PhysicMaterial roadGrip; static bool roadGripLooked;
+        public static PhysicMaterial RoadGrip()
+        {
+            if (roadGripLooked) return roadGrip;
+            roadGripLooked = true;
+            GameObject terr = GameObject.Find("MAP/MESH/TERRAIN_OBJ");
+            if (terr != null)
+                foreach (string n in new[] { "4tie", "AsphaltRoad", "Road" })
+                {
+                    Transform t = terr.transform.Find(n);
+                    Collider c = t != null ? t.GetComponent<Collider>() : null;
+                    if (c != null && c.sharedMaterial != null) { roadGrip = c.sharedMaterial; break; }
+                }
+            Log.Info("cartes : adherence des routes : " + (roadGrip != null ? roadGrip.name : "introuvable"));
+            return roadGrip;
+        }
+        static void RoadSurface(GameObject go)
+        {
+            MeshRenderer mr = go.GetComponent<MeshRenderer>();
+            if (mr == null) return;
+            bool asphalt = false;
+            foreach (Material m in mr.sharedMaterials) if (m != null && m.name.ToLowerInvariant().Contains("asphalt")) asphalt = true;
+            if (!asphalt || RoadGrip() == null) return;
+            foreach (Collider c in go.GetComponents<Collider>()) c.sharedMaterial = roadGrip;
+        }
+
         static void Collide(GameObject go, string mode)
         {
             if (mode == "aucune") return;

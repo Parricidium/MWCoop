@@ -75,6 +75,15 @@ namespace MWCoop
                     break;
                 }
                 case "osatmaksa": { KinoGui(); if (money != null) money.Value += 1000f; osatLastBuy = -10f; OsatPay(now); break; }   // (paie le panier a la caisse)
+                case "osatlivre":   // (livre l'article n sans passer a la caisse : joueur d'essai loin du magasin)
+                {
+                    int i = int.Parse(a[2]);
+                    if (i >= osatOffers.Count) { L("essai : pas d'article " + i); break; }
+                    string nm = osatOffers[i].Name; bool ok = OsatDeliver(osatOffers[i]);
+                    GameObject pm = Game.Msc && osatStock != null ? FleetariMsc.PartModel(osatStock[int.Parse(a[3])].Vin) : null;
+                    L("essai : livre " + nm + " : " + ok + (pm != null ? ", " + pm.name + " actif " + pm.activeInHierarchy + " en " + pm.transform.position.ToString("F1") + ", etiquette " + pm.tag : ""));
+                    break;
+                }
                 case "osattesti": OsatTestItems(); break;
                 case "osattormays":
                 {

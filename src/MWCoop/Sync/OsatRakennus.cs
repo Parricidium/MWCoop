@@ -100,7 +100,7 @@ namespace MWCoop
             Mat("os_valko", "paint_black_matte", 1f, new Color(0.95f, 0.95f, 0.94f));
             OwnMat("os_kyltti", "osat-kyltti.png");
             OwnMat("os_cardinal", "osat-cardinal.png", true);
-            OwnMat("os_kaytetyt", "osat-kaytetyt.png", true);
+            OwnMat("os_kaytetyt", Game.Msc ? "osat-satsuma.png" : "osat-kaytetyt.png", true);
             OwnMat("os_nouto", "osat-nouto.png", true);
         }
 
@@ -317,7 +317,7 @@ namespace MWCoop
         // (My Summer Car : memes rayons avec ses produits, modeles d'origine des objets du magasin de Teimo et des pieces -- petite ville de JD, 04/11)
         static readonly Dictionary<string, string> OsatPrefabMsc = new Dictionary<string, string> {
             { "motormoil1", "motoroil0" }, { "atfoil0", "motoroil0" }, { "boxtimingbelt", "lightbulbbox0" }, { "boxoilpump0", "lightbulbbox0" },
-            { "FANBELT0", "alternatorbelt0" }, { "VIN107", "alternatorbelt0" }, { "CARBATTERY0", "battery" } };
+            { "CARBATTERY0", "battery" } };
         static GameObject OsatPrefab(string name)
         {
             if (osatPrefabs == null)
@@ -451,6 +451,21 @@ namespace MWCoop
                 RaycastHit? h = GroundHit(osat.transform.TransformPoint(new Vector3(x, 50f, z)));
                 return h.HasValue ? osat.transform.InverseTransformPoint(h.Value.point).y : -0.2f;
             };
+            // ([Osat] Parking=droite -- petite ville de JD, 04/11 : devant, les places tombaient de l'autre cote de la rue) : a droite du magasin vu de la rue,
+            // colle a la rue, asphalte et sol solide, 6 places, muret sur les cotes et derriere les lampadaires
+            if (Config.Get("Osat", "Parking", "") == "droite")
+            {
+                const float xa = -OL - 2f, xb = xa - 15.6f, za = 3.8f, zb = 8.8f, zf = 9.2f, zm = 1.6f, m = 0.7f;   // (zf : bord de la chaussee ; zm : muret du fond)
+                HeightGrid("ki_asfaltti", xb - m, xa + m, zm, zf, 1f, gy, 0.1f);
+                for (float x = xa; x >= xb - 0.01f; x -= 2.6f) Line(x, za, x, zb, gy);
+                Line(xb, za, xa, za, gy);
+                foreach (float x in new[] { xa - 3.9f, xb + 3.9f }) KinoLamp(new Vector3(x, gy(x, za - 1.1f), za - 1.1f));
+                WallRun(xb - m, zm, xa + m, zm, gy);
+                WallRun(xb - m, zm, xb - m, zf - 1.2f, gy);
+                WallRun(xa + m, zm, xa + m, zf - 1.2f, gy);
+                SolDur(osat.transform, xb - m, xa + m, zm, zf, 1f, gy, 0.1f);
+                return;
+            }
             // places perpendiculaires a la piste, 2,6 m, 5 m de profondeur, ligne du fond ; peinture seulement (place du rallye)
             float z0 = 14.5f, z1 = 19.5f;
             for (float x = -9.1f; x <= 9.11f; x += 2.6f) Line(x, z0, x, z1, gy);

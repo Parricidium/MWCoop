@@ -188,7 +188,8 @@ namespace MWCoop
             if (inNow && !osatInside && now - osatLastHello > 40f && osatVendor != null)
             {
                 osatLastHello = now;
-                Say("Myyjä : Tervetuloa ! Les pièces des mods de Cardinal à gauche, l'occasion pour la Rivett à droite.", "Vendor: Tervetuloa! Cardinal's mod parts on the left, used Rivett parts on the right.");
+                if (Game.Msc) Say("Myyjä : Tervetuloa ! Les pièces des mods de Cardinal à gauche, celles de la Satsuma à droite.", "Vendor: Tervetuloa! Cardinal's mod parts on the left, Satsuma parts on the right.");
+                else Say("Myyjä : Tervetuloa ! Les pièces des mods de Cardinal à gauche, l'occasion pour la Rivett à droite.", "Vendor: Tervetuloa! Cardinal's mod parts on the left, used Rivett parts on the right.");
             }
             osatInside = inNow;
         }
@@ -365,6 +366,7 @@ namespace MWCoop
         {
             if (now - osatLastBuy < 0.6f) return;
             osatLastBuy = now;
+            L("magasin de pieces : a la caisse, " + osatBasket.Count + " article(s), " + BasketTotal() + " mk, argent " + (money != null ? money.Value.ToString("F0") : "?"));
             if (osatBasket.Count == 0) { Say("Myyjä : prends d'abord ce que tu veux dans les rayons.", "Vendor: take what you want from the shelves first."); return; }
             int total = BasketTotal();
             if (money == null || money.Value < total)
@@ -482,6 +484,7 @@ namespace MWCoop
 
         static GameObject Template(string vin)
         {
+            if (Game.Msc) return FleetariMsc.PartModel(vin);
             PlayMakerFSM sp = VinSpawner(vin);
             FsmGameObject pf = sp != null ? sp.FsmVariables.FindFsmGameObject("Prefab") : null;
             return pf != null ? pf.Value : null;
@@ -518,6 +521,16 @@ namespace MWCoop
 
         static void DrawStock()
         {
+            if (Game.Msc)
+            {
+                var neuf = new List<OsatUsed>(); var alea = new System.Random();
+                foreach (string[] p in FleetariMsc.SalePool())
+                    neuf.Add(new OsatUsed { Vin = p[0], Name = p[1], Price = int.Parse(p[2]), Wear = 90f + (float)alea.NextDouble() * 9f });
+                osatStock = neuf; osatStockDay = DaysPassed; osatDirty = true;
+                L("magasin de pieces : pieces de la Satsuma (jour " + osatStockDay + ") : " + string.Join(", ", neuf.ConvertAll(x => x.Name + " " + x.Price).ToArray()));
+                SendStock();
+                return;
+            }
             GameObject vl = PostChild("VINLIST_order");
             var lists = new Dictionary<string, System.Collections.ArrayList>();
             if (vl != null) foreach (PlayMakerArrayListProxy p in vl.GetComponents<PlayMakerArrayListProxy>()) if (p._arrayList != null) lists[p.referenceName ?? ""] = p._arrayList;
@@ -558,6 +571,7 @@ namespace MWCoop
         static GameObject SpawnUsed(string vin, float wear, Vector3 pos, Quaternion rot, List<KeyValuePair<string, int>> before, out List<KeyValuePair<string, int>> mine)
         {
             mine = new List<KeyValuePair<string, int>>();
+            if (Game.Msc) return FleetariMsc.GiveAt(vin, wear, pos, rot);
             PlayMakerFSM sp = VinSpawner(vin);
             if (sp == null) { Log.Warn("magasin de pieces : distributeur de " + vin + " introuvable"); return null; }
             foreach (FsmInt v in sp.FsmVariables.IntVariables) mine.Add(new KeyValuePair<string, int>(v.Name, v.Value));
