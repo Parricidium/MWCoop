@@ -975,8 +975,8 @@ static void DrawMods(Graphics &g)
         if (const Opt *ma = OptByKey("ModsAuto")) {   // accepter les fichiers de l'hote (ModsAuto)
             bool hot = g_mscHot == 1005;
             float ty = kMscAuto.Y - 6;
-            Text(g, T(L"Accepter les fichiers de l'hôte", L"Accept the host's files"), RectF(c.X + 18, ty, c.Width - 36 - 60, 20), 13, FontStyleBold, hot ? kAcc : kInk, StringAlignmentNear);
-            Text(g, T(L"Sans redemander à chaque salon", L"Without asking again in each lobby"), RectF(c.X + 18, ty + 20, c.Width - 36 - 60, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, T(L"Accepter le contenu de l'hôte", L"Accept the host's content"), RectF(c.X + 18, ty, c.Width - 36 - 60, 20), 13, FontStyleBold, hot ? kAcc : kInk, StringAlignmentNear);
+            Text(g, T(L"CD, images, réglages · jamais les .dll", L"CDs, images, settings · never the .dll files"), RectF(c.X + 18, ty + 20, c.Width - 36 - 60, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             DrawToggle(g, kMscAuto, OptGet(*ma) != 0, hot);
             MscZone(RectF(c.X + 18, ty - 4, c.Width - 36, 46), 1005);
         }

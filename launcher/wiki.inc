@@ -216,7 +216,7 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
         WikiCard(g, row);
         bool on = false;
         if (const Opt *ma = OptByKey("ModsAuto")) on = OptGet(*ma) != 0;
-        SetRowText(g, RectF(row.X + 16, row.Y, row.Width - 90, row.Height), T(L"Accepter les fichiers de l'hôte", L"Accept the host's files"), T(L"Ses mods, CD et images, copiés à part, sans demander", L"Their mods, CDs and images, copied apart, without asking"));
+        SetRowText(g, RectF(row.X + 16, row.Y, row.Width - 90, row.Height), T(L"Accepter le contenu de l'hôte", L"Accept the host's content"), T(L"Ses CD, images et réglages, sans demander. Les .dll restent à accepter", L"Their CDs, images and settings, without asking. The .dll files still need your OK"));
         UiToggle(g, RectF(row.X + row.Width - 66, row.Y + 16, 50, 28), on, false);
         HotZone(row, Z);
         Text(g, T(L"Options du jeu > Partie et partage (ton réglage actuel)", L"Game options > Game and sharing (your current setting)"), RectF(x, y + 66, w, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);

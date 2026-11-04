@@ -30,7 +30,7 @@
 // donc avant le lancement de son jeu (qui ouvre ce meme port UDP).
 enum { LB_PROTO = 1, M_HELLO = 1, M_WELCOME, M_REJECT, M_STATE, M_READY, M_GO, M_PING, M_PONG, M_SKIN };
 enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ, M_MODSX };   // mods de l'hote (modsync.inc ; M_MODSX : suite de la liste)
-// M_SYNCST (invite -> hote) : u8 avancement de la reception de l'envoi de l'hote (0-99, 255 : rien en cours) ; M_LATE (hote ->
+// M_SYNCST (invite -> hote) : u8 avancement de la reception de l'envoi de l'hote (0-99, 255 : rien en cours), puis u8 accord des DLL (1 refuse, 2 doit repondre ; absent chez un lanceur d'avant) ; M_LATE (hote ->
 // invite en retard, a la place de WELCOME) : la partie est lancee, voici les mods (puis M_MODS...) -- u8 0 sur Steam : rien.
 enum { M_SYNCST = 25, M_LATE };
 // M_CHAT (0.97.0, tchat du salon) : invite -> hote [u16 n][n octets UTF-8] ; hote -> tous [u8 numero][u16 n][n octets]. Au plus
@@ -518,7 +518,8 @@ static void LobbySession(SOCKET s)
         if (p && t == M_READY) { p->ready = q.u8() != 0; TestLog("salon : %s (joueur %d) pret=%d", p->name.c_str(), id, (int)p->ready); }
         else if (p && t == M_PONG) { uint32_t sent = q.u32(); if (q.ok) p->ping = (int)(GetTickCount() - sent); }
         else if (p && t == M_SKIN) { std::string sk = q.str(); if (q.ok) { p->skin = sk; TestLog("salon : joueur %d apparence %s", id, sk.c_str()); } }
-        else if (p && t == M_SYNCST) { int v = q.u8(); if (q.ok && (v == 255 ? -1 : v) != p->dl) { p->dl = v == 255 ? -1 : v; if (p->dl < 0 || p->dl % 25 == 0) TestLog("salon : %s (joueur %d) envoi de l'hote %d%%", p->name.c_str(), id, p->dl); } }
+        else if (p && t == M_SYNCST) { int v = q.u8(); if (q.ok && (v == 255 ? -1 : v) != p->dl) { p->dl = v == 255 ? -1 : v; if (p->dl < 0 || p->dl % 25 == 0) TestLog("salon : %s (joueur %d) envoi de l'hote %d%%", p->name.c_str(), id, p->dl); }
+            if (q.ok && q.p < m.size()) { int st = q.u8(); bool ask = st == 2, no = st == 1; if (ask != p->modsAsk || no != p->modsNo) { p->modsAsk = ask; p->modsNo = no; TestLog("salon : %s (joueur %d) accord des DLL : %s", p->name.c_str(), id, ask ? "doit repondre" : no ? "refuse" : "ok"); } } }
         std::string chatName, chatText;
         if (p && t == M_CHAT) { int n = q.u16(); if (q.ok && q.p + n <= m.size() && n <= 4 * (int)kChatMax) { chatName = p->name; chatText = m.substr(q.p, n); } }
         LeaveCriticalSection(&g_lcs);

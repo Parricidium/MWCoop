@@ -6,8 +6,10 @@
 //    fichiers de MSCLoader lui-meme (Assets\MSCLoader_*). Liste : chemin (relatif au dossier Mods), taille, empreinte
 //    FNV-1a 64 ; refaite quand un mod, un reglage ou une coche change.
 //  - Invite : une copie a part, %LOCALAPPDATA%\MWCoop\mods-invite\ (ses propres mods et reglages ne sont jamais
-//    touches). TOUT ACCEPTER, une fois (ensuite automatique : COOP > ModsAuto) : ce qui manque ou differe est
-//    telecharge, les DLL que l'hote n'a plus sont retirees. MSCLoader absent chez l'invite : installe au passage.
+//    touches). Les DLL : rien sans l'accord du joueur, fenetre avec la liste exacte (JD, 04/11 : accord-dll.inc) -- ni la taille,
+//    ni ModsAuto, ni l'arrivee en retard n'y changent rien. Le contenu sans code : TOUT ACCEPTER, une fois (ensuite automatique :
+//    COOP > ModsAuto). Ce qui manque ou differe est telecharge, les DLL que l'hote n'a plus sont retirees. MSCLoader absent chez
+//    l'invite : installe au passage.
 //  - Lancement en invite : copie de lancement du jeu (%LOCALAPPDATA%\MWCoop\invite\My Winter Car\, comme celle de
 //    Steam : exe, DLL et .ini copies, dossiers en jonctions) dont Mods est une jonction vers mods-invite et dont
 //    doorstop_config.ini dit mods=GF : MSCLoader y charge exactement les mods de l'hote. Hote sans MSCLoader (ou
@@ -36,6 +38,7 @@ struct SyncFile { std::string path; uint32_t size; uint64_t hash; };
 // Voyage le plus souvent (JD, 25/10 : « un dossier de destination part en entier ou pas du tout », et le salon le dit).
 struct SyncOffer { bool msc = false; std::string mscVer; std::vector<std::string> mods, cats, dropped; std::vector<SyncFile> files; uint64_t key = 0; int expect = 0; };
 
+static std::atomic<bool> g_syncBadPath(false);   // liste de l'hote refusee : un chemin dangereux (SyncTick le dit)
 static uint64_t Fnv(const void *p, size_t n, uint64_t h = 1469598103934665603ULL)
 {
     const uint8_t *b = (const uint8_t *)p;
@@ -98,6 +101,30 @@ static bool SyncPathOk(std::string &p)
     for (char &c : p) if (c == '/') c = '\\';
     return true;
 }
+// Chemin recu de l'hote, tel que Windows le lira. Il ignore les points et les espaces en fin de nom : « x.dll. » et « x.dll » sont
+// le meme fichier, et l'extension se lit apres ce nettoyage. Refuses : caracteres interdits, noms de peripheriques (CON, NUL...).
+static bool SyncPathGuest(std::string &p)
+{
+    if (!SyncPathOk(p)) return false;
+    std::string out;
+    for (size_t a = 0;;) {
+        size_t e = p.find('\\', a);
+        std::string c = p.substr(a, e == std::string::npos ? std::string::npos : e - a);
+        while (!c.empty() && (c.back() == '.' || c.back() == ' ')) c.pop_back();
+        if (c.empty()) return false;
+        for (unsigned char ch : c) if (ch < 32 || strchr("<>\"|?*", ch)) return false;
+        std::string dev = c.substr(0, c.find('.'));
+        while (!dev.empty() && dev.back() == ' ') dev.pop_back();
+        for (const char *d : { "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$" }) if (!_stricmp(dev.c_str(), d)) return false;
+        if (dev.size() == 4 && (!_strnicmp(dev.c_str(), "COM", 3) || !_strnicmp(dev.c_str(), "LPT", 3)) && isdigit((unsigned char)dev[3])) return false;
+        out += (out.empty() ? "" : "\\") + c;
+        if (e == std::string::npos) break;
+        a = e + 1;
+    }
+    if (!_strnicmp(out.c_str(), "mods\\", 5)) out.replace(0, 5, "Mods\\");
+    p = out;
+    return true;
+}
 static bool OfferParse(const std::string &m, SyncOffer &o)
 {
     Rd r(m);
@@ -117,7 +144,7 @@ static bool OfferParse(const std::string &m, SyncOffer &o)
         uint32_t lo = r.u32(), hi = r.u32();
         f.hash = lo | ((uint64_t)hi << 32);
         if (!r.ok) break;
-        if (!SyncPathOk(f.path)) { LaunchLog("mods : chemin refuse dans la liste de l'hote (%s)", f.path.c_str()); return false; }
+        if (!SyncPathGuest(f.path)) { LaunchLog("mods : chemin refuse dans la liste de l'hote (%s)", f.path.c_str()); g_syncBadPath = true; return false; }
         o.files.push_back(f);
     }
     // Marques en fin de message, dans cet ordre : 0xC5 + nombre total de fichiers (liste trop longue pour un message : la suite
@@ -151,7 +178,7 @@ static bool OfferMoreParse(const std::string &m, uint64_t &key, int &start, std:
         uint32_t a = r.u32(), b = r.u32();
         f.hash = a | ((uint64_t)b << 32);
         if (!r.ok) break;
-        if (!SyncPathOk(f.path)) { LaunchLog("mods : chemin refuse dans la suite de la liste (%s)", f.path.c_str()); return false; }
+        if (!SyncPathGuest(f.path)) { LaunchLog("mods : chemin refuse dans la suite de la liste (%s)", f.path.c_str()); g_syncBadPath = true; return false; }
         files.push_back(f);
     }
     return r.ok;
@@ -441,6 +468,11 @@ static DWORD WINAPI OfferThread(void *p)
         total += u.bytes;
         if (!u.cat.empty()) o.cats.push_back(u.cat);
     }
+    if (g_testEvil == 1) {   // (essai : noms a point ou espace final, .exe ; Windows lit les memes fichiers chez l'hote)
+        for (auto &f : o.files) { if (!_stricmp(f.path.c_str(), "Mods\\Alpha.dll")) f.path += "."; else if (!_stricmp(f.path.c_str(), "Mods\\Beta.dll")) f.path = "Mods\\BETA.DLL "; }
+        SyncFile e; e.path = "Mods\\evil.exe";
+        if (FileFnvCached(job->dir + L"evil.exe", &e.hash, &e.size)) o.files.push_back(e);
+    } else if (g_testEvil == 2) { SyncFile e; e.path = "..\\z.dll"; e.size = 4; e.hash = 1; o.files.push_back(e); }
     std::string blob;
     std::vector<std::string> extra;
     OfferSplit(o, blob, extra);
@@ -582,8 +614,22 @@ static std::map<int, uint32_t> g_syncGotFile;
 static std::atomic<uint64_t> g_syncGot(0), g_syncTotal(0);
 static std::atomic<int> g_syncGen(0);
 static std::atomic<DWORD> g_syncLastT(0);
-static bool g_syncAccepted;               // TOUT ACCEPTER dans ce salon
-static bool g_syncLateAuto;               // invite en retard : accepte d'office jusqu'a kSyncAskBytes
+static bool g_syncAccepted;               // TOUT ACCEPTER dans ce salon (le contenu sans code ; les DLL : g_syncOk)
+static bool g_syncLateAuto;               // invite en retard : son contenu sans code accepte d'office jusqu'a kSyncAskBytes
+// Accord pour les DLL (accord-dll.inc). state : 0 nouveau, 1 modifie, 2 deja identique, 3 refuse d'office (jamais ecrit).
+struct SyncProg { std::string path; uint32_t size; uint64_t hash; int state; };
+static std::vector<SyncProg> g_syncAsk;   // (sous g_syncMx) lignes de la question en cours
+static std::vector<SyncProg> g_syncAskAll;   // (sous g_syncMx) toutes les DLL de cette liste : ce que « oui » accepte
+static uint64_t g_syncAskSig;             // (sous g_syncMx) empreinte de ces DLL
+static std::atomic<bool> g_syncAskDll(false);   // SY_ASK : c'est la question des DLL (pas TOUT ACCEPTER)
+static std::map<std::string, std::pair<uint32_t, uint64_t>> g_syncOk;   // (sous g_syncMx) accepte : cle du chemin -> (taille, empreinte). Rien d'autre n'est ecrit ni charge.
+static uint64_t g_syncNoSig;              // (sous g_syncMx) liste de DLL refusee (une autre : nouvelle question)
+static std::atomic<bool> g_syncNo(false);   // cette liste est refusee : jeu sans MSCLoader
+static std::atomic<bool> g_syncHasProg(false);   // cette liste a des DLL
+static std::atomic<int> g_syncForbidden(0);   // fichiers .exe, .bat... de cette liste : jamais ecrits
+static uint64_t g_syncTrustNew;           // (sous g_syncMx) « Toujours faire confiance » : compte Steam a retenir a la fin
+static std::map<std::string, std::string> g_syncShaWant;   // (sous g_syncMx) DLL d'un hote de confiance a retelecharger : SHA-256 attendu
+static std::set<std::string> g_syncShaBad;   // (sous g_syncMx) arrivees differentes : elles redemandent
 // Gros envoi (JD, 25/10 : les circuits convertis de Voyage, 270 a 350 Mo) : au-dela, l'invite accepte d'abord, en voyant la
 // taille et le temps estime (sauf « Tout accepter de cet hote »). Debit : celui du dernier telechargement ([Lanceur]
 // DebitMods, Ko/s), sinon 0,34 Mo/s par Steam (vu chez un joueur) ou 1 Mo/s par IP.
@@ -647,6 +693,9 @@ static void SyncReset()
     g_syncAccepted = false;
     g_syncLateAuto = false;
     g_syncAskedKey = 0;
+    g_syncAsk.clear(); g_syncAskAll.clear(); g_syncAskDll = false;
+    g_syncOk.clear(); g_syncNoSig = 0; g_syncNo = false; g_syncHasProg = false; g_syncForbidden = 0;
+    g_syncTrustNew = 0; g_syncShaWant.clear(); g_syncShaBad.clear();
     g_syncGen++;
     g_sync = SY_NONE;
 }
@@ -687,6 +736,32 @@ static void SyncPumpLocked()
     }
 }
 
+// Verrou de l'ecriture (sous g_syncMx) : un fichier de programme hors de la liste acceptee n'arrive jamais sur le disque.
+static bool SyncWriteOk(const SyncFile &f)
+{
+    int k = ProgKind(f.path);
+    if (k == PROG_NONE) return true;
+    if (k == PROG_DLL) { auto it = g_syncOk.find(ProgKey(f.path)); if (it != g_syncOk.end() && it->second.first == f.size && it->second.second == f.hash) return true; }
+    LaunchLog("mods : %s pas ecrit (pas dans la liste acceptee)", f.path.c_str());
+    return false;
+}
+// « Toujours faire confiance » : le SHA-256 de ce qui est maintenant sur ce PC, jamais une empreinte donnee par l'hote (sous g_syncMx).
+static void SyncTrustSaveLocked()
+{
+    if (!g_syncTrustNew) return;
+    std::vector<TrustFile> files;
+    for (auto &f : g_hostOffer.files) {
+        if (ProgKind(f.path) != PROG_DLL) continue;
+        TrustFile t;
+        t.game = g_game; t.path = f.path; t.size = f.size; t.fnv = f.hash;
+        t.sha = cle::Hex(cle::Sha256File(SyncLocal(f.path)));
+        if (t.sha.empty()) { LaunchLog("mods : %s illisible, hote pas retenu", f.path.c_str()); g_syncTrustNew = 0; return; }
+        files.push_back(t);
+    }
+    bool ok = TrustRemember(g_syncTrustNew, Narrow(g_sHostName, CP_UTF8), g_game, files);
+    LaunchLog("mods : hote de confiance %llu : %d DLL retenues%s", (unsigned long long)g_syncTrustNew, (int)files.size(), ok ? "" : " (ECRITURE IMPOSSIBLE)");
+    g_syncTrustNew = 0;
+}
 // Fin : ce que l'hote n'a plus est retire de la copie (DLL des mods ; fichiers des CD, de la radio, du hockey, cartes de l'editeur).
 static void SyncPrune(const std::wstring &dir, const std::string &prefix, const wchar_t *pattern)
 {
@@ -715,6 +790,7 @@ static void SyncFinishLocked()
             LaunchLog("mods : debit mesure %d Ko/s (%llu octets en %.0f s)", kb, (unsigned long long)g_syncGot.load(), secs);
         }
     }
+    SyncTrustSaveLocked();
     g_sync = SY_DONE;
     LaunchLog("mods : copie de l'hote a jour (%d mod(s), %d contenu(s))", (int)g_hostOffer.mods.size(), (int)g_hostOffer.cats.size());
 }
@@ -735,7 +811,7 @@ static void SyncStartLocked()
     g_syncStartT = GetTickCount64();
     LaunchLog("mods : telechargement de %d fichier(s), %llu octets", (int)g_syncNeed.size(), (unsigned long long)total);
     // fichiers vides : rien a demander
-    for (int i : g_syncNeed) if (!g_hostOffer.files[i].size) {
+    for (int i : g_syncNeed) if (!g_hostOffer.files[i].size && SyncWriteOk(g_hostOffer.files[i])) {
         std::wstring p = SyncLocal(g_hostOffer.files[i].path);
         SHCreateDirectoryExW(NULL, DirOf(p).c_str(), NULL);
         HANDLE fh = CreateFileW(p.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -749,55 +825,122 @@ static void SyncStartLocked()
 }
 
 // Comparaison de la copie avec la liste de l'hote (fil a part : empreintes des fichiers).
+static bool SyncTrustable(uint64_t *id);
 static DWORD WINAPI SyncCheckThread(void *p)
 {
     int gen = (int)(intptr_t)p;
     SyncOffer o;
+    std::map<std::string, std::pair<uint32_t, uint64_t>> ok;
+    std::set<std::string> shaBad;
+    uint64_t noSig, trustId = 0;
+    bool trustable;
     {
         std::lock_guard<std::mutex> lk(g_syncMx);
         if (gen != g_syncGen) return 0;
-        o = g_hostOffer;
+        o = g_hostOffer; ok = g_syncOk; shaBad = g_syncShaBad; noSig = g_syncNoSig;
+        trustable = SyncTrustable(&trustId);
     }
+    std::wstring ownMods = MscModsDir();
+    // Les fichiers de programme de la liste, ou qu'ils soient. Une DLL deja la, identique, est listee aussi : le jeu la chargera.
+    std::vector<SyncProg> progs, rows;
+    std::vector<char> skip(o.files.size(), 0);
+    std::set<std::string> seen;
+    int forbidden = 0;
+    uint64_t sig = 0;
+    for (int i = 0; i < (int)o.files.size(); i++) {
+        const SyncFile &f = o.files[i];
+        int k = ProgKind(f.path);
+        if (k == PROG_NONE) continue;
+        std::string key = ProgKey(f.path);
+        if (k == PROG_INTERDIT || !seen.insert(key).second) {
+            skip[i] = 1; forbidden++;
+            rows.push_back({ f.path, f.size, f.hash, 3 });
+            LaunchLog("mods : %s refuse d'office, jamais ecrit (%s)", f.path.c_str(), k == PROG_INTERDIT ? "pas une DLL" : "deux fois dans la liste");
+            continue;
+        }
+        uint64_t h = 0; uint32_t sz = 0;
+        std::wstring dst = SyncLocal(f.path), own = !f.path.compare(0, 5, "Mods\\") ? ownMods + Widen(f.path.substr(5), CP_UTF8) : g_gameDir + Widen(f.path, CP_UTF8);
+        bool hasDst = FileFnvCached(dst, &h, &sz), same = hasDst && sz == f.size && h == f.hash, hasOwn = false;
+        if (!same && _wcsicmp(own.c_str(), dst.c_str()) && FileFnvCached(own, &h, &sz)) { hasOwn = true; same = sz == f.size && h == f.hash; }
+        progs.push_back({ f.path, f.size, f.hash, same ? 2 : hasDst || hasOwn ? 1 : 0 });
+        sig = Fnv(key.data(), key.size(), sig ? sig : Fnv(NULL, 0));
+        sig = Fnv(&f.size, sizeof(f.size), sig);
+        sig = Fnv(&f.hash, sizeof(f.hash), sig);
+    }
+    bool refused = !progs.empty() && sig == noSig;
+    // L'accord : deja donne dans ce salon, ou hote de confiance dont cette DLL exacte est connue. Une DLL nouvelle ou modifiee redemande.
+    std::vector<SyncProg> ask;
+    std::map<std::string, std::string> shaWant;
+    std::vector<TrustFile> known;
+    bool trusted = trustable && !progs.empty() && !refused && TrustFilesOf(trustId, g_game, known);
+    if (!refused) for (const SyncProg &q : progs) {
+        std::string key = ProgKey(q.path);
+        auto it = ok.find(key);
+        if (it != ok.end() && it->second.first == q.size && it->second.second == q.hash) continue;
+        const TrustFile *t = NULL;
+        if (trusted && !shaBad.count(key)) for (const TrustFile &k : known) if (ProgKey(k.path) == key && k.size == q.size && k.fnv == q.hash) t = &k;
+        if (!t) { ask.push_back(q); continue; }
+        ok[key] = std::make_pair(q.size, q.hash);
+        std::wstring dst = SyncLocal(q.path);
+        if (!FileExists(dst) || cle::Hex(cle::Sha256File(dst)) != t->sha) shaWant[key] = t->sha;   // (a recevoir : l'arrivee sera comparee)
+    }
+    bool wait = !ask.empty();
+    if (wait) { if (trusted) rows.insert(rows.begin(), ask.begin(), ask.end()); else rows.insert(rows.begin(), progs.begin(), progs.end()); }
     std::vector<int> need;
     uint64_t bytes = 0, reused = 0;
     int reusedN = 0;
     // Deja chez l'invite (demande de JD, 11/10 : « s'il a deja un mod que j'ai aussi, ca lui telecharge quand meme ») : un
     // fichier identique a celui de l'hote (meme taille, meme empreinte : la meme version exacte) dans SES mods (son dossier
     // Mods de MSCLoader) ou son jeu (CD, radio...) est recopie dans la copie de l'hote au lieu d'etre telecharge. Ses
-    // propres dossiers ne sont que lus ; un fichier d'une autre version vient de l'hote.
-    std::wstring ownMods = MscModsDir();
+    // propres dossiers ne sont que lus ; un fichier d'une autre version vient de l'hote. Question en attente : rien n'est recopie.
     for (int i = 0; i < (int)o.files.size(); i++) {
+        if (skip[i]) continue;
+        const SyncFile &f = o.files[i];
+        if (refused && (ProgKind(f.path) == PROG_DLL || !f.path.compare(0, 5, "Mods\\"))) continue;   // (refus : ni ses DLL ni leurs fichiers)
+        if (shaWant.count(ProgKey(f.path))) { need.push_back(i); bytes += f.size; continue; }
         uint64_t h = 0;
         uint32_t sz = 0;
-        std::wstring dst = SyncLocal(o.files[i].path);
-        if (FileFnvCached(dst, &h, &sz) && sz == o.files[i].size && h == o.files[i].hash) continue;
-        std::wstring rel = Widen(o.files[i].path, CP_UTF8);
-        std::wstring own = !o.files[i].path.compare(0, 5, "Mods\\") ? ownMods + rel.substr(5) : g_gameDir + rel;
-        if (_wcsicmp(own.c_str(), dst.c_str()) && FileFnvCached(own, &h, &sz) && sz == o.files[i].size && h == o.files[i].hash) {
+        std::wstring dst = SyncLocal(f.path);
+        if (FileFnvCached(dst, &h, &sz) && sz == f.size && h == f.hash) continue;
+        std::wstring rel = Widen(f.path, CP_UTF8);
+        std::wstring own = !f.path.compare(0, 5, "Mods\\") ? ownMods + rel.substr(5) : g_gameDir + rel;
+        if (_wcsicmp(own.c_str(), dst.c_str()) && FileFnvCached(own, &h, &sz) && sz == f.size && h == f.hash) {
+            if (wait) continue;
             size_t sl = dst.find_last_of(L'\\');
             if (sl != std::wstring::npos) SHCreateDirectoryExW(NULL, dst.substr(0, sl).c_str(), NULL);
             SetFileAttributesW(dst.c_str(), FILE_ATTRIBUTE_NORMAL);
             if (CopyFileW(own.c_str(), dst.c_str(), FALSE)) { reusedN++; reused += sz; continue; }
         }
         need.push_back(i);
-        bytes += o.files[i].size;
+        bytes += f.size;
     }
     if (reusedN) LaunchLog("mods : %d fichier(s) deja chez l'invite, a la meme version (%llu octets) : recopies de ses mods, pas telecharges", reusedN, (unsigned long long)reused);
     std::lock_guard<std::mutex> lk(g_syncMx);
     if (gen != g_syncGen) return 0;
     g_syncNeed = need;
     g_syncTotal = bytes;
+    g_syncNo = refused;
+    g_syncHasProg = !progs.empty();
+    g_syncForbidden = forbidden;
+    g_syncOk = ok;
+    g_syncShaWant = shaWant;
     std::string names;
     for (auto &m : o.mods) names += " " + m;
-    LaunchLog("mods : %d mod(s) chez l'hote :%s, %d fichier(s) a recevoir (%llu octets)", (int)o.mods.size(), names.c_str(), (int)need.size(), (unsigned long long)bytes);
+    LaunchLog("mods : %d mod(s) chez l'hote :%s, %d fichier(s) a recevoir (%llu octets), %d DLL dans la liste", (int)o.mods.size(), names.c_str(), (int)need.size(), (unsigned long long)bytes, (int)progs.size());
     // (les 10 premiers, nommes : Mr_Hokly, 24/10, « les mods sont retelecharges » -- des reglages reecrits a chaque partie ?)
     for (size_t k = 0; k < need.size() && k < 10; k++)
         LaunchLog("mods : a recevoir %s (%u octets)", o.files[need[k]].path.c_str(), o.files[need[k]].size);
-    // Mods de l'hote : acceptes d'office (demande de JD, 10/10 : « si quelqu'un rejoint une partie avec des mods, que ca lui
-    // installe MSCLoader et lui prenne les mods » ; retour de Menos : un ami sans les mods entrait quand meme). Seul ce qui
-    // n'est que du contenu (CD, images) demande encore TOUT ACCEPTER, sauf ModsAuto.
+    if (wait) {   // la question : rien n'est telecharge ni charge avant la reponse (SyncAskOpen)
+        g_syncAsk = rows; g_syncAskAll = progs; g_syncAskSig = sig; g_syncAskDll = true;
+        g_sync = SY_ASK;
+        LaunchLog("mods : accord demande pour %d DLL (hote de confiance : %d)", (int)ask.size(), (int)trusted);
+        return 0;
+    }
+    g_syncAskDll = false;
+    // Le contenu sans code (les DLL ont leur accord) : accepte d'office avec des mods acceptes (demande de JD, 10/10 ; retour de Menos :
+    // un ami sans les mods entrait quand meme) ou en retard. Sinon TOUT ACCEPTER, sauf ModsAuto.
     // (gros envoi : a accepter, avec la taille et le temps estime -- sauf « Tout accepter de cet hote »)
-    if ((!o.mods.empty() || g_syncLateAuto) && bytes <= kSyncAskBytes) g_syncAccepted = true;   // (invite en retard : tout, sauf un gros envoi)
+    if (((!o.mods.empty() && !refused) || g_syncLateAuto) && bytes <= kSyncAskBytes) g_syncAccepted = true;
     if (bytes > kSyncAskBytes && !g_syncAccepted && !ModsAuto()) LaunchLog("mods : gros envoi (%llu octets, %s) : a accepter", (unsigned long long)bytes, Narrow(SyncEta(bytes), CP_UTF8).c_str());
     if (need.empty()) SyncFinishLocked();
     else if (g_syncAccepted || ModsAuto()) { g_syncAccepted = true; SyncStartLocked(); }
@@ -910,7 +1053,7 @@ static void SyncOnData(const std::string &m)
     std::lock_guard<std::mutex> lk(g_syncMx);
     if (g_sync != SY_GET || idx >= (int)g_hostOffer.files.size() || std::find(g_syncNeed.begin(), g_syncNeed.end(), idx) == g_syncNeed.end()) return;
     const SyncFile &f = g_hostOffer.files[idx];
-    if ((uint64_t)off + n > f.size) return;
+    if ((uint64_t)off + n > f.size || !SyncWriteOk(f)) return;
     g_syncLastT = GetTickCount();
     if (g_syncInflight > 0) g_syncInflight--;
     std::wstring path = SyncLocal(f.path), part = path + L".part";
@@ -945,6 +1088,19 @@ static void SyncOnData(const std::string &m)
             LaunchLog("mods : %s", g_syncWhy.c_str());
             return;
         }
+        auto want = g_syncShaWant.find(ProgKey(f.path));
+        if (want != g_syncShaWant.end() && cle::Hex(cle::Sha256File(part)) != want->second) {   // (hote de confiance : pas la DLL acceptee -- la question revient)
+            LaunchLog("mods : %s : recue differente de celle acceptee (SHA-256), accord redemande", f.path.c_str());
+            DeleteFileW(part.c_str());
+            g_syncShaBad.insert(want->first);
+            g_syncOk.erase(want->first);
+            SyncCloseParts();
+            g_syncGen++;
+            g_sync = SY_CHECK;
+            HANDLE t = CreateThread(NULL, 0, SyncCheckThread, (void *)(intptr_t)(int)g_syncGen, 0, NULL);
+            if (t) CloseHandle(t);
+            return;
+        }
         if (!MoveFileExW(part.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
             g_syncWhy = "remplacement impossible : " + f.path + " (jeu ouvert ?)";
             g_sync = SY_FAIL;
@@ -960,13 +1116,15 @@ static void SyncOnData(const std::string &m)
 
 // Invite : MSCLoader absent ici (celui choisi dans l'onglet MODS) : installe pour les mods de l'hote. ask : d'abord la question
 // (demande de JD, 12/10 : « Ce serveur utilise des mods, voulez-vous installer MSCLoader ? », Oui / Non ; oui : celui de MWCoop,
-// sans rien changer au jeu ; non : l'invite joue sans les mods, une seule question par liste de l'hote).
-static void SyncEnsureMsc(bool ask = false)
+// sans rien changer au jeu ; non : l'invite joue sans les mods, une seule question par liste de l'hote). agreed : ses DLL viennent
+// d'etre acceptees, pas une 2e question.
+static void SyncEnsureMsc(bool ask = false, bool agreed = false)
 {
     MscScan();   // (MSCLoader installe ? releve a jour)
     if (!g_mscInstalled && g_mscInstall != 1 && !g_gameDir.empty() && !GameProcessRunning()) {
         bool own = MscOwn();
-        if (ask) {
+        if (ask && agreed) { own = true; if (g_mscOwnPref < 0) { g_mscOwnPref = 1; WritePrivateProfileStringW(L"Lanceur", L"MSCLoaderMWCoop", L"1", g_iniLauncher.c_str()); } }
+        else if (ask) {
             int r = MessageBoxW(g_wnd, T(L"Ce salon utilise des mods (MSCLoader).\n\nInstaller MSCLoader (version Coop de MWCoop, install\u00E9e \u00E0 part) et recevoir les mods de l'h\u00F4te ?\n\nNon : tu rejoins sans les mods (des objets ou des voitures de l'h\u00F4te peuvent manquer).",
                                          L"This lobby uses mods (MSCLoader).\n\nInstall MSCLoader (MWCoop's Coop version, installed apart) and get the host's mods?\n\nNo: you join without the mods (some of the host's items or cars may be missing)."),
                                  L"MWCoop", MB_YESNO | MB_ICONQUESTION);
@@ -985,12 +1143,109 @@ static void SyncEnsureMsc(bool ask = false)
 // TOUT ACCEPTER (et la prochaine fois sans demander). MSCLoader absent : installe aussi.
 static void SyncAccept()
 {
+    if (g_syncAskDll) return;   // (la question des DLL a sa fenetre : ce bouton n'y repond jamais)
     if (const Opt *o = OptByKey("ModsAuto")) if (!OptGet(*o)) OptSet(*o, 1);
-    SyncEnsureMsc();
+    if (!g_syncNo) SyncEnsureMsc();
     std::lock_guard<std::mutex> lk(g_syncMx);
     g_syncAccepted = true;
     LaunchLog("mods : TOUT ACCEPTER");
     if (g_sync == SY_ASK) SyncStartLocked();
+}
+// Reponse a la question des DLL : DB_ACCEPT, DB_ALWAYS ou DB_REFUSE ; puis nouvelle comparaison (les fichiers acceptes, ou rien que le contenu).
+static void SyncDllAnswer(int a)
+{
+    std::lock_guard<std::mutex> lk(g_syncMx);
+    if (g_sync != SY_ASK || !g_syncAskDll) return;
+    g_syncAskDll = false;
+    if (a == DB_ACCEPT || a == DB_ALWAYS) {
+        for (auto &q : g_syncAskAll) g_syncOk[ProgKey(q.path)] = std::make_pair(q.size, q.hash);
+        g_syncAccepted = true;
+        g_syncNoSig = 0;
+        uint64_t id = 0;
+        if (a == DB_ALWAYS && SyncTrustable(&id)) g_syncTrustNew = id;
+        LaunchLog("mods : %d DLL acceptees par le joueur%s", (int)g_syncAskAll.size(), g_syncTrustNew ? " (toujours faire confiance a cet hote)" : "");
+    } else {
+        g_syncNoSig = g_syncAskSig;
+        g_syncAccepted = false;
+        LaunchLog("mods : %d DLL refusees par le joueur : jeu sans MSCLoader", (int)g_syncAskAll.size());
+    }
+    g_syncGen++;
+    g_sync = SY_CHECK;
+    HANDLE t = CreateThread(NULL, 0, SyncCheckThread, (void *)(intptr_t)(int)g_syncGen, 0, NULL);
+    if (t) CloseHandle(t);
+}
+// Refus sur lequel le joueur revient (bouton du salon) : la question revient.
+static void SyncDllReask()
+{
+    std::lock_guard<std::mutex> lk(g_syncMx);
+    if (!g_syncNo || g_sync == SY_GET) return;
+    g_syncNoSig = 0;
+    g_syncNo = false;
+    g_syncGen++;
+    g_sync = SY_CHECK;
+    HANDLE t = CreateThread(NULL, 0, SyncCheckThread, (void *)(intptr_t)(int)g_syncGen, 0, NULL);
+    if (t) CloseHandle(t);
+}
+// Seul un hote Steam (identifiant verifie par Steam), dans un salon prive ou on est entre, peut etre de confiance.
+static bool SyncTrustable(uint64_t *id)
+{
+    if (g_lobby != LB_GUEST || g_lateSync || !g_lobbyPrive) return false;
+    uint64_t h = !g_testSalon.empty() && g_testTrustId ? g_testTrustId : g_lobbySteam ? g_sHost : 0;
+    if (!h) return false;
+    *id = h;
+    return true;
+}
+static bool SyncAskStale(int gen) { return gen != g_syncGen || g_sync != SY_ASK || !g_syncAskDll || (g_lobby != LB_GUEST && !g_lateSync); }
+// La question, sur le fil de la fenetre : modale, le salon continue derriere (SyncAskStale la ferme si la liste change ou si le salon se ferme).
+static void SyncAskOpen()
+{
+    static bool open;
+    static int asked = -1;
+    if (open || g_db) return;   // (hotes de confiance ouverts : la question attend, ce n'est pas un refus)
+    std::vector<SyncProg> rows;
+    int gen;
+    { std::lock_guard<std::mutex> lk(g_syncMx); rows = g_syncAsk; gen = g_syncGen; }
+    int nDll = 0;
+    for (auto &q : rows) if (q.state != 3) nDll++;
+    uint64_t id = 0;
+    bool always = SyncTrustable(&id);
+    bool steam = g_lobbySteam || g_lateSteam || always;
+    std::wstring host;
+    if (steam) host = g_sHostName;
+    else { EnterCriticalSection(&g_lcs); for (auto &p : g_peers) if (p.id == 0) host = ShowSafe(p.name); LeaveCriticalSection(&g_lcs); }
+    if (host.empty()) host = T(L"L'hôte", L"The host");
+    host = FitText(ShowSafe(Narrow(host, CP_UTF8)), 18, FontStyleBold, 260);
+    wchar_t who[200];
+    if (steam) swprintf_s(who, T(L"Compte Steam : %s (%llu)", L"Steam account: %s (%llu)"), ShowSafe(Narrow(g_sHostName, CP_UTF8)).c_str(), (unsigned long long)(!g_testSalon.empty() && g_testTrustId ? g_testTrustId : g_sHost));
+    else swprintf_s(who, L"%s", T(L"Hôte non vérifié (IP)", L"Unverified host (IP)"));
+    if (!g_testSalon.empty()) {   // (/testsalon : jamais de fenetre -- la liste au journal, et la reponse de /reponsemods)
+        if (asked != gen) {
+            asked = gen;
+            TestLog("accord : %d DLL de %s, %s, toujours=%d, %llu octets a recevoir", nDll, Narrow(host, CP_UTF8).c_str(), Narrow(who, CP_UTF8).c_str(), (int)always, (unsigned long long)g_syncTotal.load());
+            for (auto &q : rows) TestLog("accord :   %s | %u | %s", q.path.c_str(), q.size, q.state == 0 ? "nouveau" : q.state == 1 ? "modifie" : q.state == 2 ? "identique" : "REFUSE");
+            if (g_testModsAnswer == L"accepter") SyncDllAnswer(DB_ACCEPT);
+            else if (g_testModsAnswer == L"refuser") SyncDllAnswer(DB_REFUSE);
+            else if (g_testModsAnswer == L"confiance") SyncDllAnswer(always ? DB_ALWAYS : DB_ACCEPT);
+            else TestLog("accord : sans reponse");
+        }
+        return;
+    }
+    DbState s;
+    for (auto &q : rows) s.rows.push_back(DbFileRow(q.path, q.size, q.state));
+    DbConsentText(s, host, who, nDll, g_syncTotal, SyncEta(g_syncTotal), always);
+    s.stale = SyncAskStale;
+    s.staleArg = gen;
+    open = true;
+    int r = DbRun(s, g_wnd);
+    open = false;
+    if (r == DB_CLOSED) return;
+    if (gen != g_syncGen) return;
+    SyncDllAnswer(r);
+    if (r == DB_REFUSE) {
+        std::wstring msg = T(L"Tu joues sans les mods de l'hôte : des objets peuvent manquer ou être différents", L"You play without the host's mods: some items may be missing or different");
+        SetStatus(K_WARN, L"%s", msg.c_str());
+        if (g_lobby == LB_GUEST) LobbyChatAdd(0, "MWCoop", Narrow(msg, CP_UTF8));
+    }
 }
 static void SyncRetry()
 {
@@ -1013,9 +1268,9 @@ static bool SyncLaunchPending()
     int s = g_sync;
     if (s == SY_NONE || s == SY_OFF || s == SY_FAIL) return false;
     bool mods, msc;
-    { std::lock_guard<std::mutex> lk(g_syncMx); mods = !g_hostOffer.mods.empty(); msc = g_hostOffer.msc; }
+    { std::lock_guard<std::mutex> lk(g_syncMx); mods = !g_hostOffer.mods.empty() || g_syncHasProg; msc = g_hostOffer.msc; }
     if (!mods) return false;
-    return s != SY_DONE || (msc && g_mscInstall == 1);
+    return s != SY_DONE || (msc && !g_syncNo && g_mscInstall == 1);
 }
 
 // lancement.ini de l'invite : le contenu recu de l'hote (dossier, categories, images), lu directement par le jeu
@@ -1042,7 +1297,7 @@ static void SyncTick()
     // qu'il etait pret -> plus pret, jusqu'a la fin.
     if (g_lobby != LB_GUEST) g_wantReady = false;   // (salon quitte : rien a garder pour le suivant)
     else {
-        if (g_meReady && SyncBusy()) { GuestToggleReady(); g_wantReady = true; SetStatus(K_NORMAL, T(L"L'h\u00F4te envoie de nouveaux fichiers : pr\u00EAt d\u00E8s qu'ils sont re\u00E7us", L"The host is sending new files: ready as soon as they're received")); }
+        if (g_meReady && (SyncBusy() || g_syncAskDll)) { GuestToggleReady(); g_wantReady = true; SetStatus(K_NORMAL, T(L"L'h\u00F4te envoie de nouveaux fichiers : pr\u00EAt d\u00E8s qu'ils sont re\u00E7us", L"The host is sending new files: ready as soon as they're received")); }
         else if (g_wantReady && !g_meReady && !SyncBusy()) {
             int s = g_sync;
             if (s == SY_FAIL) { g_wantReady = false; SetStatus(K_WARN, T(L"Envoi de l'h\u00F4te rat\u00E9 : R\u00C9ESSAYER, puis PR\u00CAT", L"Host's files failed: RETRY, then READY")); }
@@ -1052,25 +1307,38 @@ static void SyncTick()
     // Invite, mods de l'hote acceptes d'office (case "Accepter l'envoi de l'hote", ModsAuto) : MSCLoader installe ici aussi,
     // une fois par liste de l'hote. Avant : seulement par TOUT ACCEPTER, que la case cochee ne montre jamais (retour d'un
     // joueur, 08/10 : « les mods ne se synchronisent pas, j'ai coche l'envoi de l'hote »).
-    if ((g_sync == SY_GET || g_sync == SY_DONE) && (g_syncAccepted || ModsAuto())) {
+    if ((g_sync == SY_GET || g_sync == SY_DONE) && !g_syncNo && (g_syncAccepted || ModsAuto())) {
         static uint64_t mscFor;
-        uint64_t key; bool msc;
-        { std::lock_guard<std::mutex> lk(g_syncMx); key = g_hostOffer.key; msc = g_hostOffer.msc; }
-        if (msc && key != mscFor) { mscFor = key; SyncEnsureMsc(true); }
+        uint64_t key; bool msc, agreed;
+        { std::lock_guard<std::mutex> lk(g_syncMx); key = g_hostOffer.key; msc = g_hostOffer.msc; agreed = !g_syncOk.empty(); }
+        if (msc && key != mscFor) { mscFor = key; SyncEnsureMsc(true, agreed); }
     }
     if (g_testSlowMs && g_sync == SY_GET) { std::lock_guard<std::mutex> lk(g_syncMx); SyncPumpLocked(); }   // (essai /lent)
+    if (g_syncBadPath.exchange(false)) SetStatus(K_WARN, L"%s", T(L"Liste de l'hôte refusée : un de ses chemins est dangereux", L"Host's list refused: one of its paths is dangerous"));
+    {
+        static int told;
+        int nf = g_syncForbidden;
+        if (nf != told) { told = nf; if (nf) SetStatus(K_WARN, T(L"%d fichier(s) de l'hôte refusé(s) d'office : pas des mods (.exe, .bat...)", L"%d host file(s) refused outright: not mods (.exe, .bat...)"), nf); }
+    }
+    // Invite en retard par IP, la question ouverte : l'hote raccroche au bout de 60 s sans message (LateSession).
+    if (g_lateSync && !g_lateSteam && g_syncAskDll) {
+        static DWORD lastKeep;
+        if (GetTickCount() - lastKeep > 20000) { lastKeep = GetTickCount(); Wr w; w.u8(M_PONG); w.u32(0); GuestSend(w); }
+    }
     // Invite : son avancement a l'hote (LANCER attend la fin ; demande de JD, 13/10).
     {
-        static int sentDl = -2;
+        static int sentDl = -2, sentSt = 0;
         static DWORD sentT;
-        if (g_lobby != LB_GUEST) sentDl = -2;
+        if (g_lobby != LB_GUEST) { sentDl = -2; sentSt = 0; }
         else if (g_sync != SY_NONE) {   // (liste de l'hote traitee : avant, l'hote attend -- PeerSyncPending)
             int dl = -1;
             if (SyncBusy() || SyncLaunchPending()) { uint64_t tot = g_syncTotal, got = g_syncGot; dl = tot ? (int)min<uint64_t>(99, got * 100 / tot) : 0; }
-            if (dl != sentDl && (dl < 0 || sentDl < 0 || GetTickCount() - sentT > 1500)) {
-                sentDl = dl; sentT = GetTickCount();
-                if (g_lobbySteam) SSetMember("dl", dl < 0 ? "ok" : std::to_string(dl));
-                else { Wr w; w.u8(M_SYNCST); w.u8(dl < 0 ? 255 : dl); GuestSend(w); }
+            // (etat de l'accord en plus, st : 1 a refuse, 2 doit repondre. Un octet de plus dans le message / une donnee de plus : les lanceurs d'avant les ignorent)
+            int st = g_syncAskDll ? 2 : g_syncNo ? 1 : 0;
+            if (st != sentSt || (dl != sentDl && (dl < 0 || sentDl < 0 || GetTickCount() - sentT > 1500))) {
+                sentDl = dl; sentSt = st; sentT = GetTickCount();
+                if (g_lobbySteam) { SSetMember("dl", dl < 0 ? "ok" : std::to_string(dl)); SSetMember("modsetat", st == 2 ? "ask" : st == 1 ? "refus" : ""); }
+                else { Wr w; w.u8(M_SYNCST); w.u8(dl < 0 ? 255 : dl); w.u8(st); GuestSend(w); }
             }
         }
     }
@@ -1095,6 +1363,7 @@ static void SyncTick()
         static DWORD last;
         if (GetTickCount() - last >= 1000 || g_offerNew) { last = GetTickCount(); SyncHostTick(); }
     }
+    if (g_syncAskDll && g_sync == SY_ASK && (g_lobby == LB_GUEST || g_lateSync)) SyncAskOpen();   // (en dernier : modale)
 }
 
 // Lancement en invite : quoi faire de MSCLoader. 0 : comme d'habitude (pas de salon : rejoindre en jeu...),
@@ -1108,7 +1377,7 @@ static int SyncLaunchKind()
     bool installed = MscOwn() ? MscOwnInstalled() : MscOfficialInstalled();
     bool msc;
     { std::lock_guard<std::mutex> lk(g_syncMx); msc = g_hostOffer.msc; }
-    return s == SY_DONE && msc && installed ? 2 : 1;
+    return s == SY_DONE && msc && installed && !g_syncNo ? 2 : 1;   // (DLL refusees, question sans reponse : sans MSCLoader)
 }
 
 // Copie de lancement de l'invite : comme PrepareMirror, mais Mods -> la copie des mods de l'hote (avec), et
@@ -1157,8 +1426,47 @@ static void GuestMscAssets(const std::wstring &coop)
               Narrow(src, CP_UTF8).c_str(), dirs, files, menu ? "present" : "ABSENT (reinstaller MSCLoader dans l'onglet Mods)");
     if (!menu) SetStatus(K_WARN, T(L"Fichiers de MSCLoader absents : réinstalle-le dans l'onglet Mods", L"MSCLoader files missing: reinstall it in the Mods tab"));
 }
+// Avant de lancer : dans ces dossiers, tout fichier de programme hors de la liste acceptee de CE salon (reste d'un autre salon...)
+// est retire ; false s'il reste quelque chose qu'on ne peut pas retirer (le jeu partira sans ces dossiers). Jamais a travers une jonction.
+static bool SyncGuardDir(const std::wstring &dir, const std::string &prefix, const std::map<std::string, std::pair<uint32_t, uint64_t>> &ok, int &kept, int &removed)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return true;
+    bool good = true;
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L"..") continue;
+        std::string rel = prefix + Narrow(n, CP_UTF8);
+        std::wstring p = dir + n;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) { LaunchLog("mods : %s : jonction inattendue, dossier refuse", rel.c_str()); good = false; continue; }
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { good = SyncGuardDir(p + L"\\", rel + "\\", ok, kept, removed) && good; continue; }
+        int k = ProgKind(rel);
+        if (k == PROG_NONE) continue;
+        auto it = ok.find(ProgKey(rel));
+        uint64_t hash = 0; uint32_t sz = 0;
+        if (k == PROG_DLL && it != ok.end() && FileFnv(p, &hash, &sz) && sz == it->second.first && hash == it->second.second) { kept++; continue; }
+        SetFileAttributesW(p.c_str(), FILE_ATTRIBUTE_NORMAL);
+        if (DeleteFileW(p.c_str())) { removed++; LaunchLog("mods : %s retire avant le lancement : pas dans la liste acceptee de ce salon", rel.c_str()); }
+        else { good = false; LaunchLog("mods : %s pas dans la liste acceptee et impossible a retirer (erreur %lu)", rel.c_str(), GetLastError()); }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return good;
+}
+static bool SyncGuard(bool mods)
+{
+    std::map<std::string, std::pair<uint32_t, uint64_t>> ok;
+    { std::lock_guard<std::mutex> lk(g_syncMx); ok = g_syncOk; }
+    int kept = 0, removed = 0;
+    bool good = true;
+    if (mods) good = SyncGuardDir(CoopModsDir(), "Mods\\", ok, kept, removed);
+    good = SyncGuardDir(ContentDir(), "", ok, kept, removed) && good;
+    LaunchLog("mods : controle avant lancement : %d DLL acceptee(s) gardee(s), %d fichier(s) retire(s)%s", kept, removed, good ? "" : ", DOSSIER REFUSE");
+    return good;
+}
 static bool PrepareGuestCopy(const std::wstring &m, bool mods)
 {
+    if (!SyncGuard(mods)) return false;
     SHCreateDirectoryExW(NULL, m.c_str(), NULL);
     std::wstring coop = CoopModsDir(), cont = ContentDir();
     if (mods) SHCreateDirectoryExW(NULL, coop.c_str(), NULL);
@@ -1253,7 +1561,7 @@ static int SyncBtnAt(float x, float y)   // 1 : TOUT ACCEPTER / REESSAYER ; 2 : 
     if (!SyncBarShown() || kSyncBtn.Width <= 0 || !kSyncBtn.Contains(x, y)) return 0;
     if (g_lobby == LB_HOST) return 2;
     int s = g_sync;
-    return s == SY_ASK || s == SY_FAIL ? 1 : 0;
+    return (s == SY_ASK && !g_syncAskDll) || s == SY_FAIL || (g_syncNo && s == SY_DONE) ? 1 : 0;
 }
 static std::wstring SizeText(uint64_t b)
 {
@@ -1291,6 +1599,8 @@ static void DrawSyncCard(Graphics &g, RectF c, int hot)
         int s = g_sync, n = (int)g_hostOffer.mods.size(), nc = (int)g_hostOffer.cats.size();
         wchar_t b[200];
         if (s == SY_CHECK) line = T(L"V\u00E9rification\u2026", L"Checking\u2026");
+        else if (s == SY_ASK && g_syncAskDll) { line = T(L"Fichiers de programme : réponds à la fenêtre", L"Program files: answer the window"); col = kWarn; }
+        else if (g_syncNo && s != SY_ASK && s != SY_GET && s != SY_FAIL) { line = T(L"Mods refusés : tu joues sans eux", L"Mods refused: you play without them"); col = kWarn; btn = T(L"VOIR LES FICHIERS", L"SEE THE FILES"); }
         else if (s == SY_ASK) {
             swprintf_s(b, T(L"%d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"%d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(g_syncTotal).c_str());
             if (g_syncTotal > kSyncAskBytes) { line = b; line += L" \u00B7 " + SyncEta(g_syncTotal); wcsncpy_s(b, line.c_str(), _TRUNCATE); }
@@ -1408,7 +1718,7 @@ static bool LateBegin(bool steam)
 {
     if (steam && (g_steamUp != 1 || !sapi::nw || !g_sHost)) return false;
     if (steam) SyncReset();   // (IP : deja fait par LobbyJoin -- la liste de l'hote a pu arriver avant ce message)
-    g_syncLateAuto = true;   // (il a demande a rejoindre : ses mods et son contenu sans question, sauf un gros envoi -- JD 25/10 : la taille et le temps avant)
+    g_syncLateAuto = true;   // (il a demande a rejoindre : son contenu sans code sans question, sauf un gros envoi -- JD 25/10 : la taille et le temps avant ; les DLL : toujours l'accord, JD 04/11)
     g_lateSync = true;
     g_lateSteam = steam;
     g_lateT = GetTickCount();

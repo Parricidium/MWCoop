@@ -235,7 +235,7 @@ static bool g_lobbyOptGo;                           // GO / LANCER : les options
 static bool g_sCodeAsk;                             // salon Steam prive sans invitation : le code est demande avant d'entrer (steam.inc)
 // Test UDP du salon (le jeu passe en UDP sur le port du salon) : sans objet (ancien lanceur), en cours, recu, bloque.
 enum { UDP_NA, UDP_WAIT, UDP_OK, UDP_FAIL };
-struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; uint64_t sid; int dl = -1; };   // sid : compte Steam (salon Steam) ; dl : invite qui recoit l'envoi de l'hote (%), -1 fini ou rien, -2 pas encore dit
+struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; uint64_t sid; int dl = -1; bool modsAsk = false, modsNo = false; };   // sid : compte Steam (salon Steam) ; dl : invite qui recoit l'envoi de l'hote (%), -1 fini ou rien, -2 pas encore dit ; modsAsk : doit repondre pour les DLL ; modsNo : les a refusees
 static std::atomic<int> g_lobby(LB_NONE);
 static CRITICAL_SECTION g_lcs;
 static std::vector<LobbyPeer> g_peers;
@@ -254,6 +254,10 @@ static std::string g_testCode;                       // /testsalon ... /code <X>
 static bool g_testPublic;                            // /testsalon hote ... /public : salon public (pas de code)
 static bool g_testNoUdp;
 static DWORD g_testHoldMs, g_testSlowMs;              // ... ; /lent <ms> (invite) : un morceau des mods par <ms>
+static std::wstring g_testModsAnswer;                // /testsalon invite ... /reponsemods accepter|refuser|confiance : reponse a la question des DLL (sinon aucune)
+static uint64_t g_testTrustId;                       // /testsalon invite ... /hotesteam <id> : comme si l'hote du salon etait ce compte Steam (hotes de confiance)
+static DWORD g_testReadyMs = 4500;                   // /testsalon invite ... /attendre <ms> : se met pret apres ce delai
+static int g_testEvil;                               // /testsalon hote ... /offrepiegee 1|2 : liste piegee (noms a point ou espace final et .exe ; chemin qui sort du dossier)
 static bool g_testForce;                             // /testsalon hote ... /forcer : LANCER des qu'un invite est la, pret ou non                          // /testsalon hote ... /garder <ms> : apres LANCER, reste ouvert (invites en retard)                            // /testsalon hote ... /sansudp : l'hote ne repond pas en UDP
 static std::atomic<int> g_udpMine(UDP_NA);          // invite : reponse UDP de l'hote a ses sondes
 static std::atomic<bool> g_hostUdpTest(false);      // invite : l'hote fait le test UDP (sinon : ancien lanceur)
@@ -2791,12 +2795,20 @@ static void BuildOptions()
         else o.dEn = L"Your CDs, radio, CORRIS paint, flag, posters\u2026 copied to your lobby's guests for your game.";
         g_opts.push_back(o);
     }
+    {   // Hotes de confiance (accord-dll.inc) : a retirer
+        Opt o = {};
+        o.tab = TAB_COOP; o.key = "HotesConfiance"; o.kind = O_ACTION; o.action = DR_NONE;
+        o.fr = L"Hôtes de confiance"; o.en = L"Trusted hosts"; o.suffix = L"";
+        o.dFr = L"Hôtes Steam dont tu as dit « Toujours faire confiance » : leurs DLL déjà acceptées arrivent sans question.";
+        o.dEn = L"Steam hosts you chose to \"Always trust\": their DLLs you already accepted arrive without a question.";
+        g_opts.push_back(o);
+    }
     {   // Mods de l'hote (modsync.inc) : TOUT ACCEPTER une fois l'allume
         Opt o = {};
         o.tab = TAB_COOP; o.key = "ModsAuto"; o.def = 0; o.kind = O_TOGGLE;
-        o.fr = L"Accepter l'envoi de l'h\u00F4te sans demander"; o.en = L"Accept the host's files without asking"; o.suffix = L"";
-        o.dFr = L"Les mods MSCLoader de l'h\u00F4te sont toujours re\u00E7us (copi\u00E9s \u00E0 part, les tiens ne sont pas touch\u00E9s ; MSCLoader install\u00E9 s'il manque) et le jeu attend de les avoir. Cette case : ses CD et images aussi, sans demander. Coup\u00E9 : le salon demande d'abord (TOUT ACCEPTER).";
-        o.dEn = L"The host's MSCLoader mods are always received (copied separately, yours are not touched; MSCLoader installed if missing) and the game waits for them. This box: their CDs and images too, without asking. Off: the lobby asks first (ACCEPT ALL).";
+        o.fr = L"Accepter le contenu de l'hôte sans demander"; o.en = L"Accept the host's content without asking"; o.suffix = L"";
+        o.dFr = L"Le contenu sans code : CD, images, réglages. Coupé : le salon demande d'abord (TOUT ACCEPTER). Les fichiers .dll de ses mods sont un programme : ils te sont toujours demandés, avec leur liste exacte.";
+        o.dEn = L"Content without code: CDs, images, settings. Off: the lobby asks first (ACCEPT ALL). The .dll files of their mods are programs: you are always asked about them, with their exact list.";
         g_opts.push_back(o);
     }
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
@@ -4040,6 +4052,7 @@ static bool LateBegin(bool steam);   // (modsync.inc : invite en retard, debut /
 static void LateEnd();
 static void LateFail(const wchar_t *why);
 static bool SyncHostHasMods();   // (modsync.inc)
+static std::wstring ShowSafe(const std::string &utf8);   // (accord-dll.inc)
 // Hote : cet invite recoit (ou va recevoir) l'envoi -- LANCER attend. Pas encore dit (il vient d'arriver, sa liste n'est pas
 // encore traitee) : compte aussi quand l'hote envoie des mods, 30 s au plus (jamais bloque pour de bon).
 static bool PeerSyncPending(const LobbyPeer &p)
@@ -4501,7 +4514,7 @@ static void GuestCounts(int *guests, int *notReady)
 {
     *guests = *notReady = 0;
     EnterCriticalSection(&g_lcs);
-    for (auto &p : g_peers) if (p.id != 0) { (*guests)++; if (!p.ready) (*notReady)++; }
+    for (auto &p : g_peers) if (p.id != 0) { (*guests)++; if (!p.ready || p.modsAsk) (*notReady)++; }
     LeaveCriticalSection(&g_lcs);
 }
 static bool LobbyCanStart()
@@ -4549,7 +4562,7 @@ static void HostStart()
     {   // un invite recoit encore l'envoi : pas de lancement, meme force (demande de JD, 13/10 : son jeu partirait sans les mods)
         std::string dl;
         EnterCriticalSection(&g_lcs);
-        for (auto &p : g_peers) if (PeerSyncPending(p)) { char b[300]; sprintf_s(b, "%s (%d %%)", p.name.c_str(), max(0, p.dl)); dl += (dl.empty() ? "" : ", ") + std::string(b); }
+        for (auto &p : g_peers) if (PeerSyncPending(p) && !p.modsAsk) { char b[300]; sprintf_s(b, "%s (%d %%)", p.name.c_str(), max(0, p.dl)); dl += (dl.empty() ? "" : ", ") + std::string(b); }   // (qui n'a pas encore repondu pour les DLL ne telecharge pas : LANCER peut partir sans lui, plus bas)
         LeaveCriticalSection(&g_lcs);
         if (!dl.empty()) {
             TestLog("salon : LANCER refuse, envoi en cours chez %s", dl.c_str());
@@ -4563,9 +4576,17 @@ static void HostStart()
     int guests, notReady;
     GuestCounts(&guests, &notReady);
     if (notReady && g_testSalon.empty()) {
-        wchar_t q[400];
+        wchar_t q[600];
         swprintf_s(q, T(L"%d invit\u00E9(s) sur %d pas encore pr\u00EAt(s).\n\nLancer quand m\u00EAme ? Leur jeu d\u00E9marrera aussi.",
                         L"%d of %d guest(s) not ready yet.\n\nStart anyway? Their game will start too."), notReady, guests);
+        std::string asking;
+        EnterCriticalSection(&g_lcs);
+        for (auto &p : g_peers) if (p.modsAsk) asking += (asking.empty() ? "" : ", ") + p.name;
+        LeaveCriticalSection(&g_lcs);
+        if (!asking.empty()) {   // (invite absent devant la question des DLL : il ne bloque pas le salon)
+            std::wstring n = ShowSafe(asking);
+            swprintf_s(q, T(L"%s n'a pas encore répondu pour les mods.\n\nLancer sans attendre ? Son jeu démarrera sans tes mods.", L"%s has not answered about the mods yet.\n\nStart without waiting? Their game will start without your mods."), n.c_str());
+        }
         if (MessageBoxW(g_wnd, q, ProductName(), MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
         if (g_lobby != LB_HOST || g_goSent) return;   // (le salon a pu changer pendant la question)
     }
@@ -4908,6 +4929,7 @@ static void GuestToggleReady()
 
 #include "steam.inc"
 #include "mods.inc"
+#include "accord-dll.inc"
 #include "modsync.inc"
 #include "serveur.inc"
 static void OnButton(int id);
@@ -5665,6 +5687,8 @@ static void DrawLobbyPlayersCard(Graphics &g, RectF c, const std::vector<LobbyPe
         Color lc = kGrey;
         wchar_t pb[64];
         if (p.id == 0) line += L" · " + (p.ver == "dev" ? std::wstring(L"dev") : L"v" + Widen(p.ver, CP_UTF8));
+        else if (p.modsAsk) { line += T(L" · doit répondre pour les mods", L" · must answer about the mods"); lc = kWarn; }
+        else if (p.modsNo) { line += T(L" · a refusé les mods", L" · refused the mods"); lc = kWarn; }
         else if (dlp) { swprintf_s(pb, T(L" · télécharge les mods %d %%", L" · downloading the mods %d%%"), max(0, p.dl)); line += pb; lc = kWarn; }
         else if (g_lobbySteam) line += L" · Steam";
         else if (arriving) { swprintf_s(pb, T(L"Arrive… %d ms · TCP seulement", L"Arriving… %d ms · TCP only"), p.ping); line = pb; }
@@ -5826,7 +5850,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
         } else {
             std::string pend;
             int guests = 0, pending = 0;
-            for (auto &p : peers) if (p.id != 0) { guests++; if (PeerSyncPending(p)) { pending++; if (pend.empty()) pend = p.name + " " + std::to_string(max(0, p.dl)) + " %"; } }
+            for (auto &p : peers) if (p.id != 0) { guests++; if (PeerSyncPending(p)) { pending++; if (pend.empty()) pend = p.name + (p.modsAsk ? std::string(" ?") : " " + std::to_string(max(0, p.dl)) + " %"); } }
             int shown = min(3, (int)mods.size());
             for (int i = 0; i < shown; i++) {
                 std::wstring nm = Widen(mods[i], CP_UTF8);
@@ -5847,8 +5871,8 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
         { std::lock_guard<std::mutex> lk(g_syncMx); n = (int)g_hostOffer.mods.size(); why = Widen(g_syncWhy, CP_UTF8); dropped = g_hostOffer.dropped; }
         uint64_t tot = g_syncTotal, got = g_syncGot;
         bool shown = SyncBarShown() && s != SY_NONE && s != SY_OFF;
-        std::wstring chip = s == SY_GET ? T(L"En cours", L"In progress") : s == SY_DONE ? T(L"Prêt ✓", L"Ready ✓") : s == SY_ASK ? T(L"À accepter", L"To accept") : s == SY_FAIL ? T(L"Échec", L"Failed") : s == SY_CHECK ? T(L"Vérification…", L"Checking…") : T(L"Rien", L"Nothing");
-        Color cc = s == SY_GET ? kWarn : s == SY_DONE ? kOk : s == SY_ASK ? kAcc : s == SY_FAIL ? kRed : kInk;
+        std::wstring chip = g_syncNo && s != SY_CHECK && s != SY_ASK ? T(L"Refusés", L"Refused") : s == SY_GET ? T(L"En cours", L"In progress") : s == SY_DONE ? T(L"Prêt ✓", L"Ready ✓") : s == SY_ASK ? T(L"À accepter", L"To accept") : s == SY_FAIL ? T(L"Échec", L"Failed") : s == SY_CHECK ? T(L"Vérification…", L"Checking…") : T(L"Rien", L"Nothing");
+        Color cc = g_syncNo && s != SY_CHECK && s != SY_ASK ? kWarn : s == SY_GET ? kWarn : s == SY_DONE ? kOk : s == SY_ASK ? kAcc : s == SY_FAIL ? kRed : kInk;
         float cw = ChipW(chip);
         Chip(g, RectF(right - cw, y - 1, cw, 26), chip, cc, !shown);
         y += 34;
@@ -5869,6 +5893,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
         std::wstring r1 = T(L"Mods", L"Mods"), r1r, r2 = T(L"Contenu", L"Content"), r2r;
         float p1 = 0, p2 = 0;
         Color c1 = kGrey, c2 = kGrey;
+        bool refused = g_syncNo && s != SY_CHECK;
         if (!shown) { r1r = r2r = T(L"rien pour l'instant", L"nothing for now"); }
         else if (s == SY_CHECK) { r1r = r2r = T(L"vérification…", L"checking…"); p1 = p2 = -2; }
         else if (s == SY_FAIL) { r1r = std::wstring(T(L"échec : ", L"failed: ")) + why; c1 = kRed; r2r = L"—"; }
@@ -5883,7 +5908,8 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             // fichiers avec son circuit converti ; on lisait 102 mods)
             if (n) { swprintf_s(b, L" · %d", n); r1 += b; }
             p1 = sp.modsB ? (float)((double)sp.modsGot / sp.modsB) : s == SY_DONE ? 1.0f : 0.0f;
-            if (s == SY_DONE || sp.modsDone == sp.modsN) {
+            if (refused) { r1r = T(L"refusés : tu joues sans eux", L"refused: you play without them"); c1 = kWarn; p1 = 0; }
+            else if (s == SY_DONE || sp.modsDone == sp.modsN) {
                 if (!n) r1r = T(L"aucun", L"none");
                 else if (sp.modsN == 1) r1r = T(L"1 fichier reçu", L"1 file received");
                 else { swprintf_s(b, T(L"%d fichiers reçus", L"%d files received"), sp.modsN); r1r = b; }
@@ -5911,8 +5937,8 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             int id = UI_LOBBY_OPT + mi * 3;
             bool hot = g_uiHot == id && !go;
             if (hot) { GraphicsPath hp; RoundRect(hp, RectF(row.X - 6, row.Y, row.Width + 12, row.Height), 9); SolidBrush hb(TH(card)); g.FillPath(&hb, &hp); }
-            Text(g, T(L"Tout accepter de cet hôte", L"Accept everything from this host"), RectF(x, y + 3, w - 56, 18), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
-            Text(g, T(L"Sans redemander à chaque fichier", L"Without asking for each file"), RectF(x, y + 21, w - 56, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, T(L"Accepter le contenu de cet hôte", L"Accept this host's content"), RectF(x, y + 3, w - 56, 18), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, T(L"CD, images, réglages · jamais les .dll", L"CDs, images, settings · never the .dll files"), RectF(x, y + 21, w - 56, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             UiToggle(g, RectF(right - 42, y + 8, 42, 24), LobbyOptGet("ModsAuto") == 1, hot);
             if (!go) HotZone(row, id);
             y += 42;
@@ -5925,12 +5951,12 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             Text(g, FitText(b2, 10.5f, FontStyleRegular, w), RectF(x, y, w, 16), 10.5f, FontStyleRegular, kWarn, StringAlignmentNear);   // (une ligne : la colonne est comptee)
             y += 20;
         }
-        if (s == SY_ASK || s == SY_FAIL) {   // TOUT ACCEPTER / REESSAYER (LobbyChoiceAt : 70)
+        if ((s == SY_ASK && !g_syncAskDll) || s == SY_FAIL || (refused && s != SY_GET)) {   // TOUT ACCEPTER / REESSAYER / revoir les DLL refusees (LobbyChoiceAt : 70)
             kSyncBtn = RectF(x, y, w, 40);
             GraphicsPath p; RoundRect(p, kSyncBtn, 12);
             SolidBrush lg(kAcc); g.FillPath(&lg, &p);
             if (g_lobbyHot == 70) { SolidBrush hb(Color(55, 255, 255, 255)); g.FillPath(&hb, &p); }
-            std::wstring bl = s == SY_ASK ? T(L"TOUT ACCEPTER", L"ACCEPT ALL") : T(L"RÉESSAYER", L"RETRY");
+            std::wstring bl = s == SY_ASK ? T(L"TOUT ACCEPTER", L"ACCEPT ALL") : s == SY_FAIL ? T(L"RÉESSAYER", L"RETRY") : T(L"VOIR LES FICHIERS", L"SEE THE FILES");
             if (s == SY_ASK && tot > kSyncAskBytes) {   // gros envoi : la taille et le temps sur le bouton (JD, 25/10 : les voir avant d'accepter)
                 wchar_t b2[160];
                 swprintf_s(b2, T(L"ACCEPTER · %s, %s", L"ACCEPT · %s, %s"), SizeText(tot).c_str(), SyncEta(tot).c_str());
@@ -6000,8 +6026,10 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
                 wchar_t b2[120];
                 std::string dln;
                 int dls = 0;
-                for (auto &pp : peers) if (PeerSyncPending(pp)) { dls++; if (dln.empty()) dln = pp.name; }
+                std::string askn;
+                for (auto &pp : peers) { if (pp.modsAsk) { if (askn.empty()) askn = pp.name; } else if (PeerSyncPending(pp)) { dls++; if (dln.empty()) dln = pp.name; } }
                 if (!guests) swprintf_s(b2, L"%s", T(L"Seul pour l'instant", L"Alone for now"));
+                else if (!askn.empty()) swprintf_s(b2, T(L"%d / %d prêts · %s doit répondre pour les mods", L"%d / %d ready · %s must answer about the mods"), guests - notReady, guests, Widen(askn, CP_UTF8).c_str());
                 else if (dls == 1) swprintf_s(b2, T(L"%d / %d prêts · %s télécharge les mods", L"%d / %d ready · %s is downloading the mods"), guests - notReady, guests, Widen(dln, CP_UTF8).c_str());
                 else if (dls) swprintf_s(b2, T(L"%d / %d prêts · envoi des mods (%d)…", L"%d / %d ready · sending mods (%d)…"), guests - notReady, guests, dls);
                 else swprintf_s(b2, T(L"%d / %d prêt(s)", L"%d / %d ready"), guests - notReady, guests);
@@ -6342,7 +6370,7 @@ static bool LobbyClick(float x, float y)
     int c = LobbyChoiceAt(x, y);
     if (c >= 100) { SteamInviteFriend(c - 100); return true; }
     if (c == 50 || c == 51) { SteamShowFriends(c == 51); return true; }
-    if (c == 70) { if (g_sync == SY_FAIL) SyncRetry(); else SyncAccept(); return true; }
+    if (c == 70) { if (g_sync == SY_FAIL) SyncRetry(); else if (g_sync == SY_ASK) SyncAccept(); else if (g_syncNo) SyncDllReask(); return true; }
     if (c == 71) { GoPage(TAB_CONTENT); return true; }
     if (c >= 200 && c < 300) {   // hote IP : un invite, deux clics en 4 s pour le mettre dehors
         int id = -1;
@@ -6449,8 +6477,8 @@ static void TestSalonStep()
     } else {
         if (!tried && t > 2000) { tried = true; LobbyJoin(); }
         int sy = g_sync;   // mods de l'hote : tout accepter, pret une fois recus
-        if (g_lobby == LB_GUEST && sy == SY_ASK) { TestLog("test : clic sur TOUT ACCEPTER"); SyncAccept(); }
-        if (g_lobby == LB_GUEST && !readied && t > 4500 && sy != SY_ASK && sy != SY_CHECK && sy != SY_GET) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
+        if (g_lobby == LB_GUEST && sy == SY_ASK && !g_syncAskDll) { TestLog("test : clic sur TOUT ACCEPTER"); SyncAccept(); }
+        if (g_lobby == LB_GUEST && !readied && t > g_testReadyMs && sy != SY_ASK && sy != SY_CHECK && sy != SY_GET) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
         static bool chatted;   // (essai du tchat : l'invite ecrit en arrivant, accents compris)
         if (g_lobby == LB_GUEST && !chatted && t > 3000) { chatted = true; g_chatText = L"J'arrive, prêt dans une minute !"; TestLog("test : tchat de l'invite"); LobbyChatSend(); }
     }
@@ -7538,6 +7566,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/garder")) g_testHoldMs = (DWORD)_wtoi(argv[i + 1]);
         if (!_wcsicmp(argv[i], L"/lent")) g_testSlowMs = (DWORD)_wtoi(argv[i + 1]);
         if (!_wcsicmp(argv[i], L"/forcer")) g_testForce = true;
+        if (!_wcsicmp(argv[i], L"/reponsemods")) g_testModsAnswer = argv[i + 1];
+        if (!_wcsicmp(argv[i], L"/attendre")) g_testReadyMs = (DWORD)_wtoi(argv[i + 1]);
+        if (!_wcsicmp(argv[i], L"/offrepiegee")) g_testEvil = _wtoi(argv[i + 1]);
+        if (!_wcsicmp(argv[i], L"/hotesteam")) { g_testTrustId = _wcstoui64(argv[i + 1], NULL, 10); g_sHostName = L"Compte Essai"; }
         if (!_wcsicmp(argv[i], L"/lancer")) g_autoLaunch = !_wcsicmp(argv[i + 1], L"hote") ? MODE_HOST : MODE_SOLO;   // (essai : vrai lancement, fenetre cachee)
         if (!_wcsicmp(argv[i], L"/partie")) g_testPartie = argv[i + 1];
         if (!_wcsicmp(argv[i], L"/code")) g_testCode = Narrow(argv[i + 1]);   // (salon prive : code de l'hote ; code envoye par l'invite)
@@ -8302,6 +8334,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         return 0;
     }
 
+    // /boitedll <png> <0 ip|1 steam prive|2 confiance> : la question des DLL (accord-dll.inc) en image ; /testboitedll <journal> : ses touches et ses clics, jamais montree ;
+    // /testaccord <journal> : chemins pieges, signature, hotes de confiance.
+    if (argc >= 3 && (!_wcsicmp(argv[1], L"/boitedll") || !_wcsicmp(argv[1], L"/testboitedll") || !_wcsicmp(argv[1], L"/testaccord"))) {
+        int rc = !_wcsicmp(argv[1], L"/boitedll") ? DbCaptureCmd(argv[2], argc >= 4 ? _wtoi(argv[3]) : 0) : !_wcsicmp(argv[1], L"/testboitedll") ? DbSelfTest(argv[2]) : AccordSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /boite <png> <ok|ouinon|ouinonannuler> <info|question|attention|erreur> : une fenetre de message (dialog.inc) en image
     if (argc >= 5 && !_wcsicmp(argv[1], L"/boite")) {
         std::wstring k = argv[3], ic = argv[4];
@@ -8578,6 +8617,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_tab = TAB_LOBBY;
             g_lobbySinceGen = g_lobbyGen; g_lobbySinceT = GetTickCount() - 252000;   // (invite : dans ce salon depuis 4 min 12)
             if (st == L"salon-dl") g_peers[2].dl = 45;
+            if (st == L"salon-mods-accord") { g_peers[1].modsAsk = true; g_peers[1].dl = 0; g_peers[1].ready = false; g_peers[2].modsNo = true; }
             if (host) g_peers.push_back({ 3, "Jouko", "char_shirt12", v, false, 61, UDP_WAIT });   // (arrive : TCP seulement, sonde UDP pas encore vue)
             LobbyChatClear();   // (tchat : trois lignes, comme la maquette)
             LobbyChatAdd(host ? 1 : 0, host ? "Teppo" : "Pekka", host ? "On part dans 2 min ?" : "Je lance d\xC3\xA8s que tout le monde est pr\xC3\xAAt");
@@ -8609,6 +8649,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 g_syncTotal = 6238000; g_syncGot = 5524000;
                 g_meReady = g_sync == SY_DONE;
                 if (g_sync == SY_ASK) g_lobbyHot = 70;
+                if (st == L"salon-mods-refus") { g_syncNo = true; g_syncHasProg = true; g_meReady = false; g_lobbyHot = 70; }
             }
         }
         else if (st == L"salon-steam" || st == L"salon-steam-amis" || st == L"salon-steam-invite" || st == L"salon-steam-code") {   // salon Steam (faux)

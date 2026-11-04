@@ -74,6 +74,27 @@ static std::string Sha256(const std::string &d)
     a.Close(h, 0);
     return out;
 }
+// SHA-256 d'un fichier, lu par morceaux ; vide si illisible.
+static std::string Sha256File(const std::wstring &path)
+{
+    const Api &a = A();
+    std::string out;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return out;
+    BCRYPT_ALG_HANDLE h = NULL; BCRYPT_HASH_HANDLE hh = NULL;
+    if (a.ok && NT_SUCCESS(a.Open(&h, BCRYPT_SHA256_ALGORITHM, NULL, 0)) && NT_SUCCESS(a.CreateHash(h, &hh, NULL, 0, NULL, 0, 0))) {
+        std::vector<unsigned char> buf(256 * 1024);
+        DWORD n = 0;
+        bool ok = true;
+        while (ok && ReadFile(f, buf.data(), (DWORD)buf.size(), &n, NULL) && n) ok = NT_SUCCESS(a.HashData(hh, buf.data(), n, 0));
+        unsigned char r[32];
+        if (ok && GetLastError() != ERROR_READ_FAULT && NT_SUCCESS(a.FinishHash(hh, r, 32, 0))) out.assign((char *)r, 32);
+    }
+    if (hh) a.DestroyHash(hh);
+    if (h) a.Close(h, 0);
+    CloseHandle(f);
+    return out;
+}
 // pub : X || Y (64 octets) ; sig : r || s (64 octets) ; d : donnees signees (hachees ici en SHA-256)
 static bool VerifyP256(const std::string &pub, const std::string &d, const std::string &sig)
 {

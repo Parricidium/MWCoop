@@ -2,7 +2,7 @@
 // es2.inc) : ID MWCoop de ce PC, cle d'acces signee par JD (cle.inc), liste des cles retirees. Spec : D:\1 - AI\ClaudeAI\
 // MWCoop-spec-cle-places.md (validee par JD le 26/10, cles sans limite de duree). Bouton « Placement des sieges » : page
 // Outils ([Addons et Tools]), seulement si AccesPlaces().
-#include "cle.inc"
+// (cle.inc : inclus par accord-dll.inc)
 
 // Cles publiques de JD (X || Y en hexadecimal, 128 caracteres), en liste : une nouvelle paire n'invalide pas les cles faites
 // avec l'ancienne. Ecrites par outils-prives/cles (creer-paire) ; la cle privee et sa sauvegarde restent chez JD, hors du depot.

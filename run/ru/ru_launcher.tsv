@@ -2490,3 +2490,53 @@ Template (original windows)	Шаблон (стандартные стёкла)
 3. In game, they apply by themselves after a few seconds.	3. В игре они применяются сами через несколько секунд.
 yours	твои
 the original ones	стандартные
+new	новый
+changed	изменён
+already identical	уже такой же
+refused outright	отклонён сразу
+%s wants to install %d program file(s) on your PC	%s хочет установить программные файлы на твой ПК: %d
+A .dll file is a program. It can do anything on your PC. Only accept if you trust this host.	Файл .dll — это программа. Она сможет делать на твоём ПК всё что угодно. Принимай, только если доверяешь этому хосту.
+To receive in total: %s (%s)	Всего получить: %s (%s)
+Nothing to receive: these files are already on your PC, and the game will load them.	Получать нечего: эти файлы уже на твоём ПК, и игра их загрузит.
+Always trust this host	Всегда доверять этому хосту
+Accept	Принять
+Refuse	Отказать
+Close	Закрыть
+No trusted host. To add one: \"Always trust this host\", when a Steam host of a private lobby sends you their mods.	Нет доверенных хостов. Чтобы добавить: «Всегда доверять этому хосту», когда хост Steam из приватного лобби отправляет тебе свои моды.
+Trusted hosts	Доверенные хосты
+Their mods arrive without a question, as long as no DLL is new or changed.	Их моды приходят без вопросов, пока ни одна DLL не новая и не изменённая.
+%d DLL	DLL: %d
+Steam account: %s (%llu)	Аккаунт Steam: %s (%llu)
+Unverified host (IP)	Хост не проверен (IP)
+You play without the host's mods: some items may be missing or different	Ты играешь без модов хоста: некоторых предметов может не быть, или они будут другими
+Program files: answer the window	Программные файлы: ответь в окне
+Mods refused: you play without them	Моды отклонены: ты играешь без них
+SEE THE FILES	ПОКАЗАТЬ ФАЙЛЫ
+refused: you play without them	отклонены: ты играешь без них
+Refused	Отклонены
+Host's list refused: one of its paths is dangerous	Список хоста отклонён: один из его путей опасен
+%d host file(s) refused outright: not mods (.exe, .bat...)	Файлы хоста отклонены сразу: %d, это не моды (.exe, .bat...)
+%s has not answered about the mods yet.\n\nStart without waiting? Their game will start without your mods.	%s ещё не ответил(а) насчёт модов.\n\nЗапустить, не дожидаясь? Эта игра запустится без твоих модов.
+ · must answer about the mods	 · должен ответить насчёт модов
+ · refused the mods	 · отказ от модов
+%d / %d ready · %s must answer about the mods	%d / %d готовы · %s: нужен ответ насчёт модов
+Accept this host's content	Принимать контент этого хоста
+Accept the host's content	Принимать контент хоста
+Their CDs, images and settings, without asking. The .dll files still need your OK	Его CD, картинки и настройки, без вопросов. Для файлов .dll нужно твоё согласие
+Accept the host's content without asking	Принимать контент хоста без вопросов
+Content without code: CDs, images, settings. Off: the lobby asks first (ACCEPT ALL). The .dll files of their mods are programs: you are always asked about them, with their exact list.	Контент без кода: CD, картинки, настройки. Выключено: лобби сначала спросит (ПРИНЯТЬ ВСЁ). Файлы .dll его модов — это программы: о них всегда спрашивают, с точным списком.
+Steam hosts you chose to \"Always trust\": their DLLs you already accepted arrive without a question.	Хосты Steam, которым ты выбрал(а) «Всегда доверять»: уже принятые DLL приходят без вопросов.
+You choose what you receive	Ты решаешь, что получать
+Before receiving a host's mods, the launcher shows the exact list of .dll files and asks for your OK. The hosts you always trust can be removed here: Settings > Co-op > On my side.	Перед получением модов хоста лаунчер показывает точный список файлов .dll и спрашивает твоего согласия. Хостов, которым ты всегда доверяешь, можно убрать здесь: Настройки > Co-op > У меня.
+In the lobby: the Options card shows \"Host's\" (their choices, read-only) and \"Mine\" (voice, others' images, markers, map), for this lobby only. On the right, \"Host's files\" follows the arrival of their mods, content and save; \"Accept this host's content\" avoids asking again for what is not code. The lobby chat is under the players.	В лобби: карточка «Опции» показывает «От хоста» (его выбор, только чтение) и «Мои» (голос, картинки других, маркеры, карта), только для этого лобби. Справа «Файлы хоста» показывает получение его модов, контента и сохранения; «Принимать контент этого хоста» убирает повторные вопросы о том, что не является кодом. Чат лобби — под игроками.
+If the host sends mods, a window opens before any download: the exact list of .dll files, with their path, size and whether they are new, changed or already identical.	Если хост отправляет моды, перед любой загрузкой открывается окно: точный список файлов .dll, с путём, размером и пометкой: новый, изменён или уже такой же.
+A .dll file is a program: it can do anything on your PC. Only accept if you trust this host.	Файл .dll — это программа: она сможет делать на твоём ПК всё что угодно. Принимай, только если доверяешь этому хосту.
+Refuse (the default choice): you play without the host's mods, some items may be missing or different; \"See the files\", in the lobby, lets you change your answer. If their DLL list changes, you are asked again. Other programs (.exe, .bat...) are refused outright.	Отказать (выбор по умолчанию): ты играешь без модов хоста, некоторых предметов может не быть, или они будут другими; «Показать файлы» в лобби позволяет изменить ответ. Если его список DLL меняется, вопрос повторяется. Другие программы (.exe, .bat...) отклоняются сразу.
+Always trust this host: Steam host of a private lobby only. Their DLLs you already accepted arrive without a question; a new or changed DLL asks again. Never in a public lobby or by IP. Remove them in Settings > Co-op > On my side > Trusted hosts.	Всегда доверять этому хосту: только хост Steam в приватном лобби. Уже принятые DLL приходят без вопросов; новая или изменённая DLL спрашивает снова. Никогда в публичном лобби или по IP. Убрать можно в Настройки > Co-op > У меня > Доверенные хосты.
+Content without code (CDs, images, settings): click ACCEPT ALL once. It's remembered: \"Accept the host's content\" (Settings > Co-op > On my side) turns on, next times it's automatic.	Контент без кода (CD, картинки, настройки): нажми ПРИНЯТЬ ВСЁ один раз. Это запоминается: «Принимать контент хоста» (Настройки > Co-op > У меня) включается, в следующие разы всё автоматически.
+MSCLoader missing on your side and you accepted: the launcher installs its Coop version, kept apart. Your game starts from a copy where the mods are the host's.	У тебя нет MSCLoader, и ты принял(а): лаунчер ставит свою версию Coop отдельно. Твоя игра запускается из копии, где моды — от хоста.
+When joining a game in progress, the same question comes first. Accepted: MSCLoader is installed if missing (MWCoop's version if you don't have the official one) and the game waits until they're received to start. Your own mods are not touched.	При входе в идущую игру сначала задаётся тот же вопрос. Принято: MSCLoader ставится, если его нет (версия MWCoop, если нет официальной), и игра ждёт получения модов. Твои собственные моды не затрагиваются.
+On my side: voice, \"Accept the host's content\", trusted hosts, seeing the others' imported images and markers, the map (tap or hold), my content sent.	У меня: голос, «Принимать контент хоста», доверенные хосты, показ чужих импортированных картинок и маркеров, карта (нажать или удерживать), мой отправленный контент.
+Guest: did you accept the list of files? \"See the files\", in the lobby, opens it again. Does the host have MSCLoader on?	Гость: ты принял(а) список файлов? «Показать файлы» в лобби откроет его снова. У хоста включён MSCLoader?
+CDs, images, settings · never the .dll files	CD, картинки, настройки · никогда .dll
+%d host(s)	Хостов: %d

@@ -625,6 +625,7 @@ static void SteamLobbySync()
         p.ready = id == 0 || SMemberData(u, "pret") == "1";
         std::string dl = id == 0 ? "ok" : SMemberData(u, "dl");   // (recoit l'envoi de l'hote : %, "ok" fini, rien : pas encore dit)
         p.dl = dl.empty() ? -2 : dl == "ok" ? -1 : atoi(dl.c_str());
+        { std::string ms = id == 0 ? "" : SMemberData(u, "modsetat"); p.modsAsk = ms == "ask"; p.modsNo = ms == "refus"; }   // (accord des DLL)
         static std::map<SteamId, DWORD> firstSeen;   // (arrivee de chacun : PeerSyncPending)
         if (!firstSeen.count(u)) firstSeen[u] = GetTickCount();
         p.since = firstSeen[u];

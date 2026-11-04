@@ -1,0 +1,54 @@
+L93-1	new
+L93-2	changed
+L93-3	already identical
+L93-4	refused outright
+L93-5	%s wants to install %d program file(s) on your PC
+L93-6	A .dll file is a program. It can do anything on your PC. Only accept if you trust this host.
+L93-7	To receive in total: %s (%s)
+L93-8	Nothing to receive: these files are already on your PC, and the game will load them.
+L93-9	Always trust this host
+L93-10	Accept
+L93-11	Refuse
+L93-12	Remove
+L93-13	Close
+L93-14	No trusted host. To add one: \"Always trust this host\", when a Steam host of a private lobby sends you their mods.
+L93-15	Trusted hosts
+L93-16	Their mods arrive without a question, as long as no DLL is new or changed.
+L93-17	%d DLL
+L93-18	Manage
+L93-21	Steam account: %s (%llu)
+L93-22	Unverified host (IP)
+L93-23	The host
+L93-24	You play without the host's mods: some items may be missing or different
+L93-25	Program files: answer the window
+L93-26	Mods refused: you play without them
+L93-27	SEE THE FILES
+L93-28	refused: you play without them
+L93-29	Refused
+L93-30	Host's list refused: one of its paths is dangerous
+L93-31	%d host file(s) refused outright: not mods (.exe, .bat...)
+L93-32	%s has not answered about the mods yet.\n\nStart without waiting? Their game will start without your mods.
+L93-33	 · must answer about the mods
+L93-34	 · refused the mods
+L93-35	%d / %d ready · %s must answer about the mods
+L93-36	Accept this host's content
+L93-38	Accept the host's content
+L93-41	Their CDs, images and settings, without asking. The .dll files still need your OK
+L93-42	Accept the host's content without asking
+L93-43	Content without code: CDs, images, settings. Off: the lobby asks first (ACCEPT ALL). The .dll files of their mods are programs: you are always asked about them, with their exact list.
+L93-44	Steam hosts you chose to \"Always trust\": their DLLs you already accepted arrive without a question.
+L93-45	You choose what you receive
+L93-46	Before receiving a host's mods, the launcher shows the exact list of .dll files and asks for your OK. The hosts you always trust can be removed here: Settings > Co-op > On my side.
+L93-47	In the lobby: the Options card shows \"Host's\" (their choices, read-only) and \"Mine\" (voice, others' images, markers, map), for this lobby only. On the right, \"Host's files\" follows the arrival of their mods, content and save; \"Accept this host's content\" avoids asking again for what is not code. The lobby chat is under the players.
+L93-48	If the host sends mods, a window opens before any download: the exact list of .dll files, with their path, size and whether they are new, changed or already identical.
+L93-49	A .dll file is a program: it can do anything on your PC. Only accept if you trust this host.
+L93-50	Refuse (the default choice): you play without the host's mods, some items may be missing or different; \"See the files\", in the lobby, lets you change your answer. If their DLL list changes, you are asked again. Other programs (.exe, .bat...) are refused outright.
+L93-51	Always trust this host: Steam host of a private lobby only. Their DLLs you already accepted arrive without a question; a new or changed DLL asks again. Never in a public lobby or by IP. Remove them in Settings > Co-op > On my side > Trusted hosts.
+L93-52	Content without code (CDs, images, settings): click ACCEPT ALL once. It's remembered: \"Accept the host's content\" (Settings > Co-op > On my side) turns on, next times it's automatic.
+L93-53	MSCLoader missing on your side and you accepted: the launcher installs its Coop version, kept apart. Your game starts from a copy where the mods are the host's.
+L93-54	When joining a game in progress, the same question comes first. Accepted: MSCLoader is installed if missing (MWCoop's version if you don't have the official one) and the game waits until they're received to start. Your own mods are not touched.
+L93-55	On my side: voice, \"Accept the host's content\", trusted hosts, seeing the others' imported images and markers, the map (tap or hold), my content sent.
+L93-56	Guest: did you accept the list of files? \"See the files\", in the lobby, opens it again. Does the host have MSCLoader on?
+L93-100	CDs, images, settings · never the .dll files
+L93-101	%d host(s)
+L93-102	None

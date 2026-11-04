@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------- visite guidee du premier lancement - inclus par launcher.cpp
+// ---------------------------------------------------------------- visite guidee du premier lancement - inclus par launcher.cpp
 // Demande de JD (07/10), comme certains lanceurs : au premier lancement ([Lanceur] TutoVu absent), une suite de bulles.
 // La fenetre s'assombrit sauf l'element montre (entoure), une bulle a fleche dit a quoi il sert ; SUIVANT (Entree,
 // fleche droite), RETOUR (fleche gauche), PASSER (Echap). Les onglets montres s'ouvrent derriere la bulle. A revoir :
@@ -153,6 +153,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.16.12 (03/11) : page RallyWorld dans la barre, sous Addons (64)
     { L"RallyWorld", L"Nouvelle page dans la barre, sous Addons : RallyWorld, la communauté de rallye et de tout-terrain pour Assetto Corsa qui nous prête ses voitures. Leur site, leur Discord, et de quoi les soutenir.",
       L"RallyWorld", L"New page in the bar, under Add-ons: RallyWorld, the rally and off-road community for Assetto Corsa that lends us its cars. Their website, their Discord, and a way to support them.", "1.16.12" },
+    // lanceur-1.16.21 (04/11) : accord avant les DLL d'un hote ; hotes de confiance, Reglages > Co-op > Chez moi (65)
+    { L"Tu choisis ce que tu reçois", L"Avant de recevoir les mods d'un hôte, le lanceur montre la liste exacte des fichiers .dll et te demande ton accord. Les hôtes à qui tu fais toujours confiance se retirent ici : Réglages > Co-op > Chez moi.",
+      L"You choose what you receive", L"Before receiving a host's mods, the launcher shows the exact list of .dll files and asks for your OK. The hosts you always trust can be removed here: Settings > Co-op > On my side.", "1.16.21" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -255,13 +258,14 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 65: return TutoSetTab(SET_COOP);                    // onglet Co-op (SetTutoTab l'ouvre) : hotes de confiance
     case 64: return g_navR[TAB_RALLY];                       // RallyWorld dans la barre (sous Addons : rallyworld.inc)
     case 63: return TutoSetTab(SET_IMAGE);                   // onglet Image (SetTutoTab l'ouvre) : ombre des nuages corrigee
     case 62: return g_btn[B_DISCORD].r;                      // le Discord est de retour (bouton de la barre)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 || i == 65 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

@@ -219,7 +219,7 @@ static const std::vector<GfxRow> &GfxRows()
           { L"5 %", L"12 %", L"20 %", L"35 %" }, { L"5 %", L"12 %", L"20 %", L"35 %" }, 0, 6, "Coop" },
         { "Ronflements", L"Ronflements des joueurs endormis", L"Sleeping players snore", 1, {}, {}, {}, 0, 6, "Coop" },
         { "VoirVisages", L"Voir les images importées des autres", L"See others' imported images", 1, {}, {}, {}, 0, 7, "Coop" },
-        { "ModsAuto", L"Accepter les fichiers de l'hôte", L"Accept the host's files", 0, {}, {}, {}, 0, 8, "Opt" },
+        { "ModsAuto", L"Accepter le contenu de l'hôte", L"Accept the host's content", 0, {}, {}, {}, 0, 8, "Opt" },
         { "ArgentDepart", L"Argent de départ des invités", L"Guests' starting money", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion du 14/10 : « difficulte de depart : carburant, argent ; facile, moyen, difficile, standard, au hasard ») -- Sync/Difficulty.cs
         { "Difficulte", L"Difficulté de départ (hôte, nouvelle partie)", L"Start difficulty (host, new game)", 0, { 0, 1, 2, 3, 4 },
@@ -503,7 +503,7 @@ static float SetRowDH() { return 46 * UiDensity() * UiTextScale(); }      // lig
 static float SetSecH() { return 26 * UiDensity() * UiTextScale(); }       // titre de section
 enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD = 2920, UI_SET_ACCENT = 2925, UI_SET_AURORE = 2931, UI_SET_WINTHEME = 2935, UI_SET_THEMEDEF,
        UI_SET_MAXP = 2940, UI_SET_PRIV = 2945, UI_SET_AJOUTS = 2948, UI_SET_AJOUT = 2951, UI_SET_DRONEKB = 2984,   // (ajouts : 2951-2959, neuf au plus ; disposition du drone : 2984-2986)
-       UI_SET_NOTES = 2960, UI_SET_LOGDIR, UI_SET_LOGZIP, UI_SET_DISCORDASK, UI_SET_SKIN, UI_SET_CAR, UI_SET_CONTENT, UI_SET_STEAMLINE, UI_SET_GOIMAGE, UI_SET_API, UI_SET_GITHUB,
+       UI_SET_NOTES = 2960, UI_SET_LOGDIR, UI_SET_LOGZIP, UI_SET_DISCORDASK, UI_SET_SKIN, UI_SET_CAR, UI_SET_CONTENT, UI_SET_STEAMLINE, UI_SET_GOIMAGE, UI_SET_API, UI_SET_GITHUB, UI_SET_TRUST,
        UI_SET_DEFAULT = 2972, UI_SET_SAVE, UI_SET_NETTEST, UI_SET_HOSTGUIDE, UI_SET_REPAIR, UI_SET_NIGHTLY, UI_SET_GLASS, UI_SET_RTTOGGLE,   // (2972-2979)
        UI_SET_HUDSTYLE = 2980,       // + style (0 Vanilla .. 3 Bandeau) : tuiles de l'onglet HUD (2980-2983)
        UI_SETV = 12000,              // + ligne * 10 + valeur (pastilles d'un reglage du jeu)
@@ -637,7 +637,8 @@ static const SetItem kSetItems[] = {
     { 10, SI_GFX, "GainMicro", L"Mon micro (pour les autres)", L"My microphone (for the others)", NULL, NULL },
     { 10, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
     { 10, SI_SEC, NULL, L"Partage & affichage", L"Sharing & display", NULL, NULL },
-    { 10, SI_GFX, "ModsAuto", NULL, NULL, L"Mods et contenu, sans redemander", L"Mods and content, without asking again" },
+    { 10, SI_GFX, "ModsAuto", NULL, NULL, L"CD, images, réglages · jamais les .dll", L"CDs, images, settings · never the .dll files" },
+    { 10, SI_OPT, "HotesConfiance", L"Hôtes de confiance", L"Trusted hosts", NULL, NULL },
     { 10, SI_GFX, "VoirVisages", NULL, NULL, L"Visages, peintures, posters", L"Faces, paints, posters" },
     { 10, SI_GFX, "Marqueurs", NULL, NULL, NULL, NULL },
     { 10, SI_GFX, "CarteMaintenir", L"Carte (M)", L"Map (M)", NULL, NULL },
@@ -1115,9 +1116,10 @@ static float SetOptW(const SetItem &it, std::wstring &bt, int &id, std::wstring 
     id = -1;
     if (!strcmp(it.key, "Port")) { std::vector<std::wstring> l; for (int v : o->vals) l.push_back(std::to_wstring(v)); return SetSegW(l, 12); }
     if (button) {
-        id = !strcmp(it.key, "ContenuEnvoye") ? UI_SET_CONTENT : !strcmp(it.key, "Apparence") ? UI_SET_SKIN : !strcmp(it.key, "CouleurVoiture") ? UI_SET_CAR : UI_SET_GUIDE;
-        bt = id == UI_SET_GUIDE ? T(L"Revoir", L"See again") : T(L"Choisir", L"Choose");
+        id = !strcmp(it.key, "HotesConfiance") ? UI_SET_TRUST : !strcmp(it.key, "ContenuEnvoye") ? UI_SET_CONTENT : !strcmp(it.key, "Apparence") ? UI_SET_SKIN : !strcmp(it.key, "CouleurVoiture") ? UI_SET_CAR : UI_SET_GUIDE;
+        bt = id == UI_SET_GUIDE ? T(L"Revoir", L"See again") : id == UI_SET_TRUST ? T(L"Gérer", L"Manage") : T(L"Choisir", L"Choose");
         if (id == UI_SET_CONTENT) desc = ContentSummary();
+        else if (id == UI_SET_TRUST) desc = TrustSummary();
         else if (id == UI_SET_SKIN) desc = TLab(o->labFr, o->labEn, (size_t)OptGet(*o));
         else if (id == UI_SET_CAR) desc = CarColorName();
         return SetButtonW(bt);
@@ -1945,7 +1947,7 @@ static bool SetChar(wchar_t c)
 static void SetEnter(int tab) { g_setTab = tab == TAB_COOP ? SET_COOP : SET_JEU; g_setSearch.clear(); g_setFocus = false; }
 // La barre de gauche suit l'onglet : Jeu / Image / Son = page Jeu (TAB_GFX), le reste = Co-op (TAB_COOP).
 static void SetRail() { int t = g_setTab <= SET_SON ? TAB_GFX : TAB_COOP; if (g_tab == TAB_GFX || g_tab == TAB_COOP) g_tab = t; }
-static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : step == 53 ? SET_SON : step == 63 ? SET_IMAGE : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage ; 53 : Son & vocal, parler)
+static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : step == 53 ? SET_SON : step == 63 ? SET_IMAGE : step == 65 ? SET_COOP : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage ; 53 : Son & vocal, parler)
 static void SetCaptureState(const std::wstring &st)
 {
     static const wchar_t *names[SET_N] = { L"jeu", L"image", L"hud", L"son", L"coop", L"touches", L"theme", L"lanceur" };
@@ -2071,6 +2073,7 @@ static bool SetClick(int id)
     case UI_SET_SKIN: GoPage(TAB_SKIN); return true;
     case UI_SET_CAR: GoPage(TAB_CAR); return true;
     case UI_SET_CONTENT: GoPage(TAB_CONTENT); return true;
+    case UI_SET_TRUST: TrustManage(); return true;
     case UI_SET_STEAMLINE: SteamGuideOpen(); return true;
     case UI_SET_GOIMAGE: g_setTab = SET_IMAGE; SetRail(); g_setSearch.clear(); g_scroll[g_tab] = 0; return true;
     }

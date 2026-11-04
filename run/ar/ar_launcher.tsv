@@ -2710,6 +2710,57 @@ Template (original windows)	القالب (الزجاج الأصلي)
 yours	زجاجك
 the original ones	الأصلي
 Windows (cars that have a windows template): in the car's panel, the Windows tab has its own template, a PNG with transparency: transparent stays clear glass. Same buttons as the livery; a JPG or BMP gives opaque windows.	الزجاج (للسيارات التي لها قالب زجاج): في لوحة السيارة، لتبويب الزجاج قالبه الخاص، بصيغة PNG بشفافية: الشفاف يبقى زجاجاً صافياً. الأزرار نفسها كما في الكسوة؛ ملف JPG أو BMP يعطي زجاجاً معتماً.
+new	جديد
+changed	معدَّل
+already identical	مطابق مسبقًا
+refused outright	مرفوض تلقائيًا
+%s wants to install %d program file(s) on your PC	%s يريد تثبيت ملفات برامج على جهازك: %d
+A .dll file is a program. It can do anything on your PC. Only accept if you trust this host.	ملف .dll هو برنامج. يمكنه فعل أي شيء على جهازك. لا تقبل إلا إذا كنت تثق بهذا المضيف.
+To receive in total: %s (%s)	إجمالي ما ستستلمه: %s (%s)
+Nothing to receive: these files are already on your PC, and the game will load them.	لا شيء لاستلامه: هذه الملفات موجودة على جهازك، وستحمّلها اللعبة.
+Always trust this host	الثقة بهذا المضيف دائمًا
+Accept	قبول
+Refuse	رفض
+Close	إغلاق
+No trusted host. To add one: \"Always trust this host\", when a Steam host of a private lobby sends you their mods.	لا يوجد مضيف موثوق. لإضافة واحد: «الثقة بهذا المضيف دائمًا»، عندما يرسل إليك مضيف Steam في ردهة خاصة تعديلاته.
+Trusted hosts	المضيفون الموثوقون
+Their mods arrive without a question, as long as no DLL is new or changed.	تصل تعديلاتهم دون سؤال، ما دامت لا توجد DLL جديدة أو معدَّلة.
+%d DLL	DLL: %d
+Steam account: %s (%llu)	حساب Steam: %s (%llu)
+Unverified host (IP)	مضيف غير موثَّق (IP)
+The host	المضيف
+You play without the host's mods: some items may be missing or different	أنت تلعب دون تعديلات المضيف: قد تنقص بعض الأشياء أو تختلف
+Program files: answer the window	ملفات برامج: أجب في النافذة
+Mods refused: you play without them	التعديلات مرفوضة: أنت تلعب بدونها
+SEE THE FILES	عرض الملفات
+refused: you play without them	مرفوضة: أنت تلعب بدونها
+Refused	مرفوضة
+Host's list refused: one of its paths is dangerous	رُفضت قائمة المضيف: أحد مساراتها خطير
+%d host file(s) refused outright: not mods (.exe, .bat...)	ملفات من المضيف رُفضت تلقائيًا: %d، ليست تعديلات (.exe، .bat...)
+%s has not answered about the mods yet.\n\nStart without waiting? Their game will start without your mods.	لم يُجب %s بعد بشأن التعديلات.\n\nالبدء دون انتظار؟ ستبدأ لعبته دون تعديلاتك.
+ · must answer about the mods	 · عليه الرد بشأن التعديلات
+ · refused the mods	 · رفض التعديلات
+%d / %d ready · %s must answer about the mods	%d / %d جاهزون · %s: عليه الرد بشأن التعديلات
+Accept this host's content	قبول محتوى هذا المضيف
+Accept the host's content	قبول محتوى المضيف
+Their CDs, images and settings, without asking. The .dll files still need your OK	أقراصه وصوره وإعداداته، دون سؤال. ملفات .dll تحتاج موافقتك
+Accept the host's content without asking	قبول محتوى المضيف دون سؤال
+Content without code: CDs, images, settings. Off: the lobby asks first (ACCEPT ALL). The .dll files of their mods are programs: you are always asked about them, with their exact list.	محتوى دون شيفرة: أقراص، صور، إعدادات. عند الإيقاف: تسأل الردهة أولًا (قبول الكل). ملفات .dll لتعديلاته برامج: ستُسأل عنها دائمًا، مع قائمتها الدقيقة.
+Steam hosts you chose to \"Always trust\": their DLLs you already accepted arrive without a question.	مضيفو Steam الذين اخترت «الثقة بهم دائمًا»: تصل ملفات DLL التي قبلتها دون سؤال.
+You choose what you receive	أنت تختار ما تستلمه
+Before receiving a host's mods, the launcher shows the exact list of .dll files and asks for your OK. The hosts you always trust can be removed here: Settings > Co-op > On my side.	قبل استلام تعديلات المضيف، يعرض المشغّل القائمة الدقيقة لملفات .dll ويطلب موافقتك. يمكنك إزالة المضيفين الذين تثق بهم دائمًا من هنا: الإعدادات > اللعب الجماعي > عندي.
+In the lobby: the Options card shows \"Host's\" (their choices, read-only) and \"Mine\" (voice, others' images, markers, map), for this lobby only. On the right, \"Host's files\" follows the arrival of their mods, content and save; \"Accept this host's content\" avoids asking again for what is not code. The lobby chat is under the players.	في الردهة: تعرض بطاقة الخيارات «من المضيف» (اختياراته، للقراءة فقط) و«خياراتي» (الصوت، صور الآخرين، العلامات، الخريطة)، لهذه الردهة فقط. على اليمين، تتابع «ملفات المضيف» وصول تعديلاته ومحتواه وحفظه؛ ويجنّبك «قبول محتوى هذا المضيف» السؤال مجددًا عمّا ليس شيفرة. دردشة الردهة تحت اللاعبين.
+If the host sends mods, a window opens before any download: the exact list of .dll files, with their path, size and whether they are new, changed or already identical.	إذا أرسل المضيف تعديلات، تُفتح نافذة قبل أي تنزيل: القائمة الدقيقة لملفات .dll، بمسارها وحجمها وهل هي جديدة أو معدَّلة أو مطابقة مسبقًا.
+A .dll file is a program: it can do anything on your PC. Only accept if you trust this host.	ملف .dll هو برنامج: يمكنه فعل أي شيء على جهازك. لا تقبل إلا إذا كنت تثق بهذا المضيف.
+Refuse (the default choice): you play without the host's mods, some items may be missing or different; \"See the files\", in the lobby, lets you change your answer. If their DLL list changes, you are asked again. Other programs (.exe, .bat...) are refused outright.	رفض (الخيار الافتراضي): تلعب دون تعديلات المضيف، وقد تنقص بعض الأشياء أو تختلف؛ ويتيح لك «عرض الملفات» في الردهة تغيير إجابتك. إذا تغيّرت قائمة DLL لديه، يعود السؤال. البرامج الأخرى (.exe، .bat...) تُرفض تلقائيًا.
+Always trust this host: Steam host of a private lobby only. Their DLLs you already accepted arrive without a question; a new or changed DLL asks again. Never in a public lobby or by IP. Remove them in Settings > Co-op > On my side > Trusted hosts.	الثقة بهذا المضيف دائمًا: لمضيف Steam في ردهة خاصة فقط. تصل ملفات DLL التي قبلتها دون سؤال؛ وأي DLL جديدة أو معدَّلة تعيد السؤال. لا يسري أبدًا في ردهة عامة أو عبر IP. أزلهم من الإعدادات > اللعب الجماعي > عندي > المضيفون الموثوقون.
+Content without code (CDs, images, settings): click ACCEPT ALL once. It's remembered: \"Accept the host's content\" (Settings > Co-op > On my side) turns on, next times it's automatic.	المحتوى دون شيفرة (أقراص، صور، إعدادات): انقر قبول الكل مرة واحدة. يُحفظ ذلك: يتفعّل «قبول محتوى المضيف» (الإعدادات > اللعب الجماعي > عندي)، وفي المرات التالية يصبح تلقائيًا.
+MSCLoader missing on your side and you accepted: the launcher installs its Coop version, kept apart. Your game starts from a copy where the mods are the host's.	MSCLoader غير موجود لديك وقد قبلت: يثبّت المشغّل نسخته Coop بشكل منفصل. تبدأ لعبتك من نسخة تكون فيها التعديلات من المضيف.
+When joining a game in progress, the same question comes first. Accepted: MSCLoader is installed if missing (MWCoop's version if you don't have the official one) and the game waits until they're received to start. Your own mods are not touched.	عند الانضمام إلى لعبة جارية، يأتي السؤال نفسه أولًا. عند القبول: يُثبَّت MSCLoader إن لم يكن موجودًا (نسخة MWCoop إن لم تكن لديك الرسمية) وتنتظر اللعبة استلامها لتبدأ. لا تُمس تعديلاتك الخاصة.
+On my side: voice, \"Accept the host's content\", trusted hosts, seeing the others' imported images and markers, the map (tap or hold), my content sent.	عندي: الصوت، «قبول محتوى المضيف»، المضيفون الموثوقون، رؤية صور الآخرين المستوردة وعلاماتهم، الخريطة (نقرة أو ضغط مطوّل)، محتواي المرسل.
+Guest: did you accept the list of files? \"See the files\", in the lobby, opens it again. Does the host have MSCLoader on?	الضيف: هل قبلت قائمة الملفات؟ «عرض الملفات» في الردهة يفتحها مجددًا. هل MSCLoader مفعّل لدى المضيف؟
+CDs, images, settings · never the .dll files	أقراص، صور، إعدادات · لا تشمل ملفات .dll أبدًا
+%d host(s)	المضيفون: %d
 MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.	يوضع MWCoop في مجلد اللعبة، بجانب mywintercar.exe. والمشغّل (MWCoop.exe) يتولى الباقي: يثبّت التعديل ويحدّثه ويشغّل اللعبة.
 Install in 4 steps	التثبيت في 4 خطوات
 In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.	في Steam: انقر بالزر الأيمن على My Winter Car > إدارة > استعراض الملفات المحلية. سيُفتح مجلد اللعبة.
@@ -3137,7 +3188,6 @@ Everyone's game starts together, in the host's game.	تبدأ لعبة الجم�
 OFFICIAL: the one installed in the game folder (winhttp.dll). The same as solo.	الرسمي: المثبَّت في مجلد اللعبة (winhttp.dll). كما في اللعب الفردي.
 MWCOOP: installed apart by the launcher, the game isn't changed. Your mods stay the ones in the Mods folder.	MWCOOP: يثبّته المشغّل على حدة، ولا تتغير اللعبة. تبقى تعديلاتك هي الموجودة في مجلد Mods.
 REINSTALL: puts MSCLoader back fresh (your mods and their settings are kept).	إعادة التثبيت: يعيد MSCLoader من جديد (تُحفظ تعديلاتك وإعداداتها).
-The host	المضيف
 their mods	تعديلاته
 CDs, images, paint…	الأقراص، الصور، الطلاء…
 You (guest)	أنت (ضيف)
