@@ -610,7 +610,14 @@ namespace MWCoop
                 if (hStep == 1) testHand.position = g.position + g.right * 4f + g.forward * -4f;
                 if (hStep == 1 && k > 8f) { hStep = 2; DropTest(); Log.Info("autotest : tuyau, siege : l'hote lache le bout"); }
             }
-            float[] at = host ? new[] { 42f, 44f, 46f, 62f } : new[] { 12f, 14f, 16f, 28f, 75f, 77f, 79f, 81f, 90f };
+            // (TuyauSiegeTient=1 : l'invite tient le bout de +4 a +70, sans monter au volant, pendant que l'hote monte, roule et descend)
+            bool tient = Config.GetInt("Test", "TuyauSiegeTient", 0) != 0;
+            if (!host && tient)
+            {
+                if (hStep == 0 && k > 4f) { hStep = 1; TakeTest(); Log.Info("autotest : tuyau, siege : l'invite prend le bout"); testHand.position = g.position + g.right * 4f + g.forward * -4f + Vector3.up; }
+                if (hStep == 1 && k > 70f) { hStep = 2; DropTest(); Log.Info("autotest : tuyau, siege : l'invite lache le bout"); }
+            }
+            float[] at = host ? new[] { 42f, 44f, 46f, 62f } : tient ? new float[0] : new[] { 12f, 14f, 16f, 28f, 75f, 77f, 79f, 81f, 90f };
             if (sStep < at.Length && k > at[sStep])
             {
                 int i = sStep++;
@@ -620,7 +627,7 @@ namespace MWCoop
                 else if (!host && i == 7) Log.Info("autotest : tuyau, siege : " + VehicleSync.TestStart(TestCar));
                 else Log.Info("autotest : tuyau, siege : descend, " + VehicleSync.TestExit(TestCar));
             }
-            if (!host && k > 20f && k < 24f) { Rigidbody gb = VehicleSync.Body(TestCar); if (gb != null) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); } }
+            if (!host && !tient && k > 20f && k < 24f) { Rigidbody gb = VehicleSync.Body(TestCar); if (gb != null) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); } }
             if (host && k > 50f && k < 54f) { Rigidbody gb = VehicleSync.Body(TestCar); if (gb != null) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); } }
         }
         // ([Test] TuyauEchange=1 avec TuyauDansFosse=1, dossiers #41/#46 : la main passe de l'un a l'autre, le bout pres de la fosse. Chez
