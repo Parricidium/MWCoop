@@ -292,6 +292,7 @@ namespace MWCoop
         // comme avant.
         public static bool LaidFromRemote { get { return following && !selfMode; } }
         public static Vector3 EndPos { get { return end != null ? end.transform.position : Vector3.zero; } }
+        public static string Role { get { return (mine ? "a nous" : leading ? "mene ici" : remoteBy >= 0 ? "suivi #" + remoteBy : "physique") + (following ? " pose" : "") + (end != null && end.isKinematic ? " cin" : ""); } }
 
         // Forme de la chaine (dossiers #41 et #46, xZOTIK et Markos 03/11 : « apres que l'hote l'a ajuste, le tuyau est tantot normal,
         // tantot tordu » ; « quand le client le reprend, chez l'hote le tuyau devient tordu »). Chez celui qui suit, la chaine etait

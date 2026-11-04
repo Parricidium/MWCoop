@@ -2081,7 +2081,7 @@ namespace MWCoop
         // "Wait 2" -> les retire) est annonce par celui qui le vit (@tuyau) et rejoue chez les autres.
         // VehicleSync.DriverRpm n'est pas necessaire : la copie de la GIFU recoit deja le regime du conducteur
         // (VehicleSync l'ecrit dans son Drivetrain) et c'est l'autorite, au vrai regime, qui fait foi.
-        class Well { public string Key; public PlayMakerFSM F; public bool LocalIn, RemoteIn; }
+        class Well { public string Key; public PlayMakerFSM F; public bool LocalIn, RemoteIn; public int Seen, Got; }
         static readonly Dictionary<string, Well> wells = new Dictionary<string, Well>();
         static readonly List<Well> wellsWaiting = new List<Well>();
         static readonly HashSet<string> HoseInStates = new HashSet<string> { "Hose in", "Wait", "Check hose out" };
@@ -2121,19 +2121,19 @@ namespace MWCoop
             // celui qui tient le tuyau : son dernier « dans/sorti » est remis a l'image suivante. [Test] TuyauReprise=0 : comme avant.)
             if (SewageHose.LaidFromRemote && HoseReprise)
             {
-                if (w.LocalIn != inWell) { w.LocalIn = inWell; HoseSeen++; }
+                if (w.LocalIn != inWell) { w.LocalIn = inWell; HoseSeen++; w.Seen++; }
                 if (inWell != w.RemoteIn && !wellFix.Contains(w)) wellFix.Add(w);
                 return;
             }
             if (w.LocalIn == inWell) return;
             w.LocalIn = inWell;
-            HoseSeen++;
+            HoseSeen++; w.Seen++;
             // (dossier #41, 02/11 : chaine posee ici d'apres le bout de l'autre -- son collisionneur entrait et sortait de la fosse a chaque
             // repose, 215 « tuyau dans/sorti » en une minute envoyes a celui qui mene la pompe. Seul celui qui tient le bout le dit.
             // [Test] TuyauFosseCopie=1 : comme avant)
             if (SewageHose.LaidFromRemote && Config.GetInt("Test", "TuyauFosseCopie", 0) == 0) return;
             HoseSent++;
-            Log.Info("fosse : tuyau " + (inWell ? "dans " : "sorti de ") + w.Key + " ici");
+            if (HoseLine()) Log.Info("fosse : tuyau " + (inWell ? "dans " : "sorti de ") + w.Key + " ici");
             if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@tuyau").Str(w.Key).Bool(inWell), true);
         }
 
@@ -2142,17 +2142,40 @@ namespace MWCoop
             Well w;
             if (!wells.TryGetValue(key, out w) || w.F == null) { Log.Warn("fosse " + key + " introuvable ici"); return; }
             w.RemoteIn = inWell;
-            HoseGot++;
+            HoseGot++; w.Got++;
             bool isIn = HoseInStates.Contains(w.F.ActiveStateName);
             if (isIn == inWell || !w.F.gameObject.activeInHierarchy || !hooked.Contains(w.F))
             {
-                Log.Info("fosse : tuyau de #" + who + (inWell ? " dans " : " sorti de ") + key + (isIn == inWell ? " (deja ainsi ici)" : " (fosse pas chargee ici)"));
+                if (HoseLine()) Log.Info("fosse : tuyau de #" + who + (inWell ? " dans " : " sorti de ") + key + (isIn == inWell ? " (deja ainsi ici)" : " (fosse pas chargee ici)"));
                 return;
             }
             applying = true; Replay.Depth++;
             try { Game.SetState(w.F, inWell ? "Hose in" : "Wait 2"); }
             finally { applying = false; Replay.Depth--; }
-            Log.Info("fosse : tuyau de #" + who + (inWell ? " dans " : " sorti de ") + key + " -> " + w.F.ActiveStateName);
+            if (HoseLine()) Log.Info("fosse : tuyau de #" + who + (inWell ? " dans " : " sorti de ") + key + " -> " + w.F.ActiveStateName);
+        }
+
+        // Journal de la fosse (dossier #49, Matilda Prime 04/11 : « le tuyau s'est coince, pas pu vider la fosse » -- 524 lignes dans/sorti en 78 s, ~7 par seconde, et rien sur la
+        // pompe). Toutes les 10 s, tuyau dans une fosse ou passages depuis la derniere fois : etat de la fosse, passages, pompe, regime, niveau, citerne ; et au plus 4 lignes dans/sorti
+        // par 10 s. Rien que du journal. [Test] FosseJournal=0 : comme avant.
+        static int journalOn = -1, hoseLines; static float nextJournal;
+        static bool JournalOn { get { if (journalOn < 0) journalOn = Config.GetInt("Test", "FosseJournal", 1); return journalOn != 0; } }
+        static bool HoseLine() { return !JournalOn || hoseLines++ < 4; }
+        static void WellJournal(float now)
+        {
+            if (now < nextJournal || !JournalOn) return;
+            nextJournal = now + 10f;
+            int hidden = hoseLines - 4;
+            hoseLines = 0;
+            foreach (Well w in wells.Values)
+            {
+                if (w.F == null) continue;
+                int seen = w.Seen, got = w.Got;
+                w.Seen = 0; w.Got = 0;
+                if (seen == 0 && got == 0 && !HoseInStates.Contains(w.F.ActiveStateName)) continue;
+                Log.Info("fosse, 10 s : " + w.Key.Split('/')[1] + " " + w.F.ActiveStateName + ", passages ici " + seen + ", recus " + got + (hidden > 0 ? " (" + hidden + " lignes en moins)" : "")
+                    + ", bout " + (EndInWell(w.F, SewageHose.EndPos) ? "dans la boite" : "hors boite") + " " + SewageHose.Role + ", " + Fluids.PumpJournal(w.F.gameObject));
+            }
         }
 
         static int reprise = -1, fixLogs;
@@ -2379,6 +2402,7 @@ namespace MWCoop
         {
             CheckWaiting(now);
             if (wellFix.Count > 0) FixWells();
+            WellJournal(now);
             if (!specialsScanned) return;
             if (now >= nextSpecialWait && (creatorsWaiting.Count > 0 || wellsWaiting.Count > 0))
             {

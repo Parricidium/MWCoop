@@ -668,6 +668,17 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // Journal de la fosse (Jobs.WellJournal, dossier #49) : pompe, regime, niveau, citerne, chez qui.
+        public static string PumpJournal(GameObject well)
+        {
+            List<Watch> tank = SepticWatches("Waste");
+            PlayMakerFSM pump = tank.Count > 0 ? Game.FsmOn(tank[0].Fsm.gameObject, "Pump") : null, lv = well != null ? Game.FsmOn(well, "Level") : null;
+            System.Func<string, string> b = n => { FsmBool v = pump != null ? pump.FsmVariables.FindFsmBool(n) : null; return v != null ? (v.Value ? "1" : "0") : "?"; };
+            FsmFloat ls = pump != null ? pump.FsmVariables.FindFsmFloat("LitresPerSecond") : null, lvl = lv != null ? lv.FsmVariables.FindFsmFloat("ShitLevel") : null;
+            return "pompe " + (pump != null ? pump.ActiveStateName : "?") + " (marche " + b("PumpRunning") + ", fosse " + b("HoseInShit") + ", raccorde " + b("HoseAttached") + ", aspire " + b("Sucking") + ", " + (ls != null ? ls.Value.ToString("F1") : "?") + " L/s)"
+                + ", regime " + (gifu != null ? VehicleSync.EngineRpm(gifu.transform).ToString("F0") : "?") + ", niveau " + (lvl != null ? lvl.Value.ToString("F2") : "?") + ", citerne " + (tank.Count > 0 ? tank[0].Var.Value.ToString("F0") + " L" : "?") + ", autorite #" + SepticAuthority();
+        }
+
         // Essais : change ici le niveau de la fosse 'well' (rang par cle) et la citerne, comme la pompe.
         public static string TestSeptic(int well, float dLevel, float dWaste)
         {
