@@ -106,9 +106,9 @@ namespace MWCoop
         // ------------------------------------------------------------ parts shop (version 2)
         // (magasin de pieces CARDINAL VARAOSAT -- JD, 23/10 : un batiment ou les mods vendent leurs objets ; Kauppa.OsatMyynti)
 
-        /// <summary>True when the CARDINAL VARAOSAT parts shop exists in this game (My Winter Car, add-on on; the host's choice
+        /// <summary>True when the CARDINAL VARAOSAT parts shop exists in this game (add-on on; the host's choice
         /// applies to everyone). Items can be added at any time anyway: they show up when the shop is built.</summary>
-        public static bool ShopAvailable { get { return !Game.Msc && Ajouts.Osat; } }
+        public static bool ShopAvailable { get { return Ajouts.Osat; } }
 
         /// <summary>Puts an item of your mod on sale in the CARDINAL VARAOSAT parts shop (left wing). Version 2.
         /// <para><paramref name="id"/>: unique and the same on every player's game (e.g. "MyMod.Exhaust"); adding the same id

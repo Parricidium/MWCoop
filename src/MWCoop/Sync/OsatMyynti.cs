@@ -420,9 +420,10 @@ namespace MWCoop
         // client avec le total du panier (JD, 23/10) ; [Osat] KassaKulma : rotation en plus (degres)
         static void OsatRegister()
         {
-            GameObject regSrc = FindPath("PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister");
+            string regPath = Game.Msc ? "STORE/StoreCashRegister" : "PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister";
+            GameObject regSrc = FindPath(regPath);
             float yaw = Config.GetFloat("Osat", "KassaKulma", -76f);   // (mesure : a 0, ecran vers -104 deg ; -76 le tourne vers le client, +z)
-            GameObject reg = regSrc != null ? Clone("PERAPORTTI/ActiveFunctions/Store/Cashier/StoreCashRegister", 0, OsatRegisterAt, yaw, new Vector3(0, -1, 0), false) : null;
+            GameObject reg = regSrc != null ? Clone(regPath, 0, OsatRegisterAt, yaw, new Vector3(0, -1, 0), false) : null;
             if (reg == null) { L("magasin de pieces : caisse de la PSK introuvable"); return; }
             Bounds rb = LocalBounds(reg);
             var cg = new GameObject("osat_kassa");
@@ -432,6 +433,8 @@ namespace MWCoop
             osatRegCol = cg.AddComponent<BoxCollider>(); osatRegCol.isTrigger = true; osatRegCol.size = rb.size + new Vector3(0.08f, 0.08f, 0.08f);
             Transform logic = regSrc.transform.Find("CashRegisterLogic");
             TextMesh src = logic != null ? logic.GetComponent<TextMesh>() : null;
+            if (src == null) foreach (TextMesh tx in regSrc.GetComponentsInChildren<TextMesh>(true)) { src = tx; break; }   // (My Summer Car : pas de CashRegisterLogic)
+            if (src != null) logic = src.transform;
             if (src == null) { L("magasin de pieces : ecran de la caisse de la PSK introuvable"); return; }
             var tg = new GameObject("osat_kassa_naytto");
             tg.transform.SetParent(reg.transform, false);

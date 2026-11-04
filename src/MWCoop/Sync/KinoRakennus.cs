@@ -538,7 +538,7 @@ namespace MWCoop
                 float cx = s * (20f + gx) / 2f, g = gy(s * 20f, mz);
                 Plane(s < 0 ? "ki_sisaan" : "ki_ulosajo", new Vector3(s * 20f, g + 1.55f, mz + 0.27f), 0.48f, 0.6f, Vector3.forward);
                 GroundArrow(cx, mz - 2.5f, s < 0 ? -1f : 1f, gy);
-                KinoDriveway(KinoDrives()[s < 0 ? 0 : 1], gy);
+                if (KinoDrives().Count > 1) KinoDriveway(KinoDrives()[s < 0 ? 0 : 1], gy);
             }
             // lampadaires (lumiere : KinoLights)
             foreach (float x in new[] { -19f, -7f, 7f, 19f }) KinoLamp(new Vector3(x, gy(x, z1 - 0.6f), z1 - 0.6f));
@@ -571,6 +571,7 @@ namespace MWCoop
         {
             if (kinoDrives != null) return kinoDrives;
             kinoDrives = new List<Vector3[]>();
+            if (Config.GetInt("Kino", "Allees", 1) == 0) return kinoDrives;   // (petite ville de JD, 04/11 : les ouvertures du muret donnent directement sur sa rue, l'allee mordait dessus)
             Vector3 c; float yaw; string fl;
             KinoFrame(out c, out yaw, out fl);
             Quaternion r = Quaternion.Euler(0, yaw, 0);

@@ -314,6 +314,10 @@ namespace MWCoop
         // r20battery0...) : leurs maillages et matieres seulement, poses en decor (ni physique, ni automate, ni sauvegarde).
         static Dictionary<string, GameObject> osatPrefabs;
         static readonly HashSet<string> osatMissing = new HashSet<string>();
+        // (My Summer Car : memes rayons avec ses produits, modeles d'origine des objets du magasin de Teimo et des pieces -- petite ville de JD, 04/11)
+        static readonly Dictionary<string, string> OsatPrefabMsc = new Dictionary<string, string> {
+            { "motormoil1", "motoroil0" }, { "atfoil0", "motoroil0" }, { "boxtimingbelt", "lightbulbbox0" }, { "boxoilpump0", "lightbulbbox0" },
+            { "FANBELT0", "alternatorbelt0" }, { "VIN107", "alternatorbelt0" }, { "CARBATTERY0", "battery" } };
         static GameObject OsatPrefab(string name)
         {
             if (osatPrefabs == null)
@@ -323,6 +327,8 @@ namespace MWCoop
                     if (g != null && g.transform.parent == null && !osatPrefabs.ContainsKey(g.name)) osatPrefabs[g.name] = g;
             }
             GameObject r;
+            string msc;
+            if (Game.Msc && OsatPrefabMsc.TryGetValue(name, out msc)) name = msc;
             return osatPrefabs.TryGetValue(name, out r) ? r : null;
         }
         // copie posee : at (repere du magasin) au point d'ancrage de sa boite (anchor -1/0/1 par axe), tournee de yaw, couchee de tilt
