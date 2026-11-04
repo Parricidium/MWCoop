@@ -24,7 +24,9 @@ namespace MWCoop
             "Hey, hi! I heard you're trying to rebuild your car?...",
             "I really like this project, so to help you out, I'm lending you my car.",
             "It was my dad's, so if you wreck it, I'll cut your balls off." };
-        const string Line2 = "It's parked at Teimo's, take good care of it!";
+        const string Line2Teimo = "It's parked at Teimo's, take good care of it!";
+        const string Line2Village = "It's parked right next door, take good care of it!";
+        static string Line2 { get { return QueteGolf.ParkedInVillage ? Line2Village : Line2Teimo; } }
 
         static void ResetAsiakas() { asiakas = null; asiakasCol = null; talkT = -1f; keyGiven = false; if (keyHand != null) Object.Destroy(keyHand); keyHand = null; }
 

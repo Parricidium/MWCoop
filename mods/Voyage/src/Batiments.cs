@@ -284,7 +284,8 @@ namespace Voyage
             // faisant le passage entre le cote route et le cote piste ; parking sur trois cotes, ouvert sur l'allee
             g.ChainLink("verkko", 0.5f);
             g.Mat("tolppa", "metal_galvanized", 1f, new Color(0.82f, 0.83f, 0.85f));
-            const float fx0 = -545f, fx1 = -215f, fz0 = 1722f, fz1 = 1778f;
+            // (fx0 : -545 avant le petit village de JD, 04/11 : cote ouest rentre de 12 m, sur la rue du village, mais toujours 3 m avant le bout de la piste)
+            const float fx0 = -533f, fx1 = -215f, fz0 = 1722f, fz1 = 1778f;
             Fence(g, fx0, fz0, -412f, fz0); Fence(g, -348f, fz0, fx1, fz0);   // (sud, ouverture de l'aire)
             Fence(g, fx1, fz0, fx1, fz1); Fence(g, fx1, fz1, fx0, fz1); Fence(g, fx0, fz1, fx0, fz0);
             Fence(g, -416f, 1668f, -416f, fz0); Fence(g, -344f, 1668f, -344f, fz0);   // (cotes de l'aire)

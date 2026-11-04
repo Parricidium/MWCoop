@@ -62,8 +62,34 @@ namespace MWCoop
             if (Session.Active && Session.RemoteCount > 0 && now >= nextSend) { nextSend = now + 5f; Send(); }
         }
 
+        // (petit village de JD, 04/11 : [Quete] Place=x,z,cap, monde, tant que la quete n'est pas faite -- quete faite : la voiture reste ou on l'a laissee)
+        static bool VillageSpot(out Vector3 pos, out float yaw)
+        {
+            pos = Vector3.zero; yaw = 0f;
+            string[] c = Config.Get("Quete", "Place", "").Split(','); var ci = System.Globalization.CultureInfo.InvariantCulture; float x, z;
+            if (c.Length != 3 || !float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out x) || !float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out z) || !float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out yaw)) return false;
+            float gy = float.MinValue;
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(x, 60f, z), Vector3.down, 100f))
+                if (!h.collider.isTrigger && h.collider.attachedRigidbody == null && h.point.y > gy) gy = h.point.y;
+            if (gy == float.MinValue) return false;
+            pos = new Vector3(x, gy + 0.8f, z);
+            return true;
+        }
+        // Voiture garee dans le petit village (son rectangle) : ce que le client en dit
+        public static bool ParkedInVillage
+        {
+            get
+            {
+                Transform car = Vaz.CarOf(Owner);
+                if (car == null) return false;
+                Vector3 p = car.position;
+                return p.x > -760f && p.x < -480f && p.z > 1600f && p.z < 1840f;
+            }
+        }
+
         static bool Spot(out Vector3 pos, out float yaw)
         {
+            if (!Done && VillageSpot(out pos, out yaw)) return true;
             if (hasSaved && !Bogged(savedPos)) { pos = savedPos; yaw = savedYaw; return true; }
             // (laissee au marais ou sous l'eau -- dossier #39, квазарик 01/11 : le sol Swamp du jeu (resistance au roulement 2, contre
             // 0,018 sur la route) enlise toutes les voitures, le jeu a sa depanneuse pour les siennes ; la voiture de la quete, unique,
