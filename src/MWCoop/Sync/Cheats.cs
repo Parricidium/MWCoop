@@ -27,13 +27,41 @@ namespace MWCoop
                 Place[] all = Game.Msc ? PlacesMsc : PlacesMwc;
                 if (placesFrame == Time.frameCount && placesCache != null) return placesCache;
                 var l = new System.Collections.Generic.List<Place>();
-                foreach (Place p in all) if (p.Need == null || p.Need()) l.Add(p);
+                foreach (Place p in all) if (p.Need == null || p.Need()) l.Add(VillagePlace(p));
+                // (village Assakyla, Ville.cs : un lieu de plus, au milieu de la rue, devant la boutique)
+                if (Ville.On) l.Add(new Place { Key = "village", Alias = "assakyla", Fr = "\u00C4ss\u00E4kyl\u00E4", En = "\u00C4ss\u00E4kyl\u00E4", At = new Vector3(-600f, 6.2f, 1704.9f), Face = new Vector3(-610.9f, 6f, 1715.5f) });
                 l.AddRange(modPlaces);   // (lieux des mods : CoopApi.AddMapPlace -- aerodrome de Voyage)
                 placesCache = l.ToArray(); placesFrame = Time.frameCount;
                 return placesCache;
             }
         }
+        // Boutons de l'onglet Lieux du F7 (JD 04/11) : le village seul, a la place de ses batiments ; /lieu cinema, musee, pieces, boutique et la carte M les gardent
+        public static Place[] PanelPlaces
+        {
+            get
+            {
+                if (!Ville.On) return Places;
+                var l = new System.Collections.Generic.List<Place>();
+                foreach (Place p in Places) if (p.Key != "cinema" && p.Key != "pieces" && p.Key != "musee" && p.Key != "boutique") l.Add(p);
+                return l.ToArray();
+            }
+        }
         static Place[] placesCache; static int placesFrame = -1;
+        // (batiments dans le village Assakyla, Ville.cs : devant leurs portes, face a eux)
+        static Place VillagePlace(Place p)
+        {
+            if (!Ville.On) return p;
+            Vector3 at, face;
+            switch (p.Key)
+            {
+                case "cinema": at = new Vector3(-580.0f, 5.7f, 1691.3f); face = new Vector3(-581.7f, 5f, 1675.4f); break;
+                case "pieces": at = new Vector3(-540.9f, 5.3f, 1698.3f); face = new Vector3(-534.4f, 5f, 1697.6f); break;
+                case "musee": at = new Vector3(-670.9f, 7.2f, 1712.5f); face = new Vector3(-682.4f, 7f, 1713.9f); break;
+                case "boutique": at = new Vector3(-611.5f, 6.0f, 1710.0f); face = new Vector3(-610.9f, 6f, 1715.5f); break;
+                default: return p;
+            }
+            return new Place { Key = p.Key, Alias = p.Alias, Fr = p.Fr, En = p.En, At = at, Face = face, Need = p.Need };
+        }
         static readonly System.Collections.Generic.List<Place> modPlaces = new System.Collections.Generic.List<Place>();
         public static void AddPlace(string key, string alias, string fr, string en, Vector3 at, Vector3 face)
         {
@@ -83,6 +111,10 @@ namespace MWCoop
             new Place { Key = "rallye", Alias = "rally", Fr = "Rallye", En = "Rally", At = new Vector3(-770.0f, 3.5f, 1273.0f) },
             // (cinema KINO TAHTI, 25/10 : meme champ que dans My Winter Car)
             new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f), Need = () => Kauppa.Active && Kauppa.KinoOn },
+            // (autres batiments du village, VillagePlace donne leurs places)
+            new Place { Key = "pieces", Alias = "parts", Fr = "CARDINAL VARAOSAT", En = "CARDINAL VARAOSAT", Need = () => Ville.On && Kauppa.OsatOn },
+            new Place { Key = "musee", Alias = "museum", Fr = "Musée de la Corse", En = "Museum of Corsica", Need = () => Ville.On && Ajouts.Museum },
+            new Place { Key = "boutique", Alias = "s21", Fr = "OSUUSKAUPPA s21", En = "OSUUSKAUPPA s21", Need = () => Ville.On && Kauppa.ShopOn },
         };
 
         static bool hostAllows, hostOnly;
@@ -112,14 +144,14 @@ namespace MWCoop
         static void Say(string s) { Chat.System(s); }
 
         static readonly string[] HelpFr = {
-            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, cinema, musee, boutique, pieces",
+            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, village, cinema, musee, boutique, pieces",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)",
             "/degivrer [voiture] : vitres dégivrées pour tous (toutes les voitures, ou rivett, sorbet, taxi)",
             "/argentde <joueur> <montant> : (hôte) fixe l'argent d'un joueur, le sien compris" };
         static readonly string[] HelpEn = {
-            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, cinema, museum, shop, parts",
+            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, village, cinema, museum, shop, parts",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)",
@@ -128,13 +160,13 @@ namespace MWCoop
         // My Summer Car (19/10) : ses lieux (PlacesMsc), l'heure du jeu par pas de 2 h (MAP/SUN/Pivot/SUN::Color), la pluie
         // au lieu de la neige.
         static readonly string[] HelpMscFr = {
-            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye, cinema",
+            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye, village, cinema, musee, boutique, pieces",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
             "/heure <0-24> : l'heure de tous (par pas de 2 h)", "/pluie oui|non : pluie pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (satsuma, hayosiko, ferndale, ruscko, tracteur, camion, moto, remorque)",
             "/argentde <joueur> <montant> : (hôte) fixe l'argent d'un joueur, le sien compris" };
         static readonly string[] HelpMscEn = {
-            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema",
+            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, village, cinema, museum, s21, parts",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day (2-hour steps)", "/rain on|off: rain for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)",

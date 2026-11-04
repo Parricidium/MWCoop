@@ -134,7 +134,7 @@ namespace MWCoop
         const string DefaultPads = "-1591.1,1098.5,25,5.6,3.6;-1573.8,1087.4,22,10.6,7.9";
         static void Terrace()
         {
-            string s = s21On ? Config.Get("Boutique", "Tasanne", DefaultPads) : "";
+            string s = s21On ? Config.Get("Boutique", "Tasanne", Ville.On ? Ville.Pad : DefaultPads) : "";
             if (kinoOn) { s = (s.Length > 0 ? s + ";" : "") + Kauppa.KinoPad(); Kauppa.KinoDrives(); }
             if (osatOn) s = (s.Length > 0 ? s + ";" : "") + Kauppa.OsatPad();
             if (s.Length == 0) return;
@@ -155,7 +155,7 @@ namespace MWCoop
             }
             // ([Boutique] Terrasse=0 -- petite ville de JD, 04/11 : hauteurs des plateformes gardees, le sol ne bouge pas ; il tirait aussi les grands triangles
             // voisins, clotures et boites aux lettres de la carte restaient en l'air)
-            if (Config.GetInt("Boutique", "Terrasse", 1) == 0) { Log.Info("defrichage : pas de terrassement ([Boutique] Terrasse=0)"); return; }
+            if (Config.GetInt("Boutique", "Terrasse", Ville.On ? 0 : 1) == 0) { Log.Info("defrichage : pas de terrassement ([Boutique] Terrasse=0)"); return; }
             GameObject terr = GameObject.Find("MAP/MESH/TERRAIN_OBJ");
             if (terr == null || pads.Count == 0) return;
             const float Blend = 12f, Flat = 4f;   // (sol du jeu grossier : un sommet tous les 5 a 10 m)

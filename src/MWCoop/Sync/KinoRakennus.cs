@@ -37,7 +37,7 @@ namespace MWCoop
         {
             // (22/10 soir, choix de JD : le champ plat au nord de la route, a l'est des silos MAATALOUS ; facade et parking vers la route.
             // Avant : a l'est du musee, -1528.2,1053.4,24.3,2.25 -- terrain trop complique, fosse, routes en biais)
-            string s = Config.Get("Kino", "Paikka", "-468,1629.5,184.3,3.62");   // (plancher fixe, le meme chez tous : sol 2,19..3,47 sous l'emprise, plateforme 2,75)
+            string s = Config.Get("Kino", "Paikka", Ville.On ? Ville.Kino : "-468,1629.5,184.3,3.62");   // (plancher fixe, le meme chez tous : sol 2,19..3,47 sous l'emprise, plateforme 2,75)
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             string[] a = s.Split(',');
             c = new Vector3(float.Parse(a[0], ci), 0f, float.Parse(a[1], ci));
@@ -572,7 +572,7 @@ namespace MWCoop
         {
             if (kinoDrives != null) return kinoDrives;
             kinoDrives = new List<Vector3[]>();
-            if (Config.GetInt("Kino", "Allees", 1) == 0) return kinoDrives;   // (petite ville de JD, 04/11 : les ouvertures du muret donnent directement sur sa rue, l'allee mordait dessus)
+            if (Config.GetInt("Kino", "Allees", Ville.On ? 0 : 1) == 0) return kinoDrives;   // (petite ville de JD, 04/11 : les ouvertures du muret donnent directement sur sa rue, l'allee mordait dessus)
             Vector3 c; float yaw; string fl;
             KinoFrame(out c, out yaw, out fl);
             Quaternion r = Quaternion.Euler(0, yaw, 0);

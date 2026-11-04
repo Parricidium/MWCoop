@@ -26,7 +26,7 @@ namespace MWCoop
         static void ReadPlace()
         {
             FloorY = FloorDefault; floorAuto = false;
-            string s = Config.Get("Boutique", "Paikka", "");
+            string s = Config.Get("Boutique", "Paikka", Ville.On ? Ville.Shop : "");
             if (s.Length == 0) return;
             string[] a = s.Split(',');
             var ci = System.Globalization.CultureInfo.InvariantCulture;

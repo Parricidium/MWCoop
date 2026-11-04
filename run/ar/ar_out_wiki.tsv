@@ -589,3 +589,26 @@ WW74	ثبّت Steam Legacy (نسخة Steam لنظام Windows 7).
 WW75	نزّل VxKex NEXT من صفحته الرسمية على GitHub: github.com/YuZhouRen86/VxKex-NEXT (المشغّل لا ينزّل ولا يثبّت أي شيء).
 WW76	وSteam مغلق: انقر بزر الفأرة الأيمن على steamwebhelper.exe (في مجلد Steam) ← خصائص ← تبويب VxKex ← فعّله. هذا الملف فقط: لا اللعبة ولا MWCoop.exe.
 WW77	شغّل Steam، ثم اختر STEAM في المشغّل.
+WW78	يقع متحف كورسيكا (Korsikan museo) في الجهة الغربية من قرية Ässäkylä. الدخول مجاني: تنفتح الأبواب المنزلقة أمام كل لاعب.
+WW79	متجر OSUUSKAUPPA s21، في الشارع الأوسط من قرية Ässäkylä، لا يبيع سوى أغراض اللعب الجماعي. انقر على المقبض لفتح الباب.
+WW80	وسينما KINO TÄHTI ومتجر قطع الغيار CARDINAL أيضًا، في قرية Ässäkylä، كما في MWC: شرق صوامع MAATALOUS.
+WW81	سباق الجليد: إضافة صُممت للعبة My Winter Car، وغير موجودة في My Summer Car.
+WW82	تقع سينما KINO TÄHTI في قرية Ässäkylä، شرق صوامع MAATALOUS: سينما فنلندية من الثمانينيات والتسعينيات، لها موقف سيارات وبهو ومنضدة وقاعتان. على الخريطة (M) هي نقطة \"Cinema\"؛ وفي الغش ينقلك إليها /place cinema.
+WW83	يقع متجر قطع الغيار CARDINAL VARAOSAT عند المدخل الشرقي لقرية Ässäkylä. على الخريطة (M) هو نقطة \"CARDINAL VARAOSAT\"؛ وفي الغش ينقلك إليه /place parts.
+WW84	يحوّل محوّل الحلبات حلبات Assetto Corsa الخاصة بك (الرسمية والمعدّلة) إلى وجهات سفر للعبة My Winter Car. في اللعبة، تبيع وكالة السفر في Peräjärvi تذكرة، وتقلع طائرة Cessna من المطار قرب قرية Ässäkylä وتنقلك إلى الحلبة. نسخة مبكرة: ستتحسن مع التحديثات.
+WW85	ابدأ لعبة: في وكالة السفر في Peräjärvi، ملصق لكل وجهة.
+WW86	في المطار (My Winter Car: شرق قرية Ässäkylä؛ My Summer Car: المطار القديم قرب مكب النفايات): تحدث عند المكتب، ثم انقر للموافقة. تقلع طائرة Cessna وتصل إلى الحلبة.
+WW87	اللوحة (F7) أو الدردشة: /tp <player>، /bring <player>، /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, village).
+WW88	اللوحة (F7) أو الدردشة: /tp <player>، /bring <player>، /place <name> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, village, cinema).
+WW89	على اليمين، KÄYTETYT OSAT: قطع Satsuma من منضدة Fleetari، بأسعاره، ما لم تكن مركّبة.
+WW90	Ässäkylä هي قرية اللعب الجماعي الصغيرة: طرق ومنازل وأسوار وأعمدة إنارة ومباني المود في مكان واحد. تقع شمال الطريق الرئيسي، شرق صوامع MAATALOUS. تشير لافتة زرقاء \"ÄSSÄKYLÄ\" إلى المنعطف. وهي نفسها في My Winter Car وMy Summer Car.
+WW91	في القرية
+WW92	متجر OSUUSKAUPPA s21، ومتحف كورسيكا، وسينما KINO TÄHTI، ومتجر قطع الغيار CARDINAL VARAOSAT.
+WW93	على الخريطة (M)، نقطة \"Ässäkylä\" ونقطة لكل مبنى. في الغش: زر Ässäkylä في اللوحة (F7)، أو /place village.
+WW94	متى تظهر
+WW95	يقرر المضيف للجميع، في الإعدادات > اللعب الجماعي > إضافات MWCoop. إذا لم يُحدَّد أي مبنى: تبقى المنطقة كما في اللعبة الأصلية.
+WW96	إذا حُدد مبنى واحد على الأقل: تظهر القرية كلها عند تحميل اللعبة. المبنى غير المحدد لا يُبنى، ويبقى مكانه أرضًا فارغة.
+WW97	لعبة بدأت من قبل: ما تركته في هذه المباني يبقى في مكانها القديم، على الأرض. اذهب لإحضاره من هناك.
+WW98	قرية Ässäkylä
+WW99	مكانها ومتى تظهر
+WW100	قطع المودات، قطع مستعملة

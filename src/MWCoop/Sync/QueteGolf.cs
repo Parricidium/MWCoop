@@ -62,11 +62,11 @@ namespace MWCoop
             if (Session.Active && Session.RemoteCount > 0 && now >= nextSend) { nextSend = now + 5f; Send(); }
         }
 
-        // (petit village de JD, 04/11 : [Quete] Place=x,z,cap, monde, tant que la quete n'est pas faite -- quete faite : la voiture reste ou on l'a laissee)
+        // (village Assakyla, Ville.cs, JD 04/11 : place tant que la quete n'est pas faite -- quete faite : la voiture reste ou on l'a laissee ; [Quete] Place=x,z,cap pour essayer)
         static bool VillageSpot(out Vector3 pos, out float yaw)
         {
             pos = Vector3.zero; yaw = 0f;
-            string[] c = Config.Get("Quete", "Place", "").Split(','); var ci = System.Globalization.CultureInfo.InvariantCulture; float x, z;
+            string[] c = Config.Get("Quete", "Place", Ville.On ? Ville.QuestCar : "").Split(','); var ci = System.Globalization.CultureInfo.InvariantCulture; float x, z;
             if (c.Length != 3 || !float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out x) || !float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out z) || !float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out yaw)) return false;
             float gy = float.MinValue;
             foreach (RaycastHit h in Physics.RaycastAll(new Vector3(x, 60f, z), Vector3.down, 100f))
@@ -74,6 +74,13 @@ namespace MWCoop
             if (gy == float.MinValue) return false;
             pos = new Vector3(x, gy + 0.8f, z);
             return true;
+        }
+        static bool AtTeimo(Vector3 p)
+        {
+            GameObject st = GameObject.Find(Game.Msc ? "STORE" : "STORE_AREA");
+            if (st == null) return false;
+            Vector3 d = st.transform.TransformPoint(Game.Msc ? SpotStore : SpotStoreMwc) - p; d.y = 0f;
+            return d.magnitude < 6f;
         }
         // Voiture garee dans le petit village (son rectangle) : ce que le client en dit
         public static bool ParkedInVillage
@@ -90,11 +97,14 @@ namespace MWCoop
         static bool Spot(out Vector3 pos, out float yaw)
         {
             if (!Done && VillageSpot(out pos, out yaw)) return true;
+            // (quete faite avant le village, voiture jamais bougee de sa place chez Teimo : au village avec les autres -- JD 04/11 ; deplacee par le joueur : elle reste ou elle est)
+            if (hasSaved && AtTeimo(savedPos) && VillageSpot(out pos, out yaw)) { L("voiture restee chez Teimo : posee au village"); hasSaved = false; return true; }
             if (hasSaved && !Bogged(savedPos)) { pos = savedPos; yaw = savedYaw; return true; }
             // (laissee au marais ou sous l'eau -- dossier #39, квазарик 01/11 : le sol Swamp du jeu (resistance au roulement 2, contre
             // 0,018 sur la route) enlise toutes les voitures, le jeu a sa depanneuse pour les siennes ; la voiture de la quete, unique,
             // y restait d'une partie a l'autre -- ramenee chez Teimo au chargement, comme remorquee)
-            if (hasSaved) { L("voiture laissee au marais en " + savedPos.ToString("F1") + " : ramenee chez Teimo (remorquee)"); hasSaved = false; }
+            if (hasSaved) { L("voiture laissee au marais en " + savedPos.ToString("F1") + " : ramenee (remorquee)"); hasSaved = false; }
+            if (VillageSpot(out pos, out yaw)) return true;
             pos = Vector3.zero; yaw = 0f;
             GameObject st = GameObject.Find(Game.Msc ? "STORE" : "STORE_AREA");
             if (st == null) return false;

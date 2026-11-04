@@ -42,7 +42,7 @@ namespace MWCoop
         // de la piste de ski a -1760 (z -115) .. -1772 (z -150).
         public static void OsatFrame(out Vector3 c, out float yaw, out string floor)
         {
-            string s = Config.Get("Osat", "Paikka", "-1755.8,-136.7,85.7,auto");
+            string s = Config.Get("Osat", "Paikka", Ville.On ? Ville.Osat : "-1755.8,-136.7,85.7,auto");
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             string[] a = s.Split(',');
             c = new Vector3(float.Parse(a[0], ci), 0f, float.Parse(a[1], ci));
@@ -453,7 +453,7 @@ namespace MWCoop
             };
             // ([Osat] Parking=droite -- petite ville de JD, 04/11 : devant, les places tombaient de l'autre cote de la rue) : a droite du magasin vu de la rue,
             // colle a la rue, asphalte et sol solide, 6 places, muret sur les cotes et derriere les lampadaires
-            if (Config.Get("Osat", "Parking", "") == "droite")
+            if (Config.Get("Osat", "Parking", Ville.On ? "droite" : "") == "droite")
             {
                 const float xa = -OL - 2f, xb = xa - 15.6f, za = 3.8f, zb = 8.8f, zf = 9.2f, zm = 1.6f, m = 0.7f;   // (zf : bord de la chaussee ; zm : muret du fond)
                 HeightGrid("ki_asfaltti", xb - m, xa + m, zm, zf, 1f, gy, 0.1f);

@@ -51,7 +51,7 @@ namespace MWCoop
             loadAt = Game.LevelName == "GAME" && !MapExport.Active ? Time.realtimeSinceStartup + Config.GetFloat("Test", "CartesDelai", 6f) : -1;
             if (loadAt < 0) return;
             string d = LoadDir(false);
-            if (d != null && Directory.Exists(d) && Directory.GetFiles(d, "*.mwcmap").Length > 0) SceneBatches.Prefetch();   // (copies d'objets regroupes)
+            if ((d != null && Directory.Exists(d) && Directory.GetFiles(d, "*.mwcmap").Length > 0) || Config.GetInt("Ville", "Active", 1) != 0) SceneBatches.Prefetch();   // (copies d'objets regroupes ; le village, s'il est la)
         }
 
         // Chargement reparti sur plusieurs images (CartesBudget ms par image, 4 par defaut) : plus d'a-coup a l'arrivee des
@@ -69,7 +69,7 @@ namespace MWCoop
                 catch (Exception e) { Log.Warn("cartes : " + e.Message); job = null; }
                 return;
             }
-            if (loadAt < 0 || Time.realtimeSinceStartup < loadAt) return;
+            if (loadAt < 0 || Time.realtimeSinceStartup < loadAt || !Ajouts.Ready) return;   // (le village suit les choix de l'hote)
             loadAt = -1;
             job = LoadAll();
         }
@@ -77,17 +77,24 @@ namespace MWCoop
         static IEnumerator<bool> LoadAll()
         {
             string dir = LoadDir(true);
-            if (dir == null || !Directory.Exists(dir)) { SceneBatches.Close(); yield break; }
-            string[] files = Directory.GetFiles(dir, "*.mwcmap");
-            if (files.Length == 0) { SceneBatches.Close(); yield break; }
+            string[] files = dir != null && Directory.Exists(dir) ? Directory.GetFiles(dir, "*.mwcmap") : new string[0];
+            byte[] village = Ville.On ? Ville.Pack() : null;
+            if (files.Length == 0 && village == null) { SceneBatches.Close(); yield break; }
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int frames = 0;
             root = new GameObject("MWCoop-Cartes");
             roots = null; meshCache.Clear(); plantCache.Clear(); gameTex = null; gameMat = null; allTex = false; packTex.Clear();
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-            foreach (string f in files)
+            var todo = new List<string>(files);
+            if (village != null)
             {
-                Pack p = Begin(f);
+                // (carte d'origine du village chez JD : deja dans la DLL, elle ferait les routes en double)
+                todo.RemoveAll(f => Path.GetFileName(f).StartsWith("s21-town", StringComparison.OrdinalIgnoreCase));
+                todo.Insert(0, null);
+            }
+            foreach (string f in todo)
+            {
+                Pack p = f == null ? Begin("village", village) : Begin(f);
                 if (p == null) continue;
                 foreach (string l in p.Lines) { Line(p, l); frames++; yield return true; }
                 foreach (string c in p.ReliefTargets) { ApplyRelief(p, c); frames++; yield return true; }
@@ -377,11 +384,11 @@ namespace MWCoop
             public List<string> ReliefTargets = new List<string>(); public List<string[]> Strokes = new List<string[]>();
         }
 
-        static Pack Begin(string file)
+        static Pack Begin(string file, byte[] zip = null)
         {
             try
             {
-                var p = new Pack { File = file, Z = ReadZip(file), Name = Path.GetFileNameWithoutExtension(file) };
+                var p = new Pack { File = file, Z = zip != null ? ReadZip(zip) : ReadZip(file), Name = Path.GetFileNameWithoutExtension(file) };
                 byte[] txt;
                 if (!p.Z.TryGetValue("carte.txt", out txt)) { Log.Warn("cartes : " + Path.GetFileName(file) + " : carte.txt absent"); return null; }
                 p.Lines = Encoding.UTF8.GetString(txt).Replace("\r", "").Split('\n');
@@ -1009,9 +1016,9 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- zip (sans compression ou deflate : Inflate.cs)
-        public static Dictionary<string, byte[]> ReadZip(string path)
+        public static Dictionary<string, byte[]> ReadZip(string path) { return ReadZip(File.ReadAllBytes(path)); }
+        public static Dictionary<string, byte[]> ReadZip(byte[] z)
         {
-            byte[] z = File.ReadAllBytes(path);
             var res = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
             int eocd = -1;
             for (int o = z.Length - 22; o >= 0 && o >= z.Length - 22 - 65535; o--)

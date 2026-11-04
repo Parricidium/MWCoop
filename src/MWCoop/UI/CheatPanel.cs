@@ -100,7 +100,7 @@ namespace MWCoop
             bool ok = Cheats.Allowed;
             float pad = P(16), bh = P(30), gap = P(6), rowH = P(36), tabH = P(30);
             float w = Mathf.Min(P(400), Screen.width - P(32)), iw = w - 2 * pad;
-            int perRow = 3, placeRows = (Cheats.Places.Length + perRow - 1) / perRow;
+            Cheats.Place[] placesHere = Cheats.PanelPlaces; int perRow = 3, placeRows = (placesHere.Length + perRow - 1) / perRow;
             string[][] carList = Game.Msc ? CarsMsc : CarsMwc;
             int carRows = (carList.Length + perRow - 1) / perRow;
             var tabs = new List<int>();
@@ -157,9 +157,9 @@ namespace MWCoop
                     }
                     break;
                 case T_Places:
-                    for (int i = 0; i < Cheats.Places.Length; i++)
+                    for (int i = 0; i < placesHere.Length; i++)
                     {
-                        Cheats.Place p = Cheats.Places[i];
+                        Cheats.Place p = placesHere[i];
                         Rect r = new Rect(ix + (i % perRow) * (pw + gap), cy + (i / perRow) * (bh + gap), pw, bh);
                         string lab = Lang.T(p.Fr, p.En);
                         // (noms longs -- CARDINAL VARAOSAT, Musee de la Corse, OSUUSKAUPPA s21 -- : nom court, sinon ils debordaient du bouton)

@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES, WA_INTERFACE };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES, WA_INTERFACE, WA_VILLE };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -459,8 +459,8 @@ static const WikiBlock kW_Look[] = {
     { WB_H, L"Triches", L"Cheats", 0, WG_MWC },
     { WB_P, L"Coupées d'origine. L'hôte les autorise dans Réglages > Co-op > Quand j'héberge (« Autoriser les triches (F7) ») ou dans la carte Options du salon ; ses invités suivent son choix. Chaque triche est annoncée à tous dans le tchat.",
             L"Off by default. The host allows them in Settings > Co-op > When I host (\"Allow cheats (F7)\") or in the lobby's Options card; their guests follow that choice. Every cheat is announced to everyone in the chat." },
-    { WB_B, L"Panneau (F7) ou tchat : /tp <joueur>, /amener <joueur>, /lieu <nom> (appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet).",
-            L"Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin)." },
+    { WB_B, L"Panneau (F7) ou tchat : /tp <joueur>, /amener <joueur>, /lieu <nom> (appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, village).",
+            L"Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, village)." },
     { WB_B, L"/argent <montant>, /soin (faim, soif, fatigue, stress… à zéro), /liberer (plus recherché, sorti de prison), /vetements (ma veste, ma combinaison et mon casque devant moi), /voiture <nom> (la voiture vient devant moi).", L"/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail), /clothes (my jacket, coverall and helmet in front of me), /car <name> (the car comes in front of me)." },
     { WB_B, L"Pour tous : /heure <0-24>, /neige oui|non (faits par l'hôte, le monde suit).", L"For everyone: /time <0-24>, /snow on|off (done by the host, the world follows)." },
     { WB_B, L"Hôte : /argentde <joueur> <montant> fixe l'argent d'un joueur (le sien compris).", L"Host: /setmoney <player> <amount> sets a player's money (their own included)." },
@@ -470,8 +470,8 @@ static const WikiBlock kW_Look[] = {
     { WB_H, L"Triches", L"Cheats", 0, WG_MSC },
     { WB_P, L"Coupées d'origine. L'hôte les autorise dans Réglages > Co-op > Quand j'héberge (« Autoriser les triches (F7) ») ou dans la carte Options du salon ; ses invités suivent son choix. Chaque triche est annoncée à tous dans le tchat.",
             L"Off by default. The host allows them in Settings > Co-op > When I host (\"Allow cheats (F7)\") or in the lobby's Options card; their guests follow that choice. Every cheat is announced to everyone in the chat." },
-    { WB_B, L"Panneau (F7) ou tchat : /tp <joueur>, /amener <joueur>, /lieu <nom> (maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye, cinema).",
-            L"Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, cinema)." },
+    { WB_B, L"Panneau (F7) ou tchat : /tp <joueur>, /amener <joueur>, /lieu <nom> (maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye, village, cinema).",
+            L"Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, village, cinema)." },
     { WB_B, L"/argent <montant>, /soin (faim, soif, fatigue, stress… à zéro), /liberer (plus recherché, sorti de prison), /vetements (ma veste, ma combinaison et mon casque devant moi), /voiture <nom> (satsuma, hayosiko, ferndale, ruscko, tracteur, camion, moto, remorque : elle vient devant moi).",
             L"/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail), /clothes (my jacket, coverall and helmet in front of me), /car <name> (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer: it comes in front of me)." },
     { WB_B, L"Pour tous : /heure <0-24> (par pas de 2 h), /pluie oui|non (faits par l'hôte, le monde suit).", L"For everyone: /time <0-24> (2-hour steps), /rain on|off (done by the host, the world follows)." },
@@ -646,8 +646,8 @@ static const WikiBlock kW_Drone[] = {
 };
 
 static const WikiBlock kW_Museo[] = {
-    { WB_P, L"Le musée de la Corse (Korsikan museo) est à côté de la boutique OSUUSKAUPPA s21, au sud-ouest du carrefour de la PSK à Peräjärvi. Entrée libre : les portes coulissantes s'ouvrent devant chaque joueur.",
-            L"The Museum of Corsica (Korsikan museo) stands next to the OSUUSKAUPPA s21 shop, south-west of the PSK crossroads in Peräjärvi. Free entry: the sliding doors open for every player." },
+    { WB_P, L"Le musée de la Corse (Korsikan museo) est à l'ouest du village d'Ässäkylä. Entrée libre : les portes coulissantes s'ouvrent devant chaque joueur.",
+            L"The Museum of Corsica (Korsikan museo) stands on the west side of the village of Ässäkylä. Free entry: the sliding doors open for every player." },
     { WB_H, L"À voir", L"What to see", 0 },
     { WB_B, L"Le hall : la Corse en relief sous vitrine, les bustes de Napoléon et de Pascal Paoli, et de grands tableaux du XIXe siècle.", L"The hall: Corsica in relief under glass, busts of Napoleon and Pasquale Paoli, and large 19th-century paintings." },
     { WB_B, L"La salle « La Corse » (à droite en entrant) : histoire, villes et villages, vieilles cartes postales, la carte génoise.", L"The \"Corsica\" room (on the right as you enter): history, towns and villages, old postcards, the Genoese map." },
@@ -718,8 +718,8 @@ static const WikiBlock kW_Vaz[] = {
 };
 
 static const WikiBlock kW_Shop[] = {
-    { WB_P, L"La boutique OSUUSKAUPPA s21, à Peräjärvi, au sud-ouest du carrefour de la PSK (le magasin de Teimo), le long de la petite route, à côté du musée de la Corse, ne vend que des objets du coop. Clic sur la poignée pour ouvrir la porte.",
-            L"The OSUUSKAUPPA s21 shop, in Peräjärvi, south-west of the PSK crossroads (Teimo's store), along the small road next to the Museum of Corsica, only sells co-op items. Click the handle to open the door." },
+    { WB_P, L"La boutique OSUUSKAUPPA s21, dans la rue du milieu du village d'Ässäkylä, ne vend que des objets du coop. Clic sur la poignée pour ouvrir la porte.",
+            L"The OSUUSKAUPPA s21 shop, on the middle street of the village of Ässäkylä, only sells co-op items. Click the handle to open the door." },
     { WB_H, L"En rayon", L"On the shelves", 0 },
     { WB_B, L"Vitrine vidéo (mur gauche) : télévisions 590 mk, magnétoscopes 390 mk, caméscopes 890 mk, cassettes VHS 19 mk. Clic sur une vitre pour la faire coulisser, puis prends l'objet.",
             L"Video cabinet (left wall): TVs 590 mk, VCRs 390 mk, camcorders 890 mk, VHS tapes 19 mk. Click a glass pane to slide it open, then take the item." },
@@ -852,12 +852,12 @@ static const WikiBlock kW_MscBeta[] = {
             L"Since 1.14: the Fiad 131 and the add-on cars (F10 > Cars, launcher's Character > Add-ons page), built on the RUSCKO, with their gravel wheels and the rally SATSUMA's handling; the weekend rally with them." },
     { WB_B, L"Depuis 1.14 : la boutique OSUUSKAUPPA s21 et son coin vidéo (caméscope, magnétoscope, télé, montage), le musée de la Corse, les sacs de couchage, les casques et le KARTTURI 2000 sur les spéciales de MSC, au même endroit que sur MWC (Peräjärvi).",
             L"Since 1.14: the OSUUSKAUPPA s21 shop and its video corner (camcorder, VCR, TV, editing), the Museum of Corsica, sleeping bags, helmets and the KARTTURI 2000 on MSC's stages, in the same place as in MWC (Peräjärvi)." },
-    { WB_B, L"Le cinéma KINO TÄHTI aussi, au même endroit que sur MWC : au bord de la route, à l'est des silos MAATALOUS.",
-            L"The KINO TÄHTI cinema too, in the same place as in MWC: by the road, east of the MAATALOUS silos." },
+    { WB_B, L"Le cinéma KINO TÄHTI et le magasin de pièces CARDINAL aussi, dans le village d'Ässäkylä, comme sur MWC : à l'est des silos MAATALOUS.",
+            L"The KINO TÄHTI cinema and the CARDINAL parts shop too, in the village of Ässäkylä, as in MWC: east of the MAATALOUS silos." },
     { WB_B, L"Depuis msc-1.15.1 : les résultats des dragsters avec les temps des autres joueurs, les trophées du rallye pour chacun, et un podium qui attend les autres pilotes humains.", L"Since msc-1.15.1: drag race results with the other players' times, rally trophies for everyone, and a podium that waits for the other human drivers." },
     { WB_H, L"Absents de My Summer Car", L"Not in My Summer Car" },
-    { WB_B, L"Course sur glace et magasin de pièces CARDINAL : des ajouts faits pour My Winter Car, absents de My Summer Car.",
-            L"Ice race and CARDINAL parts shop: additions made for My Winter Car, not in My Summer Car." },
+    { WB_B, L"Course sur glace : un ajout fait pour My Winter Car, absent de My Summer Car.",
+            L"Ice race: an addition made for My Winter Car, not in My Summer Car." },
     { WB_TIP, L"Quelque chose cloche ? Signaler un bug (l'insecte en haut à droite) : le formulaire et le zip des journaux.",
               L"Something wrong? Report a bug (the bug icon at the top right): the form and the logs zip." },
     { WB_GO, L"Changer de jeu (MSC ou MWC)", L"Switch game (MSC or MWC)", 1000 + WA_UPDATE },
@@ -1011,9 +1011,27 @@ static const WikiBlock kW_Editor[] = {
             L"Steam doesn't find the game (non-Steam copy, Steam blocked in your country)? Just point to the game's .exe file: the editor remembers it, for the launcher too." },
     { WB_GO, L"Ouvrir les Outils", L"Open Tools", TAB_TOOLS },
 };
+static const WikiBlock kW_Ville[] = {   // (village Assakyla, Sync/Ville.cs -- JD, 04/11)
+    { WB_P, L"Ässäkylä est le petit village du coop : routes, maisons, clôtures, lampadaires, et les bâtiments du mod au même endroit. Il se trouve au nord de la route principale, à l'est des silos MAATALOUS. Un panneau bleu « ÄSSÄKYLÄ » signale l'embranchement. Il est le même sur My Winter Car et My Summer Car.",
+            L"Ässäkylä is the little co-op village: roads, houses, fences, street lights, and the mod's buildings all in one place. It lies north of the main road, east of the MAATALOUS silos. A blue \"ÄSSÄKYLÄ\" sign marks the turn-off. It is the same in My Winter Car and My Summer Car." },
+    { WB_H, L"Dans le village",
+            L"In the village" },
+    { WB_B, L"La boutique OSUUSKAUPPA s21, le musée de la Corse, le cinéma KINO TÄHTI et le magasin de pièces CARDINAL VARAOSAT.",
+            L"The OSUUSKAUPPA s21 shop, the Museum of Corsica, the KINO TÄHTI cinema and the CARDINAL VARAOSAT parts shop." },
+    { WB_B, L"Sur la carte (M), le point « Ässäkylä » et un point par bâtiment. Dans les triches : le bouton Ässäkylä du panneau (F7), ou /lieu village.",
+            L"On the map (M), the \"Ässäkylä\" spot and one spot per building. In the cheats: the Ässäkylä button of the panel (F7), or /place village." },
+    { WB_H, L"Quand il apparaît",
+            L"When it appears" },
+    { WB_B, L"L'hôte décide pour tout le monde, dans Réglages > Co-op > Ajouts MWCoop. Aucun bâtiment coché : la zone reste comme dans le jeu d'origine.",
+            L"The host decides for everyone, in Settings > Co-op > MWCoop additions. No building ticked: the area stays as in the original game." },
+    { WB_B, L"Au moins un bâtiment coché : tout le village apparaît au chargement de la partie. Un bâtiment décoché n'est pas construit, sa place reste un terrain vide.",
+            L"At least one building ticked: the whole village appears when the game loads. An unticked building is not built, its spot stays an empty lot." },
+    { WB_TIP, L"Partie déjà commencée : ce que tu avais laissé dans ces bâtiments reste à leur ancienne place, au sol. Va le chercher là-bas.",
+            L"Game already started: whatever you left in these buildings stays at their old spot, on the ground. Go and fetch it there." },
+};
 static const WikiBlock kW_Kino[] = {   // (cinema KINO TAHTI, 1.10.1 -- JD, 22/10 : « un guide dans le wiki »)
-    { WB_P, L"Le cinéma KINO TÄHTI est au bord de la route, à l'est des silos MAATALOUS : un cinéma finlandais des années 80-90, avec son parking, son hall, son comptoir et deux salles. Sur la carte (M), c'est le point « Cinéma » ; dans les triches, /lieu cinema y emmène.",
-            L"The KINO TÄHTI cinema stands by the road, east of the MAATALOUS silos: a Finnish cinema from the 80s-90s, with its parking, lobby, counter and two screen rooms. On the map (M) it is the \"Cinema\" spot; in the cheats, /place cinema takes you there." },
+    { WB_P, L"Le cinéma KINO TÄHTI est dans le village d'Ässäkylä, à l'est des silos MAATALOUS : un cinéma finlandais des années 80-90, avec son parking, son hall, son comptoir et deux salles. Sur la carte (M), c'est le point « Cinéma » ; dans les triches, /lieu cinema y emmène.",
+            L"The KINO TÄHTI cinema stands in the village of Ässäkylä, east of the MAATALOUS silos: a Finnish cinema from the 80s-90s, with its parking, lobby, counter and two screen rooms. On the map (M) it is the \"Cinema\" spot; in the cheats, /place cinema takes you there." },
     { WB_H, L"Au comptoir",
             L"At the counter", 0 },
     { WB_S, L"Vise un article sur le comptoir : son prix s'affiche. Clic gauche pour l'acheter, avec ton porte-monnaie.",
@@ -1052,14 +1070,16 @@ static const WikiBlock kW_Kino[] = {   // (cinema KINO TAHTI, 1.10.1 -- JD, 22/1
     { WB_GO, L"Monter et exporter une cassette", L"Edit and export a tape", 1000 + WA_MONTAGE },
 };
 static const WikiBlock kW_Osat[] = {   // (magasin de pieces CARDINAL VARAOSAT -- JD, 23/10)
-    { WB_P, L"Le magasin de pièces CARDINAL VARAOSAT est au camping de la station de ski, au nord des caravanes, entre la piste et la barrière bleue. Sur la carte (M), c'est le point « CARDINAL VARAOSAT » ; dans les triches, /lieu pieces y emmène.",
-            L"The CARDINAL VARAOSAT parts shop is at the ski resort camping area, north of the caravans, between the track and the blue fence. On the map (M) it is the \"CARDINAL VARAOSAT\" spot; in the cheats, /place parts takes you there." },
+    { WB_P, L"Le magasin de pièces CARDINAL VARAOSAT est à l'entrée est du village d'Ässäkylä. Sur la carte (M), c'est le point « CARDINAL VARAOSAT » ; dans les triches, /lieu pieces y emmène.",
+            L"The CARDINAL VARAOSAT parts shop is at the east entrance of the village of Ässäkylä. On the map (M) it is the \"CARDINAL VARAOSAT\" spot; in the cheats, /place parts takes you there." },
     { WB_H, L"Deux ailes",
             L"Two wings", 0 },
     { WB_B, L"À gauche, CARDINAL : les pièces et les véhicules des mods qui vendent ici (comme ceux de Cardinal). Les rayons restent vides si aucun de ces mods n'est installé.",
             L"On the left, CARDINAL: parts and vehicles from mods that sell here (like Cardinal's). The shelves stay empty if none of these mods is installed." },
     { WB_B, L"À droite, KÄYTETYT OSAT : 16 pièces d'occasion pour la Rivett, tirées au hasard et renouvelées tous les 3 jours du jeu. Leur état (usure) s'affiche avec le prix.",
-            L"On the right, KÄYTETYT OSAT: 16 used parts for the Rivett, picked at random and restocked every 3 game days. Their condition (wear) shows with the price." },
+            L"On the right, KÄYTETYT OSAT: 16 used parts for the Rivett, picked at random and restocked every 3 game days. Their condition (wear) shows with the price.", 0, WG_MWC },
+    { WB_B, L"À droite, KÄYTETYT OSAT : les pièces de la Satsuma du comptoir de Fleetari, à ses prix, tant qu'elles ne sont pas montées.",
+            L"On the right, KÄYTETYT OSAT: the Satsuma parts from Fleetari's counter, at his prices, as long as they are not fitted.", 0, WG_MSC },
     { WB_H, L"Acheter",
             L"Buying", 0 },
     { WB_S, L"Vise un article : son nom, son état et son prix s'affichent. Clic gauche pour le prendre, clic droit pour le reposer.",
@@ -1075,8 +1095,8 @@ static const WikiBlock kW_Osat[] = {   // (magasin de pieces CARDINAL VARAOSAT -
     { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
 };
 static const WikiBlock kW_Voyage[] = {   // (convertisseur de circuits Assetto Corsa + mod Voyage, Early -- JD, 24/10)
-    { WB_P, L"Le convertisseur de circuits transforme les circuits de ton Assetto Corsa (officiels et mods) en destinations de voyage pour My Winter Car. Dans le jeu, l'agence de voyage de Peräjärvi vend un billet, le Cessna décolle de l'aérodrome près du cinéma et te dépose sur le circuit. Version Early : il s'améliorera au fil des mises à jour.",
-            L"The track converter turns the tracks of your Assetto Corsa (official and mods) into travel destinations for My Winter Car. In game, the Peräjärvi travel agency sells a ticket, the Cessna takes off from the airfield near the cinema and drops you on the track. Early version: it will improve with the updates." },
+    { WB_P, L"Le convertisseur de circuits transforme les circuits de ton Assetto Corsa (officiels et mods) en destinations de voyage pour My Winter Car. Dans le jeu, l'agence de voyage de Peräjärvi vend un billet, le Cessna décolle de l'aérodrome près du village d'Ässäkylä et te dépose sur le circuit. Version Early : il s'améliorera au fil des mises à jour.",
+            L"The track converter turns the tracks of your Assetto Corsa (official and mods) into travel destinations for My Winter Car. In game, the Peräjärvi travel agency sells a ticket, the Cessna takes off from the airfield near the village of Ässäkylä and drops you on the track. Early version: it will improve with the updates." },
     { WB_H, L"Ce qu'il faut",
             L"What you need", 0 },
     { WB_B, L"Assetto Corsa installé, avec les circuits que tu veux convertir (Steam le trouve tout seul ; sinon, indique son dossier).",
@@ -1091,14 +1111,14 @@ static const WikiBlock kW_Voyage[] = {   // (convertisseur de circuits Assetto C
             L"In its left bar, if the Voyage mod is missing or outdated: Install (or Update). It is copied into the game's Mods folder." },
     { WB_S, L"Choisis un circuit dans la bibliothèque : le tracé, le nom à l'agence, le prix du billet, le point d'arrivée (stand, grille, tour lancé), les textures et le décor. Convertir : quelques secondes.",
             L"Pick a track in the library: the layout, the name at the agency, the ticket price, the arrival point (pit box, grid, hotlap), the textures and the scenery. Convert: a few seconds." },
-    { WB_S, L"Lance une partie : à l'agence de voyage de Peräjärvi (à l'est du musée de la Corse), une affiche par destination.",
-            L"Start a game: at the Peräjärvi travel agency (east of the Museum of Corsica), one poster per destination." },
+    { WB_S, L"Lance une partie : à l'agence de voyage de Peräjärvi, une affiche par destination.",
+            L"Start a game: at the Peräjärvi travel agency, one poster per destination." },
     { WB_H, L"Le voyage",
             L"The trip", 0 },
     { WB_S, L"À l'agence, clic sur l'affiche du circuit : un billet aller-retour, payé en liquide.",
             L"At the agency, click the track's poster: a return ticket, paid in cash." },
-    { WB_S, L"À l'aérodrome (My Winter Car : au nord du cinéma ; My Summer Car : l'ancien aéroport, près de la décharge) : PARLER au guichet, puis clic pour dire oui. Le Cessna décolle, et tu arrives au circuit.",
-            L"At the airfield (My Winter Car: north of the cinema; My Summer Car: the old airport, near the landfill): TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track." },
+    { WB_S, L"À l'aérodrome (My Winter Car : à l'est du village d'Ässäkylä ; My Summer Car : l'ancien aéroport, près de la décharge) : PARLER au guichet, puis clic pour dire oui. Le Cessna décolle, et tu arrives au circuit.",
+            L"At the airfield (My Winter Car: east of the village of Ässäkylä; My Summer Car: the old airport, near the landfill): TALK at the desk, then click to say yes. The Cessna takes off, and you land at the track." },
     { WB_S, L"Pour rentrer : le guichet du retour, à côté du point d'arrivée. L'avion te ramène à l'aérodrome.",
             L"To come back: the return desk, next to the arrival point. The plane brings you back to the airfield." },
     { WB_H, L"Gérer ses destinations",
@@ -1172,8 +1192,9 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, relief, végétation, lumières, co-op", L"Objects, roads, terrain, plants, lights, co-op", kW_Editor),   // (WA_EDITOR = 33)
     WART(2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34 ; My Summer Car aussi depuis le 24/10)
     WARTG(WG_ALL, 1, L"Le cinéma KINO TÄHTI", L"The KINO TÄHTI cinema", L"Billet, popcorn, fauteuils, vos films", L"Ticket, popcorn, seats, your films", kW_Kino),   // (WA_KINO = 35)
-    WARTG(WG_MWC, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, occasion pour la Rivett", L"Mod parts, used parts for the Rivett", kW_Osat),   // (WA_OSAT = 36)
+    WARTG(WG_ALL, 1, L"Le magasin de pièces CARDINAL", L"The CARDINAL parts shop", L"Pièces des mods, pièces d'occasion", L"Mod parts, used parts", kW_Osat),   // (WA_OSAT = 36)
     WART(2, L"Le convertisseur de circuits", L"The track converter", L"Tes circuits Assetto Corsa, en avion depuis l'aérodrome", L"Your Assetto Corsa tracks, by plane from the airfield", kW_Voyage),   // (WA_VOYAGE = 37)
     WART(2, L"Le placement des sièges", L"Seat placement", L"Accès réservé : places, postures, ceintures", L"Reserved access: seats, postures, belts", kW_Places),   // (WA_PLACES = 38)
     WART(3, L"Ancienne ou nouvelle interface", L"Old or new interface", L"Changer à tout moment", L"Switch any time", kW_Interface),   // (refonte Soft UI : fenetre.inc)
+    WARTG(WG_ALL, 1, L"Le village d'Ässäkylä", L"The village of Ässäkylä", L"Où il est, quand il apparaît", L"Where it is, when it appears", kW_Ville),   // (WA_VILLE)
 };

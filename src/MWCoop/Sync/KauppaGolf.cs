@@ -27,6 +27,8 @@ namespace MWCoop
         const string Line2Teimo = "It's parked at Teimo's, take good care of it!";
         const string Line2Village = "It's parked right next door, take good care of it!";
         static string Line2 { get { return QueteGolf.ParkedInVillage ? Line2Village : Line2Teimo; } }
+        // (quand on lui reparle, cle deja donnee -- JD 04/11 : la voiture peut etre n'importe ou)
+        const string LineAgain = "Take good care of my car!";
 
         static void ResetAsiakas() { asiakas = null; asiakasCol = null; talkT = -1f; keyGiven = false; if (keyHand != null) Object.Destroy(keyHand); keyHand = null; }
 
@@ -62,7 +64,7 @@ namespace MWCoop
                 Vector3 d = asiakas.Root.transform.parent.InverseTransformDirection(pl.position - asiakas.Root.transform.position); d.y = 0f;
                 talkYaw = d.sqrMagnitude > 1e-4f ? Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg : asiakasRest.eulerAngles.y;
             }
-            if (talkGive) SayFor(Who + Lines1[0], 3.2f); else SayFor(Who + Line2, 4f);
+            if (talkGive) SayFor(Who + Lines1[0], 3.2f); else SayFor(Who + LineAgain, 4f);
             L("client : on lui parle" + (talkGive ? " (cle a donner)" : " (quete faite)"));
         }
 
