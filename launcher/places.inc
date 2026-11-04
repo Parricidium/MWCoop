@@ -423,7 +423,7 @@ static bool PlacesExporting() { return g_placesExporting; }
 static void PlacesExport()
 {
     if (g_placesExporting || g_gameDir.empty() || !g_modOk) return;
-    if (GameProcessRunning(NULL)) { SetStatus(K_WARN, T(L"Ferme le jeu avant d'exporter tes voitures", L"Close the game before exporting your cars")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu avant d'exporter tes voitures", L"Close the game before exporting your cars"))) return;
     g_placesExporting = true;
     HANDLE h = CreateThread(NULL, 0, PlacesExportThread, NULL, 0, NULL);
     if (h) CloseHandle(h); else g_placesExporting = false;

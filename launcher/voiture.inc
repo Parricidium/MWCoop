@@ -577,7 +577,7 @@ static RectF g_dentBtnRect;    // (bulle du guide)
 // Jeu ferme seulement (il le reecrit a la sauvegarde). En coop, la sauvegarde est celle de l'hote : c'est lui qui le fait.
 static void CarRemoveDents()
 {
-    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu pour retirer les bosses", L"Close the game to remove the dents")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu pour retirer les bosses", L"Close the game to remove the dents"))) return;
     std::wstring d = SaveDirOf(SaveCurrentProf());   // (la sauvegarde utilisee : saves.inc)
     if (d.empty()) return;
     std::wstring f = d + L"meshsave.txt";
@@ -969,8 +969,7 @@ static DWORD WINAPI AddonDlThread(void *)
 static void AddonDownload(const std::wstring &key)
 {
     if (g_addonDlBusy || g_gameDir.empty() || LocalDir().empty()) return;
-    DWORD pid = 0;
-    if (GameProcessRunning(&pid)) { SetStatus(K_WARN, T(L"Ferme le jeu avant d'installer une voiture", L"Close the game before installing a car")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu avant d'installer une voiture", L"Close the game before installing a car"))) return;
     g_addonDlBusy = true;
     EnterCriticalSection(&g_cs); g_addonDlKey = key; LeaveCriticalSection(&g_cs);
     HANDLE h = CreateThread(NULL, 0, AddonDlThread, NULL, 0, NULL);
@@ -1271,8 +1270,7 @@ static void AddonUninstall()
     const Addon *pa = AddonCur();
     if (!pa || pa->builtin || !pa->installed || pa->dir.empty() || g_addonDlBusy) return;
     Addon a = *pa;
-    DWORD pid = 0;
-    if (GameProcessRunning(&pid)) { SetStatus(K_WARN, T(L"Ferme le jeu avant de désinstaller une voiture", L"Close the game before uninstalling a car")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu avant de désinstaller une voiture", L"Close the game before uninstalling a car"))) return;
     std::wstring q = std::wstring(T(L"Désinstaller « ", L"Uninstall “")) + a.name + T(L" » ?\n\nTa livrée est gardée. Tu pourras la retélécharger depuis Addons (bouton Télécharger).",
                                                                                     L"”?\n\nYour livery is kept. You can download it again from Add-ons (Download button).");
     if (MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return;

@@ -210,7 +210,7 @@ static std::wstring VhsFilmsPart(const VhsTape &t)
 }
 static bool VhsGuard()
 {
-    if (GameProcessRunning()) { g_vhsGameOn = true; SetStatus(K_WARN, T(L"Ferme le jeu pour modifier les cassettes (il réécrit leur liste)", L"Close the game to change the tapes (it rewrites their list)")); return false; }
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu pour modifier les cassettes (il réécrit leur liste)", L"Close the game to change the tapes (it rewrites their list)"))) { g_vhsGameOn = true; return false; }
     return true;
 }
 
@@ -273,7 +273,7 @@ static void VhsTick()   // (Tick, chaque image)
     g_vhsImpFilm.clear(); g_vhsImpP = -1; g_progress = -1;
     VhsImportFree();
     if (st != 2) { SetStatus(K_ERR, T(L"Conversion ratée : %s", L"Conversion failed: %s"), msg); return; }
-    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Vidéo convertie, mais le jeu est ouvert : ferme-le et refais l'import", L"Video converted, but the game is open: close it and import again")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Vidéo convertie, mais le jeu est ouvert : ferme-le et refais l'import", L"Video converted, but the game is open: close it and import again"))) return;
     g_vhsEdit = -1; VhsScan();
     for (int i = 0; i < (int)g_vhs.size(); i++)
         if (g_vhs[i].id == tape) {
