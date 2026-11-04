@@ -46,7 +46,7 @@ namespace MWCoop
 
         static Transform Gifu() { Rigidbody b = VehicleSync.Body("GIFU(750/450psi)"); return b != null ? b.transform : null; }
 
-        public static void OnLevelLoaded() { logs = 0; leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; chainIn = null; chainOut = null; chainBy = -1; nextChain = 0f; hStep = 0; eLog = 0; wellIgnored.Clear(); wellCols.Clear(); nextWellCols = 0f; npcDone.Clear(); nextNpcLook = 0; }
+        public static void OnLevelLoaded() { logs = 0; leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; chainIn = null; chainOut = null; chainBy = -1; nextChain = 0f; hStep = 0; eLog = 0; sStep = 0; sPrev = null; nextShape = 0f; wellIgnored.Clear(); wellCols.Clear(); nextWellCols = 0f; npcDone.Clear(); nextNpcLook = 0; }
 
         static bool Find()
         {
@@ -109,11 +109,12 @@ namespace MWCoop
             bool isOut = root.activeInHierarchy;
             if (!isOut)
             {
-                if (wasOut) { Release(); IgnoreCopy(Gifu(), false); mine = false; remoteBy = -1; wasOut = false; leading = false; }
+                if (wasOut) { chainIn = null; Release(); IgnoreCopy(Gifu(), false); mine = false; remoteBy = -1; wasOut = false; leading = false; }
                 return;
             }
             wasOut = true;
             bool held = FireTools.Held() == end.gameObject || testHeld;
+            if ((mine || held || leading) && Forme) chainIn = null;   // (la forme d'un autre, d'avant : pas pour la prochaine fois qu'on suivra)
             if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) Release(); } Jobs.HoseTakeover(end.transform); }
             // Bout lache ici (camion en copie), puis le camion s'en va : la pose figee d'ici etirait la chaine chez tous (15,7 m quand le
             // camion avait roule 24 m, [MWC] 28/10). Au-dela de sa longueur, la main est rendue : celui qui mene la GIFU reprend la pose
@@ -179,6 +180,8 @@ namespace MWCoop
             if (!following)
             {
                 following = true; selfMode = self; endKin = end.isKinematic; selfHeld = held;
+                keepPts = null; keepSet = false;
+                if (self && !held && Forme) { keepPts = new Vector3[segs.Length]; keepRot = new Quaternion[segs.Length]; for (int i = 0; i < segs.Length; i++) { keepPts[i] = segs[i].transform.position; keepRot[i] = segs[i].transform.rotation; } dropPos = end.transform.position; dropRot = end.transform.rotation; dropSet = true; }
                 if (couplerRb != null) { couplerKin = couplerRb.isKinematic; couplerRb.isKinematic = true; }
                 chainLen = restLen > 1f ? restLen : segs.Length * 0.38f;
                 foreach (Rigidbody r in segs) { if (!r.isKinematic) { r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; } r.isKinematic = true; }   // (le bout aussi : tenu, il suit la main -- son parent -- ; lache, il reste ou il est pose)
@@ -217,8 +220,25 @@ namespace MWCoop
             Vector3[] pts = Layout(a, b, chainLen, n);
             // (forme de la source, dans le repere du camion : maillons tires vers elle, le bout reste sur sa pose a 10/s)
             Transform gc = self ? null : Gifu();
-            bool useChain = gc != null && Chaine && chainIn != null && chainIn.Length == n && chainBy == remoteBy && Time.realtimeSinceStartup - chainAt < 1.5f;
+            // (regression de 032da8e, dossiers #41/#47, 03/11 : forme perimee au bout de 1,5 s alors qu'une chaine au repos n'est renvoyee que toutes
+            // les 2 s -- retour a la forme calculee 0,5 s sur 2, saut de 3,6 m en plein repos, essai TuyauSiege ; et des qu'un joueur montait au volant,
+            // la source se taisant, forme calculee jusqu'a la reprise. La derniere forme recue reste bonne, elle est dans le repere du camion ; sauf
+            // si la chaine de la source est restee loin derriere le camion : du raccord a son premier maillon, plus rien de vrai. [Test] TuyauForme=0 : comme avant.)
+            bool useChain = gc != null && Chaine && chainIn != null && chainIn.Length == n
+                            && (Forme ? (gc.TransformPoint(chainIn[0]) - a).sqrMagnitude < 9f : chainBy == remoteBy && Time.realtimeSinceStartup - chainAt < 1.5f);
             if (useChain) for (int i = 0; i < n - 1; i++) pts[i + 1] = Vector3.Lerp(segs[i].transform.position, gc.TransformPoint(chainIn[i]), 0.35f);
+            if (useChain) chainFrames++; else if (!self) layoutFrames++;
+            // (bout lache ici, chaine physique jusque-la, et le camion devient une copie -- l'autre monte au volant : la chaine ne bouge pas. Avant, elle
+            // passait a la forme calculee, chez celui-ci et chez les autres. Tant que le camion reste la.)
+            bool keepNow = false;
+            if (self && !held && keepPts != null && keepPts.Length == n)
+            {
+                if (!keepSet) { keepSet = true; keepAt = a; }
+                keepNow = (a - keepAt).sqrMagnitude < 0.09f;
+                if (keepNow) for (int i = 0; i < n; i++) pts[i + 1] = keepPts[i];
+                else keepPts = null;
+            }
+            else if (self) keepPts = null;
             // (le bout est l'enfant du maillon d'avant tant que la main ne l'a pas repris : sa pose gardee et remise apres la passe)
             Vector3 ep = end.transform.position; Quaternion eq = end.transform.rotation;
             for (int i = 0; i < (self ? n - 1 : n); i++)
@@ -227,6 +247,8 @@ namespace MWCoop
                 Transform t = segs[i].transform;
                 t.position = p;
                 if (i == n - 1) t.rotation = Quaternion.Slerp(t.rotation, rq, 0.5f);
+                else if (keepNow) t.rotation = keepRot[i];
+                else if (useChain && chainRot != null && chainRot.Length == n) t.rotation = Quaternion.Slerp(t.rotation, gc.rotation * chainRot[i], 0.35f);
                 else if ((q - p).sqrMagnitude > 1e-6f) t.rotation = Quaternion.LookRotation(q - p, Vector3.up);
             }
             if (self) { end.transform.position = ep; end.transform.rotation = eq; }
@@ -280,8 +302,13 @@ namespace MWCoop
         // [Test] TuyauChaine=0 : comme avant.
         static Vector3[] chainIn, chainOut, chainCur; static float chainAt, nextChain, chainKeep; static int chainBy = -1, chaineOn = -1;
         static bool Chaine { get { if (chaineOn < 0) chaineOn = Config.GetInt("Test", "TuyauChaine", 1); return chaineOn != 0; } }
+        static int formeOn = -1; static Vector3[] keepPts; static Quaternion[] keepRot; static bool keepSet; static Vector3 keepAt;
+        static bool Forme { get { if (formeOn < 0) formeOn = Config.GetInt("Test", "TuyauForme", 1); return formeOn != 0; } }
         static int Cm(float v) { return Mathf.Clamp(Mathf.RoundToInt(v * 100f) + 32768, 0, 65535); }
         static float FromCm(int v) { return (v - 32768) * 0.01f; }
+        static int Byte1(float v) { return Mathf.Clamp(Mathf.RoundToInt((v + 1f) * 127.5f), 0, 255); }
+        static float From1(int v) { return v / 127.5f - 1f; }
+        static Quaternion[] chainRot;
 
         static void SendChain(Transform gt, float now, bool held)
         {
@@ -293,7 +320,13 @@ namespace MWCoop
             if (moved < 0.0009f && now < chainKeep) return;
             nextChain = now + (held ? 0.2f : 0.5f); chainKeep = now + 2f;
             var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@chaine").U8(n);
-            for (int i = 0; i < n; i++) { chainOut[i] = chainCur[i]; w.U16(Cm(chainCur[i].x)).U16(Cm(chainCur[i].y)).U16(Cm(chainCur[i].z)); }
+            Quaternion inv = Quaternion.Inverse(gt.rotation);
+            for (int i = 0; i < n; i++)
+            {
+                chainOut[i] = chainCur[i]; w.U16(Cm(chainCur[i].x)).U16(Cm(chainCur[i].y)).U16(Cm(chainCur[i].z));
+                Quaternion q = inv * segs[i].transform.rotation;   // (orientation aussi : recalculee ailleurs, le maillon ne ressemblait pas et la chaine se detendait d'un coup une fois rendue a la physique)
+                w.U8(Byte1(q.x)).U8(Byte1(q.y)).U8(Byte1(q.z)).U8(Byte1(q.w));
+            }
             Session.SendAll(w, false);
         }
 
@@ -302,7 +335,14 @@ namespace MWCoop
             int n = r.U8();
             if (!Find() || !root.activeInHierarchy || mine || FireTools.Held() == end.gameObject || testHeld || segs == null || n != segs.Length) return;
             if (chainIn == null || chainIn.Length != n) chainIn = new Vector3[n];
-            for (int i = 0; i < n; i++) { float x = FromCm(r.U16()), y = FromCm(r.U16()); chainIn[i] = new Vector3(x, y, FromCm(r.U16())); }
+            if (chainRot == null || chainRot.Length != n) chainRot = new Quaternion[n];
+            for (int i = 0; i < n; i++)
+            {
+                float x = FromCm(r.U16()), y = FromCm(r.U16()); chainIn[i] = new Vector3(x, y, FromCm(r.U16()));
+                float qx = From1(r.U8()), qy = From1(r.U8()), qz = From1(r.U8()), qw = From1(r.U8());
+                float len = Mathf.Sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
+                chainRot[i] = len > 0.01f ? new Quaternion(qx / len, qy / len, qz / len, qw / len) : Quaternion.identity;
+            }
             if (chainBy != who && logs++ < 10) Log.Info("tuyau de la GIFU : forme de la chaine de #" + who + " suivie (" + n + " maillons)");
             chainAt = Time.realtimeSinceStartup; chainBy = who;
         }
@@ -485,7 +525,51 @@ namespace MWCoop
         static bool testHeld;
         static int fosseOn = -1, fStep; static float nextFosseLog; static Vector3 wellAt; static GameObject wellGo; static float nextNudge; static bool nudgeOut;
         static bool fosseTest { get { if (fosseOn < 0) fosseOn = Config.GetInt("Test", "TuyauDansFosse", 0); return fosseOn != 0; } }
-        static float HoseBack { get { return fosseTest ? 70f : 50f; } }
+        static float HoseBack { get { return Siege ? 110f : fosseTest ? 70f : 50f; } }
+        // ([Test] TuyauSiege=1, dossiers #41/#47 : tuyau sorti par l'hote, personne au bout. +12 l'invite monte au volant, +20 il roule 4 s, +28 il descend ; +42 l'hote
+        // monte, +50 il roule 4 s, +62 il descend ; +75 l'invite remonte et demarre, +90 il descend. TuyauTenu=1 en plus : l'invite a d'abord tenu le
+        // bout. Chacun note chaque seconde la forme vue ici, dans le repere du camion : plus grand saut d'un maillon d'une image a l'autre, ecart
+        // maxi entre maillons, coudes, et d'ou vient la pose.)
+        static int siegeOn = -1, sStep; static float sAt, sJump, nextShape; static Vector3[] sPrev; static int chainFrames, layoutFrames;
+        static bool Siege { get { if (siegeOn < 0) siegeOn = Config.GetInt("Test", "TuyauSiege", 0); return siegeOn != 0; } }
+        const string TestCar = "GIFU(750/450psi)";
+        static void SiegeTest(float k, float now)
+        {
+            Transform g = Gifu();
+            if (g != null && segs != null && root.activeInHierarchy)
+            {
+                if (sPrev == null || sPrev.Length != segs.Length) sPrev = new Vector3[segs.Length];
+                else for (int i = 0; i < segs.Length; i++) sJump = Mathf.Max(sJump, (g.InverseTransformPoint(segs[i].transform.position) - sPrev[i]).magnitude);
+                for (int i = 0; i < segs.Length; i++) sPrev[i] = g.InverseTransformPoint(segs[i].transform.position);
+                if (now >= nextShape)
+                {
+                    nextShape = now + 1f;
+                    float gap = 0f; Vector3 lp = coupler.position; foreach (Rigidbody r in segs) { gap = Mathf.Max(gap, (r.transform.position - lp).magnitude); lp = r.transform.position; }
+                    Log.Info("autotest : tuyau, siege +" + k.ToString("F0") + " s : saut maxi " + sJump.ToString("F2") + " m, ecart maxi " + gap.ToString("F2") + " m, sous le sol/coudes " + TestUnder() + ", " + (mine ? "a nous" : leading ? "mene ici" : remoteBy >= 0 ? "suivi #" + remoteBy : "physique, rien") + (following ? (selfMode ? ", posee ici" : ", posee d'apres l'autre") : "") + (VehicleSync.SimAuthority(g) ? ", camion ici" : ", camion copie") + ", images chaine/calcul " + chainFrames + "/" + layoutFrames + ", raccord " + (coupler.position - g.position).magnitude.ToString("F2") + " m, maillons " + ChainShape());
+                    sJump = 0f; chainFrames = layoutFrames = 0;
+                }
+            }
+            bool host = Session.IsHost;
+            // (TuyauSiegeHote=1 : l'hote a tenu puis lache le bout avant que l'invite monte)
+            if (host && Config.GetInt("Test", "TuyauSiegeHote", 0) != 0)
+            {
+                if (hStep == 0 && k > 4f) { hStep = 1; TakeTest(); Log.Info("autotest : tuyau, siege : l'hote prend le bout"); }
+                if (hStep == 1) testHand.position = g.position + g.right * 4f + g.forward * -4f;
+                if (hStep == 1 && k > 8f) { hStep = 2; DropTest(); Log.Info("autotest : tuyau, siege : l'hote lache le bout"); }
+            }
+            float[] at = host ? new[] { 42f, 44f, 46f, 62f } : new[] { 12f, 14f, 16f, 28f, 75f, 77f, 79f, 81f, 90f };
+            if (sStep < at.Length && k > at[sStep])
+            {
+                int i = sStep++;
+                int local = !host && i >= 4 ? i - 4 : i;
+                if (local == 0) Log.Info("autotest : tuyau, siege : " + (host ? "l'hote" : "l'invite") + " va au volant, " + VehicleSync.TestEnter(TestCar, false));
+                else if (local == 1 || local == 2) Log.Info("autotest : tuyau, siege : au volant, " + VehicleSync.TestEnter(TestCar, true));
+                else if (!host && i == 7) Log.Info("autotest : tuyau, siege : " + VehicleSync.TestStart(TestCar));
+                else Log.Info("autotest : tuyau, siege : descend, " + VehicleSync.TestExit(TestCar));
+            }
+            if (!host && k > 20f && k < 24f) { Rigidbody gb = VehicleSync.Body(TestCar); if (gb != null) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); } }
+            if (host && k > 50f && k < 54f) { Rigidbody gb = VehicleSync.Body(TestCar); if (gb != null) { Vector3 f = gb.transform.forward; f.y = 0f; gb.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(gb.velocity.y, 0f); } }
+        }
         // ([Test] TuyauEchange=1 avec TuyauDansFosse=1, dossiers #41/#46 : la main passe de l'un a l'autre, le bout pres de la fosse. Chez
         // l'invite la fosse est decalee de TuyauDecalage m (3 par defaut) sur le cote -- poses un peu differentes d'un jeu a l'autre :
         //  +2..+12 l'invite tient le bout dans SA fosse puis le lache ; +15 l'hote le prend sur place (hors de SA fosse), +19 le lache ;
@@ -568,6 +652,7 @@ namespace MWCoop
             if (tStep == 0 && Jobs.OtherInGame(40f)) { tStep = 1; tAt = now; }
             if (tStep == 0) return;
             if (Echange) EchangeTest(now - tAt);
+            if (Siege && Find()) SiegeTest(now - tAt, now);
             // (TuyauDepart=1 : l'hote, au volant, roule 6 s a +22 s -- apres le lacher de l'invite a +12 s ; [MWC] 28/10)
             if (Session.IsHost && Config.GetInt("Test", "TuyauDepart", 0) != 0 && tvStep == 6 && now - tAt > 22f) { tvStep = 7; tvAt = now; Log.Info("autotest : tuyau, la GIFU part (6 s)"); }
             if (tvStep == 7)

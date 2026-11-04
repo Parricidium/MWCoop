@@ -181,7 +181,7 @@ static bool InstallAtStartup()
         int was = g_game; g_game = g;
         bool running = !dirs[g].empty() && GameProcessRunning(NULL);
         g_game = was;
-        if (running && !test) { MessageBoxW(NULL, T(L"Ferme le jeu, puis relance MWCoop pour l'installer.", L"Close the game, then restart MWCoop to install it."), L"MWCoop", MB_OK | MB_ICONWARNING); return false; }
+        if (running && !test) { LaunchLog("installation dans AppData refusee : jeu en cours"); MessageBoxW(NULL, T(L"Ferme le jeu, puis relance MWCoop pour l'installer.", L"Close the game, then restart MWCoop to install it."), L"MWCoop", MB_OK | MB_ICONWARNING); return false; }
     }
     SHCreateDirectoryExW(NULL, home.c_str(), NULL);
     std::wstring exe = home + L"MWCoop.exe", ini = home + L"mwcoop-lanceur.ini";

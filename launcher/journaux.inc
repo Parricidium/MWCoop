@@ -98,6 +98,15 @@ static long long FileUnixTime(const std::wstring &p)
 }
 static bool GameProcessRunning(DWORD *pidOut = NULL);
 static bool GameRunningAsk();
+// Refus « ferme le jeu » : le message du joueur et une ligne au journal (dossier #48, 04/11 : ces refus n'y laissaient aucune trace).
+static bool GameOpenRefuse(int kind, const wchar_t *msg)
+{
+    DWORD pid = 0;
+    if (!GameProcessRunning(&pid)) return false;
+    LaunchLog("refus, jeu %lu en cours : %s", pid, Narrow(msg, CP_UTF8).c_str());
+    SetStatus(kind, L"%s", msg);
+    return true;
+}
 static void CrashCheck()
 {
     g_crashT = 0;

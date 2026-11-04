@@ -459,7 +459,7 @@ static DWORD WINAPI MscInstallThread(void *param)
 static void MscInstall(bool reinstall = false)
 {
     if (g_mscInstall == 1 || g_gameDir.empty()) return;
-    if (GameProcessRunning()) { SetStatus(K_ERR, T(L"Ferme My Winter Car avant d'installer MSCLoader", L"Close My Winter Car before installing MSCLoader")); return; }
+    if (GameOpenRefuse(K_ERR, T(L"Ferme My Winter Car avant d'installer MSCLoader", L"Close My Winter Car before installing MSCLoader"))) return;
     bool own = MscOwn();
     if (own || reinstall) {
         std::wstring q = own
@@ -553,7 +553,7 @@ static void MscSetActive(int i, bool on)
     MscMod m = g_msc[i];
     std::wstring dll = g_mscDir + m.file, off = dll + L".off";
     if (on == !m.off) return;
-    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu pour activer ou désactiver un mod", L"Close the game to turn a mod on or off")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu pour activer ou désactiver un mod", L"Close the game to turn a mod on or off"))) return;
     BOOL ok = on ? MoveFileExW(off.c_str(), dll.c_str(), 0) : MoveFileExW(dll.c_str(), off.c_str(), MOVEFILE_REPLACE_EXISTING);
     if (!ok) { SetStatus(K_ERR, T(L"%s : renommage impossible (erreur %lu)", L"%s: can't rename (error %lu)"), m.name.c_str(), GetLastError()); return; }
     TestLog("mods : %s %s", Narrow(m.file, CP_UTF8).c_str(), on ? "active (.dll)" : "desactive (.dll.off)");
@@ -601,7 +601,7 @@ static void MscClearRecv()
 {
     std::wstring d = CoopModsDir();
     if (d.empty() || g_mscRecv.empty()) return;
-    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu avant de vider les mods reçus", L"Close the game before clearing the received mods")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu avant de vider les mods reçus", L"Close the game before clearing the received mods"))) return;
     wchar_t q[500];
     swprintf_s(q, T(L"Vider les mods reçus de l'hôte (%d) ?\n\nIls seront retéléchargés au prochain salon s'il les envoie encore. Tes propres mods ne sont pas touchés.",
                     L"Clear the mods received from the host (%d)?\n\nThey will be downloaded again in the next lobby if the host still sends them. Your own mods are not touched."), (int)g_mscRecv.size());

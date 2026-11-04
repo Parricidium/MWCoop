@@ -3612,6 +3612,8 @@ static void LogGameModules(bool full = false)   // (full : toutes les DLL, mode 
     }
 }
 
+static bool GameRemnant(DWORD pid, DWORD err);
+static const wchar_t *g_testGameExe;   // (/testjeuencours <journal> <exe> : un autre nom de processus, pour ne gener aucun lanceur ouvert)
 // Le jeu de CE dossier tourne-t-il deja ? Les jeux d'autres dossiers (copies pour jouer a deux sur
 // un PC, instances de test) ont leur propre profil MWCoop, donc leur propre verrou d'instance unique.
 static bool GameProcessRunning(DWORD *pidOut)
@@ -3626,9 +3628,12 @@ static bool GameProcessRunning(DWORD *pidOut)
     std::wstring copy = MirrorDir().empty() ? L"" : MirrorDir() + GM().exe;
     bool found = false;
     for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
-        if (_wcsicmp(pe.szExeFile, GM().exe)) continue;
+        if (_wcsicmp(pe.szExeFile, g_testGameExe ? g_testGameExe : GM().exe)) continue;
         HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
-        if (!h) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; break; }   // inconnu : prudence
+        if (!h) {
+            if (GameRemnant(pe.th32ProcessID, GetLastError())) continue;   // (un vrai jeu peut tourner a cote : on continue de chercher)
+            found = true; if (pidOut) *pidOut = pe.th32ProcessID; break;   // inconnu : prudence
+        }
         wchar_t path[MAX_PATH];
         DWORD n = MAX_PATH;
         if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str()) || !_wcsicmp(path, own.c_str()) || (!copy.empty() && !_wcsicmp(path, copy.c_str()))) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; }
@@ -3686,6 +3691,20 @@ static std::wstring GameLevelNow()
     return f.size() > 4 ? f[4] : L"";
 }
 
+// Reste d'un jeu ferme (Matilda, dossiers #44 et #48) : processus qu'on ne peut meme pas ouvrir (erreur 5, coince en fin de
+// vie), sans fenetre visible, mod muet depuis plus de 15 s. Impossible a fermer, seul un redemarrage du PC l'efface : il ne
+// compte plus comme un jeu en cours (switch, addons, livrees, mods, sauvegardes, retour au menu apres une partie...).
+static bool GameRemnant(DWORD pid, DWORD err)
+{
+    WndFind f = { pid, false };
+    EnumWindows(FindPidWindow, (LPARAM)&f);
+    long long beat = -1;
+    NewestHeartbeat(&beat);
+    if (f.found || (beat >= 0 && beat <= 15)) return false;
+    static std::set<DWORD> told;
+    if (told.insert(pid).second) LaunchLog("jeu %lu : ouverture impossible (erreur %lu), sans fenetre, mod muet : reste d'un jeu coince, ignore", pid, err);
+    return true;
+}
 // Fermer le jeu : d'abord poliment (WM_CLOSE a ses fenetres), de force apres 5 s.
 static BOOL CALLBACK ClosePidWindows(HWND h, LPARAM lp)
 {
@@ -3738,7 +3757,8 @@ static bool GameRunningAsk()
         stuck = ageS > 60 && (!window || silent);
         // Processus qu'on ne peut meme pas ouvrir (chemin et age inconnus), sans fenetre, mod muet : un reste du jeu precedent
         // (Matilda, 18/10 : « jeu ferme normalement » a 17:47:56, lanceur rouvert 30 s plus tard, pid sans fenetre, refus a
-        // chaque LANCER). Traite comme bloque : fermeture proposee, et lancement quand meme si elle est impossible.
+        // chaque LANCER). Traite comme bloque : fermeture proposee, et lancement quand meme si elle est impossible. (Depuis le
+        // dossier #48, GameProcessRunning l'ignore en amont : ne reste ici que s'il devient tel entre les deux appels.)
         if (!opened && !window && silent) stuck = true;
     }
     // Toujours au journal : ce refus n'y laissait aucune trace.
@@ -6749,7 +6769,7 @@ static bool UninstallCore(bool registry, std::wstring *left)
 
 static void Uninstall()
 {
-    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Le jeu tourne : ferme-le avant de d\u00E9sinstaller MWCoop", L"The game is running: close it before uninstalling MWCoop")); return; }
+    if (GameOpenRefuse(K_WARN, T(L"Le jeu tourne : ferme-le avant de d\u00E9sinstaller MWCoop", L"The game is running: close it before uninstalling MWCoop"))) return;
     int r = MessageBoxW(g_wnd, T(L"D\u00E9sinstaller compl\u00E8tement MWCoop ?\n\nPart \u00E0 la Corbeille : tout MWCoop dans le dossier du jeu (version.dll, dossier MWCoop avec ses profils, journaux et contenus re\u00E7us, ce lanceur), tout %LOCALAPPDATA%\\MWCoop (copies de lancement, MSCLoader de MWCoop, caches), et les r\u00E9glages du profil invit\u00E9.\n\nGard\u00E9s : ta sauvegarde, tes mods (dossier Mods) et le MSCLoader officiel.\n\nPour rejouer en coop, il faudra ret\u00E9l\u00E9charger MWCoop.",
                                  L"Completely uninstall MWCoop?\n\nMoved to the Recycle Bin: everything MWCoop in the game folder (version.dll, the MWCoop folder with its profiles, logs and received content, this launcher), all of %LOCALAPPDATA%\\MWCoop (launch copies, MWCoop's MSCLoader, caches), and the guest profile settings.\n\nKept: your save, your mods (Mods folder) and the official MSCLoader.\n\nTo play co-op again, you will need to download MWCoop again."),
                          L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
@@ -6781,7 +6801,7 @@ static bool LogsGroupDelete(int gi)
     if (gi < 0 || gi >= (int)g_logGroups.size()) return false;
     const LogGroup &gr = g_logGroups[gi];
     bool current = gr.key == L"*";
-    if (current && GameProcessRunning()) { SetStatus(K_WARN, T(L"Le jeu tourne : ferme-le avant de supprimer ses journaux", L"The game is running: close it before deleting its logs")); return false; }
+    if (current && GameOpenRefuse(K_WARN, T(L"Le jeu tourne : ferme-le avant de supprimer ses journaux", L"The game is running: close it before deleting its logs"))) return false;
     std::vector<std::wstring> paths;
     if (current) for (int i : gr.items) paths.push_back(g_logList[i].path);
     else paths.push_back(gr.dir);
@@ -8115,12 +8135,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         LaunchLog("testvitres : fin, %d echec(s)", fails);
         return fails ? 1 : 0;
     }
-    // Essai : /testjeuencours <journal> -- le jeu en cours vu d'ici (GameProcessRunning) et les copies de lancement suivies.
+    // Essai : /testjeuencours <journal> [exe] -- le jeu en cours vu d'ici (GameProcessRunning) et les copies de lancement suivies ;
+    // exe : cherche ce processus a la place du jeu (reste coince simule, dossier #48).
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testjeuencours")) {
         g_launcherLog = argv[2];
+        if (argc >= 4) g_testGameExe = argv[3];
         DWORD pid = 0;
         bool on = GameProcessRunning(&pid);
         LaunchLog("testjeuencours : %s pid=%lu (jeu %s, copie %s, GameExe %s)", on ? "EN COURS" : "aucun", pid, Narrow(g_gameDir, CP_UTF8).c_str(), Narrow(MirrorDir(), CP_UTF8).c_str(), Narrow(GameExe(), CP_UTF8).c_str());
+        GameOpenRefuse(K_WARN, L"essai de refus");
         return on ? 0 : 1;
     }
     // Essai : /testtuto <journal> <ini d'essai> -- bulles des nouveautes : 1er demarrage avec l'ancienne valeur (TutoVersion =
