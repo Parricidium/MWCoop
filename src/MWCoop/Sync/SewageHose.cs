@@ -517,7 +517,7 @@ namespace MWCoop
         // 15 s apres l'hote (autorite des fosses, GIFU garee) la vide (0,3 -> Pay) ; l'invite note a +25 s si le proprio est
         // la et tend l'argent (PayMoney allume), l'hote reste loin (maison hors de portee chez lui).
         static int tStep; static float tAt;
-        static string TestWell { get { return Game.Msc ? "JOBS/HouseShit3/WasteWell_2000litre/Shit/Level3/ShitLevelTrigger" : "JOBS/HouseShit3/WasteWell_2000litre/Shit/Level/ShitLevelTrigger"; } }
+        static string TestWell { get { int m = Config.GetInt("Test", "TuyauMaison", 3); return Game.Msc ? "JOBS/HouseShit" + m + "/WasteWell_2000litre/Shit/Level" + m + "/ShitLevelTrigger" : "JOBS/HouseShit" + m + "/WasteWell_2000litre/Shit/Level/ShitLevelTrigger"; } }
         static string TestMan { get { return Game.Msc ? "JOBS/HouseShit3/LOD/ShitNPC/ShitMan3" : "JOBS/HouseShit3/LOD/ShitNPC/Man"; } }   // (MSC : Level{N}, ShitMan{N})
         // [Test] Autotest=tuyau (2 joueurs) : 40 s apres l'arrivee de l'autre, l'invite sort le tuyau (ActivateHose -> Remove
         // part, rejoue chez l'hote) puis promene le bout 10 s (comme tenu : il l'envoie) ; chacun note la pose du bout toutes
@@ -525,11 +525,63 @@ namespace MWCoop
         static bool testHeld;
         static int fosseOn = -1, fStep; static float nextFosseLog; static Vector3 wellAt; static GameObject wellGo; static float nextNudge; static bool nudgeOut;
         static bool fosseTest { get { if (fosseOn < 0) fosseOn = Config.GetInt("Test", "TuyauDansFosse", 0); return fosseOn != 0; } }
-        static float HoseBack { get { return Siege ? 110f : fosseTest ? 70f : 50f; } }
+        static float HoseBack { get { return Vidange ? 160f : Siege ? 110f : fosseTest ? 70f : 50f; } }
         // ([Test] TuyauSiege=1, dossiers #41/#47 : tuyau sorti par l'hote, personne au bout. +12 l'invite monte au volant, +20 il roule 4 s, +28 il descend ; +42 l'hote
         // monte, +50 il roule 4 s, +62 il descend ; +75 l'invite remonte et demarre, +90 il descend. TuyauTenu=1 en plus : l'invite a d'abord tenu le
         // bout. Chacun note chaque seconde la forme vue ici, dans le repere du camion : plus grand saut d'un maillon d'une image a l'autre, ecart
         // maxi entre maillons, coudes, et d'ou vient la pose.)
+        // ([Test] TuyauVidange=1 avec TuyauDansFosse=1 et TuyauMaison=n, dossier #49 : la vraie fosse, pas deplacee. La GIFU est amenee a 5 m de la fosse, les deux joueurs a cote ; l'invite
+        // tient le bout dans la fosse 10 s puis le lache (physique). L'hote : +14 au volant, +20 moteur, +22 pompe hydraulique, +60 (TuyauVidangeSort=0 : jamais) il descend, moteur tournant.
+        // Chacun note toutes les 2 s le regime, la pompe, le niveau, la citerne, l'etat du declencheur et le bout.)
+        static int vidOn = -1, vStep; static float vNextLog;
+        static bool Vidange { get { if (vidOn < 0) vidOn = Config.GetInt("Test", "TuyauVidange", 0); return vidOn != 0; } }
+        static string VidangeState(float k)
+        {
+            Transform g = Gifu(), st = g != null ? g.Find("ShitTank") : null, hy = g != null ? g.Find("Dashboard/Knobs/Hydraulics") : null;
+            PlayMakerFSM pump = st != null ? Game.FsmOn(st.gameObject, "Pump") : null, waste = st != null ? Game.FsmOn(st.gameObject, "Waste") : null, hp = hy != null ? Game.FsmOn(hy.gameObject, "Pump") : null;
+            PlayMakerFSM lv = wellGo != null ? Game.FsmOn(wellGo, "Level") : null, tr = wellGo != null ? Game.FsmOn(wellGo, "Trigger") : null;
+            System.Func<PlayMakerFSM, string, string> b = (f, n) => { FsmBool v = f != null ? f.FsmVariables.FindFsmBool(n) : null; return v != null && v.Value ? "1" : "0"; };
+            System.Func<PlayMakerFSM, string, string> fl = (f, n) => { FsmFloat v = f != null ? f.FsmVariables.FindFsmFloat(n) : null; return v != null ? v.Value.ToString("F2") : "?"; };
+            return "+" + k.ToString("F0") + " s : regime " + (g != null ? VehicleSync.EngineRpm(g).ToString("F0") : "?") + ", pompe " + (pump != null ? pump.ActiveStateName : "?") + " (en marche " + b(pump, "PumpRunning") + ", dans la fosse " + b(pump, "HoseInShit") + ", raccorde " + b(pump, "HoseAttached") + ", aspire " + b(pump, "Sucking") + ", " + fl(pump, "LitresPerSecond") + " L/s)"
+                + ", hydraulique " + (hp != null ? hp.ActiveStateName : "?") + ", niveau " + fl(lv, "ShitLevel") + ", citerne " + fl(waste, "Waste") + " L, declencheur " + (tr != null ? tr.ActiveStateName : "?")
+                + (wellGo != null ? " a y=" + wellGo.transform.position.y.ToString("F2") : "") + ", bout a " + (end != null && wellGo != null ? (end.transform.position - wellGo.transform.position).ToString("F2") : "?") + (end != null && end.isKinematic ? " cin" : " v=" + (end != null ? end.velocity.magnitude.ToString("F2") : "?"))
+                + (mine ? ", a nous" : leading ? ", mene ici" : remoteBy >= 0 ? ", suivi #" + remoteBy : ", physique") + (following ? " pose" : "") + ", passages " + Jobs.HoseSeen + ", annonces " + Jobs.HoseSent + ", recus " + Jobs.HoseGot;
+        }
+        static void VidangeTest(float k, float now)
+        {
+            if (now >= vNextLog) { vNextLog = now + 2f; Log.Info("autotest : tuyau, vidange " + VidangeState(k)); }
+            // (TuyauVidangeInvite=1, l'ordre de Matilda Prime : l'invite monte a +0, demarre a +6, descend a +8 moteur tournant -- le camion reste a lui -- pendant qu'il tient le bout)
+            if (!Session.IsHost && Config.GetInt("Test", "TuyauVidangeInvite", 0) != 0)
+            {
+                float[] gat = { 0f, 2f, 4f, 8f };
+                if (vStep < gat.Length && k > gat[vStep])
+                {
+                    int gi = vStep++;
+                    if (gi == 0) Log.Info("autotest : tuyau, vidange : l'invite va au volant, " + VehicleSync.TestEnter(TestCar, false));
+                    else if (gi <= 2) Log.Info("autotest : tuyau, vidange : au volant, " + VehicleSync.TestEnter(TestCar, true));
+                    else Log.Info("autotest : tuyau, vidange : l'invite descend, " + VehicleSync.TestExit(TestCar));
+                }
+                if (k > 6f && k < 15f) VehicleSync.TestForceRpm(TestCar, 600f);
+            }
+            if (!Session.IsHost) return;
+            // (TuyauVidangeRegime : regime tenu de +20 a TuyauVidangeCale, 80 s par defaut -- ensuite le moteur cale, comme chez Matilda Prime)
+            float rpm = Config.GetFloat("Test", "TuyauVidangeRegime", 2000f);
+            if (rpm > 0f && k > 20f && k < Config.GetFloat("Test", "TuyauVidangeCale", 80f)) VehicleSync.TestForceRpm(TestCar, rpm);
+            float[] at = { 14f, 16f, 18f, 20f, 22f, 60f };
+            if (vStep >= at.Length || k <= at[vStep]) return;
+            int i = vStep++;
+            if (i == 0) Log.Info("autotest : tuyau, vidange : l'hote va au volant, " + VehicleSync.TestEnter(TestCar, false));
+            else if (i <= 2) Log.Info("autotest : tuyau, vidange : au volant, " + VehicleSync.TestEnter(TestCar, true));
+            else if (i == 3) Log.Info("autotest : tuyau, vidange : " + VehicleSync.TestStart(TestCar));
+            else if (i == 4)
+            {
+                Transform g = Gifu(), hy = g != null ? g.Find("Dashboard/Knobs/Hydraulics") : null;
+                PlayMakerFSM u = hy != null ? Game.FsmOn(hy.gameObject, "Use") : null;
+                if (u != null) Game.SetState(u, "Test");
+                Log.Info("autotest : tuyau, vidange : pompe hydraulique -> " + (u != null ? u.ActiveStateName : "introuvable"));
+            }
+            else if (Config.GetInt("Test", "TuyauVidangeSort", 1) != 0) Log.Info("autotest : tuyau, vidange : descend, " + VehicleSync.TestExit(TestCar));
+        }
         static int siegeOn = -1, sStep; static float sAt, sJump, nextShape; static Vector3[] sPrev; static int chainFrames, layoutFrames;
         static bool Siege { get { if (siegeOn < 0) siegeOn = Config.GetInt("Test", "TuyauSiege", 0); return siegeOn != 0; } }
         const string TestCar = "GIFU(750/450psi)";
@@ -644,14 +696,30 @@ namespace MWCoop
                 wellGo = Game.FindAny(TestWell);
                 Transform g = Gifu(), ha = g != null ? g.Find("ActivateHose") : null;
                 if (ha != null) { wellAt = ha.position + ha.right * 3f; wellAt.y = GroundY(wellAt + Vector3.up * 3f) + 0.2f; }
+                if (Vidange && wellGo != null)
+                {
+                    wellAt = wellGo.transform.position;
+                    // (TuyauVidangePleine=1 : fosse pleine, commande passee, comme chez Matilda Prime)
+                    if (Session.IsHost && Config.GetInt("Test", "TuyauVidangePleine", 0) != 0)
+                    {
+                        PlayMakerFSM lf = Game.FsmOn(wellGo, "Level"); FsmFloat lvl = lf != null ? lf.FsmVariables.FindFsmFloat("ShitLevel") : null;
+                        if (lvl != null) { lvl.Value = 4.9f; lf.SendEvent("ORDERTAKEN"); Log.Info("autotest : tuyau, vidange : fosse pleine, commande passee -> " + lf.ActiveStateName); }
+                    }
+                    Vector3 park = wellAt + new Vector3(-5f, 0f, 2f); park.y = GroundY(park + Vector3.up * 3f) + 1.5f;
+                    if (Session.IsHost && g != null) Log.Info("autotest : tuyau, vidange : " + VehicleSync.TestPlaceAt(TestCar, park, g.rotation));
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; Vector3 me = wellAt + new Vector3(1.5f, 0f, Session.IsHost ? 1.5f : -1.5f); me.y = GroundY(me + Vector3.up * 3f) + 1f; pl.transform.position = me; cc.enabled = true; }
+                }
                 if (ha != null && Echange) { Vector3 o = ha.right * Config.GetFloat("Test", "TuyauDecalage", 3f); Vector3 q = wellAt + o; q.y = GroundY(q + Vector3.up * 3f) + 0.2f; wellOff = q - wellAt; }
                 Log.Info("autotest : tuyau, fosse " + (wellGo == null ? "introuvable" : ha == null ? "trouvee, raccord introuvable" : "amenee en " + wellAt.ToString("F1") + (wellGo.activeInHierarchy ? "" : " (eteinte)")));
             }
-            if (fosseTest && fStep == 1 && wellGo != null && wellAt != Vector3.zero) wellGo.transform.position = wellAt + (Session.IsHost ? Vector3.zero : wellOff);   // (chaque image : l'automate du niveau deplace la fosse)
+            if (Vidange && fStep == 1 && wellGo != null) wellAt = wellGo.transform.position;
+            else if (fosseTest && fStep == 1 && wellGo != null && wellAt != Vector3.zero) wellGo.transform.position = wellAt + (Session.IsHost ? Vector3.zero : wellOff);   // (chaque image : l'automate du niveau deplace la fosse)
             if (fosseTest && fStep == 1 && now >= nextFosseLog) { nextFosseLog = now + 10f; Log.Info("autotest : tuyau, fosse : passages ici " + Jobs.HoseSeen + ", annonces " + Jobs.HoseSent + ", recus " + Jobs.HoseGot + (LaidFromRemote ? " (chaine posee d'apres l'autre)" : "")); }
             if (tStep == 0 && Jobs.OtherInGame(40f)) { tStep = 1; tAt = now; }
             if (tStep == 0) return;
             if (Echange) EchangeTest(now - tAt);
+            if (Vidange) VidangeTest(now - tAt, now);
             if (Siege && Find()) SiegeTest(now - tAt, now);
             // (TuyauDepart=1 : l'hote, au volant, roule 6 s a +22 s -- apres le lacher de l'invite a +12 s ; [MWC] 28/10)
             if (Session.IsHost && Config.GetInt("Test", "TuyauDepart", 0) != 0 && tvStep == 6 && now - tAt > 22f) { tvStep = 7; tvAt = now; Log.Info("autotest : tuyau, la GIFU part (6 s)"); }
@@ -686,11 +754,11 @@ namespace MWCoop
                     // ([Test] TuyauFosse=m, dossier #41 : bout tenu m metres sous le raccord a cote du camion, comme plonge dans une fosse)
                     float fd = Config.GetFloat("Test", "TuyauFosse", 0f);
                     if (testHand != null) testHand.position = fosseTest && wellAt != Vector3.zero ? wellAt + wellOff : fd > 0f ? basePos + Vector3.down * fd : basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f);
-                    if (k > 10f) { tStep = 4; testHeld = false; end.isKinematic = false; if (testHand != null) { end.transform.parent = endParent; Object.Destroy(testHand.gameObject); testHand = null; } }
+                    if (k > 10f && !(Vidange && Config.GetInt("Test", "TuyauVidangeTient", 0) != 0)) { tStep = 4; testHeld = false; end.isKinematic = false; if (testHand != null) { end.transform.parent = endParent; Object.Destroy(testHand.gameObject); testHand = null; } }
                 }
                 // (TuyauDansFosse=1 : bout pose qui bouge un peu -- comme la physique chez MSC -- 1,5 m dans/hors de la fosse chaque seconde ; chez
                 // l'hote la chaine se repose d'apres lui a chaque fois)
-                if (!Echange && fosseTest && tStep == 4 && end != null && wellAt != Vector3.zero && now - tAt < HoseBack - 3f && now >= nextNudge)
+                if (!Echange && !Vidange && fosseTest && tStep == 4 && end != null && wellAt != Vector3.zero && now - tAt < HoseBack - 3f && now >= nextNudge)
                 {
                     nextNudge = now + 1f; nudgeOut = !nudgeOut;
                     Transform ha = ah.transform;

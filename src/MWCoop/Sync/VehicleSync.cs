@@ -3421,6 +3421,8 @@ namespace MWCoop
         // Essais (Satsuma qui roule seule chez le second conducteur, 25/10) : boite en premiere, demarrage comme une reprise
         // a chaud, et l'etat de la transmission, de l'embrayage, des commandes et des roues.
         public static string TestFirst(string name) { Car c = Named(name); if (c == null || c.Dt == null) return "?"; c.Dt.gear = c.Dt.first; return "premiere (rapport " + c.Dt.gear + ")"; }
+        // (essais : regime tenu, le moteur d'une voiture de MWC ne demarre pas dans un essai cache ; chaque image)
+        public static void TestForceRpm(string name, float rpm) { Car c = Named(name); if (c == null || c.Dt == null) return; c.Dt.enabled = true; c.Dt.rpm = rpm; testRunCar = c.Index; testRunUntil = Time.realtimeSinceStartup + 0.5f; }
         public static string TestStart(string name) { Car c = Named(name); if (c == null || c.Dt == null) return "?"; HotStart(c); return "demarrage"; }
         public static string TestSystems(string name) { Car c = Named(name); if (c == null) return "?"; StarterSystems(c); return "circuits du demarrage"; }
         public static string TestRunning(string name) { Car c = Named(name); if (c == null || c.Starter == null) return "?"; Game.SetState(c.Starter, c.RunState); return "demarreur force a " + c.RunState; }
