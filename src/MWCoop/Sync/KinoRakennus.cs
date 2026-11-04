@@ -538,10 +538,11 @@ namespace MWCoop
                 float cx = s * (20f + gx) / 2f, g = gy(s * 20f, mz);
                 Plane(s < 0 ? "ki_sisaan" : "ki_ulosajo", new Vector3(s * 20f, g + 1.55f, mz + 0.27f), 0.48f, 0.6f, Vector3.forward);
                 GroundArrow(cx, mz - 2.5f, s < 0 ? -1f : 1f, gy);
-                KinoDriveway(KinoDrives()[s < 0 ? 0 : 1], gy);
+                if (KinoDrives().Count > 1) KinoDriveway(KinoDrives()[s < 0 ? 0 : 1], gy);
             }
             // lampadaires (lumiere : KinoLights)
             foreach (float x in new[] { -19f, -7f, 7f, 19f }) KinoLamp(new Vector3(x, gy(x, z1 - 0.6f), z1 - 0.6f));
+            SolDur(kino.transform, x0, x1, z0, z1 + 0.6f, 1f, gy, 0.1f);
         }
 
         // pilier de brique (0,5 x 1,3 m, chaperon en beton) au bout d'un muret
@@ -571,6 +572,7 @@ namespace MWCoop
         {
             if (kinoDrives != null) return kinoDrives;
             kinoDrives = new List<Vector3[]>();
+            if (Config.GetInt("Kino", "Allees", 1) == 0) return kinoDrives;   // (petite ville de JD, 04/11 : les ouvertures du muret donnent directement sur sa rue, l'allee mordait dessus)
             Vector3 c; float yaw; string fl;
             KinoFrame(out c, out yaw, out fl);
             Quaternion r = Quaternion.Euler(0, yaw, 0);
@@ -647,6 +649,33 @@ namespace MWCoop
         }
 
         // grille de quads (cellule c) a la hauteur du sol + lift
+        // sol solide sous un parking (JD 04/11 : les voitures s'enfoncaient dans l'asphalte, dessine au-dessus d'un sol qui ne suit pas partout) : meme grille
+        // que HeightGrid, en collision, adherence de la route. A poser en dernier : gy le trouverait ensuite.
+        static void SolDur(Transform parent, float x0, float x1, float z0, float z1, float c, Func<float, float, float> gy, float lift)
+        {
+            int nx = Mathf.Max(1, Mathf.CeilToInt((x1 - x0) / c)), nz = Mathf.Max(1, Mathf.CeilToInt((z1 - z0) / c));
+            var v = new Vector3[(nx + 1) * (nz + 1)]; var t = new int[nx * nz * 6];
+            for (int i = 0; i <= nx; i++)
+                for (int j = 0; j <= nz; j++)
+                {
+                    float x = x0 + (x1 - x0) * i / nx, z = z0 + (z1 - z0) * j / nz;
+                    v[i * (nz + 1) + j] = new Vector3(x, gy(x, z) + lift, z);
+                }
+            int o = 0;
+            for (int i = 0; i < nx; i++)
+                for (int j = 0; j < nz; j++)
+                {
+                    int a = i * (nz + 1) + j, b = a + nz + 1;
+                    t[o++] = a; t[o++] = a + 1; t[o++] = b + 1; t[o++] = a; t[o++] = b + 1; t[o++] = b;
+                }
+            var m = new Mesh { name = "sol_dur" }; m.vertices = v; m.triangles = t; m.RecalculateNormals(); m.RecalculateBounds();
+            var g = new GameObject("sol_dur");
+            g.transform.SetParent(parent, false);
+            RaycastHit? h = GroundHit(parent.TransformPoint(new Vector3((x0 + x1) / 2f, 50f, (z0 + z1) / 2f)));
+            if (h.HasValue) g.layer = h.Value.collider.gameObject.layer;
+            var mc = g.AddComponent<MeshCollider>(); mc.sharedMesh = m; mc.sharedMaterial = MapPacks.RoadGrip();
+        }
+
         static void HeightGrid(string key, float x0, float x1, float z0, float z1, float c, Func<float, float, float> gy, float lift)
         {
             int nx = Mathf.Max(1, Mathf.CeilToInt((x1 - x0) / c)), nz = Mathf.Max(1, Mathf.CeilToInt((z1 - z0) / c));

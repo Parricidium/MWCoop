@@ -40,6 +40,71 @@ namespace MWCoop
             new[] { "QFuelpump", "Fuelpump", "WearFuelpump", "BuyFuelpump" },
             new[] { "QClutchDisc", "ClutchPlate", "WearClutch", "BuyClutchDisc" },
         };
+        // Magasin CARDINAL (My Summer Car, JD 04/11 : les pieces de la Satsuma a la place de l'occasion de la Rivett) : les memes pieces que le comptoir de
+        // Fleetari, tant que son bouton existe et qu'elles ne sont pas montees. { Q<X>, nom, prix }.
+        public static List<string[]> SalePool()
+        {
+            var l = new List<string[]>();
+            GameObject shop = Game.FindAny("REPAIRSHOP");
+            if (shop == null) return l;
+            foreach (string[] it in Items)
+            {
+                Transform btn = shop.transform.Find("LOD/Store/Parts/" + it[3]);
+                PlayMakerFSM buy = btn != null ? Game.FsmOn(btn.gameObject, "Buy") : null;
+                PlayMakerFSM db = Game.FindFsm("Database/DatabaseMotor/" + it[1], "Data");
+                if (buy == null || db == null) continue;
+                FsmBool inst = db.FsmVariables.FindFsmBool("Installed");
+                if (inst != null && inst.Value) continue;
+                FsmFloat price = buy.FsmVariables.FindFsmFloat("Price"); FsmString note = buy.FsmVariables.FindFsmString("Notification");
+                string name = note != null && !string.IsNullOrEmpty(note.Value) ? note.Value : it[1];
+                int cut = name.LastIndexOf(" MK"); if (cut > 0) { cut = name.LastIndexOf(' ', cut - 1); if (cut > 0) name = name.Substring(0, cut); }
+                l.Add(new[] { it[0], name, (price != null ? Mathf.RoundToInt(price.Value) : 100).ToString() });
+            }
+            return l;
+        }
+        public static GameObject PartModel(string q)
+        {
+            string[] it = System.Array.Find(Items, x => x[0] == q);
+            PlayMakerFSM db = it != null ? Game.FindFsm("Database/DatabaseMotor/" + it[1], "Data") : null;
+            FsmGameObject tp = db != null ? db.FsmVariables.FindFsmGameObject("ThisPart") : null;
+            return tp != null ? tp.Value : null;
+        }
+        // La piece sort comme au comptoir (usure, base reparee, bouton detruit), posee en pos ; chez chaque joueur (usure de l'acheteur). Null : plus disponible.
+        public static GameObject GiveAt(string q, float wearValue, Vector3 pos, Quaternion rot)
+        {
+            string[] it = System.Array.Find(Items, x => x[0] == q);
+            GameObject shop = Game.FindAny("REPAIRSHOP");
+            Transform btn = it != null && shop != null ? shop.transform.Find("LOD/Store/Parts/" + it[3]) : null;
+            PlayMakerFSM db = it != null ? Game.FindFsm("Database/DatabaseMotor/" + it[1], "Data") : null;
+            if (btn == null || db == null) return null;
+            FsmBool inst = db.FsmVariables.FindFsmBool("Installed");
+            FsmGameObject tp = db.FsmVariables.FindFsmGameObject("ThisPart");
+            GameObject part = tp != null ? tp.Value : null;
+            if (part == null || (inst != null && inst.Value)) return null;
+            PlayMakerFSM wear = Game.FindFsm(WearPath, "Data");
+            GameObject regGo = Game.FindAny(RegPath);
+            PlayMakerFSM reg = regGo != null ? Game.FsmOn(regGo, "Data") : null;
+            bool regIdle = reg != null && (!reg.gameObject.activeInHierarchy || RegIdle.Contains(reg.ActiveStateName));
+            applying = true; Replay.Depth++;
+            try
+            {
+                FsmFloat wv = wear != null && it[2].Length > 0 ? wear.FsmVariables.FindFsmFloat(it[2]) : null;
+                if (wv != null && wearValue >= 0f) wv.Value = wearValue;
+                FsmBool dmg = db.FsmVariables.FindFsmBool("Damaged"); if (dmg != null) dmg.Value = false;
+                db.SendEvent("REPAIR");
+                part.transform.SetParent(null, false);
+                part.SetActive(true);
+                part.transform.position = pos; part.transform.rotation = rot;
+                Rigidbody rb = part.GetComponent<Rigidbody>();
+                if (rb != null) { rb.position = pos; rb.rotation = rot; if (!rb.isKinematic) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; } }
+                try { part.tag = "PART"; } catch { }
+                if (reg != null) Unpick(reg, regIdle, it[0], btn);
+                Object.Destroy(btn.gameObject);
+            }
+            finally { applying = false; Replay.Depth--; }
+            return part;
+        }
+
         // Toles repeintes au hasard par Bodyfix (REPAIRSHOP/Jobs) : leur couleur est envoyee a la fin des travaux.
         static readonly string[] Panels = { "bootlid(Clone)", "door left(Clone)", "door right(Clone)", "fender left(Clone)", "fender right(Clone)", "hood(Clone)" };
 

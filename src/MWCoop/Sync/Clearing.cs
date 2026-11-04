@@ -153,6 +153,9 @@ namespace MWCoop
                 if (osatOn && one == Kauppa.OsatPad()) OsatPadY = h;
                 Log.Info("defrichage : plateforme en " + x + ", " + z + " a " + h.ToString("F2") + " m");
             }
+            // ([Boutique] Terrasse=0 -- petite ville de JD, 04/11 : hauteurs des plateformes gardees, le sol ne bouge pas ; il tirait aussi les grands triangles
+            // voisins, clotures et boites aux lettres de la carte restaient en l'air)
+            if (Config.GetInt("Boutique", "Terrasse", 1) == 0) { Log.Info("defrichage : pas de terrassement ([Boutique] Terrasse=0)"); return; }
             GameObject terr = GameObject.Find("MAP/MESH/TERRAIN_OBJ");
             if (terr == null || pads.Count == 0) return;
             const float Blend = 12f, Flat = 4f;   // (sol du jeu grossier : un sommet tous les 5 a 10 m)
