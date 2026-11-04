@@ -153,6 +153,7 @@ namespace MWCoop
                 rw.SetParent(model.transform, false);
                 rw.localRotation = q; rw.localPosition = -(q * wb.center);
                 Vector3 rlg; wheelWide = inf.TryGetValue("roues_largeur", out rlg) && rlg.x > 0.5f ? rlg : new Vector3(1f, 0f, 0f);
+                Vector3 sht; shockTopMax = inf.TryGetValue("amortisseur_haut", out sht) ? sht.x : 0f;
                 if (!inf.ContainsKey("roues_jeu") || !GameWheel(b, model.transform, left, fr, radius)) VazCar.AddModel(b, rw, "roue.p205");
                 else UnityEngine.Object.Destroy(rw.gameObject);
                 w.model = model; w.caliperModel = null;
@@ -443,6 +444,9 @@ namespace MWCoop
         // le meme demontee), par rapport a sa roue (wheelR<L|R>). Avant : la jambe de force n'a pas de maillage simple en place ; le meme
         // amortisseur, tendu du point bas de la jambe (SpindleF<L|R>/OFFSET/pivot_shock_f<l|r>) a son point haut (Chassis/F<L|R>/
         // TriggersStrutsF<L|R>), par rapport au porte-moyeu.
+        // (infos.txt amortisseur_haut -- JD 04/11, capture : le haut de la jambe de la Satsuma depassait du capot, plus bas que le sien : jambe avant
+        // raccourcie depuis son point bas, comme comprimee, son haut a cette hauteur au-dessus du moyeu)
+        static float shockTopMax;
         static Mesh shockMesh; static Material[] shockMats; static bool shockSeen;
         static int Shock(Transform model, Vector3 scale, bool front, string s, int layer)
         {
@@ -481,7 +485,14 @@ namespace MWCoop
                 Vector3 e1 = mb.center + dir * ex[ax], e2 = mb.center - dir * ex[ax];
                 bool firstTop = e1.sqrMagnitude < e2.sqrMagnitude; Vector3 top = firstTop ? e1 : e2, bottom = firstTop ? e2 : e1;
                 Quaternion q = Quaternion.FromToRotation((bottom - top).normalized, (pl - ph).normalized);
-                rel = Matrix4x4.TRS(ph, q, Vector3.one) * Matrix4x4.TRS(-top, Quaternion.identity, Vector3.one);
+                Vector3 sc = Vector3.one;
+                if (shockTopMax > 0f && ph.y * scale.y > shockTopMax && ph.y > pl.y)
+                {
+                    float k = Mathf.Clamp((shockTopMax / scale.y - pl.y) / (ph.y - pl.y), 0.2f, 1f);
+                    ph = pl + (ph - pl) * k; sc[ax] = k;
+                }
+                rel = Matrix4x4.TRS(ph, q, sc) * Matrix4x4.TRS(-top, Quaternion.identity, Vector3.one);
+                Log.Info("standalone : jambe avant, haut a " + (ph.y * scale.y).ToString("F2") + " m au-dessus du moyeu, longueur x " + sc[ax].ToString("F2"));
             }
             Transform fixe = model.parent.Find("roue_jeu_fixe");
             if (fixe == null) { fixe = new GameObject("roue_jeu_fixe").transform; fixe.SetParent(model.parent, false); fixe.localScale = scale; }

@@ -2558,7 +2558,7 @@ namespace MWCoop
                 var ds = (StandaloneDriver)b.Axis;
                 switch (cSon)
                 {
-                    case 0: case 1: if (st.Doors != null && st.Doors[0] != null) ToggleDoor(b, st, 0); break;
+                    case 0: case 1: if (st.Doors != null && st.Doors[0] != null) ToggleDoor(b, st, 0); if (cSon == 0) foreach (VazCar.Built bh in cars) if (bh.M != null && bh.M.QuestOnly) { Photo(bh, "capot", new Vector3(0f, 1.6f, 2.6f), new Vector3(0f, 0.85f, 1.0f)); Photo(bh, "capot-g", new Vector3(-0.55f, 1.25f, 1.75f), new Vector3(-0.55f, 0.85f, 1.05f)); } break;
                     case 2: case 3: foreach (VazCar.Built bh in cars) { State sh; if (states.TryGetValue(bh, out sh) && sh.Hatch != null) { sh.HatchOpen = !sh.HatchOpen; SendState(bh, sh); Log.Info("standalone : coop, hayon de " + bh.Car.name + (sh.HatchOpen ? " ouvert" : " ferme")); } } break;
                     case 4: ds.HandLatch = 1f; break;
                     case 5: ds.HandLatch = 0f; break;
