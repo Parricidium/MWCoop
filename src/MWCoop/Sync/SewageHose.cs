@@ -46,7 +46,7 @@ namespace MWCoop
 
         static Transform Gifu() { Rigidbody b = VehicleSync.Body("GIFU(750/450psi)"); return b != null ? b.transform : null; }
 
-        public static void OnLevelLoaded() { logs = 0; leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; chainIn = null; chainOut = null; chainBy = -1; nextChain = 0f; hStep = 0; eLog = 0; sStep = 0; sPrev = null; nextShape = 0f; sG0 = Vector3.zero; dampUntil = 0f; dragSaved = null; chainMoving = false; wellIgnored.Clear(); wellCols.Clear(); nextWellCols = 0f; npcDone.Clear(); nextNpcLook = 0; }
+        public static void OnLevelLoaded() { logs = 0; leading = false; ignoring = false; gifuCols = null; root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; chainIn = null; chainOut = null; chainBy = -1; nextChain = 0f; hStep = 0; eLog = 0; sStep = 0; sPrev = null; nextShape = 0f; pStep = 0; simWas = false; shapeAt = 0f; shapeLogs = 0; sG0 = Vector3.zero; dampUntil = 0f; dragSaved = null; chainMoving = false; wellIgnored.Clear(); wellCols.Clear(); nextWellCols = 0f; npcDone.Clear(); nextNpcLook = 0; }
 
         static bool Find()
         {
@@ -72,6 +72,12 @@ namespace MWCoop
             restLen = 0f; Vector3 rprev = c.position;
             foreach (Rigidbody rb in segs) { restLen += (rb.transform.position - rprev).magnitude; rprev = rb.transform.position; }
             if (!(restLen > 1f && restLen < 50f)) restLen = segs.Length * 0.38f;
+            linkAxis = new Vector3[segs.Length];
+            for (int i = 0; i < segs.Length; i++)
+            {
+                Vector3 ax = i + 1 < segs.Length ? segs[i + 1].transform.localPosition : (i > 0 ? linkAxis[i - 1] : Vector3.forward);
+                linkAxis[i] = ax.sqrMagnitude > 1e-6f ? ax.normalized : Vector3.forward;
+            }
             if (end != null) Log.Info("tuyau de la GIFU : bout " + t.name + " (" + Recon.Path(t).Split('/').Length + " niveaux)");
             return end != null;
         }
@@ -145,6 +151,9 @@ namespace MWCoop
             // physique, a cote de la Satsuma : « heurte Hose a 282 km/h », pare-brise casses. Elle reste posee tant que le camion ne bouge pas de 30 cm.)
             bool simHere = gt != null && VehicleSync.SimAuthority(gt);
             if (selfMode && !simHere && coupler != null) stayAt = coupler.position;
+            // (dossier #50 : « coince dans le sol quand quelqu'un monte, et le camion cale » : pas reproduit, releve au changement de mains et 2 s apres)
+            if (gt != null && simHere != simWas) { simWas = simHere; shapeAt = now + 2f; ShapeLog(gt, "camion " + (simHere ? "ici" : "copie")); }
+            else if (gt != null && shapeAt > 0f && now >= shapeAt) { shapeAt = 0f; ShapeLog(gt, "2 s apres"); }
             bool stay = Forme && selfMode && !held && simHere && coupler != null && (coupler.position - stayAt).sqrMagnitude < 0.09f;
             if (dampUntil > 0f && now >= dampUntil) Undamp();
             if (oldRule == 0) IgnoreCopy(gt, ((!following || selfMode) && gt != null && !simHere) || stay);
@@ -270,10 +279,27 @@ namespace MWCoop
                 if (i == n - 1) t.rotation = Quaternion.Slerp(t.rotation, rq, 0.5f);
                 else if (keepNow) t.rotation = keepRot[i];
                 else if (useChain && chainRot != null && chainRot.Length == n) t.rotation = Quaternion.Slerp(t.rotation, gc.rotation * chainRot[i], 0.35f);
-                else if ((q - p).sqrMagnitude > 1e-6f) t.rotation = Quaternion.LookRotation(q - p, Vector3.up);
+                else if ((q - p).sqrMagnitude > 1e-6f) Aim(t, i, q - p);
             }
             if (self) { end.transform.position = ep; end.transform.rotation = eq; }
             IgnoreWells(!self && Jobs.HoseReprise);
+        }
+
+        // Maillon tourne vers le suivant. Son axe de longueur n'est pas son z mais la pose du maillon suivant sous lui : tourne en z (LookRotation, depuis le
+        // 12/10), chaque maillon etait de travers a 90 degres, un escalier en dents de scie chez tous ceux dont la chaine est posee par le code, jamais vu en
+        // chiffres (dossiers #41, #46, #47, #50 : « tordu » ; premieres photos du tuyau, TuyauPhoto=1, 05/11), et rendu ainsi a la physique ses articulations
+        // le remettaient d'un coup (« se detend », maillons a 15 m/s). [Test] TuyauAxe=0 : comme avant.
+        static Vector3[] linkAxis; static int axeOn = -1;
+        static bool Axe { get { if (axeOn < 0) axeOn = Config.GetInt("Test", "TuyauAxe", 1); return axeOn != 0; } }
+        static bool simWas; static float shapeAt; static int shapeLogs;
+        static void ShapeLog(Transform gt, string why)
+        {
+            if (shapeLogs++ < 40) Log.Info("tuyau de la GIFU : " + why + ", " + Role + (selfMode ? " par ici" : "") + ", sous le sol/coudes " + TestUnder() + ", bout a " + (end.transform.position - coupler.position).magnitude.ToString("F1") + " m du raccord, regime " + VehicleSync.EngineRpm(gt).ToString("F0"));
+        }
+        static void Aim(Transform t, int i, Vector3 dir)
+        {
+            if (!Axe || linkAxis == null || i >= linkAxis.Length) { t.rotation = Quaternion.LookRotation(dir, Vector3.up); return; }
+            t.rotation = Quaternion.FromToRotation(t.rotation * linkAxis[i], dir) * t.rotation;
         }
 
         // Copie du bout (chaine posee d'apres l'autre) : elle ne touche plus les declencheurs des fosses d'ici. Sinon, a une pose un
@@ -400,7 +426,7 @@ namespace MWCoop
                 pts[i] = Vector3.Lerp(a, b, k) + Vector3.down * (sag * 4f * k * (1f - k));
                 if (!under && i < n && !NearEnd(pts[i], b) && pts[i].y < GroundUnder(pts[i]) + 0.02f) under = true;
             }
-            if (L <= d * 1.02f || !under) { LiftAboveGround(pts, b); return pts; }
+            if (L <= d * 1.02f || !under) { if (Axe) EvenSteps(pts); LiftAboveGround(pts, b); return pts; }
             float ga = GroundUnder(a), floor = (ga > float.MinValue ? ga : GroundY(a)) + 0.05f;
             Vector3 A = new Vector3(a.x, Mathf.Min(floor, a.y), a.z), B = new Vector3(b.x, Mathf.Max(floor, b.y), b.z);
             float lp = Mathf.Max(0f, a.y - A.y) + (B - A).magnitude + Mathf.Max(0f, B.y - b.y);
@@ -433,6 +459,23 @@ namespace MWCoop
             }
             LiftAboveGround(pts, b);
             return pts;
+        }
+        // Parabole : maillons a pas egaux le long de la courbe (a pas egaux sur la corde, tasses au milieu et ecartes aux extremites).
+        static void EvenSteps(Vector3[] pts)
+        {
+            int n = pts.Length - 1;
+            var src = (Vector3[])pts.Clone();
+            float total = 0f;
+            for (int i = 1; i <= n; i++) total += (src[i] - src[i - 1]).magnitude;
+            if (total < 1e-4f) return;
+            int seg = 1; float acc = 0f;
+            for (int i = 1; i < n; i++)
+            {
+                float want = total * i / n;
+                while (seg < n && acc + (src[seg] - src[seg - 1]).magnitude < want) { acc += (src[seg] - src[seg - 1]).magnitude; seg++; }
+                float len = (src[seg] - src[seg - 1]).magnitude;
+                pts[i] = len > 1e-5f ? Vector3.Lerp(src[seg - 1], src[seg], (want - acc) / len) : src[seg];
+            }
         }
         static bool NearEnd(Vector3 p, Vector3 b) { float dx = p.x - b.x, dz = p.z - b.z; return dx * dx + dz * dz < 0.36f; }
         static void LiftAboveGround(Vector3[] pts, Vector3 b)
@@ -540,7 +583,7 @@ namespace MWCoop
                     {
                         Vector3 p = pts[i + 1], q = i + 2 <= n ? pts[i + 2] : pts[n] + (pts[n] - pts[n - 1]);
                         segs[i].transform.position = p;
-                        if ((q - p).sqrMagnitude > 1e-6f) segs[i].transform.rotation = Quaternion.LookRotation(q - p, Vector3.up);
+                        if ((q - p).sqrMagnitude > 1e-6f) Aim(segs[i].transform, i, q - p);
                     }
                     if (logs++ < 10) Log.Info("tuyau de la GIFU : chaine etiree a " + d.magnitude.ToString("F1") + " m rendue a la physique : bout ramene a portee du raccord");
                 }
@@ -625,6 +668,46 @@ namespace MWCoop
         static int siegeOn = -1, sStep; static float sAt, sJump, nextShape, sV, sGV; static Vector3 sG0; static Vector3[] sPrev; static int chainFrames, layoutFrames;
         static bool Siege { get { if (siegeOn < 0) siegeOn = Config.GetInt("Test", "TuyauSiege", 0); return siegeOn != 0; } }
         const string TestCar = "GIFU(750/450psi)";
+        // ([Test] TuyauPhoto=1 avec TuyauSiege=1, dossiers #47/#50 : a chaque instant de pAt chacun note tous les maillons dans le repere du camion et photographie le tuyau, memes angles des deux cotes)
+        static readonly float[] pAt = { 3f, 10f, 16f, 25f, 32f, 38f, 48f, 58f, 68f, 76f, 84f, 92f };
+        static int pStep;
+        static void PhotoTest(string tag, Transform g)
+        {
+            var sb = new System.Text.StringBuilder("autotest : tuyau, photo " + tag + " " + (Session.IsHost ? "hote" : "invite") + " " + TestUnder() + " :");
+            Vector3 mid = (coupler.position + end.transform.position) * 0.5f;
+            for (int i = 0; i < segs.Length; i++)
+            {
+                Transform t = segs[i].transform; Vector3 lp = g.InverseTransformPoint(t.position);
+                Vector3 nx = i + 1 < segs.Length ? segs[i + 1].transform.position - t.position : t.position - segs[i - 1].transform.position;
+                sb.Append(" ").Append(i).Append("=").Append(lp.x.ToString("F2")).Append(",").Append(lp.y.ToString("F2")).Append(",").Append(lp.z.ToString("F2")).Append("|").Append(Vector3.Angle(t.forward, nx).ToString("F0")).Append("|").Append(segs[i].isKinematic ? "k" : "p");
+                mid = i == segs.Length / 2 ? t.position : mid;
+            }
+            if (linkAxis != null && segs.Length > 3) sb.Append(" axe range ").Append(linkAxis[1].ToString("F3")).Append(" axe ici ").Append(segs[2].transform.localPosition.ToString("F3")).Append(" longueur ").Append(restLen.ToString("F2"));
+            Log.Info(sb.ToString());
+            Shot(tag + "-dos", mid - g.forward * 6f + Vector3.up * 2.5f, mid);
+            Shot(tag + "-haut", mid + Vector3.up * 8f + g.right * 0.5f, mid);
+        }
+        static void Shot(string name, Vector3 from, Vector3 at)
+        {
+            var go = new GameObject("tuyau_photo");
+            try
+            {
+                var cam = go.AddComponent<Camera>(); cam.enabled = false;
+                Camera main = PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.GetComponent<Camera>() : null;
+                if (main != null) cam.CopyFrom(main);
+                cam.fieldOfView = 55f; cam.nearClipPlane = 0.05f; cam.farClipPlane = 300f;
+                go.transform.position = from; go.transform.LookAt(at);
+                var rt = new RenderTexture(960, 540, 24); cam.targetTexture = rt; cam.Render();
+                RenderTexture.active = rt; var tex = new Texture2D(960, 540, TextureFormat.RGB24, false); tex.ReadPixels(new Rect(0, 0, 960, 540), 0, 0); tex.Apply();
+                RenderTexture.active = null; cam.targetTexture = null;
+                string png = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "tuyau-" + (Session.IsHost ? "hote" : "invite") + name + ".png");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(png));
+                System.IO.File.WriteAllBytes(png, tex.EncodeToPNG());
+                Object.Destroy(tex); rt.Release(); Object.Destroy(rt);
+            }
+            catch (System.Exception e) { Log.Warn("tuyau : photo " + name + " : " + e.Message); }
+            Object.Destroy(go);
+        }
         static void SiegeTest(float k, float now)
         {
             Transform g = Gifu();
@@ -644,6 +727,7 @@ namespace MWCoop
                     sJump = 0f; chainFrames = layoutFrames = 0; sV = 0f; sGV = 0f;
                 }
             }
+            if (g != null && segs != null && pStep < pAt.Length && k > pAt[pStep] && Config.GetInt("Test", "TuyauPhoto", 0) != 0) { PhotoTest("+" + pAt[pStep].ToString("F0"), g); pStep++; }
             bool host = Session.IsHost;
             // (TuyauSiegeHote=1 : l'hote a tenu puis lache le bout avant que l'invite monte)
             if (host && Config.GetInt("Test", "TuyauSiegeHote", 0) != 0)
@@ -658,6 +742,7 @@ namespace MWCoop
             {
                 if (hStep == 0 && k > 4f) { hStep = 1; TakeTest(); Log.Info("autotest : tuyau, siege : l'invite prend le bout"); }
                 if (hStep == 1 && k > 70f) { hStep = 2; DropTest(); Log.Info("autotest : tuyau, siege : l'invite lache le bout"); }
+                if (hStep == 1 && g != null && Config.GetInt("Test", "TuyauPhoto", 0) != 0) { Transform ha = g.Find("ActivateHose"); if (ha != null) { Vector3 to = ha.position + g.right * 3.5f - g.forward * 1.5f; float gy = GroundUnder(to); to.y = (gy > float.MinValue ? gy : to.y) + 1f; testHand.position = Vector3.MoveTowards(testHand.position, to, 2f * Time.deltaTime); } }
             }
             float[] at = host ? new[] { 42f, 44f, 46f, 62f } : tient ? new float[0] : new[] { 12f, 14f, 16f, 28f, 75f, 77f, 79f, 81f, 90f };
             if (sStep < at.Length && k > at[sStep])
