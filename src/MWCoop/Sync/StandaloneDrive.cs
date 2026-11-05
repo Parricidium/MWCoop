@@ -1286,9 +1286,42 @@ namespace MWCoop
             var d = (StandaloneDriver)b.Axis;
             d.Keys = true; d.Handbrake = 0f;
             driving = b; enteredAt = Time.realtimeSinceStartup;
+            TrafficGate(b, true);
             if (st.Folded[0]) { st.Folded[0] = false; SendState(b, st); }   // (dossier conducteur releve en s'asseyant)
             GearHud(true, b);
             Log.Info("standalone : joueur au volant de " + b.Car.name + " (pied a " + footHeight.ToString("F2") + " m)");
+        }
+
+        // Circulation (JD 05/11 : aucune voiture sur la grande route, sauf le bus et le cousin) : le jeu allume TRAFFIC/VehiclesHighway ou
+        // VehiclesDirtRoad quand un objet au tag Player passe une porte de TRAFFIC/TriggerManager. Au volant, c'est le <voiture>/TrafficTrigger
+        // de la voiture du jeu (capsule, tag et couche Player, pas un declencheur), allume par son automate PlayerTrigger le temps de la
+        // conduite ; nos voitures n'en avaient pas : la route restait eteinte. Le notre : petite boule du meme tag sous le capot, dans la
+        // caisse (un declencheur ne reveille pas les portes, essai du 05/11), inertie et centre de gravite remis apres coup. [Test] TraficPorte=0 : sans.
+        static readonly Dictionary<VazCar.Built, GameObject> trafficGates = new Dictionary<VazCar.Built, GameObject>();
+        static void TrafficGate(VazCar.Built b, bool on)
+        {
+            if (Config.GetInt("Test", "TraficPorte", 1) == 0) return;
+            GameObject g;
+            if (!trafficGates.TryGetValue(b, out g) || g == null)
+            {
+                if (!on || b.Car == null) return;
+                State st; states.TryGetValue(b, out st);
+                int layer = LayerMask.NameToLayer("Player");
+                g = new GameObject("TrafficTrigger");
+                g.SetActive(false);
+                g.tag = "Player";
+                if (layer >= 0) g.layer = layer;
+                g.transform.SetParent(b.Car.transform, false);
+                g.transform.localPosition = st != null && st.HasCabin ? new Vector3(0f, st.Cabin.min.y + 0.25f, st.Cabin.max.z + 0.3f) : new Vector3(0f, 0.6f, 0.9f);
+                var c = g.AddComponent<SphereCollider>();
+                c.radius = 0.1f;
+                trafficGates[b] = g;
+                Log.Info("standalone : TrafficTrigger pose sur " + b.Car.name + " en " + g.transform.localPosition.ToString("F2") + " (couche " + LayerMask.LayerToName(g.layer) + ")");
+            }
+            if (g.activeSelf == on) return;
+            Vector3 inertia = b.Rb.inertiaTensor, com = b.Rb.centerOfMass; Quaternion ir = b.Rb.inertiaTensorRotation;
+            g.SetActive(on);
+            b.Rb.inertiaTensor = inertia; b.Rb.inertiaTensorRotation = ir; b.Rb.centerOfMass = com;
         }
 
         // force : sortie d'urgence (voiture detruite, fin de partie) sans condition de vitesse
@@ -1337,6 +1370,7 @@ namespace MWCoop
             ClearHover();
             var d = b.Axis as StandaloneDriver;
             if (d != null) { d.Keys = false; d.Throttle = 0f; d.Brake = 0f; d.Steer = 0f; d.Clutch = 0f; d.Handbrake = 1f; }
+            TrafficGate(b, false);
             driving = null; exitBlock = Time.realtimeSinceStartup + 0.6f;
             Log.Info("standalone : joueur descendu" + (force ? " (force)" : "") + (pl != null ? " en " + pl.transform.position.ToString("F1") : ""));
         }
