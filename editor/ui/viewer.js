@@ -1,10 +1,10 @@
 // Visite libre de la carte preparee (cache ecrit par le mod : MapExport.cs). Unity est en repere main gauche : z inverse
-// (positions, normales, matrices) et ordre des triangles retourne pour three.js. Couches : 0 sol, 1 routes, 2 batiments, 3 vegetation.
+// (positions, normales, matrices) et ordre des triangles retourne pour three.js. Couches : 0 sol, 1 routes, 2 batiments, 3 vegetation, 4 village Assakyla (cache format 5, decor de reference).
 import * as THREE from "./vendor/three.module.min.js";
 
 const KINDS = [
   { k: "kSol", color: "#8fa86a" }, { k: "kRoutes", color: "#c9a46a" },
-  { k: "kBatiments", color: "#d07a5a" }, { k: "kVegetation", color: "#4f8a5b" },
+  { k: "kBatiments", color: "#d07a5a" }, { k: "kVegetation", color: "#4f8a5b" }, { k: "kVillage", color: "#c77dd6" },
 ];
 const SKY = { msc: 0xa9cbe8, mwc: 0xbfcad8 };
 
@@ -27,7 +27,7 @@ export class Viewer {
     sun.position.set(0.4, 1, 0.3);
     this.scene.add(sun);
     this.groups = KINDS.map(() => { const g = new THREE.Group(); this.scene.add(g); return g; });
-    this.counts = [0, 0, 0, 0];
+    this.counts = KINDS.map(() => 0);
     this.selBox = null;
     this.bind();
     this.resize();
@@ -90,7 +90,7 @@ export class Viewer {
       this.instMeshes[n] = mesh;
       if (ob.p && !this.byPath.has(ob.p)) this.byPath.set(ob.p, n);
       if (/^LakeWater(Under|Color)/.test(ob.n)) mesh.visible = false;   // (effets sous l'eau de MSC : plans superposes a la surface)
-      const k = Math.max(0, Math.min(3, ob.k));
+      const k = Math.max(0, Math.min(KINDS.length - 1, ob.k));
       this.groups[k].add(mesh);
       mesh.updateMatrixWorld(true);
       this.counts[k]++;
@@ -188,7 +188,7 @@ export class Viewer {
         const mat = mats[gr.materialIndex] || mats[0];
         if (!mat || mat.visible === false) continue;
         const key = mesh.userData.kind + "|" + mat.uuid;
-        let b = buckets.get(key); if (!b) buckets.set(key, b = { kind: Math.max(0, Math.min(3, mesh.userData.kind)), mat, parts: [] });
+        let b = buckets.get(key); if (!b) buckets.set(key, b = { kind: Math.max(0, Math.min(KINDS.length - 1, mesh.userData.kind)), mat, parts: [] });
         b.parts.push({ idx, mesh, start: gr.start, count: gr.count });
       }
     });

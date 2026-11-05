@@ -58,6 +58,7 @@ export class Edition {
   // ---------------------------------------------------------------- chargement
   start() {
     if (!this.v.info.objets.length || this.v.info.format < 2) this.ui.warn(T("cacheAncien"));
+    else if (this.v.info.format < 5) this.ui.warn(T("cacheSansVillage"));
     if (this.proj.relief.length) this.replayRelief();
     for (const rec of this.proj.objets) this.build(rec);
     this.applyMasks();
@@ -580,6 +581,8 @@ export class Edition {
     if (!s) { el.innerHTML = `<div class="ph">${esc(T("proprietes"))}</div><p class="empty pad">${esc(T("propsVide"))}</p>`; return; }
     if (s.idx !== undefined) {
       const ob = this.v.info.objets[s.idx], masked = this.isMasked(s.idx);
+      // (village Assakyla, cache format 5 : decor de reference, pas un objet du jeu -- ni copie ni masque)
+      if (ob.k === 4) { el.innerHTML = `<div class="ph">${esc(T("kVillage"))}</div><div class="sec"><b class="nm">${esc(ob.n)}</b><p class="hint">${esc(T("villageAide"))}</p></div>`; return; }
       const kind = classify(ob.n, ob.p);
       el.innerHTML = `<div class="ph">${esc(T("objetJeu"))}</div><div class="sec"><b class="nm">${esc(ob.n)}</b>${kind && kind !== "junk" ? `<div class="hint">${esc(catName(kind, window.LANG))}</div>` : ""}
         <div class="kv"><span>${esc(T("chemin"))}</span><span>${esc(ob.p || "—")}</span></div>

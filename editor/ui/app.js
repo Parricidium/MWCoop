@@ -155,7 +155,7 @@ function onVerif(v) {
 const STEPS = [
   { k: "eLancement", st: ["lancement", "chargement", "attente", "releve"] },
   { k: "eSol", st: ["sol"] }, { k: "eRoutes", st: ["routes"] }, { k: "eBatiments", st: ["batiments"] },
-  { k: "eVegetation", st: ["vegetation"] }, { k: "eTextures", st: ["textures"] }, { k: "eCache", st: ["cache", "fini"] },
+  { k: "eVegetation", st: ["vegetation", "village"] }, { k: "eTextures", st: ["textures"] }, { k: "eCache", st: ["cache", "fini"] },
 ];
 const PREP_ART = `<svg viewBox="0 0 400 400" aria-hidden="true"><rect width="400" height="400" fill="#121820"/><g id="tiles"></g>
   <g stroke="var(--acc)" stroke-width="1.2" fill="none" opacity=".25"><path d="M100 0v400M200 0v400M300 0v400M0 100h400M0 200h400M0 300h400"/></g></svg>`;

@@ -37,6 +37,7 @@ namespace MWCoop
         static double buildMs;
         static bool offLogged;
         static bool built;
+        public static bool BuildSettled { get { return built || !Active; } }   // (export de la carte : les batiments du village poses)
 
         static void L(string s) { Log.Info("boutique : " + s); }
 

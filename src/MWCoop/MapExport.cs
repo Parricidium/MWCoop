@@ -21,6 +21,9 @@ namespace MWCoop
     //  - maillages.bin : par maillage, nombres de 4 octets : sommets n, drapeaux (1 normales, 2 uv), sous-maillages k, k
     //    tailles d'indices, puis positions (3n), normales (3n), uv (2n), indices (u32) ;
     //  - textures/<i>.png (au plus ExportTexture px, 512) ; etat.txt : avancement pour l'editeur (etape, avance, texte, fini).
+    // Format 5 (JD 05/11 : « charger la petite ville ... avec les batiments ») : le village Assakyla (Ville.cs) et ses batiments sont
+    // construits avant le releve, tous ajouts allumes, et ranges en sorte 4 : decor de reference de l'editeur, sans chemin ni ensemble
+    // (ce ne sont pas des objets du jeu : ni a copier ni a masquer, une carte ne les retrouverait pas chez qui n'a pas ces ajouts).
     // Objets regroupes par le jeu (static batching, « Combined Mesh » en coordonnees monde) : seulement les sous-maillages de
     // l'objet (index interne staticBatchIndex, sinon ceux qui tiennent dans sa boite), matrice identite, chacun une fois.
     public static class MapExport
@@ -42,7 +45,7 @@ namespace MWCoop
         }
 
         static IEnumerator<bool> job;
-        static float startAt = -1, quitAt = -1;
+        static float startAt = -1, quitAt = -1, settledAt = -1;
         static string lastStage;
 
         public static void Update()
@@ -64,7 +67,15 @@ namespace MWCoop
                 startAt = Time.realtimeSinceStartup + Config.GetFloat("Test", "ExportDelai", 20f);
                 State("attente", 0f, "Monde en place, export dans quelques secondes", false, null);
             }
-            if (job == null && Time.realtimeSinceStartup >= startAt) job = Run();
+            if (job == null && Time.realtimeSinceStartup >= startAt)
+            {
+                // (le village et ses batiments d'abord, 3 min au plus : carte sans eux plutot que pas de carte)
+                bool ready = MapPacks.Settled && Kauppa.BuildSettled;
+                if (ready && settledAt < 0) settledAt = Time.realtimeSinceStartup;
+                bool late = Time.realtimeSinceStartup >= startAt + 180f;
+                if (late && !ready) Log.Warn("export de la carte : village pas pret apres 3 min, releve sans lui");
+                if (late || (ready && Time.realtimeSinceStartup >= settledAt + 3f)) job = Run();
+            }
             if (job == null) return;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
@@ -105,9 +116,9 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- releve
-        const int KGround = 0, KRoad = 1, KBuilding = 2, KPlant = 3;
-        static readonly string[] KindStage = { "sol", "routes", "batiments", "vegetation" };
-        static readonly string[] KindText = { "Sol et relief", "Routes et chemins", "Batiments et objets", "Arbres et vegetation" };
+        const int KGround = 0, KRoad = 1, KBuilding = 2, KPlant = 3, KVillage = 4;
+        static readonly string[] KindStage = { "sol", "routes", "batiments", "vegetation", "village" };
+        static readonly string[] KindText = { "Sol et relief", "Routes et chemins", "Batiments et objets", "Arbres et vegetation", "Assakyla" };
 
         struct Item { public MeshRenderer R; public Mesh M; public int Kind; }
         class Inst { public int Mesh; public Matrix4x4 T; public int[] Mats; public int Kind; public string Name, Path; public bool World; public Matrix4x4 R; public int[] Units; }   // (World : sommets du maillage en coordonnees monde -- lot -- et R le repere de l'objet)
@@ -160,8 +171,8 @@ namespace MWCoop
             Log.Info("export de la carte : " + groups + " groupes LOD (" + (getLods != null ? "par l'API" : "par les noms") + "), " + lodSkip.Count + " niveaux ecartes");
             var items = new List<Item>();
             int skipped = 0, dynamic = 0, off = 0;
-            var kindNames = new Dictionary<string, int>[4];
-            for (int k = 0; k < 4; k++) kindNames[k] = new Dictionary<string, int>();
+            var kindNames = new Dictionary<string, int>[5];
+            for (int k = 0; k < 5; k++) kindNames[k] = new Dictionary<string, int>();
             var rootSkip = new Dictionary<string, int>();
             foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(typeof(MeshRenderer)))
             {
@@ -169,10 +180,12 @@ namespace MWCoop
                 if (r.hideFlags != HideFlags.None || !roots.Contains(r.transform.root)) continue;
                 if (!r.enabled || lodSkip.Contains(r) || r.gameObject.layer == 31) { skipped++; continue; }
                 string root = Game.RootName(r.transform);
-                if (SkipRoot(root)) { int rc; rootSkip.TryGetValue(root, out rc); rootSkip[root] = rc + 1; continue; }
+                bool village = VillageRoot(root);
+                if (village && !r.gameObject.activeInHierarchy) { skipped++; continue; }   // (leurs objets eteints sont d'autres etats : ecran allume, porte...)
+                if (!village && SkipRoot(root)) { int rc; rootSkip.TryGetValue(root, out rc); rootSkip[root] = rc + 1; continue; }
                 Rigidbody rb = null;   // (GetComponentInParent ne voit pas les objets eteints)
                 for (Transform t = r.transform; t != null && rb == null; t = t.parent) rb = t.GetComponent<Rigidbody>();
-                if (rb != null) { dynamic++; int dc; dynNames.TryGetValue(rb.name, out dc); dynNames[rb.name] = dc + 1; continue; }   // (voitures, objets, portes : bougent)
+                if (rb != null && !(village && rb.isKinematic)) { dynamic++; int dc; dynNames.TryGetValue(rb.name, out dc); dynNames[rb.name] = dc + 1; continue; }   // (voitures, objets, portes : bougent)
                 MeshFilter mf = r.GetComponent<MeshFilter>();
                 Mesh m = mf != null ? mf.sharedMesh : null;
                 if (m == null) { skipped++; continue; }
@@ -182,18 +195,18 @@ namespace MWCoop
                     if (Mathf.Max(Mathf.Abs(s.x), Mathf.Max(Mathf.Abs(s.y), Mathf.Abs(s.z))) > 12000f) { Log.Info("export de la carte : ecarte (trop grand) " + Recon.Path(r.transform) + " " + s.ToString("F0")); skipped++; continue; }
                 }
                 if (!r.gameObject.activeInHierarchy) off++;
-                int kind = KindOf(r, m);
+                int kind = village ? KVillage : KindOf(r, m);
                 items.Add(new Item { R = r, M = m, Kind = kind });
                 string n = r.name; int c; kindNames[kind].TryGetValue(n, out c); kindNames[kind][n] = c + 1;
             }
             items.Sort((a, b) => a.Kind.CompareTo(b.Kind));
             Log.Info("export de la carte : mobiles ecartes : " + Top(dynNames, 30));
             Log.Info("export de la carte : racines ecartees : " + Top(rootSkip, 30) + " ; objets eteints gardes : " + off);
-            int[] counts = new int[4];
+            int[] counts = new int[5];
             foreach (Item it in items) counts[it.Kind]++;
             Log.Info("export de la carte : " + items.Count + " objets (sol " + counts[0] + ", routes " + counts[1] + ", batiments " + counts[2] + ", vegetation " + counts[3]
-                     + "), ecartes " + skipped + ", mobiles " + dynamic);
-            for (int k = 0; k < 4; k++)
+                     + ", village " + counts[4] + "), ecartes " + skipped + ", mobiles " + dynamic);
+            for (int k = 0; k < 5; k++)
             {
                 var top = new List<KeyValuePair<string, int>>(kindNames[k]);
                 top.Sort((a, b) => b.Value.CompareTo(a.Value));
@@ -319,6 +332,8 @@ namespace MWCoop
 
         // Racines sans decor : joueur, interface, systemes, circulation, PNJ, objets et pieces libres, le mod.
         static readonly HashSet<string> SkipRoots = new HashSet<string> { "PLAYER", "GUI", "Systems", "Sheets", "TRAFFIC", "NPC_CARS", "ITEMS", "CARPARTS", "COPS", "Clouds" };
+        // (racines du village : le paquet de la DLL, MapPacks, et les batiments du mod)
+        static bool VillageRoot(string root) { return root == "MWCoop-Cartes" || root == "OSUUSKAUPPA s21" || root == "MWCoop Korsikan museo" || root == "MWCoop KINO TAHTI" || root == "MWCoop CARDINAL VARAOSAT"; }
         static bool SkipRoot(string root) { return SkipRoots.Contains(root) || root.StartsWith("MWCoop") || root.StartsWith("Sky"); }
 
         static int KindOf(MeshRenderer r, Mesh mesh)
@@ -370,7 +385,7 @@ namespace MWCoop
                 meshIndex[id] = mi;
             }
             if (mi < 0) return;
-            insts.Add(new Inst { Mesh = mi, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform), Units = UnitsOf(r.transform) });
+            insts.Add(new Inst { Mesh = mi, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = it.Kind == KVillage ? null : UniquePath(r.transform), Units = it.Kind == KVillage ? null : UnitsOf(r.transform) });
         }
 
         // ---------------------------------------------------------------- objets regroupes (lots statiques)
@@ -505,7 +520,7 @@ namespace MWCoop
         static void WriteJson(string path)
         {
             var sb = new StringBuilder(1 << 20);
-            sb.Append("{\"format\":4,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
+            sb.Append("{\"format\":5,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
             sb.Append(",\"mod\":").Append(S(Version.Text)).Append(",\"date\":").Append(S(DateTime.Now.ToString("yyyy-MM-dd HH:mm")));
             Transform pl = Game.PlayerT;
             if (pl != null) sb.Append(",\"joueur\":[").Append(F(pl.position.x)).Append(',').Append(F(pl.position.y)).Append(',').Append(F(pl.position.z)).Append(']');
@@ -554,7 +569,8 @@ namespace MWCoop
                 for (int rr = 0; rr < 3; rr++) for (int cc = 0; cc < 4; cc++) sb.Append(rr + cc > 0 ? "," : "").Append(F(o.T[rr, cc]));
                 sb.Append("],\"x\":[");
                 for (int k = 0; k < o.Mats.Length; k++) sb.Append(k > 0 ? "," : "").Append(o.Mats[k]);
-                sb.Append("],\"p\":").Append(S(o.Path));
+                sb.Append(']');
+                if (o.Path != null) sb.Append(",\"p\":").Append(S(o.Path));
                 if (o.Units != null) { sb.Append(",\"u\":["); for (int k = 0; k < o.Units.Length; k++) sb.Append(k > 0 ? "," : "").Append(o.Units[k]); sb.Append(']'); }
                 if (o.World)
                 {

@@ -34,6 +34,7 @@ namespace MWCoop
         {
             get
             {
+                if (MapExport.Active) return Game.Msc ? B_Msc : B_Drone | B_Bags | B_Shop | B_Museum | B_Vaz | B_Kino | B_Osat;   // (carte de l'editeur : toujours avec le village, quels que soient les ajouts du joueur -- JD 05/11)
                 if (!On) return 0;
                 int b = (Config.GetInt("Coop", "AjoutDrone", 1) != 0 ? B_Drone : 0) | (Config.GetInt("Coop", "AjoutSacs", 1) != 0 ? B_Bags : 0)
                       | (Config.GetInt("Coop", "AjoutBoutique", 1) != 0 ? B_Shop : 0) | (Config.GetInt("Coop", "AjoutMusee", 1) != 0 ? B_Museum : 0)

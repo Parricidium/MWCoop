@@ -44,13 +44,14 @@ namespace MWCoop
         }
 
         static IEnumerator<bool> job;
+        public static bool Settled { get { return loadAt < 0 && job == null; } }   // (export de la carte : le village pose)
 
         public static void OnLevelLoaded()
         {
             root = null; Objects = Hidden = Packs = 0; job = null; lamps.Clear(); suns = null; hiddenUnits.Clear(); waters.Clear();
-            loadAt = Game.LevelName == "GAME" && !MapExport.Active ? Time.realtimeSinceStartup + Config.GetFloat("Test", "CartesDelai", 6f) : -1;
+            loadAt = Game.LevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Test", "CartesDelai", 6f) : -1;   // (export de la carte : le village seul, LoadAll)
             if (loadAt < 0) return;
-            string d = LoadDir(false);
+            string d = MapExport.Active ? null : LoadDir(false);
             if ((d != null && Directory.Exists(d) && Directory.GetFiles(d, "*.mwcmap").Length > 0) || Config.GetInt("Ville", "Active", 1) != 0) SceneBatches.Prefetch();   // (copies d'objets regroupes ; le village, s'il est la)
         }
 
@@ -64,7 +65,7 @@ namespace MWCoop
             if (job != null)
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                float budget = Config.GetFloat("Test", "CartesBudget", 4f);
+                float budget = MapExport.Active ? 100f : Config.GetFloat("Test", "CartesBudget", 4f);
                 try { while (sw.Elapsed.TotalMilliseconds < budget) if (!job.MoveNext()) { job = null; break; } }
                 catch (Exception e) { Log.Warn("cartes : " + e.Message); job = null; }
                 return;
@@ -76,7 +77,7 @@ namespace MWCoop
 
         static IEnumerator<bool> LoadAll()
         {
-            string dir = LoadDir(true);
+            string dir = MapExport.Active ? null : LoadDir(true);   // (export pour l'editeur : jamais les cartes du joueur)
             string[] files = dir != null && Directory.Exists(dir) ? Directory.GetFiles(dir, "*.mwcmap") : new string[0];
             byte[] village = Ville.On ? Ville.Pack() : null;
             if (files.Length == 0 && village == null) { SceneBatches.Close(); yield break; }
