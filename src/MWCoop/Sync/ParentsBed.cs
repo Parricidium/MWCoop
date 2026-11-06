@@ -138,7 +138,7 @@ namespace MWCoop
             Transform head = pivot != null ? pivot.Find("Sphere") : null;
             foreach (Renderer r in sl.GetComponentsInChildren<Renderer>(true)) r.enabled = false;   // (reperes du corps : invisibles)
             // (k.x : la tete -- le pivot final, ou le jeu pose la camera du dormeur -- a cette distance du milieu vers la tete de lit)
-            Vector3 k = ParseV(Config.Get("Test", "LitParents", ""), Game.Msc ? new Vector3(-0.40f, -0.37f, 0f) : new Vector3(-0.35f, -0.37f, -0.50f));   // (My Summer Car : pas d'ecart de travers entre le pivot et le corps, le corps sortait du lit, photos 06/11)
+            Vector3 k = ParseV(Config.Get("Test", "LitParents", ""), new Vector3(Game.Msc ? -0.40f : -0.35f, -0.37f, 0f));   // (pas d'ecart de travers entre le pivot et le corps : -0,5 mettait la place 1 a 0,8 m du centre, a moitie hors du lit, MWC compris depuis le 22/10 ; vu sur photos, 06/11)
             Vector3 across = Vector3.Cross(Vector3.up, ax);
             // L'animation du jeu (sleep_bed_in, sur AnimPivotSleep) deplace le pivot -- et le joueur, qui y est accroche -- de l'origine
             // du declencheur jusqu'au lit : c'est la pose FINALE du pivot qu'on aligne sur le lit (le modele « Sleep 1 » est a 1,4 m
@@ -170,6 +170,14 @@ namespace MWCoop
         // [Test] Autotest=litparents : a 25 s, le joueur a cote du lit se couche (l'automate du jeu, seul le clic n'est pas rejoue) a la place [Test] LitPlace (1 ou 2) ; position du joueur
         // et de la camera toutes les 2 s jusqu'au reveil, photos couche et debout (dumps	uyau-*lit*.png).
         static int tStep; static float tNext, tAt;
+        static bool tEye; static float tWoke;
+        static string Etat()
+        {
+            PlayMakerFSM c = Game.FindFsm("MAP/SUN/Pivot/SUN", "Color"); FsmVariables g = FsmVariables.GlobalVariables;
+            System.Func<string, string> v = n => { FsmFloat x = g.FindFsmFloat(n); return n + " " + (x != null ? x.Value.ToString("F1") : "?"); };
+            FsmInt day = g.FindFsmInt("GlobalDay");
+            return "heure " + (c != null ? c.FsmVariables.GetFsmInt("Time").Value.ToString() : "?") + ", jour " + (day != null ? day.Value : -1) + ", " + v("PlayerFatigue") + ", " + v("PlayerHunger") + ", " + v("PlayerThirst");
+        }
         public static void Test(float t)
         {
             // ([Test] LitVue=s : pas de sommeil ici, photos du lit toutes les 2 s pendant 24 s a partir de s : l'avatar couche de l'autre joueur)
@@ -187,6 +195,7 @@ namespace MWCoop
                 return;
             }
             if (t < Config.GetFloat("Test", "LitA", 25f)) return;
+            if (tStep == 0 && Config.GetInt("Test", "LitSec", -1) >= 0 && System.DateTime.Now.Second != Config.GetInt("Test", "LitSec", -1)) return;   // (les deux joueurs a la meme seconde de l'horloge du PC)
             if (tStep == 0 && t > 25f)
             {
                 tStep = 1;
@@ -196,10 +205,12 @@ namespace MWCoop
                 PlayMakerFSM f = null;
                 if (sl != null) foreach (PlayMakerFSM x in sl.GetComponentsInChildren<PlayMakerFSM>(true)) if (x.FsmName == "Activate") f = x;
                 Log.Info("autotest : litparents, " + nom + " " + (sl != null ? "trouve en " + sl.position.ToString("F2") : "INTROUVABLE") + ", automate " + (f != null ? f.ActiveStateName : "absent") + ", places " + pivots.Count);
+                if (Config.GetInt("Test", "LitMoi", 0) != 0) { GameObject mine = Game.FindAny("YARD/Building/BEDROOM1/LOD_bedroom1/Sleep/SleepTrigger"); f = mine != null ? Game.FsmOn(mine, "Activate") : null; Log.Info("autotest : litparents, temoin : lit du joueur " + (f != null)); }   // (temoin : le lit du jeu)
                 if (f == null) return;
                 GameObject pl = Game.PlayerGo; var cc = pl.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = false; pl.transform.position = f.transform.position + feetDir * 1.6f + Vector3.up * 0.3f; if (cc != null) cc.enabled = true;
                 FsmFloat fat = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue"); if (fat != null) fat.Value = 30f;
+                Log.Info("autotest : litparents, avant " + Etat());
                 Game.SetState(f, "Get positions");
                 tAt = Time.realtimeSinceStartup;
             }
@@ -215,8 +226,10 @@ namespace MWCoop
                 if (bed != null && pl != null)
                 {
                     Vector3 c = bed.transform.position;
+                    if (!tEye && sl && cam != null) { tEye = true; Log.Info("autotest : litparents, couche " + Etat()); SewageHose.Shot("lit-yeux", cam.transform.position, cam.transform.position + cam.transform.forward); Log.Info("autotest : litparents, camera " + cam.transform.position.ToString("F2") + " vise " + cam.transform.forward.ToString("F2") + ", mouvement " + (Game.PlayerT != null ? Game.PlayerT.localEulerAngles.ToString("F0") : "?")); }
                     if (tStep == 1 && sl) { tStep = 2; SewageHose.Shot("lit-couche-haut", c + Vector3.up * 2.2f + Vector3.right * 0.2f, pl.position); SewageHose.Shot("lit-couche-cote", c + feetDir * 2.6f + Vector3.up * 1.1f, pl.position); }
-                    if (tStep == 2 && !sl && pl.parent == null) { tStep = 3; SewageHose.Shot("lit-debout", pl.position + feetDir * 2f + Vector3.up * 1f, pl.position); Log.Info("autotest : litparents, reveil ; sol sous le joueur " + Floor(pl.position, float.NaN).ToString("F2") + ", attendu lever " + wakeAt.ToString("F2")); }
+                    if (tStep == 3 && Config.GetInt("Test", "LitSauve", 0) != 0 && now - tWoke > 4f && Net.Session.IsHost) { tStep = 4; Log.Info("autotest : litparents, sauvegarde apres le reveil, " + Etat()); Game.SaveInPlace(); }
+                    if (tStep == 2 && !sl && pl.parent == null) { tWoke = now; tStep = 3; SewageHose.Shot("lit-debout", pl.position + feetDir * 2f + Vector3.up * 1f, pl.position); Log.Info("autotest : litparents, apres " + Etat()); Log.Info("autotest : litparents, reveil ; sol sous le joueur " + Floor(pl.position, float.NaN).ToString("F2") + ", attendu lever " + wakeAt.ToString("F2")); }
                 }
             }
         }
