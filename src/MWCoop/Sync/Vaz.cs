@@ -301,12 +301,18 @@ namespace MWCoop
             int n = 0;
             foreach (KeyValuePair<int, Rent> kv in rents)
             {
-                if (kv.Key == Me || kv.Value.Car == null || kv.Value.Car.Car == null) continue;
+                if (kv.Key == Me || !Session.Players.ContainsKey(kv.Key) || kv.Value.Car == null || kv.Value.Car.Car == null) continue;   // (les joueurs, pas les voitures du monde)
                 Transform t = kv.Value.Car.Car.transform;
                 t.position += Vector3.up * 0.6f; t.rotation = Quaternion.Euler(0f, t.eulerAngles.y, 175f);
                 n++;
             }
             return n;
+        }
+        public static float TestOtherUp()
+        {
+            foreach (KeyValuePair<int, Rent> kv in rents)
+                if (kv.Key != Me && Session.Players.ContainsKey(kv.Key) && kv.Value.Car != null && kv.Value.Car.Car != null) return kv.Value.Car.Car.transform.up.y;
+            return float.NaN;
         }
 
         // Trappe de toit de la VAZ n (clic d'un joueur) : l'hote applique et diffuse ; un invite le demande a l'hote.

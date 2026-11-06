@@ -1008,6 +1008,7 @@ namespace MWCoop
             { "Move closer to your car", "Подойдите к своей машине" },
             { "Not enough room here to turn it over", "Здесь не хватает места, чтобы её перевернуть" },
             { "Rental refused: nothing was charged", "В аренде отказано: деньги не списаны" },
+            { "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  drag the preview: turn", "Стрелки: цвет  \u00B7  Enter: взять или вернуть  \u00B7  перетащите превью: поворот" },
         };
     }
 }

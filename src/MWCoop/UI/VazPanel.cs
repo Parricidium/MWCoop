@@ -68,9 +68,9 @@ namespace MWCoop
             get
             {
                 if (note != null && Time.realtimeSinceStartup < noteUntil) return note;
-                if (false)
-                    return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  M : mod\u00E8le  \u00B7  glisser l'aper\u00E7u : tourner",
-                                  "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  M: model  \u00B7  drag the preview: turn");
+                if (MineRental)
+                    return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  glisser l'aper\u00E7u : tourner",
+                                  "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  drag the preview: turn");
                 return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  glisser l'aper\u00E7u : tourner",
                               "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  drag the preview: turn");
             }

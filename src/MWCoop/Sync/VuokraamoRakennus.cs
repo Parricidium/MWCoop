@@ -1145,7 +1145,14 @@ namespace MWCoop
         {
             int mode = Config.GetInt("Test", "VuokraLoue", 0);
             if (vaRent < 0 || mode == 0 || stands.Count == 0 || money == null) return;
-            if (mode == 2) { if (Vaz.TestFlipOthers() > 0) { vaRent = -1; L("essai location : voiture de l'invite retournee par l'hote"); } return; }
+            if (mode == 2)
+            {
+                // (l'hote : retourne la voiture de l'invite des qu'elle est la, puis note ce qu'il en voit)
+                if (vaRent == 0 && Vaz.TestFlipOthers() > 0) { vaRent = 1; vaRentAt = now; L("essai location : voiture de l'invite retournee par l'hote"); }
+                if (vaRent == 1 && now - vaRentAt > 10f) { vaRent = 2; L("essai location : chez l'hote, 10 s apres, haut y " + Vaz.TestOtherUp().ToString("F2")); }
+                if (vaRent == 2 && now - vaRentAt > 26f) { vaRent = -1; L("essai location : chez l'hote, 26 s apres, haut y " + Vaz.TestOtherUp().ToString("F2")); }
+                return;
+            }
             if (vaRent == 0 && Time.timeSinceLevelLoad > 60f)
             {
                 vaRent = 1; vaRentAt = now;
