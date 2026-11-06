@@ -57,7 +57,7 @@ namespace MWCoop
             foreach (Stand s in stands) { if (s.Hold != null) VazCar.DestroyPreview(s.Hold); if (s.Poster != null) UnityEngine.Object.Destroy(s.Poster); }
             foreach (UnityEngine.Object o in vaBaked) if (o != null) UnityEngine.Object.Destroy(o);
             vaBaked.Clear();
-            stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0;
+            stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0; vaClick = 0; vaAim = false;
         }
 
         // prix de location : d'apres le rapport puissance / poids (mk, arrondi a 10) ; [Vuokraamo] Hinta_<dossier>=n
@@ -483,7 +483,7 @@ namespace MWCoop
                 dc.AddComponent<MeshCollider>().sharedMesh = desk.sharedMesh;
             }
             var cg = new GameObject("va_myyja_coll"); cg.transform.SetParent(t, false);
-            cg.transform.localPosition = spot + Vector3.up * 0.9f;
+            cg.transform.position = t.TransformPoint(vaSource.InverseTransformPoint(SrcVendor + Vector3.up * 0.9f)); cg.transform.rotation = Quaternion.identity;   // (le repere du batiment n'a pas forcement y vers le haut)
             var cc = cg.AddComponent<CapsuleCollider>(); cc.height = 1.8f; cc.radius = 0.3f;
             vaVendorCol = cc;
             L("garage : vendeur " + (vaVendor != null ? "en place" : "absent (collision seule)") + ", bureau " + (desk != null ? desk.name : "absent"));
@@ -594,12 +594,56 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- image par image
-        static int vaTest; static float vaTestAt;
+        static int vaTest; static float vaTestAt; static bool vaAim; static int vaClick;
+        // [Test] VuokraClic=1 : le joueur pose sous le porche entre dans le bureau a pied (vrai CharacterController), puis clique sur le loueur
+        static void VuokraClickTest(float now)
+        {
+            if (vaClick < 0 || Config.GetInt("Test", "VuokraClic", 0) == 0) return;
+            Transform v = vuokra.transform;
+            Func<float, float, float, Vector3> w = (x, y, z) => v.TransformPoint(HallP(x, y, z));
+            GameObject pl = Game.PlayerGo;
+            if (vaClick == 0 && Time.timeSinceLevelLoad > 35f && pl != null)
+            {
+                vaClick = 1; vaTestAt = now;
+                Log.Info("essai clic : batiment rot " + vaSource.rotation.eulerAngles + ", y local vers " + vaSource.up.ToString("F2") + " ; ancienne zone de clic a " + (v.TransformPoint(vaSource.InverseTransformPoint(SrcVendor) + Vector3.up * 0.9f) - v.TransformPoint(vaSource.InverseTransformPoint(SrcVendor + Vector3.up * 0.9f))).magnitude.ToString("F2") + " m du loueur");
+                Autotest.PutPlayer(Config.GetInt("Test", "VuokraDedans", 0) != 0 ? w(4.2f, 1.1f, 7.5f) : w(4.2f, 1.1f, -3f));
+            }
+            if (vaClick == 1 && now - vaTestAt > 3f && pl != null)
+            {
+                var cc = pl.GetComponent<CharacterController>();
+                if (cc == null) { L("essai clic : pas de CharacterController"); vaClick = -1; return; }
+                L("essai clic : controleur allume " + cc.enabled + ", arret du jeu " + Game.GlobalBool("PlayerStop"));
+                cc.enabled = true;
+                foreach (Collider c in Physics.OverlapSphere(pl.transform.position + Vector3.up * 0.3f, 1.2f))
+                    if (!c.isTrigger && c.transform.root != pl.transform.root) L("essai clic : autour du joueur " + Recon.Path(c.transform) + " " + c.GetType().Name + " " + c.bounds.center.ToString("F1") + " " + c.bounds.size.ToString("F1"));
+                Vector3 from = pl.transform.position, target = w(3.8f, 1.1f, 1.2f);
+                for (int i = 0; i < 90; i++)
+                {
+                    Vector3 d = target - pl.transform.position; d.y = 0f;
+                    if (d.magnitude < 0.1f) break;
+                    cc.Move(d.normalized * 0.08f + Vector3.down * 0.02f);
+                }
+                Vector3 frontLeft = SrcHall + SrcOut * (VaD / 2f) - SrcAlong * (VaW / 2f);
+                Vector3 src = vaSource.TransformPoint(v.InverseTransformPoint(pl.transform.position)) - frontLeft;
+                L("essai clic : sol sous le joueur " + (cc.isGrounded ? "oui" : "non"));
+                L("essai clic : a pied de " + from.ToString("F1") + " a " + pl.transform.position.ToString("F1") + ", dans la halle x " + Vector3.Dot(src, SrcAlong).ToString("F2") + ", z " + Vector3.Dot(src, -SrcOut).ToString("F2") + " (bureau : z de 0 a 5)");
+                vaClick = 2; vaTestAt = now;
+            }
+            if (vaClick == 2 && now - vaTestAt > 2f) { vaClick = 3; vaTestAt = now; vaAim = true; }
+            if (vaClick == 3 && now - vaTestAt > 1f)
+            {
+                vaClick = -1;
+                L("essai clic : menu ouvert " + VuokraOpen + ", curseur voulu " + Menu.CursorWanted);
+                Autotest.CaptureSoon("va-clic", 0.1f);
+                if (Config.GetInt("Test", "VuokraSonde", 0) != 0) VaSonde();
+                L("essai clic : fini");
+            }
+        }
         static void TickVuokra(float now)
         {
             if (vuokra == null) return;
             VuokraKeys();
-            if (Config.Testing) VuokraTest(now);
+            if (Config.Testing) { VuokraClickTest(now); VuokraTest(now); }
             Camera cam = Game.MainCam;
             bool near = cam != null && (cam.transform.position - vuokra.transform.position).sqrMagnitude < 3600f;
             if (guiText == null)
@@ -612,13 +656,17 @@ namespace MWCoop
             if (near && !VuokraOpen && vaVendorCol != null && !Game.GlobalBool("PlayerSleeps"))
             {
                 RaycastHit h;
-                hit = vaVendorCol.Raycast(new Ray(cam.transform.position, cam.transform.forward), out h, 2.8f);
+                // ([Test] VuokraClic : le vrai chemin, depuis la vraie camera du joueur, visee sur le loueur)
+                Vector3 dir = vaAim ? (vaVendorCol.bounds.center - cam.transform.position).normalized : cam.transform.forward;
+                hit = vaVendorCol.Raycast(new Ray(cam.transform.position, dir), out h, 3.2f);
+                if (vaAim) L("essai clic : camera en " + cam.transform.position.ToString("F2") + ", loueur a " + (vaVendorCol.bounds.center - cam.transform.position).magnitude.ToString("F2") + " m, touche " + hit);
             }
             if (hit != vaLooked) { if (vaLooked) ClearGui(); vaLooked = hit; }
-            if (!hit) return;
+            if (!hit) { vaAim = false; return; }
             guiUse.Value = true;
             guiText.Value = Lang.TG("LOCATION DE VOITURES", "CAR RENTAL");
-            if (Input.GetMouseButtonDown(0)) { ClearGui(); vaLooked = false; OpenVuokra(saMenu ?? stands[0]); }
+            if (vaAim) L("essai clic : texte du jeu « " + guiText.Value + " »");
+            if (Input.GetMouseButtonDown(0) || vaAim) { vaAim = false; ClearGui(); vaLooked = false; OpenVuokra(saMenu ?? stands[0]); }
         }
 
         // (essai) points de l'emprise de chaque voiture exposee sur un mur du plan
@@ -680,6 +728,65 @@ namespace MWCoop
             }
         }
 
+        // [Test] VuokraSonde=1 : ce que le vrai garage laisse lire
+        static void VaSonde()
+        {
+            GameObject rs = Game.FindAny("REPAIRSHOP");
+            L("sonde : Building rot " + vaSource.rotation.eulerAngles + " ech " + vaSource.lossyScale + ", vuokra rot " + vuokra.transform.rotation.eulerAngles);
+            foreach (MeshCollider mc in rs.GetComponentsInChildren<MeshCollider>(true))
+            {
+                Mesh m = mc.sharedMesh; if (m == null) continue;
+                Vector2[] uv = m.isReadable ? m.uv : null;
+                L("sonde : collision " + Recon.Path(mc.transform) + " maillage " + m.name + " lisible " + m.isReadable + " sommets " + m.vertexCount + " uv " + (uv != null ? uv.Length : -1) + " sous " + m.subMeshCount + " bornes " + m.bounds.size.ToString("F1"));
+            }
+            foreach (Renderer r in vaSource.GetComponentsInChildren<Renderer>(true))
+            {
+                MeshFilter f = r.GetComponent<MeshFilter>(); Mesh m = f != null ? f.sharedMesh : null; if (m == null) continue;
+                int n = -1;
+                try { Vector3[] vx = m.vertices; n = vx != null ? vx.Length : -1; } catch { }
+                L("sonde : rendu " + Recon.Path(r.transform) + " " + m.name + " lisible " + m.isReadable + " sommets lus " + n + " fusion " + r.isPartOfStaticBatch + " actif " + r.gameObject.activeInHierarchy);
+            }
+            GameObject li = Game.FindAny("REPAIRSHOP/Lifter");
+            if (li != null)
+                foreach (Transform t in li.GetComponentsInChildren<Transform>(true))
+                {
+                    MeshFilter f = t.GetComponent<MeshFilter>(); Renderer r = t.GetComponent<Renderer>();
+                    var sb = new System.Text.StringBuilder("sonde : pont " + Recon.Path(t) + " pos " + t.position.ToString("F2") + " rot " + t.rotation.eulerAngles.ToString("F0") + " ech " + t.lossyScale.ToString("F2") + " actif " + t.gameObject.activeSelf);
+                    if (f != null && f.sharedMesh != null) sb.Append(" maillage ").Append(f.sharedMesh.name).Append(" lisible ").Append(f.sharedMesh.isReadable).Append(" fusion ").Append(r != null && r.isPartOfStaticBatch).Append(" bornes ").Append(r != null ? r.bounds.size.ToString("F2") : "-");
+                    foreach (PlayMakerFSM s in t.GetComponents<PlayMakerFSM>()) sb.Append(" automate ").Append(s.FsmName).Append("[").Append(s.ActiveStateName).Append("]");
+                    foreach (Component c in t.GetComponents<Component>()) if (c is Animation || c is Collider) sb.Append(" ").Append(c.GetType().Name);
+                    L(sb.ToString());
+                }
+            var seen = new HashSet<string>();
+            foreach (Renderer r in rs.GetComponentsInChildren<Renderer>(true))
+                foreach (Material m in r.sharedMaterials)
+                    if (m != null && m.mainTexture != null && seen.Add(m.mainTexture.name))
+                    {
+                        string n = m.mainTexture.name;
+                        L("sonde : texture " + n + " " + m.mainTexture.width + "x" + m.mainTexture.height + " matiere " + m.name + " couleur " + (m.HasProperty("_Color") ? m.color.ToString() : "-") + " sur " + r.name);
+                        if (n == "repair_shop_concrete" || n == "repair_shop_walls_inner" || n == "ATLAS_BUILDINGS" || n == "sheet_metal_wave" || n == "wood_panel6" || n == "metal_roof2" || n == "store_banners" || n == "store_floor")
+                        {
+                            RenderTexture rt = RenderTexture.GetTemporary(1024, 1024, 0); RenderTexture prev = RenderTexture.active;
+                            Graphics.Blit(m.mainTexture, rt); RenderTexture.active = rt;
+                            var t = new Texture2D(1024, 1024, TextureFormat.RGB24, false); t.ReadPixels(new Rect(0, 0, 1024, 1024), 0, 0); t.Apply();
+                            string png = Path.Combine(Path.Combine(Log.DataDir, "dumps"), "photo-tex-" + n + ".png");
+                            File.WriteAllBytes(png, t.EncodeToPNG());
+                            RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rt); UnityEngine.Object.Destroy(t);
+                        }
+                    }
+            // ce qui est sur le parvis
+            Transform v = vuokra.transform;
+            Vector3 a = v.TransformPoint(HallP(-3f, 0f, -VaApron - 4f)), d = v.TransformPoint(HallP(VaW + 3f, 0f, 0f));
+            Bounds zone = new Bounds((a + d) / 2f, new Vector3(Mathf.Abs(a.x - d.x), 60f, Mathf.Abs(a.z - d.z)));
+            foreach (Renderer r in UnityEngine.Object.FindObjectsOfType<Renderer>())
+                if (zone.Contains(r.bounds.center) && !r.transform.IsChildOf(v) && r.bounds.size.y > 2f)
+                {
+                    Transform t = r.transform; while (t.parent != null && t.parent.parent != null) t = t.parent;
+                    L("sonde : parvis " + Recon.Path(r.transform) + " centre " + r.bounds.center.ToString("F1") + " taille " + r.bounds.size.ToString("F1") + " racine " + t.root.name);
+                }
+            L("sonde : fini");
+        }
+
         // [Test] VuokraEssai=1 : photos du garage, menu ouvert, location de la premiere voiture
         static void VuokraTest(float now)
         {
@@ -692,6 +799,7 @@ namespace MWCoop
                 vaTest = 1; vaTestAt = now;
                 VaPlan(1f); VaPlan(2.8f);
                 VaCheck();
+                if (Config.GetInt("Test", "VuokraSonde", 0) != 0) VaSonde();
                 foreach (Cheats.Place pl in Cheats.Places) if (pl.Key == "vuokra") { QueteGolf.Shot("va-lieu", pl.At + Vector3.up * 0.4f, pl.Face + Vector3.up * 1.5f); L("essai : lieu sur la carte en " + pl.At + ", visant " + pl.Face); }
                 Autotest.PutPlayer(w(11f, 1.2f, -8f));
                 L("essai : joueur devant le garage");
