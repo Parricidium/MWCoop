@@ -692,6 +692,7 @@ namespace MWCoop
                 vaTest = 1; vaTestAt = now;
                 VaPlan(1f); VaPlan(2.8f);
                 VaCheck();
+                foreach (Cheats.Place pl in Cheats.Places) if (pl.Key == "vuokra") { QueteGolf.Shot("va-lieu", pl.At + Vector3.up * 0.4f, pl.Face + Vector3.up * 1.5f); L("essai : lieu sur la carte en " + pl.At + ", visant " + pl.Face); }
                 Autotest.PutPlayer(w(11f, 1.2f, -8f));
                 L("essai : joueur devant le garage");
             }

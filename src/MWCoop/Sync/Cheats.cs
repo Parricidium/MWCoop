@@ -42,7 +42,7 @@ namespace MWCoop
             {
                 if (!Ville.On) return Places;
                 var l = new System.Collections.Generic.List<Place>();
-                foreach (Place p in Places) if (p.Key != "cinema" && p.Key != "pieces" && p.Key != "musee" && p.Key != "boutique") l.Add(p);
+                foreach (Place p in Places) if (p.Key != "cinema" && p.Key != "pieces" && p.Key != "vuokra" && p.Key != "musee" && p.Key != "boutique") l.Add(p);
                 return l.ToArray();
             }
         }
@@ -56,6 +56,7 @@ namespace MWCoop
             {
                 case "cinema": at = new Vector3(-580.0f, 5.7f, 1691.3f); face = new Vector3(-581.7f, 5f, 1675.4f); break;
                 case "pieces": at = new Vector3(-540.9f, 5.3f, 1698.3f); face = new Vector3(-534.4f, 5f, 1697.6f); break;
+                case "vuokra": at = new Vector3(-535.7f, 5.3f, 1721.9f); face = new Vector3(-523.0f, 5f, 1720.5f); break;
                 case "musee": at = new Vector3(-670.9f, 7.2f, 1712.5f); face = new Vector3(-682.4f, 7f, 1713.9f); break;
                 case "boutique": at = new Vector3(-611.5f, 6.0f, 1710.0f); face = new Vector3(-610.9f, 6f, 1715.5f); break;
                 default: return p;
@@ -89,6 +90,7 @@ namespace MWCoop
             new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f), Need = () => Kauppa.Active && Kauppa.KinoOn },
             // magasin de pieces CARDINAL VARAOSAT (JD, 23/10) : sur le parvis, face a la vitrine (Kauppa.OsatFrame : local 0, 6,5)
             new Place { Key = "pieces", Alias = "parts", Fr = "CARDINAL VARAOSAT", En = "CARDINAL VARAOSAT", At = new Vector3(-1749.3f, 7.2f, -136.2f), Face = new Vector3(-1755.8f, 7f, -136.7f), Need = () => Kauppa.Active && Kauppa.OsatOn },
+            new Place { Key = "vuokra", Alias = "vuokraamo", Fr = "RALLI-VUOKRAAMO", En = "RALLI-VUOKRAAMO", Need = () => Kauppa.VuokraOn },
             // musee de la Corse et boutique OSUUSKAUPPA s21 (coin s21 de Perajarvi) : devant leurs portes, face a eux
             new Place { Key = "musee", Alias = "museum", Fr = "Musée de la Corse", En = "Museum of Corsica", At = new Vector3(-1570.3f, 5.5f, 1096.1f), Face = new Vector3(-1574.6f, 5f, 1085.4f), Need = () => Kauppa.Active && Ajouts.Museum },
             new Place { Key = "boutique", Alias = "shop", Fr = "OSUUSKAUPPA s21", En = "OSUUSKAUPPA s21", At = new Vector3(-1592.3f, 6.0f, 1105.1f), Face = new Vector3(-1591.1f, 5f, 1098.5f), Need = () => Kauppa.ShopOn },
@@ -113,6 +115,7 @@ namespace MWCoop
             new Place { Key = "cinema", Alias = "kino", Fr = "Cinéma", En = "Cinema", At = new Vector3(-469.2f, 5.0f, 1613.6f), Face = new Vector3(-468f, 5f, 1629.5f), Need = () => Kauppa.Active && Kauppa.KinoOn },
             // (autres batiments du village, VillagePlace donne leurs places)
             new Place { Key = "pieces", Alias = "parts", Fr = "CARDINAL VARAOSAT", En = "CARDINAL VARAOSAT", Need = () => Ville.On && Kauppa.OsatOn },
+            new Place { Key = "vuokra", Alias = "vuokraamo", Fr = "RALLI-VUOKRAAMO", En = "RALLI-VUOKRAAMO", Need = () => Kauppa.VuokraOn },
             new Place { Key = "musee", Alias = "museum", Fr = "Musée de la Corse", En = "Museum of Corsica", Need = () => Ville.On && Ajouts.Museum },
             new Place { Key = "boutique", Alias = "s21", Fr = "OSUUSKAUPPA s21", En = "OSUUSKAUPPA s21", Need = () => Ville.On && Kauppa.ShopOn },
         };
