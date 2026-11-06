@@ -1683,11 +1683,47 @@ namespace MWCoop
             else { Collider c = t.GetComponent<Collider>(); if (c != null) at = c.bounds.center; }
             ReachFor(at);
         }
+        // Manivelle tournee par ce joueur (Menos, 01/11) : la main decrit un cercle de 5 cm autour de la manivelle, dans le plan de la portiere (1,2 tour/s) -- la copie cote passager
+        // n'a pas de maillage dont on tirerait la poignee. Relance a chaque mouvement recu, 0,6 s de plus, rien de plus sur le reseau. Le jeu n'a pas de clip de manivelle : a la premiere personne, rien.
+        Transform crankT; Vector3 crankLocal; float crankStart, crankUntil, crankLog;
+        public void CrankFor(Transform t)
+        {
+            if (t == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (t != crankT || now > crankUntil + 0.25f)
+            {
+                Renderer best = null;
+                foreach (Renderer r in t.GetComponentsInChildren<Renderer>())
+                    if (r.enabled && (best == null || r.bounds.size.sqrMagnitude < best.bounds.size.sqrMagnitude)) best = r;
+                Vector3 at = best != null && best.bounds.size.magnitude < 1.5f ? best.bounds.center : t.position;
+                reachRight = Root == null || Root.transform.InverseTransformPoint(at).x >= -0.08f;
+                Transform sh = Bone(reachRight ? "shoulder_right" : "shoulder_left");
+                if (sh == null || (at - sh.position).sqrMagnitude > 1.2f * 1.2f) { crankT = null; if (Config.GetInt("Test", "ManivelleJournal", 0) != 0) Log.Info("autotest : manivelle, trop loin " + (sh != null ? (at - sh.position).magnitude.ToString("F2") : "?")); return; }   // trop loin : pas lui
+                crankT = t; crankLocal = t.InverseTransformPoint(at); crankStart = now;
+                if (pressLogs++ < 5 || Config.GetInt("Test", "ManivelleJournal", 0) != 0) Log.Info("avatar " + (Player != null ? Player.Name : "?") + " : manivelle, poignee a " + crankLocal.magnitude.ToString("F3") + " de l'axe " + crankLocal.ToString("F3"));
+            }
+            crankUntil = now + 0.6f;
+        }
         float reachStart;
         bool reachRight = true;
         static int pressLogs;
         void ReachPose()
         {
+            if (crankT != null)
+            {
+                float cn = Time.realtimeSinceStartup;
+                if (cn < crankUntil + 0.25f)
+                {
+                    float cw = Mathf.Clamp01(Mathf.Min((cn - crankStart) / 0.18f, cn < crankUntil ? 1f : 1f - (cn - crankUntil) / 0.25f));
+                    wReach = cw * cw * (3f - 2f * cw);
+                    float ca = (cn - crankStart) * 7.5f;
+                    Vector3 grip = crankT.TransformPoint(crankLocal) + (Root.transform.up * Mathf.Cos(ca) + Root.transform.forward * Mathf.Sin(ca)) * 0.05f;
+                    ArmTo(reachRight, grip, wReach * Reachable(reachRight, grip));
+                    if (Config.GetInt("Test", "ManivelleJournal", 0) != 0 && cn >= crankLog) { crankLog = cn + 0.25f; Transform chk = Bone(reachRight ? "hand_right" : "hand_left"); Log.Info("autotest : manivelle, poignee " + crankT.parent.InverseTransformPoint(grip).ToString("F3") + ", poids " + wReach.ToString("F2") + ", main droite " + reachRight + " a " + (chk != null ? (chk.position - grip).magnitude.ToString("F2") : "?") + " m, epaule a " + ((Bone(reachRight ? "shoulder_right" : "shoulder_left") != null) ? (Bone(reachRight ? "shoulder_right" : "shoulder_left").position - grip).magnitude.ToString("F2") : "?") + " m"); }
+                    return;
+                }
+                crankT = null;
+            }
             float e = Time.realtimeSinceStartup - reachStart;
             if (e < 0f || e > 0.7f) { wReach = 0f; return; }
             float w = e < 0.18f ? e / 0.18f : e > 0.45f ? 1f - (e - 0.45f) / 0.25f : 1f;

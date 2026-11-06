@@ -131,6 +131,11 @@ namespace MWCoop
             return avatars.TryGetValue(id, out a) && a != null && a.Root != null ? a.HandRight : null;
         }
 
+        public static void CrankFor(int id, Transform t)
+        {
+            Avatar a;
+            if (avatars.TryGetValue(id, out a) && a != null && a.Root != null) a.CrankFor(t);
+        }
         public static void ReachFor(int id, Transform t)
         {
             Avatar a;

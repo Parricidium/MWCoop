@@ -507,10 +507,11 @@ namespace MWCoop
             if (now - w.AimAt < 1f) return;   // (on la tourne ici en ce moment : la notre fait foi)
             w.RemoteAt = now;
             bool moved = (w.Glass.localPosition - p).sqrMagnitude > 1e-6f;
+            if (Config.GetInt("Test", "ManivelleJournal", 0) != 0 && winLogs++ < 6) Log.Info("autotest : manivelle, recu " + key + " de #" + who + ", bouge " + moved);
             w.Glass.localPosition = p; w.Glass.localRotation = q;
             w.SentPos = p; w.SentRot = q;
             if (w.Knob != null && !Holding(w.Knob)) { w.Knob.transform.localRotation = kq; w.SentKnob = kq; }
-            if (moved && !reliable && now - w.ReachAt > 0.5f) { w.ReachAt = now; PlayerSync.ReachFor(who, w.Knob.transform); }
+            if (moved && now - w.ReachAt > 0.5f) { w.ReachAt = now; PlayerSync.CrankFor(who, w.Knob.transform); }
         }
 
         // Manivelle tenue ici (automate hors de son attente) : sa pose est a nous.
@@ -669,6 +670,41 @@ namespace MWCoop
 
         static float MaxDiff(Matrix4x4 a, Matrix4x4 b) { float e = 0f; for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) e = Mathf.Max(e, Mathf.Abs(a[i, j] - b[i, j])); return e; }
         static int tStep; static Vector3 l0, r0; static Quaternion ql0, qr0; static Matrix4x4 ml0, mr0; static Transform gl, gr, car; static PlayMakerFSM kl, kr; static Camera tcam;
+        // [Test] Autotest=manivelle (2 joueurs, l'hote assis dans la SORBET) : la manivelle la plus proche monte et descend, 4 s dans chaque sens, de 36 a 80 s.
+        static int crankStep, winLogs; static float crankNext;
+        static void TestCrank(float t)
+        {
+            if (!Session.IsHost) return;
+            if (t > 30f && crankStep == 0) { crankStep = 1; Log.Info("autotest : manivelle, " + Seats.TestSit("SORBET", 0)); }
+            Transform cam = PlayerSync.LocalCamera;
+            if (t < 36f || t > 80f || cam == null) return;
+            Win near = null; float bd = 9f;
+            foreach (Win w in wins) if (w.Knob != null && w.Key.Contains("SORBET")) { float d = (w.Knob.transform.position - cam.position).sqrMagnitude; if (d < bd) { bd = d; near = w; } }
+            if (near == null) return;
+            near.AimAt = Time.realtimeSinceStartup;
+
+            // (comme la molette : l'automate quitte son etat aussitot, remis a chaque image, 4 s dans chaque sens)
+
+            if (Time.realtimeSinceStartup >= crankNext)
+
+            {
+
+                crankNext = Time.realtimeSinceStartup + 4f;
+
+                crankStep++;
+
+                Log.Info("autotest : manivelle, " + near.Key + " a " + Mathf.Sqrt(bd).ToString("F2") + " m, sens " + (crankStep % 2) + ", verre " + near.Glass.localPosition.ToString("F3"));
+
+            }
+
+            string want = crankStep % 2 == 0 ? "State 1" : "State 2";
+
+            if (near.Knob.ActiveStateName != want) Game.SetState(near.Knob, want);
+
+        }
+
+
+
         static bool suiviLogged;
         public static void Test(string mode, float t)
         {
@@ -684,6 +720,7 @@ namespace MWCoop
                 return;
             }
             if (mode == "vitreporte") { TestDoorGlass(t); return; }
+            if (mode == "manivelle") { TestCrank(t); return; }
             if (mode != "vitre") return;
             if (tStep == 1 && t < (Config.GetInt("Test", "VitreDemi", 0) != 0 ? 27f : 31f)) foreach (Win w in wins) if (w.Key.Contains("SORBET")) w.AimAt = Time.realtimeSinceStartup;   // (comme si on la visait)
             if (tStep == 0 && t > 25f)

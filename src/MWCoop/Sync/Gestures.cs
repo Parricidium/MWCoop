@@ -147,7 +147,7 @@ namespace MWCoop
             bool fingerNow = Active(middleFinger) && (fingerAnim == null || fingerAnim.isPlaying) || FnState == "Finger" || FnState == "Fuck singer";
             // Casque mis ou enleve (globale PlayerHelmet du jeu) : la main a la tete (Menor, 12/10).
             bool helm = Game.GlobalBool("PlayerHelmet");
-            if (helmSeen && helm != helmWas) { SendEvent(E_Helmet); if (ThirdPerson.HasBody) Mine().HelmetAt = now; }
+            if (helmSeen && helm != helmWas) { SendEvent(E_Helmet); if (ThirdPerson.HasBody) Mine().HelmetAt = now; if (Config.Get("Test", "Autotest", "") == "casque") Log.Info("autotest : casque, geste envoye, PlayerHelmet " + helm); }
             helmWas = helm; helmSeen = true;
             if (fistNow && !fistWas) { SendEvent(E_Punch); Pvp.OnLocalPunch(); }
             if (fingerNow && !fingerWas) SendEvent(E_Finger);
@@ -433,11 +433,47 @@ namespace MWCoop
             return w;
         }
 
-        static bool helmWas, helmSeen;
+        static bool helmWas, helmSeen; static int gesteCasqueN;
         static float stalkSent;
         static Remote Mine() { Remote me; if (!remote.TryGetValue(Session.LocalId, out me)) remote[Session.LocalId] = me = new Remote(); return me; }
         // Commande du comodo actionnee au volant ici (Jobs : clignotant, essuie-glace, warning de la voiture conduite) : la main
         // gauche de l'avatar va a la manette (Menor, 12/10).
+        // Essai (Autotest=casque) : l'automate 'Logic' du casque, mis puis enleve trois fois, capture a 0,1 / 0,25 / 0,4 s ; journal de ce qui joue pendant une seconde.
+        static PlayMakerFSM casque; static int casqueStep; static float casqueUntil, casqueLog;
+        public static void TestCasque(string mode, float t)
+        {
+            if (mode != "casque" || !Session.IsHost) return;
+            if (casque == null)
+            {
+                GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Helmet");
+                if (h == null) return;
+                if (!h.activeSelf) { h.SetActive(true); Log.Info("autotest : casque, objet active"); }
+                casque = Game.FsmOn(h, "Logic");
+                if (casque == null) return;
+            }
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (casqueStep < 6 && t > 30f + casqueStep * 6f)
+            {
+                bool on = casqueStep % 2 == 0;
+                float[] ds = { Config.GetFloat("Test", "CasqueA", 0.1f), Config.GetFloat("Test", "CasqueB", 0.25f), Config.GetFloat("Test", "CasqueC", 0.4f) };
+                float d = ds[casqueStep / 2];
+                var hv = casque.FsmVariables.GetFsmGameObject("Helmet"); Log.Info("autotest : casque, " + (on ? "met" : "enleve") + " depuis " + casque.ActiveStateName + ", variable Helmet " + (hv != null && hv.Value != null ? Recon.Path(hv.Value.transform) : "vide") + (on && Config.GetInt("Test", "CasqueEvent", 0) != 0 ? "" : " : " + Game.SetState(casque, on ? "Anim1" : "Anim off1")) + ", PlayerHelmet " + Game.GlobalBool("PlayerHelmet"));
+                if (on && Config.GetInt("Test", "CasqueEvent", 0) != 0) casque.SendEvent("EQUIP");
+                Autotest.CaptureSoon("casque-" + (on ? "met" : "enleve") + "-" + (int)(d * 100f), d);
+                casqueStep++; casqueUntil = now + 1f;
+            }
+            if (now < casqueUntil && now >= casqueLog)
+            {
+                casqueLog = now + 0.1f;
+                string pl = "";
+                GameObject cam = Game.PlayerPart("Pivot/AnimPivot/Camera");
+                if (cam != null) foreach (Animation a in cam.GetComponentsInChildren<Animation>(false)) if (a.isPlaying) foreach (AnimationState st in a) if (a.IsPlaying(st.name)) pl += " " + a.name + ":" + st.name + "@" + st.normalizedTime.ToString("F2");
+                string rn = "";
+                foreach (Renderer rr in casque.GetComponentsInChildren<Renderer>(false)) if (rr.enabled) rn += " " + rr.name;
+                Log.Info("autotest : casque, " + casque.ActiveStateName + " joue" + pl + " ; rendus" + rn);
+            }
+        }
+
         public static void LocalStalk()
         {
             float now = UnityEngine.Time.realtimeSinceStartup;
@@ -465,7 +501,7 @@ namespace MWCoop
             {
                 int ev = r.U8();
                 if (ev == E_Punch) g.PunchAt = g.Time; else if (ev == E_Finger) g.FingerAt = g.Time; else if (ev == E_Helmet) g.HelmetAt = g.Time; else if (ev == E_Stalk) g.StalkAt = g.Time;
-                if ((ev == E_Helmet || ev == E_Stalk) && Config.GetInt("Test", "CaptureGeste", 0) != 0) Autotest.CaptureSoon(ev == E_Helmet ? "geste-casque" : "geste-comodo", ev == E_Helmet ? Config.GetFloat("Test", "CaptureGesteDelai", 0.5f) : 0.35f);
+                if ((ev == E_Helmet || ev == E_Stalk) && Config.GetInt("Test", "CaptureGeste", 0) != 0) Autotest.CaptureSoon(ev == E_Helmet ? "geste-casque-" + (++gesteCasqueN) : "geste-comodo", ev == E_Helmet ? Config.GetFloat("Test", "CaptureGesteDelai", 0.5f) : 0.35f);
                 if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Gesture).U8(who).U8(1).U8(ev), true, who);
                 if (Logging) Log.Info("autotest : gestes : recu de #" + who + " : " + (ev == E_Punch ? "coup" : "doigt"));
                 return;
