@@ -50,7 +50,9 @@ namespace MWCoop
         static Avatar vaVendor;
         static Collider vaVendorCol;
         static Font vaFont;
-        static float vaFloor, vaLiftTop;
+        static float vaFloor, vaLiftTop, vaLift2Top;
+        static MeshCollider vaBaseColl;
+        static MeshFilter vaInner;
         static Transform vaHall;
         static bool vaLampDone; static float vaLampUntil;
         static readonly List<UnityEngine.Object> vaBaked = new List<UnityEngine.Object>();
@@ -61,7 +63,7 @@ namespace MWCoop
             foreach (Stand s in stands) { if (s.Hold != null) VazCar.DestroyPreview(s.Hold); if (s.Poster != null) UnityEngine.Object.Destroy(s.Poster); }
             foreach (UnityEngine.Object o in vaBaked) if (o != null) UnityEngine.Object.Destroy(o);
             vaBaked.Clear();
-            stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0; vaClick = 0; vaAim = false; vaHall = null; vaLampDone = false; vaLampUntil = 0f;
+            stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0; vaClick = 0; vaAim = false; vaObjDone = false; vaMeshes = null; vaDeskColl = null; vaHall = null; vaLampDone = false; vaLampUntil = 0f;
         }
 
         // prix de location : d'apres le rapport puissance / poids (mk, arrondi a 10) ; [Vuokraamo] Hinta_<dossier>=n
@@ -145,7 +147,7 @@ namespace MWCoop
                 {
                     float g = sp[((y * 512 / 300) % 512) * 512 + (x * 2) % 512].grayscale * 0.82f / mean;
                     float large = Mathf.PerlinNoise(x * 0.0065f + 3f, y * 0.012f + 7f), fine = Mathf.PerlinNoise(x * 0.05f, y * 0.07f + 11f);
-                    Color col = tint * g * (0.72f + 0.5f * large);
+                    Color col = tint * g * (0.86f + 0.26f * large);
                     float top = 1f - y / (float)H, bottom = y / (float)H;
                     float streak = rust[x] * (Mathf.Clamp01(1f - top * 1.6f) * 0.8f + Mathf.Clamp01(1f - bottom * 3.5f)) * (0.55f + 0.6f * fine);
                     col = Color.Lerp(col, rc * (0.6f + g * 0.6f), Mathf.Clamp01(streak));
@@ -162,25 +164,21 @@ namespace MWCoop
         static void VuokraMaterials()
         {
             Mat("va_pelti", "wall_metal1", 2f, Color.white);
-            Mat("va_katto", "wall_metal2", 2.5f);
+            Mat("va_katto", "wall_metal2", 2.5f, new Color(0.46f, 0.31f, 0.25f));
+            Mat("va_sisakatto", "wall_metal2", 2.5f);
             Mat("va_lauta", "wood_panel1", 2f, new Color(0.96f, 0.93f, 0.88f));
             Mat("va_sokkeli", "paint_black_matte", 1f, new Color(0.46f, 0.46f, 0.44f));
             Mat("va_sininen", "paint_black_matte", 1f, new Color(0.10f, 0.22f, 0.58f));
             Mat("va_teras", "paint_black_matte", 1f, new Color(0.24f, 0.25f, 0.27f));
             Mat("va_tumma", "paint_black_matte", 1f, new Color(0.12f, 0.12f, 0.14f));
             Mat("va_kehys", "paint_black_matte", 1f, new Color(0.72f, 0.71f, 0.66f));
-            Mat("va_ruoste", "paint_black_matte", 1f, new Color(0.30f, 0.17f, 0.10f));
-            Mat("va_kumi", "paint_black_matte", 1f, new Color(0.06f, 0.06f, 0.065f));
-            Mat("va_kulta", "paint_black_matte", 1f, new Color(0.85f, 0.66f, 0.20f));
-            Mat("va_punainen", "paint_black_matte", 1f, new Color(0.62f, 0.10f, 0.08f));
-            Mat("va_vihrea", "paint_black_matte", 1f, new Color(0.10f, 0.36f, 0.20f));
-            Mat("va_keltainen", "paint_black_matte", 1f, new Color(0.82f, 0.62f, 0.12f));
             Mat("va_tiski", "wood12", 1f);
             Mat("va_kaakeli", "tiles4", 1f);
             if (!mats.ContainsKey("ki_asfaltti")) Mat("ki_asfaltti", "mwc_asphalt", 7f);
             try
             {
                 Material w = mats["va_pelti"];
+                Material tile; if (TryGameMaterial("tiles4", out tile)) mats["va_kaakeli"] = tile;
                 if (w != null && w.mainTexture != null) { w.mainTexture = BakeWall(w.mainTexture, new Color(0.40f, 0.62f, 0.90f)); w.color = Color.white; }
                 // (My Winter Car : toit sous la neige, comme les autres)
                 if (!Game.Msc) { Material n; if (TryGameMaterial("SNOW", out n)) mats["va_katto"] = n; }
@@ -237,6 +235,7 @@ namespace MWCoop
             VuokraLift();
             VuokraCars();
             VuokraVendor();
+            VuokraRealDecor();
             VuokraLights();
             L("garage construit en " + vuokra.transform.position.ToString("F1") + ", plancher " + vaFloor.ToString("F2") + ", " + stands.Count + " voitures");
         }
@@ -270,7 +269,7 @@ namespace MWCoop
             }
             if (coll == null || !coll.sharedMesh.isReadable) { L("garage : collision du batiment illisible"); return; }
             // Murs : seulement les faces du tour du batiment, vers l'exterieur ; a l'interieur, les vrais murs du jeu (repair_shop_wall_inner).
-            var walls = new VaBuild { U = 12f, V = VaBandY, V0 = SrcHall.y, TwoSided = false }; var band = new VaBuild { TwoSided = false }; var roof = new VaBuild(); var porch = new VaBuild();
+            var walls = new VaBuild { U = 12f, V = VaBandY, V0 = SrcHall.y, TwoSided = false }; var band = new VaBuild { TwoSided = false }; var roof = new VaBuild { TwoSided = false }; var ceil = new VaBuild { TwoSided = false }; var porch = new VaBuild();
             Vector3[] vs = coll.sharedMesh.vertices; int[] ts = coll.sharedMesh.triangles;
             float bandWorld = SrcHall.y + VaBandY;
             Vector3 fl = SrcHall + SrcOut * (VaD / 2f) - SrcAlong * (VaW / 2f);
@@ -284,7 +283,14 @@ namespace MWCoop
                 float hx = Vector3.Dot(mid, SrcAlong), hz = Vector3.Dot(mid, -SrcOut);
                 // (porche : devant la facade, bois)
                 if (hz < -0.75f) { porch.Tri(a, b, d, n); continue; }
-                if (Mathf.Abs(n.y) > 0.3f) { roof.Tri(a, b, d, n); continue; }
+                if (Mathf.Abs(n.y) > 0.3f)
+                {
+                    // (jamais les planchers ni le bas des fenetres de la collision : ils couvraient le vrai sol et le pont ; dessous du toit : le metal du jeu, dehors son toit)
+                    if ((a.y + b.y + d.y) / 3f - SrcHall.y < 2.5f) continue;
+                    if (n.y < 0f) { Vector3 up = b; b = d; d = up; n = -n; }
+                    roof.Tri(a, b, d, n); ceil.Tri(a, d, b, -n);
+                    continue;
+                }
                 Vector3 outward = hz <= 0.05f ? SrcOut : hz >= 15f ? -SrcOut : hx <= 0.55f ? -SrcAlong : hx >= 21f ? SrcAlong : Vector3.zero;
                 if (outward == Vector3.zero) continue;
                 if (Vector3.Dot(n, outward) < 0f) { Vector3 tmp = b; b = d; d = tmp; n = -n; }
@@ -293,6 +299,7 @@ namespace MWCoop
             VaPart("va_seinat", walls.Mesh(), new[] { mats["va_pelti"] }, Vector3.zero, Quaternion.identity, Vector3.one);
             VaPart("va_lauta", band.Mesh(), new[] { mats["va_lauta"] }, Vector3.zero, Quaternion.identity, Vector3.one);
             VaPart("va_katto", roof.Mesh(), new[] { mats["va_katto"] }, Vector3.zero, Quaternion.identity, Vector3.one);
+            VaPart("va_sisakatto", ceil.Mesh(), new[] { mats["va_sisakatto"] }, Vector3.zero, Quaternion.identity, Vector3.one);
             VaPart("va_kuisti", porch.Mesh(), new[] { mats["va_lauta"] }, Vector3.zero, Quaternion.identity, Vector3.one);
             L(string.Format("garage : coque de {0} triangles (murs {1}, bois {2}, toit {3})", ts.Length / 3, walls.Count, band.Count, roof.Count));
             var cg = new GameObject("va_collision"); cg.transform.SetParent(vuokra.transform, false);
@@ -300,6 +307,7 @@ namespace MWCoop
             cg.transform.localRotation = Quaternion.Inverse(vaSource.rotation) * coll.transform.rotation;
             cg.AddComponent<MeshCollider>().sharedMesh = coll.sharedMesh;
             // Sol et socle : le vrai maillage du jeu (celui de sa collision, lisible, avec ses coordonnees d'image), et sa matiere : dalles, cadre jaune du pont...
+            vaBaseColl = baseColl;
             if (baseColl != null && baseColl.sharedMesh.isReadable)
             {
                 Renderer br = baseColl.GetComponent<Renderer>();
@@ -309,7 +317,12 @@ namespace MWCoop
             }
             // murs interieurs, toit du bureau, lampes : les pieces du jeu
             foreach (Renderer r in vaSource.GetComponentsInChildren<Renderer>(true))
-                if (r.name == "repair_shop_wall_inner" || r.name == "repair_shop_office_roof") VaCopy(r.transform, vaSource);
+                if (r.name == "repair_shop_wall_inner" || r.name == "repair_shop_office_roof")
+                {
+                    VaCopy(r.transform, vaSource);
+                    MeshFilter imf = r.GetComponent<MeshFilter>();
+                    if (r.name == "repair_shop_wall_inner" && imf != null && imf.sharedMesh != null && imf.sharedMesh.isReadable) vaInner = imf;
+                }
             GameObject li = Game.FindAny("REPAIRSHOP/LOD/lights");
             if (li != null) VaCopy(li.transform, vaSource);
         }
@@ -321,7 +334,8 @@ namespace MWCoop
             public int Count { get { return t.Count / (TwoSided ? 6 : 3); } }
             public void Tri(Vector3 a, Vector3 b, Vector3 c, Vector3 n)
             {
-                Vector3 along = Mathf.Abs(n.y) > 0.3f ? SrcAlong : Vector3.Cross(Vector3.up, n).normalized;
+                // (sur les axes du batiment : des normales a peine differentes decalaient les ondes de la tole d'un triangle a l'autre)
+                Vector3 along = Mathf.Abs(n.y) > 0.3f || Mathf.Abs(Vector3.Dot(n, SrcOut)) > 0.7f ? SrcAlong : SrcOut;
                 Vector3 up = Mathf.Abs(n.y) > 0.3f ? SrcOut : Vector3.up;
                 foreach (bool back in new[] { false, true })
                 {
@@ -330,7 +344,7 @@ namespace MWCoop
                     foreach (Vector3 p in new[] { a, b, c })
                     {
                         v.Add(vaSource.InverseTransformPoint(p));
-                        u.Add(new Vector2(Vector3.Dot(p, along) / U, (Vector3.Dot(p, up) - V0) / V));
+                        u.Add(new Vector2(Vector3.Dot(p - SrcHall, along) / U, (Vector3.Dot(p, up) - V0) / V));
                     }
                     if (back) { t.Add(k); t.Add(k + 2); t.Add(k + 1); } else { t.Add(k); t.Add(k + 1); t.Add(k + 2); }
                 }
@@ -399,10 +413,11 @@ namespace MWCoop
             GameObject f = SaPrim(vuokra.transform, PrimitiveType.Cube, HallP(VaW / 2f, -0.12f, VaD / 2f), new Vector3(VaW + 1f, 0.2f, VaD + 1f), mats["va_kaakeli"], HallR(0f), true);
             f.name = "va_lattia_coll";
             f.GetComponent<Renderer>().enabled = false;
-            // bureau : carrelage du jeu, a l'echelle
+            // bureau : le carrelage du jeu, a la hauteur et aux dimensions du sien (repair_shop_office_floor, illisible : 5,5 x 5,3 m a +5 cm ; dalles de 40 cm, 6 x 6 par image)
+            const float FY = 0.055f, X0 = 0.13f, X1 = 5.63f, Z0 = -0.14f, Z1 = 5.16f;
             var m = new Mesh { name = "va_kaakeli" };
-            m.vertices = new[] { new Vector3(0.5f, 0.015f, 0f), new Vector3(5.6f, 0.015f, 0f), new Vector3(5.6f, 0.015f, 5f), new Vector3(0.5f, 0.015f, 5f) };
-            m.uv = new[] { new Vector2(0f, 0f), new Vector2(4f, 0f), new Vector2(4f, 4f), new Vector2(0f, 4f) };
+            m.vertices = new[] { new Vector3(X0, FY, Z0), new Vector3(X1, FY, Z0), new Vector3(X1, FY, Z1), new Vector3(X0, FY, Z1) };
+            m.uv = new[] { new Vector2(0f, 0f), new Vector2((X1 - X0) / 2.4f, 0f), new Vector2((X1 - X0) / 2.4f, (Z1 - Z0) / 2.4f), new Vector2(0f, (Z1 - Z0) / 2.4f) };
             m.triangles = new[] { 0, 2, 1, 0, 3, 2 };
             m.RecalculateNormals(); vaBaked.Add(m);
             var g = new GameObject("va_kaakeli"); g.transform.SetParent(vaHall, false);
@@ -422,16 +437,16 @@ namespace MWCoop
                 SaText(h, "puh. 987 561 33", new Vector3(0f, -0.43f, 0f), Quaternion.identity, 0.019f, new Color(0.30f, 0.35f, 0.15f), TextAnchor.MiddleCenter);
             }, 220f);
             // deux projecteurs au-dessus (JD 06/11 : « comme pour la boutique s21 »), l'enseigne n'emet plus sa lumiere
-            foreach (float s in new[] { -1.35f, 1.35f })
+            foreach (float s in new[] { -1.55f, 1.55f })
             {
-                Vector3 lamp = at + SrcAlong * s + SrcOut * 0.7f + Vector3.up * 0.95f;
+                Vector3 lamp = at + SrcAlong * s + SrcOut * 0.95f + Vector3.up * 0.95f;
                 Quaternion lr = Quaternion.Inverse(vaSource.rotation) * Quaternion.LookRotation(-SrcOut, Vector3.up);
-                SaPrim(vuokra.transform, PrimitiveType.Cube, vaSource.InverseTransformPoint(at + SrcAlong * s + SrcOut * 0.35f + Vector3.up * 0.95f), new Vector3(0.04f, 0.04f, 0.7f), mats["va_teras"], lr);
+                SaPrim(vuokra.transform, PrimitiveType.Cube, vaSource.InverseTransformPoint(at + SrcAlong * s + SrcOut * 0.47f + Vector3.up * 0.95f), new Vector3(0.04f, 0.04f, 0.95f), mats["va_teras"], lr);
                 SaPrim(vuokra.transform, PrimitiveType.Cube, vaSource.InverseTransformPoint(lamp), new Vector3(0.26f, 0.12f, 0.2f), mats["va_tumma"], lr);
                 var sg = new GameObject("va_kyltti_valo"); sg.transform.SetParent(vuokra.transform, false);
                 sg.transform.localPosition = vaSource.InverseTransformPoint(lamp + Vector3.down * 0.05f);
-                sg.transform.localRotation = Quaternion.Inverse(vaSource.rotation) * Quaternion.LookRotation(at - lamp + Vector3.down * 0.3f, Vector3.up);
-                var sl = sg.AddComponent<Light>(); sl.type = LightType.Spot; sl.spotAngle = 105f; sl.color = new Color(1f, 0.9f, 0.75f); sl.intensity = 1.8f; sl.range = 4.5f; sl.shadows = LightShadows.None;
+                sg.transform.localRotation = Quaternion.Inverse(vaSource.rotation) * Quaternion.LookRotation(at + SrcAlong * s * 0.85f - lamp, Vector3.up);
+                var sl = sg.AddComponent<Light>(); sl.type = LightType.Spot; sl.spotAngle = 140f; sl.color = new Color(1f, 0.9f, 0.75f); sl.intensity = 2f; sl.range = 4.2f; sl.shadows = LightShadows.None; sl.renderMode = LightRenderMode.ForcePixel;
             }
         }
 
@@ -448,6 +463,8 @@ namespace MWCoop
                     Vector3 w = vuokra.transform.TransformPoint(local);
                     RaycastHit? h = GroundHit(new Vector3(w.x, w.y + 40f, w.z));
                     float ground = h.HasValue && !h.Value.collider.transform.IsChildOf(vuokra.transform) ? h.Value.point.y : vaFloor;
+                    // (pas le dessus d'un objet : un point du parvis tombe sur le grillage de Voyage montait en pointe, le cone de la capture de JD 06/11)
+                    if (ground > vaFloor + 1f) ground = vaFloor;
                     float k = Mathf.Clamp01(j / 3f);   // (rampe sur 3 m depuis le seuil)
                     w.y = Mathf.Lerp(vaFloor + 0.01f, ground + 0.04f, k);
                     int id = j * (nx + 1) + i;
@@ -474,23 +491,59 @@ namespace MWCoop
             return g;
         }
 
+        // Sol reel du garage du jeu sous un point de la halle, depuis le niveau de reference (0 si rien dessous)
+        static float RealFloor(float x, float z)
+        {
+            Vector3 fl = SrcHall + SrcOut * (VaD / 2f) - SrcAlong * (VaW / 2f);
+            Vector3 p = fl + SrcAlong * x - SrcOut * z + Vector3.up * 3f;
+            float best = float.MinValue;
+            RaycastHit h;
+            if (vaBaseColl != null && vaBaseColl.Raycast(new Ray(p, Vector3.down), out h, 8f)) best = h.point.y;
+            // (la deuxieme halle a sa dalle dans les murs interieurs du jeu, plus haut que le socle)
+            if (vaInner != null)
+            {
+                Vector3[] vs = vaInner.sharedMesh.vertices; int[] ts = vaInner.sharedMesh.triangles;
+                Transform t = vaInner.transform;
+                for (int i = 0; i + 2 < ts.Length; i += 3)
+                {
+                    Vector3 a = t.TransformPoint(vs[ts[i]]), b = t.TransformPoint(vs[ts[i + 1]]), c = t.TransformPoint(vs[ts[i + 2]]);
+                    float d = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+                    if (Mathf.Abs(d) < 1e-5f || Mathf.Abs(Vector3.Cross(b - a, c - a).normalized.y) < 0.9f) continue;
+                    float l1 = ((b.z - c.z) * (p.x - c.x) + (c.x - b.x) * (p.z - c.z)) / d, l2 = ((c.z - a.z) * (p.x - c.x) + (a.x - c.x) * (p.z - c.z)) / d, l3 = 1f - l1 - l2;
+                    if (l1 < 0f || l2 < 0f || l3 < 0f) continue;
+                    float y = l1 * a.y + l2 * b.y + l3 * c.y;
+                    if (y - SrcHall.y < 1f && y > best) best = y;
+                }
+            }
+            return best == float.MinValue ? 0f : best - SrcHall.y;
+        }
+
         // Ponts : le maillage du jeu (REPAIRSHOP/Lifter/Platform/mesh) ; le premier a sa vraie place, le second dans l'autre halle.
         static void VuokraLift()
         {
             GameObject src = Game.FindAny("REPAIRSHOP/Lifter/Platform/mesh");
-            vaLiftTop = 0.03f;
+            vaLiftTop = vaLift2Top = 0.03f;
             if (src == null || src.GetComponent<Renderer>() == null) { L("garage : pont du jeu absent"); return; }
-            vaLiftTop = Mathf.Max(0.02f, src.GetComponent<Renderer>().bounds.max.y - SrcHall.y);
+            // (dessus des pistes : leurs collisions, pas les bras rouges)
+            float top = float.MinValue, thick = 0.09f;
+            foreach (Collider c in src.transform.parent.GetComponentsInChildren<Collider>(true))
+                if (c.name == "Coll" && c.bounds.size.y > 0f) { top = Mathf.Max(top, c.bounds.max.y); thick = c.bounds.size.y; }
+            if (top == float.MinValue) top = src.GetComponent<Renderer>().bounds.max.y;
+            vaLiftTop = top - SrcHall.y;
             GameObject a = VaCopy(src.transform, vaSource);
             if (a != null)
             {
                 a.name = "va_nostin";
                 GameObject b2 = UnityEngine.Object.Instantiate(a) as GameObject;
                 b2.name = "va_nostin2"; b2.transform.SetParent(a.transform.parent, false);
-                b2.transform.localPosition = a.transform.localPosition + vaSource.InverseTransformVector(SrcAlong * (16f - VaLiftX) - SrcOut * (11.4f - VaLiftZ));
+                // (dans l'autre halle : sans fosse, pose sur le sol)
+                float lift = RealFloor(16f, 11.4f) + thick + 0.01f - vaLiftTop;
+                vaLift2Top = vaLiftTop + lift;
+                b2.transform.localPosition = a.transform.localPosition + vaSource.InverseTransformVector(SrcAlong * (16f - VaLiftX) - SrcOut * (11.4f - VaLiftZ) + Vector3.up * lift);
                 b2.transform.localRotation = a.transform.localRotation; b2.transform.localScale = a.transform.localScale;
             }
-            L("garage : ponts du jeu, dessus a " + vaLiftTop.ToString("F2") + " m");
+            VaBox(new Vector3(VaLiftX, -0.19f, VaLiftZ), new Vector3(5f, 0.04f, 8f), "va_tumma");
+            L("garage : ponts du jeu, dessus a " + vaLiftTop.ToString("F2") + " et " + vaLift2Top.ToString("F2") + " m, sol " + RealFloor(11.4f, 10.4f).ToString("F2") + " et " + RealFloor(16f, 11.4f).ToString("F2"));
         }
 
         static void VuokraCars()
@@ -501,7 +554,7 @@ namespace MWCoop
                 Stand s = stands[i]; Slot sl = VaSlots[i];
                 var pivot = new GameObject("va_paikka_" + s.Folder).transform;
                 pivot.SetParent(t, false);
-                pivot.localPosition = HallP(sl.X, sl.Lift ? vaLiftTop : 0f, sl.Z);
+                pivot.localPosition = HallP(sl.X, sl.Lift ? (sl.X > 12f ? vaLift2Top : vaLiftTop) : RealFloor(sl.X, sl.Z), sl.Z);
                 pivot.localRotation = HallR(sl.Yaw);
                 try
                 {
@@ -564,15 +617,109 @@ namespace MWCoop
             foreach (float s in new[] { -0.8f, 0.8f }) VaBox(new Vector3(2.26f + s, 1.75f, F - 0.02f), new Vector3(0.1f, 1.5f, 0.1f), "va_kehys");
             foreach (float s in new[] { -0.7f, 0.7f }) VaBox(new Vector3(2.26f, 1.75f + s, F - 0.02f), new Vector3(1.7f, 0.1f, 0.1f), "va_kehys");
             VaBox(new Vector3(2.26f, 1.75f, F - 0.02f), new Vector3(0.05f, 1.3f, 0.05f), "va_kehys");
-            // boitier electrique, futs, pneus, palette
+            // boitier electrique ; fûts, pneus, palette, bidon, panneau de rallye : ceux du jeu
             VaBox(new Vector3(12.8f, 1.45f, F - 0.04f), new Vector3(0.5f, 0.7f, 0.18f), "va_kehys");
-            VaCyl(new Vector3(19.4f, 0.45f, -1.5f), 0.6f, 0.9f, "va_ruoste", null, true);
-            VaCyl(new Vector3(20.1f, 0.45f, -1.25f), 0.6f, 0.9f, "va_sininen", null, true);
-            VaCyl(new Vector3(19.75f, 0.45f, -2.05f), 0.6f, 0.9f, "va_ruoste", null, true);
-            for (int k = 0; k < 4; k++) VaCyl(new Vector3(21f, 0.12f + k * 0.235f, -1.5f), 0.64f, 0.22f, "va_kumi");
-            for (int k = 0; k < 3; k++) VaCyl(new Vector3(21.1f, 0.12f + k * 0.235f, -2.25f), 0.64f, 0.22f, "va_kumi");
-            VaBox(new Vector3(12.9f, 0.08f, -1.15f), new Vector3(1.1f, 0.14f, 0.9f), "va_tiski", true);
-            VaCyl(new Vector3(12.9f, 0.38f, -1.15f), 0.4f, 0.46f, "va_punainen");
+            VaReal("barrell", new Vector3(19.4f, 0.01f, -1.5f), 0f, 0, null, true);
+            VaReal("barrell", new Vector3(20.15f, 0.01f, -1.25f), 40f, 0, null, true);
+            VaReal("barrell", new Vector3(19.75f, 0.01f, -2.1f), 110f, 0, null, true);
+            VaTires("tire_stock", new Vector3(21f, 0.01f, -1.5f), 4);
+            VaTires("tire_stock", new Vector3(21.1f, 0.01f, -2.25f), 3);
+            GameObject pal = VaReal("pallet", new Vector3(12.9f, 0.01f, -1.2f), 0f);
+            float py = pal != null ? VaBounds(pal).max.y : 0.01f;
+            VaReal("jerrycan_fuel", new Vector3(12.7f, py, -1.15f), 20f);
+            if (pal != null) VaReal("kilju_bucket", new Vector3(13.2f, py, -1.25f), 0f);
+            VaReal("rally_parcferme_sign1", new Vector3(6.6f, 0.01f, -1.15f), 0f, 0, Quaternion.LookRotation(Vector3.up, Vector3.right));
+        }
+
+        // Vrais objets du jeu (JD 06/11 : « utilise des vrais objets du jeu pour decorer »). Trouves par le nom de leur maillage : meme nom dans
+        // les deux jeux, chemins differents. Seulement les objets que le jeu n'a pas regroupes (les autres sont illisibles : meubles du bureau de Fleetari).
+        static readonly string[] VaWanted = { "trophy_gold", "trophy_silver", "trophy_bronze", "phone_handle", "notepad", "coffee_cup_home", "paper_stand1", "cash_register",
+            "teimo_clock", "fire_extinguisher", "chair_wooden", "office_shelf", "bookshelf", "tire_stock", "tire_gobra", "barrell", "jerrycan_fuel", "jerrycan_diesel", "kilju_bucket", "pallet", "cardboard_box",
+            "dyno_computer", "dyno_fancase", "motorhoist_frame", "floor_jack", "battery_charger", "spraycan", "rally_standbanner3", "rally_sign01", "rally_parcferme_sign1" };
+        static Dictionary<string, Transform> vaMeshes;
+        static readonly HashSet<string> vaMissing = new HashSet<string>();
+        static Transform VaMeshSrc(string mesh, int up)
+        {
+            if (vaMeshes == null)
+            {
+                vaMeshes = new Dictionary<string, Transform>();
+                var want = new HashSet<string>(VaWanted);
+                foreach (MeshFilter f in Resources.FindObjectsOfTypeAll<MeshFilter>())
+                {
+                    if (f == null || f.sharedMesh == null || !want.Contains(f.sharedMesh.name)) continue;
+                    Renderer r = f.GetComponent<Renderer>();
+                    if (r == null || r.isPartOfStaticBatch) continue;
+                    string path = Recon.Path(f.transform);
+                    if (path.Contains("MWCoop") || path.Contains("va_") || path.Contains("osat_") || path.Contains("osuus_")) continue;
+                    Transform old;
+                    if (!vaMeshes.TryGetValue(f.sharedMesh.name, out old) || (!old.gameObject.activeInHierarchy && f.gameObject.activeInHierarchy)) vaMeshes[f.sharedMesh.name] = f.transform;
+                }
+            }
+            Transform t;
+            if (!vaMeshes.TryGetValue(mesh, out t)) return null;
+            for (int i = 0; i < up && t.parent != null; i++) t = t.parent;
+            return t;
+        }
+        // (bornes dans le repere de la halle : LocalBounds mesure depuis la boutique)
+        static Bounds VaBounds(GameObject g)
+        {
+            bool first = true; Bounds o = new Bounds();
+            foreach (MeshRenderer r in g.GetComponentsInChildren<MeshRenderer>())
+            {
+                Bounds mb = r.GetComponent<MeshFilter>().sharedMesh.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 k = mb.center + Vector3.Scale(mb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    Vector3 w = vaHall.InverseTransformPoint(r.transform.TransformPoint(k));
+                    if (first) { o = new Bounds(w, Vector3.zero); first = false; } else o.Encapsulate(w);
+                }
+            }
+            return o;
+        }
+        // copie posee : at = milieu du dessous, repere de la halle. Debout comme dans le jeu, tournee de yaw ; rot pour les objets que le jeu laisse couches.
+        static GameObject VaReal(string mesh, Vector3 at, float yaw, int up = 0, Quaternion? rot = null, bool collide = false)
+        {
+            Transform src = VaMeshSrc(mesh, up);
+            if (src == null) { if (vaMissing.Add(mesh)) L("garage : objet du jeu " + mesh + " absent"); return null; }
+            var g = new GameObject("va_" + mesh);
+            g.transform.SetParent(vaHall, false);
+            int n = 0;
+            foreach (MeshRenderer r in src.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                MeshFilter mf = r.GetComponent<MeshFilter>();
+                if (mf == null || mf.sharedMesh == null || r.GetComponent<TextMesh>() != null || r.isPartOfStaticBatch || mf.sharedMesh.name.StartsWith("Combined Mesh")) continue;
+                // (pieces eteintes sous l'objet : ses autres etats, bouchon ouvert, ecrans...)
+                bool off = false;
+                for (Transform u = r.transform; u != src && u != null; u = u.parent) if (!u.gameObject.activeSelf) { off = true; break; }
+                if (off) continue;
+                var c = new GameObject(r.name); c.transform.SetParent(g.transform, false);
+                c.transform.localPosition = Quaternion.Inverse(src.rotation) * (r.transform.position - src.position);
+                c.transform.localRotation = Quaternion.Inverse(src.rotation) * r.transform.rotation;
+                c.transform.localScale = r.transform.lossyScale;
+                c.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
+                c.AddComponent<MeshRenderer>().sharedMaterials = r.sharedMaterials;
+                n++;
+            }
+            if (n == 0) { UnityEngine.Object.Destroy(g); if (vaMissing.Add(mesh)) L("garage : objet du jeu " + mesh + " sans maillage"); return null; }
+            g.transform.localRotation = rot ?? Quaternion.Euler(0f, yaw, 0f) * Quaternion.Inverse(YawOnly(src.rotation)) * src.rotation;
+            Bounds bo = VaBounds(g);
+            g.transform.localPosition = at - new Vector3(bo.center.x, bo.min.y, bo.center.z);
+            if (collide)
+            {
+                var cg = new GameObject("va_objet_coll"); cg.transform.SetParent(vaHall, false);
+                var bc = cg.AddComponent<BoxCollider>(); bc.size = bo.size; bc.center = new Vector3(at.x, at.y + bo.size.y / 2f, at.z);
+            }
+            return g;
+        }
+        // pile de pneus du jeu, a plat
+        static void VaTires(string mesh, Vector3 at, int count)
+        {
+            for (int k = 0; k < count; k++)
+            {
+                GameObject t = VaReal(mesh, at, 0f, 0, Quaternion.Euler(0f, 37f * k, 90f));
+                if (t == null) return;
+                at.y = VaBounds(t).max.y;
+            }
         }
 
         // objet du jeu (comme OsatProp) dans le repere de la halle
@@ -595,8 +742,9 @@ namespace MWCoop
                 n++;
             }
             if (n == 0) { UnityEngine.Object.Destroy(g); return null; }
-            g.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
-            Bounds b = LocalBounds(g);
+            // (debout, JD 06/11 : les modeles ont leur hauteur sur z)
+            g.transform.localRotation = Quaternion.Euler(270f, yaw, 0f);
+            Bounds b = VaBounds(g);
             g.transform.localPosition = at - new Vector3(b.center.x, b.min.y, b.center.z);
             return g;
         }
@@ -608,28 +756,27 @@ namespace MWCoop
             const float SX = 5.1f;
             foreach (float y in new[] { 0.5f, 1.05f, 1.6f }) VaBox(new Vector3(SX, y, 2.2f), new Vector3(0.5f, 0.04f, 3f), "va_tiski");
             foreach (float z in new[] { 0.72f, 3.68f }) VaBox(new Vector3(SX, 0.95f, z), new Vector3(0.5f, 1.9f, 0.05f), "va_tiski", true);
-            string[] goods = { "motormoil1", "coolant0", "brakefluid0", "atfoil0", "sparkplugbox0", "boxoilpump0", "motormoil1", "coolant0" };
-            int put = 0;
+            string[] goods = { "motormoil1", "coolant0", "boxoilpump0", "atfoil0", "coolant0", "motormoil1", "boxtimingbelt" };
+            int put = 0, real = 0;
             foreach (float y in new[] { 0.52f, 1.07f, 1.62f })
                 for (int i = 0; i < 7; i++)
-                    if (VaProp(goods[(put + i) % goods.Length], new Vector3(SX, y, 1.0f + i * 0.4f), 90f) != null) put++;
-            // classeurs, derriere le bureau
-            string[] folders = { "va_punainen", "va_sininen", "va_vihrea", "va_keltainen", "va_kumi" };
-            foreach (float y in new[] { 1.0f, 1.5f })
-            {
-                VaBox(new Vector3(0.82f, y - 0.03f, 4.1f), new Vector3(0.4f, 0.03f, 1.6f), "va_tiski");
-                for (int i = 0; i < 16; i++) VaBox(new Vector3(0.82f, y + 0.15f, 3.42f + i * 0.09f), new Vector3(0.3f, 0.32f, 0.07f), folders[(i * 3 + (y > 1.2f ? 2 : 0)) % folders.Length]);
-            }
-            // coupes de rallye
-            foreach (float z in new[] { 3.5f, 4.0f, 4.55f })
-            {
-                VaCyl(new Vector3(0.82f, 2.0f, z), 0.1f, 0.04f, "va_tumma");
-                VaCyl(new Vector3(0.82f, 2.12f, z), 0.05f, 0.2f, "va_kulta");
-                VaCyl(new Vector3(0.82f, 2.28f, z), 0.14f, 0.14f, "va_kulta");
-            }
-            VaBox(new Vector3(0.82f, 1.97f, 4.1f), new Vector3(0.4f, 0.03f, 1.6f), "va_tiski");
-            // pneus dans le coin, cote porte
-            for (int k = 0; k < 4; k++) VaCyl(new Vector3(1.1f, 0.13f + k * 0.235f, 0.7f), 0.64f, 0.22f, "va_kumi");
+                {
+                    Vector3 at = new Vector3(SX, y, 1.0f + i * 0.4f);
+                    if (VaProp(goods[(put + i) % goods.Length], at, 0f) != null) { put++; real++; }
+                }
+            L("garage : etagere, " + real + " produits du jeu sur 21");
+            // derriere le bureau : etagere du jeu avec ses classeurs sur My Summer Car, bibliotheque du jeu sur My Winter Car (l'autre y est regroupee) ; dessus, les coupes du jeu
+            const float OF = 0.055f;
+            GameObject fs = VaReal("office_shelf", new Vector3(0.74f, OF, 4.05f), 90f) ?? VaReal("bookshelf", new Vector3(0.82f, OF, 4.05f), 0f);
+            float top = fs != null ? VaBounds(fs).max.y : 1.9f;
+            VaReal("trophy_gold", new Vector3(0.8f, top, 4.05f), 90f);
+            VaReal("trophy_silver", new Vector3(0.8f, top, 3.6f), 90f);
+            VaReal("trophy_bronze", new Vector3(0.8f, top, 4.5f), 90f);
+            // dans le coin, cote porte : pneus du jeu ; sous les tarifs : chaise ; pres de l'etagere : extincteur ; au mur : horloge
+            VaTires("tire_stock", new Vector3(1.1f, OF, 0.7f), 4);
+            VaReal("chair_wooden", new Vector3(0.85f, OF, 2.2f), 90f);
+            VaReal("fire_extinguisher", new Vector3(5.2f, OF, 0.38f), 0f, 0, Quaternion.Euler(270f, 0f, 0f));
+            VaReal("teimo_clock", new Vector3(5.5f, 2.2f, 2.2f), 180f, 1);
             // affiches des voitures, mur du fond
             int a = 0;
             foreach (Stand s in stands)
@@ -695,7 +842,7 @@ namespace MWCoop
         static void VuokraVendor()
         {
             Transform t = vuokra.transform;
-            Vector3 spot = vaSource.InverseTransformPoint(SrcVendor);
+            Vector3 spot = vaSource.InverseTransformPoint(SrcVendor + Vector3.up * 0.055f);
             vaVendor = Avatar.CreatePreview("VUOKRA-myyja", 0);
             if (vaVendor == null) L("garage : vendeur indisponible (corps de PNJ)");
             else { Transform r = vaVendor.Root.transform; r.SetParent(t, false); r.localPosition = spot; r.localRotation = HallR(180f); }
@@ -718,13 +865,73 @@ namespace MWCoop
                 dc.transform.localPosition = vaSource.InverseTransformPoint(desk.transform.position);
                 dc.transform.localRotation = Quaternion.Inverse(vaSource.rotation) * desk.transform.rotation;
                 dc.transform.localScale = desk.transform.lossyScale;
-                dc.AddComponent<MeshCollider>().sharedMesh = desk.sharedMesh;
+                vaDeskColl = dc.AddComponent<MeshCollider>(); vaDeskColl.sharedMesh = desk.sharedMesh;
             }
             var cg = new GameObject("va_myyja_coll"); cg.transform.SetParent(t, false);
             cg.transform.position = t.TransformPoint(vaSource.InverseTransformPoint(SrcVendor + Vector3.up * 0.9f)); cg.transform.rotation = Quaternion.identity;   // (le repere du batiment n'a pas forcement y vers le haut)
             var cc = cg.AddComponent<CapsuleCollider>(); cc.height = 1.8f; cc.radius = 0.3f;
             vaVendorCol = cc;
             L("garage : vendeur " + (vaVendor != null ? "en place" : "absent (collision seule)") + ", bureau " + (desk != null ? desk.name : "absent"));
+        }
+
+        // Sur le bureau : telephone, bloc-notes, tasse, publicite, caisse, aux endroits plats de la collision du meuble. Dans les halles : banc d'essai, palan, cric, bidons, pneus, panneaux de rallye.
+        static MeshCollider vaDeskColl;
+        static void VuokraRealDecor()
+        {
+            if (vaDeskColl != null)
+            {
+                var pts = new List<Vector3>(); var seen = new Dictionary<int, int>();
+                for (float x = 0.2f; x < 5.6f; x += 0.1f)
+                    for (float z = 0f; z < 5.1f; z += 0.1f)
+                    {
+                        RaycastHit h;
+                        if (!vaDeskColl.Raycast(new Ray(vaHall.TransformPoint(new Vector3(x, 3f, z)), Vector3.down), out h, 3f)) continue;
+                        Vector3 pt = vaHall.InverseTransformPoint(h.point); pt.x = x; pt.z = z;
+                        pts.Add(pt);
+                        int k = Mathf.RoundToInt(pt.y / 0.02f); int o; seen.TryGetValue(k, out o); seen[k] = o + 1;
+                    }
+                int best = 0, bn = 0;
+                foreach (var kv in seen) if (kv.Key * 0.02f > 0.5f && kv.Value > bn) { best = kv.Key; bn = kv.Value; }
+                // (plateau : la hauteur la plus frequente ; on garde les points entoures de plateau, loin des bords et des cloisons)
+                var flat = new HashSet<int>();
+                foreach (Vector3 q in pts) if (Mathf.RoundToInt(q.y / 0.02f) == best) flat.Add(Mathf.RoundToInt(q.x * 10f) * 1000 + Mathf.RoundToInt(q.z * 10f));
+                var inner = new List<Vector3>();
+                foreach (Vector3 q in pts)
+                {
+                    int ix = Mathf.RoundToInt(q.x * 10f), iz = Mathf.RoundToInt(q.z * 10f);
+                    if (flat.Contains(ix * 1000 + iz) && flat.Contains((ix - 1) * 1000 + iz) && flat.Contains((ix + 1) * 1000 + iz) && flat.Contains(ix * 1000 + iz - 1) && flat.Contains(ix * 1000 + iz + 1)) inner.Add(q);
+                }
+                L("garage : plateau du bureau a " + (best * 0.02f).ToString("F2") + " m, " + inner.Count + " points");
+                if (inner.Count > 4)
+                {
+                    float x0 = float.MaxValue, x1 = float.MinValue, z0 = float.MaxValue, z1 = float.MinValue;
+                    foreach (Vector3 q in inner) { x0 = Mathf.Min(x0, q.x); x1 = Mathf.Max(x1, q.x); z0 = Mathf.Min(z0, q.z); z1 = Mathf.Max(z1, q.z); }
+                    bool alongX = x1 - x0 > z1 - z0;
+                    inner.Sort((p, q) => alongX ? p.x.CompareTo(q.x) : p.z.CompareTo(q.z));
+                    Func<float, Vector3> at = f => inner[Mathf.Clamp((int)(inner.Count * f), 0, inner.Count - 1)];
+                    float side = alongX ? 90f : 0f;
+                    VaReal("phone_handle", at(0.12f), side, 1);
+                    VaReal("notepad", at(0.32f), side);
+                    VaReal("coffee_cup_home", at(0.42f), side, 0, Quaternion.Euler(270f, side, 0f));
+                    VaReal("paper_stand1", at(0.6f), side);
+                    VaReal("cash_register", at(0.86f), side);
+                }
+            }
+            const float HF = -0.08f;
+            // devant, a droite de la grande porte : ordinateur et ventilateur du banc d'essai, bidons
+            VaReal("dyno_computer", new Vector3(12.5f, HF, 1.0f), 90f, 0, null, true);
+            VaReal("dyno_fancase", new Vector3(12.45f, HF, 2.9f), 90f, 0, null, true);
+            VaReal("jerrycan_diesel", new Vector3(12.6f, HF, 4.5f), 90f);
+            VaReal("jerrycan_fuel", new Vector3(12.6f, HF, 5.0f), 90f);
+            // devant, a gauche de la grande porte : palan et cric, chargeur de batterie
+            VaReal("motorhoist_frame", new Vector3(6.95f, HF, 2.6f), 90f, 1, null, true);
+            VaReal("floor_jack", new Vector3(7.3f, HF, 4.9f), 200f, 3);
+            VaReal("battery_charger", new Vector3(6.4f, HF, 0.7f), 0f);
+            // au fond : pneus, banniere et panneau de rallye du jeu
+            VaTires("tire_gobra", new Vector3(12.5f, HF, 13.9f), 4);
+            VaTires("tire_stock", new Vector3(11.75f, HF, 14.05f), 2);
+            VaReal("rally_standbanner3", new Vector3(9.2f, 2.45f, 14.9f), 0f, 0, Quaternion.LookRotation(Vector3.up, Vector3.right));
+            VaReal("rally_sign01", new Vector3(12.9f, HF, 7.2f), 0f, 0, Quaternion.LookRotation(Vector3.up, Vector3.forward));
         }
 
         static void VuokraLights()
@@ -832,7 +1039,28 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- image par image
-        static int vaTest; static float vaTestAt; static bool vaAim; static int vaClick;
+        static int vaTest; static float vaTestAt; static bool vaAim; static int vaClick; static bool vaObjDone;
+        // [Test] VuokraObjets=1 : tous les objets du jeu non regroupes (donc copiables), un par maillage, pour choisir le decor
+        static void VaObjets()
+        {
+            if (vaObjDone || Config.GetInt("Test", "VuokraObjets", 0) == 0 || Time.timeSinceLevelLoad < 25f) return;
+            vaObjDone = true;
+            var seen = new HashSet<string>(); int n = 0;
+            foreach (MeshRenderer r in Resources.FindObjectsOfTypeAll<MeshRenderer>())
+            {
+                if (r == null) continue;
+                MeshFilter f = r.GetComponent<MeshFilter>(); Mesh m = f != null ? f.sharedMesh : null;
+                if (m == null || m.name.StartsWith("Combined Mesh") || r.isPartOfStaticBatch) continue;
+                Vector3 s = Vector3.Scale(m.bounds.size, r.transform.lossyScale);
+                if (s.magnitude < 0.04f || s.magnitude > 4.5f) continue;
+                string path = Recon.Path(r.transform);
+                if (path.Contains("MWCoop") || path.Contains("va_") || path.Contains("osat_") || path.Contains("osuus_")) continue;
+                if (!seen.Add(m.name)) continue;
+                L("objet : " + m.name + " | " + path + " | " + s.ToString("F2") + " | " + (r.sharedMaterial != null ? r.sharedMaterial.name : "-") + " | actif " + r.gameObject.activeInHierarchy + " | rot " + r.transform.rotation.eulerAngles.ToString("F0"));
+                n++;
+            }
+            L("objets : fini, " + n + " maillages");
+        }
         // [Test] VuokraClic=1 : le joueur pose sous le porche entre dans le bureau a pied (vrai CharacterController), puis clique sur le loueur
         static void VuokraClickTest(float now)
         {
@@ -882,7 +1110,7 @@ namespace MWCoop
             if (vuokra == null) return;
             MoveLamp(now);
             VuokraKeys();
-            if (Config.Testing) { VuokraClickTest(now); VuokraTest(now); }
+            if (Config.Testing) { VaObjets(); VuokraClickTest(now); VuokraTest(now); }
             Camera cam = Game.MainCam;
             bool near = cam != null && (cam.transform.position - vuokra.transform.position).sqrMagnitude < 3600f;
             if (guiText == null)
@@ -1051,13 +1279,33 @@ namespace MWCoop
                 QueteGolf.Shot("va-arriere", w(30f, 4f, 34f), w(11f, 2f, 9f));
                 QueteGolf.Shot("va-ciel", w(11f, 70f, 2f), w(11.1f, 0f, 2.1f));
                 QueteGolf.Shot("va-entree", w(9.5f, 1.7f, -4f), w(9.5f, 1.2f, 8f));
-                QueteGolf.Shot("va-dedans", w(12.5f, 1.7f, 1.2f), w(5f, 1.0f, 12f));
+                QueteGolf.Shot("va-dedans", w(8.6f, 1.7f, 0.8f), w(9f, 1.0f, 13f));
                 QueteGolf.Shot("va-dedans-fond", w(1.5f, 1.7f, 14f), w(12f, 1.0f, 5f));
                 QueteGolf.Shot("va-halle2", w(16f, 1.7f, 3.8f), w(16f, 1.0f, 13f));
                 QueteGolf.Shot("va-vendeur", w(3.8f, 1.7f, 0.4f), w(2.4f, 1.2f, 3.2f));
                 QueteGolf.Shot("va-bureau", w(1.2f, 1.8f, 0.5f), w(4.6f, 0.9f, 4f));
                 QueteGolf.Shot("va-bureau2", w(5f, 1.8f, 0.5f), w(0.9f, 1.2f, 3.8f));
-                QueteGolf.Shot("va-pont", w(4.6f, 1.2f, 7f), w(VaLiftX, 0.3f, VaLiftZ));
+                QueteGolf.Shot("va-pont", w(VaLiftX - 1.2f, 0.7f, VaLiftZ - 4.5f), w(VaLiftX, 0.3f, VaLiftZ));
+                QueteGolf.Shot("va-pont2", w(14.5f, 0.5f, 8.8f), w(16.2f, 0.1f, 11.4f));
+                QueteGolf.Shot("va-etagere", w(2.8f, 1.5f, 2.2f), w(5.1f, 1f, 2.2f));
+                QueteGolf.Shot("va-horloge", w(3.2f, 1.6f, 2.2f), w(5.5f, 2.3f, 2.2f));
+                QueteGolf.Shot("va-panneau", w(10.2f, 1.5f, 7.2f), w(13f, 1.5f, 7.2f));
+                QueteGolf.Shot("va-classeurs", w(3.4f, 1.7f, 4.4f), w(0.8f, 1.5f, 3.9f));
+                QueteGolf.Shot("va-tiski", w(3.9f, 2f, 0.7f), w(2.6f, 0.9f, 2.6f));
+                QueteGolf.Shot("va-avant", w(9.4f, 1.6f, 6.8f), w(7f, 0.6f, 2f));
+                QueteGolf.Shot("va-droite", w(11.2f, 1.5f, 7.2f), w(12.5f, 0.8f, 2f));
+                QueteGolf.Shot("va-fond", w(10f, 1.5f, 7.5f), w(10.5f, 1.6f, 15f));
+                QueteGolf.Shot("va-dehors", w(19f, 1.7f, -6f), w(20.3f, 0.4f, -1.6f));
+                QueteGolf.Shot("va-palette", w(11f, 1.5f, -4.5f), w(11f, 0.5f, -1.2f));
+                QueteGolf.Shot("va-cloture", w(-5f, 2.2f, -6f), w(1f, 0.8f, 8f));
+                int coll = 0;
+                foreach (Collider vc in Physics.OverlapSphere(w(VaW / 2f, 1f, VaD / 2f), 22f))
+                {
+                    if (vc.transform.parent == null || vc.transform.parent.name != "voyage_collisions") continue;
+                    Vector3 hp = vaHall.InverseTransformPoint(vc.bounds.center);
+                    if (hp.x > -0.5f && hp.x < VaW + 0.5f && hp.z > -VaApron && hp.z < VaD + 0.5f) coll++;
+                }
+                L("essai : " + coll + " collisions de Voyage dans le garage ou son parvis");
                 QueteGolf.Shot("va-sol", w(9f, 3.0f, 4f), w(10f, 0f, 11f));
                 QueteGolf.Shot("va-gauche", w(-9f, 2f, -14f), w(8f, 2f, -2f));
                 QueteGolf.Shot("va-porte", w(16f, 2f, -9f), w(16f, 1.5f, 0f));
