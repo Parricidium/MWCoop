@@ -957,7 +957,7 @@ static DWORD WINAPI AddonDlThread(void *)
     }
     DeleteTree(stage);
     LaunchLog("addon %ls %ls : %s (%s)", key.c_str(), c.ver.c_str(), ok ? "installe" : "ECHEC", why.c_str());
-    if (ok) SetStatus(K_OK, T(L"%s installée : en jeu, prends-la au F10 (onglet Voitures)", L"%s installed: in game, take it with F10 (Cars tab)"), c.name.c_str());
+    if (ok) SetStatus(K_OK, T(L"%s installée : en jeu, loue-la au garage RALLI-VUOKRAAMO", L"%s installed: in game, rent it at the RALLI-VUOKRAAMO garage"), c.name.c_str());
     else SetStatus(K_ERR, T(L"Téléchargement de %s impossible (%s)", L"Could not download %s (%s)"), c.name.c_str(), Widen(why).c_str());
     g_addonPics.erase(key);
     g_addonScanT = 0;
@@ -1504,8 +1504,8 @@ static void DrawAddonList(Graphics &g)
     if (KuplaShown()) { UiButton(g, RectF(area.X + 20, area.Y + 16, 40, 40), L"", UI_ADDONS_HOME, false, IC_CHEVL); hx = 50; }
     Title(g, KuplaShown() ? T(L"Voitures", L"Cars") : T(L"Addons", L"Add-ons"), RectF(area.X + 24 + hx, area.Y + 20, 400 - hx, 30), 22, kInk);
     AddonSeenMark();
-    Para(g, T(L"Voitures en extension : télécharge-les ici, elles se mettent à jour d'un clic. En partie, on les prend au F10 (onglet Voitures).",
-              L"Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab)."),
+    Para(g, T(L"Voitures en extension : télécharge-les ici, elles se mettent à jour d'un clic. En partie, on les loue au garage RALLI-VUOKRAAMO.",
+              L"Extension cars: download them here, they update in one click. In game, rent them at the RALLI-VUOKRAAMO garage."),
          RectF(area.X + 24, area.Y + 56, area.Width - 48 - 400, 40), 12.5f, kGrey);
     UiButton(g, RectF(area.X + area.Width - 24 - 264, area.Y + 20, 264, 38), T(L"Ouvrir le dossier des addons", L"Open the add-ons folder"), UI_ADDON_DIR, false, IC_FOLDER, true, 10);
     UiButton(g, RectF(area.X + area.Width - 24 - 264 - 12 - 108, area.Y + 20, 108, 38), T(L"Aide", L"Help"), UI_ADDON_HELP, false, IC_BOOK, true, 10);
@@ -1697,7 +1697,8 @@ static void DrawAddonView(Graphics &g, const Addon &a)
             T(L"1. Gabarit : la voiture dépliée à plat (2048 x 2048). La zone hachurée en rouge reçoit ton numéro : ne dessine rien d'important dessous.",
               L"1. Template: the car laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it."),
             T(L"2. Peins par-dessus en gardant la taille, puis « Mon image… ».", L"2. Paint over it keeping the size, then \"My image…\"."),
-            T(L"3. En jeu, prends-la au F10 (onglet Voitures) : tout le monde voit ta livrée.", L"3. In game, take it with F10 (Cars tab): everyone sees your livery."),
+            a.builtin ? T(L"3. En jeu, prends-la au F10 : tout le monde voit ta livrée.", L"3. In game, take it with F10: everyone sees your livery.")
+                      : T(L"3. En jeu, loue-la au garage RALLI-VUOKRAAMO : tout le monde voit ta livrée.", L"3. In game, rent it at the RALLI-VUOKRAAMO garage: everyone sees your livery."),
         };
         for (const wchar_t *st : steps) { Para(g, st, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
     } else Para(g, T(L"Pas de livrée pour cet addon : couleur et numéro du joueur.", L"No livery for this add-on: the player's colour and number."), RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 13, kGrey);
@@ -1709,7 +1710,7 @@ static void DrawAddonView(Graphics &g, const Addon &a)
     Para(g, !g_fr && !a.descEn.empty() ? a.descEn : a.desc, RectF(pn.X + 24, pn.Y + 284, pn.Width - 48, 44), 13, kGrey);
     float y = pn.Y + 344;
     const wchar_t *rows[][2] = {
-        { T(L"En jeu", L"In game"), T(L"F10 › Voitures", L"F10 › Cars") },
+        { T(L"En jeu", L"In game"), a.builtin ? T(L"F10, gratuite", L"F10, free") : T(L"garage RALLI-VUOKRAAMO", L"RALLI-VUOKRAAMO garage") },
         { T(L"Couleur", L"Colour"), T(L"unique par joueur", L"unique per player") },
         { T(L"Numéro", L"Number"), T(L"le sien, sur les portières", L"theirs, on the doors") },
         { a.builtin ? T(L"Intégrée", L"Built in") : T(L"Sans l'addon", L"Without the add-on"),
