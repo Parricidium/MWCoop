@@ -31,7 +31,7 @@ namespace MWCoop
         static string pointed = "";
         static bool sheetLogged;
 
-        public static void OnLevelLoaded() { dists.Clear(); crimes.Clear(); satsuma = park = last = null; sheets[0] = sheets[1] = null; next = nextScan = 0f; pointed = ""; sheetLogged = false; testStep = 0; }
+        public static void OnLevelLoaded() { dists.Clear(); crimes.Clear(); satsuma = park = last = null; sheets[0] = sheets[1] = null; next = nextScan = 0f; pointed = ""; sheetLogged = false; testStep = 0; openSheet = null; sheetState = timingState = toasted = ""; sheetPaid = false; escOff = false; }
 
         static bool IsCar(GameObject g) { return g != null && (g.name.StartsWith("SATSUMA") || g.name.StartsWith(Vaz.Prefix)); }
 
@@ -93,10 +93,12 @@ namespace MWCoop
             if (!Game.Msc || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             bool mine = pointed.StartsWith(Vaz.Prefix);
+            SheetJournal();
             if (now >= next)
             {
                 next = now + 1f;
                 Scan(now);
+                TimingJournal();
                 GameObject want = Want(out mine);
                 if (want != null)
                 {
@@ -110,7 +112,8 @@ namespace MWCoop
                     {
                         pointed = want.name;
                         Log.Info("rallye (MSC) : la voiture du rallye est " + want.name + " (" + dists.Count + " distances, " + crimes.Count + " spectateurs, " + n + " changements)");
-                        if (mine) Hud.Toast(Lang.T("Rallye : inscription, parc fermé et spéciales avec ta voiture", "Rally: registration, parc fermé and stages with your car"));
+                        // (une fois par voiture : apres l'arrivee, la plus proche du parc ferme peut changer plusieurs fois)
+                        if (mine && toasted != pointed) { toasted = pointed; Hud.Toast(Lang.T("Rallye : inscription, parc fermé et spéciales avec ta voiture", "Rally: registration, parc fermé and stages with your car")); }
                     }
                 }
             }
@@ -126,6 +129,71 @@ namespace MWCoop
                 if (sy != null) for (int i = 0; i < 5; i++) { Transform x = sy.Find("x" + i); if (x != null && x.gameObject.activeSelf) x.gameObject.SetActive(false); }
                 if (!sheetLogged) { sheetLogged = true; Log.Info("rallye (MSC) : feuille d'inscription ouverte avec " + pointed + " : equipee pour le rallye"); }
             }
+        }
+
+        // Journal de la feuille et de la speciale (JD 06/11 : « j'ai du payer 4 fois » ; rien dans les journaux pour le voir) : refus, paiement,
+        // inscription, depart, points de passage, arrivee, avec l'argent et le chrono.
+        static GameObject openSheet;
+        static string sheetState = "", timingState = "", toasted = "";
+        static bool sheetPaid;
+        static string Money() { return Game.GlobalFloat("PlayerMoney").ToString("F0") + " mk"; }
+        // Echap pendant les 2 s qui suivent la signature : la feuille se fermait, l'argent deja pris, sans inscription -- il fallait repayer (JD 06/11 : 4 fois 500 mk ;
+        // reproduit en essai, s'eloigner n'y fait rien). Ignore pendant ces 2 s. [Test] RallyeEchapLibre=1 : comme avant.
+        static bool escOff;
+        static void SheetEsc(GameObject sheet, bool off)
+        {
+            if (escOff == off) return;
+            escOff = off;
+            if (Config.GetInt("Test", "RallyeEchapLibre", 0) != 0) return;
+            PlayMakerFSM su = sheet != null ? Game.FsmOn(sheet, "Setup") : null;
+            if (su == null) return;
+            foreach (FsmState st in su.FsmStates)
+                if (st != null && st.Name == "Reset" && st.Actions != null)
+                    foreach (FsmStateAction a in st.Actions) { var k = a as HutongGames.PlayMaker.Actions.GetKeyDown; if (k != null) k.key = off ? KeyCode.None : KeyCode.Escape; }
+        }
+        static Transform TodayTiming()
+        {
+            FsmInt gd = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay");
+            int day = gd != null ? gd.Value : 0;
+            GameObject t = day == 6 ? Game.FindAny("RALLY/Saturday/TimingSaturday") : day == 7 ? Game.FindAny("RALLY/Sunday/TimingSunday") : null;
+            return t != null ? t.transform : null;
+        }
+        static void SheetJournal()
+        {
+            GameObject open = null;
+            foreach (GameObject sh in sheets) if (sh != null && sh.activeInHierarchy) open = sh;
+            if (open != null)
+            {
+                if (openSheet != open) { openSheet = open; sheetPaid = false; sheetState = ""; Log.Info("rallye (MSC) : feuille ouverte (" + open.name + "), voiture " + pointed + ", casque " + Game.GlobalBool("PlayerHelmet") + ", argent " + Money()); }
+                Transform bt = open.transform.Find("ButtonConfirm");
+                PlayMakerFSM bf = bt != null ? Game.FsmOn(bt.gameObject, "Button") : null;
+                string st = bf != null ? bf.ActiveStateName ?? "" : "";
+                if (st == sheetState) return;
+                sheetState = st;
+                SheetEsc(open, st == "Good name" || st == "Good name 2");
+                if (st == "Good name") { sheetPaid = true; Log.Info("rallye (MSC) : feuille signee, payee, argent " + Money()); }
+                else if (st == "Good name 2") Log.Info("rallye (MSC) : feuille du dimanche signee (gratuite), argent " + Money());
+                else if (st == "No helmet" || st == "No safety" || st == "No inspected" || st == "Drunk" || st == "No money") Log.Info("rallye (MSC) : feuille refusee (" + st + "), argent " + Money());
+                return;
+            }
+            if (openSheet == null) return;
+            SheetEsc(openSheet, false);
+            openSheet = null;
+            Transform tt = TodayTiming();
+            bool reg = tt != null && tt.gameObject.activeInHierarchy;
+            Log.Info("rallye (MSC) : feuille fermee, " + (reg ? "inscrit" : sheetPaid ? "PAYEE SANS INSCRIPTION (fermee pendant les 2 s apres la signature)" : "pas inscrit") + ", argent " + Money());
+        }
+        // (une fois par seconde : le depart, chaque point de passage, l'arrivee)
+        static void TimingJournal()
+        {
+            Transform tt = TodayTiming();
+            PlayMakerFSM tf = tt != null && tt.gameObject.activeInHierarchy ? Game.FsmOn(tt.gameObject, "Timing") : null;
+            PlayMakerFSM cf = tf != null ? Game.FsmOn(tt.gameObject, "Clock") : null;
+            string st = tf != null ? tf.ActiveStateName ?? "" : "";
+            if (st == timingState) return;
+            timingState = st;
+            FsmFloat tot = cf != null ? cf.FsmVariables.FindFsmFloat("TimeTotal") : null;
+            if (st.StartsWith("Checkpoint") || st == "Jump start" || st == "Finish" || st == "Wait") Log.Info("rallye (MSC) : speciale, " + st + ", chrono " + (tot != null && tot.Value < 3999f ? tot.Value.ToString("F1") + " s" : "pas parti") + ", voiture " + pointed + ", argent " + Money());
         }
 
         // [Test] Autotest=vazrallye (solo, MSC) : 20 s samedi 12 h ; 26 s a la tente de Fleetari ; 30 s voiture du F10 ([Test]
