@@ -1232,6 +1232,8 @@ namespace MWCoop
 
         static void TestChat(float t)
         {
+            if (testStep == 0 && t > 18f && Config.GetInt("Test", "HudGlisse", 0) != 0 && HudSettings.StyleNow == HudSettings.Vanilla) HudSettings.Set("Style", HudSettings.Carte);
+            if (testStep == 0 && t > 20f && Config.GetInt("Test", "TouchesListe", 0) != 0) StandaloneCar.Held("Use");
             if (testStep == 0 && t > 20f) { testStep = 1; ChatOpen = true; focusChat = true; chatText = Config.Get("Test", "TchatTexte", "essai du tchat " + Session.LocalId); Log.Info("autotest : tchat ouvert"); }
             else if (testStep == 1 && t > 22f) { testStep = 2; testKey = new Event { type = EventType.KeyDown, keyCode = KeyCode.Return }; }
             else if (testStep == 2 && t > 24f) { testStep = 3; Log.Info("autotest : tchat historique : " + string.Join(" | ", Chat.History.ToArray())); }

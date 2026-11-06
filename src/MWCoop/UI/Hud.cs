@@ -84,12 +84,15 @@ namespace MWCoop
             // ([Graphismes] Pseudos : 0 caches, sinon la distance en metres ; 120 par defaut).
             Camera cam = Game.MainCam;
             float far = Gfx.Get("Pseudos", 120);
-            if (cam == null || far <= 0f) return;
+            bool bubbles = HudSettings.On("BullesTchat");
+            if (cam == null || (far <= 0f && !bubbles)) return;
             foreach (Avatar a in PlayerSync.Avatars)
             {
                 if (a.Root == null) continue;
                 Vector3 sp = cam.WorldToScreenPoint(a.HeadPosition);
-                if (sp.z <= 0.5f || sp.z > far) continue;
+                if (sp.z <= 0.5f) continue;
+                if (bubbles) Bubble(a.Player.Id, sp, now, far > 0f && sp.z <= far);
+                if (far <= 0f || sp.z > far) continue;
                 string n = a.Player.Name;
                 // Avatar Steam a gauche du pseudo (joueurs passes par Steam, ou dont le compte est connu).
                 Texture2D av = MWCoop.Net.SteamNet.Avatar(a.Player.SteamId);
@@ -112,6 +115,35 @@ namespace MWCoop
                 else Style.Text(r, n, 15, TextAnchor.MiddleCenter, Style.White);
             }
             Style.Alpha = 1f;
+        }
+
+        // Message du tchat au-dessus du joueur : apparait en grandissant et en montant, s'efface en continuant de monter ; lisible
+        // jusqu'a 60 m, couleur du joueur sur le bord. Au-dessus du pseudo quand il est affiche.
+        const float BubbleFar = 60f;
+        static void Bubble(int id, Vector3 sp, float now, bool nameShown)
+        {
+            Chat.Said s = Chat.SaidBy(id);
+            if (s == null || sp.z > BubbleFar) return;
+            float age = now - s.Born, left = s.Until - now;
+            float inK = Mathf.Clamp01(age / 0.22f), outK = Mathf.Clamp01(left / 0.5f);
+            // (entree : leger depassement, puis taille normale)
+            float pop = 0.82f + 0.18f * (1f + 1.7f * (inK - 1f) * (inK - 1f) * (inK - 1f) + 0.7f * (inK - 1f) * (inK - 1f));
+            float lift = (1f - inK) * Style.Px(12) + (1f - outK) * -Style.Px(14);
+            float maxW = Mathf.Min(Style.Px(320), Screen.width * 0.5f), padX = Style.Px(14), lineH = Style.Px(21), textW = Style.Width(s.Text, 15, false);
+            int lines = Mathf.Max(1, Mathf.CeilToInt(textW / (maxW - padX * 2f) * 1.08f));
+            float w = Mathf.Min(textW + padX * 2f + Style.Px(2), maxW) * pop, h = (lines * lineH + Style.Px(14)) * pop;
+            float bottom = Screen.height - sp.y - (nameShown ? Style.Px(26) + Style.Px(12) : Style.Px(10)) + lift;
+            var r = new Rect(Mathf.Round(sp.x - w / 2), Mathf.Round(bottom - h), w, h);
+            r.x = Mathf.Clamp(r.x, Style.Px(6), Mathf.Max(Style.Px(6), Screen.width - w - Style.Px(6)));
+            Style.Alpha = Mathf.Min(inK, outK) * Mathf.Clamp01(2f - sp.z / (BubbleFar * 0.5f));
+            float rad = Mathf.Min(Style.Px(13), h / 2);
+            Style.Round(r, rad, Kit.A(Style.Shade, 0.82f));
+            Style.Ring(r, rad, Markers.ColorOf(id));
+            // (queue : deux points vers le joueur)
+            float d1 = Style.Px(8), d2 = Style.Px(4), cx = Mathf.Clamp(sp.x, r.x + rad, r.xMax - rad);
+            Style.Round(new Rect(cx - d1 / 2, r.yMax + Style.Px(1), d1, d1), d1 / 2, Kit.A(Style.Shade, 0.82f));
+            if (!nameShown) Style.Round(new Rect(cx - d2 / 2, r.yMax + d1 + Style.Px(2), d2, d2), d2 / 2, Kit.A(Style.Shade, 0.82f));
+            if (pop > 0.97f) Style.Text(new Rect(r.x + padX, r.y, r.width - padX * 2f, r.height), s.Text, 15, TextAnchor.MiddleCenter, Style.White, false, true);
         }
     }
 }

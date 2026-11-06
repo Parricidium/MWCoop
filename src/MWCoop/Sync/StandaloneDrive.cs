@@ -65,6 +65,23 @@ namespace MWCoop
             }
             catch (Exception e) { sb.Append(" : ").Append(e.Message); }
             Log.Info(sb.ToString());
+            // ([Test] TouchesListe=1 : toutes les touches que le jeu a definies dans cInput -- noms et touches, pour les commandes des voitures)
+            if (Config.GetInt("Test", "TouchesListe", 0) != 0)
+                foreach (FieldInfo f in t.GetFields(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public))
+                    if (f.FieldType == typeof(string[]))
+                    {
+                        string[] v = f.GetValue(null) as string[];
+                        if (v == null) continue;
+                        var l = new System.Text.StringBuilder(); int cn = 0;
+                        foreach (string x in v) if (!string.IsNullOrEmpty(x)) { l.Append(x).Append(" | "); if (++cn > 90) break; }
+                        Log.Info("touches du jeu : " + f.Name + " : " + l);
+                    }
+            if (Config.GetInt("Test", "TouchesListe", 0) != 0)
+            {
+                var ms = new System.Text.StringBuilder();
+                foreach (Mesh me in Resources.FindObjectsOfTypeAll<Mesh>()) if (me != null && System.Text.RegularExpressions.Regex.IsMatch(me.name, "watch|wrist|kello|clock|arm_", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) ms.Append(me.name).Append(" (").Append(me.vertexCount).Append(") | ");
+                Log.Info("maillages montre : " + ms);
+            }
         }
         public static float Axis(string n)
         {

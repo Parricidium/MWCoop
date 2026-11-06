@@ -266,18 +266,79 @@ namespace MWCoop
             K = HudSettings.Get("Taille") / 100f;
             int ci = Mathf.Clamp(HudSettings.Get("Couleur"), 0, Accents.Length - 1);
             accent = Accents[ci];
-            int pos = HudSettings.Get("Position");
+            int pos = dragging ? HudSettings.Libre : HudSettings.Get("Position");
+            haveBlock = false;
             if (style == HudSettings.Carte) DrawCard(pos < 0 ? 0 : pos);
             else if (style == HudSettings.Anneaux) DrawRings(pos < 0 ? 2 : pos);
             else if (style == HudSettings.Bandeau) DrawStrip(pos < 0 ? 4 : pos);
+            HudDrag();
             if (HudSettings.On("Equipe")) DrawTeam(style, pos);
             DrawAlerts();
             Style.Alpha = 1f;
         }
 
+        // HUD deplace a la souris, tchat ouvert (suggestion de квазарик, 22/10) : le curseur est alors libre ; lache, [Hud] Position=Libre et
+        // LibreX / LibreY en milliemes de la place disponible. Les positions fixes restent au choix (F10 > HUD, lanceur).
+        static Rect block; static bool haveBlock, dragging; static Vector2 grab; static float dragX, dragY; static int dragTest;
+        static void DragTo(Vector2 m)
+        {
+            dragX = Mathf.Clamp01((m.x - grab.x) / Mathf.Max(1f, Screen.width - block.width));
+            dragY = Mathf.Clamp01((m.y - grab.y) / Mathf.Max(1f, Screen.height - block.height));
+        }
+        static void DragEnd()
+        {
+            dragging = false;
+            HudSettings.Set("LibreX", Mathf.RoundToInt(dragX * 1000f)); HudSettings.Set("LibreY", Mathf.RoundToInt(dragY * 1000f));
+            HudSettings.Set("Position", HudSettings.Libre);
+        }
+        static void HudDrag()
+        {
+            if (!Menu.ChatOpen || !haveBlock) { if (dragging) DragEnd(); return; }
+            // ([Test] HudGlisse=1 : le meme chemin, avec des evenements de souris simules -- appui, glisse, lache)
+            if (dragTest < 3 && Event.current.type == EventType.Repaint && Config.GetInt("Test", "HudGlisse", 0) != 0)
+            {
+                Event real = Event.current;
+                Vector2 to = dragTest == 0 ? block.center : new Vector2(Screen.width * 0.7f, Screen.height * 0.5f);
+                Event.current = new Event { type = dragTest == 0 ? EventType.MouseDown : dragTest == 1 ? EventType.MouseDrag : EventType.MouseUp, mousePosition = to, button = 0 };
+                dragTest++;
+                HudDrag();
+                Event.current = real;
+                if (dragTest == 3) Log.Info("autotest : hud glisse : Position " + HudSettings.Get("Position") + ", LibreX " + HudSettings.Get("LibreX") + ", LibreY " + HudSettings.Get("LibreY"));
+            }
+            Event e = Event.current;
+            Vector2 m = e.mousePosition;
+            bool over = dragging || block.Contains(m);
+            if (e.type == EventType.Repaint)
+            {
+                Style.Ring(block, P(14), over ? accent : Kit.A(Style.White, 0.45f));
+                string hint = Lang.T("Glisser pour déplacer", "Drag to move");
+                float hw = Style.Width(hint, F(12), false) + P(18), hh = P(22), hy = block.y >= hh + P(8) ? block.y - hh - P(4) : block.yMax + P(4);
+                var hr = new Rect(Mathf.Clamp(block.center.x - hw / 2, 0f, Mathf.Max(0f, Screen.width - hw)), hy, hw, hh);
+                Style.Round(hr, hh / 2, Panel);
+                Style.Text(hr, hint, F(12), TextAnchor.MiddleCenter, Txt, false);
+            }
+            else if (e.type == EventType.MouseDown && e.button == 0 && block.Contains(m))
+            {
+                dragging = true; grab = m - block.position; DragTo(m); e.Use();
+            }
+            else if (e.type == EventType.MouseDrag && dragging) { DragTo(m); e.Use(); }
+            else if (e.type == EventType.MouseUp && dragging) { DragTo(m); DragEnd(); e.Use(); }
+        }
+
         // Place d'un bloc w x h : 0 haut gauche, 1 haut droite, 2 bas gauche, 3 bas droite, 4 haut centre, 5 bas centre. En haut
         // a gauche, sous la pastille d'etat du mod ; en bas, au-dessus de la ligne du tchat et du temoin du micro.
         static Rect Place(int pos, float w, float h)
+        {
+            Rect r = Fixed(pos, w, h);
+            if (pos == HudSettings.Libre)
+            {
+                float fx = dragging ? dragX : HudSettings.Get("LibreX") / 1000f, fy = dragging ? dragY : HudSettings.Get("LibreY") / 1000f;
+                r = new Rect(Mathf.Round(Mathf.Clamp01(fx) * Mathf.Max(0f, Screen.width - w)), Mathf.Round(Mathf.Clamp01(fy) * Mathf.Max(0f, Screen.height - h)), w, h);
+            }
+            block = r; haveBlock = true;
+            return r;
+        }
+        static Rect Fixed(int pos, float w, float h)
         {
             float m = Style.Px(20), top = Style.Px(48), bottom = Style.Px(72);
             float x = pos == 1 || pos == 3 ? Screen.width - w - m : pos == 4 || pos == 5 ? Mathf.Round((Screen.width - w) / 2) : m;
@@ -529,9 +590,10 @@ namespace MWCoop
             float fw = fpsOn ? Style.Width(FpsText, F(12)) + P(28) : 0f;
             w += tw + fw + gap * (chips + (dayW > 0 ? 1 : 0) + (monW > 0 ? 1 : 0) + (tempOn ? 1 : 0) + (fpsOn ? 1 : 0) - 1);
             if (w <= pad * 2) return;
-            Rect r = Place(pos == 0 || pos == 1 || pos == 4 ? 4 : 5, w, h);
+            Rect r = Place(pos == HudSettings.Libre ? pos : pos == 0 || pos == 1 || pos == 4 ? 4 : 5, w, h);
             if (pos == 0 || pos == 1) r.x = pos == 0 ? Style.Px(20) : Screen.width - w - Style.Px(20);
             if (pos == 2 || pos == 3) r.x = pos == 2 ? Style.Px(20) : Screen.width - w - Style.Px(20);
+            block = r;
             Style.Round(r, h / 2, Panel);
             Style.Ring(r, h / 2, Edge);
             float x = r.x + pad, cy = r.y + (h - chipH) / 2;

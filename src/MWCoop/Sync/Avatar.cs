@@ -341,6 +341,112 @@ namespace MWCoop
             charT = ch.transform;
             body = ch.GetComponentInChildren<SkinnedMeshRenderer>();
             if (body != null) { body.updateWhenOffscreen = true; body.enabled = true; defMats = body.sharedMaterials; }
+            AttachWatch();
+        }
+
+        // ---------------------------------------------------------------- montre au poignet (suggestion de Dom, 31/10)
+        // Le modele de la montre du jeu (joueur : FPSCamera/FPSCamera/Watch, maillages wristwatch_*), au poignet gauche -- celui que le
+        // geste « montre » leve (Gestures.G_Watch). Aiguilles recopiees de celles du joueur (WatchTick).
+        const string WatchPrefix = "wristwatch_";
+        static Transform watchSrc; static float nextWatchFind; static int watchLogs;
+        GameObject watchGo;
+        readonly List<KeyValuePair<Transform, Transform>> watchHands = new List<KeyValuePair<Transform, Transform>>();
+        static Vector3 V3(string k, Vector3 d)
+        {
+            string[] c = Config.Get("Test", k, "").Split(',');
+            float x, y, z; var ci = System.Globalization.CultureInfo.InvariantCulture; const System.Globalization.NumberStyles st = System.Globalization.NumberStyles.Float;
+            return c.Length == 3 && float.TryParse(c[0], st, ci, out x) && float.TryParse(c[1], st, ci, out y) && float.TryParse(c[2], st, ci, out z) ? new Vector3(x, y, z) : d;
+        }
+        void AttachWatch()
+        {
+            if (watchGo != null || bones == null) return;
+            Transform wrist = Bone("hand_left");
+            if (wrist == null) return;
+            if (watchSrc == null)
+            {
+                if (Time.realtimeSinceStartup < nextWatchFind || Game.PlayerGo == null) return;
+                nextWatchFind = Time.realtimeSinceStartup + 3f;
+                watchSrc = Game.PlayerGo.transform.Find("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Watch");
+                if (watchSrc == null) return;
+            }
+            MeshFilter table = null;
+            MeshFilter[] mfs = watchSrc.GetComponentsInChildren<MeshFilter>(true);
+            foreach (MeshFilter f in mfs) if (f.sharedMesh != null && f.sharedMesh.name.StartsWith(WatchPrefix + "table")) table = f;
+            if (table == null) { Log.Warn("montre : modele du jeu introuvable"); watchSrc = null; nextWatchFind = float.MaxValue; return; }
+            watchHands.Clear();
+            watchGo = new GameObject("montre");
+            watchGo.transform.SetParent(wrist, false);
+            // (cadran : +Z du maillage, vers le dos de la main ; sorti du poignet, plus epais de ce cote que le bracelet)
+            watchGo.transform.localRotation = Quaternion.Euler(V3("MontreRot", new Vector3(145f, 0f, 0f)));
+            watchGo.transform.localPosition = watchGo.transform.localRotation * new Vector3(0f, 0f, Config.GetFloat("Test", "MontreSortie", 0.012f));
+            float size = Mathf.Max(table.sharedMesh.bounds.size.x, table.sharedMesh.bounds.size.y, table.sharedMesh.bounds.size.z);
+            Vector3 ws = wrist.lossyScale;
+            float k = Config.GetFloat("Test", "MontreTaille", 0.075f) / Mathf.Max(size, 1e-4f) / Mathf.Max(Mathf.Abs(ws.x), 1e-4f);
+            watchGo.transform.localScale = Vector3.one * k;
+            Matrix4x4 toTable = table.transform.worldToLocalMatrix;
+            foreach (MeshFilter f in mfs)
+            {
+                if (f.sharedMesh == null || !f.sharedMesh.name.StartsWith(WatchPrefix)) continue;
+                var g = new GameObject(f.sharedMesh.name);
+                g.transform.SetParent(watchGo.transform, false);
+                Matrix4x4 m = toTable * f.transform.localToWorldMatrix;
+                g.transform.localPosition = m.MultiplyPoint3x4(Vector3.zero);
+                g.transform.localRotation = Quaternion.LookRotation(m.GetColumn(2), m.GetColumn(1));
+                g.transform.localScale = new Vector3(m.GetColumn(0).magnitude, m.GetColumn(1).magnitude, m.GetColumn(2).magnitude);
+                g.AddComponent<MeshFilter>().sharedMesh = f.sharedMesh;
+                MeshRenderer sr = f.GetComponent<MeshRenderer>();
+                var dr = g.AddComponent<MeshRenderer>();
+                if (sr != null) dr.sharedMaterials = sr.sharedMaterials;
+                dr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                g.layer = wrist.gameObject.layer;
+                if (f.sharedMesh.name.Contains("hour") || f.sharedMesh.name.Contains("minute")) watchHands.Add(new KeyValuePair<Transform, Transform>(f.transform, g.transform));
+            }
+            if (Config.Testing && watchLogs++ < 2)
+            {
+                var sb = new System.Text.StringBuilder("montre : posee sur " + wrist.parent.name + "/" + wrist.name + ", echelle poignet " + ws.ToString("F3") + ", maillage " + table.sharedMesh.bounds.size.ToString("F4") + ", k " + k.ToString("F3") + " ;");
+                foreach (MeshFilter f in mfs) sb.Append(" ").Append(f.name).Append("[").Append(f.sharedMesh != null ? f.sharedMesh.name : "-").Append("]");
+                foreach (Transform c in wrist) sb.Append(" enfant ").Append(c.name).Append(" ").Append(c.localPosition.ToString("F3"));
+                Log.Info(sb.ToString());
+            }
+        }
+        float nextWatch; int watchShots;
+        void WatchTick(float now)
+        {
+            if (now < nextWatch) return;
+            nextWatch = now + 2f;
+            if (watchGo == null) { AttachWatch(); return; }
+            foreach (KeyValuePair<Transform, Transform> h in watchHands) if (h.Key != null) h.Value.localRotation = h.Key.localRotation;
+            // ([Test] MontrePhoto=1 : photos du poignet)
+            if (watchShots == 0 && Config.GetInt("Test", "MontrePhoto", 0) != 0 && Time.timeSinceLevelLoad > 55f && Bone("hand_left") != null)
+            {
+                watchShots = 1;
+                Transform w = watchGo.transform; Vector3 c = w.position, f = Root.transform.forward, r = Root.transform.right;
+                QueteGolf.Shot("montre-gauche", c - r * 0.28f + Vector3.up * 0.05f, c);
+                QueteGolf.Shot("montre-devant", c + f * 0.28f + Vector3.up * 0.05f, c);
+                QueteGolf.Shot("montre-derriere", c - f * 0.28f + Vector3.up * 0.05f, c);
+                QueteGolf.Shot("montre-droite", c + r * 0.22f + Vector3.up * 0.05f, c);
+                QueteGolf.Shot("montre-corps", c - r * 0.9f + f * 0.9f + Vector3.up * 0.3f, c + Vector3.up * 0.1f);
+                // (coupe du poignet : sommets du corps a moins de 2 cm du plan de la montre, repere de l'os ; verre de la montre, repere de la montre)
+                if (body != null)
+                {
+                    var baked = new Mesh(); body.BakeMesh(baked);
+                    Vector3 lo = Vector3.one * 9f, hi = -Vector3.one * 9f; int nv = 0; Transform bo = watchGo.transform.parent;
+                    foreach (Vector3 v in baked.vertices)
+                    {
+                        Vector3 l = bo.InverseTransformPoint(body.transform.TransformPoint(v));
+                        if (Mathf.Abs(l.x - watchGo.transform.localPosition.x) > 0.02f || l.magnitude > 0.2f) continue;
+                        lo = Vector3.Min(lo, l); hi = Vector3.Max(hi, l); nv++;
+                    }
+                    Object.Destroy(baked);
+                    Log.Info("montre : coupe du poignet " + nv + " sommets, " + lo.ToString("F3") + " a " + hi.ToString("F3"));
+                }
+                foreach (MeshFilter mf in watchGo.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    Bounds mb = mf.sharedMesh.bounds; Transform tt = mf.transform;
+                    Log.Info("montre : " + mf.name + " local " + tt.localPosition.ToString("F4") + " rot " + tt.localEulerAngles.ToString("F1") + " ech " + tt.localScale.ToString("F2") + ", maillage centre " + mb.center.ToString("F4") + " taille " + mb.size.ToString("F4"));
+                }
+                Log.Info("montre : photos, position " + c.ToString("F3") + ", poignet " + w.parent.position.ToString("F3") + ", coude " + w.parent.parent.position.ToString("F3"));
+            }
         }
 
         // ---------------------------------------------------------------- apercu des tenues (Studio)
@@ -1861,6 +1967,7 @@ namespace MWCoop
         int faceGen;
         public void Apply(PlayerInfo pi)
         {
+            WatchTick(Time.realtimeSinceStartup);
             PlayerState st = pi.State;
             int f = st.Flags;
             // Mort (en train de choisir ou revenir) : a pied, pantin qui tombe ; au volant ou passager, affale sur le siege

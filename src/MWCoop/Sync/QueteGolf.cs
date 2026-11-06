@@ -215,7 +215,7 @@ namespace MWCoop
                 try { L("essai : fichier : " + File.ReadAllText(FilePath).Replace("\n", " | ")); } catch (Exception ex) { L("essai : fichier illisible " + ex.Message); }
             }
         }
-        static void Shot(string name, Vector3 at, Vector3 target)
+        internal static void Shot(string name, Vector3 at, Vector3 target)
         {
             var go = new GameObject("quete_photo");
             try

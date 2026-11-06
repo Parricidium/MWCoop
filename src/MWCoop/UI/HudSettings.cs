@@ -11,6 +11,7 @@ namespace MWCoop
     {
         public const string Sec = "Hud";
         public const int Vanilla = 0, Carte = 1, Anneaux = 2, Bandeau = 3;
+        public const int Libre = 6;   // (Position : la place choisie a la souris, tchat ouvert -- LibreX, LibreY)
         // Groupes (onglet HUD du F10, cartes du lanceur) : 0 style, 1 personnaliser, 2 jauges affichees, 3 coop.
         public class Opt { public string Key, Fr, En, HelpFr, HelpEn; public int Def, Group; public int[] Vals; public string[] Lf, Le; }
         static Opt O(string k, string fr, string en, int def, int g, int[] vals = null, string[] lf = null, string[] le = null, string hf = null, string he = null)
@@ -20,10 +21,12 @@ namespace MWCoop
             O("Style", "Style du HUD", "HUD style", 0, 0, new[] { 0, 1, 2, 3 }, new[] { "Vanilla", "Carte", "Anneaux", "Bandeau" }, new[] { "Vanilla", "Card", "Rings", "Strip" },
               "Vanilla : le HUD d'origine du jeu", "Vanilla: the game's own HUD"),
             O("Taille", "Taille", "Size", 100, 1, new[] { 70, 80, 90, 100, 110, 125, 150 }, new[] { "70 %", "80 %", "90 %", "100 %", "110 %", "125 %", "150 %" }),
-            O("Position", "Position", "Position", -1, 1, new[] { -1, 0, 1, 2, 3, 4, 5 },
-              new[] { "Auto", "Haut gauche", "Haut droite", "Bas gauche", "Bas droite", "Haut centre", "Bas centre" },
-              new[] { "Auto", "Top left", "Top right", "Bottom left", "Bottom right", "Top centre", "Bottom centre" },
-              "Auto : la place prévue pour ce style", "Auto: the usual place for this style"),
+            O("Position", "Position", "Position", -1, 1, new[] { -1, 0, 1, 2, 3, 4, 5, Libre },
+              new[] { "Auto", "Haut gauche", "Haut droite", "Bas gauche", "Bas droite", "Haut centre", "Bas centre", "Libre" },
+              new[] { "Auto", "Top left", "Top right", "Bottom left", "Bottom right", "Top centre", "Bottom centre", "Free" },
+              "Auto : la place prévue pour ce style · Libre : tchat ouvert, déplace le HUD à la souris", "Auto: the usual place for this style · Free: with the chat open, drag the HUD with the mouse"),
+            // (place libre, en millièmes de la place disponible : le HUD reste à l'écran quelle que soit la résolution ; pas de ligne de menu)
+            O("LibreX", "", "", 30, 8), O("LibreY", "", "", 120, 8),
             // (My Summer Car : jaune et orange pour les deux premieres, NewHud.Accents -- comme le lanceur)
             O("Couleur", "Couleur", "Colour", 0, 1, new[] { 0, 1, 2, 3 }, new[] { Game.Msc ? "Jaune" : "Glace", Game.Msc ? "Orange" : "Bleu ciel", "Aurore", "Lilas" },
               new[] { Game.Msc ? "Yellow" : "Ice", Game.Msc ? "Orange" : "Sky blue", "Aurora", "Lilac" }),
@@ -46,6 +49,8 @@ namespace MWCoop
             O("JaugeJour", "Jour", "Day", 1, 2),
             O("Equipe", "Panneau Équipe", "Team panel", 1, 3, null, null, null,
               "Les jauges des autres joueurs, en petit (aussi avec Vanilla)", "The other players' gauges, small (also with Vanilla)"),
+            O("BullesTchat", "Bulles de tchat au-dessus des joueurs", "Chat bubbles above players", 1, 3, null, null, null,
+              "Le message apparaît au-dessus de celui qui l'écrit", "The message appears above the player who wrote it"),
             O("Alertes", "Alertes en haut de l'écran", "Alerts at the top of the screen", 1, 3, null, null, null,
               Game.Msc ? "Très faim, épuisé… pour vous et vos amis" : "Très faim, épuisé, gelé… pour vous et vos amis",
               Game.Msc ? "Very hungry, exhausted… for you and your friends" : "Very hungry, exhausted, freezing… for you and your friends"),

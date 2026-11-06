@@ -1969,6 +1969,8 @@ namespace MWCoop
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
             // passager, sonde des places.
             CameraKnobs(t);
+            // (tchat et HUD, communs aux deux jeux : bulles, deplacement a la souris -- 06/11)
+            if (mode == "tchat") { Menu.Test(mode, t); if (t > 12f && !done) { done = true; Chat.Send("Salut, c'est " + Net.Session.Me.Name + " !"); } return; }
             // (24/10, pommeau sorti dans Avatar.KnobPoint par [MWC]) [Test] PassageVitesse=1 : le conducteur passe 1, 2, 3 a 40/43/46 s ;
             // [Test] JournalMains=1 : mains des avatars des autres et rapport de la voiture, toutes les 0,5 s de 30 a 130 s.
             if (Config.GetInt("Test", "PassageVitesse", 0) != 0 && VehicleSync.LocalDrivingName != null)
