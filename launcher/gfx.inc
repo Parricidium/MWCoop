@@ -340,6 +340,7 @@ static const std::vector<GfxRow> &GfxRows()
             { "RefletsEau", L"Reflets de l'eau", L"Water reflections", 1, {}, {}, {}, 2, 0 },
         });
     }
+    if (!kSauvegardeAutoShown) rows.erase(std::remove_if(rows.begin(), rows.end(), [](const GfxRow &r) { return !strcmp(r.key, "SauvegardeAuto"); }), rows.end());   // (reportee : launcher.cpp ; cachee partout par SetItemOn)
     return rows;
 }
 

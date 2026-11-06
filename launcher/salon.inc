@@ -198,7 +198,8 @@ static const LobbyOptDef kLobbyOptDefs[] = {
     { "SauvegardeAuto", 0, true },   // (06/11, forum : minutes, 0 coupe ; lue par le mod comme [Coop], seul l'hote declenche)
 };
 static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));
-static bool LobbyOptOn(const LobbyOptDef &d) { return d.only != (g_game == GAME_MSC ? 1 : 2) && (strcmp(d.key, "KuplaBulles") || KuplaBullesShown()); }
+static bool LobbyOptSent(const LobbyOptDef &d) { return strcmp(d.key, "SauvegardeAuto") || kSauvegardeAutoShown; }   // (option cachee : ni montree, ni envoyee, ni dans lancement.ini)
+static bool LobbyOptOn(const LobbyOptDef &d) { return d.only != (g_game == GAME_MSC ? 1 : 2) && (strcmp(d.key, "KuplaBulles") || KuplaBullesShown()) && LobbyOptSent(d); }
 static std::map<std::string, int> g_lobbyOpt;       // mes choix pour CE salon (hote : options de la partie et les miennes ; invite : les miennes)
 static std::map<std::string, int> g_hostOpt;        // invite : options de la partie recues de l'hote (sous g_lcs)
 static int g_lobbyOptTab = -1;                      // carte des options du salon : 0 la partie (de l'hote), 1 les miennes ; -1 : selon le role
@@ -226,7 +227,7 @@ static void LobbyOptImport()
 static std::string LobbyOptText()   // "cle=valeur;..." des options de la partie (salon Steam, journal)
 {
     std::string s;
-    for (auto &d : kLobbyOptDefs) if (d.host) s += std::string(d.key) + "=" + std::to_string(LobbyOptGet(d.key)) + ";";
+    for (auto &d : kLobbyOptDefs) if (d.host && LobbyOptSent(d)) s += std::string(d.key) + "=" + std::to_string(LobbyOptGet(d.key)) + ";";
     return s;
 }
 static void LobbyOptParse(const std::string &s, std::map<std::string, int> &out)   // (l'inverse)
@@ -248,6 +249,7 @@ static std::string LobbyCoopLines(bool host)
     std::map<std::string, int> ho;
     if (!host) { EnterCriticalSection(&g_lcs); ho = g_hostOpt; LeaveCriticalSection(&g_lcs); }
     for (auto &d : kLobbyOptDefs) {
+        if (!LobbyOptSent(d)) continue;
         if (d.host && !host) { auto it = ho.find(d.key); if (it != ho.end()) t += std::string(d.key) + "=" + std::to_string(it->second) + "\r\n"; continue; }
         t += std::string(d.key) + "=" + std::to_string(LobbyOptGet(d.key)) + "\r\n";
     }

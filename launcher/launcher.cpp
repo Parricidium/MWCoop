@@ -125,6 +125,9 @@ static const bool kKuplaShown = true, kKuplaBullesShown = false;   // (27/10 : K
 static bool g_kuplaForce;
 static bool KuplaShown() { return kKuplaShown || g_kuplaForce; }
 static bool KuplaBullesShown() { return kKuplaBullesShown || g_kuplaForce; }
+// Sauvegarde automatique de l'hote ([Coop] SauvegardeAuto, forum 06/11) : reportee par JD le 06/11, le mod ne la lit pas. Rien ne se voit et
+// rien ne s'ecrit (Reglages, salon, lancement.ini, Guide, bulle 69) ; le code et les traductions restent. A allumer avec la version du mod qui la lit, et mettre alors le since de la bulle 69 (tuto.inc) a la version de ce lanceur.
+static const bool kSauvegardeAutoShown = false;
 // Nom du mod affiche : « MSCoop » sur My Summer Car (retour de Vaydon, 19/10 : « It should be MSCOOP »), « MWCoop » sinon. Les
 // noms de fichiers et de dossiers (MWCoop.dll, dossier MWCoop, %LOCALAPPDATA%\MWCoop) ne changent pas.
 static const wchar_t *ProductName() { return g_game == GAME_MSC ? L"MSCoop" : L"MWCoop"; }
@@ -5797,12 +5800,12 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             else Pill(g, RectF(x, y + 3, PillW(DiffName(dv), 11) + 4, 22), WithA(kAcc, 0.22f), DiffName(dv), kInk, 11);
             y += 34;
         }
-        if (partie == PARTIE_NOUVELLE) {
-            std::wstring note = std::wstring(g_game == GAME_MSC ? T(L"Couleur de la SATSUMA : ", L"SATSUMA color: ") : T(L"Couleur de la CORRIS : ", L"CORRIS color: ")) + CarColorName() + L".";
-            Text(g, note, RectF(x, y + 2, w, 16), 10.5f, FontStyleRegular, kWarn, StringAlignmentNear);
-            y += 20;
+        if (partie == PARTIE_NOUVELLE || !kSauvegardeAutoShown) {   // (option cachee : la note d'avant, a sa place)
+            std::wstring note = partie == PARTIE_NOUVELLE ? std::wstring(g_game == GAME_MSC ? T(L"Couleur de la SATSUMA : ", L"SATSUMA color: ") : T(L"Couleur de la CORRIS : ", L"CORRIS color: ")) + CarColorName() + L"." : std::wstring(T(L"Tes invités la reçoivent en arrivant.", L"Your guests receive it when they arrive."));
+            Text(g, note, RectF(x, y + 2, w, 16), 10.5f, FontStyleRegular, partie == PARTIE_NOUVELLE ? kWarn : kGrey, StringAlignmentNear);
+            y += kSauvegardeAutoShown ? 20 : 18;
         } else y += 6;
-        {   // sauvegarde automatique, minutes (0 coupe) : le mod lit [Coop] SauvegardeAuto, seul l'hote declenche
+        if (kSauvegardeAutoShown) {   // sauvegarde automatique, minutes (0 coupe) : le mod lit [Coop] SauvegardeAuto, seul l'hote declenche
             static const int autos[5] = { 0, 5, 10, 15, 30 };
             int av = LobbyOptGet("SauvegardeAuto"), as = -1;
             for (int k = 0; k < 5; k++) if (av == autos[k]) as = k;
@@ -6290,7 +6293,7 @@ static void LobbyOptClick(int id)
         return;
     }
     if (id >= UI_LOBBY_AUTOSAVE && id < UI_LOBBY_AUTOSAVE + 5) {   // sauvegarde automatique : pour ce salon, comme les autres options de la partie
-        if (!host) return;
+        if (!host || !kSauvegardeAutoShown) return;
         static const int autos[5] = { 0, 5, 10, 15, 30 };
         g_lobbyOpt["SauvegardeAuto"] = autos[id - UI_LOBBY_AUTOSAVE];
         TestLog("salon : option SauvegardeAuto = %d (ce salon seulement)", autos[id - UI_LOBBY_AUTOSAVE]);
@@ -6394,6 +6397,87 @@ static void LobbyOptClick(int id)
         pub = d.host;
     }
     if (pub) LobbyPublish();
+}
+// /testsauveauto <journal> : option cachee = rien de visible, rien d'ecrit, meme si le fichier ou l'hote la portent. Dossier de jeu jetable seulement.
+static int SauveAutoSelfTest(const wchar_t *log)
+{
+    DeleteFileW(log);
+    int bad = 0;
+    auto say = [&](const std::string &l, bool good) {
+        FILE *o = _wfopen(log, L"ab");
+        if (o) { fprintf(o, "%s %s\r\n", l.c_str(), good ? "ok" : "ECHEC"); fclose(o); }
+        if (!good) bad++;
+    };
+    std::wstring parent = g_dir.substr(0, g_dir.find_last_of(L'\\', g_dir.size() - 2) + 1);
+    if (g_gameDir.empty() || _wcsicmp(g_gameDir.c_str(), g_dir.c_str()) || _wcsnicmp(LocalDir().c_str(), parent.c_str(), parent.size())) { say("refuse : dossier de jeu jetable et LOCALAPPDATA a part seulement", false); return 2; }
+    const char *K = "SauvegardeAuto";
+    std::wstring ini = ModIni();
+    auto put = [&](const char *t) { FILE *o = _wfopen(ini.c_str(), L"wb"); if (o) { fputs(t, o); fclose(o); } };
+    auto bytes = [&]() { std::vector<unsigned char> d; ReadAll(ini, d); return std::string(d.begin(), d.end()); };
+    auto has = [](const std::string &s, const char *k) { return s.find(k) != std::string::npos; };
+
+    say("interrupteur coupe", !kSauvegardeAutoShown);
+    g_lobby = LB_HOST;
+    g_lobbySteam = false;
+
+    // fichier sans la cle : elle n'y entre jamais
+    put("[Coop]\r\nPseudo=Essai\r\n");
+    LobbyOptImport();
+    say("hote : absente de lancement.ini", !has(LobbyCoopLines(true), K));
+    say("temoin : Difficulte presente dans lancement.ini", has(LobbyCoopLines(true), "Difficulte="));
+    say("hote : absente des options envoyees aux invites", !has(LobbyOptText(), K));
+    say("temoin : Difficulte presente dans les options envoyees", has(LobbyOptText(), "Difficulte="));
+    std::string av = bytes();
+    for (int k = 0; k < 5; k++) LobbyOptClick(UI_LOBBY_AUTOSAVE + k);
+    say("clic sur ses pastilles : sans effet", !g_lobbyOpt.count(K) ? true : g_lobbyOpt[K] == 0);
+    say("clic sur ses pastilles : fichier identique", bytes() == av);
+    g_lobbyOptTab = 0;
+    LobbyOptClick(UI_LOBBY_OPTKEEP);
+    say("Garder comme defauts : la cle n'est pas ecrite", !has(bytes(), K));
+    say("temoin : Garder comme defauts ecrit Difficulte", has(bytes(), "Difficulte="));
+    LobbyOptClick(UI_LOBBY_OPTRESET);
+    say("Remettre mes Reglages : la cle n'est pas ecrite", !has(bytes(), K));
+    say("Remettre mes Reglages : absente de lancement.ini", !has(LobbyCoopLines(true), K));
+    GfxLoad();
+    say("lecture des Reglages : la cle n'est pas ecrite", !has(bytes(), K));
+
+    // fichier ou l'hote qui la portent deja (essais d'avant) : ni transmise, ni effacee, ni changee
+    put("[Coop]\r\nPseudo=Essai\r\nSauvegardeAuto=15\r\n");
+    LobbyOptImport();
+    say("cle deja la : absente de lancement.ini", !has(LobbyCoopLines(true), K));
+    say("cle deja la : absente des options envoyees", !has(LobbyOptText(), K));
+    LobbyOptClick(UI_LOBBY_OPTKEEP);
+    say("cle deja la : valeur du fichier inchangee", GetPrivateProfileIntA("Coop", K, -1, ModIniA().c_str()) == 15);
+    g_lobby = LB_GUEST;
+    EnterCriticalSection(&g_lcs); g_hostOpt[K] = 15; g_hostOpt["Difficulte"] = 2; LeaveCriticalSection(&g_lcs);
+    say("invite d'un hote qui l'envoie : absente de lancement.ini", !has(LobbyCoopLines(false), K));
+    say("temoin : invite, Difficulte de l'hote presente", has(LobbyCoopLines(false), "Difficulte=2"));
+    g_lobby = LB_NONE;
+
+    // visible nulle part
+    int li = LobbyOptIdx(K);
+    say("salon : ligne cachee", li >= 0 && !LobbyOptOn(kLobbyOptDefs[li]));
+    say("Reglages : ligne absente", GfxRowByKey(K) == NULL && SetGfxIdx(K) < 0);
+    bool item = false;
+    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].key && !strcmp(kSetItems[i].key, K) && SetItemOn(kSetItems[i])) item = true;
+    say("Reglages : reglage cache (recherche et Par defaut compris)", !item);
+    say("temoin : VitesseVitres toujours dans les Reglages", GfxRowByKey("VitesseVitres") != NULL);
+    say("bulle 69 : c'est bien la sienne", !wcscmp(kTuto[69].tFr, L"Sauvegarde automatique"));
+    say("bulle 69 : sautee", TutoSkip(69));
+    say("temoin : bulle 68 montree", !TutoSkip(68));
+    int vus = 0, cac = 0, tem = 0;
+    for (int a = 0; a < kWikiArts; a++) {
+        const WikiArticle &art = kWikiArt[a];
+        for (int i = 0; i < art.n; i++) {
+            if (!art.b[i].fr) continue;
+            if (!wcsncmp(art.b[i].fr, L"Sauvegarde auto", 15)) { cac++; if (WikiBlockShown(art, i)) vus++; }
+            if (!wcsncmp(art.b[i].fr, L"Joueurs au plus", 15) && WikiBlockShown(art, i)) tem++;
+        }
+    }
+    say("Guide : son bloc existe encore et reste cache", cac == 1 && vus == 0);
+    say("temoin : bloc voisin du Guide montre", tem == 1);
+    say(bad ? "RESULTAT : ECHEC" : "RESULTAT : tout passe", !bad);
+    return bad ? 1 : 0;
 }
 
 static bool LobbyClick(float x, float y)
@@ -8369,6 +8453,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // /testmodsapart <journal> : dossier de mods a part, dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testmodsapart")) {
         int rc = MscSepSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
+    // /testsauveauto <journal> : sauvegarde automatique cachee, rien de visible ni d'ecrit ; dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testsauveauto")) {
+        int rc = SauveAutoSelfTest(argv[2]);
         GdiplusShutdown(gtok);
         return rc;
     }

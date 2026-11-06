@@ -182,7 +182,7 @@ static const TutoStep &TutoStepOf(int i)
     if (g_game == GAME_MSC && i == 34) return kTutoMsc34;
     return kTuto[i];
 }
-static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33 || i == 52) || i == 57 && !AccesPlaces() || i == 60 && !KuplaShown(); }   // (60 : Kupla, cache avant sa sortie)   // (52 : Addons, voitures de My Winter Car ; 57 : seulement avec une cle d'acces)
+static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33 || i == 52) || i == 57 && !AccesPlaces() || i == 60 && !KuplaShown() || i == 69 && !kSauvegardeAutoShown; }   // (60 : Kupla, cache avant sa sortie)   // (52 : Addons, voitures de My Winter Car ; 57 : seulement avec une cle d'acces)
 
 // Pastille d'un onglet de la page Reglages (meme calcul que DrawSettingsPage : gfx.inc) et champ Chercher un reglage de
 // l'en-tete (DrawSetSearchBox : a gauche des raccourcis API / Journaux / Credits, ui.inc DrawHeader).
