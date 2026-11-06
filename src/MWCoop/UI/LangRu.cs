@@ -518,6 +518,8 @@ namespace MWCoop
             { "No order on its way.", "Нет заказов в пути." },
             { "Fatigue to 100", "Усталость 100" },
             { "Deliver orders", "Доставить заказы" },
+            { "My outfits", "Мои наряды" },
+            { "Left/Right: wear one of my outfits (launcher)", "Влево/вправо: надеть один из моих нарядов (лаунчер)" },
             { "/time <0-24>: everyone's time of day", "/time <0-24>: время суток для всех" },
             { "/snow on|off: snow (or rain) for everyone", "/snow on|off: снег (или дождь) для всех" },
             { "/tp <player>: go to a player", "/tp <игрок>: перейти к игроку" },

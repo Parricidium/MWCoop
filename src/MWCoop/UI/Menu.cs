@@ -875,6 +875,12 @@ namespace MWCoop
                 int i = Mathf.Max(0, ch.IndexOf(CustomFace.IsCustom(v) ? "perso" : v));
                 SetPart(f, ch[(i + dd + ch.Count) % ch.Count]);
             }
+            MyOutfits.Load();
+            if (MyOutfits.Count > 0)
+            {
+                int di = Item(Lang.T("Mes tenues", "My outfits"), MyOutfits.Current, true, Lang.T("Gauche/Droite : mettre une de mes tenues (lanceur)", "Left/Right: wear one of my outfits (launcher)"), false);
+                if (di == 1 || di == -1) MyOutfits.Step(di);
+            }
             Header(Lang.T("TENUES", "OUTFITS") + Sep + skins.Count);
             int jw = TileGrid(skinLabels, cur, 3);
             if (jw >= 0) SetSkin(skins[jw]);
@@ -889,7 +895,7 @@ namespace MWCoop
         static void SkinPreview(Rect r, Event e)
         {
             string me = Looks.Parse(Session.Me.Skin).Shirt;
-            int k = sel - 1 - LookRows;   // lignes : 0 = « Apparence », puis les parties (LookRows), puis les tenues
+            int k = sel - 1 - LookRows - (MyOutfits.Count > 0 ? 1 : 0);   // lignes : 0 = « Apparence », puis les parties (LookRows), « Mes tenues », puis les tenues
             string s = k >= 0 && k < skins.Count ? skins[k] : me;
             if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : Lang.T("PAR D\u00C9FAUT", "DEFAULT"); }
             Texture tex = Studio.Live(Looks.WithShirt(Session.Me.Skin, s), (int)r.width, (int)r.height);   // (le reste de l'apparence avec)
@@ -933,7 +939,7 @@ namespace MWCoop
             LoadSkins();
             if (skins == null || skins.Count == 0) { testSel = 0; return "(aucune tenue)"; }
             int j = k * Mathf.Max(1, skins.Count / 5) % skins.Count;
-            testSel = 1 + LookRows + j;   // (lignes : la tenue, les parties, puis les tuiles)
+            testSel = 1 + LookRows + (MyOutfits.Count > 0 ? 1 : 0) + j;   // (lignes : la tenue, les parties, mes tenues, puis les tuiles)
             return skins[j] + " (" + skinLabels[j] + ")";
         }
 
@@ -953,6 +959,7 @@ namespace MWCoop
             return s;
         }
 
+        public static bool HasSkin(string s) { LoadSkins(); return skins != null && skins.Contains(s); }
         const int LookRows = 6;
         static void SetPart(int f, string v)
         {
