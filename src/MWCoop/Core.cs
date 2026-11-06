@@ -160,6 +160,7 @@ namespace MWCoop
             new Mod("voitures", VehicleSync.Update),
             new Mod("pieces", Parts.Update),
             new Mod("objets", Props.Update),
+            new Mod("sieges", Sieges.Update),
             new Mod("argent", Wallet.Update),
             new Mod("magasin", Shop.Update),
             new Mod("peinture", Paint.Update),
@@ -350,6 +351,7 @@ namespace MWCoop
             Parts.OnLevelLoaded();
             Props.OnLevelLoaded();
             Wallet.OnLevelLoaded();
+            Sieges.OnLevelLoaded();
             Shop.OnLevelLoaded();
             Paint.OnLevelLoaded();
             Settings.OnLevelLoaded();

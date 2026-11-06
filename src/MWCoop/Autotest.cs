@@ -6457,6 +6457,7 @@ namespace MWCoop
             CeintureTest(mode, t);   // (les deux jeux)
             // [Test] Autotest=apimods : (avec MSCLoader et MWCoopTestMod) l'hote sauvegarde sur place a 20 s : son Mods.txt
             // (compteur du mod d'essai) partira avec la sauvegarde a la partie suivante.
+            Sieges.Test(mode, t);
             if (mode == "apimods" && Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : sauvegarde de l'hote"); Game.SaveInPlace(); }
             if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "tableau" && t > 35f && !done)
