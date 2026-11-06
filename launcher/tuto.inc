@@ -166,9 +166,9 @@ static const TutoStep kTuto[] = {
       L"Separate mods folder", L"With MWCoop's MSCLoader, you can keep separate mods for co-op: Mods page, \"Separate mods folder\". Off by default. \"Copy my mods\" copies, without moving anything. The official MSCLoader does not change.", "1.16.23" },
     { L"Sauvegarde automatique", L"L'hôte peut faire sauvegarder la partie toutes les 5 à 30 minutes : Réglages > Co-op, ou dans le salon. Coupée d'office. À chaque sauvegarde, gel de quelques secondes pour tous, plus sur une grosse partie.",
       L"Autosave", L"The host can have the game saved every 5 to 30 minutes: Settings > Co-op, or in the lobby. Off by default. At each save, a freeze of a few seconds for everyone, longer on a big game.", "1.16.23" },
-    // lanceur-1.16.24 (06/11) : SOLO et SOLO COOP sur l'Accueil (70)
+    // lanceur-1.16.25 (07/11) : SOLO et SOLO COOP sur l'Accueil (70)
     { L"Solo ou Solo Coop", L"Deux boutons sur l'Accueil : SOLO, le jeu sans le mod ; SOLO COOP, seul avec le mod et ses ajouts, sur la sauvegarde de ton choix.",
-      L"Solo or Solo Coop", L"Two buttons on Home: SOLO, the game without the mod; SOLO COOP, alone with the mod and its additions, on the save of your choice.", "1.16.24" },
+      L"Solo or Solo Coop", L"Two buttons on Home: SOLO, the game without the mod; SOLO COOP, alone with the mod and its additions, on the save of your choice.", "1.16.25" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
