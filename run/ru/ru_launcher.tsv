@@ -2629,3 +2629,7 @@ Rev counter: temperature and fuel as bars, in its two windows.	Тахометр:
 Out of fuel far from anything: 4 s on the starter find the bottom of the tank.	Кончилось топливо вдали от всего: 4 с работы стартера находят остаток на дне бака.
 Free	Свободно
 Auto: by style · Free: drag it with the chat open	Авто: по стилю · Свободно: мышью, чат открыт
+Paint, once the quest is done: bring the car to the front of Fleetari's repair shop, then open the \"Paint\" brochure, on the desk next to the other one. Regular (10,150 mk) or metallic (18,950 mk), then a factory or RGB colour.	Покраска, когда квест выполнен: подгони машину к автосервису Флеетари и открой брошюру «Покраска», она лежит на столе рядом с другой. Обычная (10 150 mk) или металлик (18 950 mk), затем заводской цвет или RGB.
+The work takes 1,400 to 2,600 s and only moves forward while you're more than 100 m from the shop. Fleetari calls when it's done; the car must be at the shop by then, otherwise the work waits for it to come back.	Работа занимает от 1 400 до 2 600 с и идёт, только пока ты дальше 100 м от автосервиса. Когда всё готово, Флеетари звонит; машина к этому моменту должна быть в автосервисе, иначе работа ждёт её возвращения.
+You pay when ordering, with a 10% discount.	Оплата при заказе, со скидкой 10 %.
+You order without paying. After the work, a bill (price + 15 mk) replaces the brochure on the desk: click it to pay.	Заказ без оплаты. После работы счёт (цена + 15 mk) лежит на столе вместо брошюры: щёлкни по нему, чтобы оплатить.
