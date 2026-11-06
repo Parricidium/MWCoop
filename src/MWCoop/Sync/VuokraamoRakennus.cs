@@ -17,15 +17,18 @@ namespace MWCoop
     public static partial class Kauppa
     {
         // (mesures sur la sonde du 06/11, en coordonnees du jeu : centre de la halle, normale sortante de la facade, sol)
-        static readonly Vector3 SrcHall = new Vector3(1562.8f, 4.65f, 733.3f), SrcOut = new Vector3(-0.947f, 0f, -0.321f).normalized;
-        static readonly Vector3 SrcAlong = new Vector3(0.321f, 0f, -0.947f);
-        const float VaW = 21.9f, VaD = 17.6f, VaBandY = 3.4f, VaOfficeX = 7.3f, VaOfficeZ = 6.4f, VaApron = 11f;
+        static readonly Vector3 SrcHall = new Vector3(1562.8f, 4.65f, 733.3f), SrcOut = new Vector3(-0.909f, 0f, -0.416f).normalized;
+        static readonly Vector3 SrcAlong = new Vector3(0.416f, 0f, -0.909f).normalized;
+        const float VaW = 21.6f, VaD = 15.6f, VaBandY = 3.4f, VaOfficeX = 7.3f, VaOfficeZ = 6.4f, VaApron = 11f;
         // (place dans le repere du Cardinal : a sa gauche vu de face, facade sur la meme ligne)
         const float VaAtX = 24f, VaAtZ = -9f;
-        static readonly Vector3 VaVendorSpot = new Vector3(9.0f, 0f, 7.6f);
+        // (comme Fleetari : dans la piece de gauche, a sa place derriere le bureau -- JD 06/11 ; sa chaise, chair_pub 6, en coordonnees du jeu)
+        static readonly Vector3 SrcVendor = new Vector3(1555.086f, 4.65f, 739.041f);
+        // Plan releve sur la collision du jeu (x, z de la halle) : halle principale x 0,5 a 13 (z 5,5 a 14,5 ; devant, x 6 a 13), deuxieme halle x 14 a 18
+        // (z 3,5 a 14,5), reduit de droite x 19 a 21, bureau x 0,5 a 5,5 (z 0 a 5). Aucune voiture sur un mur (VaCheck, essai).
         static readonly Slot[] VaSlots = {
-            new Slot(9.8f, 14f, 180f, true), new Slot(15.2f, 14f, 180f, true), new Slot(20f, 13.6f, 178f, false), new Slot(4f, 13.4f, 184f, false),
-            new Slot(14.5f, 5f, 176f, false), new Slot(19.6f, 5.2f, 183f, false), new Slot(3.6f, 9.4f, 90f, false), new Slot(10f, 3.6f, 180f, false),
+            new Slot(9.0f, 12.2f, 180f, true), new Slot(16f, 11.4f, 180f, true), new Slot(3.4f, 12.2f, 184f, false), new Slot(16f, 6.2f, 178f, false),
+            new Slot(8.2f, 6.2f, 176f, false), new Slot(3.0f, 8.1f, 90f, false), new Slot(11.25f, 7.6f, 183f, false), new Slot(20f, 9f, 180f, false),
         };
 
         public static bool VuokraOn { get { return Ajouts.Osat && Ville.On && Vaz.Enabled && Config.GetInt("Vuokraamo", "Active", 1) != 0; } }
@@ -100,7 +103,10 @@ namespace MWCoop
             var t = new Texture2D(size, size, TextureFormat.RGB24, true) { name = "va_harmaa" };
             t.ReadPixels(new Rect(0, 0, size, size), 0, 0);
             Color[] px = t.GetPixels();
-            for (int i = 0; i < px.Length; i++) { float g = Mathf.Clamp01(px[i].grayscale * 1.25f); px[i] = new Color(g, g, g); }
+            float mean = 0f;
+            for (int i = 0; i < px.Length; i++) mean += px[i].grayscale;
+            mean = Mathf.Max(0.05f, mean / px.Length);
+            for (int i = 0; i < px.Length; i++) { float g = Mathf.Clamp01(px[i].grayscale * 0.82f / mean); px[i] = new Color(g, g, g); }
             t.SetPixels(px); t.Apply(true);
             RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rt);
             vaBaked.Add(t);
@@ -109,10 +115,10 @@ namespace MWCoop
 
         static void VuokraMaterials()
         {
-            Color wall = new Color(0.20f, 0.44f, 0.72f);
+            Color wall = new Color(0.40f, 0.64f, 0.92f);
             Mat("va_pelti", "wall_metal1", 2f, wall);
-            Mat("va_katto", "wall_metal2", 2.5f, new Color(0.34f, 0.36f, 0.40f));
-            Mat("va_lauta", "wood_panel1", 2f, new Color(0.30f, 0.34f, 0.42f));
+            Mat("va_katto", "wall_metal2", 2.5f, new Color(0.55f, 0.57f, 0.60f));
+            Mat("va_lauta", "wood_panel1", 2f, new Color(0.92f, 0.90f, 0.84f));
             Mat("va_lattia", "repair_shop_floor", 4f, Color.white);
             Mat("va_sokkeli", "paint_black_matte", 1f, new Color(0.46f, 0.46f, 0.44f));
             Mat("va_sininen", "paint_black_matte", 1f, new Color(0.10f, 0.22f, 0.58f));
@@ -301,7 +307,7 @@ namespace MWCoop
                 door = f.transform; open = r.bounds.size.y < 1f; break;
             }
             if (door == null) { L("garage : pas de porte lisible"); return; }
-            Vector3 openC = new Vector3(1555.6f, 7.6f, 731.4f), shutC = new Vector3(1557.7f, 6.1f, 725.2f);
+            Vector3 openC = new Vector3(1555.6f, 7.6f, 731.4f), shutC = new Vector3(1557.73f, 6.08f, 725.17f) + SrcOut * 0.38f;
             Quaternion toOpen = open ? door.rotation : Quaternion.AngleAxis(Config.GetFloat("Vuokraamo", "PorteSens", 90f), SrcAlong) * door.rotation;
             Quaternion toShut = open ? Quaternion.AngleAxis(-Config.GetFloat("Vuokraamo", "PorteSens", 90f), SrcAlong) * door.rotation : door.rotation;
             Renderer dr = door.GetComponent<Renderer>();
@@ -321,7 +327,7 @@ namespace MWCoop
                     kg.AddComponent<MeshFilter>().sharedMesh = kf.sharedMesh; kg.AddComponent<MeshRenderer>().sharedMaterials = kr.sharedMaterials;
                 }
                 // (porte fermee : on ne la traverse pas)
-                if (!up) { var bc = new GameObject("va_ovi_coll"); bc.transform.SetParent(vuokra.transform, false); bc.transform.localPosition = HallP(17f, 1.5f, 0f); bc.transform.localRotation = HallR(0f); bc.AddComponent<BoxCollider>().size = new Vector3(3.6f, 3.2f, 0.2f); }
+                if (!up) { var bc = new GameObject("va_ovi_coll"); bc.transform.SetParent(vuokra.transform, false); bc.transform.localPosition = HallP(16.1f, 1.5f, -0.5f); bc.transform.localRotation = HallR(0f); bc.AddComponent<BoxCollider>().size = new Vector3(3.6f, 3.2f, 0.2f); }
             }
         }
 
@@ -329,6 +335,10 @@ namespace MWCoop
         {
             GameObject f = SaPrim(vuokra.transform, PrimitiveType.Cube, HallP(VaW / 2f, -0.1f, VaD / 2f), new Vector3(VaW + 1f, 0.2f, VaD + 1f), mats["va_lattia"], HallR(0f), true);
             f.name = "va_lattia";
+            // (bureau : carrelage)
+            Mat("va_kaakeli", "tiles4", 1.2f);
+            GameObject o = SaPrim(vuokra.transform, PrimitiveType.Cube, HallP(3f, 0.01f, 2.5f), new Vector3(5f, 0.02f, 5f), mats["va_kaakeli"], HallR(0f));
+            o.name = "va_kaakeli";
         }
 
         // Enseigne : a la place de celle du jeu (sa taille), peinte sur de la tole claire
@@ -339,8 +349,8 @@ namespace MWCoop
             Quaternion rot = Quaternion.Inverse(vaSource.rotation) * Quaternion.LookRotation(-SrcOut, Vector3.up);
             SaPanel(vuokra.transform, pos, rot, 4.7f, 1.25f, new Color(0.93f, 0.89f, 0.76f), h =>
             {
-                SaText(h, "RALLI-VUOKRAAMO", new Vector3(0f, 0.20f, 0f), Quaternion.identity, 0.052f, new Color(0.11f, 0.30f, 0.52f), TextAnchor.MiddleCenter);
-                SaText(h, "AUTOVUOKRAUS & KILPA-AUTOT", new Vector3(0f, -0.20f, 0f), Quaternion.identity, 0.021f, new Color(0.16f, 0.36f, 0.50f), TextAnchor.MiddleCenter);
+                SaText(h, "RALLI-VUOKRAAMO", new Vector3(0f, 0.20f, 0f), Quaternion.identity, 0.0415f, new Color(0.11f, 0.30f, 0.52f), TextAnchor.MiddleCenter);
+                SaText(h, "AUTOVUOKRAUS & KILPA-AUTOT", new Vector3(0f, -0.20f, 0f), Quaternion.identity, 0.0195f, new Color(0.16f, 0.36f, 0.50f), TextAnchor.MiddleCenter);
                 SaText(h, "puh. 987 561 33", new Vector3(0f, -0.43f, 0f), Quaternion.identity, 0.019f, new Color(0.30f, 0.35f, 0.15f), TextAnchor.MiddleCenter);
             }, 220f);
         }
@@ -447,23 +457,42 @@ namespace MWCoop
         static void VuokraVendor()
         {
             Transform t = vuokra.transform;
-            Vector3 spot = HallP(VaVendorSpot.x, 0f, VaVendorSpot.z);
+            Vector3 spot = vaSource.InverseTransformPoint(SrcVendor);
             vaVendor = Avatar.CreatePreview("VUOKRA-myyja", 0);
             if (vaVendor == null) L("garage : vendeur indisponible (corps de PNJ)");
             else { Transform r = vaVendor.Root.transform; r.SetParent(t, false); r.localPosition = spot; r.localRotation = HallR(180f); }
-            // comptoir devant lui
-            SaPrim(t, PrimitiveType.Cube, HallP(VaVendorSpot.x, 0.5f, VaVendorSpot.z - 0.9f), new Vector3(2.2f, 1f, 0.6f), mats["va_tiski"], HallR(0f), true);
+            // le bureau du jeu : sa collision, lisible, dessinee en bois
+            GameObject rs = Game.FindAny("REPAIRSHOP");
+            MeshCollider desk = null;
+            if (rs != null) foreach (MeshCollider mc in rs.GetComponentsInChildren<MeshCollider>(true)) if (mc.name.StartsWith("inspection_desk") && mc.sharedMesh != null && mc.sharedMesh.isReadable) desk = mc;
+            if (desk != null)
+            {
+                var mesh = new VaBuild();
+                Vector3[] dv = desk.sharedMesh.vertices; int[] dt = desk.sharedMesh.triangles;
+                for (int i = 0; i + 2 < dt.Length; i += 3)
+                {
+                    Vector3 a = desk.transform.TransformPoint(dv[dt[i]]), b = desk.transform.TransformPoint(dv[dt[i + 1]]), d = desk.transform.TransformPoint(dv[dt[i + 2]]);
+                    Vector3 n = Vector3.Cross(b - a, d - a); if (n.sqrMagnitude < 1e-8f) continue;
+                    mesh.Tri(a, b, d, n.normalized);
+                }
+                VaPart("va_tiski", mesh.Mesh(), new[] { mats["va_tiski"] }, Vector3.zero, Quaternion.identity, Vector3.one);
+                var dc = new GameObject("va_tiski_coll"); dc.transform.SetParent(t, false);
+                dc.transform.localPosition = vaSource.InverseTransformPoint(desk.transform.position);
+                dc.transform.localRotation = Quaternion.Inverse(vaSource.rotation) * desk.transform.rotation;
+                dc.transform.localScale = desk.transform.lossyScale;
+                dc.AddComponent<MeshCollider>().sharedMesh = desk.sharedMesh;
+            }
             var cg = new GameObject("va_myyja_coll"); cg.transform.SetParent(t, false);
-            cg.transform.localPosition = HallP(VaVendorSpot.x, 0.9f, VaVendorSpot.z);
+            cg.transform.localPosition = spot + Vector3.up * 0.9f;
             var cc = cg.AddComponent<CapsuleCollider>(); cc.height = 1.8f; cc.radius = 0.3f;
             vaVendorCol = cc;
-            L("garage : vendeur " + (vaVendor != null ? "en place" : "absent (collision seule)"));
+            L("garage : vendeur " + (vaVendor != null ? "en place" : "absent (collision seule)") + ", bureau " + (desk != null ? desk.name : "absent"));
         }
 
         static void VuokraLights()
         {
             Transform t = vuokra.transform;
-            foreach (Vector3 p in new[] { new Vector3(11f, 3.6f, 5f), new Vector3(18f, 3.6f, 5f), new Vector3(11f, 3.6f, 13f), new Vector3(18f, 3.6f, 13f), new Vector3(4f, 3.6f, 12f) })
+            foreach (Vector3 p in new[] { new Vector3(11f, 3.6f, 5f), new Vector3(16f, 3.6f, 6f), new Vector3(9f, 3.6f, 11f), new Vector3(16f, 3.6f, 12f), new Vector3(4f, 3.6f, 10f), new Vector3(3f, 2.5f, 2.5f) })
             {
                 var g = new GameObject("va_valo"); g.transform.SetParent(t, false); g.transform.localPosition = HallP(p.x, p.y, p.z);
                 var l = g.AddComponent<Light>(); l.type = LightType.Point; l.range = 12f; l.intensity = 1.1f; l.color = new Color(1f, 0.95f, 0.86f); l.shadows = LightShadows.None;
@@ -592,6 +621,65 @@ namespace MWCoop
             if (Input.GetMouseButtonDown(0)) { ClearGui(); vaLooked = false; OpenVuokra(saMenu ?? stands[0]); }
         }
 
+        // (essai) points de l'emprise de chaque voiture exposee sur un mur du plan
+        static bool[,] vaGrid;
+        static void VaCheck()
+        {
+            const float cell = 0.5f, x0 = -2.5f, z0 = -3f;
+            Vector3 frontLeft = SrcHall + SrcOut * (VaD / 2f) - SrcAlong * (VaW / 2f);
+            foreach (Stand s in stands)
+            {
+                Transform pv = vuokra.transform.Find("va_paikka_" + s.Folder);
+                BoxCollider bc = pv != null ? pv.GetComponent<BoxCollider>() : null;
+                if (bc == null) { L("verif : " + s.Name + " pas exposee"); continue; }
+                int bad = 0, n = 0;
+                for (float a = -0.5f; a <= 0.5f; a += 0.1f)
+                    for (float c = -0.5f; c <= 0.5f; c += 0.1f)
+                    {
+                        Vector3 local = new Vector3(a * bc.size.x, 0f, c * bc.size.z);
+                        Vector3 src = vaSource.TransformPoint(vuokra.transform.InverseTransformPoint(pv.TransformPoint(local))) - frontLeft;
+                        int i = Mathf.FloorToInt((Vector3.Dot(src, SrcAlong) - x0) / cell), j = Mathf.FloorToInt((Vector3.Dot(src, -SrcOut) - z0) / cell);
+                        n++;
+                        if (vaGrid != null && j >= 0 && j < vaGrid.GetLength(0) && i >= 0 && i < vaGrid.GetLength(1) && vaGrid[j, i]) bad++;
+                    }
+                L("verif : " + s.Name + " " + bad + "/" + n + " points sur un mur, taille " + bc.size.ToString("F1"));
+            }
+        }
+        static void VaPlan(float height)
+        {
+            MeshCollider coll = null;
+            foreach (MeshCollider mc in vaSource.GetComponentsInChildren<MeshCollider>(true)) if (mc.name == "coll" && mc.sharedMesh != null) coll = mc;
+            if (coll == null) return;
+            const float cell = 0.5f; const int nx = 54, nz = 52; float x0 = -2.5f, z0 = -3f;
+            var grid = new char[nz, nx];
+            for (int j = 0; j < nz; j++) for (int i = 0; i < nx; i++) grid[j, i] = '.';
+            Vector3[] vs = coll.sharedMesh.vertices; int[] ts = coll.sharedMesh.triangles;
+            float y = SrcHall.y + height;
+            Vector3 frontLeft = SrcHall + SrcOut * (VaD / 2f) - SrcAlong * (VaW / 2f);
+            for (int t = 0; t + 2 < ts.Length; t += 3)
+            {
+                Vector3[] p = { coll.transform.TransformPoint(vs[ts[t]]), coll.transform.TransformPoint(vs[ts[t + 1]]), coll.transform.TransformPoint(vs[ts[t + 2]]) };
+                var hits = new List<Vector3>();
+                for (int k = 0; k < 3; k++) { Vector3 s = p[k], e = p[(k + 1) % 3]; if ((s.y <= y) != (e.y <= y)) hits.Add(Vector3.Lerp(s, e, (y - s.y) / (e.y - s.y))); }
+                if (hits.Count < 2) continue;
+                for (float f = 0f; f <= 1f; f += 0.02f)
+                {
+                    Vector3 w = Vector3.Lerp(hits[0], hits[1], f) - frontLeft;
+                    int i = Mathf.FloorToInt((Vector3.Dot(w, SrcAlong) - x0) / cell), j = Mathf.FloorToInt((Vector3.Dot(w, -SrcOut) - z0) / cell);
+                    if (i >= 0 && i < nx && j >= 0 && j < nz) grid[j, i] = '#';
+                }
+            }
+            if (height < 2f) { vaGrid = new bool[nz, nx]; for (int j = 0; j < nz; j++) for (int i = 0; i < nx; i++) vaGrid[j, i] = grid[j, i] == '#'; }
+            if (Config.GetInt("Test", "VuokraPlan", 0) == 0) return;
+            L("plan a " + height + " m : colonnes x de " + x0 + " par " + cell + ", lignes z de " + z0);
+            for (int j = nz - 1; j >= 0; j--)
+            {
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < nx; i++) sb.Append(grid[j, i]);
+                L("plan z " + (z0 + j * cell).ToString("F1") + " " + sb);
+            }
+        }
+
         // [Test] VuokraEssai=1 : photos du garage, menu ouvert, location de la premiere voiture
         static void VuokraTest(float now)
         {
@@ -602,6 +690,8 @@ namespace MWCoop
             if (vaTest == 0 && t > 40f)
             {
                 vaTest = 1; vaTestAt = now;
+                VaPlan(1f); VaPlan(2.8f);
+                VaCheck();
                 Autotest.PutPlayer(w(11f, 1.2f, -8f));
                 L("essai : joueur devant le garage");
             }
@@ -612,10 +702,12 @@ namespace MWCoop
                 QueteGolf.Shot("va-facade-biais", w(-12f, 2.5f, -20f), w(10f, 3f, 4f));
                 QueteGolf.Shot("va-arriere", w(30f, 4f, 34f), w(11f, 2f, 9f));
                 QueteGolf.Shot("va-ciel", w(11f, 70f, 2f), w(11.1f, 0f, 2.1f));
-                QueteGolf.Shot("va-entree", w(10.5f, 1.7f, -3f), w(12f, 1.2f, 12f));
-                QueteGolf.Shot("va-dedans", w(9f, 1.7f, 1.5f), w(16f, 1.2f, 13f));
-                QueteGolf.Shot("va-dedans-fond", w(20f, 1.7f, 16.5f), w(6f, 1.2f, 4f));
-                QueteGolf.Shot("va-vendeur", w(9f, 1.7f, 4.8f), w(9f, 1.2f, 7.6f));
+                QueteGolf.Shot("va-entree", w(9.5f, 1.7f, -4f), w(9.5f, 1.2f, 8f));
+                QueteGolf.Shot("va-dedans", w(12.5f, 1.7f, 1.2f), w(5f, 1.0f, 12f));
+                QueteGolf.Shot("va-dedans-fond", w(1.5f, 1.7f, 14f), w(12f, 1.0f, 5f));
+                QueteGolf.Shot("va-halle2", w(16f, 1.7f, 3.8f), w(16f, 1.0f, 13f));
+                QueteGolf.Shot("va-vendeur", w(3.8f, 1.7f, 0.4f), w(2.4f, 1.2f, 3.2f));
+                QueteGolf.Shot("va-porte", w(16f, 2f, -9f), w(16f, 1.5f, 0f));
                 Vector3 c; float oy; string fl; OsatFrame(out c, out oy, out fl);
                 QueteGolf.Shot("va-cardinal", c + Quaternion.Euler(0f, oy, 0f) * new Vector3(14f, 0f, 44f) + Vector3.up * (vaFloor + 3f), c + Quaternion.Euler(0f, oy, 0f) * new Vector3(14f, 0f, 0f) + Vector3.up * (vaFloor + 2f));
                 OpenVuokra(stands[0]);
