@@ -65,6 +65,12 @@ namespace MWCoop
             public bool HasEyeHold; public Vector3 EyeHold;
             // (boutons du modele -- infos.txt boutons_modele : pas de boutons de couleur, warning au lieu du klaxon ; voyant du frein a main)
             public bool ModelButtons, Hazard, BlinkShown; public GameObject BrakeLamp;
+            // (touches du jeu : pleins phares, clignotant 1 gauche 2 droit, demarreur tenu a la touche, touche pas encore relachee apres l'arret)
+            public bool HighBeam, HighShown, KeyCrank, StartLatch; public int Turn, TurnShown;
+            // (voiture de la quete : reservoir 0-1, temperature du moteur en degres, barres des deux fenetres du compte-tours, panne seche)
+            // (autoradio du modele, voiture de la quete : 0 eteint, 1 radio locale, 2 radio folk ; meme morceau que les canaux du jeu)
+            public int RadioCh; public float RadioVol = 0.6f; public AudioSource RadioSrc; public Vector3 RadioAt; public bool HasRadio;
+            public bool HasFuel, FuelWarned; public float Fuel = 1f, EngineTemp = float.NaN, EmptyCrank; public Transform FuelBar, TempBar; public Vector3 FuelBar0, TempBar0, BarDir; public float BarRun;
             // (essuie-glaces : av1, av2, ar -- pivot, axe, angle maxi ; comodo ; StandaloneDrive)
             public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
             public float[] WiperRest = new float[3], WiperSign = { 1f, 1f, -1f };   // (angle du repos par rapport au modele, sens de la course)

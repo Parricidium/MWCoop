@@ -90,14 +90,18 @@ namespace MWCoop
             try { float v = (float)axisRaw.Invoke(null, new object[] { n }); return float.IsNaN(v) ? 0f : Mathf.Clamp(v, -1f, 1f); } catch { return 0f; }
         }
         static MethodInfo buttonHeld;
+        // ([Test] : touche tenue / appuyee simulee -- la touche du jeu ne se simule pas autrement)
+        static string simHeld = "", simDown = "";
         public static bool Held(string n)
         {
+            if (simHeld == n) return true;
             Cin();
             if (buttonHeld == null) return false;
             try { return (bool)buttonHeld.Invoke(null, new object[] { n }); } catch { return false; }
         }
         public static bool Down(string n)
         {
+            if (simDown == n) return true;
             Cin();
             if (buttonDown == null) return n == "DrivingMode" && Input.GetKeyDown(KeyCode.Return);
             try { return (bool)buttonDown.Invoke(null, new object[] { n }); } catch { return false; }
@@ -124,6 +128,7 @@ namespace MWCoop
                 st.Key = kp; st.KeyAxis = ka.normalized; kp.gameObject.SetActive(false);
             }
             st.ModelButtons = inf.ContainsKey("boutons_modele");
+            SetupFuel(b, st, inf);
             SetupBrakeLamp(b, st, inf);
             SetupGearDisplay(b, st, inf);
             SetupLcd(b, st, inf);
@@ -808,6 +813,8 @@ namespace MWCoop
             HandTick(b, st, d);
             BeltTick(b, st);
             Gauges(b, st);
+            FuelTick(b, st);
+            RadioTick(b, st);
             HeaterTick(b, st);
             GameObject pl = Game.PlayerGo;
             if (pl == null || !PlayerSync.InGame) return;
@@ -816,6 +823,13 @@ namespace MWCoop
             {
                 Doors(b, st);
                 CabinPresence(b, st, pl.transform);
+                // (texte du plein : efface en s'eloignant, seulement sur la voiture qui a un reservoir)
+                if (st.HasFuel)
+                {
+                    bool rf = RefillPrompt(b, st, pl.transform);
+                    if (refilling && !rf) { Game.SetGlobalBool("GUIuse", false); Game.SetGlobal("GUIinteraction", ""); }
+                    refilling = rf;
+                }
                 bool zone = !QueteGolf.Locked(b) && InZone(b, st, pl.transform) && b.Rb.velocity.magnitude < 2f && Vector3.Angle(b.Car.transform.up, Vector3.up) < 45f;   // (voiture de la quete s21 pas encore pretee : fermee)
                 if (zone)
                 {
@@ -823,7 +837,7 @@ namespace MWCoop
                     Game.SetGlobalBool("GUIdrive", true); Game.SetGlobal("GUIinteraction", "ENTER DRIVING MODE");
                     if (Time.realtimeSinceStartup > exitBlock && Down("DrivingMode")) Enter(b, st);
                 }
-                else if (prompted == b) { prompted = null; Game.SetGlobalBool("GUIdrive", false); Game.SetGlobal("GUIinteraction", ""); }
+                else if (prompted == b) { prompted = null; Game.SetGlobalBool("GUIdrive", false); if (!refilling) Game.SetGlobal("GUIinteraction", ""); }
                 return;
             }
             if (driving != b) return;
@@ -832,8 +846,7 @@ namespace MWCoop
             Lean(b, st);
             if (hovered < 0) Doors(b, st);
             GearText(b);
-            // phares a la touche du jeu (HighBeam, L par defaut -- JD 28/10 : « je ne peux pas allumer ses phares avec L »)
-            if (Down("HighBeam")) { st.LightsOn = !st.LightsOn; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints") + " (touche)"); }
+            GameKeys(b, st);
             // (etat renvoye toutes les 3 s par le conducteur : un joueur arrive en cours l'a aussi)
             if (Time.realtimeSinceStartup >= st.NextState) SendState(b, st);
             if (Time.realtimeSinceStartup - enteredAt > 0.5f && Down("DrivingMode"))
@@ -841,6 +854,239 @@ namespace MWCoop
                 if (b.Rb.velocity.magnitude < 0.5f) Exit(b, false);
                 else Log.Info("standalone : descente refusee, la voiture roule (" + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h)");
             }
+        }
+
+        // Commandes de toutes les voitures autonomes sur les touches du jeu, reglables dans ses options (suggestion de Донской, 04/11) :
+        //  HighBeam (L -- JD 28/10) : phares, pleins phares, eteints ; Wipers : essuie-glaces ; IndicatorLeft / IndicatorRight : clignotant,
+        //  les deux ensemble : warnings ; StartEngine : tenue, contact et demarreur (0,9 s) ; moteur tournant, appui : arret.
+        static void GameKeys(VazCar.Built b, State st)
+        {
+            if (Menu.ChatOpen || Menu.Open) return;
+            Vector3 dash = b.Car.transform.TransformPoint(st.T.Yeux + new Vector3(0f, -0.2f, 0.45f));
+            if (Down("HighBeam"))
+            {
+                if (!st.LightsOn) { st.LightsOn = true; st.HighBeam = false; } else if (!st.HighBeam) st.HighBeam = true; else { st.LightsOn = false; st.HighBeam = false; }
+                Foley(b, "dash_button", dash, 0.6f); SendState(b, st);
+                Log.Info("standalone : phares " + (!st.LightsOn ? "eteints" : st.HighBeam ? "pleins phares" : "allumes") + " (touche)");
+            }
+            if (Down("Wipers") && (st.Wipers[0] != null || st.Wipers[1] != null || st.Wipers[2] != null || st.Stalk != null))
+            {
+                st.WipersOn = !st.WipersOn; Foley(b, "dash_button", dash, 0.6f); SendState(b, st);
+                Log.Info("standalone : essuie-glaces " + (st.WipersOn ? "en marche" : "arretes") + " (touche)");
+            }
+            bool dl = Down("IndicatorLeft"), dr = Down("IndicatorRight");
+            if (dl || dr)
+            {
+                if ((dl && Held("IndicatorRight")) || (dr && Held("IndicatorLeft"))) { st.Hazard = !st.Hazard; st.Turn = 0; }
+                else { int t = dl ? 1 : 2; st.Turn = st.Turn == t ? 0 : t; }
+                Foley(b, "dash_button", dash, 0.6f); SendState(b, st);
+                Log.Info("standalone : clignotant " + st.Turn + ", warnings " + st.Hazard + " (touche)");
+            }
+            bool held = Held("StartEngine");
+            if (!held) st.StartLatch = false;
+            if (st.EngineOn)
+            {
+                st.KeyCrank = false;
+                if (Down("StartEngine") && !st.StartLatch) { st.StartLatch = true; st.KeyPos = 0; SetEngine(b, false); }
+                return;
+            }
+            if (held && !st.StartLatch)
+            {
+                if (st.Key != null && (!st.KeyIn || st.KeyPos == 0)) { st.KeyIn = true; st.KeyPos = 1; st.KeyWait = false; SendState(b, st); }
+                st.KeyCrank = true;
+                if (st.CrankT < 0f) { st.CrankT = Time.time; if (b.Sound != null) b.Sound.ExternalStarter(true, false); }
+                if (Time.time - st.CrankT > 0.9f && CanStart(st)) { st.KeyCrank = false; st.StartLatch = true; SetEngine(b, true); if (b.Sound != null) b.Sound.ExternalStarter(false, true); }
+            }
+            else if (st.KeyCrank) { st.KeyCrank = false; CrankStop(b, st); }
+        }
+
+        // ---------------------------------------------------------------- reservoir et temperature (voiture de la quete, suggestion de Донской)
+        // Deux petites fenetres du compte-tours du modele : temperature a gauche, carburant a droite (barre qui se deplace dessus). Conso :
+        // regime et gaz, 40 L ; a sec, le moteur cale. Le plein : a pied a cote de la voiture, moteur coupe, a moins de 12 m d'une pompe
+        // (clic tenu, paye). Panne loin de tout : 4 s de demarreur retrouvent le fond du reservoir (4 %) -- jamais bloque sur la route.
+        const float TankLitres = 40f, FuelPerLitre = 5f;
+        static bool CanStart(State st)
+        {
+            if (!st.HasFuel || st.Fuel > 0f) return true;
+            if (Time.time - st.CrankT < 4f) return false;
+            st.Fuel = 0.04f; st.FuelWarned = false;
+            Log.Info("standalone : fond du reservoir retrouve");
+            return true;
+        }
+        static void SetupFuel(VazCar.Built b, State st, Dictionary<string, Vector3> inf)
+        {
+            if (!b.M.QuestOnly) return;
+            st.HasFuel = true; st.Fuel = QueteGolf.SavedFuel; st.EngineTemp = QueteGolf.SavedTemp;
+            // (autoradio : le poste du modele, au-dessus des commandes du chauffage)
+            st.HasRadio = true; st.RadioAt = new Vector3(Config.GetFloat("Test", "RadioX", -0.02f), Config.GetFloat("Test", "RadioY", 0.905f), Config.GetFloat("Test", "RadioZ", 0.54f));
+            var rg = new GameObject("autoradio"); rg.transform.SetParent(b.Body, false); rg.transform.localPosition = st.RadioAt;
+            st.RadioSrc = rg.AddComponent<AudioSource>();
+            st.RadioSrc.playOnAwake = false; st.RadioSrc.loop = false; st.RadioSrc.spatialBlend = 1f; st.RadioSrc.minDistance = 1.5f; st.RadioSrc.maxDistance = 25f; st.RadioSrc.rolloffMode = AudioRolloffMode.Linear;
+            Vector3 c, up, right;
+            if (!inf.TryGetValue("cadran_r_centre", out c) || !inf.TryGetValue("cadran_r_haut", out up) || !inf.TryGetValue("cadran_r_droite", out right)) return;
+            Vector3 n = Vector3.Cross(right, up).normalized;
+            // (fenetres du cadran, en pixels de la face de 256 : y 222, gauche de 30 a 105, droite de 153 a 228 ; barre du haut de la fenetre au bas)
+            Func<float, float, Vector3> at = (px, py) => c - n * 0.0022f + right * ((px - 128f) / 128f) + up * ((128f - py) / 128f);
+            st.BarDir = right / 128f; st.BarRun = 75f;
+            st.TempBar0 = at(30f, 222f); st.FuelBar0 = at(153f, 222f);
+            Shader sh = Shader.Find("Unlit/Color") ?? Shader.Find("Unlit/Texture");
+            var mat = new Material(sh) { color = new Color(0.95f, 0.93f, 0.85f), name = "standalone_barre" };
+            foreach (bool isFuel in new[] { false, true })
+            {
+                GameObject q = Gauge.Quad(isFuel ? "barre_carburant" : "barre_temperature", b.Body, isFuel ? st.FuelBar0 : st.TempBar0, Vector3.zero, up * (15f / 128f), right * (1.6f / 128f));
+                q.GetComponent<MeshRenderer>().sharedMaterial = mat;
+                if (isFuel) st.FuelBar = q.transform; else st.TempBar = q.transform;
+            }
+        }
+        static void FuelTick(VazCar.Built b, State st)
+        {
+            if (!st.HasFuel) return;
+            float dt = Time.deltaTime;
+            if (float.IsNaN(st.EngineTemp)) st.EngineTemp = Ambient();
+            bool mine = !b.Rb.isKinematic;
+            if (mine)
+            {
+                float rpm = b.Dt != null ? b.Dt.rpm : 0f, thr = b.Dt != null ? Mathf.Clamp01(b.Dt.throttle) : 0f, kmh = b.Rb.velocity.magnitude * 3.6f;
+                if (st.EngineOn)
+                {
+                    // (ralenti 0,8 L/h, plein regime et plein gaz ~ 24 L/h ; le temps de jeu va plus vite que le temps reel : x 2)
+                    float lh = 0.8f + rpm / 6000f * (0.15f + 0.85f * thr) * 23f;
+                    st.Fuel = Mathf.Max(0f, st.Fuel - lh * 2f / 3600f / TankLitres * dt);
+                    if (st.Fuel <= 0.1f && !st.FuelWarned) { st.FuelWarned = true; if (driving == b) Hud.Toast(Lang.T("Réservoir presque vide", "Fuel tank nearly empty")); }
+                    if (st.Fuel <= 0f) { st.KeyPos = 0; SetEngine(b, false); Log.Info("standalone : panne seche"); }
+                    // (monte a 90 degres en ~4 min, thermostat ; le plein regime sans air la pousse, le vent la ramene)
+                    float load = rpm / 6000f * (0.3f + 0.7f * thr), target = 88f + Mathf.Clamp01(load - 0.5f) * 36f - Mathf.Clamp01(kmh / 80f) * Mathf.Clamp01(1f - load) * 4f;
+                    st.EngineTemp += (target > st.EngineTemp ? 0.35f + load * 0.6f : -0.2f) * dt;
+                }
+                else st.EngineTemp = Mathf.MoveTowards(st.EngineTemp, Ambient(), (0.04f + kmh * 0.002f) * dt);
+            }
+            if (st.TempBar != null) st.TempBar.localPosition = st.TempBar0 + st.BarDir * st.BarRun * Mathf.InverseLerp(40f, 125f, st.EngineTemp);
+            if (st.FuelBar != null) st.FuelBar.localPosition = st.FuelBar0 + st.BarDir * st.BarRun * Mathf.Clamp01(st.Fuel);
+        }
+        static float Ambient() { return Game.Msc ? 18f : -5f; }
+        // Meme morceau, meme instant que le canal du jeu (commun a tous : Radio) ; contact coupe : silence.
+        static void RadioTick(VazCar.Built b, State st)
+        {
+            if (!st.HasRadio || st.RadioSrc == null) return;
+            bool powered = st.EngineOn || (st.KeyIn && st.KeyPos > 0);
+            AudioSource src = st.RadioCh > 0 && powered ? Radio.Channel(st.RadioCh - 1) : null;
+            if (src == null || src.clip == null) { if (st.RadioSrc.isPlaying) st.RadioSrc.Stop(); return; }
+            st.RadioSrc.volume = st.RadioVol;
+            if (st.RadioSrc.clip != src.clip) { st.RadioSrc.clip = src.clip; st.RadioSrc.time = Mathf.Min(src.time, Mathf.Max(0f, src.clip.length - 0.1f)); st.RadioSrc.Play(); return; }
+            if (!st.RadioSrc.isPlaying) { st.RadioSrc.time = Mathf.Min(src.time, Mathf.Max(0f, src.clip.length - 0.1f)); st.RadioSrc.Play(); return; }
+            if (Mathf.Abs(st.RadioSrc.time - src.time) > 1f && src.time < src.clip.length - 0.1f) st.RadioSrc.time = src.time;
+        }
+        // Visee sur le poste : clic, station suivante puis eteint ; molette, volume.
+        static bool RadioInput(VazCar.Built b, State st, Transform cam)
+        {
+            if (!st.HasRadio) return false;
+            Vector3 v = b.Car.transform.TransformPoint(st.RadioAt) - cam.position;
+            float along = Vector3.Dot(v, cam.forward);
+            if (along < 0.1f || along > 1.3f || (v - cam.forward * along).magnitude > 0.07f) return false;
+            Game.SetGlobalBool("GUIuse", true);
+            Game.SetGlobal("GUIinteraction", st.RadioCh == 0 ? "RADIO" : st.RadioCh == 1 ? "RADIO 1  " + Mathf.RoundToInt(st.RadioVol * 100f) + " %" : "RADIO FOLK  " + Mathf.RoundToInt(st.RadioVol * 100f) + " %");
+            if (Input.GetMouseButtonDown(0)) { st.RadioCh = (st.RadioCh + 1) % 3; Foley(b, "dash_button", cam.position + v, 0.6f); SendState(b, st); Log.Info("standalone : radio " + st.RadioCh); }
+            float sc = Input.GetAxis("Mouse ScrollWheel");
+            if (sc != 0f) st.RadioVol = Mathf.Clamp01(st.RadioVol + Mathf.Sign(sc) * 0.05f);
+            return true;
+        }
+        public static void SetQuestFuelIfIdle(float f)
+        {
+            foreach (VazCar.Built b in cars) { State st; if (QueteGolf.IsQuestCar(b) && states.TryGetValue(b, out st) && driving != b && !st.EngineOn) st.Fuel = f; }
+        }
+        // (couleur de la voiture de la quete : la matiere de peinture du modele, partagee par toutes ses pieces)
+        public static void RepaintQuest(Color c)
+        {
+            foreach (VazCar.Built b in cars)
+            {
+                if (!QueteGolf.IsQuestCar(b)) continue;
+                VazCar.Repaint(b, c);
+            }
+        }
+        // [Test] QueteCommandes=1 (QueteGolf.TestTick) : au volant, photos de la planche, touches simulees, reservoir, temperature, couleur.
+        static int qStep; static float qAt;
+        public static void QuestControlsTest(float e)
+        {
+            VazCar.Built b = null; State st = null;
+            foreach (VazCar.Built x in cars) if (QueteGolf.IsQuestCar(x)) { b = x; states.TryGetValue(x, out st); }
+            if (b == null || st == null) return;
+            Func<string> etat = () => "moteur " + st.EngineOn + ", phares " + st.LightsOn + ", pleins " + st.HighBeam + ", essuie " + st.WipersOn + ", clignotant " + st.Turn + ", warnings " + st.Hazard + ", cle " + st.KeyIn + "/" + st.KeyPos + ", reservoir " + st.Fuel.ToString("F3") + ", temp " + st.EngineTemp.ToString("F1");
+            simDown = "";
+            if (qStep == 0 && e > 8f)
+            {
+                qStep = 1; qAt = e;
+                GameObject pl = Game.PlayerGo; var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = b.Car.transform.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
+                if (cc != null) cc.enabled = true;
+                Enter(b, st);
+                Log.Info("standalone : commandes, au volant : " + etat());
+                st.Fuel = 0.6f; st.EngineTemp = 85f; FuelTick(b, st);
+                Vector3 tacho = st.Tacho != null ? b.Car.transform.InverseTransformPoint(st.Tacho.Needle.position) : st.T.Yeux + Vector3.forward;
+                Photo(b, "quete-compte-tours", st.T.Yeux + new Vector3(0.05f, -0.04f, 0.1f), tacho, 16f);
+                Photo(b, "quete-planche", st.T.Yeux, tacho, 46f);
+                Photo(b, "quete-console", new Vector3(0f, st.T.Yeux.y - 0.05f, st.T.Yeux.z), new Vector3(0f, 0.72f, 0.55f), 42f);
+            }
+            float d = e - qAt;
+            string[] seq = { "HighBeam", "HighBeam", "HighBeam", "Wipers", "Wipers", "IndicatorLeft", "IndicatorLeft", "IndicatorRight" };
+            if (qStep >= 1 && qStep <= seq.Length && d > 2f + qStep * 0.5f) { simDown = seq[qStep - 1]; GameKeys(b, st); simDown = ""; Log.Info("standalone : commandes, " + seq[qStep - 1] + " : " + etat()); qStep++; }
+            if (qStep == seq.Length + 1 && d > 8f) { qStep++; simHeld = "StartEngine"; Log.Info("standalone : commandes, demarreur tenu : " + etat()); }
+            if (qStep == seq.Length + 2 && d > 9.3f) { qStep++; simHeld = ""; Log.Info("standalone : commandes, demarreur relache : " + etat()); }
+            if (qStep == seq.Length + 3 && d > 11f) { qStep++; simDown = "StartEngine"; simHeld = "StartEngine"; GameKeys(b, st); simDown = ""; simHeld = ""; GameKeys(b, st); Log.Info("standalone : commandes, arret a la touche : " + etat()); }
+            if (qStep == seq.Length + 4 && d > 12f) { qStep++; st.Fuel = 0.002f; simHeld = "StartEngine"; }
+            if (qStep == seq.Length + 5 && d > 14f) { qStep++; Log.Info("standalone : commandes, a sec apres 2 s de demarreur : " + etat()); st.Fuel = 0f; if (st.EngineOn) SetEngine(b, false); st.CrankT = -1f; st.StartLatch = false; }
+            if (qStep == seq.Length + 6 && d > 19.5f) { qStep++; simHeld = ""; Log.Info("standalone : commandes, 5 s de demarreur a vide (fond retrouve) : " + etat()); }
+            if (qStep == seq.Length + 7 && d > 21f)
+            {
+                qStep++; QueteGolf.ChoosePaint(2);
+                Photo(b, "quete-couleur", new Vector3(-3.4f, 1.3f, 3.6f));
+                Photo(b, "quete-radio", st.T.Yeux + new Vector3(0.2f, -0.03f, 0.1f), st.RadioAt, 20f);
+                st.RadioCh = 1; st.KeyIn = true; st.KeyPos = 1; RadioTick(b, st);
+                AudioSource rc = Radio.Channel(0);
+                Log.Info("standalone : commandes, radio : canal " + (rc != null && rc.clip != null ? rc.clip.name + " a " + rc.time.ToString("F1") + " joue " + rc.isPlaying : "absent") + ", poste " + (st.RadioSrc.clip != null ? st.RadioSrc.clip.name + " a " + st.RadioSrc.time.ToString("F1") + " joue " + st.RadioSrc.isPlaying : "vide"));
+                pumpsAt = null; bool np = NearPump(b.Car.transform.position);
+                var ps = new System.Text.StringBuilder();
+                if (pumpsAt != null) foreach (Transform t in pumpsAt) if (t != null) ps.Append(" ").Append(t.name).Append(" ").Append(t.position.ToString("F0"));
+                Log.Info("standalone : commandes, pompes" + ps + ", voiture a moins de 12 m : " + np);
+                Log.Info("standalone : commandes, fini, couleur " + QueteGolf.PaintIndex + " : " + etat());
+            }
+        }
+        public static float QuestFuel(out float temp)
+        {
+            foreach (VazCar.Built b in cars) { State st; if (QueteGolf.IsQuestCar(b) && states.TryGetValue(b, out st)) { temp = st.EngineTemp; return st.Fuel; } }
+            temp = float.NaN; return -1f;
+        }
+        // (plein a la pompe : a pied, voiture a moins de 12 m d'une pompe du jeu ; 6 L/s, paye en liquide)
+        static Transform[] pumpsAt; static float nextPumps;
+        static bool NearPump(Vector3 p)
+        {
+            if (pumpsAt == null || Time.realtimeSinceStartup > nextPumps)
+            {
+                nextPumps = Time.realtimeSinceStartup + 20f;
+                var l = new List<Transform>();
+                foreach (string s in Game.Msc ? new[] { "STORE/LOD/Pumps/Pump98", "STORE/LOD/Pumps" } : new[] { "PERAPORTTI/Pump1", "PERAPORTTI/Pump2", "STORE_AREA/Stuff/LOD/Pumps", "PERAPORTTI/FuelPylon" })
+                { GameObject g = Game.FindAny(s); if (g != null) l.Add(g.transform); }
+                pumpsAt = l.ToArray();
+            }
+            foreach (Transform t in pumpsAt) if (t != null && (t.position - p).sqrMagnitude < 144f) return true;
+            return false;
+        }
+        static float refillPaid;
+        // vrai : le texte du jeu est pris
+        static bool RefillPrompt(VazCar.Built b, State st, Transform pl)
+        {
+            if (!st.HasFuel || st.EngineOn || QueteGolf.Locked(b) || st.Fuel >= 0.995f) return false;
+            if ((pl.position - b.Car.transform.position).sqrMagnitude > 16f || !NearPump(b.Car.transform.position)) return false;
+            Game.SetGlobalBool("GUIuse", true);
+            Game.SetGlobal("GUIinteraction", Lang.TG("FAIRE LE PLEIN", "FILL UP") + " " + Mathf.RoundToInt(st.Fuel * TankLitres) + " L");
+            if (Input.GetMouseButton(0))
+            {
+                float dl = 6f * Time.deltaTime;
+                refillPaid += dl * FuelPerLitre;
+                st.Fuel = Mathf.Min(1f, st.Fuel + dl / TankLitres); st.FuelWarned = false;
+                if (refillPaid >= 1f && Wallet.Ready) { int mk = Mathf.FloorToInt(refillPaid); refillPaid -= mk; Wallet.AddLocal(-mk); }
+            }
+            else if (Input.GetMouseButtonUp(0)) SendState(b, st);
+            return true;
         }
 
         // Portieres : visee au centre de l'ecran (a moins de 35 cm du centre de la portiere, a moins de 2 m), texte du jeu, clic gauche
@@ -1500,7 +1746,10 @@ namespace MWCoop
             // (octet de plus : warnings 1, essuie-glaces 2, ceinture du conducteur 4, dossiers rabattus 8 / 16, frein a main 32 : pour le son)
             // (puis le chauffage : marche 1, ventilateur x 2 (0-3) ; temperature et direction 0-255 -- StandaloneHeater)
             var w = new Net.NetWriter(Net.Msg.Race).U8(Vaz.V_STD).U8(b.Number).U8(f).U8((st.Hazard ? 1 : 0) | (st.WipersOn ? 2 : 0) | (st.DriverBelted ? 4 : 0) | (st.Folded[0] ? 8 : 0) | (st.Folded[1] ? 16 : 0) | ((b.Rb.isKinematic ? st.HandRemote : st.HandSent) ? 32 : 0));
-            if (st.Heat != null) w.U8((st.Heat.On ? 1 : 0) | (st.Heat.FanStep << 1)).U8(Mathf.RoundToInt(st.Heat.TempPos * 255f)).U8(Mathf.RoundToInt(st.Heat.DirPos * 255f));
+            // (chauffage : toujours 3 octets, a zero sans chauffage ; puis 1 pleins phares, 2 / 4 clignotant ; puis reservoir et temperature, voiture de la quete)
+            if (st.Heat != null) w.U8((st.Heat.On ? 1 : 0) | (st.Heat.FanStep << 1)).U8(Mathf.RoundToInt(st.Heat.TempPos * 255f)).U8(Mathf.RoundToInt(st.Heat.DirPos * 255f)); else w.U8(0).U8(0).U8(0);
+            w.U8((st.HighBeam ? 1 : 0) | (st.Turn == 1 ? 2 : 0) | (st.Turn == 2 ? 4 : 0) | (st.RadioCh << 3));
+            if (st.HasFuel) w.U8(Mathf.RoundToInt(Mathf.Clamp01(st.Fuel) * 255f)).U8(float.IsNaN(st.EngineTemp) ? 255 : Mathf.Clamp(Mathf.RoundToInt(st.EngineTemp + 40f), 0, 254));
             Net.Session.SendAll(w, true);
         }
 
@@ -1547,12 +1796,14 @@ namespace MWCoop
                     st.Heat.TempPos = extra[2] / 255f; st.Heat.DirPos = extra[3] / 255f;
                     HeaterParts(st);
                 }
+                if (extra.Length > 4) { st.HighBeam = (extra[4] & 1) != 0; st.Turn = (extra[4] & 2) != 0 ? 1 : (extra[4] & 4) != 0 ? 2 : 0; st.RadioCh = (extra[4] >> 3) & 3; }
+                if (extra.Length > 6 && st.HasFuel) { st.Fuel = extra[5] / 255f; if (extra[6] != 255) st.EngineTemp = extra[6] - 40f; }
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
 
         // ---------------------------------------------------------------- tableau de bord
-        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300, KStalk = 400, KBelt = 500, KHeater = 600;
+        const int KIgnition = 0, KLights = 2, KHorn = 3, KWheelHub = 99, KCrank0 = 200, KHand = 300, KStalk = 400, KBelt = 500, KHeater = 600, KRadio = 700;
         static void SetHorn(VazCar.Built b, State st, bool on, bool send)
         {
             if (on == st.HornOn) return;
@@ -1568,6 +1819,7 @@ namespace MWCoop
             // chauffage (commandes de la console, visee serree : l'interrupteur est a 2,4 cm de celui des warnings)
             string ht = HeaterInput(b, st, cam);
             if (ht != null) { hovered = KHeater; CrankStop(b, st); SetHorn(b, st, false, true); Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", ht); return; }
+            if (RadioInput(b, st, cam)) { hovered = KRadio; CrankStop(b, st); SetHorn(b, st, false, true); return; }
             int hit = -1; float bestPerp = 0.035f;
             foreach (int i in new[] { KIgnition, KLights, KHorn, KWheelHub })
             {
@@ -1664,7 +1916,7 @@ namespace MWCoop
             // klaxon : bouton orange ou moyeu du volant, tant que le clic est tenu (comme le bouton du jeu)
             if (hit == KHorn || hit == KWheelHub) { SetHorn(b, st, Input.GetMouseButton(0), true); return; }
             SetHorn(b, st, false, true);
-            if (hit == KLights) { if (Input.GetMouseButtonDown(0)) { st.LightsOn = !st.LightsOn; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints")); } return; }
+            if (hit == KLights) { if (Input.GetMouseButtonDown(0)) { st.LightsOn = !st.LightsOn; st.HighBeam = false; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints")); } return; }
             // cle (comme la Satsuma) : clic = mise ; clic = contact ; relacher puis clic tenu = demarreur ; moteur tournant, clic = cle
             // ramenee, moteur coupe ; clic droit moteur coupe = contact coupe, puis cle retiree
             if (st.Key != null)
@@ -1680,11 +1932,12 @@ namespace MWCoop
             if (Input.GetMouseButton(0))
             {
                 if (st.CrankT < 0f) { st.CrankT = Time.time; if (b.Sound != null) b.Sound.ExternalStarter(true, false); }
-                if (Time.time - st.CrankT > 0.9f) { SetEngine(b, true); if (b.Sound != null) b.Sound.ExternalStarter(false, true); }
+                if (Time.time - st.CrankT > 0.9f && CanStart(st)) { SetEngine(b, true); if (b.Sound != null) b.Sound.ExternalStarter(false, true); }
             }
             else CrankStop(b, st);
         }
-        static void CrankStop(VazCar.Built b, State st) { if (st.CrankT >= 0f) { st.CrankT = -1f; if (b.Sound != null) b.Sound.ExternalStarter(false, false); } }
+        static bool refilling;
+        static void CrankStop(VazCar.Built b, State st) { if (st.KeyCrank) return; if (st.CrankT >= 0f) { st.CrankT = -1f; if (b.Sound != null) b.Sound.ExternalStarter(false, false); } }
         // cle : visible mise, tournee sur son axe (contact 40 degres, demarreur 70, retour au contact) ; moteur demarre d'ailleurs (autre
         // joueur, essais) : cle mise au contact
         // essuie-glaces : aller-retour en 1,3 s (angle = maxi x (1 - cos) / 2), rangement en fin de course a l'arret ; comodo baisse en marche
@@ -2077,16 +2330,18 @@ namespace MWCoop
         {
             var d = b.Axis as CarController;
             bool f = st.LightsOn, br = d != null && d.brake > 0.1f, rv = b.Dt != null && b.Dt.gearRatios != null && b.Dt.gear >= 0 && b.Dt.gear < b.Dt.gearRatios.Length && b.Dt.gearRatios[b.Dt.gear] < 0f;
-            bool blink = st.Hazard && Time.time % 0.8f < 0.4f;   // (warnings : clignotants des deux cotes, 1,25 Hz)
-            if (b.LampsInit && f == b.FrontOn && br == b.BrakeOn && rv == b.ReverseOn && blink == st.BlinkShown) return;
-            b.LampsInit = true; b.FrontOn = f; b.RearOn = f; b.BrakeOn = br; b.ReverseOn = rv; st.BlinkShown = blink;
-            if (st.Heads != null) foreach (Light l in st.Heads) if (l != null) l.enabled = f;
+            bool flash = Time.time % 0.8f < 0.4f, blink = (st.Hazard || st.Turn != 0) && flash;   // (warnings et clignotant : 1,25 Hz)
+            bool high = f && st.HighBeam;
+            if (b.LampsInit && f == b.FrontOn && br == b.BrakeOn && rv == b.ReverseOn && blink == st.BlinkShown && high == st.HighShown && st.Turn == st.TurnShown) return;
+            b.LampsInit = true; b.FrontOn = f; b.RearOn = f; b.BrakeOn = br; b.ReverseOn = rv; st.BlinkShown = blink; st.HighShown = high; st.TurnShown = st.Turn;
+            // (pleins phares : plus loin et plus serres)
+            if (st.Heads != null) foreach (Light l in st.Heads) if (l != null) { l.enabled = f; l.range = high ? 120f : 45f; l.spotAngle = high ? 46f : 70f; l.intensity = high ? 3.4f : 2.2f; }
             foreach (KeyValuePair<MeshRenderer, string> kv in b.Lamps)
             {
                 if (kv.Key == null) continue;
                 string k = kv.Value; Material m = null;
                 if (k.EndsWith("_ar")) { if (br) b.Lit.TryGetValue(k, out m); else if (f && !b.Dim.TryGetValue(k, out m)) b.Lit.TryGetValue(k, out m); }
-                else if ((k.EndsWith("_av") && f) || (k.EndsWith("_re") && rv) || ((k.EndsWith("_cg") || k.EndsWith("_cd")) && blink)) b.Lit.TryGetValue(k, out m);
+                else if ((k.EndsWith("_av") && f) || (k.EndsWith("_re") && rv) || (k.EndsWith("_cg") && blink && (st.Hazard || st.Turn == 1)) || (k.EndsWith("_cd") && blink && (st.Hazard || st.Turn == 2))) b.Lit.TryGetValue(k, out m);
                 Material basic; b.Mats.TryGetValue(k, out basic);
                 kv.Key.sharedMaterial = m ?? basic;
             }

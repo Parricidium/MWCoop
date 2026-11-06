@@ -572,6 +572,17 @@ namespace MWCoop
         static Shader transp, cutout, unlitTex, unlitTransp;
         static Shader FindShader(params string[] names) { foreach (string n in names) { Shader s = Shader.Find(n); if (s != null) return s; } return null; }
 
+        // Peinture d'une voiture deja construite : les matieres de type « paint » de son modele.
+        public static void Repaint(Built b, Color c)
+        {
+            b.Paint = c;
+            foreach (KeyValuePair<string, Material> kv in b.Mats)
+            {
+                MatDef d;
+                if (kv.Value != null && matDefs.TryGetValue(b.M.Folder + "|" + kv.Key, out d) && d.Kind == "paint") kv.Value.color = c;
+            }
+        }
+
         static Material MaterialFor(Built b, string key, Material basePaint, Color paint, int number)
         {
             Material m;

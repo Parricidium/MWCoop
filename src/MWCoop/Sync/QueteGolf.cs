@@ -17,7 +17,29 @@ namespace MWCoop
     public static class QueteGolf
     {
         public const int Owner = 99, Number = 16;
-        public static readonly Color Paint = new Color(0.72f, 0.05f, 0.05f);   // (rouge, comme celle de JD)
+        public static readonly Color PaintBase = new Color(0.72f, 0.05f, 0.05f);   // (rouge, comme celle de JD)
+        // Couleur choisie (F10, onglet des voitures -- suggestion de Донской, 04/11), reservoir et temperature gardes dans la sauvegarde de la quete.
+        public static readonly Color[] Palette = {
+            PaintBase, new Color(0.06f, 0.20f, 0.62f), new Color(0.18f, 0.50f, 0.86f), new Color(0.02f, 0.28f, 0.13f),
+            new Color(0.03f, 0.03f, 0.03f), new Color(0.86f, 0.86f, 0.84f), new Color(0.50f, 0.52f, 0.54f), new Color(0.90f, 0.66f, 0.05f) };
+        public static int PaintIndex { get; private set; }
+        public static Color Paint { get { return Palette[Mathf.Clamp(PaintIndex, 0, Palette.Length - 1)]; } }
+        public static float SavedFuel = 1f, SavedTemp = float.NaN;
+        // (joueur : demande a l'hote ; hote : pose, renvoie a tous, repeinte tout de suite)
+        public static void ChoosePaint(int i)
+        {
+            i = Mathf.Clamp(i, 0, Palette.Length - 1);
+            if (Session.Active && !Session.IsHost) Session.SendToHost(new NetWriter(Msg.Race).U8(Vaz.V_QUETE).U8(10 + i), true);
+            ApplyPaint(i);
+            if (Host) Send();
+        }
+        static void ApplyPaint(int i)
+        {
+            if (i == PaintIndex) return;
+            PaintIndex = i;
+            StandaloneCar.RepaintQuest(Paint);
+            L("couleur " + i);
+        }
         // (garee chez Teimo, a droite de la terrasse du pub, l'arriere contre la cloture, le nez vers la route -- capture de JD, 31/10 ;
         // repere du magasin STORE : x vers le pub, z vers l'arriere ; [Test] QueteGolfPlace=x,z,cap pour la deplacer)
         static readonly Vector3 SpotStore = new Vector3(11.4f, 0f, 3.6f); const float YawStore = 180f;
@@ -59,6 +81,7 @@ namespace MWCoop
                 if (Spot(out pos, out yaw)) { placed = true; placedAt = now; Vaz.PlaceWorldCar(Owner, Number, VazCar.ModelGolf, pos, yaw); L("voiture posee en " + pos.ToString("F1") + " cap " + yaw.ToString("F0") + (hasSaved ? " (sauvegarde)" : " (chez Teimo)") + ", quete " + (Done ? "faite" : "a faire")); }
             }
             if (placed && Config.GetInt("Test", "QueteGolfEssai", 0) != 0) TestTick(now);
+            if (placed && Config.GetInt("Test", "QueteCommandes", 0) != 0) StandaloneCar.QuestControlsTest(now - placedAt);
             if (Session.Active && Session.RemoteCount > 0 && now >= nextSend) { nextSend = now + 5f; Send(); }
         }
 
@@ -161,17 +184,28 @@ namespace MWCoop
             if (Host) Send(d && fresh);
         }
 
-        // (hote -> tous : 0 / 1 l'etat, 2 la cle vient d'etre donnee)
+        static float SavedFuelNow() { float t; float f = StandaloneCar.QuestFuel(out t); return f >= 0f ? f : SavedFuel; }
+        // (hote -> tous : 0 / 1 l'etat, 2 la cle vient d'etre donnee ; puis couleur et reservoir. Invite -> hote : 1 la cle, 10 + n la couleur)
         static void Send(bool fresh = false)
         {
-            if (Session.Active && Session.RemoteCount > 0) Session.Broadcast(new NetWriter(Msg.Race).U8(Vaz.V_QUETE).U8(fresh ? 2 : Done ? 1 : 0), true);
+            if (Session.Active && Session.RemoteCount > 0) Session.Broadcast(new NetWriter(Msg.Race).U8(Vaz.V_QUETE).U8(fresh ? 2 : Done ? 1 : 0).U8(PaintIndex).U8(Mathf.RoundToInt(Mathf.Clamp01(SavedFuelNow()) * 255f)), true);
         }
 
         public static void OnMessage(Peer from, NetReader r)
         {
             int v = r.U8();
-            if (Session.IsHost) { if (v == 1) SetDone(true, true); }
-            else SetDone(v != 0, v == 2);
+            if (Session.IsHost)
+            {
+                if (v == 1) SetDone(true, true);
+                else if (v >= 10) { ApplyPaint(Mathf.Clamp(v - 10, 0, Palette.Length - 1)); Send(); }
+            }
+            else
+            {
+                SetDone(v != 0, v == 2);
+                byte[] rest = r.Rest();
+                if (rest.Length > 0) ApplyPaint(rest[0]);
+                if (rest.Length > 1) StandaloneCar.SetQuestFuelIfIdle(rest[1] / 255f);
+            }
         }
 
         static AudioSource FindKeySound()
@@ -258,6 +292,13 @@ namespace MWCoop
                 {
                     string[] p = line.Trim().Split(' ');
                     if (p[0] == "fait" && p.Length > 1) Done = p[1] == "1";
+                    else if (p[0] == "couleur" && p.Length > 1) { int ci2; if (int.TryParse(p[1], out ci2)) PaintIndex = Mathf.Clamp(ci2, 0, Palette.Length - 1); }
+                    else if (p[0] == "reservoir" && p.Length > 2)
+                    {
+                        float fu, te;
+                        if (float.TryParse(p[1], System.Globalization.NumberStyles.Float, ci, out fu)) SavedFuel = Mathf.Clamp01(fu);
+                        if (float.TryParse(p[2], System.Globalization.NumberStyles.Float, ci, out te) && !float.IsNaN(te)) SavedTemp = te;
+                    }
                     else if (p[0] == "place" && p.Length > 4)
                     {
                         float x, y, z, w;
@@ -280,6 +321,9 @@ namespace MWCoop
                 if (c != null) { savedPos = c.position + Vector3.up * 0.3f; savedYaw = c.eulerAngles.y; hasSaved = true; }
                 var ci = System.Globalization.CultureInfo.InvariantCulture;
                 string s = "fait " + (Done ? "1" : "0") + "\n" + (hasSaved ? "place " + savedPos.x.ToString("F3", ci) + " " + savedPos.y.ToString("F3", ci) + " " + savedPos.z.ToString("F3", ci) + " " + savedYaw.ToString("F1", ci) + "\n" : "");
+                float tt, ff = StandaloneCar.QuestFuel(out tt);
+                if (ff >= 0f) { SavedFuel = ff; SavedTemp = tt; }
+                s += "\ncouleur " + PaintIndex + "\nreservoir " + SavedFuel.ToString("F3", ci) + " " + (float.IsNaN(SavedTemp) ? "NaN" : SavedTemp.ToString("F1", ci));
                 File.WriteAllText(FilePath, s);
                 L("sauvegardee : quete " + (Done ? "faite" : "a faire") + (hasSaved ? ", voiture en " + savedPos.ToString("F1") : ""));
             }

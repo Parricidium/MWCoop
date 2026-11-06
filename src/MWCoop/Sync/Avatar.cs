@@ -426,25 +426,6 @@ namespace MWCoop
                 QueteGolf.Shot("montre-derriere", c - f * 0.28f + Vector3.up * 0.05f, c);
                 QueteGolf.Shot("montre-droite", c + r * 0.22f + Vector3.up * 0.05f, c);
                 QueteGolf.Shot("montre-corps", c - r * 0.9f + f * 0.9f + Vector3.up * 0.3f, c + Vector3.up * 0.1f);
-                // (coupe du poignet : sommets du corps a moins de 2 cm du plan de la montre, repere de l'os ; verre de la montre, repere de la montre)
-                if (body != null)
-                {
-                    var baked = new Mesh(); body.BakeMesh(baked);
-                    Vector3 lo = Vector3.one * 9f, hi = -Vector3.one * 9f; int nv = 0; Transform bo = watchGo.transform.parent;
-                    foreach (Vector3 v in baked.vertices)
-                    {
-                        Vector3 l = bo.InverseTransformPoint(body.transform.TransformPoint(v));
-                        if (Mathf.Abs(l.x - watchGo.transform.localPosition.x) > 0.02f || l.magnitude > 0.2f) continue;
-                        lo = Vector3.Min(lo, l); hi = Vector3.Max(hi, l); nv++;
-                    }
-                    Object.Destroy(baked);
-                    Log.Info("montre : coupe du poignet " + nv + " sommets, " + lo.ToString("F3") + " a " + hi.ToString("F3"));
-                }
-                foreach (MeshFilter mf in watchGo.GetComponentsInChildren<MeshFilter>(true))
-                {
-                    Bounds mb = mf.sharedMesh.bounds; Transform tt = mf.transform;
-                    Log.Info("montre : " + mf.name + " local " + tt.localPosition.ToString("F4") + " rot " + tt.localEulerAngles.ToString("F1") + " ech " + tt.localScale.ToString("F2") + ", maillage centre " + mb.center.ToString("F4") + " taille " + mb.size.ToString("F4"));
-                }
                 Log.Info("montre : photos, position " + c.ToString("F3") + ", poignet " + w.parent.position.ToString("F3") + ", coude " + w.parent.parent.position.ToString("F3"));
             }
         }

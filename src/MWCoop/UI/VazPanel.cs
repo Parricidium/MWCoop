@@ -294,6 +294,23 @@ namespace MWCoop
             Style.Ring(r, rad, Kit.Sep);
         }
 
+        // Couleur de la voiture de la quete s21 : pour tous, une fois la cle donnee (quete sur la route, pas de couleur sur une voiture encore a Teimo)
+        static float QuestPaint(Rect r, float cy)
+        {
+            if (!QueteGolf.On || !QueteGolf.Done) return cy;
+            Style.Text(new Rect(r.x, cy, r.width, P(18)), Lang.T("Couleur de la voiture de la qu\u00EAte s21", "s21 quest car colour"), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+            cy += P(20);
+            float sz = Mathf.Min(P(26), (r.width - 7f * P(6)) / QueteGolf.Palette.Length);
+            for (int i = 0; i < QueteGolf.Palette.Length; i++)
+            {
+                var cr = new Rect(r.x + i * (sz + P(6)), cy, sz, sz);
+                Style.Round(cr, sz / 2, QueteGolf.Palette[i]);
+                if (i == QueteGolf.PaintIndex) Style.Ring(new Rect(cr.x - 2f, cr.y - 2f, cr.width + 4f, cr.height + 4f), sz / 2 + 2f, Kit.Ice);
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && cr.Contains(Event.current.mousePosition)) { QueteGolf.ChoosePaint(i); Event.current.Use(); }
+            }
+            return cy + sz + P(8);
+        }
+
         static void DrawCard(Rect r, Event e)
         {
             float cy = r.y;
@@ -367,6 +384,7 @@ namespace MWCoop
                 Style.Text(new Rect(r.x, cy, r.width, P(16)), sl.Length > 0 ? Lang.T("Livr\u00E9e perso", "Custom livery") : Lang.T("Couleur + num\u00E9ro (livr\u00E9e : lanceur, Addons)", "Colour + number (livery: launcher, Add-ons)"), 11, TextAnchor.MiddleLeft, Kit.Faint, false);
                 cy += P(18);
             }
+            cy = QuestPaint(r, cy);
             string st = mine ? Lang.T("La v\u00F4tre", "Yours") : owner == null ? Lang.T("Libre", "Free") : Lang.T("Prise par ", "Taken by ") + owner;
             Kit.Pill(r.x, cy + P(9), st, mine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber);
             cy += P(26);

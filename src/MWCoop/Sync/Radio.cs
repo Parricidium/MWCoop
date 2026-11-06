@@ -38,6 +38,8 @@ namespace MWCoop
     public static class Radio
     {
         static AudioSource[] ch;              // Channel1, Folk
+        // (canal du jeu, pour un poste qui n'est pas un poste du jeu : voiture de la quete -- StandaloneCar.RadioTick)
+        public static AudioSource Channel(int i) { return ch != null && i >= 0 && i < ch.Length ? ch[i] : null; }
         static PlayMakerFSM[] upd;
         static bool found, muted;
         static float nextSend, nextFind, nextClips, nextLog;
