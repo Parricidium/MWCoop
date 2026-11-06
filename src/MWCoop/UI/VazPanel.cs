@@ -314,7 +314,7 @@ namespace MWCoop
             if (!Kauppa.VuokraOn)
             {
                 Style.Title(new Rect(r.x + P(12), r.y + P(6), r.width - P(24), P(22)), "RALLI-VUOKRAAMO", Kit.Ink, TextAnchor.MiddleLeft, 15);
-                Style.Text(new Rect(r.x + P(12), r.y + P(30), r.width - P(24), P(50)), Lang.T("Pas de garage dans cette partie : l'h\u00F4te a coup\u00E9 le Cardinal ou le village. Pas de voitures de rallye.", "No garage in this game: the host turned off the Cardinal or the village, so no rally cars."), 12, TextAnchor.UpperLeft, Kit.Amber, false, true);
+                Style.Text(new Rect(r.x + P(12), r.y + P(30), r.width - P(24), P(50)), Lang.T("Pas de garage dans cette partie : l'h\u00F4te a coup\u00E9 le magasin CARDINAL. Pas de voitures de rallye.", "No garage in this game: the host turned off the CARDINAL shop, so no rally cars."), 12, TextAnchor.UpperLeft, Kit.Amber, false, true);
                 return;
             }
             float ih = r.height - P(12), iw = P(186);

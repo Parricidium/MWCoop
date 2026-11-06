@@ -1002,7 +1002,7 @@ namespace MWCoop
             { "Left of the Cardinal shop, marked on the map (M).", "Слева от магазина Cardinal, отмечено на карте (M)." },
             { "Car given back", "Машина возвращена" },
             { "Fiad is free \u00B7 rally cars at the garage \u00B7 a colour and a number each \u00B7 given back when you leave", "Fiad бесплатно \u00B7 раллийные машины в гараже \u00B7 у каждого свой цвет и номер \u00B7 возвращается при выходе" },
-            { "No garage in this game: the host turned off the Cardinal or the village, so no rally cars.", "В этой игре нет гаража: хост отключил Cardinal или посёлок, поэтому раллийных машин нет." },
+            { "No garage in this game: the host turned off the CARDINAL shop, so no rally cars.", "В этой игре нет гаража: хост отключил магазин CARDINAL, поэтому раллийных машин нет." },
             { "Put back on its wheels", "Поставить на колёса" },
             { "Car put back on its wheels", "Машина поставлена на колёса" },
             { "Move closer to your car", "Подойдите к своей машине" },
