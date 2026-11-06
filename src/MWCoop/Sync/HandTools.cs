@@ -104,6 +104,7 @@ namespace MWCoop
             return null;
         }
 
+        static PlayMakerFSM axUse; static bool axDown;
         static bool Find()
         {
             if (srcs != null && camBase != null) return true;
@@ -141,8 +142,19 @@ namespace MWCoop
                     if (an != null && an.isPlaying) { fl |= F_Anim; break; }
                 }
             }
+            // Hache (Menos, 31/10 : « seulement avec la masse ») : elle n'a pas d'animation, son automate Use la fait tourner ('Raise ax' -> 'Calculate force' -> 'Hit' -> 'Stop ax') :
+            // F_Anim n'etait jamais vu, son coup jamais porte. Le coup part a la fin de la montee, sur l'automate.
+            if (t == 1 && (forced == 0 || forced == 1))
+            {
+                if (axUse == null && srcs[0] != null && srcs[0].parent != null) axUse = Game.FsmOn(srcs[0].parent.gameObject, "Use");
+                string axs = axUse != null ? axUse.ActiveStateName : "";
+                bool down = axs == "Calculate force" || axs == "Hit" || axs == "Stop ax";
+                if (axs == "Raise ax" || down) fl |= F_Anim;
+                if (down && !axDown) Pvp.OnLocalSwing(1, 0.05f);
+                axDown = down;
+            }
             if (Time.realtimeSinceStartup < testSwingUntil) fl |= F_Anim;   // (essai : coup simule, OutilCoup)
-            if ((fl & F_Anim) != 0 && (flags & F_Anim) == 0 && t >= 1 && t <= 3 && t == tool) Pvp.OnLocalSwing(t);   // (hache, masse, barre a mine : coup porte, Pvp)
+            if ((fl & F_Anim) != 0 && (flags & F_Anim) == 0 && t >= (axUse != null ? 2 : 1) && t <= 3 && t == tool) Pvp.OnLocalSwing(t, 0.35f);   // (hache, masse, barre a mine : coup porte, Pvp)
             tool = t; flags = fl;
             if (ThirdPerson.HasBody) Local(t, fl); else if (remote.ContainsKey(Session.LocalId)) PlayerLeft(Session.LocalId);
             float now = Time.realtimeSinceStartup;

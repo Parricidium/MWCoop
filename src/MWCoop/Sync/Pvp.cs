@@ -1,4 +1,4 @@
-using MWCoop.Net;
+﻿using MWCoop.Net;
 using UnityEngine;
 
 namespace MWCoop
@@ -51,11 +51,12 @@ namespace MWCoop
         {
             if (Allowed && PlayerSync.InGame && VehicleSync.LocalDriving < 0 && !Seats.Seated) { weapon = 0; punchAt = Time.realtimeSinceStartup + 0.15f; }
         }
-        // HandTools : l'animation de l'outil tenu vient de partir (hache 1, masse 2, barre a mine 3) ; le coup porte 0,35 s apres.
-        public static void OnLocalSwing(int tool)
+        // HandTools : l'outil tenu vient de partir (hache 1, masse 2, barre a mine 3) ; le coup porte 'delay' s apres.
+        static bool hacheLeve;
+        public static void OnLocalSwing(int tool, float delay)
         {
             if (tool < 1 || tool > 3) return;
-            if (Allowed && PlayerSync.InGame && VehicleSync.LocalDriving < 0 && !Seats.Seated) { weapon = tool; punchAt = Time.realtimeSinceStartup + 0.35f; }
+            if (Allowed && PlayerSync.InGame && VehicleSync.LocalDriving < 0 && !Seats.Seated) { weapon = tool; punchAt = Time.realtimeSinceStartup + delay; }
         }
 
         static void TryHit()
@@ -113,7 +114,13 @@ namespace MWCoop
                 Transform cam = PlayerSync.LocalCamera;
                 if (cam != null) cam.localRotation = Quaternion.identity;
                 Log.Info("autotest : pvp, coup (invite a " + d.magnitude.ToString("F2") + " m, autorise " + Allowed + ")");
-                OnLocalPunch();
+                // ([Test] PvpHache=1 : la hache du jeu en main, 'Raise ax' de son automate au lieu du poing)
+                if (Config.GetInt("Test", "PvpHache", 0) != 0)
+                {
+                    GameObject ax = Game.PlayerPart("Pivot/AnimPivot/Camera/Ax");
+                    if (ax != null) { ax.SetActive(true); PlayMakerFSM use = Game.FsmOn(ax, "Use"); if (use != null && t > 41f) { if (use.ActiveStateName != "Wait button" && use.ActiveStateName != "Idle ax") Log.Info("autotest : pvp, hache : etat " + use.ActiveStateName); hacheLeve = !hacheLeve; Game.SetState(use, hacheLeve ? "Raise ax" : "Calculate force"); } }
+                }
+                else OnLocalPunch();
             }
         }
 
@@ -145,7 +152,8 @@ namespace MWCoop
             Log.Info("pvp : " + Respawn.TestDie("Murder"));
         }
 
-        static AudioClip hitClip; static float hitVol = 1f; static bool hitLooked;
+        static AudioClip hitClip; static float hitVol = 1f; static bool hitLooked; static int ouchLogs;
+        static Transform FindOuch(int n) { GameObject g = GameObject.Find("MasterAudio/PlayerMisc/ouch" + n); return g != null ? g.transform : null; }
         static void HitSound(int target)
         {
             if (!hitLooked)
@@ -161,6 +169,11 @@ namespace MWCoop
             if (target == Session.LocalId) { Transform pl = Game.PlayerT; if (pl == null) return; at = pl.position + Vector3.up * 1.4f; }
             else { PlayerInfo pi; if (!Session.Players.TryGetValue(target, out pi) || pi.Level != 1) return; at = pi.State.Feet + Vector3.up * 1.4f; }
             AudioSource.PlayClipAtPoint(hitClip, at, hitVol);
+            // Cri de douleur du jeu (PlayerMisc/ouch0..9), chez tous : Menos, 31/10.
+            Transform ouch = FindOuch(Random.Range(0, 10));
+            AudioSource os = ouch != null ? ouch.GetComponent<AudioSource>() : null;
+            if (os != null && os.clip != null) { AudioSource.PlayClipAtPoint(os.clip, at, os.volume > 0f ? os.volume : 1f); if (ouchLogs++ < 3) Log.Info("pvp : cri " + os.clip.name + " sur #" + target); }
+            else if (ouchLogs++ < 3) Log.Info("pvp : cri introuvable");
         }
     }
 }
