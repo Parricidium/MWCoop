@@ -1009,21 +1009,24 @@ static void DrawHome(Graphics &g)
             if (!host && g_steamNet && g_sInvite) { SolidBrush dot(kOk); g.FillEllipse(&dot, r.X + r.Width - 34, r.Y + 22, 12.0f, 12.0f); }
         }
     }
-    // jouer en solo
+    // SOLO (le jeu sans le mod) et SOLO COOP (seul, avec le mod, sur la sauvegarde choisie) : cote a cote (JD, 06/11)
     {
-        Button &b = g_btn[B_SOLO];
-        b.r = RectF(rx, ty + th + 16, rw, 60);
-        b.visible = lobby == LB_NONE && !g_goWait;
-        if (b.visible) {
+        float bw = (rw - 12) / 2;
+        struct { int id; float x; const wchar_t *t, *s; } k[2] = {
+            { B_SOLO, rx, T(L"SOLO", L"SOLO"), T(L"Sans le mod", L"Without the mod") },
+            { B_SOLOCOOP, rx + bw + 12, T(L"SOLO COOP", L"SOLO COOP"), T(L"Seul, avec le mod", L"Alone, with the mod") } };
+        for (auto &e : k) {
+            Button &b = g_btn[e.id];
+            b.r = RectF(e.x, ty + th + 16, bw, 60);
+            b.visible = lobby == LB_NONE && !g_goWait;
+            if (!b.visible) continue;
             float a = b.enabled ? 1.0f : 0.4f;
             GraphicsPath p; RoundRect(p, b.r, 18);
             SolidBrush fb(Mix(TH(card), TH(cardSel), b.hover)); g.FillPath(&fb, &p);
             Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
-            Icon(g, IC_PLAY, b.r.X + 30, b.r.Y + 30, 20, WithA(kInk, a), 2.0f);
-            Text(g, T(L"JOUER EN SOLO", L"PLAY SOLO"), RectF(b.r.X + 52, b.r.Y, 150, b.r.Height), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
-            Text(g, T(L"Sans Coop", L"Without Coop"),
-                 RectF(b.r.X + 196, b.r.Y, b.r.Width - 240, b.r.Height), 12.5f, FontStyleRegular, WithA(kGrey, a), StringAlignmentNear);
-            Icon(g, IC_CHEVR, b.r.X + b.r.Width - 28, b.r.Y + 30, 18, WithA(kInk, a), 2.2f);
+            Icon(g, IC_PLAY, b.r.X + 26, b.r.Y + 30, 20, WithA(kInk, a), 2.0f);
+            Text(g, e.t, RectF(b.r.X + 46, b.r.Y + 9, bw - 54, 24), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+            Text(g, e.s, RectF(b.r.X + 46, b.r.Y + 31, bw - 54, 20), 12, FontStyleRegular, WithA(kGrey, a), StringAlignmentNear);
         }
     }
     // nouveautes

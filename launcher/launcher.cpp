@@ -165,7 +165,7 @@ static const float kImgW = kCardW + 2 * kM, kImgH = kCardH + 2 * kM;   // fenetr
 // ---------------------------------------------------------------- etat
 enum { ST_IDLE, ST_LAUNCH, ST_CLOSING, ST_RUNNING };   // ST_RUNNING : jeu lance, lanceur reste ouvert (serveur.inc)
 enum { K_NORMAL, K_OK, K_WARN, K_ERR };
-enum { MODE_SOLO, MODE_HOST, MODE_GUEST };
+enum { MODE_SOLO, MODE_HOST, MODE_GUEST, MODE_SOLOCOOP };   // (MODE_SOLO : le chargeur n'injecte pas MWCoop ; MODE_SOLOCOOP, JD 06/11 : le mod sans session, sur la sauvegarde choisie)
 enum { REL_OFFLINE = -1, REL_NONE = 0, REL_OK = 1 };   // reponse de GitHub
 
 static HWND g_wnd;
@@ -2002,7 +2002,7 @@ static void UpdateTick()
 enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_RALLY, TAB_SYNC, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_SYNC : raccourci vers l'article « Ce qui est synchronise » du Guide, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
 static int g_tab = TAB_HOME;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_MAX, B_COUNT };   // (B_MAX : Agrandir, nouvelle interface seulement -- fenetre.inc)   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_MAX, B_SOLOCOOP, B_COUNT };   // (B_MAX : Agrandir, nouvelle interface seulement -- fenetre.inc)   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -2044,7 +2044,7 @@ static void UpdateButtons()
     bool can = menu && game && !busy && g_modOk && !g_goWait;
     g_btn[B_HOST].enabled = can && lobby != LB_CONNECTING;   // HEBERGER, LANCER (hote) ou PRET (invite)
     g_btn[B_JOIN].enabled = can;                             // REJOINDRE, FERMER LE SALON, QUITTER ou ANNULER
-    g_btn[B_SOLO].enabled = can;
+    g_btn[B_SOLO].enabled = g_btn[B_SOLOCOOP].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = g_btn[B_LANG].enabled = true;
     g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = g_btn[B_BUG].enabled = g_btn[B_MAX].enabled = true;
@@ -2052,7 +2052,7 @@ static void UpdateButtons()
     g_btn[B_LOGS].visible = false;
     bool home = g_tab == TAB_HOME;
     g_btn[B_HOST].visible = g_btn[B_JOIN].visible = menu && game && ((home && lobby == LB_NONE) || g_tab == TAB_LOBBY);
-    g_btn[B_SOLO].visible = menu && game && home && lobby == LB_NONE && !g_goWait;
+    g_btn[B_SOLO].visible = g_btn[B_SOLOCOOP].visible = menu && game && home && lobby == LB_NONE && !g_goWait;
     g_btn[B_EXE].visible = menu;
     g_btn[B_COLOR].visible = menu && game && g_tab == TAB_CAR;
     g_btn[B_COLOR].enabled = true;
@@ -3879,7 +3879,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
 {
     const Opt *ap = OptByKey("Apparence");
     std::string skin = ap ? ap->svals[OptGet(*ap)] : DefaultShirt();   // (char_shirt21 n'existe pas dans MSC : tenue.inc)
-    static const char *modes[] = { "solo", "hote", "invite" };
+    static const char *modes[] = { "solo", "hote", "invite", "solocoop" };
     std::string t = "[Lancement]\r\n";
     t += std::string("Mode=") + (!g_exportDir.empty() ? "export" : modes[mode]) + "\r\n";   // (export : pas "solo", que le chargeur lance sans MWCoop)
     // Horodatage dans [Lancement], avant tout : le chargeur le lit par section (GetPrivateProfileString) et, depuis les options du
@@ -3887,7 +3887,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     // sauvegarde principale (retour de JD, 18/10 : « ca charge toujours la meme sauvegarde »). Le mod, lui, lit a plat.
     t += "Horodatage=" + std::to_string((long long)_time64(NULL)) + "\r\n";
     if (mode == MODE_GUEST) t += "Adresse=" + Narrow(addr, CP_UTF8) + "\r\n";
-    if (mode != MODE_SOLO) t += std::string("Reseau=") + (g_steamNet ? "steam" : "ip") + "\r\n";
+    if (mode != MODE_SOLO && mode != MODE_SOLOCOOP) t += std::string("Reseau=") + (g_steamNet ? "steam" : "ip") + "\r\n";
     if (mode == MODE_GUEST && g_steamNet && g_sHost) {   // salon Steam du lanceur : le mod se connecte directement a l'hote
         char hs[40];
         sprintf_s(hs, "HoteSteam=%llu\r\n", (unsigned long long)g_sHost);
@@ -3896,12 +3896,12 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += "Port=" + std::to_string(port) + "\r\n";
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
-    t += std::string("Profil=") + (g_exportPlaces ? "places-export" : !g_exportDir.empty() ? "carte-export" : mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
+    t += std::string("Profil=") + (g_exportPlaces ? "places-export" : !g_exportDir.empty() ? "carte-export" : mode == MODE_GUEST ? "invite" : mode == MODE_HOST || mode == MODE_SOLOCOOP ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
     if (g_exportPlaces) t += "ExportPlaces=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (outil des places : copie de la partie en cours, SeatExport.cs)
     else if (!g_exportDir.empty()) t += "ExportCarte=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (editeur de carte : profil a part, jamais les sauvegardes du joueur)
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
     if (mode == MODE_GUEST) t += ContentLaunchLines();
-    if (mode != MODE_SOLO && g_lobbyOptGo) { t += LobbyCoopLines(mode == MODE_HOST); g_lobbyOptGo = false; }   // (options choisies dans le salon : salon.inc)
+    if (mode != MODE_SOLO && mode != MODE_SOLOCOOP && g_lobbyOptGo) { t += LobbyCoopLines(mode == MODE_HOST); g_lobbyOptGo = false; }   // (options choisies dans le salon : salon.inc)
     EnsureModDir();
     std::wstring path = g_modRoot + L"MWCoop\\lancement.ini", tmp = path + L".tmp";
     HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
@@ -4067,7 +4067,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods);
 static bool g_syncKeep;   // GO recu : la copie des mods sert au lancement (LobbyClose ne l'oublie pas)
 static void Launch(int mode, const char *partie = NULL)
 {
-    if (mode == MODE_SOLO) g_launchWarn.clear();   // (avertissement UDP : salon seulement)
+    if (mode == MODE_SOLO || mode == MODE_SOLOCOOP) g_launchWarn.clear();   // (avertissement UDP : salon seulement)
     if (g_gameDir.empty() || g_busy || !g_modOk) { TestLog("lancement impossible (jeu=%d occupe=%d mod=%d)", (int)!g_gameDir.empty(), (int)g_busy, (int)g_modOk); return; }
     // Invite : les mods de l'hote d'abord (le jeu partira tout seul a la fin de la reception) -- un invite sans eux entrait
     // quand meme (retour de Menos, 10/10).
@@ -4137,7 +4137,7 @@ static void Launch(int mode, const char *partie = NULL)
             else TestLog("steam_appid.txt : creation impossible (erreur %lu)", GetLastError());
         }
     }
-    static const wchar_t *modes[] = { L"solo", L"hote", L"invite" };
+    static const wchar_t *modes[] = { L"solo", L"hote", L"invite", L"solocoop" };
     std::wstring args = std::wstring(L"-mwcoop-mode ") + (!g_exportDir.empty() ? L"export" : modes[mode]) + L" -mwcoop-port " + std::to_wstring(port);
     if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
     if (!g_exportDir.empty()) args += g_exportPlaces ? L" -mwcoop-profil places-export -mwcoop-arriereplan" : L" -mwcoop-profil carte-export -mwcoop-arriereplan";   // (export de la carte : fenetre hors de l'ecran)
@@ -4159,6 +4159,7 @@ static void Launch(int mode, const char *partie = NULL)
         if (mode == MODE_HOST && g_steamNet) swprintf_s(info, T(L"%s h\u00E9berge la partie (Steam)", L"%s is hosting (Steam)"), name.c_str());
         else if (mode == MODE_HOST) swprintf_s(info, T(L"%s h\u00E9berge la partie (port %d)", L"%s is hosting (port %d)"), name.c_str(), port);
         else if (mode == MODE_GUEST) swprintf_s(info, T(L"%s rejoint %s", L"%s joins %s"), name.c_str(), addr.c_str());
+        else if (mode == MODE_SOLOCOOP) swprintf_s(info, T(L"%s joue en Solo Coop", L"%s plays Solo Coop"), name.c_str());
         else swprintf_s(info, T(L"%s joue en solo", L"%s plays solo"), name.c_str());
         g_launchInfo = info;
         g_focus = -1;
@@ -7053,6 +7054,7 @@ static void OnButton(int id)
         break;
     }
     case B_SOLO: Launch(MODE_SOLO); break;
+    case B_SOLOCOOP: SoloCoopOpen(); break;   // (saves.inc : choix de la sauvegarde, puis lancement)
     case B_EXE: ChooseExe(); break;
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
@@ -7418,6 +7420,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             ScreenToClient(h, &pt);
             float x = (pt.x - g_offX) / g_scale - kM, y = (pt.y - g_offY) / g_scale - kM;
             float step = -(short)HIWORD(wp) / 120.0f * 64;
+            if (g_saveModal == SM_SOLOCOOP) { SoloCoopScroll(step > 0 ? 1 : -1); return 0; }
             if (g_tab == TAB_SKIN && SkinWheel(x, y, (short)HIWORD(wp))) return 0;   // (apercu du personnage : zoom)
             if (g_railScrollMax > 0 && g_railView.Contains(x, y)) { g_railScroll = min(max(g_railScroll + step * 0.6f, 0.0f), g_railScrollMax); return 0; }   // (barre de gauche, quand elle defile)
             if (SigZipPickWheel(step)) return 0;   // (signalnatif.inc : fenetre de choix des zips, par-dessus la page)
@@ -8462,6 +8465,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return rc;
     }
+    // /testsolocoop <journal> : fenetre de Solo Coop, lancement.ini et copies de secours, sans jeu ; dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testsolocoop")) {
+        int rc = SoloCoopSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /testhudlibre <journal> : position libre du HUD, jamais ecrasee sans clic ; dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testhudlibre")) {
         int rc = HudLibreSelfTest(argv[2]);
@@ -8727,6 +8736,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_saveBakFor = L"";   // (pas relues : g_savesFake)
             if (st == L"sauvegardes-toutes") g_saveModal = SM_COPIES;
         }   // (saves.inc : parties factices ; fenetres : -nouvelle, -choix, -nom, -recommencer)
+        else if (st == L"accueil-solo") { g_tab = TAB_HOME; }   // (SOLO et SOLO COOP)
+        else if (st == L"solocoop" || st == L"solocoop-vide" || st == L"solocoop-long") {   // fenetre de Solo Coop : sauvegardes factices, aucune, ou plus d'une page
+            g_tab = TAB_HOME; SavesFake();
+            if (st == L"solocoop-vide") g_saves.clear();
+            if (st == L"solocoop-long") { SaveSlot o = g_saves[1]; for (int i = 3; i <= 9; i++) { o.prof = L"partie-" + std::to_wstring(i); o.name = L"Partie " + std::to_wstring(i); g_saves.push_back(o); } }
+            SoloCoopOpen();
+        }
         else if (st == L"sauvegardes-nouvelle") { g_tab = TAB_SAVES; SaveOpenNewGame(); }
         else if (st == L"sauvegardes-choix") { g_tab = TAB_SAVES; SaveOpenPick(); }
         else if (st == L"sauvegardes-recommencer") { g_tab = TAB_SAVES; SavesScan(); g_saveModal = SM_RESTART; }

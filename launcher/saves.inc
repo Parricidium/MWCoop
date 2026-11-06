@@ -20,7 +20,12 @@ static DWORD g_savesScanT;
 static bool g_savesFake;   // captures : liste factice (SavesFake), pas de releve
 static int g_saveEdit = -1; static std::wstring g_saveEditText;   // renommage dans la liste de l'onglet
 static int g_saveDelArm = -1; static DWORD g_saveDelT;
-enum { SM_NONE, SM_PICK, SM_NEWGAME, SM_RESTART, SM_NAME, SM_COPIES, SM_CHECK };
+enum { SM_NONE, SM_PICK, SM_NEWGAME, SM_RESTART, SM_NAME, SM_COPIES, SM_CHECK, SM_SOLOCOOP };
+static bool SoloCoopGo();                               // (fenetre de Solo Coop : plus bas)
+static std::wstring g_soloCoopProf;                     // sauvegarde selectionnee dans la fenetre (par son profil : la liste peut etre relue)
+static bool g_soloCoopSel, g_soloCoopGone;              // une ligne est selectionnee ; la selection n'existait plus a la validation
+static int g_soloCoopTop;                               // premiere ligne montree
+static const int kSoloCoopPage = 6;
 static void SaveCheckOpen(int i);                       // (es2.inc : Verifier la sauvegarde)
 static void SaveRepair();
 static void DrawSaveCheck(Graphics &g, RectF c, float y);      // fenetre par-dessus le lanceur
@@ -32,6 +37,7 @@ enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAV
        UI_SAVE_DUP, UI_SAVE_EXPORT, UI_SAVE_RESTART, UI_SAVE_DEL,   // onglet, carte de droite : sur la partie choisie (g_saveSel)
        UI_SAVE_IMPORT,       // en-tete : « Importer une sauvegarde » ; fenetre du nom : « Depuis un zip… » (zip, rar, 7z)
        UI_SAVE_COPIES,       // carte de droite : « Toutes les copies » (fenetre SM_COPIES)
+       UI_SAVE_SCPREV, UI_SAVE_SCNEXT, UI_SAVE_SCGO,   // fenetre de Solo Coop : page precedente, suivante, Lancer
        UI_SAVE_CHECK, UI_SAVE_REPAIR, UI_SAVE_CHECKCOPIES,   // « Verifier la sauvegarde » (fenetre SM_CHECK : es2.inc), Reparer, Copies de secours
        UI_SAVE_RESTORE = 9050,   // + k : copie de secours k de la partie choisie (9050-9089)
        UI_SAVE = 9100,       // + ligne * 8 + partie (onglet)
@@ -315,7 +321,7 @@ static void SaveNameDone();
 static bool SaveChar(wchar_t c)
 {
     std::wstring *t = g_saveModal == SM_NAME ? &g_saveNameText : g_tab == TAB_SAVES && g_saveEdit >= 0 ? &g_saveEditText : NULL;
-    if (!t) { if (g_saveModal != SM_NONE && c == 27) { g_saveModal = SM_NONE; return true; } return g_saveModal != SM_NONE; }
+    if (!t) { if (g_saveModal == SM_SOLOCOOP && c == 13) { SoloCoopGo(); return true; } if (g_saveModal != SM_NONE && c == 27) { g_saveModal = SM_NONE; return true; } return g_saveModal != SM_NONE; }
     if (c == 8) { if (!t->empty()) t->pop_back(); }
     else if (c == 127) t->clear();
     else if (c == 13) {
@@ -542,10 +548,50 @@ static void SaveImportArchive(const std::wstring &name)
     g_saveModal = SM_NONE;
     SaveImportFile(file, name);
 }
+// ---- SOLO COOP (JD, 06/11) : seul, avec le mod et sans session. Au clic, la liste des sauvegardes qui ont une partie, celle utilisee
+// deja selectionnee ; Lancer la charge (Partie=continuer), Annuler ne lance rien. Jamais de nouvelle partie : sans sauvegarde, la fenetre le dit.
+static std::vector<int> SoloCoopRows()
+{
+    std::vector<int> r;
+    for (int i = 0; i < (int)g_saves.size(); i++) if (g_saves[i].has) r.push_back(i);
+    return r;
+}
+static void SoloCoopScroll(int d)
+{
+    int n = (int)SoloCoopRows().size();
+    g_soloCoopTop = max(0, min(g_soloCoopTop + d, n - kSoloCoopPage));
+}
+static void SoloCoopOpen()
+{
+    SavesScan();
+    std::vector<int> r = SoloCoopRows();
+    std::wstring cur = SaveCurrentProf();
+    int at = 0;
+    for (int k = 0; k < (int)r.size(); k++) if (g_saves[r[k]].prof == cur) at = k;
+    g_soloCoopSel = !r.empty();
+    g_soloCoopProf = r.empty() ? L"" : g_saves[r[at]].prof;
+    g_soloCoopGone = false;
+    g_soloCoopTop = max(0, min(at - kSoloCoopPage + 1, (int)r.size() - kSoloCoopPage));
+    g_saveModal = SM_SOLOCOOP;
+}
+static bool SoloCoopGo()
+{
+    SavesScan();
+    bool ok = false;
+    if (g_soloCoopSel) for (const SaveSlot &s : g_saves) if (s.has && s.prof == g_soloCoopProf) ok = true;
+    if (!ok) { g_soloCoopGone = g_soloCoopSel; g_soloCoopSel = false; return false; }   // (effacee entre-temps : la fenetre reste, rien ne part)
+    if (g_testSalon.empty() && GameRunningAsk()) return false;
+    std::wstring prof = g_soloCoopProf;
+    g_saveModal = SM_NONE;
+    SaveSetCurrent(prof);   // (la sauvegarde lancee devient celle utilisee : WriteLaunchFile et les copies de secours la lisent la)
+    Launch(MODE_SOLOCOOP, "continuer");
+    return true;
+}
 static void SavePickRow(int i)
 {
     if (i < 0 || i >= (int)g_saves.size()) return;
     const SaveSlot s = g_saves[i];
+    if (g_saveModal == SM_SOLOCOOP) { if (s.has) { g_soloCoopProf = s.prof; g_soloCoopSel = true; g_soloCoopGone = false; } return; }
     if (g_saveModal == SM_RESTART) {
         wchar_t q[700];
         swprintf_s(q, CarMsc() ? T(L"Vous êtes sur le point de recommencer « %s ».\n\nCela effacera cette sauvegarde (la partie en cours sera perdue). Êtes-vous sûr ?\n\nCouleur de la SATSUMA (icône voiture du salon) : %s.",
@@ -831,7 +877,7 @@ static void SaveCopiesBeforeLaunch(int mode)
 {
     if (mode == MODE_GUEST || g_gameDir.empty()) return;
     try {   // (une copie ratee n'empeche jamais le jeu de partir)
-    std::wstring prof = mode == MODE_HOST ? SaveCurrentProf() : L"", root = SaveCopiesDir(prof);
+    std::wstring prof = mode == MODE_HOST || mode == MODE_SOLOCOOP ? SaveCurrentProf() : L"", root = SaveCopiesDir(prof);
     if (root.empty()) return;
     std::vector<unsigned char> d;
     std::wstring last = ReadAll(root + L"version.txt", d) ? Trim(Widen(std::string(d.begin(), d.end()), CP_UTF8)) : L"";
@@ -1147,6 +1193,7 @@ static void DrawSaveModal(Graphics &g)
     if (rows > 7) rows = 7;
     int crows = min(14, (int)g_saveBak.size());
     float h = g_saveModal == SM_NAME ? 250 : g_saveModal == SM_NEWGAME ? 300 : g_saveModal == SM_CHECK ? 560 : g_saveModal == SM_COPIES ? 130 + max(1, crows) * 46 : 150 + rows * 62;
+    if (g_saveModal == SM_SOLOCOOP) { int n = (int)SoloCoopRows().size(); h = n ? 180.0f + min(n, kSoloCoopPage) * 62 : 220.0f; }
     RectF c(640 - 290, 400 - h / 2, 580, h);
     {   // (fond plein : le verre laissait voir la page dessous)
         GraphicsPath bp; RoundRect(bp, c, 20);
@@ -1155,10 +1202,44 @@ static void DrawSaveModal(Graphics &g)
     }
     const wchar_t *title = g_saveModal == SM_CHECK ? T(L"Vérifier la sauvegarde", L"Check the save") : g_saveModal == SM_COPIES ? T(L"Copies de secours", L"Backup copies") : g_saveModal == SM_PICK ? T(L"Sauvegarde de la partie", L"Game save") : g_saveModal == SM_NEWGAME ? T(L"Nouvelle partie", L"New game")
                          : g_saveModal == SM_RESTART ? T(L"Recommencer une sauvegarde", L"Restart a save") : T(L"Nom de la sauvegarde", L"Save name");
+    if (g_saveModal == SM_SOLOCOOP) title = T(L"Solo Coop", L"Solo Coop");
     Title(g, title, RectF(c.X + 24, c.Y + 18, c.Width - 100, 30), 19, kInk);
     UiButton(g, RectF(c.X + c.Width - 24 - 40, c.Y + 16, 40, 36), L"", UI_SAVE_MCLOSE, false, IC_CLOSE);
     float y = c.Y + 62;
     if (g_saveModal == SM_CHECK) { DrawSaveCheck(g, c, y); return; }
+    if (g_saveModal == SM_SOLOCOOP) {
+        std::vector<int> sr = SoloCoopRows();
+        if (sr.empty()) {
+            Para(g, T(L"Aucune sauvegarde à charger. Solo Coop ne crée pas de nouvelle partie : héberge d'abord une partie, ou importe une sauvegarde depuis la page Sauvegardes.", L"No save to load. Solo Coop does not create a new game: start one by hosting, or import a save from the Saves page."), RectF(c.X + 24, y, c.Width - 48, 70), 13.5f, kInk);
+            UiButton(g, RectF(c.X + c.Width - 24 - 130, c.Y + c.Height - 24 - 44, 130, 44), T(L"Fermer", L"Close"), UI_SAVE_MCLOSE, true);
+            return;
+        }
+        Para(g, g_soloCoopGone ? T(L"Cette sauvegarde n'existe plus : choisis-en une autre.", L"This save no longer exists: pick another one.") : T(L"Seul, avec le mod et ses ajouts, sans serveur ni invité. Choisis la sauvegarde à charger.", L"Alone, with the mod and its additions, no server and no guests. Pick the save to load."), RectF(c.X + 24, y, c.Width - 48, 36), 12.5f, g_soloCoopGone ? kInk : kGrey);
+        y += 42;
+        std::wstring cur = SaveCurrentProf();
+        int top = max(0, min(g_soloCoopTop, (int)sr.size() - kSoloCoopPage));
+        for (int k = top; k < (int)sr.size() && k < top + kSoloCoopPage; k++) {
+            int i = sr[k];
+            const SaveSlot &s = g_saves[i];
+            RectF r(c.X + 24, y + (k - top) * 62, c.Width - 48, 54);
+            bool hot = g_uiHot == UI_SAVE_PICK + i, on = g_soloCoopSel && s.prof == g_soloCoopProf;
+            GraphicsPath p; RoundRect(p, r, 12);
+            SolidBrush b(hot ? TH(cardSel) : on ? WithA(kAcc, 0.10f) : TH(card)); g.FillPath(&b, &p);
+            Pen pn(on ? kAcc : hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), on ? 1.6f : 1.0f); g.DrawPath(&pn, &p);
+            Text(g, s.name, RectF(r.X + 16, r.Y + 6, r.Width - 140, 22), 14.5f, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, SaveWhen(s), RectF(r.X + 16, r.Y + 28, r.Width - 32, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            if (s.prof == cur) Pill(g, RectF(r.X + r.Width - 12 - PillW(T(L"UTILISÉE", L"IN USE"), 11), r.Y + 8, PillW(T(L"UTILISÉE", L"IN USE"), 11), 20), WithA(kAcc, 0.22f), T(L"UTILISÉE", L"IN USE"), kAcc, 11);
+            HotZone(r, UI_SAVE_PICK + i);
+        }
+        float fy = c.Y + c.Height - 24 - 44;
+        if ((int)sr.size() > kSoloCoopPage) {
+            UiButton(g, RectF(c.X + 24, fy, 44, 44), L"", UI_SAVE_SCPREV, false, IC_CHEVL, top > 0);
+            UiButton(g, RectF(c.X + 76, fy, 44, 44), L"", UI_SAVE_SCNEXT, false, IC_CHEVR, top + kSoloCoopPage < (int)sr.size());
+        }
+        UiButton(g, RectF(c.X + c.Width - 24 - 150, fy, 150, 44), T(L"Lancer", L"Launch"), UI_SAVE_SCGO, true, IC_PLAY, g_soloCoopSel);
+        UiButton(g, RectF(c.X + c.Width - 24 - 150 - 12 - 130, fy, 130, 44), T(L"Annuler", L"Cancel"), UI_SAVE_MCLOSE, false, -1);
+        return;
+    }
     if (g_saveModal == SM_COPIES) {   // toutes les copies de la partie choisie (14 au plus : 10 au lancement, « avant » 3 versions, Reworked)
         int sel = SaveSelIndex();
         wchar_t sub[300] = L"";
@@ -1247,6 +1328,9 @@ static void DrawSaveModal(Graphics &g)
 static void SaveClick(int id)
 {
     if (id == UI_SAVE_MCLOSE) { g_saveModal = SM_NONE; return; }
+    if (id == UI_SAVE_SCPREV) { SoloCoopScroll(-kSoloCoopPage); return; }
+    if (id == UI_SAVE_SCNEXT) { SoloCoopScroll(kSoloCoopPage); return; }
+    if (id == UI_SAVE_SCGO) { SoloCoopGo(); return; }
     if (id == UI_SAVE_REFRESH) { g_saveEdit = -1; SavesScan(); return; }
     if (id == UI_SAVE_NEW) { if (SaveGuard()) SaveAskName(false); return; }
     if (id == UI_SAVE_LOBBY) { SaveOpenPick(); return; }
@@ -1336,4 +1420,121 @@ static bool GameSet(int game, bool host)
     if (g_lobby != LB_NONE) LobbyClose();
     PostMessageW(g_wnd, WM_APP_RELAUNCH, 0, 0);
     return true;
+}
+
+// /testsolocoop <journal> : la fenetre et ce qu'elle ecrit, sans fenetre ni jeu (g_testSalon : Launch s'arrete apres lancement.ini et les copies).
+// Dossier de jeu jetable et LOCALAPPDATA a cote obligatoires ; USERPROFILE a cote aussi : la Partie principale d'essai n'est pas celle du joueur.
+static int SoloCoopSelfTest(const wchar_t *log)
+{
+    DeleteFileW(log);
+    int bad = 0;
+    auto say = [&](const std::string &l, bool good) {
+        FILE *o = _wfopen(log, L"ab");
+        if (o) { fprintf(o, "%s %s\r\n", l.c_str(), good ? "ok" : "ECHEC"); fclose(o); }
+        if (!good) bad++;
+    };
+    std::wstring parent = g_dir.substr(0, g_dir.find_last_of(L'\\', g_dir.size() - 2) + 1);
+    if (g_gameDir.empty() || _wcsicmp(g_gameDir.c_str(), g_dir.c_str()) || _wcsnicmp(LocalDir().c_str(), parent.c_str(), parent.size())) { say("refuse : dossier de jeu jetable et LOCALAPPDATA a cote obligatoires", false); return 3; }
+    std::wstring up = parent + L"up";
+    CreateDirectoryW(up.c_str(), NULL);
+    SetEnvironmentVariableW(L"USERPROFILE", up.c_str());
+    g_testSalon = L"solocoop";
+    g_testSalonLog = std::wstring(log) + L".lancement";
+    g_modOk = true; g_busy = false;
+    std::wstring li = g_modRoot + L"MWCoop\\lancement.ini";
+    auto put = [&](const std::wstring &prof) {
+        std::wstring d = SaveDirOf(prof);
+        SHCreateDirectoryExW(NULL, d.c_str(), NULL);
+        FILE *o = _wfopen((d + (g_game == GAME_MSC ? L"defaultES2File.txt" : L"savefile.txt")).c_str(), L"wb");
+        if (o) { fputs("partie", o); fclose(o); }
+    };
+    auto ini = [&]() { std::vector<unsigned char> d; return ReadAll(li, d) ? std::string(d.begin(), d.end()) : std::string(); };
+    auto has = [&](const std::string &t, const char *x) { return t.find(x) != std::string::npos; };
+    auto row = [&](const std::wstring &prof) { for (int i = 0; i < (int)g_saves.size(); i++) if (g_saves[i].prof == prof) return i; return -1; };
+    auto setCur = [&](const wchar_t *p) { WritePrivateProfileStringW(L"Lanceur", L"Sauvegarde", *p ? p : NULL, g_iniLauncher.c_str()); };
+    DeleteFileW(li.c_str());
+
+    SoloCoopOpen();
+    say("aucune sauvegarde : fenetre ouverte, liste vide, rien de selectionne", g_saveModal == SM_SOLOCOOP && SoloCoopRows().empty() && !g_soloCoopSel);
+    say("aucune sauvegarde : Lancer ne part pas", !SoloCoopGo() && g_saveModal == SM_SOLOCOOP && !FileExists(li));
+    SaveClick(UI_SAVE_MCLOSE);
+
+    std::wstring p1 = SaveCreate(L"Une"), p2 = SaveCreate(L"Deux"), p3 = SaveCreate(L"Vide");
+    put(p1); put(p2);
+    setCur(p2.c_str());
+    SoloCoopOpen();
+    say("deux parties : la vide et la principale absente ne sont pas proposees", SoloCoopRows().size() == 2);
+    say("celle utilisee est deja selectionnee", g_soloCoopSel && g_soloCoopProf == p2);
+    SaveClick(UI_SAVE_MCLOSE);
+    say("Annuler : rien de lance, aucune copie", g_saveModal == SM_NONE && !FileExists(li) && SaveCopiesList(p2).empty());
+    SoloCoopOpen(); SaveChar(27);
+    say("Echap : rien de lance", g_saveModal == SM_NONE && !FileExists(li));
+    setCur(p3.c_str());
+    SoloCoopOpen();
+    say("utilisee vide : la premiere partie jouable est selectionnee", g_soloCoopSel && g_soloCoopProf == p1);
+    say("utilisee vide : le choix n'est pas change avant Lancer", SaveCurrentProf() == p3);
+    SaveClick(UI_SAVE_MCLOSE);
+
+    setCur(p2.c_str());
+    SoloCoopOpen();
+    SaveClick(UI_SAVE_PICK + row(p3));
+    say("clic sur une sauvegarde vide : ignore", g_soloCoopProf == p2);
+    SaveClick(UI_SAVE_PICK + row(p1));
+    say("clic : la selection suit, pas encore de lancement", g_soloCoopProf == p1 && !FileExists(li));
+    SaveChar(13);
+    std::string t = ini();
+    say("Entree : lancement.ini ecrit, fenetre fermee", g_saveModal == SM_NONE && !t.empty());
+    say("Mode=solocoop", has(t, "Mode=solocoop\r\n"));
+    say("Profil de la sauvegarde choisie", has(t, ("Profil=" + Narrow(p1, CP_UTF8) + "\r\n").c_str()));
+    say("Partie=continuer", has(t, "Partie=continuer\r\n"));
+    say("ni Reseau ni Adresse", !has(t, "Reseau=") && !has(t, "Adresse="));
+    say("Horodatage dans [Lancement], lu par le chargeur", has(t, "[Lancement]\r\nMode=solocoop\r\nHorodatage="));
+    say("devenue la sauvegarde utilisee", SaveCurrentProf() == p1);
+    say("copie de secours de la partie choisie", SaveCopiesList(p1).size() == 1);
+    say("pas de copie de l'autre", SaveCopiesList(p2).empty());
+    DeleteFileW(li.c_str());
+
+    put(L"");
+    SoloCoopOpen();
+    SaveClick(UI_SAVE_PICK + row(L""));
+    SaveClick(UI_SAVE_SCGO);
+    t = ini();
+    say("Partie principale proposee quand elle existe : Mode=solocoop, Profil vide", has(t, "Mode=solocoop\r\n") && has(t, "Profil=\r\n") && has(t, "Partie=continuer\r\n"));
+    say("copie de secours de la Partie principale", SaveCopiesList(L"").size() == 1);
+    DeleteFileW(li.c_str());
+
+    setCur(p2.c_str());
+    SoloCoopOpen();
+    DeleteFileW((SaveDirOf(p2) + (g_game == GAME_MSC ? L"defaultES2File.txt" : L"savefile.txt")).c_str());
+    SaveClick(UI_SAVE_SCGO);
+    say("effacee avant Lancer : fenetre gardee, message, rien de lance", g_saveModal == SM_SOLOCOOP && g_soloCoopGone && !g_soloCoopSel && !FileExists(li));
+    SaveClick(UI_SAVE_SCGO);
+    say("sans selection : Lancer ne part pas", g_saveModal == SM_SOLOCOOP && !FileExists(li));
+    SaveClick(UI_SAVE_MCLOSE);
+    put(p2);
+
+    std::wstring last;
+    for (int i = 0; i < 8; i++) { last = SaveCreate(L"Page"); put(last); }
+    setCur(last.c_str());
+    SoloCoopOpen();
+    int n = (int)SoloCoopRows().size();
+    say("liste longue : la sauvegarde utilisee est dans la page montree", n > kSoloCoopPage && g_soloCoopTop == n - kSoloCoopPage);
+    SaveClick(UI_SAVE_SCPREV);
+    int back = g_soloCoopTop;
+    say("page precedente", back == max(0, n - 2 * kSoloCoopPage));
+    SoloCoopScroll(-1000); say("butee haute", g_soloCoopTop == 0);
+    SoloCoopScroll(1000); say("butee basse", g_soloCoopTop == n - kSoloCoopPage);
+    SaveClick(UI_SAVE_MCLOSE);
+
+    setCur(p1.c_str());
+    Launch(MODE_SOLO);
+    t = ini();
+    say("SOLO inchange : Mode=solo, Profil vide, pas de Partie", has(t, "Mode=solo\r\n") && has(t, "Profil=\r\n") && !has(t, "Partie="));
+    DeleteFileW(li.c_str());
+    Launch(MODE_HOST, "continuer");
+    t = ini();
+    say("hote inchange : Mode=hote, Reseau, Profil", has(t, "Mode=hote\r\n") && has(t, "Reseau=") && has(t, ("Profil=" + Narrow(p1, CP_UTF8) + "\r\n").c_str()));
+    DeleteFileW(li.c_str());
+    say(bad ? "RESULTAT" : "RESULTAT tout", !bad);
+    return bad ? 1 : 0;
 }

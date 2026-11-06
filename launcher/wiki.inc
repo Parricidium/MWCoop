@@ -153,17 +153,18 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
         return 150;
     }
     case WF_NET: {   // accueil : Steam / IP, puis heberger / rejoindre / solo
-        if (!draw) return 156;
+        if (!draw) return 244;
         UiSeg(g, RectF(x, y, 260, 40), { L"STEAM", L"IP / VPN" }, g_steamNet ? 0 : 1, Z, 12.5f);
         WikiBadge(g, x + 270, y + 20, 1);
-        float bw = (w - 24) / 3;
+        float bw = (w - 12) / 2;   // (deux rangees : les libelles russes ne tiennent pas sur quatre colonnes)
         UiButton(g, RectF(x, y + 56, bw, 44), T(L"HÉBERGER", L"HOST"), Z, true, IC_HOMEPLUS);
         UiButton(g, RectF(x + bw + 12, y + 56, bw, 44), T(L"REJOINDRE", L"JOIN"), Z, false, IC_LOGIN);
-        UiButton(g, RectF(x + 2 * (bw + 12), y + 56, bw, 44), T(L"SOLO", L"SOLO"), Z, false, IC_PLAY);
-        WikiBadge(g, x + bw / 2, y + 112, 2); WikiBadge(g, x + bw * 1.5f + 12, y + 112, 3); WikiBadge(g, x + bw * 2.5f + 24, y + 112, 4);
-        Para(g, T(L"1 réseau · 2 ouvrir un salon · 3 entrer dans celui d'un ami · 4 jouer seul, avec MWCoop", L"1 network · 2 open a lobby · 3 enter a friend's · 4 play alone, with MWCoop"),
-             RectF(x, y + 126, w, 20), 11.5f, kGrey);
-        return 156;
+        UiButton(g, RectF(x, y + 132, bw, 44), T(L"SOLO", L"SOLO"), Z, false, IC_PLAY);
+        UiButton(g, RectF(x + bw + 12, y + 132, bw, 44), T(L"SOLO COOP", L"SOLO COOP"), Z, false, IC_PLAY);
+        WikiBadge(g, x + bw / 2, y + 112, 2); WikiBadge(g, x + bw * 1.5f + 12, y + 112, 3); WikiBadge(g, x + bw / 2, y + 188, 4); WikiBadge(g, x + bw * 1.5f + 12, y + 188, 5);
+        Para(g, T(L"1 réseau · 2 ouvrir un salon · 3 entrer dans celui d'un ami · 4 sans le mod · 5 seul, avec le mod", L"1 network · 2 open a lobby · 3 enter a friend's · 4 without the mod · 5 alone, with the mod"),
+             RectF(x, y + 204, w, 36), 11.5f, kGrey);
+        return 244;
     }
     case WF_LOBBY: {   // salon : hote, amis, PRET, LANCER
         if (!draw) return 150;

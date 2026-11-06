@@ -19,8 +19,8 @@ static const TutoStep kTuto[] = {
       L"HOST", L"Opens a lobby: your friends join it, everyone gets READY, then START launches everyone's game. The lobby's gear holds its options.", "0.42.0" },
     { L"REJOINDRE", L"Entre dans le salon d'un ami (par Steam : son invitation, ou son salon trouvé tout seul ; par IP : son adresse juste au-dessus).",
       L"JOIN", L"Enters a friend's lobby (through Steam: their invite, or their lobby found by itself; by IP: their address just above).", "0.42.0" },
-    { L"JOUER EN SOLO", L"Le jeu vanilla : MWCoop n'est pas chargé du tout (ni pastille, ni menu coop). Ta sauvegarde n'est jamais touchée par les parties des autres.",
-      L"PLAY SOLO", L"The vanilla game: MWCoop isn't loaded at all (no badge, no co-op menu). Your save is never touched by other people's games.", "0.75.14" },
+    { L"SOLO", L"Le jeu vanilla : MWCoop n'est pas chargé du tout (ni pastille, ni menu coop). Ta sauvegarde n'est jamais touchée par les parties des autres.",
+      L"SOLO", L"The vanilla game: MWCoop isn't loaded at all (no badge, no co-op menu). Your save is never touched by other people's games.", "0.75.14" },
     { L"Toutes les pages, à gauche", L"Le salon, ton personnage, ce que tu partages et les nouveautés : un clic, sans fenêtre qui s'ouvre par-dessus.",
       L"Every page, on the left", L"The lobby, your character, what you share and the updates: one click, no window popping over.", "0.42.0" },
     { L"Personnage et voiture", L"Ton apparence complète (silhouette, chapeau, lunettes, cheveux, visage, haut, pantalon) en 3D, et la couleur de ta CORRIS.",
@@ -166,6 +166,9 @@ static const TutoStep kTuto[] = {
       L"Separate mods folder", L"With MWCoop's MSCLoader, you can keep separate mods for co-op: Mods page, \"Separate mods folder\". Off by default. \"Copy my mods\" copies, without moving anything. The official MSCLoader does not change.", "1.16.23" },
     { L"Sauvegarde automatique", L"L'hôte peut faire sauvegarder la partie toutes les 5 à 30 minutes : Réglages > Co-op, ou dans le salon. Coupée d'office. À chaque sauvegarde, gel de quelques secondes pour tous, plus sur une grosse partie.",
       L"Autosave", L"The host can have the game saved every 5 to 30 minutes: Settings > Co-op, or in the lobby. Off by default. At each save, a freeze of a few seconds for everyone, longer on a big game.", "1.16.23" },
+    // lanceur-1.16.24 (06/11) : SOLO et SOLO COOP sur l'Accueil (70)
+    { L"Solo ou Solo Coop", L"Deux boutons sur l'Accueil : SOLO, le jeu sans le mod ; SOLO COOP, seul avec le mod et ses ajouts, sur la sauvegarde de ton choix.",
+      L"Solo or Solo Coop", L"Two buttons on Home: SOLO, the game without the mod; SOLO COOP, alone with the mod and its additions, on the save of your choice.", "1.16.24" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -268,6 +271,7 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 70: return g_btn[B_SOLOCOOP].r;                     // SOLO COOP (Accueil)
     case 69: return TutoSetTab(SET_COOP);                    // onglet Co-op (SetTutoTab l'ouvre) : sauvegarde automatique
     case 68: return g_mscSepR;                               // Dossier de mods a part (page Mods, MSCLoader de MWCoop ; sinon bulle au centre)
     case 67: return g_navR[TAB_SYNC];                        // Synchronise dans la barre (sous Guide)
