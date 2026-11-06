@@ -5251,6 +5251,7 @@ static void LobbyRowLabel(const LobbyOptDef &d, const GfxRow *r, std::wstring &l
         { "VocalActivation", L"Parler", L"Talk", NULL, NULL },   // (1.8.9, JD : « laisser le choix » ; sans petite ligne : la carte de l'invite est pleine)
         { "Difficulte", L"Difficulté de départ", L"Start difficulty", L"Nouvelle partie : argent et carburant", L"New game: money and fuel" },
         { "VitesseVitres", L"Vitesse des vitres", L"Window speed", NULL, NULL },
+        { "SauvegardeAuto", L"Sauvegarde auto", L"Autosave", NULL, NULL },
         { "CarteMaintenir", L"Carte (M)", L"Map (M)", NULL, NULL },
         { "KuplaBulles", L"Bulles co-op (Kupla, bêta)", L"Co-op bubbles (Kupla, beta)", L"Le monde reste vivant autour de chaque joueur", L"The world stays alive around every player" },
     };
@@ -5400,7 +5401,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         caption(T(L"RÈGLES", L"RULES"), !host);
         for (const char *k : { "ArgentDepart", "Triches", "TrichesHote", "Renverser", "PvP", "CeinturesArriere" })   // (ceintures arriere : MWC, cachees sur MSC par row)
             if (strcmp(k, "TrichesHote") || val("Triches") == 1) row(k, false);   // (hote seulement : sous Triches, quand elles sont autorisees)
-        if (!host) for (const char *k : { "Difficulte", "VitesseVitres" }) row(k, false);   // (lecture seule ; l'hote les regle dans la carte de droite -- 1.8.9)
+        if (!host) for (const char *k : { "Difficulte", "VitesseVitres", "SauvegardeAuto" }) row(k, false);   // (lecture seule ; l'hote les regle dans la carte de droite -- 1.8.9)
         y += 6;
         caption(T(L"JEUX & AJOUTS", L"GAMES & ADDITIONS"), false);
         row("VenttiEnjeux", false);
@@ -5432,8 +5433,8 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         if (g_lobbyMax > 10) swprintf_s(sb, L"%s", T(L"Au-delà de 10 : très bonne connexion et bonne machine chez l'hôte", L"Above 10: a very good connection and a good machine on the host's side"));
         else if (sel < 0) swprintf_s(sb, T(L"Hôte compris · %d pour ce salon", L"Host included · %d for this lobby"), g_lobbyMax);
         else swprintf_s(sb, L"%s", T(L"Hôte compris · au-delà de 10, bonne connexion conseillée", L"Host included · above 10, a good connection is advised"));
-        if (!pick) Text(g, sb, RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, g_lobbyMax > 10 ? kWarn : kGrey, StringAlignmentNear);
-        if (edit) UiSeg(g, RectF(right - 180, y + (pick ? 3 : 4), 180, 28), { L"2", L"4", L"8", L"12", L"16" }, sel, UI_LOBBY_MAXSEG, 11.5f);
+        if (!pick) Text(g, FitText(sb, 10.5f, FontStyleRegular, w), RectF(x, y + 27, w, 16), 10.5f, FontStyleRegular, g_lobbyMax > 10 ? kWarn : kGrey, StringAlignmentNear);
+        if (edit) UiSeg(g, RectF(right - 180, y + (pick ? 3 : 1), 180, pick ? 28.0f : 25.0f), { L"2", L"4", L"8", L"12", L"16" }, sel, UI_LOBBY_MAXSEG, 11.5f);   // (haute de 25 : l'explication passe dessous, sans se croiser)
         else Pill(g, RectF(right - 46, y + (pick ? 6 : 7), 46, 22), WithA(kAcc, 0.22f), std::to_wstring(g_lobbyMax), kInk, 10.5f);
         y += pick ? rh : rh2;
         if (!host && ho.empty()) Text(g, T(L"Pas encore reçues de l'hôte", L"Not received from the host yet"), RectF(x, y + 4, w, 18), 11, FontStyleItalic, kGrey, StringAlignmentNear);
@@ -5796,9 +5797,22 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             else Pill(g, RectF(x, y + 3, PillW(DiffName(dv), 11) + 4, 22), WithA(kAcc, 0.22f), DiffName(dv), kInk, 11);
             y += 34;
         }
-        std::wstring note = partie == PARTIE_NOUVELLE ? std::wstring(g_game == GAME_MSC ? T(L"Couleur de la SATSUMA : ", L"SATSUMA color: ") : T(L"Couleur de la CORRIS : ", L"CORRIS color: ")) + CarColorName() + L"." : std::wstring(T(L"Tes invités la reçoivent en arrivant.", L"Your guests receive it when they arrive."));
-        Text(g, note, RectF(x, y + 2, w, 16), 10.5f, FontStyleRegular, partie == PARTIE_NOUVELLE ? kWarn : kGrey, StringAlignmentNear);
-        y += 18;
+        if (partie == PARTIE_NOUVELLE) {
+            std::wstring note = std::wstring(g_game == GAME_MSC ? T(L"Couleur de la SATSUMA : ", L"SATSUMA color: ") : T(L"Couleur de la CORRIS : ", L"CORRIS color: ")) + CarColorName() + L".";
+            Text(g, note, RectF(x, y + 2, w, 16), 10.5f, FontStyleRegular, kWarn, StringAlignmentNear);
+            y += 20;
+        } else y += 6;
+        {   // sauvegarde automatique, minutes (0 coupe) : le mod lit [Coop] SauvegardeAuto, seul l'hote declenche
+            static const int autos[5] = { 0, 5, 10, 15, 30 };
+            int av = LobbyOptGet("SauvegardeAuto"), as = -1;
+            for (int k = 0; k < 5; k++) if (av == autos[k]) as = k;
+            Text(g, T(L"Sauvegarde auto", L"Autosave"), RectF(x, y, w - 186, 26), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+            if (!go) UiSeg(g, RectF(right - 180, y, 180, 26), { T(L"Non", L"Off"), L"5", L"10", L"15", L"30" }, as, UI_LOBBY_AUTOSAVE, 11);
+            else Pill(g, RectF(right - 56, y + 2, 56, 22), WithA(kAcc, 0.22f), av ? std::to_wstring(av) : std::wstring(T(L"Non", L"Off")), kInk, 10.5f);
+            y += 28;
+            Text(g, FitText(T(L"En minutes · gel de quelques secondes ou plus, pour tous", L"In minutes · a freeze of a few seconds or more, for everyone"), 10.5f, FontStyleRegular, w), RectF(x, y, w, 15), 10.5f, FontStyleRegular, av ? kWarn : kGrey, StringAlignmentNear);
+            y += 16;
+        }
         gap();
         // envoye aux invites (contenu de la page PARTAGE : g_offer)
         Title(g, T(L"Envoyé aux invités", L"Sent to guests"), RectF(x, y, w - 90, 24), 16, kInk);
@@ -5859,6 +5873,8 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             int guests = 0, pending = 0;
             for (auto &p : peers) if (p.id != 0) { guests++; if (PeerSyncPending(p)) { pending++; if (pend.empty()) pend = p.name + (p.modsAsk ? std::string(" ?") : " " + std::to_string(max(0, p.dl)) + " %"); } }
             int shown = min(3, (int)mods.size());
+            float room = c.Y + c.Height - 18 - 44 - 8 - 64 - 12 - 64 - 6 - y;   // (jusqu'au conseil du bas : hc, plus bas)
+            while (shown > 1 && shown * 24 + ((int)mods.size() > shown ? 18 : 0) > room) shown--;
             for (int i = 0; i < shown; i++) {
                 std::wstring nm = Widen(mods[i], CP_UTF8);
                 size_t dot = nm.rfind(L'.');
@@ -6270,6 +6286,14 @@ static void LobbyOptClick(int id)
         if (!host) return;
         g_lobbyOpt["Difficulte"] = id - UI_LOBBY_DIFF;
         TestLog("salon : option Difficulte = %d (ce salon seulement)", id - UI_LOBBY_DIFF);
+        LobbyPublish();
+        return;
+    }
+    if (id >= UI_LOBBY_AUTOSAVE && id < UI_LOBBY_AUTOSAVE + 5) {   // sauvegarde automatique : pour ce salon, comme les autres options de la partie
+        if (!host) return;
+        static const int autos[5] = { 0, 5, 10, 15, 30 };
+        g_lobbyOpt["SauvegardeAuto"] = autos[id - UI_LOBBY_AUTOSAVE];
+        TestLog("salon : option SauvegardeAuto = %d (ce salon seulement)", autos[id - UI_LOBBY_AUTOSAVE]);
         LobbyPublish();
         return;
     }
@@ -8342,6 +8366,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         return 0;
     }
 
+    // /testmodsapart <journal> : dossier de mods a part, dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testmodsapart")) {
+        int rc = MscSepSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /testtenues <journal> : tenues enregistrees (lecture, ecriture, mise), dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testtenues")) {
         int rc = OutfitSelfTest(argv[2]);
@@ -8418,10 +8448,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             SetStatus(K_WARN, T(L"Arr\u00EAt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
             if (st == L"crash-survol") g_uiHot = UI_NAV + TAB_LOGS;
         }
-        else if (st == L"mods" || st == L"mods-page" || st == L"mods-absent") {   // onglet MODS (faux mods)
+        else if (st == L"mods" || st == L"mods-page" || st == L"mods-absent" || st == L"mods-apart" || st == L"mods-apart-coupe") {   // onglet MODS (faux mods)
             g_mscFake = true;
             g_mscInstalled = st != L"mods-absent";
             g_mscVer = L"1.4.2"; g_mscDirKind = L"GF";
+            if (st == L"mods-apart" || st == L"mods-apart-coupe") {
+                g_mscOwnPref = 1; g_mscSepForce = st == L"mods-apart" ? 1 : 0;
+                g_mscDir = g_mscSepForce ? MscSepDir() : g_gameDir + L"Mods\\";
+                if (g_mscSepForce) g_mscDirKind = L"SEP";
+            }
             MscMod a, b, c;
             a.file = L"BetterHeadlights.dll"; a.id = L"BetterHeadlights"; a.name = L"Better Headlights"; a.ver = L"1.3"; a.author = L"Fleetari"; a.known = true;
             a.sets = { { "HeaderGroup", "", L"Phares", "", "", "", "", "", {} }, { "CheckBox", "xenon", L"Ampoules x\u00E9non", "1", "0", "", "", "", {} },

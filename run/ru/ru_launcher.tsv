@@ -2586,3 +2586,29 @@ A mod MWCoop doesn't support: what it adds is only seen by those who have it, an
 Something differs on your side? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s). If it comes back: Report a bug, the bug icon at the top right.	У тебя что-то отличается? F10 > Синхр. > Пересинхронизировать мир: хост заново отправит всё состояние, как при твоём входе (раз в 30 с). Если повторится: «Сообщить об ошибке», значок жука вверху справа.
 What is synced	Что синхронизируется
 Shared between players, or kept by each	Общее для игроков или у каждого своё
+Close the game before copying your mods	Закрой игру перед копированием модов
+Nothing to copy: the separate folder already has everything	Копировать нечего: в отдельной папке уже всё есть
+Copy %d file(s) (%s)?\n\nFrom: %s\nTo: %s\n\nYour original mods do not move. What is already in the separate folder is kept.	Скопировать файлы: %d (%s)?\n\nОткуда: %s\nКуда: %s\n\nТвои исходные моды не перемещаются. То, что уже есть в отдельной папке, сохраняется.
+Close the game to change the mods folder	Закрой игру, чтобы сменить папку модов
+MWCoop goes back to the solo Mods folder. The separate folder stays, nothing is deleted	MWCoop возвращается к папке Mods одиночной игры. Отдельная папка остаётся, ничего не удаляется
+Separate folder on: copy your mods if you want them in co-op	Отдельная папка включена: скопируй моды, если хочешь их в коопе
+Separate folder on, MSCLoader files missing: REINSTALL	Отдельная папка включена, файлов MSCLoader нет: ПЕРЕУСТАНОВИТЬ
+Mods copied: %d, kept: %d, failed: %d (see the log)	Модов скопировано: %d, сохранено: %d, ошибок: %d (см. журнал)
+Mods copied: %d, kept: %d. Your original mods did not move	Модов скопировано: %d, сохранено: %d. Твои исходные моды не перемещались
+MWCoop's separate folder	отдельной папке MWCoop
+Separate mods folder	Отдельная папка модов
+In use: 	Используется: 
+Copying…	Копирование…
+Copy my mods	Скопировать мои моды
+Autosave (host)	Автосохранение (хост)
+Autosave	Автосохранение
+A freeze of a few seconds or more, for everyone	Зависание на несколько секунд или дольше, у всех
+In minutes · a freeze of a few seconds or more, for everyone	В минутах · зависание на несколько секунд или дольше, у всех
+With MWCoop's MSCLoader, you can keep separate mods for co-op: Mods page, \"Separate mods folder\". Off by default. \"Copy my mods\" copies, without moving anything. The official MSCLoader does not change.	С MSCLoader от MWCoop можно держать отдельные моды для коопа: страница «Моды», «Отдельная папка модов». По умолчанию выключено. «Скопировать мои моды» копирует, ничего не перемещая. Официальный MSCLoader не меняется.
+The host can have the game saved every 5 to 30 minutes: Settings > Co-op, or in the lobby. Off by default. At each save, a freeze of a few seconds for everyone, longer on a big game.	Хост может включить сохранение игры каждые 5–30 минут: Настройки > Co-op или в лобби. По умолчанию выключено. При каждом сохранении зависание на несколько секунд у всех, в большой игре дольше.
+Either way, your mods are the ones in the game's Mods folder, unless you choose the separate folder below.	В обоих случаях твои моды лежат в папке Mods игры, если не выбрать отдельную папку ниже.
+A separate mods folder for co-op	Отдельная папка модов для коопа
+With MWCOOP only: \"Separate mods folder\" (Mods page, off by default) keeps mods different from solo, in your MWCoop folder in AppData. The row shows the folder in use.	Только с MWCOOP: «Отдельная папка модов» (страница «Моды», по умолчанию выключено) хранит моды отдельно от одиночной игры, в твоей папке MWCoop в AppData. Строка показывает используемую папку.
+\"Copy my mods\" copies the solo ones: the originals do not move, and what is already in the separate folder is kept.	«Скопировать мои моды» копирует моды одиночной игры: исходные не перемещаются, а то, что уже есть в отдельной папке, сохраняется.
+Off: MWCoop goes back to the solo folder. Nothing is deleted. With OFFICIAL, nothing changes.	Выключено: MWCoop возвращается к папке одиночной игры. Ничего не удаляется. С ОФИЦИАЛЬНЫМ ничего не меняется.
+Autosave: the host can have the game saved every 5, 10, 15 or 30 minutes (off by default). At each save, a freeze of a few seconds for everyone, longer on a big game.	Автосохранение: хост может включить сохранение игры каждые 5, 10, 15 или 30 минут (по умолчанию выключено). При каждом сохранении зависание на несколько секунд у всех, в большой игре дольше.

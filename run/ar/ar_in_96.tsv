@@ -1,0 +1,26 @@
+L96-1	Close the game before copying your mods
+L96-2	Nothing to copy: the separate folder already has everything
+L96-3	Copy %d file(s) (%s)?\n\nFrom: %s\nTo: %s\n\nYour original mods do not move. What is already in the separate folder is kept.
+L96-4	Close the game to change the mods folder
+L96-5	MWCoop goes back to the solo Mods folder. The separate folder stays, nothing is deleted
+L96-6	Separate folder on: copy your mods if you want them in co-op
+L96-7	Separate folder on, MSCLoader files missing: REINSTALL
+L96-8	Mods copied: %d, kept: %d, failed: %d (see the log)
+L96-9	Mods copied: %d, kept: %d. Your original mods did not move
+L96-10	MWCoop's separate folder
+L96-11	Separate mods folder
+L96-12	In use: 
+L96-13	Copying…
+L96-14	Copy my mods
+L96-15	Autosave (host)
+L96-16	Autosave
+L96-17	A freeze of a few seconds or more, for everyone
+L96-18	With MWCoop's MSCLoader, you can keep separate mods for co-op: Mods page, \"Separate mods folder\". Off by default. \"Copy my mods\" copies, without moving anything. The official MSCLoader does not change.
+L96-19	The host can have the game saved every 5 to 30 minutes: Settings > Co-op, or in the lobby. Off by default. At each save, a freeze of a few seconds for everyone, longer on a big game.
+L96-20	Either way, your mods are the ones in the game's Mods folder, unless you choose the separate folder below.
+L96-21	A separate mods folder for co-op
+L96-22	With MWCOOP only: \"Separate mods folder\" (Mods page, off by default) keeps mods different from solo, in your MWCoop folder in AppData. The row shows the folder in use.
+L96-23	\"Copy my mods\" copies the solo ones: the originals do not move, and what is already in the separate folder is kept.
+L96-24	Off: MWCoop goes back to the solo folder. Nothing is deleted. With OFFICIAL, nothing changes.
+L96-25	Autosave: the host can have the game saved every 5, 10, 15 or 30 minutes (off by default). At each save, a freeze of a few seconds for everyone, longer on a big game.
+L96-100	In minutes · a freeze of a few seconds or more, for everyone

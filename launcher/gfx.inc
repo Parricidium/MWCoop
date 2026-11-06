@@ -226,6 +226,8 @@ static const std::vector<GfxRow> &GfxRows()
           { L"Vanilla", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Vanilla", L"Easy", L"Medium", L"Hard", L"Random" }, 0, 8, "Coop" },   // (0 : le jeu tel quel -- « Vanilla », JD 22/10)
         { "VitesseVitres", L"Vitesse des vitres des voitures (hôte)", L"Car window speed (host)", 1, { 1, 2, 3, 4 },
           { L"Jeu", L"x2", L"x3", L"x4" }, { L"Game", L"x2", L"x3", L"x4" }, 0, 8, "Coop" },
+        { "SauvegardeAuto", L"Sauvegarde automatique (hôte)", L"Autosave (host)", 0, { 0, 5, 10, 15, 30 },
+          { L"Non", L"5", L"10", L"15", L"30 min" }, { L"Off", L"5", L"10", L"15", L"30 min" }, 0, 8, "Coop" },   // (06/11, forum : minutes, le mod lit [Coop] SauvegardeAuto)
         { "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", 1, {}, {}, {}, 0, 8, "Coop" },
         // (Menor, 25/10 : « retirez les ceintures arriere et l'armoire ») -- Sync/Seats.cs RearBeltsOn (hote), Sync/Wardrobe.cs (chacun)
         { "CeinturesArriere", L"Ceintures des places arrière (hôte)", L"Rear seat belts (host)", 1, {}, {}, {}, 0, 8, "Coop" },
@@ -324,6 +326,7 @@ static const std::vector<GfxRow> &GfxRows()
     pills("VocalSeuil", { 5, 12, 20, 35 }, { L"5", L"12 %", L"20", L"35" }, {});
     pills("Difficulte", { 0, 1, 2, 3, 4 }, { L"Vanilla", L"Facile", L"Moyenne", L"Difficile", L"Hasard" }, { L"Vanilla", L"Easy", L"Medium", L"Hard", L"Random" });
     pills("VitesseVitres", { 1, 2, 3, 4 }, { L"Jeu", L"x2", L"x3", L"x4" }, { L"Game", L"x2", L"x3", L"x4" });
+    pills("SauvegardeAuto", { 0, 5, 10, 15, 30 }, { L"Non", L"5", L"10", L"15", L"30 min" }, { L"Off", L"5", L"10", L"15", L"30 min" });
     // My Summer Car (19/10) : ni temperature du corps ni sueur dans ce jeu ; ses options graphiques (Systems/Options::GFX, vidage
     // v.250908-04) n'ont pas d'ombres de la lune, les retroviseurs y sont un oui / non (CarMirrors) ; en plus, ses reflets de
     // l'environnement (RefProbes) et de l'eau (Water) -- cles lues par MWCoop\Gfx.cs.
@@ -617,6 +620,7 @@ static const SetItem kSetItems[] = {
     { 9, SI_GFX, "PvP", L"Coups de poing entre joueurs", L"Punches between players", NULL, NULL },
     { 9, SI_GFX, "Difficulte", L"Difficulté de départ", L"Start difficulty", L"Nouvelle partie : argent et carburant · Vanilla = le jeu tel quel", L"New game: money and fuel · Vanilla = the game as is" },
     { 9, SI_GFX, "VitesseVitres", L"Vitesse des vitres des voitures", L"Car window speed", NULL, NULL },
+    { 9, SI_GFX, "SauvegardeAuto", L"Sauvegarde automatique", L"Autosave", L"Gel de quelques secondes ou plus, pour tous", L"A freeze of a few seconds or more, for everyone" },
     { 9, SI_GFX, "PencheVitre", L"Passager : se pencher seulement vitre ouverte", L"Passenger: lean out only with the window open", NULL, NULL },
     { 9, SI_GFX, "CeinturesArriere", L"Ceintures des places arrière", L"Rear seat belts", L"Ajout MWCoop : le jeu n'en a pas", L"MWCoop addition: the game has none", 0, 1 },
     { 9, SI_SEC, NULL, L"Jeux & ajouts", L"Games & additions", NULL, NULL },
@@ -1947,7 +1951,7 @@ static bool SetChar(wchar_t c)
 static void SetEnter(int tab) { g_setTab = tab == TAB_COOP ? SET_COOP : SET_JEU; g_setSearch.clear(); g_setFocus = false; }
 // La barre de gauche suit l'onglet : Jeu / Image / Son = page Jeu (TAB_GFX), le reste = Co-op (TAB_COOP).
 static void SetRail() { int t = g_setTab <= SET_SON ? TAB_GFX : TAB_COOP; if (g_tab == TAB_GFX || g_tab == TAB_COOP) g_tab = t; }
-static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : step == 53 ? SET_SON : step == 63 ? SET_IMAGE : step == 65 ? SET_COOP : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage ; 53 : Son & vocal, parler)
+static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : step == 53 ? SET_SON : step == 63 ? SET_IMAGE : step == 65 || step == 69 ? SET_COOP : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage ; 53 : Son & vocal, parler)
 static void SetCaptureState(const std::wstring &st)
 {
     static const wchar_t *names[SET_N] = { L"jeu", L"image", L"hud", L"son", L"coop", L"touches", L"theme", L"lanceur" };

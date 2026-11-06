@@ -87,7 +87,8 @@ enum { UI_LOBBY_AJOUTS = 3312,   // + k : ajouts MWCoop Tous / Choisir / Aucun
        UI_LOBBY_MODS = 3322,     // Gerer (page MODS)
        UI_LOBBY_CHAT = 3323, UI_LOBBY_SEND,   // tchat : champ « Message au salon », ENVOYER
        UI_LOBBY_SEGV = 3330,     // + rang : pastilles segmentees de « Les miennes » (kLobbySegKeys, a la suite ; 3330-3359)
-       UI_LOBBY_DIFF = 3360 };   // + niveau : difficulte de depart (carte de droite, Nouvelle partie ; 1.8.9)
+       UI_LOBBY_DIFF = 3360,     // + niveau : difficulte de depart (carte de droite, Nouvelle partie ; 1.8.9)
+       UI_LOBBY_AUTOSAVE = 3365 };   // + k : sauvegarde automatique Non / 5 / 10 / 15 / 30 min (3365-3369)
 static RectF g_lobbyGearR, g_lobbyPopR;               // engrenage de l'en-tete, son menu
 
 // Sons du salon (repris de SACoop) : arrivee, depart, pret, plus pret. Petites notes synthetisees (WAV en memoire).
@@ -194,6 +195,7 @@ static const LobbyOptDef kLobbyOptDefs[] = {
     { "VoirVisages", 1, false }, { "CarteMaintenir", 0, false }, { "Marqueurs", 1, false }, { "ModsAuto", 0, false },
     { "TrichesHote", 0, true },   // (26/10 : a la fin, les indices des autres ne bougent pas ; montree sous Triches)
     { "KuplaBulles", 0, true },   // (27/10, Kupla P2 de [Addons et Tools] : cachee tant que kKuplaBullesShown est faux -- LobbyOptOn)
+    { "SauvegardeAuto", 0, true },   // (06/11, forum : minutes, 0 coupe ; lue par le mod comme [Coop], seul l'hote declenche)
 };
 static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));
 static bool LobbyOptOn(const LobbyOptDef &d) { return d.only != (g_game == GAME_MSC ? 1 : 2) && (strcmp(d.key, "KuplaBulles") || KuplaBullesShown()); }

@@ -59,6 +59,33 @@ static bool MscOfficialInstalled() { return !g_gameDir.empty() && FileExists(Msc
 static bool MscOwnInstalled() { std::wstring p = MscPackDir(); return !p.empty() && FileExists(p + L"winhttp.dll") && FileExists(p + L"Managed\\MSCLoader.Preloader.dll"); }
 static bool MscOwn() { return g_mscOwnPref >= 0 ? g_mscOwnPref == 1 : !MscOfficialInstalled(); }
 static std::wstring MscModsDir();
+// Dossier de mods a part (pr, forum 21/10 ; JD 06/11 : un choix, coupe par defaut) : avec le MSCLoader de MWCoop seulement, ses mods dans
+// %LOCALAPPDATA%\MWCoop\mods-coop-<jeu>\ au lieu du dossier du solo. L'officiel ne change pas. Les mods d'un joueur ne sont jamais
+// deplaces ni supprimes : « Copier mes mods » copie, et garde ce qui est deja dans le dossier a part.
+static int g_mscSepForce = -1;   // (captures)
+static const wchar_t *MscSepKey() { return g_game == GAME_MSC ? L"ModsAPartMSC" : L"ModsAPartMWC"; }
+static bool MscSepWanted() { return g_mscSepForce >= 0 ? g_mscSepForce == 1 : GetPrivateProfileIntW(L"Lanceur", MscSepKey(), 0, g_iniLauncher.c_str()) != 0; }
+static bool MscSepOn() { return MscOwn() && MscSepWanted(); }
+static std::wstring MscSepDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + (g_game == GAME_MSC ? L"mods-coop-msc\\" : L"mods-coop-mwc\\"); }
+// Mods de la copie de lancement -> ce dossier. Une jonction qui vise ailleurs est refaite (la jonction seule) ; un vrai dossier non vide est renomme, jamais efface.
+static bool MscLinkMods(const std::wstring &m, const std::wstring &target)
+{
+    std::wstring dst = m + L"Mods";
+    DWORD at = GetFileAttributesW(dst.c_str());
+    if (at != INVALID_FILE_ATTRIBUTES) {
+        if (SameDirTarget(dst, target)) return true;
+        if (at & FILE_ATTRIBUTE_REPARSE_POINT) RemoveDirectoryW(dst.c_str());
+        else if (DirEmptyW(dst)) RemoveDirectoryW(dst.c_str());
+        else {
+            wchar_t stamp[32]; SYSTEMTIME st; GetLocalTime(&st);
+            swprintf_s(stamp, L".ancien-%04d%02d%02d-%02d%02d%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+            if (!MoveFileW(dst.c_str(), (dst + stamp).c_str())) { TestLog("mscloader de MWCoop : Mods de la copie impossible a renommer (erreur %lu)", GetLastError()); return false; }
+        }
+    }
+    if (MakeJunction(dst, target)) return true;
+    TestLog("mscloader de MWCoop : jonction Mods impossible (erreur %lu)", GetLastError());
+    return false;
+}
 // Doorstop d'une copie de lancement : notre winhttp.dll, et un doorstop_config.ini vers notre dossier. guest : la copie de
 // l'invite (Mods de la copie : ceux de l'hote) ; sinon le dossier des mods de l'officiel (GF : la jonction Mods de la copie).
 static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
@@ -68,14 +95,18 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
     if (!CopyFileW((pack + L"winhttp.dll").c_str(), dll.c_str(), FALSE)) { TestLog("mscloader de MWCoop : winhttp.dll impossible dans la copie (erreur %lu)", GetLastError()); return false; }
     wchar_t kind[16] = L"GF", intro[16] = L"false", cfg[16] = L"false";
     if (FileExists(MscIni())) {
-        if (!guest) GetPrivateProfileStringW(L"MSCLoader", L"mods", L"GF", kind, 16, MscIni().c_str());
+        if (!guest && !MscSepOn()) GetPrivateProfileStringW(L"MSCLoader", L"mods", L"GF", kind, 16, MscIni().c_str());
         GetPrivateProfileStringW(L"MSCLoader", L"skipIntro", L"false", intro, 16, MscIni().c_str());
         GetPrivateProfileStringW(L"MSCLoader", L"skipConfigScreen", L"false", cfg, 16, MscIni().c_str());
     }
-    if (!guest && !_wcsicmp(kind, L"GF")) {   // Mods du jeu, relie par la copie (cree ici, apres la copie : jonction a faire)
+    if (!guest && MscSepOn()) {   // dossier a part
+        std::wstring sep = MscSepDir();
+        sep.pop_back();
+        SHCreateDirectoryExW(NULL, sep.c_str(), NULL);
+        if (!MscLinkMods(m, sep)) return false;
+    } else if (!guest && !_wcsicmp(kind, L"GF")) {   // Mods du jeu, relie par la copie (cree ici, apres la copie : jonction a faire)
         SHCreateDirectoryExW(NULL, (g_gameDir + L"Mods").c_str(), NULL);
-        if (GetFileAttributesW((m + L"Mods").c_str()) == INVALID_FILE_ATTRIBUTES && !MakeJunction(m + L"Mods", g_gameDir + L"Mods"))
-            TestLog("mscloader de MWCoop : jonction Mods impossible (erreur %lu)", GetLastError());
+        MscLinkMods(m, g_gameDir + L"Mods");
     }
     // MSCLoader 1.4.2 (menu des mods, ModMenu.Mod_Settings) lit la version de <jeu>\mywintercar_Data\Managed\MSCLoader.Preloader.dll :
     // absente (MSCLoader jamais installe dans le jeu), son Init s'arrete sur FileNotFoundException avant de charger le moindre mod
@@ -98,7 +129,8 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
     return true;
 }
 
-static std::wstring MscModsDir()
+// Le dossier des mods du solo : celui de l'officiel (doorstop_config.ini du jeu).
+static std::wstring MscSoloModsDir()
 {
     wchar_t k[16] = L"GF";
     GetPrivateProfileStringW(L"MSCLoader", L"mods", L"GF", k, 16, MscIni().c_str());
@@ -114,6 +146,11 @@ static std::wstring MscModsDir()
     }
     g_mscDirKind = L"GF";
     return g_gameDir + L"Mods\\";
+}
+static std::wstring MscModsDir()
+{
+    if (MscSepOn()) { g_mscDirKind = L"SEP"; return MscSepDir(); }
+    return MscSoloModsDir();
 }
 
 static std::vector<std::wstring> SplitTab(const std::wstring &l)
@@ -493,8 +530,109 @@ static void MscInstall(bool reinstall = false)
     if (t) CloseHandle(t);
 }
 
+// ---- dossier a part : les reglages, la copie (jamais a travers une jonction ; ce qui existe deja dans le dossier a part est garde)
+static std::wstring SizeText(uint64_t b);   // (modsync.inc)
+struct MscCopyCount { int copied = 0, kept = 0, failed = 0; unsigned long long bytes = 0; };
+static void MscCopyTree(const std::wstring &src, const std::wstring &dst, MscCopyCount &c, bool dry, int depth = 0)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((src + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    if (!dry) SHCreateDirectoryExW(NULL, dst.c_str(), NULL);
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L".." || (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) continue;
+        std::wstring a = src + L"\\" + n, b = dst + L"\\" + n;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { if (depth < 16) MscCopyTree(a, b, c, dry, depth + 1); continue; }
+        if (FileExists(b)) { c.kept++; continue; }
+        unsigned long long sz = ((unsigned long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+        if (dry || CopyFileW(a.c_str(), b.c_str(), TRUE)) { c.copied++; c.bytes += sz; }
+        else { c.failed++; LaunchLog("mods : copie impossible de %s (erreur %lu)", Narrow(a, CP_UTF8).c_str(), GetLastError()); }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+// Les dossiers de base de MSCLoader (console, menu des mods) : sans eux il ne charge rien. Vrai si le menu est la.
+static bool MscSepBase()
+{
+    std::wstring d = MscSepDir();
+    if (d.empty()) return false;
+    SHCreateDirectoryExW(NULL, (d + L"Assets").c_str(), NULL);
+    CreateDirectoryW((d + L"References").c_str(), NULL);
+    CreateDirectoryW((d + L"Config").c_str(), NULL);
+    std::wstring src = MscSoloModsDir() + L"Assets\\";
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((src + L"MSCLoader_*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+            MscCopyCount c;
+            MscCopyTree(src + fd.cFileName, d + L"Assets\\" + fd.cFileName, c, false);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    return FileExists(d + L"Assets\\MSCLoader_Settings\\settingsui.unity3d") || FileExists(d + L"Assets\\MSCLoader_Settings\\settings.unity3d");
+}
+static std::atomic<int> g_mscCopyState(0);   // 0 rien, 1 en cours, 2 fini
+static MscCopyCount g_mscCopyRes;
+static DWORD WINAPI MscCopyThread(void *p)
+{
+    std::pair<std::wstring, std::wstring> *job = (std::pair<std::wstring, std::wstring> *)p;
+    MscCopyCount c;
+    MscCopyTree(job->first, job->second, c, false);
+    delete job;
+    g_mscCopyRes = c;
+    LaunchLog("mods : copie vers le dossier a part : %d copie(s), %d deja la, %d en echec, %llu octets", c.copied, c.kept, c.failed, c.bytes);
+    g_mscCopyState = 2;
+    return 0;
+}
+static void MscSepCopyAsk()
+{
+    if (g_mscCopyState == 1 || !MscSepOn()) return;
+    std::wstring src = MscSoloModsDir(), dst = MscSepDir();
+    src.pop_back(); dst.pop_back();
+    if (SameDirTarget(src, dst)) return;
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu avant de copier tes mods", L"Close the game before copying your mods"))) return;
+    MscCopyCount c;
+    MscCopyTree(src, dst, c, true);
+    if (!c.copied) { SetStatus(K_NORMAL, L"%s", T(L"Rien à copier : le dossier à part a déjà tout", L"Nothing to copy: the separate folder already has everything")); return; }
+    wchar_t q[1600];
+    swprintf_s(q, T(L"Copier %d fichier(s) (%s) ?\n\nDe : %s\nVers : %s\n\nTes mods d'origine ne bougent pas. Ce qui est déjà dans le dossier à part est gardé.",
+                    L"Copy %d file(s) (%s)?\n\nFrom: %s\nTo: %s\n\nYour original mods do not move. What is already in the separate folder is kept."), c.copied, SizeText(c.bytes).c_str(), src.c_str(), dst.c_str());
+    if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+    g_mscCopyState = 1;
+    auto *job = new std::pair<std::wstring, std::wstring>(src, dst);
+    HANDLE t = CreateThread(NULL, 0, MscCopyThread, job, 0, NULL);
+    if (t) CloseHandle(t); else { delete job; g_mscCopyState = 0; }
+}
+static void MscSepSet(bool on)
+{
+    WritePrivateProfileStringW(L"Lanceur", MscSepKey(), on ? L"1" : L"0", g_iniLauncher.c_str());
+    LaunchLog("mods : dossier de mods a part %s", on ? "active" : "coupe");
+}
+static void MscSepToggle()
+{
+    if (g_mscCopyState == 1) return;
+    if (GameOpenRefuse(K_WARN, T(L"Ferme le jeu pour changer de dossier de mods", L"Close the game to change the mods folder"))) return;
+    bool on = !MscSepWanted();
+    MscSepSet(on);
+    if (!on) {
+        SetStatus(K_NORMAL, L"%s", T(L"MWCoop reprend le dossier Mods du solo. Le dossier à part reste là, rien n'est supprimé", L"MWCoop goes back to the solo Mods folder. The separate folder stays, nothing is deleted"));
+        MscScan();
+        return;
+    }
+    bool menu = MscSepBase();
+    MscScan();
+    SetStatus(menu ? K_NORMAL : K_WARN, L"%s", menu ? T(L"Dossier à part activé : copie tes mods si tu les veux en coop", L"Separate folder on: copy your mods if you want them in co-op") : T(L"Dossier à part activé, fichiers de MSCLoader absents : RÉINSTALLER", L"Separate folder on, MSCLoader files missing: REINSTALL"));
+    MscSepCopyAsk();
+}
 static void MscTick()
 {
+    if (g_mscCopyState == 2) {
+        g_mscCopyState = 0;
+        const MscCopyCount &c = g_mscCopyRes;
+        if (c.failed) SetStatus(K_WARN, T(L"Mods copiés : %d, gardés : %d, en échec : %d (voir le journal)", L"Mods copied: %d, kept: %d, failed: %d (see the log)"), c.copied, c.kept, c.failed);
+        else SetStatus(K_OK, T(L"Mods copiés : %d, gardés : %d. Tes mods d'origine n'ont pas bougé", L"Mods copied: %d, kept: %d. Your original mods did not move"), c.copied, c.kept);
+        MscScan();
+    }
     int st = g_mscInstall;
     if (st == 2 || st == 3) {
         g_mscInstall = 0;
@@ -519,7 +657,9 @@ static RectF kMscList(282, 234, 622, 418),          // lignes des mods (liste)
                    kMscOpenDir(282, 692, 196, 36), kMscSendAll(488, 692, 130, 36), kMscClearRecv(952, 316, 294, 36),
                    kMscSrcOff(582, 170, 96, 30), kMscSrcOwn(682, 170, 96, 30), kMscReinst(784, 170, 120, 30);   // officiel / MWCoop, reinstaller
 static RectF kMscCompat(952, 704, 294, 24);   // lien « Guide : jouer avec des mods » (article du GUIDE ; tuto.inc le vise)
-static const float kMscRowH = 62, kMscSetH = 54;
+static const float kMscRowH = 62, kMscSetH = 54, kMscSepH = 46;
+static RectF g_mscSepR;   // ligne « Dossier de mods a part » (tuto.inc la vise)
+static bool MscSepRowShown() { return g_mscInstalled && MscOwn(); }
 // colonnes des lignes (maquette : 40 | nom | 110 | 120 | 56, espaces de 12) : icone 40 | nom | version 110 | envoye 120 | actif 50 ;
 // la ligne entiere ouvre les options du mod (plus d'engrenage, comme la maquette)
 static const float kMscColVer = 588, kMscColSend = 710, kMscColOn = 842, kMscColName = 334;
@@ -531,7 +671,8 @@ static void MscLayout()
 {
     float x = g_pageR.X, w = g_pageR.Width, rw = 330, gap = 12, left = w - rw - gap;
     kMscL = RectF(x, 88, left, 656); kMscRecvCard = RectF(x + left + gap, 88, rw, 280); kMscInfoCard = RectF(x + left + gap, 380, rw, 364);
-    kMscList = RectF(x + 18, 234, left - 36, 418); kMscPageList = RectF(x + 24, 170, w - 48, 540);   // (la page d'un mod : toute la largeur)
+    float sepH = MscSepRowShown() ? kMscSepH : 0;
+    kMscList = RectF(x + 18, 234 + sepH, left - 36, 418 - sepH); kMscPageList = RectF(x + 24, 170, w - 48, 540);   // (la page d'un mod : toute la largeur)
     kMscToggle = RectF(x + left - 68, 104, 50, 28); kMscAuto = RectF(kMscRecvCard.X + rw - 68, 288, 50, 28); kMscBack = RectF(x + w - 264, 108, 240, 30);
     kMscClearRecv = RectF(kMscRecvCard.X + 18, 316, rw - 36, 36); kMscCompat = RectF(kMscInfoCard.X + 18, 704, rw - 36, 24);
 }
@@ -614,7 +755,7 @@ static void MscClearRecv()
 
 // Zones de la liste, declarees pendant le dessin (comme HotZone, mais pour g_mscHot : la souris et le clic passent par MscAt).
 // Element : 1000 interrupteur Mods actives, 1001 installer, 1002 retour, 1003 mod active (page), 1004 dossier, 1005 accepter
-// les fichiers de l'hote, 1006 / 1007 MSCLoader officiel / MWCoop, 1008 reinstaller, 1009 guide des mods, 1010 tout envoyer,
+// les fichiers de l'hote, 1006 / 1007 MSCLoader officiel / MWCoop, 1008 reinstaller, 1009 guide des mods, 1010 tout envoyer, 1012 dossier a part, 1013 copier mes mods,
 // 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins, 2 plus), 4000+i envoyer, 6000+i actif.
 static std::vector<HotRect> g_mscZones;
 static void MscZone(RectF r, int id) { g_mscZones.push_back({ r, id }); }
@@ -665,6 +806,8 @@ static bool MscClick(float x, float y)
                                                          : T(L"MSCLoader officiel : pas installé dans le jeu (INSTALLER MSCLOADER)", L"Official MSCLoader: not installed in the game (INSTALL MSCLOADER)"));
     }
     else if (h == 1004) ShellOpen(g_mscDir.c_str());
+    else if (h == 1012) MscSepToggle();
+    else if (h == 1013) MscSepCopyAsk();
     else if (h == 1009) MscOpenCompat();
     else if (h == 1010) {   // tout envoyer : chaque mod actif (les sauteurs de menu ne partent jamais)
         int n = 0;
@@ -825,7 +968,7 @@ static void DrawMods(Graphics &g)
         Title(g, t, RectF(c.X + 18, c.Y + 14, tw + 6, 26), 16, kInk);
         if (g_mscInstalled) {
             wchar_t b[160];
-            swprintf_s(b, T(L"· %d dans %s", L"· %d in %s"), (int)g_msc.size(), g_mscDirKind == L"MD" ? T(L"Documents\\My Winter Car\\Mods", L"Documents\\My Winter Car\\Mods") : g_mscDirKind == L"AD" ? L"LocalLow\\...\\Mods" : T(L"le dossier Mods du jeu", L"the game's Mods folder"));
+            swprintf_s(b, T(L"· %d dans %s", L"· %d in %s"), (int)g_msc.size(), g_mscDirKind == L"MD" ? T(L"Documents\\My Winter Car\\Mods", L"Documents\\My Winter Car\\Mods") : g_mscDirKind == L"AD" ? L"LocalLow\\...\\Mods" : g_mscDirKind == L"SEP" ? T(L"le dossier à part de MWCoop", L"MWCoop's separate folder") : T(L"le dossier Mods du jeu", L"the game's Mods folder"));
             Text(g, b, RectF(c.X + 18 + tw + 6, c.Y + 15, 330, 26), 13, FontStyleBold, kGrey, StringAlignmentNear);
             bool hot = g_mscHot == 1000;
             Text(g, T(L"Mods activés", L"Mods on"), RectF(kMscToggle.X - 130, kMscToggle.Y, 122, kMscToggle.Height), 13, FontStyleBold, hot ? kAcc : kInk, StringAlignmentFar);
@@ -870,8 +1013,25 @@ static void DrawMods(Graphics &g)
                       L"MSCLoader is a project independent from MWCoop; its support here is experimental. Nothing is written into the game with the version provided by MWCoop."),
                  RectF(c.X + 18, c.Y + 230, c.Width - 36, 60), 12, kGrey);
         } else {
+            float sepH = 0;
+            g_mscSepR = RectF(0, 0, 0, 0);
+            if (MscSepRowShown()) {   // dossier a part : le choix, et le dossier utilise, en entier
+                sepH = kMscSepH;
+                bool on = MscSepWanted(), hot = g_mscHot == 1012, busy = g_mscCopyState == 1;
+                float ry = c.Y + 116, bw = on ? 156.0f : 0.0f, tx = c.X + 18 + 52;
+                g_mscSepR = RectF(c.X + 18, ry, c.Width - 36, kMscSepH - 4);
+                DrawToggle(g, RectF(c.X + 18, ry + 8, 44, 24), on, hot);
+                Text(g, T(L"Dossier de mods à part", L"Separate mods folder"), RectF(tx, ry + 1, c.Width - 36 - 52 - bw - 8, 19), 12.5f, FontStyleBold, hot ? kAcc : kInk, StringAlignmentNear);
+                std::wstring use = T(L"Utilisé : ", L"In use: "), path = g_mscDir;
+                float pw = c.Width - 36 - 52 - bw - 8 - 8;
+                bool cut = false;
+                while (path.size() > 12 && MeasureW(mg, use + (cut ? L"…" : L"") + path, 10.5f, FontStyleRegular) > pw) { path.erase(0, 1); cut = true; }   // (la fin reste : le nom du dossier)
+                Text(g, use + (cut ? L"…" : L"") + path, RectF(tx, ry + 20, pw + 8, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+                MscZone(RectF(c.X + 18, ry, c.Width - 36 - bw - 8, kMscSepH - 4), 1012);
+                if (on) MscButton(g, RectF(c.X + c.Width - 18 - bw, ry + 3, bw, 34), busy ? T(L"Copie en cours…", L"Copying…") : T(L"Copier mes mods", L"Copy my mods"), 1013, -1, !busy);
+            }
             // en-tete du tableau
-            float hy = c.Y + 126;
+            float hy = c.Y + 126 + sepH;
             Text(g, T(L"MOD", L"MOD"), RectF(kMscColName, hy, 200, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
             Text(g, T(L"VERSION", L"VERSION"), RectF(kMscColVer, hy, 110, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
             Text(g, T(L"ENVOYÉ", L"SENT"), RectF(kMscColSend, hy, 120, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
@@ -1006,4 +1166,75 @@ static void DrawMods(Graphics &g)
         Text(g, T(L"Guide : jouer avec des mods →", L"Guide: playing with mods →"), kMscCompat, 12.5f, hot ? FontStyleBold | FontStyleUnderline : FontStyleBold, kAcc, StringAlignmentNear);
         MscZone(kMscCompat, 1009);
     }
+}
+
+// /testmodsapart <journal> : dans un dossier de jeu jetable et un LOCALAPPDATA a cote, jamais ailleurs.
+static int MscSepSelfTest(const wchar_t *log)
+{
+    DeleteFileW(log);
+    int bad = 0;
+    auto say = [&](const std::string &l, bool good) {
+        FILE *o = _wfopen(log, L"ab");
+        if (o) { fprintf(o, "%s %s\r\n", l.c_str(), good ? "ok" : "ECHEC"); fclose(o); }
+        if (!good) bad++;
+    };
+    std::wstring parent = g_dir.substr(0, g_dir.find_last_of(L'\\', g_dir.size() - 2) + 1);
+    if (g_gameDir.empty() || _wcsicmp(g_gameDir.c_str(), g_dir.c_str()) || _wcsnicmp(LocalDir().c_str(), parent.c_str(), parent.size())) { say("refuse : dossier de jeu jetable et LOCALAPPDATA a cote obligatoires", false); return 3; }
+    auto put = [](const std::wstring &f, const char *t) {
+        SHCreateDirectoryExW(NULL, f.substr(0, f.find_last_of(L'\\')).c_str(), NULL);
+        FILE *o = _wfopen(f.c_str(), L"wb"); if (o) { fputs(t, o); fclose(o); }
+    };
+    auto read = [](const std::wstring &f) { std::vector<unsigned char> d; ReadAll(f, d); return std::string(d.begin(), d.end()); };
+    std::wstring solo = g_gameDir + L"Mods\\", sep = MscSepDir(), pack = MscPackDir(), other = parent + L"autre-dossier\\";
+    put(solo + L"Alpha.dll", "alpha");
+    put(solo + L"Assets\\Alpha\\t.png", "png");
+    put(solo + L"Assets\\MSCLoader_Settings\\settingsui.unity3d", "menu");
+    put(solo + L"Config\\Mod Settings\\Alpha\\settings.json", "reglages");
+    put(solo + L"References\\Ref.dll", "ref");
+    put(other + L"hors.dll", "hors");
+    bool lien = MakeJunction(solo + L"lien", other.substr(0, other.size() - 1));
+    say("jonction d'essai dans Mods", lien);
+    put(pack + L"winhttp.dll", "w");
+    put(pack + L"Managed\\MSCLoader.Preloader.dll", "p");
+    put(g_gameDir + L"doorstop_config.ini", "[General]\r\nenabled=true\r\n[MSCLoader]\r\nmods=GF\r\n");
+    g_mscOwnPref = 1;
+    say("coupe par defaut : le dossier du solo", !MscSepWanted() && !_wcsicmp(MscModsDir().c_str(), solo.c_str()));
+    MscSepSet(true);
+    say("active : le dossier a part", !_wcsicmp(MscModsDir().c_str(), sep.c_str()));
+    say("fichiers de base de MSCLoader poses", MscSepBase() && read(sep + L"Assets\\MSCLoader_Settings\\settingsui.unity3d") == "menu");
+    say("les mods ne sont pas copies d'office", !FileExists(sep + L"Alpha.dll"));
+    g_mscOwnPref = 0;
+    say("MSCLoader officiel : le choix ne compte pas", !MscSepOn() && !_wcsicmp(MscModsDir().c_str(), solo.c_str()));
+    g_mscOwnPref = 1;
+    MscScan();
+    say("les mods listes et envoyes sont ceux du dossier a part", g_mscInstalled && !_wcsicmp(g_mscDir.c_str(), sep.c_str()));
+    // la copie : rien de deplace, ce qui existe est garde, jamais a travers une jonction
+    put(sep + L"References\\Ref.dll", "ma version coop");
+    std::wstring a = solo.substr(0, solo.size() - 1), b = sep.substr(0, sep.size() - 1);
+    MscCopyCount dry;
+    MscCopyTree(a, b, dry, true);
+    say("compte a blanc : rien d'ecrit", dry.copied >= 3 && !FileExists(sep + L"Alpha.dll"));
+    MscCopyCount c;
+    MscCopyTree(a, b, c, false);
+    say("copie : Alpha, Assets et reglages", read(sep + L"Alpha.dll") == "alpha" && read(sep + L"Assets\\Alpha\\t.png") == "png" && read(sep + L"Config\\Mod Settings\\Alpha\\settings.json") == "reglages" && c.failed == 0);
+    say("deja la : garde tel quel", read(sep + L"References\\Ref.dll") == "ma version coop");
+    say("la jonction n'est pas suivie", !FileExists(sep + L"lien\\hors.dll") && read(other + L"hors.dll") == "hors");
+    say("originaux intacts", read(solo + L"Alpha.dll") == "alpha" && read(solo + L"Assets\\Alpha\\t.png") == "png" && read(solo + L"References\\Ref.dll") == "ref" && read(solo + L"Config\\Mod Settings\\Alpha\\settings.json") == "reglages");
+    MscCopyCount c2;
+    MscCopyTree(a, b, c2, false);
+    say("2e copie : plus rien a copier", c2.copied == 0);
+    // la copie de lancement
+    std::wstring m = MscCopyDir();
+    say("copie de lancement, dossier a part", PrepareMirror(m) && MscOwnApply(m, true, false) && SameDirTarget(m + L"Mods", b));
+    say("doorstop : mods=GF", read(m + L"doorstop_config.ini").find("mods=GF") != std::string::npos);
+    say("par la copie : le mod copie", read(m + L"Mods\\Alpha.dll") == "alpha");
+    MscSepSet(false);
+    say("coupe : retour au dossier du solo", !_wcsicmp(MscModsDir().c_str(), solo.c_str()) && PrepareMirror(m) && MscOwnApply(m, true, false) && SameDirTarget(m + L"Mods", a));
+    say("coupe : dossier a part intact", read(sep + L"Alpha.dll") == "alpha" && read(sep + L"References\\Ref.dll") == "ma version coop");
+    MscSepSet(true);
+    say("reactive : a nouveau le dossier a part", PrepareMirror(m) && MscOwnApply(m, true, false) && SameDirTarget(m + L"Mods", b));
+    say("originaux toujours intacts", read(solo + L"Alpha.dll") == "alpha" && read(other + L"hors.dll") == "hors");
+    FILE *o = _wfopen(log, L"ab");
+    if (o) { fprintf(o, "%s\r\n", bad ? "ECHEC" : "TOUT OK"); fclose(o); }
+    return bad ? 1 : 0;
 }

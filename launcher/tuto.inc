@@ -161,6 +161,11 @@ static const TutoStep kTuto[] = {
       L"My outfits", L"Save several outfits under the name of your choice (work, weekend, rally) and put them back on with one click: Character page, My outfits tab.", "1.16.23" },
     { L"Ce qui est synchronisé", L"Nouvelle ligne dans la barre, sous Guide : tout ce que MWCoop partage entre les joueurs, ce que chacun garde pour lui, et quoi faire si quelque chose diffère.",
       L"What's synced", L"New line in the bar, under Guide: everything MWCoop shares between players, what each player keeps to themselves, and what to do if something differs.", "1.16.23" },
+    // lanceur-1.16.23 (06/11) : dossier de mods a part, page Mods (68) ; sauvegarde automatique, Reglages > Co-op (69)
+    { L"Dossier de mods à part", L"Avec le MSCLoader de MWCoop, tu peux garder des mods à part pour la coop : page Mods, « Dossier de mods à part ». Coupé d'office. « Copier mes mods » copie, sans rien déplacer. Le MSCLoader officiel ne change pas.",
+      L"Separate mods folder", L"With MWCoop's MSCLoader, you can keep separate mods for co-op: Mods page, \"Separate mods folder\". Off by default. \"Copy my mods\" copies, without moving anything. The official MSCLoader does not change.", "1.16.23" },
+    { L"Sauvegarde automatique", L"L'hôte peut faire sauvegarder la partie toutes les 5 à 30 minutes : Réglages > Co-op, ou dans le salon. Coupée d'office. À chaque sauvegarde, gel de quelques secondes pour tous, plus sur une grosse partie.",
+      L"Autosave", L"The host can have the game saved every 5 to 30 minutes: Settings > Co-op, or in the lobby. Off by default. At each save, a freeze of a few seconds for everyone, longer on a big game.", "1.16.23" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -263,6 +268,8 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 69: return TutoSetTab(SET_COOP);                    // onglet Co-op (SetTutoTab l'ouvre) : sauvegarde automatique
+    case 68: return g_mscSepR;                               // Dossier de mods a part (page Mods, MSCLoader de MWCoop ; sinon bulle au centre)
     case 67: return g_navR[TAB_SYNC];                        // Synchronise dans la barre (sous Guide)
     case 66: return PersoTabRect(2);                         // Mes tenues (en-tete de la page Personnage : tenue.inc)
     case 65: return TutoSetTab(SET_COOP);                    // onglet Co-op (SetTutoTab l'ouvre) : hotes de confiance
@@ -272,7 +279,7 @@ static RectF TutoTarget(int i)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 || i == 65 ? TAB_COOP : i == 24 || i == 46 || i == 66 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 || i == 68 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 || i == 65 || i == 69 ? TAB_COOP : i == 24 || i == 46 || i == 66 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la
