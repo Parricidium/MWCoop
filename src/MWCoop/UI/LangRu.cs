@@ -512,14 +512,6 @@ namespace MWCoop
             { "/money <amount>: cash for yourself", "/money <сумма>: наличные себе" },
             { "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/heal: голод, жажда, усталость, стресс, мочевой пузырь, грязь на ноль" },
             { "/free: no longer wanted, out of jail", "/free: снять розыск, выйти из тюрьмы" },
-            { "/fatigue [0-100]: my fatigue (100 without a number), to sleep", "/fatigue [0-100]: моя усталость (100 без числа), чтобы поспать" },
-            { "/delivery: orders on their way arrive now", "/delivery: заказы в пути прибывают сейчас" },
-            { "Fatigue: 0 to 100.", "Усталость: от 0 до 100." },
-            { "No order on its way.", "Нет заказов в пути." },
-            { "Fatigue to 100", "Усталость 100" },
-            { "Deliver orders", "Доставить заказы" },
-            { "My outfits", "Мои наряды" },
-            { "Left/Right: wear one of my outfits (launcher)", "Влево/вправо: надеть один из моих нарядов (лаунчер)" },
             { "/time <0-24>: everyone's time of day", "/time <0-24>: время суток для всех" },
             { "/snow on|off: snow (or rain) for everyone", "/snow on|off: снег (или дождь) для всех" },
             { "/tp <player>: go to a player", "/tp <игрок>: перейти к игроку" },
@@ -1006,6 +998,10 @@ namespace MWCoop
             { "Weight", "Вес" },
             { "Your custom livery (launcher, Add-ons)", "Ваша ливрея (лаунчер, Add-ons)" },
             { "Your money: ", "Ваши деньги: " },
+            { "Rally cars are rented here: talk to the agent in the left-hand room.", "Раллийные машины арендуются здесь: поговорите с прокатчиком в левой комнате." },
+            { "Left of the Cardinal shop, marked on the map (M).", "Слева от магазина Cardinal, отмечено на карте (M)." },
+            { "Car given back", "Машина возвращена" },
+            { "Fiad is free \u00B7 rally cars at the garage \u00B7 a colour and a number each \u00B7 given back when you leave", "Fiad бесплатно \u00B7 раллийные машины в гараже \u00B7 у каждого свой цвет и номер \u00B7 возвращается при выходе" },
         };
     }
 }

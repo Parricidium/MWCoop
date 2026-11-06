@@ -15,9 +15,13 @@ namespace MWCoop
         static int pick = -1;   // modele choisi ici pour la prochaine prise ([Coop] VoitureModele)
         static int Pick
         {
-            get { if (pick < 0) pick = Config.GetInt("Coop", "VoitureModele", 0); return VazCar.Has(pick) ? pick : VazCar.Base; }
+            get { if (pick < 0) pick = Config.GetInt("Coop", "VoitureModele", 0); return VazCar.Has(pick) && !Rental(pick) ? pick : VazCar.Base; }
             set { pick = value; Config.Save("Coop", "VoitureModele", value.ToString()); }
         }
+        // Voitures de location (JD 06/11 : « retirer la possibilite d'invoquer les voitures par F10 ») : le garage RALLI-VUOKRAAMO est dans la partie, elles se prennent chez lui.
+        // Sans garage (l'hote a coupe le Cardinal ou le village), le F10 reste leur seul chemin.
+        static bool Rental(int m) { return Kauppa.VuokraBuilt && VazCar.ModelOf(m).Group != "MWCoop"; }
+        static bool MineRental { get { int n = Vaz.Mine; return n != 0 && Rental(Vaz.ModelOf(Vaz.OwnerOf(n))); } }
         static int pvModel = -1; static string pvLivery = "";
         // filtre des modeles par categorie (Gr. A, Gr. B... -- JD, 23/10) : "" = tous ([Coop] VoitureFiltre)
         static string filter;
@@ -31,7 +35,7 @@ namespace MWCoop
         static System.Collections.Generic.List<string> Groups()
         {
             var g = new System.Collections.Generic.List<string>();
-            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i) && !g.Contains(VazCar.ModelOf(i).Group)) g.Add(VazCar.ModelOf(i).Group);
+            for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i) && !Rental(i) && !g.Contains(VazCar.ModelOf(i).Group)) g.Add(VazCar.ModelOf(i).Group);
             g.Sort((a, b) => a == "MWCoop" ? -1 : b == "MWCoop" ? 1 : string.CompareOrdinal(a, b));
             return g;
         }
@@ -63,7 +67,7 @@ namespace MWCoop
             get
             {
                 if (note != null && Time.realtimeSinceStartup < noteUntil) return note;
-                if (Vaz.EvoAvailable)
+                if (Vaz.EvoAvailable && !Kauppa.VuokraBuilt)
                     return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  M : mod\u00E8le  \u00B7  glisser l'aper\u00E7u : tourner",
                                   "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  M: model  \u00B7  drag the preview: turn");
                 return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  glisser l'aper\u00E7u : tourner",
@@ -123,7 +127,7 @@ namespace MWCoop
 
         static void Act(int n)
         {
-            if (Vaz.Mine == n) { Vaz.Release(); Note(Lang.T("Fiad n\u00B0 ", "Fiad no. ") + n + Lang.T(" rendue", " given back"), false); return; }
+            if (Vaz.Mine == n) { bool rent = MineRental; Vaz.Release(); if (rent) Note(Lang.T("Voiture rendue", "Car given back"), false); else Note(Lang.T("Fiad n\u00B0 ", "Fiad no. ") + n + Lang.T(" rendue", " given back"), false); return; }
             if (!Vaz.Enabled) { Note(Lang.T("Fiad 131 coup\u00E9e dans cette partie (lanceur, Ajouts)", "Fiad 131 is off in this game (launcher, Add-ons)"), true); return; }
             if (Vaz.Mine != 0) { Note(Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + Vaz.Mine + Lang.T("", " first"), true); return; }
             if (!Vaz.IsFree(n)) { Note(Lang.T("La n\u00B0 ", "No. ") + n + Lang.T(" est d\u00E9j\u00E0 prise", " is already taken"), true); return; }
@@ -134,7 +138,7 @@ namespace MWCoop
 
         static void CallMine()
         {
-            if (Vaz.Mine == 0) return;
+            if (Vaz.Mine == 0 || MineRental) return;
             Vaz.Call();
             Note(Lang.T("La Fiad arrive \u00E0 c\u00F4t\u00E9 de vous", "The Fiad is coming next to you"), false);
         }
@@ -207,7 +211,7 @@ namespace MWCoop
                 case KeyCode.V: CallMine(); return true;
                 case KeyCode.M:
                     if (!Vaz.EvoAvailable) return false;
-                    { int m = Pick, n = 0; do { m = (m + 1) % VazCar.Models.Length; n++; } while ((!VazCar.InF10(m) || !InFilter(m)) && n <= VazCar.Models.Length); if (VazCar.InF10(m)) Pick = m; }   // (modele suivant installe, dans le filtre)
+                    { int m = Pick, n = 0; do { m = (m + 1) % VazCar.Models.Length; n++; } while ((!VazCar.InF10(m) || !InFilter(m) || Rental(m)) && n <= VazCar.Models.Length); if (VazCar.InF10(m) && !Rental(m)) Pick = m; }   // (modele suivant installe, dans le filtre)
                     return true;
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter: Act(hi); return true;
@@ -229,6 +233,12 @@ namespace MWCoop
             float cardW = P(236), gap = P(16);
             var left = new Rect(v.x, v.y, v.width - cardW - gap, v.height);
             var card = new Rect(left.xMax + gap, v.y, cardW, v.height);
+            if (Kauppa.VuokraBuilt)
+            {
+                float gh = P(140);
+                DrawGarage(new Rect(left.x, left.yMax - gh, left.width, gh), e);
+                left.height -= gh + P(10);
+            }
             bool click = false;
             float top = left.y;
             if (!Vaz.Enabled)
@@ -294,6 +304,22 @@ namespace MWCoop
             Style.Ring(r, rad, Kit.Sep);
         }
 
+        // a la place des voitures de location : le garage, son image, ce qu'on y fait, ou il est
+        static void DrawGarage(Rect r, Event e)
+        {
+            if (e.type != EventType.Repaint) return;
+            Style.Round(r, P(10), Kit.A(Color.white, 0.04f));
+            Style.Ring(r, P(10), Kit.Edge);
+            float ih = r.height - P(12), iw = P(186);
+            var ir = new Rect(r.x + P(6), r.y + P(6), iw, ih);
+            Texture2D img = Kauppa.VuokraPicture;
+            if (img != null) GUI.DrawTexture(ir, img, ScaleMode.ScaleAndCrop, false);
+            float tx = ir.xMax + P(12), tw = r.xMax - tx - P(8);
+            Style.Title(new Rect(tx, r.y + P(6), tw, P(22)), "RALLI-VUOKRAAMO", Kit.Ink, TextAnchor.MiddleLeft, 15);
+            Style.Text(new Rect(tx, r.y + P(30), tw, P(64)), Lang.T("Les voitures de rallye se louent ici : parle au loueur, dans la pi\u00E8ce de gauche.", "Rally cars are rented here: talk to the agent in the left-hand room."), 12, TextAnchor.UpperLeft, Kit.Soft, false, true);
+            Style.Text(new Rect(tx, r.yMax - P(58), tw, P(52)), Lang.T("\u00C0 gauche du magasin Cardinal, point sur la carte (M).", "Left of the Cardinal shop, marked on the map (M)."), 12, TextAnchor.LowerLeft, Kit.Ice, false, true);
+        }
+
         static void DrawCard(Rect r, Event e)
         {
             float cy = r.y;
@@ -325,9 +351,9 @@ namespace MWCoop
                 // noms se chevauchaient dans quatre boutons de meme largeur
                 // filtre par categorie (au-dessus des modeles, seulement s'il y a plusieurs categories) : Tous, MWCoop, Gr. A...
                 System.Collections.Generic.List<string> gs = Groups();
+                if (Filter.Length > 0 && !gs.Contains(Filter)) Filter = "";
                 if (gs.Count > 1)
                 {
-                    if (Filter.Length > 0 && !gs.Contains(Filter)) Filter = "";
                     var labels = new System.Collections.Generic.List<string> { Lang.T("Tous", "All") };
                     labels.AddRange(gs);
                     float fx = r.x, fg = P(6);
@@ -342,13 +368,13 @@ namespace MWCoop
                     cy += P(30);
                 }
                 var ms = new System.Collections.Generic.List<int>();
-                for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i) && InFilter(i)) ms.Add(i);
+                for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i) && InFilter(i) && !Rental(i)) ms.Add(i);
                 if (ms.Count > 0 && !ms.Contains(Pick)) Pick = ms[0];   // (le modele choisi est toujours un de ceux du filtre)
                 float gap = P(8);
                 var w = new float[ms.Count];
                 for (int k = 0; k < ms.Count; k++) w[k] = Mathf.Min(r.width, Mathf.Max(P(70), Style.Width(VazCar.ModelOf(ms[k]).Name, 13) + P(26)));
                 int start = 0;
-                while (start < ms.Count)
+                while (start < ms.Count && ms.Count > 1)
                 {
                     int end = start; float used = w[start];
                     while (end + 1 < ms.Count && used + gap + w[end + 1] <= r.width) { end++; used += gap + w[end]; }
@@ -371,7 +397,8 @@ namespace MWCoop
             Kit.Pill(r.x, cy + P(9), st, mine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber);
             cy += P(26);
             var br = new Rect(r.x, cy, r.width, P(34));
-            if (mine)
+            if (mine && MineRental) { if (Kit.Button(br, Lang.T("Rendre", "Give back"), 0, false)) Act(hi); }
+            else if (mine)
             {
                 float hw = (r.width - P(8)) / 2;
                 if (Kit.Button(new Rect(r.x, cy, hw, P(34)), Lang.T("Faire venir", "Bring here"), 1, false, true, "venir")) CallMine();
