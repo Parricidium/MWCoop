@@ -40,8 +40,45 @@ namespace MWCoop
         static bool loaded;          // participation chargee par le jeu (Data sorti de 'State 2' / 'Check day' / 'Load 2')
         static int weekDay;          // dernier GlobalDay vu (fin du week-end : temps des autres effaces)
 
+        // Carte (MapPanel, comme Rally.StageOnMap de My Winter Car -- JD 06/11 : « il n'y a pas le trace de la speciale en cours ») : speciale du jour,
+        // ss 1 le samedi, 2 le dimanche, tant que le rallye est ouvert (RallyDay, de 10 h a 18 h) ou que j'y suis encore passe 18 h ;
+        // mine : je ne l'ai pas encore finie (sa feuille est a remplir ou son chrono allume, jusqu'a l'arrivee) ; ensuite, trait fin.
+        public static bool StageOnMap(out int ss, out bool mine)
+        {
+            ss = 0; mine = false;
+            FsmInt gd = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay");
+            int day = gd != null ? gd.Value : 0;
+            if (day != 6 && day != 7) return false;
+            ss = day == 6 ? 1 : 2;
+            GameObject timing = Game.FindAny(day == 6 ? "RALLY/Saturday/TimingSaturday" : "RALLY/Sunday/TimingSunday");
+            GameObject form = Game.FindAny(day == 6 ? "RALLY/Saturday/StartArea/StartAreaObjects/RegisterFormSaturday" : "RALLY/Sunday/StartArea/StartAreaObjects/RegisterFormSunday");
+            bool running = timing != null && timing.activeInHierarchy;
+            mine = running || form != null && form.activeInHierarchy;
+            return running || Game.GlobalBool("RallyDay");
+        }
+
+        // Trace de la speciale pour la carte : la route des voitures IA (Kartturi.StageRoute) continue apres l'arrivee (720 m le samedi, 167 m le dimanche) :
+        // coupee au point le plus proche de la ligne d'arrivee (Checkpoint04), une fois par niveau.
+        static readonly Vector3[][] mapRoutes = new Vector3[3][];
+        public static Vector3[] MapRoute(int ss)
+        {
+            if (ss < 1 || ss > 2) return null;
+            if (mapRoutes[ss] != null) return mapRoutes[ss];
+            Vector3[] r = Kartturi.StageRoute(ss);
+            GameObject fin = Game.FindAny(ss == 1 ? "RALLY/Saturday/TimingSaturday/Checkpoint04" : "RALLY/Sunday/TimingSunday/Checkpoint04");
+            if (r == null || r.Length < 2 || fin == null) return r;
+            Vector3 f = fin.transform.position;
+            int best = r.Length - 1; float bd = float.MaxValue;
+            for (int i = 0; i < r.Length; i++) { float dx = r[i].x - f.x, dz = r[i].z - f.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = i; } }
+            var cut = new Vector3[best + 1];
+            System.Array.Copy(r, cut, best + 1);
+            Log.Info("rallye (MSC) : carte, SS" + ss + " coupee a l'arrivee, point " + best + " sur " + r.Length + ", a " + Mathf.Sqrt(bd).ToString("F1") + " m de la ligne");
+            return mapRoutes[ss] = cut;
+        }
+
         public static void OnLevelLoaded()
         {
+            mapRoutes[1] = mapRoutes[2] = null;
             humans.Clear(); data = null; names = times = null; nextLook = 0f; hooked = false; lastSent = ""; trophiesHooked = false; nextTrophyLook = 0f; myDay = 0;
             mine[1] = mine[2] = 0f; mineCls = ""; loaded = false; weekDay = 0; nextStore = 0f; storedLine = null;
             snapshots.Clear(); stageBy.Clear(); clocks[1] = clocks[2] = null; nextStageSend = nextClockLook = 0f;

@@ -7,6 +7,7 @@ namespace MWCoop
     //  - rallye : trace de chaque speciale du jour encore a courir par au moins un pilote inscrit (Rally.StageOnMap), en orange
     //    (la mienne, epaisse ; celle des autres seulement, fine) ; depart marque avec MON heure de depart et le temps restant
     //    (« depart 16 h, dans 23 min »), arrivee marquee. Trace : celui du KARTTURI (Kartturi.StageRoute, routes du jeu) ;
+    //    My Summer Car (JD 06/11) : la speciale du jour, le rallye ouvert (RallyMsc.StageOnMap) -- pas d'heure de depart dans ce jeu ;
     //  - course sur glace : la piste (TRAFFIC/Routes/Icetrack) pendant le week-end de course, et ma place sur la grille quand ma
     //    manche est la prochaine (IceRace.MyHeat).
     // Chacun voit ses heures et sa manche : rien d'envoye, tout est lu ici.
@@ -21,7 +22,25 @@ namespace MWCoop
         {
             string next;
             // rallye
-            if (Rally.Ready && RaceCal.Live(false, out next))
+            if (Game.Msc)
+            {
+                int ss; bool mineMsc;
+                if (RallyMsc.StageOnMap(out ss, out mineMsc))
+                {
+                    Vector3[] r = RallyMsc.MapRoute(ss);
+                    if (r != null && r.Length >= 2)
+                    {
+                        Color c = mineMsc ? RallyMine : RallyOther;
+                        if (!pins) Polyline(local, r, c, Style.Px(mineMsc ? 4 : 2));
+                        else
+                        {
+                            Pin(local, used, r[0], "SS" + ss + Lang.T(" · départ", " · start"), c, true);
+                            Pin(local, used, r[r.Length - 1], Lang.T("Arrivée SS", "Finish SS") + ss, c, false);
+                        }
+                    }
+                }
+            }
+            else if (Rally.Ready && RaceCal.Live(false, out next))
                 for (int n = 1; n <= 3; n++)
                 {
                     bool mine; int start, left;
