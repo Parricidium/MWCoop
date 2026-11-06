@@ -254,7 +254,7 @@ static void ShellDrawRail(Graphics &g)
             const NavItem &it = kNav[i];
             if (NavHidden(it.page) || (RailFolded(k) && it.page != g_tab)) continue;
             rows.push_back({ RectF(x0, yy, w, step - 2), it.page, it.icon, it.fr, it.en });
-            bool on = g_state == ST_IDLE && (it.page == TAB_ADDONS ? g_tab == TAB_CAR && AddonsOn() : g_tab == it.page && !(it.page == TAB_CAR && AddonsOn()));
+            bool on = g_state == ST_IDLE && NavIsOn(it.page);
             if (on) curY = yy;
             yy += step;
         }
@@ -269,7 +269,7 @@ static void ShellDrawRail(Graphics &g)
     }
     int hotPage = -1; RectF hotR;
     for (auto &row : rows) {
-        bool en = PageEnabled(row.page), on = g_state == ST_IDLE && (row.page == TAB_ADDONS ? g_tab == TAB_CAR && AddonsOn() : g_tab == row.page && !(row.page == TAB_CAR && AddonsOn())),
+        bool en = PageEnabled(row.page), on = g_state == ST_IDLE && NavIsOn(row.page),
              hot = en && g_uiHot == UI_NAV + row.page;
         g_navR[row.page] = DipToCard(row.r);
         float a = en ? 1.0f : 0.38f;

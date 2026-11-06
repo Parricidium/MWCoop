@@ -331,10 +331,18 @@ static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_C
 // Pages absentes d'un jeu : sur My Summer Car, pas de cassettes VHS (camescope et magasin de MWC ; 19/10).
 static bool NavHidden(int p) { return false; }   // (VHS et addons : sur My Summer Car aussi depuis le 24/10 -- coin video et voitures)
 static bool AddonsOn(); static void AddonsGo(); static void AddonsLeave();   // (voiture.inc : onglet Addons de la page Voiture)
+static void WikiOpenSync(); static bool WikiSyncOn();   // (launcher.cpp : article « Ce qui est synchronise »)
+// La ligne de la barre de cette page est-elle allumee ? (les deux raccourcis ne sont jamais g_tab ; une seule ligne a la fois)
+static bool NavIsOn(int p)
+{
+    if (p == TAB_ADDONS) return g_tab == TAB_CAR && AddonsOn();
+    if (p == TAB_SYNC) return g_tab == TAB_WIKI && WikiSyncOn();
+    return g_tab == p && !(p == TAB_CAR && AddonsOn()) && !(p == TAB_WIKI && WikiSyncOn());
+}
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE || NavHidden(p)) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM || p == TAB_TOOLS || p == TAB_BUG || p == TAB_RALLY;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_SYNC || p == TAB_ALBUM || p == TAB_TOOLS || p == TAB_BUG || p == TAB_RALLY;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -343,6 +351,7 @@ static void GoPage(int p)
 {
     // Raccourci Addons de la barre (suggestion d'un joueur, 21/10) : la page Voiture, onglet Addons ; Voiture seule : l'onglet des couleurs.
     if (p == TAB_ADDONS) { AddonsGo(); return; }
+    if (p == TAB_SYNC) { WikiOpenSync(); return; }
     if (p == TAB_CAR) AddonsLeave();
     if (p == g_tab) return;
     SoftPageChange(g_tab, p);   // (soft.inc, nouvelle interface : l'ancienne page part, la nouvelle arrive dans le sens de la barre)
@@ -389,9 +398,10 @@ static const NavItem kNav[] = {
     { TAB_RALLY, IC_HEART, L"RallyWorld", L"RallyWorld" },   // (sous Addons, coeur rouge : la communaute qui nous prete ses voitures -- JD, 03/11 ; rallyworld.inc)
     { TAB_VHS, IC_FILM, L"VHS", L"VHS" }, { TAB_ALBUM, IC_IMAGE, L"Album", L"Album" },   // (MEDIA : media.inc, demande de JD, 13/10)
     { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" },   // (guide des joueurs, wiki.inc)
+    { TAB_SYNC, IC_LAYERS, L"Synchronisé", L"What's synced" },   // (sous Guide : son article « Ce qui est synchronise » -- suggestion de Markos, forum 01/11)
     { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 3, 3, 5, 4 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroupN[] = { 3, 3, 5, 5 };   // pages de chaque groupe, dans l'ordre de kNav
 static const int kNavGroups = 4;
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MOI", L"RÉGLAGES", L"MÉDIA & AIDE" }, *kNavGroupEn[] = { L"PLAY", L"ME", L"SETTINGS", L"MEDIA & HELP" };
 static Bitmap *g_logo;
@@ -436,7 +446,7 @@ static RectF RailClip(RectF r)
 static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t *label)
 {
     // (Addons : allume quand la page Voiture montre l'onglet Addons ; Voiture : quand elle montre ses couleurs)
-    bool en = PageEnabled(page), on = g_state == ST_IDLE && (page == TAB_ADDONS ? g_tab == TAB_CAR && AddonsOn() : g_tab == page && !(page == TAB_CAR && AddonsOn())),
+    bool en = PageEnabled(page), on = g_state == ST_IDLE && NavIsOn(page),
          hot = en && g_uiHot == UI_NAV + page;
     g_navR[page] = r;
     float a = en ? 1.0f : 0.38f;

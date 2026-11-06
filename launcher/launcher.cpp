@@ -1996,7 +1996,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_RALLY, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_RALLY, TAB_SYNC, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_SYNC : raccourci vers l'article « Ce qui est synchronise » du Guide, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_MAX, B_COUNT };   // (B_MAX : Agrandir, nouvelle interface seulement -- fenetre.inc)   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
@@ -5012,6 +5012,13 @@ static void WikiOpenAddons()   // (onglet Addons : bouton Aide)
     g_scroll[TAB_WIKI] = 0;
     GoPage(TAB_WIKI);
 }
+static void WikiOpenSync()   // (barre, TAB_SYNC : suggestion de Markos, forum 01/11)
+{
+    g_wikiSel = WA_SYNCHRO;
+    g_scroll[TAB_WIKI] = 0;
+    GoPage(TAB_WIKI);
+}
+static bool WikiSyncOn() { return g_wikiSel == WA_SYNCHRO; }
 static void WikiOpenHost()
 {
     for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].b == kW_Host) { g_wikiSel = a; break; }   // (sommaire a plat depuis le rework : plus de categories pliees)
@@ -5415,18 +5422,18 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         y += pick ? rh : rh2;
         g.DrawLine(&sp, x, y - 0.5f, right, y - 0.5f);
         if (mode == 1) for (const char *k : kAjoutKeys) row(k, false);
-        // joueurs au plus (hote compris) : 4 / 8 / 12 / 16, avertissement au-dela de 10
-        static const int opts[4] = { 4, 8, 12, 16 };
+        // joueurs au plus (hote compris) : 2 / 4 / 8 / 12 / 16 (2 : Markos, forum 02/11), avertissement au-dela de 10
+        static const int opts[5] = { 2, 4, 8, 12, 16 };
         int sel = -1;
-        for (int k = 0; k < 4; k++) if (g_lobbyMax == opts[k]) sel = k;
+        for (int k = 0; k < 5; k++) if (g_lobbyMax == opts[k]) sel = k;
         float my = pick ? 0.0f : 5.0f;   // (compact : une seule ligne)
-        Text(g, T(L"Joueurs au plus", L"Players max"), RectF(x, y + my, w - 160, pick ? rh : 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, T(L"Joueurs au plus", L"Players max"), RectF(x, y + my, w - 186, pick ? rh : 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
         wchar_t sb[120];
         if (g_lobbyMax > 10) swprintf_s(sb, L"%s", T(L"Au-delà de 10 : très bonne connexion et bonne machine chez l'hôte", L"Above 10: a very good connection and a good machine on the host's side"));
         else if (sel < 0) swprintf_s(sb, T(L"Hôte compris · %d pour ce salon", L"Host included · %d for this lobby"), g_lobbyMax);
         else swprintf_s(sb, L"%s", T(L"Hôte compris · au-delà de 10, bonne connexion conseillée", L"Host included · above 10, a good connection is advised"));
         if (!pick) Text(g, sb, RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, g_lobbyMax > 10 ? kWarn : kGrey, StringAlignmentNear);
-        if (edit) UiSeg(g, RectF(right - 152, y + (pick ? 3 : 4), 152, 28), { L"4", L"8", L"12", L"16" }, sel, UI_LOBBY_MAXSEG, 11.5f);
+        if (edit) UiSeg(g, RectF(right - 180, y + (pick ? 3 : 4), 180, 28), { L"2", L"4", L"8", L"12", L"16" }, sel, UI_LOBBY_MAXSEG, 11.5f);
         else Pill(g, RectF(right - 46, y + (pick ? 6 : 7), 46, 22), WithA(kAcc, 0.22f), std::to_wstring(g_lobbyMax), kInk, 10.5f);
         y += pick ? rh : rh2;
         if (!host && ho.empty()) Text(g, T(L"Pas encore reçues de l'hôte", L"Not received from the host yet"), RectF(x, y + 4, w, 18), 11, FontStyleItalic, kGrey, StringAlignmentNear);
@@ -6309,9 +6316,9 @@ static void LobbyOptClick(int id)
         if (g_lobbySteam) SteamLobbySetMax(v);
         TestLog("salon : %d joueurs au plus", v);
         pub = true;
-    } else if (id >= UI_LOBBY_MAXSEG && id < UI_LOBBY_MAXSEG + 4) {   // 4 / 8 / 12 / 16 (jamais moins que les presents)
+    } else if (id >= UI_LOBBY_MAXSEG && id < UI_LOBBY_MAXSEG + 5) {   // 2 / 4 / 8 / 12 / 16 (jamais moins que les presents)
         if (!host) return;
-        static const int opts[4] = { 4, 8, 12, 16 };
+        static const int opts[5] = { 2, 4, 8, 12, 16 };
         int v = opts[id - UI_LOBBY_MAXSEG];
         EnterCriticalSection(&g_lcs);
         int n = (int)g_peers.size();
@@ -7360,6 +7367,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_CHAR:
         if (SigChar((wchar_t)wp)) return 0;   // (signalnatif.inc : champs du formulaire de signalement)
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
+        if (OutfitChar((wchar_t)wp)) return 0;   // (tenue.inc : nom d'une tenue enregistree)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
         if (SetChar((wchar_t)wp)) return 0;   // (gfx.inc : champ Chercher des reglages)
         if (GuideChar((wchar_t)wp)) return 0;   // (wiki.inc : champ Chercher du guide)
@@ -8334,6 +8342,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         return 0;
     }
 
+    // /testtenues <journal> : tenues enregistrees (lecture, ecriture, mise), dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testtenues")) {
+        int rc = OutfitSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /boitedll <png> <0 ip|1 steam prive|2 confiance> : la question des DLL (accord-dll.inc) en image ; /testboitedll <journal> : ses touches et ses clics, jamais montree ;
     // /testaccord <journal> : chemins pieges, signature, hotes de confiance.
     if (argc >= 3 && (!_wcsicmp(argv[1], L"/boitedll") || !_wcsicmp(argv[1], L"/testboitedll") || !_wcsicmp(argv[1], L"/testaccord"))) {
@@ -8501,11 +8515,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             int k = _wtoi(st.c_str() + 7) - 1;
             g_addonSel = k >= 0 && k < (int)g_addonList.size() && g_addonList[k].installed ? k : -1;
         }
-        else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso" || st == L"visage" || st == L"volant") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s) ; visage : onglet Visage ; volant : vue Volant
+        else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso" || st == L"visage" || st == L"volant" || st == L"tenue-miennes" || st == L"tenue-miennes-nom") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s) ; visage : onglet Visage ; volant : vue Volant
             g_tab = TAB_SKIN;
             g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);
             if (st == L"tenue-survol") { g_skinRowHot = HT_TILE + 2; g_lookZone = 1; }   // (3e tuile des hauts survolee)
             if (st == L"visage") g_persoTab = 1;
+            if (st == L"tenue-miennes" || st == L"tenue-miennes-nom") {
+                g_persoTab = 2;
+                g_outfitsFor = L"capture";
+                g_outfits = { { T(L"Travail", L"Work"), "char_shirt03|pants1" }, { T(L"Week-end", L"Weekend"), "char_shirt11|pants2" }, { L"Rally", "rally_shirt|pants1" }, { T(L"Tenue 4", L"Outfit 4"), PersoLookString() } };
+                if (st == L"tenue-miennes-nom") { g_outfitEdit = 1; g_outfitEditText = T(L"Week-end", L"Weekend"); }
+                else g_skinRowHot = HT_OUTFIT + 1 * 4 + 1;   // (survol : les boutons de la carte)
+            }
             if (st == L"volant") g_persoView = PV_VOLANT;
             if (st == L"tenue-perso") { g_skinRowHot = 1; g_skinYaw = (float)_wtof(argv[argc - 1]); }   // (dernier argument : la vue 0..16)
         }

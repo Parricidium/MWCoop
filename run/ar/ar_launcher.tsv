@@ -2761,6 +2761,52 @@ On my side: voice, \"Accept the host's content\", trusted hosts, seeing the othe
 Guest: did you accept the list of files? \"See the files\", in the lobby, opens it again. Does the host have MSCLoader on?	الضيف: هل قبلت قائمة الملفات؟ «عرض الملفات» في الردهة يفتحها مجددًا. هل MSCLoader مفعّل لدى المضيف؟
 CDs, images, settings · never the .dll files	أقراص، صور، إعدادات · لا تشمل ملفات .dll أبدًا
 %d host(s)	المضيفون: %d
+What's synced	ما تتم مزامنته
+My outfits	ملابسي
+Outfit %d	ملابس %d
+Save what I'm wearing	حفظ ما أرتديه
+%d / %d · one click to put it on	%d / %d · نقرة واحدة لارتدائها
+Put an outfit together in the Outfit and Face tabs, then save it here. Work, weekend, rally: you name them.	نسّق ملابسك في تبويبَي الملابس والوجه، ثم احفظها هنا. العمل، عطلة نهاية الأسبوع، الرالي: أنت من يسمّيها.
+Outfit name	اسم الملابس
+on	مرتداة
+Could not save your outfits	تعذّر حفظ ملابسك
+%d outfits at most: remove one	%d مجموعات ملابس كحد أقصى: أزل واحدة
+Remove the outfit \"	إزالة الملابس «
+\"? What you are wearing does not change.	»؟ لن يتغيّر ما ترتديه.
+\"%s\": %d part(s) missing on this PC, left as they are	«%s»: أجزاء غير موجودة على هذا الجهاز: %d، تُركت كما هي
+Outfit \"%s\" on	تم ارتداء «%s»
+Work	العمل
+Weekend	عطلة نهاية الأسبوع
+Players max: 2, 4, 8, 12 or 16, host included (8 by default), in the Options card. Above 10, you need a very good connection and a good machine on the host's side.	الحد الأقصى للاعبين: 2 أو 4 أو 8 أو 12 أو 16، بمن فيهم المضيف (8 افتراضيًا)، في بطاقة الخيارات. فوق 10، يلزم اتصال جيد جدًا وجهاز جيد لدى المضيف.
+My outfits: save what you are wearing under a name (12 outfits at most, per game), put it back on with one click. An imported image stays unique: the outfit shows the current image.	ملابسي: احفظ ما ترتديه باسم (12 مجموعة كحد أقصى لكل لعبة)، وارتدها مجددًا بنقرة واحدة. الصورة المستوردة واحدة: تعرض الملابس الصورة الحالية.
+The Character page also has the Outfit, Face, Car tabs in the header. On the left, the 3D preview (Full, Portrait or Wheel): drag to turn, wheel to zoom. On the right, the tiles with their 3D thumbnail, per body part; the \"+ N\" tile shows the rest. RANDOM draws an outfit, SAVE keeps it.	تحتوي صفحة الشخصية أيضًا على تبويبات الملابس والوجه والسيارة في الترويسة. على اليسار معاينة ثلاثية الأبعاد (كامل أو صورة أو خلف المقود): اسحب للتدوير، والعجلة للتكبير. على اليمين المربعات بمصغّراتها حسب أجزاء الجسم؛ ويعرض مربع «+ N» البقية. يختار «عشوائي» ملابس، ويحفظها «حفظ».
+Save several outfits under the name of your choice (work, weekend, rally) and put them back on with one click: Character page, My outfits tab.	احفظ عدة مجموعات ملابس بالأسماء التي تختارها (العمل، عطلة نهاية الأسبوع، الرالي) وارتدها بنقرة واحدة: صفحة الشخصية، تبويب ملابسي.
+New line in the bar, under Guide: everything MWCoop shares between players, what each player keeps to themselves, and what to do if something differs.	سطر جديد في الشريط، تحت الدليل: كل ما يشاركه MWCoop بين اللاعبين، وما يحتفظ به كل لاعب، وما العمل إذا اختلف شيء.
+Everything MWCoop shares between the players of the same game. The world is the host's: their save goes to the guests at the start of the game.	كل ما يشاركه MWCoop بين لاعبي اللعبة نفسها. العالم هو عالم المضيف: يُرسل حفظه إلى الضيوف في بداية اللعبة.
+The players	اللاعبون
+Where they are and their moves, outfits and faces, proximity voice, chat, shared markers, punches (if the host allows them).	أماكنهم وحركاتهم، الملابس والوجوه، الصوت القريب، الدردشة، العلامات المشتركة، اللكمات (إذا سمح المضيف).
+The cars	السيارات
+Driver and passengers, doors, dashboard, windows, crashes, towing, fuel.	السائق والركاب، الأبواب، لوحة القيادة، النوافذ، الاصطدامات، السحب، الوقود.
+Mechanics: parts, bolts, tuning, fluids, paint, leaks and steam.	الميكانيكا: القطع، البراغي، الضبط، السوائل، الطلاء، التسربات والبخار.
+The CORRIS and My Winter Car's vehicles, parked cars, the Fiad 131 and the add-on cars.	CORRIS ومركبات My Winter Car، السيارات المركونة، Fiad 131 وسيارات الإضافات.
+SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, the boat, the Fiad 131 and the add-on cars.	SATSUMA وGIFU وKEKMET وHAYOSIKO وFERNDALE وRUSCKO وJONNEZ وFLATBED والقارب وFiad 131 وسيارات الإضافات.
+The world	العالم
+The host's time and weather, traffic, NPCs, doors, machines, the radio, fires, the sauna.	وقت المضيف وطقسه، حركة المرور، الشخصيات، الأبواب، الآلات، الراديو، النيران، الساونا.
+Items: what you move, drink, eat or cook, shelves and display cabinets.	الأشياء: ما تنقله أو تشربه أو تأكله أو تطبخه، الرفوف والخزائن الزجاجية.
+Shops, jobs and phone calls.	المتاجر، الأعمال والمكالمات الهاتفية.
+Races and additions	السباقات والإضافات
+The rally and the ice race.	الرالي وسباق الجليد.
+The rally and the drag races, with everyone's times and trophies.	الرالي وسباقات السحب، مع أوقات الجميع وجوائزهم.
+MWCoop additions (s21 shop, cinema, museum, Ässäkylä...): the ones the host chose, for everyone.	إضافات MWCoop (متجر s21، السينما، المتحف، Ässäkylä...): تلك التي اختارها المضيف، للجميع.
+The host's mods and content (CDs, radio, images): sent to their guests, with their OK for the mods.	تعديلات المضيف ومحتواه (أقراص، راديو، صور): تُرسل إلى ضيوفه، وبموافقتهم للتعديلات.
+What each player keeps	ما يحتفظ به كل لاعب
+Your settings: graphics, HUD, keys, volume. Your solo save: a guest plays in a separate profile.	إعداداتك: الرسومات، الواجهة، المفاتيح، الصوت. حفظك الفردي: يلعب الضيف في ملف منفصل.
+Your money, your crimes and jail, your objectives on the map.	مالك، جرائمك والسجن، أهدافك على الخريطة.
+Not synced	غير متزامن
+A mod MWCoop doesn't support: what it adds is only seen by those who have it, and it can create differences.	تعديل لا يدعمه MWCoop: ما يضيفه لا يراه إلا من لديهم هذا التعديل، وقد يسبّب اختلافات.
+Something differs on your side? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s). If it comes back: Report a bug, the bug icon at the top right.	هل يختلف شيء لديك؟ F10 > المزامنة > إعادة مزامنة العالم: يعيد المضيف إرسال حالته كلها، كما عند وصولك (مرة كل 30 ث). إذا عاد الأمر: الإبلاغ عن خطأ، أيقونة الحشرة أعلى اليمين.
+What is synced	ما تتم مزامنته
+Shared between players, or kept by each	مشترك بين اللاعبين أو خاص بكل لاعب
 MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.	يوضع MWCoop في مجلد اللعبة، بجانب mywintercar.exe. والمشغّل (MWCoop.exe) يتولى الباقي: يثبّت التعديل ويحدّثه ويشغّل اللعبة.
 Install in 4 steps	التثبيت في 4 خطوات
 In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.	في Steam: انقر بالزر الأيمن على My Winter Car > إدارة > استعراض الملفات المحلية. سيُفتح مجلد اللعبة.

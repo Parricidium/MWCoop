@@ -82,7 +82,7 @@ static int g_lobbySinceGen = -1;                    // ... pour quel salon (g_lo
 // Identifiants des nouvelles commandes du salon (suite de UI_LOBBY_* de uikit.inc ; 3300-3399 et 10400-10999 : LobbyOptClick,
 // ui.inc ; plages par session : uikit.inc)
 enum { UI_LOBBY_AJOUTS = 3312,   // + k : ajouts MWCoop Tous / Choisir / Aucun
-       UI_LOBBY_MAXSEG = 3316,   // + k : joueurs au plus 4 / 8 / 12 / 16
+       UI_LOBBY_MAXSEG = 3325,   // + k : joueurs au plus 2 / 4 / 8 / 12 / 16 (3325-3329)
        UI_LOBBY_OPTRESET = 3320, UI_LOBBY_OPTKEEP,   // Remettre (les Reglages), Garder comme defauts
        UI_LOBBY_MODS = 3322,     // Gerer (page MODS)
        UI_LOBBY_CHAT = 3323, UI_LOBBY_SEND,   // tchat : champ « Message au salon », ENVOYER

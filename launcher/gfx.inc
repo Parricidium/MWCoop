@@ -1289,7 +1289,7 @@ static float SetItemH(const SetItem &it, float w)
         std::vector<std::wstring> labs;
         if (!strcmp(k, "aurore")) labs = { T(L"Off", L"Off"), T(L"Calme", L"Calm"), T(L"Vivant", L"Lively") };
         else if (!strcmp(k, "densite")) labs = { T(L"Aérée", L"Airy"), T(L"Normale", L"Normal"), T(L"Compacte", L"Compact") };
-        else if (!strcmp(k, "max")) labs = { L"4", L"8", L"12", L"16" };
+        else if (!strcmp(k, "max")) labs = { L"2", L"4", L"8", L"12", L"16" };
         else if (!strcmp(k, "prive")) labs = { T(L"Public", L"Public"), T(L"Privé", L"Private") };
         else if (!strcmp(k, "net")) labs = { L"Steam", L"IP / VPN" };
         else if (!strcmp(k, "canal")) labs = { L"MSC", L"MWC" };
@@ -1399,7 +1399,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             }
         } else if (!strcmp(k, "max")) {
             int mx = (int)GetPrivateProfileIntW(L"Lanceur", L"SalonMax", 8, g_iniLauncher.c_str());
-            SetSegRow(g, it, row, { L"4", L"8", L"12", L"16" }, mx <= 4 ? 0 : mx <= 8 ? 1 : mx <= 12 ? 2 : 3, UI_SET_MAXP);
+            SetSegRow(g, it, row, { L"2", L"4", L"8", L"12", L"16" }, mx <= 2 ? 0 : mx <= 4 ? 1 : mx <= 8 ? 2 : mx <= 12 ? 3 : 4, UI_SET_MAXP);
         } else if (!strcmp(k, "prive")) {
             bool prive = GetPrivateProfileIntW(L"Lanceur", L"SalonPrive", 1, g_iniLauncher.c_str()) != 0;
             SetSegRow(g, it, row, { T(L"Public", L"Public"), T(L"Privé", L"Private") }, prive ? 1 : 0, UI_SET_PRIV);
@@ -2089,7 +2089,7 @@ static bool SetClick(int id)
     if (id == UI_SET_ANIMRED) { AnimReducedSet(GetPrivateProfileIntW(L"Lanceur", L"AnimationsReduites", 0, g_iniLauncher.c_str()) == 0); return true; }
     if (id >= UI_SET_SESS && id < UI_SET_SESS + 3) { static const int n[] = { 3, 10, 30 }; WritePrivateProfileStringW(L"Lanceur", L"Sessions", n[id - UI_SET_SESS] == 30 ? NULL : std::to_wstring(n[id - UI_SET_SESS]).c_str(), g_iniLauncher.c_str()); return true; }
     if (id >= UI_SET_PORTSEG && id < UI_SET_PORTSEG + 8) { if (const Opt *o = OptByKey("Port")) if (id - UI_SET_PORTSEG < (int)o->vals.size()) OptSet(*o, o->vals[id - UI_SET_PORTSEG]); return true; }
-    if (id >= UI_SET_MAXP && id < UI_SET_MAXP + 4) { static const int m[] = { 4, 8, 12, 16 }; WritePrivateProfileStringW(L"Lanceur", L"SalonMax", std::to_wstring(m[id - UI_SET_MAXP]).c_str(), g_iniLauncher.c_str()); return true; }
+    if (id >= UI_SET_MAXP && id < UI_SET_MAXP + 5) { static const int m[] = { 2, 4, 8, 12, 16 }; WritePrivateProfileStringW(L"Lanceur", L"SalonMax", std::to_wstring(m[id - UI_SET_MAXP]).c_str(), g_iniLauncher.c_str()); return true; }
     if (((id >= UI_SET_AJOUTS && id < UI_SET_AJOUTS + 3) || (id >= UI_SET_AJOUT && id < UI_SET_AJOUT + kAjoutN)) && AjoutsParHote()) return true;   // (reglé par l'hôte)
     if (id >= UI_SET_AJOUTS && id < UI_SET_AJOUTS + 3) {
         int k = id - UI_SET_AJOUTS;

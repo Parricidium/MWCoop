@@ -585,9 +585,9 @@ static void PersoMigrate()
 // Les tuiles, onglets, pastilles et la vue ne passent pas par HotZone (UiClick, ui.inc, ne les connait pas) : PersoPageHit
 // donne un code, SkinMouseDown / CarMouseDown l'appliquent (PersoPageMouseDown), g_skinRowHot (TENUE) ou g_carHot - 1000
 // (VOITURE) le gardent pour le survol.
-enum { HT_TAB = 0, HT_VIEW = 10, HT_SWATCH = 20, HT_PAINT = 40, HT_UNDO = 50, HT_IMG = 60, HT_TILE = 100 };   // HT_TILE + rubrique * 16 + i (i = 15 : « + N »)
+enum { HT_TAB = 0, HT_VIEW = 10, HT_SWATCH = 20, HT_PAINT = 40, HT_UNDO = 50, HT_IMG = 60, HT_TILE = 100, HT_OUTFIT_NEW = 299, HT_OUTFIT = 300 };   // HT_TILE + rubrique * 16 + i (i = 15 : « + N »)
 enum { SEC_SHIRT, SEC_PANTS, SEC_HEAD, SEC_BODY, SEC_FACE, SEC_HAT, SEC_GLASSES, SEC_HAIR, SEC_COUNT };
-static int g_persoTab;                                     // 0 Tenue, 1 Visage (Voiture : g_tab == TAB_CAR)
+static int g_persoTab;                                     // 0 Tenue, 1 Visage, 2 Mes tenues (Voiture : g_tab == TAB_CAR)
 static int g_persoView;                                    // PV_FULL (Pied), PV_PORTRAIT, PV_VOLANT
 static int g_tilePage[SEC_COUNT] = { -1, -1, -1, -1, -1, -1, -1, -1 };   // page montree par rubrique (-1 : celle du choix actuel)
 static const int kTileCols = 8;
@@ -598,8 +598,8 @@ struct TileSec { int id, f; const wchar_t *fr, *en; };     // f : partie (PF_*),
 // (plus de rangee « Tete » melangee dans Tenue -- retour de JD, 18/10 : visage, chapeau, lunettes, cheveux sont l'onglet Visage)
 static const TileSec kTenueSecs[] = { { SEC_SHIRT, PF_SHIRT, L"Haut", L"Top" }, { SEC_PANTS, PF_PANTS, L"Bas", L"Bottom" }, { SEC_BODY, PF_BODY, L"Silhouette", L"Build" } };
 static const TileSec kVisageSecs[] = { { SEC_FACE, PF_FACE, L"Visage", L"Face" }, { SEC_HAT, PF_HAT, L"Chapeau", L"Hat" }, { SEC_GLASSES, PF_GLASSES, L"Lunettes", L"Glasses" }, { SEC_HAIR, PF_HAIR, L"Cheveux", L"Hair" } };
-static const wchar_t *kPersoTabFr[4] = { L"Tenue", L"Visage", L"Voiture", L"Addons" }, *kPersoTabEn[4] = { L"Outfit", L"Face", L"Car", L"Add-ons" };   // (Addons : voiture.inc, g_addonsTab)
-static int PersoTabCount() { return 4; }   // (Addons aussi sur My Summer Car depuis le 24/10 : voitures sur la Ruscko)
+static const wchar_t *kPersoTabFr[5] = { L"Tenue", L"Visage", L"Mes tenues", L"Voiture", L"Addons" }, *kPersoTabEn[5] = { L"Outfit", L"Face", L"My outfits", L"Car", L"Add-ons" };   // (Addons : voiture.inc, g_addonsTab)
+static int PersoTabCount() { return 5; }   // (Addons aussi sur My Summer Car depuis le 24/10 : voitures sur la Ruscko)
 static const wchar_t *kViewFr[3] = { L"Pied", L"Portrait", L"Volant" }, *kViewEn[3] = { L"Full", L"Portrait", L"Wheel" };
 static void LookReset();
 
@@ -630,6 +630,7 @@ static RectF TileRect(const SecLay &L, int i) { return RectF(kSkinPanel.X + 18 +
 static float PersoLayout(std::vector<SecLay> &out)
 {
     bool perso = g_perso.state == 1;
+    if (g_persoTab == 2) return kSkinPanel.Y + 48;   // (Mes tenues : pas de tuiles)
     const TileSec *secs = g_persoTab ? kVisageSecs : kTenueSecs;
     int ns = g_persoTab ? (int)_countof(kVisageSecs) : (int)_countof(kTenueSecs);
     float y = kSkinPanel.Y + 48;
@@ -665,24 +666,250 @@ static bool LookChanged()
     for (int f = 0; f < PF_COUNT && f < (int)g_drPerso.size(); f++) if (f != PF_SHIRT && PersoGet(f) != g_drPerso[f]) return true;
     return false;
 }
-static float PersoTabW(int k) { return PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 13) + 4; }   // (10 de chaque cote : +16 avant le bouton Signaler un bug, 26/10)
+static float PersoTabW(int k) { return g_newUi ? PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 13) + 4 : PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 12) - 2; }   // (10 de chaque cote : +16 avant le bouton Signaler un bug, 26/10)
 static float PersoTabsW() { float w = 0; for (int k = 0; k < PersoTabCount(); k++) w += PersoTabW(k) + (k ? 6 : 0); return w; }
 static RectF PersoTabRect(int k) { float x = g_persoTabRight - PersoTabsW(); for (int j = 0; j < k; j++) x += PersoTabW(j) + 6; return RectF(x, kPersoTabY, PersoTabW(k), kPersoTabH); }
 
 // Onglets de la page (TENUE et VOITURE), dessines par l'en-tete (ui.inc DrawHeader) : pilules comme la maquette.
 static void PersoTabsDraw(Graphics &g)
 {
-    int sel = g_tab == TAB_CAR ? (g_addonsTab ? 3 : 2) : g_persoTab;
+    int sel = g_tab == TAB_CAR ? (g_addonsTab ? 4 : 3) : g_persoTab;
     for (int k = 0; k < PersoTabCount(); k++) {
         RectF r = PersoTabRect(k);
         bool on = k == sel, hot = g_tab == TAB_CAR ? g_carHot == 1000 + HT_TAB + k : g_skinRowHot == HT_TAB + k;
         GraphicsPath p; RoundRect(p, r, r.Height / 2);
         SolidBrush b(on ? kAcc : hot ? TH(cardSel) : TH(btn2)); g.FillPath(&b, &p);
         if (!on) { Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); }
-        Text(g, T(kPersoTabFr[k], kPersoTabEn[k]), r, 13, FontStyleBold, on ? kOnAcc : kInk);
+        Text(g, T(kPersoTabFr[k], kPersoTabEn[k]), r, g_newUi ? 13.0f : 12.0f, FontStyleBold, on ? kOnAcc : kInk);
     }
 }
 
+// ---- Mes tenues (forum, Somegames1 22/10 ; JD 06/11 : « des "tenue prédéfinie personnalisée" dans le launcher ») : l'apparence
+// entiere sous un nom, a remettre d'un clic. <MWCoop>\tenues-perso.txt, UTF-8, un fichier par jeu (les vetements different) :
+// une ligne par tenue, « nom<tabulation>haut|pantalon|visage|corps|chapeau|lunettes|cheveux » (le format de PersoLookString, celui
+// du mod). Une image importee (« perso ») reste unique : la tenue montre l'image du moment.
+struct SavedOutfit { std::wstring name; std::string look; };
+static const int kOutfitMax = 12, kOutfitNameMax = 28;
+static std::vector<SavedOutfit> g_outfits;
+static std::wstring g_outfitsFor;      // fichier deja lu (changer de jeu : relu)
+static int g_outfitEdit = -1;          // tenue en cours de renommage
+static std::wstring g_outfitEditText;
+static std::wstring OutfitFile() { return g_modRoot.empty() ? L"" : g_modRoot + L"MWCoop\\tenues-perso.txt"; }
+static std::wstring OutfitCleanName(std::wstring n)
+{
+    for (wchar_t &c : n) if (c < 32) c = L' ';
+    n = Trim(n);
+    if (n.size() > (size_t)kOutfitNameMax) n.resize(kOutfitNameMax);
+    return n;
+}
+static std::vector<SavedOutfit> OutfitRead(const std::wstring &file)
+{
+    std::vector<SavedOutfit> v;
+    std::vector<unsigned char> d;
+    if (file.empty() || !ReadAll(file, d)) return v;
+    std::string all(d.begin(), d.end());
+    if (!all.compare(0, 3, "\xEF\xBB\xBF")) all.erase(0, 3);
+    for (size_t a = 0; a < all.size() && (int)v.size() < kOutfitMax;) {
+        size_t e = all.find('\n', a);
+        std::string l = all.substr(a, e == std::string::npos ? std::string::npos : e - a);
+        a = e == std::string::npos ? all.size() : e + 1;
+        if (!l.empty() && l.back() == '\r') l.pop_back();
+        size_t t = l.find('\t');
+        if (t == std::string::npos || t == 0) continue;
+        SavedOutfit o;
+        o.name = OutfitCleanName(Widen(l.substr(0, t), CP_UTF8));
+        o.look = l.substr(t + 1);
+        if (!o.name.empty() && !o.look.empty()) v.push_back(o);
+    }
+    return v;
+}
+static bool OutfitWrite(const std::wstring &file, const std::vector<SavedOutfit> &v)
+{
+    if (file.empty()) return false;
+    EnsureModDir();
+    std::string o;
+    for (auto &x : v) o += Narrow(OutfitCleanName(x.name), CP_UTF8) + "\t" + x.look + "\r\n";
+    std::wstring tmp = file + L".tmp";
+    HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    DWORD w = 0;
+    bool ok = WriteFile(h, o.data(), (DWORD)o.size(), &w, NULL) && w == o.size();
+    CloseHandle(h);
+    if (ok) ok = MoveFileExW(tmp.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+    if (!ok) DeleteFileW(tmp.c_str());
+    return ok;
+}
+static void OutfitsLoad()
+{
+    std::wstring f = OutfitFile();
+    if (g_outfitsFor == f || g_outfitsFor == L"capture") return;
+    g_outfitsFor = f;
+    g_outfits = OutfitRead(f);
+    g_outfitEdit = -1;
+}
+static void OutfitsSave() { if (!OutfitWrite(OutfitFile(), g_outfits)) SetStatus(K_ERR, L"%s", T(L"Impossible d'enregistrer tes tenues", L"Could not save your outfits")); }
+// Met cette apparence, comme des clics sur les tuiles. Rend le nombre de parties absentes de ce PC (pack retire, image supprimee) : elles restent telles quelles.
+static int OutfitWear(const std::string &lookStr)
+{
+    std::string look[PF_COUNT];
+    PersoParseLook(lookStr, look);
+    int missing = 0;
+    for (int f = 0; f < PF_COUNT; f++) {
+        if (f == PF_SHIRT) {
+            const Opt *ap = SkinOpt();
+            int at = -1;
+            if (ap) for (size_t i = 0; i < ap->svals.size(); i++) if (ap->svals[i] == look[f]) at = (int)i;
+            if (at < 0 || (look[f] == "perso" && !PersoImgHas(PI_SHIRT))) { missing++; continue; }
+            if (OptGet(*ap) != at) OptSet(*ap, at);
+            continue;
+        }
+        int k = PersoImgOf(f);
+        if (look[f] == "perso" && k >= 0 && !PersoImgHas(k)) { missing++; continue; }
+        if (g_perso.state == 1 && !look[f].empty()) {   // (sans export du mod : la liste n'est pas connue, la valeur est gardee telle quelle)
+            std::vector<std::string> ch = PersoChoices(f);
+            if (std::find(ch.begin(), ch.end(), look[f]) == ch.end()) { missing++; continue; }
+        }
+        if (PersoGet(f) != look[f]) PersoSet(f, look[f]);
+    }
+    g_skinChangeT = GetTickCount();
+    g_skinAnnounce = true;
+    for (auto &p : g_tilePage) p = -1;
+    return missing;
+}
+static void OutfitAdd()
+{
+    if ((int)g_outfits.size() >= kOutfitMax) { SetStatus(K_WARN, T(L"%d tenues au plus : retire-en une", L"%d outfits at most: remove one"), kOutfitMax); return; }
+    wchar_t nm[48];
+    for (int n = (int)g_outfits.size() + 1;; n++) {   // (un numero libre : « Tenue 3 » peut rester apres un retrait)
+        swprintf_s(nm, T(L"Tenue %d", L"Outfit %d"), n);
+        bool used = false;
+        for (auto &o : g_outfits) used |= o.name == nm;
+        if (!used) break;
+    }
+    g_outfits.push_back({ nm, PersoLookString() });
+    OutfitsSave();
+    g_outfitEdit = (int)g_outfits.size() - 1;   // (le nom tout de suite, Entree pour le garder)
+    g_outfitEditText = nm;
+    g_time = 0;
+    g_focus = -1;
+}
+static RectF OutfitNewRect() { return RectF(kSkinPanel.X + kSkinPanel.Width - 18 - 236, kSkinPanel.Y + 14, 236, 36); }
+static float OutfitCardW() { return (kSkinPanel.Width - 36 - 2 * 10) / 3; }
+static RectF OutfitCard(int i) { float w = OutfitCardW(); return RectF(kSkinPanel.X + 18 + (i % 3) * (w + 10), kSkinPanel.Y + 92 + (i / 3) * 138, w, 128); }
+static RectF OutfitBtn(int i, int part)   // 0 mettre (toute la carte), 1 renommer, 2 retirer
+{
+    RectF c = OutfitCard(i);
+    if (part == 1) return RectF(c.X + c.Width - 70, c.Y + c.Height - 36, 28, 28);
+    if (part == 2) return RectF(c.X + c.Width - 36, c.Y + c.Height - 36, 28, 28);
+    return c;
+}
+static int OutfitHit(float x, float y)
+{
+    if ((int)g_outfits.size() < kOutfitMax && OutfitNewRect().Contains(x, y)) return HT_OUTFIT_NEW;
+    for (int i = 0; i < (int)g_outfits.size(); i++) for (int part : { 1, 2, 0 }) if (OutfitBtn(i, part).Contains(x, y)) return HT_OUTFIT + i * 4 + part;
+    return -1;
+}
+static void OutfitClick(int t)
+{
+    if (t == HT_OUTFIT_NEW) { OutfitAdd(); return; }
+    int i = (t - HT_OUTFIT) / 4, part = (t - HT_OUTFIT) % 4;
+    if (i < 0 || i >= (int)g_outfits.size()) return;
+    if (part == 1) { g_outfitEdit = i; g_outfitEditText = g_outfits[i].name; g_time = 0; g_focus = -1; return; }
+    if (part == 2) {
+        std::wstring q = std::wstring(T(L"Retirer la tenue « ", L"Remove the outfit \"")) + g_outfits[i].name + T(L" » ? Ce que tu portes ne change pas.", L"\"? What you are wearing does not change.");
+        if (MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
+        g_outfits.erase(g_outfits.begin() + i);
+        g_outfitEdit = -1;
+        OutfitsSave();
+        return;
+    }
+    g_outfitEdit = -1;
+    int missing = OutfitWear(g_outfits[i].look);
+    if (missing) SetStatus(K_WARN, T(L"« %s » : %d partie(s) absente(s) de ce PC, gardée(s) telles quelles", L"\"%s\": %d part(s) missing on this PC, left as they are"), g_outfits[i].name.c_str(), missing);
+    else SetStatus(K_OK, T(L"Tenue « %s » mise", L"Outfit \"%s\" on"), g_outfits[i].name.c_str());
+}
+// Saisie du nom (WM_CHAR, avant le reste).
+static bool OutfitChar(wchar_t c)
+{
+    if (g_outfitEdit < 0 || g_tab != TAB_SKIN || g_persoTab != 2) return false;
+    std::wstring &t = g_outfitEditText;
+    if (c == 8) { if (!t.empty()) t.pop_back(); }
+    else if (c == 127) t.clear();
+    else if (c == 27) g_outfitEdit = -1;
+    else if (c == 13) {
+        std::wstring n = OutfitCleanName(t);
+        if (!n.empty() && g_outfitEdit < (int)g_outfits.size() && g_outfits[g_outfitEdit].name != n) { g_outfits[g_outfitEdit].name = n; OutfitsSave(); }
+        g_outfitEdit = -1;
+    }
+    else if (c >= 32 && t.size() < (size_t)kOutfitNameMax) t += c;
+    g_time = 0;
+    return true;
+}
+static void DrawOutfits(Graphics &g, RectF pn);
+// /testtenues : dans un dossier de jeu jetable seulement (jamais le jeu trouve par Steam).
+static int OutfitSelfTest(const wchar_t *log)
+{
+    DeleteFileW(log);
+    int bad = 0;
+    auto say = [&](const std::string &l, bool good) {
+        FILE *o = _wfopen(log, L"ab");
+        if (o) { fprintf(o, "%s %s\r\n", l.c_str(), good ? "ok" : "ECHEC"); fclose(o); }
+        if (!good) bad++;
+    };
+    if (g_gameDir.empty() || _wcsicmp(g_gameDir.c_str(), g_dir.c_str())) { say("refuse : le lanceur doit etre dans un dossier de jeu jetable", false); return 3; }
+    std::wstring f = OutfitFile();
+    say("rien au depart : liste vide", OutfitRead(f).empty());
+    std::vector<SavedOutfit> v = { { L"Travail", "a|b|c" }, { L"Выходные", "d|e" }, { L"Nom\tavec tab", "f" } };
+    say("ecrire", OutfitWrite(f, v));
+    std::vector<SavedOutfit> r = OutfitRead(f);
+    say("3 relues", r.size() == 3);
+    say("cyrillique garde", r.size() == 3 && r[1].name == L"Выходные" && r[1].look == "d|e");
+    say("tabulation du nom retiree, pas de decalage", r.size() == 3 && r[2].name == L"Nom avec tab" && r[2].look == "f");
+    {   // lignes abimees, BOM, plus de 12 lignes
+        std::string s = "\xEF\xBB\xBFUn\ta|b\r\nsans tabulation\r\n\tsans nom\r\nsans apparence\t\r\n";
+        for (int i = 0; i < 20; i++) s += "T" + std::to_string(i) + "\tx\n";
+        std::wstring t = f + L".essai";
+        FILE *o = _wfopen(t.c_str(), L"wb"); if (o) { fwrite(s.data(), 1, s.size(), o); fclose(o); }
+        std::vector<SavedOutfit> w = OutfitRead(t);
+        say("BOM et lignes abimees ignorees", !w.empty() && w[0].name == L"Un" && w[0].look == "a|b" && w[1].name == L"T0");
+        say("12 tenues au plus", w.size() == (size_t)kOutfitMax);
+        DeleteFileW(t.c_str());
+    }
+    say("nom coupe a 28 caracteres", OutfitCleanName(std::wstring(60, L'x')).size() == (size_t)kOutfitNameMax);
+    // mettre : le mwcoop.ini de ce dossier de jeu
+    PersoSet(PF_PANTS, "pants1"); PersoSet(PF_HAT, "");
+    std::string before = PersoLookString();
+    int miss = OutfitWear("|pants2|||||hair3");
+    say("mettre sans export : parties ecrites", PersoGet(PF_PANTS) == "pants2" && PersoGet(PF_HAIR) == "hair3" && PersoGet(PF_HAT) == "");
+    say("haut inconnu compte comme absent, le haut ne change pas", miss == 1 && PersoGet(PF_SHIRT) == before.substr(0, before.find('|')));
+    PersoSet(PF_HAIR, "");
+    int miss2 = OutfitWear(before);
+    say("remis comme avant, rien d'absent", miss2 == 0 && PersoLookString() == before);
+    int perdu = OutfitWear(PersoGet(PF_SHIRT) + "|perso");
+    say("pantalon perso sans image : compte", perdu == 1 && PersoGet(PF_PANTS) != "perso");
+    // ajouter, numero libre, plafond
+    g_outfitsFor = f; g_outfits.clear();
+    OutfitAdd(); OutfitAdd();
+    say("ajout : Tenue 1 et 2", g_outfits.size() == 2 && g_outfits[1].look == PersoLookString() && g_outfitEdit == 1);
+    g_outfits.erase(g_outfits.begin());
+    OutfitAdd();
+    say("numero libre apres un retrait", g_outfits.size() == 2 && g_outfits[0].name != g_outfits[1].name);
+    while ((int)g_outfits.size() < kOutfitMax) OutfitAdd();
+    OutfitAdd();
+    say("plafond tenu", (int)g_outfits.size() == kOutfitMax && (int)OutfitRead(f).size() == kOutfitMax);
+    // renommer au clavier
+    g_tab = TAB_SKIN; g_persoTab = 2; g_outfitEdit = 0; g_outfitEditText = L"Ab";
+    OutfitChar(L'c'); OutfitChar(8); OutfitChar(L'd'); OutfitChar(13);
+    say("renommer : Entree garde", g_outfits[0].name == L"Abd" && g_outfitEdit == -1 && OutfitRead(f)[0].name == L"Abd");
+    g_outfitEdit = 0; g_outfitEditText = L"Autre"; OutfitChar(27);
+    say("renommer : Echap annule", g_outfits[0].name == L"Abd" && g_outfitEdit == -1);
+    g_outfitEdit = 0; g_outfitEditText = L"   "; OutfitChar(13);
+    say("nom vide : garde l'ancien", g_outfits[0].name == L"Abd");
+    DeleteFileW(f.c_str());
+    FILE *o = _wfopen(log, L"ab");
+    if (o) { fprintf(o, "%s\r\n", bad ? "ECHEC" : "TOUT OK"); fclose(o); }
+    return bad ? 1 : 0;
+}
 // Element sous la souris : code HT_*, -1 sinon (onglets sur les deux pages ; le reste sur TENUE).
 static int PersoPageHit(float x, float y)
 {
@@ -692,6 +919,7 @@ static int PersoPageHit(float x, float y)
         for (int i = 0; i < 3; i++) if (PersoViewBtnRect(i).Contains(x, y)) return HT_VIEW + i;
         if (LookChanged() && PersoUndoRect().Contains(x, y)) return HT_UNDO;
     }
+    if (g_persoTab == 2) return OutfitHit(x, y);
     std::vector<SecLay> lay;
     PersoLayout(lay);
     for (int s = 0; s < (int)lay.size(); s++) {
@@ -711,15 +939,17 @@ static bool PersoPageMouseDown(float x, float y)
 {
     int t = PersoPageHit(x, y);
     if (t < 0) return false;
-    if (t < HT_TAB + 4) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
+    if (t < HT_TAB + 5) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
         int k = t - HT_TAB;
-        if (k == 2 || k == 3) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); g_addonsTab = k == 3; if (k == 3) { g_addonSel = -1; g_addonScanT = 0; g_addonsPage = 0; } }
+        g_outfitEdit = -1;
+        if (k == 3 || k == 4) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); g_addonsTab = k == 4; if (k == 4) { g_addonSel = -1; g_addonScanT = 0; g_addonsPage = 0; } }
         else { g_tab = TAB_SKIN; g_persoTab = k; g_skinIdleT = GetTickCount(); for (auto &p : g_tilePage) p = -1; }
         g_skinRowHot = -1; g_carHot = -1;
         return true;
     }
     if (t >= HT_VIEW && t < HT_VIEW + 3) { g_persoView = t - HT_VIEW; return true; }
     if (t == HT_UNDO) { LookReset(); return true; }
+    if (t >= HT_OUTFIT_NEW) { OutfitClick(t); return true; }
     if (t >= HT_SWATCH && t < HT_SWATCH + kSwatchN) { CarSetColor(CarSwatchColor(t - HT_SWATCH)); return true; }
     if (t == HT_PAINT) { g_tab = TAB_CAR; g_paintView = true; g_vinView = false; g_skinRowHot = -1; return true; }
     if (t >= HT_IMG && t < HT_IMG + 3) {   // Mes images : l'image est la -> choisie pour sa partie ; sinon import
@@ -1006,6 +1236,75 @@ static void DrawPersoCallout(Graphics &g, RectF nr)
          RectF(nr.X + 52, nr.Y + 40, nr.Width - 70, nr.Height - 48), 12.5f, kGrey);
 }
 
+static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (launcher.cpp)
+// Carte de droite de l'onglet Mes tenues : une carte par tenue (portrait, nom, « portee »), clic = la mettre.
+static void DrawOutfits(Graphics &g, RectF pn)
+{
+    OutfitsLoad();
+    Title(g, T(L"Mes tenues", L"My outfits"), RectF(pn.X + 18, pn.Y + 16, 200, 30), 16, kInk);
+    bool full = (int)g_outfits.size() >= kOutfitMax;
+    {
+        RectF nr = OutfitNewRect();
+        bool hot = g_skinRowHot == HT_OUTFIT_NEW && !full;
+        GraphicsPath p; RoundRect(p, nr, 12);
+        SolidBrush b(full ? TH(btn2) : kAcc); g.FillPath(&b, &p);
+        if (hot) { SolidBrush hb(Color(55, 255, 255, 255)); g.FillPath(&hb, &p); }
+        Text(g, T(L"Enregistrer ce que je porte", L"Save what I'm wearing"), nr, 12.5f, FontStyleBold, full ? kGrey : kOnAcc);
+    }
+    wchar_t cnt[64];
+    swprintf_s(cnt, T(L"%d / %d · un clic pour la mettre", L"%d / %d · one click to put it on"), (int)g_outfits.size(), kOutfitMax);
+    Text(g, FitText(cnt, 12, FontStyleRegular, pn.Width - 36), RectF(pn.X + 18, pn.Y + 58, pn.Width - 36, 22), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    if (g_outfits.empty()) {
+        RectF e(pn.X + 18, pn.Y + 92, pn.Width - 36, 110);
+        GraphicsPath p; RoundRect(p, e, 14);
+        Pen dash(TH(choiceBorder), 1.2f); dash.SetDashStyle(DashStyleDash); g.DrawPath(&dash, &p);
+        Para(g, T(L"Compose une tenue dans les onglets Tenue et Visage, puis enregistre-la ici. Travail, week-end, rallye : à toi de les nommer.", L"Put an outfit together in the Outfit and Face tabs, then save it here. Work, weekend, rally: you name them."), RectF(e.X + 18, e.Y + 8, e.Width - 36, e.Height - 16), 13, kGrey, StringAlignmentCenter);
+        return;
+    }
+    std::string cur = PersoLookString();
+    for (int i = 0; i < (int)g_outfits.size(); i++) {
+        const SavedOutfit &o = g_outfits[i];
+        RectF c = OutfitCard(i);
+        int base = HT_OUTFIT + i * 4;
+        bool on = o.look == cur, hot = g_skinRowHot >= base && g_skinRowHot < base + 4;
+        TileFrame(g, c, on, hot, TH(choiceBorder), false);
+        RectF av(c.X + 10, c.Y + 10, 72, 72);
+        int W = max(8, (int)(av.Width * g_scale + 0.5f)), H = max(8, (int)(av.Height * g_scale + 0.5f));
+        Bitmap *pt = PersoPortrait(o.look, W, H, 1);
+        if (pt) DrawPixels(g, pt, av);
+        else DrawSkinAvatar(g, av, o.look.substr(0, o.look.find('|')), CarRgb(kPersoPal[max(0, g_myId) % 16]), o.name);
+        float tx = av.X + av.Width + 10, tw = c.X + c.Width - 10 - tx;
+        if (on) {
+            std::wstring chip = T(L"portée", L"on");
+            Pill(g, RectF(tx, c.Y + 12, PillW(chip) + 4, 22), WithA(kOk, 0.20f), chip, kOk, 11);
+        }
+        std::string look[PF_COUNT];
+        PersoParseLook(o.look, look);
+        Para(g, PersoLabel(PF_SHIRT, look[PF_SHIRT]) + L"\n" + PersoLabel(PF_PANTS, look[PF_PANTS]), RectF(tx, c.Y + 38, tw, 44), 11, kGrey);
+        if (g_outfitEdit == i) {
+            RectF fr(c.X + 8, c.Y + c.Height - 38, c.Width - 16, 30);
+            GraphicsPath fp; RoundRect(fp, fr, 8); SolidBrush fb(TH(field)); g.FillPath(&fb, &fp); Pen fpn(kAcc, 2); g.DrawPath(&fpn, &fp);
+            RectF tr(fr.X + 8, fr.Y, fr.Width - 16, fr.Height);
+            Text(g, g_outfitEditText.empty() ? std::wstring(T(L"Nom de la tenue", L"Outfit name")) : g_outfitEditText, tr, 13, FontStyleBold, g_outfitEditText.empty() ? TH(placeholder) : kInk, StringAlignmentNear);
+            if (fmodf(g_time, 1.0f) < 0.55f) {
+                float cw = g_outfitEditText.empty() ? 0 : MeasureW(g, g_outfitEditText, 13, FontStyleBold);
+                float cx = min(tr.X + cw + 1, tr.X + tr.Width);
+                Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, fr.Y + 7, cx, fr.Y + fr.Height - 7);
+            }
+        } else {
+            Text(g, FitText(o.name, 13, FontStyleBold, c.Width - 20 - 76), RectF(c.X + 10, c.Y + c.Height - 36, c.Width - 20 - 74, 28), 13, FontStyleBold, kInk, StringAlignmentNear);
+            if (hot) for (int part : { 1, 2 }) {
+                RectF br = OutfitBtn(i, part);
+                bool bh = g_skinRowHot == base + part;
+                GraphicsPath p; RoundRect(p, br, 8);
+                SolidBrush b(bh ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
+                Pen pn2(TH(fieldBorder), 1.0f); g.DrawPath(&pn2, &p);
+                Icon(g, part == 1 ? IC_PENCIL : IC_TRASH, br.X + 14, br.Y + 14, 14, part == 2 && bh ? kRed : kInk, 1.8f);
+            }
+        }
+    }
+}
+
 static void DrawSkins(Graphics &g)
 {
     SkinsLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
@@ -1125,6 +1424,7 @@ static void DrawSkins(Graphics &g)
 
     // --- a droite : les rubriques de l'onglet
     RectF pn = kSkinPanel;
+    if (g_persoTab == 2) { DrawOutfits(g, pn); return; }
     Title(g, g_persoTab ? T(L"Visage", L"Face") : T(L"Tenue", L"Outfit"), RectF(pn.X + 18, pn.Y + 16, 160, 30), 16, kInk);
     Text(g, g_persoTab ? T(L"Visage, chapeau, lunettes, cheveux · tes images", L"Face, hat, glasses, hair · your images") : T(L"Vêtements du jeu + packs de la communauté · tes images en bas", L"Game clothes + community packs · your images below"),
          RectF(pn.X + 120, pn.Y + 18, pn.Width - 138, 26), 12, FontStyleRegular, kGrey, StringAlignmentFar);

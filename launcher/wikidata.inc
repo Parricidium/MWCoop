@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES, WA_INTERFACE, WA_VILLE };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES, WA_INTERFACE, WA_VILLE, WA_SYNCHRO };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -157,8 +157,8 @@ static const WikiBlock kW_Host[] = {
             L"At the top of the lobby, the Session code banner: Public (anyone can join) or Private (a 6-character code, shown big; COPY puts it in the clipboard, the arrow draws a new one). The choice is remembered for next time." },
     { WB_B, L"Par IP, tes amis tapent le code à côté de ton adresse ; par Steam, un ami que tu invites entre sans le taper (un ami venu de Steam sans invitation doit le taper).",
             L"By IP, your friends type the code next to your address; through Steam, a friend you invite gets in without typing it (a friend coming from Steam without an invite has to type it)." },
-    { WB_B, L"Joueurs au plus : 4, 8, 12 ou 16, hôte compris (8 par défaut), dans la carte Options. Au-delà de 10, il faut une très bonne connexion et une bonne machine chez l'hôte.",
-            L"Players max: 4, 8, 12 or 16, host included (8 by default), in the Options card. Above 10, you need a very good connection and a good machine on the host's side." },
+    { WB_B, L"Joueurs au plus : 2, 4, 8, 12 ou 16, hôte compris (8 par défaut), dans la carte Options. Au-delà de 10, il faut une très bonne connexion et une bonne machine chez l'hôte.",
+            L"Players max: 2, 4, 8, 12 or 16, host included (8 by default), in the Options card. Above 10, you need a very good connection and a good machine on the host's side." },
     { WB_B, L"Carte Options, onglet « La partie » : argent de départ, triches, renverser, coups de poing, Ventti, Ajouts MWCoop (Tous / Choisir / Aucun), joueurs au plus. Elles partent de Réglages > Co-op > « Quand j'héberge » mais ne valent que pour ce salon ; tes invités les reçoivent. « Remettre mes Réglages » les y ramène, « Garder comme défauts » les y enregistre. L'onglet « Les miennes » : tes options à toi (vocal, images des autres, marqueurs, carte).",
             L"Options card, \"The game\" tab: starting money, cheats, run over, punches, Ventti, MWCoop additions (All / Choose / None), players max. They start from Settings > Co-op > \"When I host\" but only apply to this lobby; your guests receive them. \"Reset to my Settings\" brings them back, \"Keep as defaults\" saves them there. The \"Mine\" tab: your own options (voice, others' images, markers, map)." },
     { WB_TIP, L"Les ajouts MWCoop suivent toujours l'hôte : en invité, tu as ceux de son salon (Réglages > Co-op les montre grisés, « Réglé par l'hôte ») ; ton choix ne compte que quand tu héberges.",
@@ -413,8 +413,10 @@ static const WikiBlock kW_Settings[] = {
 };
 static const WikiBlock kW_Look[] = {
     { WB_H, L"Personnage : Tenue et Visage", L"Character: Outfit and Face" },
-    { WB_P, L"La page Personnage a trois onglets dans l'en-tête : Tenue, Visage, Voiture. À gauche, l'aperçu 3D (Pied, Portrait ou Volant) : glisse pour tourner, molette pour zoomer. À droite, les tuiles avec leur vignette 3D, par partie du corps ; la tuile « + N » montre la suite. ALÉATOIRE tire une tenue, ENREGISTRER la garde.",
-            L"The Character page has three tabs in the header: Outfit, Face, Car. On the left, the 3D preview (Full, Portrait or Wheel): drag to turn, wheel to zoom. On the right, the tiles with their 3D thumbnail, per body part; the \"+ N\" tile shows the rest. RANDOM draws an outfit, SAVE keeps it." },
+    { WB_B, L"Mes tenues : enregistre ce que tu portes sous un nom (12 tenues au plus, par jeu), remets-le d'un clic. Une image importée reste unique : la tenue montre l'image du moment.",
+            L"My outfits: save what you are wearing under a name (12 outfits at most, per game), put it back on with one click. An imported image stays unique: the outfit shows the current image." },
+    { WB_P, L"La page Personnage a aussi les onglets Tenue, Visage, Voiture dans l'en-tête. À gauche, l'aperçu 3D (Pied, Portrait ou Volant) : glisse pour tourner, molette pour zoomer. À droite, les tuiles avec leur vignette 3D, par partie du corps ; la tuile « + N » montre la suite. ALÉATOIRE tire une tenue, ENREGISTRER la garde.",
+            L"The Character page also has the Outfit, Face, Car tabs in the header. On the left, the 3D preview (Full, Portrait or Wheel): drag to turn, wheel to zoom. On the right, the tiles with their 3D thumbnail, per body part; the \"+ N\" tile shows the rest. RANDOM draws an outfit, SAVE keeps it." },
     { WB_B, L"Tenue : haut, bas, tête et silhouette. Les choix viennent des vêtements du jeu, plus les 155 tenues offertes par Dom (« Dom 12 »…). En bas, la bande Voiture : la couleur de ta CORRIS et « Peinture perso… ».",
             L"Outfit: top, bottom, head and build. The choices come from the game's clothes, plus the 155 outfits given by Dom (\"Dom 12\"…). At the bottom, the Car strip: your CORRIS colour and \"Custom paint…\".", 0, WG_MWC },
     { WB_B, L"Tenue : haut, bas, tête et silhouette. Les choix viennent des vêtements du jeu, plus les 155 tenues offertes par Dom (« Dom 12 »…). En bas, la bande Voiture : la couleur de ta SATSUMA et « Peinture perso… ».",
@@ -1155,6 +1157,35 @@ static const WikiBlock kW_Places[] = {   // (outil des places reserve, cle d'acc
     { WB_B, L"L'outil a besoin de WebView2 : Windows 10 et 11 l'ont avec Edge.",
             L"The tool needs WebView2: Windows 10 and 11 have it with Edge." },
 };
+// ---- Ce qui est synchronise (Markos, forum 01/11 ; ligne de la barre, TAB_SYNC) : les fonctions, pas un etat en direct.
+static const WikiBlock kW_Sync[] = {
+    { WB_P, L"Tout ce que MWCoop partage entre les joueurs d'une même partie. Le monde est celui de l'hôte : sa sauvegarde part chez les invités au début de la partie.",
+            L"Everything MWCoop shares between the players of the same game. The world is the host's: their save goes to the guests at the start of the game." },
+    { WB_H, L"Les joueurs", L"The players" },
+    { WB_B, L"Où ils sont et leurs gestes, tenues et visages, vocal de proximité, tchat, marqueurs partagés, coups de poing (si l'hôte les autorise).", L"Where they are and their moves, outfits and faces, proximity voice, chat, shared markers, punches (if the host allows them)." },
+    { WB_H, L"Les voitures", L"The cars" },
+    { WB_B, L"Conducteur et passagers, portières, tableau de bord, vitres, chocs, remorquage, carburant.", L"Driver and passengers, doors, dashboard, windows, crashes, towing, fuel." },
+    { WB_B, L"La mécanique : pièces, boulons, réglages, liquides, peinture, fuites et vapeur.", L"Mechanics: parts, bolts, tuning, fluids, paint, leaks and steam." },
+    { WB_B, L"La CORRIS et les véhicules de My Winter Car, les voitures garées, la Fiad 131 et les voitures addons.", L"The CORRIS and My Winter Car's vehicles, parked cars, the Fiad 131 and the add-on cars.", 0, WG_MWC },
+    { WB_B, L"SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, le bateau, la Fiad 131 et les voitures addons.", L"SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, the boat, the Fiad 131 and the add-on cars.", 0, WG_MSC },
+    { WB_H, L"Le monde", L"The world" },
+    { WB_B, L"L'heure et la météo de l'hôte, la circulation, les PNJ, les portes, les machines, la radio, les feux, le sauna.", L"The host's time and weather, traffic, NPCs, doors, machines, the radio, fires, the sauna." },
+    { WB_B, L"Les objets : ce qu'on déplace, boit, mange ou cuisine, les rayons et les vitrines.", L"Items: what you move, drink, eat or cook, shelves and display cabinets." },
+    { WB_B, L"Les magasins, les boulots et les appels.", L"Shops, jobs and phone calls." },
+    { WB_H, L"Les courses et les ajouts", L"Races and additions" },
+    { WB_B, L"Le rallye et la course sur glace.", L"The rally and the ice race.", 0, WG_MWC },
+    { WB_B, L"Le rallye et les dragsters, avec les temps et les trophées de chacun.", L"The rally and the drag races, with everyone's times and trophies.", 0, WG_MSC },
+    { WB_B, L"Les ajouts MWCoop (boutique s21, cinéma, musée, Ässäkylä...) : ceux choisis par l'hôte, pour tout le monde.", L"MWCoop additions (s21 shop, cinema, museum, Ässäkylä...): the ones the host chose, for everyone." },
+    { WB_B, L"Les mods et le contenu de l'hôte (CD, radio, images) : envoyés à ses invités, avec leur accord pour les mods.", L"The host's mods and content (CDs, radio, images): sent to their guests, with their OK for the mods." },
+    { WB_H, L"Ce que chacun garde pour lui", L"What each player keeps" },
+    { WB_B, L"Tes réglages : graphismes, HUD, touches, volume. Ta sauvegarde solo : un invité joue dans un profil à part.", L"Your settings: graphics, HUD, keys, volume. Your solo save: a guest plays in a separate profile." },
+    { WB_B, L"Ton argent, tes délits et ta prison, tes objectifs sur la carte.", L"Your money, your crimes and jail, your objectives on the map.", 0, WG_MWC },
+    { WB_H, L"Pas synchronisé", L"Not synced" },
+    { WB_B, L"Un mod que MWCoop ne prend pas en charge : ce qu'il ajoute n'est vu que par ceux qui l'ont, et peut créer des écarts.", L"A mod MWCoop doesn't support: what it adds is only seen by those who have it, and it can create differences." },
+    { WB_TIP, L"Quelque chose diffère chez toi ? F10 > Synchro > Resynchroniser le monde : l'hôte te renvoie tout son état, comme à ton arrivée (une fois par 30 s). Si ça revient : Signaler un bug, l'insecte en haut à droite.", L"Something differs on your side? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s). If it comes back: Report a bug, the bug icon at the top right." },
+    { WB_GO, L"Mods pris en charge et déconseillés", L"Mod support and known incompatibilities", 1000 + WA_MODCOMPAT },
+    { WB_GO, L"En jeu : touches et menu", L"In game: keys and menu", 1000 + WA_INGAME },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -1197,4 +1228,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(2, L"Le placement des sièges", L"Seat placement", L"Accès réservé : places, postures, ceintures", L"Reserved access: seats, postures, belts", kW_Places),   // (WA_PLACES = 38)
     WART(3, L"Ancienne ou nouvelle interface", L"Old or new interface", L"Changer à tout moment", L"Switch any time", kW_Interface),   // (refonte Soft UI : fenetre.inc)
     WARTG(WG_ALL, 1, L"Le village d'Ässäkylä", L"The village of Ässäkylä", L"Où il est, quand il apparaît", L"Where it is, when it appears", kW_Ville),   // (WA_VILLE)
+    WART(1, L"Ce qui est synchronisé", L"What is synced", L"Partagé entre les joueurs, ou gardé par chacun", L"Shared between players, or kept by each", kW_Sync),   // (WA_SYNCHRO ; ligne de la barre : TAB_SYNC)
 };

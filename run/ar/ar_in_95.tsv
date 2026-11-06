@@ -1,0 +1,46 @@
+L95-1	What's synced
+L95-2	My outfits
+L95-3	Outfit %d
+L95-4	Save what I'm wearing
+L95-5	%d / %d · one click to put it on
+L95-6	Put an outfit together in the Outfit and Face tabs, then save it here. Work, weekend, rally: you name them.
+L95-7	Outfit name
+L95-8	on
+L95-9	Could not save your outfits
+L95-10	%d outfits at most: remove one
+L95-11	Remove the outfit \"
+L95-12	\"? What you are wearing does not change.
+L95-13	\"%s\": %d part(s) missing on this PC, left as they are
+L95-14	Outfit \"%s\" on
+L95-15	Work
+L95-16	Weekend
+L95-17	Players max: 2, 4, 8, 12 or 16, host included (8 by default), in the Options card. Above 10, you need a very good connection and a good machine on the host's side.
+L95-18	My outfits: save what you are wearing under a name (12 outfits at most, per game), put it back on with one click. An imported image stays unique: the outfit shows the current image.
+L95-19	The Character page also has the Outfit, Face, Car tabs in the header. On the left, the 3D preview (Full, Portrait or Wheel): drag to turn, wheel to zoom. On the right, the tiles with their 3D thumbnail, per body part; the \"+ N\" tile shows the rest. RANDOM draws an outfit, SAVE keeps it.
+L95-20	Save several outfits under the name of your choice (work, weekend, rally) and put them back on with one click: Character page, My outfits tab.
+L95-21	New line in the bar, under Guide: everything MWCoop shares between players, what each player keeps to themselves, and what to do if something differs.
+L95-22	Everything MWCoop shares between the players of the same game. The world is the host's: their save goes to the guests at the start of the game.
+L95-23	The players
+L95-24	Where they are and their moves, outfits and faces, proximity voice, chat, shared markers, punches (if the host allows them).
+L95-25	The cars
+L95-26	Driver and passengers, doors, dashboard, windows, crashes, towing, fuel.
+L95-27	Mechanics: parts, bolts, tuning, fluids, paint, leaks and steam.
+L95-28	The CORRIS and My Winter Car's vehicles, parked cars, the Fiad 131 and the add-on cars.
+L95-29	SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, the boat, the Fiad 131 and the add-on cars.
+L95-30	The world
+L95-31	The host's time and weather, traffic, NPCs, doors, machines, the radio, fires, the sauna.
+L95-32	Items: what you move, drink, eat or cook, shelves and display cabinets.
+L95-33	Shops, jobs and phone calls.
+L95-34	Races and additions
+L95-35	The rally and the ice race.
+L95-36	The rally and the drag races, with everyone's times and trophies.
+L95-37	MWCoop additions (s21 shop, cinema, museum, Ässäkylä...): the ones the host chose, for everyone.
+L95-38	The host's mods and content (CDs, radio, images): sent to their guests, with their OK for the mods.
+L95-39	What each player keeps
+L95-40	Your settings: graphics, HUD, keys, volume. Your solo save: a guest plays in a separate profile.
+L95-41	Your money, your crimes and jail, your objectives on the map.
+L95-42	Not synced
+L95-43	A mod MWCoop doesn't support: what it adds is only seen by those who have it, and it can create differences.
+L95-44	Something differs on your side? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s). If it comes back: Report a bug, the bug icon at the top right.
+L95-45	What is synced
+L95-46	Shared between players, or kept by each

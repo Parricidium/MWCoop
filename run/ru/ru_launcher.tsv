@@ -2540,3 +2540,49 @@ On my side: voice, \"Accept the host's content\", trusted hosts, seeing the othe
 Guest: did you accept the list of files? \"See the files\", in the lobby, opens it again. Does the host have MSCLoader on?	Гость: ты принял(а) список файлов? «Показать файлы» в лобби откроет его снова. У хоста включён MSCLoader?
 CDs, images, settings · never the .dll files	CD, картинки, настройки · никогда .dll
 %d host(s)	Хостов: %d
+What's synced	Синхронизация
+My outfits	Мои наряды
+Outfit %d	Наряд %d
+Save what I'm wearing	Сохранить то, что на мне
+%d / %d · one click to put it on	%d / %d · надеть одним кликом
+Put an outfit together in the Outfit and Face tabs, then save it here. Work, weekend, rally: you name them.	Собери наряд на вкладках «Наряд» и «Лицо», затем сохрани его здесь. Работа, выходные, ралли: названия выбираешь ты.
+Outfit name	Название наряда
+on	надет
+Could not save your outfits	Не удалось сохранить наряды
+%d outfits at most: remove one	Не больше %d нарядов: убери один
+Remove the outfit \"	Убрать наряд «
+\"? What you are wearing does not change.	»? То, что на тебе, не изменится.
+\"%s\": %d part(s) missing on this PC, left as they are	«%s»: частей нет на этом ПК: %d, оставлены как есть
+Outfit \"%s\" on	Наряд «%s» надет
+Work	Работа
+Weekend	Выходные
+Players max: 2, 4, 8, 12 or 16, host included (8 by default), in the Options card. Above 10, you need a very good connection and a good machine on the host's side.	Максимум игроков: 2, 4, 8, 12 или 16, включая хоста (по умолчанию 8), в карточке «Опции». Больше 10 — нужны очень хорошее соединение и хороший компьютер у хоста.
+My outfits: save what you are wearing under a name (12 outfits at most, per game), put it back on with one click. An imported image stays unique: the outfit shows the current image.	Мои наряды: сохрани то, что на тебе, под названием (не больше 12 нарядов на игру), надевай снова одним кликом. Импортированная картинка одна: наряд показывает текущую.
+The Character page also has the Outfit, Face, Car tabs in the header. On the left, the 3D preview (Full, Portrait or Wheel): drag to turn, wheel to zoom. On the right, the tiles with their 3D thumbnail, per body part; the \"+ N\" tile shows the rest. RANDOM draws an outfit, SAVE keeps it.	На странице «Персонаж» в заголовке также есть вкладки «Наряд», «Лицо», «Машина». Слева 3D-просмотр (в полный рост, портрет или за рулём): перетаскивай, чтобы вращать, колёсико — масштаб. Справа плитки с 3D-миниатюрами по частям тела; плитка «+ N» показывает остальное. СЛУЧАЙНО подбирает наряд, СОХРАНИТЬ оставляет его.
+Save several outfits under the name of your choice (work, weekend, rally) and put them back on with one click: Character page, My outfits tab.	Сохраняй несколько нарядов под своими названиями (работа, выходные, ралли) и надевай их одним кликом: страница «Персонаж», вкладка «Мои наряды».
+New line in the bar, under Guide: everything MWCoop shares between players, what each player keeps to themselves, and what to do if something differs.	Новая строка в панели, под «Руководством»: всё, что MWCoop делит между игроками, что каждый оставляет себе и что делать, если что-то отличается.
+Everything MWCoop shares between the players of the same game. The world is the host's: their save goes to the guests at the start of the game.	Всё, что MWCoop делит между игроками одной партии. Мир принадлежит хосту: его сохранение отправляется гостям в начале партии.
+The players	Игроки
+Where they are and their moves, outfits and faces, proximity voice, chat, shared markers, punches (if the host allows them).	Где они находятся и их движения, наряды и лица, голос поблизости, чат, общие маркеры, удары кулаком (если хост разрешает).
+The cars	Машины
+Driver and passengers, doors, dashboard, windows, crashes, towing, fuel.	Водитель и пассажиры, двери, приборная панель, стёкла, столкновения, буксировка, топливо.
+Mechanics: parts, bolts, tuning, fluids, paint, leaks and steam.	Механика: детали, болты, настройки, жидкости, краска, утечки и пар.
+The CORRIS and My Winter Car's vehicles, parked cars, the Fiad 131 and the add-on cars.	CORRIS и транспорт My Winter Car, припаркованные машины, Fiad 131 и машины-дополнения.
+SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, the boat, the Fiad 131 and the add-on cars.	SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED, лодка, Fiad 131 и машины-дополнения.
+The world	Мир
+The host's time and weather, traffic, NPCs, doors, machines, the radio, fires, the sauna.	Время и погода хоста, трафик, NPC, двери, механизмы, радио, огонь, сауна.
+Items: what you move, drink, eat or cook, shelves and display cabinets.	Предметы: то, что вы переносите, пьёте, едите или готовите, полки и витрины.
+Shops, jobs and phone calls.	Магазины, подработки и телефонные звонки.
+Races and additions	Гонки и дополнения
+The rally and the ice race.	Ралли и гонка на льду.
+The rally and the drag races, with everyone's times and trophies.	Ралли и драг-рейсинг, со временем и трофеями каждого.
+MWCoop additions (s21 shop, cinema, museum, Ässäkylä...): the ones the host chose, for everyone.	Дополнения MWCoop (магазин s21, кинотеатр, музей, Ässäkylä...): выбранные хостом, для всех.
+The host's mods and content (CDs, radio, images): sent to their guests, with their OK for the mods.	Моды и контент хоста (CD, радио, картинки): отправляются гостям, для модов нужно их согласие.
+What each player keeps	Что каждый оставляет себе
+Your settings: graphics, HUD, keys, volume. Your solo save: a guest plays in a separate profile.	Твои настройки: графика, HUD, клавиши, громкость. Твоё одиночное сохранение: гость играет в отдельном профиле.
+Your money, your crimes and jail, your objectives on the map.	Твои деньги, преступления и тюрьма, твои цели на карте.
+Not synced	Не синхронизируется
+A mod MWCoop doesn't support: what it adds is only seen by those who have it, and it can create differences.	Мод, который MWCoop не поддерживает: то, что он добавляет, видят только те, у кого он есть, и он может создавать расхождения.
+Something differs on your side? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s). If it comes back: Report a bug, the bug icon at the top right.	У тебя что-то отличается? F10 > Синхр. > Пересинхронизировать мир: хост заново отправит всё состояние, как при твоём входе (раз в 30 с). Если повторится: «Сообщить об ошибке», значок жука вверху справа.
+What is synced	Что синхронизируется
+Shared between players, or kept by each	Общее для игроков или у каждого своё

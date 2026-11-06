@@ -156,6 +156,11 @@ static const TutoStep kTuto[] = {
     // lanceur-1.16.21 (04/11) : accord avant les DLL d'un hote ; hotes de confiance, Reglages > Co-op > Chez moi (65)
     { L"Tu choisis ce que tu reçois", L"Avant de recevoir les mods d'un hôte, le lanceur montre la liste exacte des fichiers .dll et te demande ton accord. Les hôtes à qui tu fais toujours confiance se retirent ici : Réglages > Co-op > Chez moi.",
       L"You choose what you receive", L"Before receiving a host's mods, the launcher shows the exact list of .dll files and asks for your OK. The hosts you always trust can be removed here: Settings > Co-op > On my side.", "1.16.21" },
+    // lanceur-1.16.23 (06/11) : Mes tenues, page Personnage (66) ; Synchronise dans la barre, sous Guide (67)
+    { L"Mes tenues", L"Enregistre plusieurs tenues sous le nom de ton choix (travail, week-end, rallye) et remets-les d'un clic : page Personnage, onglet Mes tenues.",
+      L"My outfits", L"Save several outfits under the name of your choice (work, weekend, rally) and put them back on with one click: Character page, My outfits tab.", "1.16.23" },
+    { L"Ce qui est synchronisé", L"Nouvelle ligne dans la barre, sous Guide : tout ce que MWCoop partage entre les joueurs, ce que chacun garde pour lui, et quoi faire si quelque chose diffère.",
+      L"What's synced", L"New line in the bar, under Guide: everything MWCoop shares between players, what each player keeps to themselves, and what to do if something differs.", "1.16.23" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -234,7 +239,7 @@ static RectF TutoTarget(int i)
     case 43: return TutoSetSearch();                         // Chercher un reglage (en-tete de la page Reglages)
     case 44: return TutoSetTab(SET_THEME);                   // onglet Theme (TutoGo l'ouvre)
     case 45: return kGfxTop;                                 // carte Prereglage (onglet Jeu)
-    case 46: return join(PersoTabRect(0), PersoTabRect(2));  // Tenue / Visage / Voiture (en-tete de la page Personnage : tenue.inc)
+    case 46: return join(PersoTabRect(0), PersoTabRect(3));  // Tenue / Visage / Voiture (en-tete de la page Personnage : tenue.inc)
     case 47: return RectF(kSaveR.X, kSaveR.Y + 28, kSaveR.Width, 240);   // haut de la carte de droite des Sauvegardes : chiffres et derniere partie (saves.inc)
     case 48: return RectF(kContentR.X, kContentR.Y, kContentR.Width, 160);   // haut de la carte de droite : les pistes du CD (modsync.inc)
     case 49: return RectF(g_guideTabRight - GuideTabsW(), 26, GuideTabsW(), 36);   // Guide / Nouveautes / Credits (wiki.inc GuideTabsDraw)
@@ -258,6 +263,8 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 67: return g_navR[TAB_SYNC];                        // Synchronise dans la barre (sous Guide)
+    case 66: return PersoTabRect(2);                         // Mes tenues (en-tete de la page Personnage : tenue.inc)
     case 65: return TutoSetTab(SET_COOP);                    // onglet Co-op (SetTutoTab l'ouvre) : hotes de confiance
     case 64: return g_navR[TAB_RALLY];                       // RallyWorld dans la barre (sous Addons : rallyworld.inc)
     case 63: return TutoSetTab(SET_IMAGE);                   // onglet Image (SetTutoTab l'ouvre) : ombre des nuages corrigee
@@ -265,7 +272,7 @@ static RectF TutoTarget(int i)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 || i == 65 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 || i == 65 ? TAB_COOP : i == 24 || i == 46 || i == 66 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

@@ -532,7 +532,7 @@ static void WinAnimTest()
     g_animTestFails = 0; g_animTestNoLive = true; SoftToastsClear();
     InvalidateAll(); PresentNew();
     for (int t = 0; t < TAB_COUNT; t++) {   // la barre de gauche : chaque ligne (l'indicateur glisse, la page change)
-        if (SoftNavIndex(t) < 0 || t == g_tab || t == TAB_ADDONS || t == TAB_ALBUM) continue;   // (Album : vignettes chargees en arriere-plan, image jamais stable)
+        if (SoftNavIndex(t) < 0 || t == g_tab || t == TAB_ADDONS || t == TAB_SYNC || t == TAB_ALBUM) continue;   // (Album : vignettes chargees en arriere-plan, image jamais stable)
         SoftPressNote(UI_NAV + t); UiClick(UI_NAV + t); InvalidateAll();
         char what[64]; sprintf_s(what, "barre, page %d", t); g_animTestTrace = false; WinAnimCheck(what); g_animTestTrace = false;
     }
@@ -593,7 +593,7 @@ static void WinAnimTest()
         };
         int crawled = 0, skipped = 0, failsBefore = g_animTestFails;
         for (int t = 0; t < TAB_COUNT; t++) {
-            if (SoftNavIndex(t) < 0 || t == TAB_ADDONS || t == TAB_ALBUM) continue;
+            if (SoftNavIndex(t) < 0 || t == TAB_ADDONS || t == TAB_SYNC || t == TAB_ALBUM) continue;
             UiClick(UI_NAV + t); InvalidateAll();
             char what[96]; sprintf_s(what, "parcours, page %d", t); WinAnimCheck(what);
             if (g_tab != t) continue;   // (page refusee : pas de jeu, pas de salon)
