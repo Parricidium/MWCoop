@@ -47,8 +47,14 @@ namespace MWCoop
 
         static void PrepareCuts(Mirror m)
         {
+            m.Cuts = MakeCuts(m.GlassR, m.Car);
+            if (logs++ < 12) Log.Info("vitres : vitre arriere de " + m.Car.name + " (" + (m.DoorR != null ? m.DoorR.name : "?") + ") : " + m.Cuts.Length + " maillage(s) coupes a la ceinture en descendant");
+        }
+        // (a partir du maillage en place : celui de la pluie pour une standalone, ses UV et normales gardes)
+        public static Cut[] MakeCuts(Transform glass, Transform car)
+        {
             var list = new System.Collections.Generic.List<Cut>();
-            foreach (MeshFilter mf in m.GlassR.GetComponentsInChildren<MeshFilter>(true))
+            foreach (MeshFilter mf in glass.GetComponentsInChildren<MeshFilter>(true))
             {
                 Mesh src = mf.sharedMesh;
                 if (src == null) continue;
@@ -60,7 +66,7 @@ namespace MWCoop
                     if (c.UV == null || c.UV.Length != c.V.Length) c.UV = null;
                     c.T = new int[src.subMeshCount][];
                     for (int k = 0; k < src.subMeshCount; k++) c.T[k] = src.GetTriangles(k);
-                    c.Up = mf.transform.InverseTransformDirection(m.Car.up).normalized;
+                    c.Up = mf.transform.InverseTransformDirection(car.up).normalized;
                     Vector3 ls = mf.transform.lossyScale; float sc = Mathf.Abs(Vector3.Dot(new Vector3(Mathf.Abs(c.Up.x), Mathf.Abs(c.Up.y), Mathf.Abs(c.Up.z)), ls));
                     c.Up = c.Up * (sc > 1e-4f ? sc : 1f);   // (hauteurs en metres du monde malgre l'echelle du maillage)
                     c.Min = float.MaxValue;
@@ -70,8 +76,7 @@ namespace MWCoop
                 }
                 catch (System.Exception e) { Log.Warn("vitres : maillage " + mf.name + " non coupable : " + e.Message); }
             }
-            m.Cuts = list.ToArray();
-            if (logs++ < 12) Log.Info("vitres : vitre arriere de " + m.Car.name + " (" + (m.DoorR != null ? m.DoorR.name : "?") + ") : " + m.Cuts.Length + " maillage(s) coupes a la ceinture en descendant");
+            return list.ToArray();
         }
 
         static void ApplyCut(Cut c, float h)
@@ -89,7 +94,7 @@ namespace MWCoop
         }
 
         // Plan de l'outil (repere du parent de la vitre) ramene dans le repere du maillage, pour chaque pose (f : course de 0 a 1).
-        static void ApplyPlane(Cut c, Transform parent, VitreFiles.Glass g, float f)
+        public static void ApplyPlane(Cut c, Transform parent, VitreFiles.Glass g, float f)
         {
             if (c.MF == null || Mathf.Abs(f - c.LastF) < 0.002f) return;
             c.LastF = f;
@@ -100,9 +105,10 @@ namespace MWCoop
             if (c.MF.sharedMesh != c.Work) c.MF.sharedMesh = c.Work;
             RebuildCut(c, 0f);
         }
-        static void RestoreCuts(Mirror m)
+        static void RestoreCuts(Mirror m) { RestoreCuts(m.Cuts); }
+        public static void RestoreCuts(Cut[] cuts)
         {
-            if (m.Cuts != null) foreach (Cut c in m.Cuts) if (c.MF != null && c.Orig != null) { c.MF.sharedMesh = c.Orig; c.LastF = -1f; c.UsePlane = false; c.Last = -1f; }
+            if (cuts != null) foreach (Cut c in cuts) if (c.MF != null && c.Orig != null) { c.MF.sharedMesh = c.Orig; c.LastF = -1f; c.UsePlane = false; c.Last = -1f; }
         }
 
         static void RebuildCut(Cut c, float cutoff)
@@ -168,7 +174,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); followers.Clear(); wins.Clear(); satsumaWins.Clear(); nextWinScan = 0f; VitreFiles.OnLevelLoaded(); vitreGen = -1; }
 
-        static string PathIn(Transform car, Transform t) { return Recon.Path(t).Substring(Recon.Path(car).Length).TrimStart('/'); }
+        public static string PathIn(Transform car, Transform t) { return Recon.Path(t).Substring(Recon.Path(car).Length).TrimStart('/'); }
         // Fichiers de vitres changes (outil des places, meme en partie) : vitres deja animees reliees a leur reglage, les nouvelles
         // manivelles au prochain passage.
         static int vitreGen = -1;
@@ -726,7 +732,7 @@ namespace MWCoop
 
 
 
-        static bool suiviLogged;
+        static bool suiviLogged, vitreSauvee;
         public static void Test(string mode, float t)
         {
             // [Test] Autotest=vitre-suivi (invite, avec Autotest=vitre chez l'hote) : a 50 s, pose des deux vitres de la SORBET
@@ -743,6 +749,13 @@ namespace MWCoop
             if (mode == "vitreporte") { TestDoorGlass(t); return; }
             if (mode == "manivelle") { TestCrank(t); return; }
             if (mode != "vitre") return;
+            // ([Test] VitreSauve=1 : sauvegarde en jeu, vitres baissees ; a relire avec Autotest=vitre-suivi a la partie suivante)
+            if (tStep == 3 && !vitreSauvee && Config.GetInt("Test", "VitreSauve", 0) != 0)
+            {
+                vitreSauvee = true;
+                Game.SaveInPlace();
+                Log.Info("autotest : vitre, sauvegarde en jeu, verre gauche " + (gl != null ? gl.localPosition.ToString("F3") : "?") + " ; droite " + (gr != null ? gr.localPosition.ToString("F3") : "?"));
+            }
             if (tStep == 1 && t < (Config.GetInt("Test", "VitreDemi", 0) != 0 ? 27f : 31f)) foreach (Win w in wins) if (w.Key.Contains("SORBET")) w.AimAt = Time.realtimeSinceStartup;   // (comme si on la visait)
             if (tStep == 0 && t > 25f)
             {

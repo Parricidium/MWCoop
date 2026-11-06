@@ -259,6 +259,17 @@ namespace MWCoop
         {
             var sb = new StringBuilder();
             int n = 0;
+            // (standalone : ses vitres de portiere a manivelle -- la voiture de la quete, JD 06/11)
+            VazCar.Built solo = StandaloneCar.Find(car.gameObject);
+            if (solo != null)
+            {
+                float travel;
+                foreach (Transform t in StandaloneCar.WindowsOf(solo, out travel))
+                    sb.Append(n++ > 0 ? "," : "").Append("{\"chemin\":").Append(S(WindowCranks.PathIn(car, t)))
+                      .Append(",\"nom\":").Append(S(t.name)).Append(",\"parent\":").Append(Mx(car.worldToLocalMatrix * t.parent.localToWorldMatrix))
+                      .Append(",\"p\":").Append(V(t.localPosition)).Append(",\"q\":").Append(Q(t.localRotation)).Append(",\"s\":").Append(V(t.localScale)).Append('}');
+                return n == 0 ? "" : ",\"vitres\":[" + sb + "],\"vitresCourse\":" + F(travel);
+            }
             if (Vaz.IsVaz(car)) return "";   // (copies de la SORBET : plus tard, voitures du jeu d'abord)
             foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
             {

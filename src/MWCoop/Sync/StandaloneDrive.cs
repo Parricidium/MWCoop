@@ -1827,6 +1827,8 @@ namespace MWCoop
             if (st.Heat != null) w.U8((st.Heat.On ? 1 : 0) | (st.Heat.FanStep << 1)).U8(Mathf.RoundToInt(st.Heat.TempPos * 255f)).U8(Mathf.RoundToInt(st.Heat.DirPos * 255f)); else w.U8(0).U8(0).U8(0);
             w.U8((st.HighBeam ? 1 : 0) | (st.Turn == 1 ? 2 : 0) | (st.Turn == 2 ? 4 : 0) | (st.RadioCh << 3));
             if (st.HasFuel) w.U8(Mathf.RoundToInt(Mathf.Clamp01(st.Fuel) * 255f)).U8(float.IsNaN(st.EngineTemp) ? 255 : Mathf.Clamp(Mathf.RoundToInt(st.EngineTemp + 40f), 0, 254));
+            // (vitres de portiere : apres le reste, seulement les voitures qui en ont)
+            if (st.Glass[0] != null || st.Glass[1] != null) w.U8(Mathf.RoundToInt(st.WinPos[0] * 255f)).U8(Mathf.RoundToInt(st.WinPos[1] * 255f));
             Net.Session.SendAll(w, true);
         }
 
@@ -1875,6 +1877,8 @@ namespace MWCoop
                 }
                 if (extra.Length > 4) { st.HighBeam = (extra[4] & 1) != 0; st.Turn = (extra[4] & 2) != 0 ? 1 : (extra[4] & 4) != 0 ? 2 : 0; st.RadioCh = (extra[4] >> 3) & 3; }
                 if (extra.Length > 6 && st.HasFuel) { st.Fuel = extra[5] / 255f; if (extra[6] != 255) st.EngineTemp = extra[6] - 40f; }
+                int wa = st.HasFuel ? 7 : 5;
+                if (extra.Length > wa + 1 && driving != b && (st.Glass[0] != null || st.Glass[1] != null)) { st.WinPos[0] = extra[wa] / 255f; st.WinPos[1] = extra[wa + 1] / 255f; }
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
@@ -1911,7 +1915,7 @@ namespace MWCoop
             // manivelles des vitres (les deux, du siege conducteur) : molette, comme les voitures du jeu
             for (int w = 0; w < 2; w++)
             {
-                if (st.Crank[w] == null) continue;
+                if (st.Crank[w] == null || !WinOn(b, st, w)) continue;
                 Vector3 v = st.Crank[w].position - cam.position;
                 float along = Vector3.Dot(v, cam.forward);
                 if (along < 0.15f || along > 1.6f) continue;
@@ -1980,7 +1984,7 @@ namespace MWCoop
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", "WINDOW");
                 // (molette comme les voitures du jeu : vers soi = vitre baissee ; un cran = 1/8 de la course)
                 int w = hit - KCrank0; float sc = Input.GetAxis("Mouse ScrollWheel");
-                if (sc != 0f) st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] - Mathf.Sign(sc) * 0.125f);
+                if (sc != 0f) { st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] - Mathf.Sign(sc) * 0.125f); SendState(b, st); }
                 return;
             }
             if (hit < 0) { ClearHover(); CrankStop(b, st); SetHorn(b, st, false, true); return; }
@@ -2089,7 +2093,14 @@ namespace MWCoop
                     MeshFilter mf = mr.GetComponent<MeshFilter>();
                     // (vitres seulement : pas le verre des compteurs ni les petits verres de l'habitacle -- JD 31/10 : « pas l'effet de pluie sur
                     // les compteurs »)
-                    if (mf != null && mf.sharedMesh != null && Mathf.Max(mf.sharedMesh.bounds.size.x, mf.sharedMesh.bounds.size.y, mf.sharedMesh.bounds.size.z) >= 0.5f) rs.Add(mf);
+                    // (et le verre d'une portiere dont la vitre est un fichier a part : la petite vitre fixe, autrefois dans le meme maillage qu'elle)
+                    bool doorPane = false;
+                    for (int w = 0; w < 2; w++)
+                    {
+                        if (st.Glass[w] == null || st.Doors == null || st.Doors[w] == null || !mr.transform.IsChildOf(st.Doors[w])) continue;
+                        foreach (MeshRenderer gr in st.Glass[w].GetComponentsInChildren<MeshRenderer>(true)) if (gr.sharedMaterial != null && gr.sharedMaterial.name == sm.name) doorPane = true;
+                    }
+                    if (mf != null && mf.sharedMesh != null && (doorPane || Mathf.Max(mf.sharedMesh.bounds.size.x, mf.sharedMesh.bounds.size.y, mf.sharedMesh.bounds.size.z) >= 0.5f)) rs.Add(mf);
                 }
                 if (rs.Count == 0) { Log.Warn("standalone : pluie, pas de vitre (matiere glass) dans le modele"); return; }
                 var lo = new Vector3[3]; var hi = new Vector3[3]; for (int k = 0; k < 3; k++) { lo[k] = Vector3.one * 1e9f; hi[k] = -Vector3.one * 1e9f; }
@@ -2385,11 +2396,61 @@ namespace MWCoop
         // vitres : position 0 (fermee) a 1 (baissee), manivelle 3 tours sur la course
         static void WindowAnim(VazCar.Built b, State st)
         {
+            BindWindows(b, st);
             for (int w = 0; w < 2; w++)
             {
-                if (st.Glass[w] != null) st.Glass[w].localPosition = st.GlassDown[w] * st.WinPos[w];
+                if (!WinOn(b, st, w)) st.WinPos[w] = 0f;
+                if (st.Glass[w] != null)
+                {
+                    VitreFiles.Glass v = st.WinV[w];
+                    if (v == null) st.Glass[w].localPosition = st.GlassDown[w] * st.WinPos[w];
+                    else if (st.WinPos[w] != st.WinShown[w])
+                    {
+                        float f = st.WinShown[w] = st.WinPos[w];
+                        st.Glass[w].localPosition = Vector3.Lerp(v.HasUp ? v.UpP : Vector3.zero, v.DownP, f);
+                        st.Glass[w].localRotation = Quaternion.Slerp(v.HasUp ? v.UpQ : Quaternion.identity, v.DownQ, f);
+                        if (v.HasCut)
+                        {
+                            if (st.WinCuts[w] == null) st.WinCuts[w] = WindowCranks.MakeCuts(st.Glass[w], b.Car.transform);
+                            foreach (WindowCranks.Cut c in st.WinCuts[w]) WindowCranks.ApplyPlane(c, st.Glass[w].parent, v, f);
+                        }
+                        else WindowCranks.RestoreCuts(st.WinCuts[w]);
+                    }
+                }
                 if (st.Crank[w] != null) st.Crank[w].localRotation = Quaternion.AngleAxis(st.WinPos[w] * 1080f, st.CrankAxis[w]);
             }
+        }
+        // Vitres de la voiture de la quete (JD 06/11) : reglees dans l'outil des places (onglet Vitres, MWCoop\vitres\<jeu>\quete-s21.txt, relu
+        // en partie). Sans fichier : fixes, manivelle inerte, comme avant.
+        static bool WinOn(VazCar.Built b, State st, int w) { return st.WinV[w] != null || b.M == null || !b.M.QuestOnly; }
+        static void BindWindows(VazCar.Built b, State st)
+        {
+            if (st.WinGen == VitreFiles.Generation) return;
+            st.WinGen = VitreFiles.Generation;
+            string key = b.M != null && b.M.QuestOnly ? "quete-s21" : Vaz.SeatKey(b.Car.name);
+            for (int w = 0; w < 2; w++)
+            {
+                if (st.Glass[w] == null) continue;
+                VitreFiles.Glass v = VitreFiles.Find(key, WindowCranks.PathIn(b.Car.transform, st.Glass[w]));
+                if (st.WinV[w] != null && v == null)
+                {
+                    st.Glass[w].localPosition = Vector3.zero; st.Glass[w].localRotation = Quaternion.identity;
+                    WindowCranks.RestoreCuts(st.WinCuts[w]);
+                }
+                st.WinV[w] = v;
+                st.WinShown[w] = -1f;
+                if (st.WinCuts[w] != null) foreach (WindowCranks.Cut c in st.WinCuts[w]) c.LastF = -1f;
+                if (v != null) Log.Info("standalone : " + st.Glass[w].name + " reglee par le fichier de vitres");
+            }
+        }
+        // (export pour l'outil des places : vitres de portiere, course de la manivelle)
+        public static List<Transform> WindowsOf(VazCar.Built b, out float travel)
+        {
+            var list = new List<Transform>(); travel = 0f;
+            State st;
+            if (b == null || !states.TryGetValue(b, out st)) return list;
+            for (int w = 0; w < 2; w++) if (st.Glass[w] != null) { list.Add(st.Glass[w]); travel = Mathf.Max(travel, st.GlassDown[w].magnitude); }
+            return list;
         }
         static void KeyVisual(VazCar.Built b, State st)
         {
@@ -2782,6 +2843,68 @@ namespace MWCoop
         }
         static int cDoor; static float cDoorAt, cDoorLog; static bool cDoorSeen, cDoorWas;
 
+        // [Test] Autotest=quetevitres (seul ou a 2, voiture de la quete s21) : le premier joueur prend le volant ; vitre gauche et droite posees
+        // a 0, 1/2, 1 puis 0 (comme la molette : WinPos, puis SendState) ; chacun note verre, sommets, maillage. Sans fichier de vitres :
+        // tout reste a 0. Photos dehors et dedans (dumps\photo-vitres-*.png) a chaque position ; [Test] StandalonePluie=1 : sous la pluie.
+        static float qwT0 = -1; static int qwStep; static bool qwAbsent;
+        static string WinState(VazCar.Built b, State st)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int w = 0; w < 2; w++)
+            {
+                if (st.Glass[w] == null) { sb.Append(w == 0 ? "g pas de vitre" : " ; d pas de vitre"); continue; }
+                int nv = 0; string mesh = ""; bool wet = false;
+                foreach (MeshFilter mf in st.Glass[w].GetComponentsInChildren<MeshFilter>(true)) if (mf.sharedMesh != null) { nv += mf.sharedMesh.vertexCount; mesh = mf.sharedMesh.name; }
+                foreach (MeshRenderer mr in st.Glass[w].GetComponentsInChildren<MeshRenderer>(true)) if (mr.sharedMaterial != null && mr.sharedMaterial.name.StartsWith("standalone_vitre_pluie")) wet = true;
+                sb.Append(w == 0 ? "g " : " ; d ").Append("pos " + st.WinPos[w].ToString("F2") + " verre " + st.Glass[w].localPosition.ToString("F3") + " " + nv + " sommets (" + mesh + (wet ? ", matiere de pluie" : "") + ")" + (st.Crank[w] != null ? " manivelle " + st.Crank[w].localEulerAngles.ToString("F0") : "") + (st.WinV[w] != null ? " fichier" : " sans fichier"));
+            }
+            return sb.ToString();
+        }
+        static void WinPhotos(VazCar.Built b, string pos)
+        {
+            Photo(b, "vitres-" + pos + "-dehors-g", new Vector3(-3.4f, 1.15f, 0.2f), new Vector3(-0.7f, 0.9f, 0.1f));
+            Photo(b, "vitres-" + pos + "-dehors-d", new Vector3(3.4f, 1.15f, 0.2f), new Vector3(0.7f, 0.9f, 0.1f));
+            Vector3 head = b.M.Head; head.x = 0f;
+            Photo(b, "vitres-" + pos + "-dedans-g", head, new Vector3(-0.8f, 0.85f, 0.1f), 70f);
+            Photo(b, "vitres-" + pos + "-dedans-d", head, new Vector3(0.8f, 0.85f, 0.1f), 70f);
+        }
+        public static void QuestWindowTest(float t)
+        {
+            float now = Time.realtimeSinceStartup;
+            bool coop = Net.Session.Active;
+            if (t < 25f || (coop && qwT0 < 0 && !Jobs.OtherInGame(20f))) return;
+            VazCar.Built b = null; State st = null;
+            foreach (VazCar.Built x in cars) if (QueteGolf.IsQuestCar(x) && x.Car != null) { b = x; states.TryGetValue(x, out st); }
+            if (b == null || st == null) { if (t > 70f && !qwAbsent) { qwAbsent = true; Log.Info("autotest : quetevitres, voiture de la quete absente"); } return; }
+            if (qwT0 < 0) { qwT0 = now; Log.Info("autotest : quetevitres, repos : " + WinState(b, st)); }
+            float d = now - qwT0;
+            bool first = !coop || Net.Session.IsHost;
+            GameObject pl = Game.PlayerGo;
+            if (first && qwStep == 0 && pl != null)
+            {
+                var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                pl.transform.position = b.Car.transform.TransformPoint(new Vector3(b.M.Head.x, 0.5f, st.T.EntreeZ));
+                if (cc != null) cc.enabled = true;
+                Enter(b, st); SendState(b, st);
+                Log.Info("autotest : quetevitres, au volant de " + b.Car.name);
+            }
+            float[] when = { 12f, 18f, 24f, 30f }, val = { 0f, 0.5f, 1f, 0f };
+            string[] nom = { "0", "demi", "bas", "remontee" };
+            if (qwStep == 0) qwStep = 1;
+            for (int i = 0; i < when.Length; i++)
+                if (qwStep == 1 + 2 * i && d > when[i])
+                {
+                    qwStep++;
+                    if (first) { st.WinPos[0] = st.WinPos[1] = val[i]; SendState(b, st); }
+                }
+                else if (qwStep == 2 + 2 * i && d > when[i] + 3f)
+                {
+                    qwStep++;
+                    Log.Info("autotest : quetevitres, T+" + d.ToString("F0") + " " + nom[i] + " (" + (first ? "hote" : "invite") + ") : " + WinState(b, st));
+                    if (first && Config.GetInt("Test", "VitresPhotos", 1) != 0) WinPhotos(b, nom[i]);
+                    break;
+                }
+        }
         // [Test] Autotest=queteportiere (2 joueurs, voiture de la quete s21 ; My Winter Car surtout, ou elle est la seule voiture
         // standalone) : 20 s apres l'arrivee de l'autre, l'hote prend le volant (T+0) et reste a l'arret ; l'invite s'assoit en passager
         // (T+5), ouvre sa portiere (T+8) et la referme (T+12), meme chemin que le clic (ToggleDoor) ; chacun note la portiere passager

@@ -2003,6 +2003,7 @@ namespace MWCoop
             if (mode == "litparents") { ParentsBed.Test(t); return; }   // (suggestion 35 : lit des parents sur MSC)
             if (mode == "standaloneroule") { StandaloneCar.Roll(t); return; }   // (pilote standalone, 28/10)
             if (mode == "standalonemonte") { StandaloneCar.MountTest(t); return; }
+            if (mode == "quetevitres") { StandaloneCar.QuestWindowTest(t); return; }   // (vitres de la voiture de la quete, fichier de l'outil des places)
             if (mode == "standalonecoop") { StandaloneCar.CoopTest(t); return; }   // (28/10 : tenue de route des voitures du F10, JD)
             if (mode == "vazrallye") { RallyMscVaz.Test(mode, t); return; }   // (24/10 : rallye de MSC avec sa voiture du F10)
             if (mode == "vazpanel") { VazPanel.Test(mode, t); return; }
@@ -4134,6 +4135,7 @@ namespace MWCoop
             }
             if (mode == "tremble" && !Game.Msc) Tremble();   // (voiture qui tremble chez l'autre, dossier #38 : My Winter Car aussi)
             if (mode == "queteportiere") StandaloneCar.QuestDoorTest(t);   // (portiere passager de la voiture de la quete sur une copie)
+            if (mode == "quetevitres") StandaloneCar.QuestWindowTest(t);   // (vitres de la voiture de la quete, fichier de l'outil des places)
             if (mode == "kekremorque") Jobs.TestTrailer();   // (attelage du KEKMET, comme Autotest=remorque sur MSC ; [Test] RemorqueActeur=invite -- Донской 01/11)
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t); Gestures.TestPena(mode, t);
