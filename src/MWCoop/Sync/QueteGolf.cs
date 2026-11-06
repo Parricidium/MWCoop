@@ -71,7 +71,7 @@ namespace MWCoop
             if (!StandaloneCar.Quest || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextCheck) { nextCheck = now + 2f; on = Kauppa.ShopOn && Vaz.Enabled && VazCar.Golf83.HasFiles; }
-            if (!Host) return;
+            if (!Host) { if (Config.GetInt("Test", "QueteCommandes", 0) != 0) StandaloneCar.QuestControlsTest(now); return; }
             if (!loaded) { loaded = true; Load(); }
             if (firstInGame < 0f) firstInGame = now;
             // (pose apres l'arrivee en partie : sol et magasin charges, ajouts de l'hote connus)
@@ -280,6 +280,8 @@ namespace MWCoop
                 var ci = System.Globalization.CultureInfo.InvariantCulture;
                 // ([Test] QueteGolfSauvee=x,y,z,cap : place lue comme dans une sauvegarde -- essai du marais, dossier #39)
                 string ts = Config.Get("Test", "QueteGolfSauvee", "");
+                // (« boutique » : quete faite, voiture a sa place devant le magasin -- commandes sur les deux jeux)
+                if (ts == "boutique") { Done = true; L("essai : quete faite, voiture devant le magasin"); return; }
                 if (ts.Length > 0)
                 {
                     string[] c = ts.Split(','); float x, y, z, w;

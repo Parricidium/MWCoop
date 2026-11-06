@@ -1004,7 +1004,7 @@ namespace MWCoop
             }
         }
         // [Test] QueteCommandes=1 (QueteGolf.TestTick) : au volant, photos de la planche, touches simulees, reservoir, temperature, couleur.
-        static int qStep; static float qAt;
+        static int qStep; static float qAt, qNextLog; static bool qAsked;
         public static void QuestControlsTest(float e)
         {
             VazCar.Built b = null; State st = null;
@@ -1012,6 +1012,24 @@ namespace MWCoop
             if (b == null || st == null) return;
             Func<string> etat = () => "moteur " + st.EngineOn + ", phares " + st.LightsOn + ", pleins " + st.HighBeam + ", essuie " + st.WipersOn + ", clignotant " + st.Turn + ", warnings " + st.Hazard + ", cle " + st.KeyIn + "/" + st.KeyPos + ", reservoir " + st.Fuel.ToString("F3") + ", temp " + st.EngineTemp.ToString("F1");
             simDown = "";
+            // (a deux : l'invite regarde ce que l'hote fait au volant, puis demande une autre couleur quand il voit la sienne)
+            if (!Net.Session.IsHost)
+            {
+                if (e > qNextLog)
+                {
+                    qNextLog = e + 3f;
+                    float rv; float rf = QuestFuel(out rv);
+                    Log.Info("standalone : commandes, invite : " + etat() + ", radio " + st.RadioCh + ", couleur " + QueteGolf.PaintIndex + ", reservoir vu " + rf.ToString("F3") + ", temp vue " + rv.ToString("F1"));
+                }
+                if (!qAsked && QueteGolf.PaintIndex == 2) { qAsked = true; QueteGolf.ChoosePaint(5); Log.Info("standalone : commandes, invite demande la couleur 5"); qAt = e; }
+                if (qAsked && e - qAt > 8f && qStep == 0)
+                {
+                    qStep = 1;
+                    QueteGolf.Shot("quete-invite", b.Car.transform.position + b.Car.transform.right * 5f + Vector3.up * 1.5f, b.Car.transform.position);
+                    Log.Info("standalone : commandes, fin2, invite, couleur " + QueteGolf.PaintIndex);
+                }
+                return;
+            }
             if (qStep == 0 && e > 8f)
             {
                 qStep = 1; qAt = e;
@@ -1038,6 +1056,7 @@ namespace MWCoop
             if (qStep == seq.Length + 7 && d > 21f)
             {
                 qStep++; QueteGolf.ChoosePaint(2);
+                simHeld = "IndicatorRight"; simDown = "IndicatorLeft"; GameKeys(b, st); Log.Info("standalone : commandes, deux clignotants : " + etat()); GameKeys(b, st); simHeld = ""; simDown = "";
                 Photo(b, "quete-couleur", new Vector3(-3.4f, 1.3f, 3.6f));
                 Photo(b, "quete-radio", st.T.Yeux + new Vector3(0.2f, -0.03f, 0.1f), st.RadioAt, 20f);
                 st.RadioCh = 1; st.KeyIn = true; st.KeyPos = 1; RadioTick(b, st);
@@ -1047,8 +1066,32 @@ namespace MWCoop
                 var ps = new System.Text.StringBuilder();
                 if (pumpsAt != null) foreach (Transform t in pumpsAt) if (t != null) ps.Append(" ").Append(t.name).Append(" ").Append(t.position.ToString("F0"));
                 Log.Info("standalone : commandes, pompes" + ps + ", voiture a moins de 12 m : " + np);
+                // (plein : voiture posee a cote de la premiere pompe, 5 s de clic simule, sans passer par la marche a pied)
+                if (!np && pumpsAt != null && pumpsAt.Length > 0 && pumpsAt[0] != null)
+                {
+                    Vector3 at = pumpsAt[0].position + pumpsAt[0].right * 4f + Vector3.up * 1.2f;
+                    b.Car.transform.position = at;
+                    Rigidbody rb = b.Car.GetComponent<Rigidbody>();
+                    if (rb != null) { rb.position = at; rb.velocity = Vector3.zero; }
+                }
+                if (st.EngineOn) SetEngine(b, false);
+                st.Fuel = 0.1f; st.FuelWarned = false; refillMoney0 = Wallet.Cash;
+            }
+            if (qStep == seq.Length + 8 && d > 22f && d <= 27f)
+            {
+                refillSim = true;
+                bool pris = RefillPrompt(b, st, b.Car.transform);
+                refillSim = false;
+                if (!qPrompt && pris) { qPrompt = true; Log.Info("standalone : commandes, plein propose, " + Mathf.RoundToInt(st.Fuel * TankLitres) + " L"); }
+            }
+            if (qStep == seq.Length + 8 && d > 27f)
+            {
+                qStep++;
+                Log.Info("standalone : commandes, plein : pompe proche " + NearPump(b.Car.transform.position) + ", propose " + qPrompt + ", argent " + refillMoney0.ToString("F0") + " -> " + Wallet.Cash.ToString("F0"));
                 Log.Info("standalone : commandes, fini, couleur " + QueteGolf.PaintIndex + " : " + etat());
             }
+            // (a deux : la couleur demandee par l'invite revient-elle chez l'hote ?)
+            if (qStep == seq.Length + 9 && (QueteGolf.PaintIndex == 5 || d > 75f)) { qStep++; Log.Info("standalone : commandes, fin2, hote, couleur " + QueteGolf.PaintIndex); }
         }
         public static float QuestFuel(out float temp)
         {
@@ -1059,18 +1102,25 @@ namespace MWCoop
         static Transform[] pumpsAt; static float nextPumps;
         static bool NearPump(Vector3 p)
         {
-            if (pumpsAt == null || Time.realtimeSinceStartup > nextPumps)
+            if ((pumpsAt == null || pumpsAt.Length == 0 || pumpsAt[0] == null) && Time.realtimeSinceStartup > nextPumps)
             {
                 nextPumps = Time.realtimeSinceStartup + 20f;
                 var l = new List<Transform>();
-                foreach (string s in Game.Msc ? new[] { "STORE/LOD/Pumps/Pump98", "STORE/LOD/Pumps" } : new[] { "PERAPORTTI/Pump1", "PERAPORTTI/Pump2", "STORE_AREA/Stuff/LOD/Pumps", "PERAPORTTI/FuelPylon" })
-                { GameObject g = Game.FindAny(s); if (g != null) l.Add(g.transform); }
+                if (Game.Msc)
+                {
+                    foreach (string s in new[] { "STORE/LOD/Pumps/GasolinePump98", "STORE/LOD/Pumps/GasolinePumpD", "STORE/LOD/Pumps/GasolinePumpPÖ" })
+                    { GameObject g = Game.FindAny(s); if (g != null) l.Add(g.transform); }
+                }
+                else
+                    foreach (Transform t in Resources.FindObjectsOfTypeAll<Transform>())
+                        if (t.name.StartsWith("FuelPumps_") && t.gameObject.hideFlags == HideFlags.None) l.Add(t);
                 pumpsAt = l.ToArray();
             }
+            if (pumpsAt == null) return false;
             foreach (Transform t in pumpsAt) if (t != null && (t.position - p).sqrMagnitude < 144f) return true;
             return false;
         }
-        static float refillPaid;
+        static float refillPaid, refillMoney0; static bool refillSim, qPrompt;
         // vrai : le texte du jeu est pris
         static bool RefillPrompt(VazCar.Built b, State st, Transform pl)
         {
@@ -1078,12 +1128,12 @@ namespace MWCoop
             if ((pl.position - b.Car.transform.position).sqrMagnitude > 16f || !NearPump(b.Car.transform.position)) return false;
             Game.SetGlobalBool("GUIuse", true);
             Game.SetGlobal("GUIinteraction", Lang.TG("FAIRE LE PLEIN", "FILL UP") + " " + Mathf.RoundToInt(st.Fuel * TankLitres) + " L");
-            if (Input.GetMouseButton(0))
+            if ((Input.GetMouseButton(0) || refillSim) && (!Wallet.Ready || Wallet.Cash >= 1f))
             {
                 float dl = 6f * Time.deltaTime;
                 refillPaid += dl * FuelPerLitre;
                 st.Fuel = Mathf.Min(1f, st.Fuel + dl / TankLitres); st.FuelWarned = false;
-                if (refillPaid >= 1f && Wallet.Ready) { int mk = Mathf.FloorToInt(refillPaid); refillPaid -= mk; Wallet.AddLocal(-mk); }
+                if (refillPaid >= 1f && Wallet.Ready) { int mk = Mathf.FloorToInt(refillPaid); refillPaid -= mk; Wallet.Spend(mk); }
             }
             else if (Input.GetMouseButtonUp(0)) SendState(b, st);
             return true;

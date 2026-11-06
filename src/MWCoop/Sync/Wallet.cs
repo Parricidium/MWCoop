@@ -180,6 +180,14 @@ namespace MWCoop
             return true;
         }
 
+        // Achat hors des caisses du jeu (plein de la voiture de la quete) : une baisse, donc une depense ordinaire, locale.
+        public static bool Spend(int amount)
+        {
+            if (!Ready || amount <= 0 || cash.Value < amount) return false;
+            cash.Value -= amount;
+            return true;
+        }
+
         // Triche de l'hote (/argentde) : liquide fixe a 'amount' -- ni revenu partage ni depense (lastCash suit).
         public static bool SetLocal(int amount)
         {

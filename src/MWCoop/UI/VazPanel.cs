@@ -267,6 +267,8 @@ namespace MWCoop
                 string st = mine ? Lang.T("la v\u00F4tre", "yours") : owner == null ? Lang.T("libre", "free") : owner;
                 Style.Text(new Rect(tx, r.yMax - P(24), r.xMax - tx - P(6), P(18)), st, 11, TextAnchor.MiddleLeft, mine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber, false);
             }
+            // (sous la grille : la fiche de droite est deja pleine)
+            QuestPaint(left, top + Mathf.Ceil(Vaz.Count / (float)Cols) * (ch + cg) + P(4));
             var pvr = new Rect(card.x, card.y, card.width, Mathf.Round(card.width * RtH / (float)RtW));
             DrawPreview(pvr, e, now);
             DrawCard(new Rect(card.x, pvr.yMax + P(10), card.width, card.yMax - pvr.yMax - P(10)), e);
@@ -384,7 +386,6 @@ namespace MWCoop
                 Style.Text(new Rect(r.x, cy, r.width, P(16)), sl.Length > 0 ? Lang.T("Livr\u00E9e perso", "Custom livery") : Lang.T("Couleur + num\u00E9ro (livr\u00E9e : lanceur, Addons)", "Colour + number (livery: launcher, Add-ons)"), 11, TextAnchor.MiddleLeft, Kit.Faint, false);
                 cy += P(18);
             }
-            cy = QuestPaint(r, cy);
             string st = mine ? Lang.T("La v\u00F4tre", "Yours") : owner == null ? Lang.T("Libre", "Free") : Lang.T("Prise par ", "Taken by ") + owner;
             Kit.Pill(r.x, cy + P(9), st, mine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber);
             cy += P(26);

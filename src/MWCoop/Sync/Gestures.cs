@@ -27,9 +27,10 @@ namespace MWCoop
     public static class Gestures
     {
         public const int G_Thumb = 1, G_Watch = 2, G_Push = 4, G_Piss = 8, G_Down = 16, G_Held = 32, G_Seat = 64,
-            G_Finger = 128, G_Fist = 256;
+            G_Finger = 128, G_Fist = 256, G_OwnsWatch = 512;   // (G_OwnsWatch : My Summer Car, ce joueur a obtenu la montre -- Avatar la lui met au poignet)
         public const int E_Punch = 1, E_Finger = 2, E_Helmet = 3, E_Stalk = 4;   // (3 : casque mis ou enleve ; 4 : clignotant / essuie-glace au volant)
         const string Module = "gestes";
+        static GameObject wristHand; static FsmBool watchOwned;
 
         // Etat recu d'un autre joueur (lu par son Avatar).
         public class Remote
@@ -112,10 +113,12 @@ namespace MWCoop
                 middleFinger = Child(inner, "MiddleFinger");
                 fist = Child(inner, "Fist");
                 watch = Child(inner, "Watch");
+                if (watch != null) { Transform wh = watch.transform.Find("Animate/BreathAnim/WristwatchHand"); wristHand = wh != null ? wh.gameObject : null; }
                 push = Child(inner, "Hand Push");
                 if (middleFinger != null) { Transform pv = middleFinger.transform.Find("Pivot"); if (pv != null) fingerAnim = pv.GetComponent<Animation>(); }
                 if (fist != null) { Transform pv = fist.transform.Find("Pivot"); if (pv != null) fistAnim = pv.GetComponent<Animation>(); }
             }
+            if (Game.Msc) { PlayMakerFSM wd = Game.FindFsm("Database/DatabaseOrders/Wristwatch", "Data"); watchOwned = wd != null ? wd.FsmVariables.FindFsmBool("Owned") : null; }
             GameObject po = Game.FindAny("Systems/PassOut"), ko = Game.FindAny("Systems/KnockOut");
             if (po != null) passOut = Game.FsmOn(po, "Activate");
             if (ko != null) knockOut = Game.FsmOn(ko, "Activate");
@@ -195,6 +198,13 @@ namespace MWCoop
             string fs = FnState;
             if (fs == "Finger 2" || fs == "Thumb Up") b |= G_Thumb;
             if (Active(watch) || fs == "Anim on" || fs == "Watch ON" || fs == "Watch ON 2") b |= G_Watch;
+            // (montre de My Summer Car, automate Wristwatch::Data : Owned, sauvegarde ; WristwatchHand, allumee par le jeu quand on l'obtient)
+            if (Game.Msc)
+            {
+                float mt = Config.Testing ? Config.GetFloat("Test", "MontreAcquise", 0f) : 0f;
+                if (mt > 0f && Time.timeSinceLevelLoad > mt) { if (watchOwned != null) watchOwned.Value = true; if (wristHand != null) wristHand.SetActive(true); }
+                if ((watchOwned != null && watchOwned.Value) || (wristHand != null && wristHand.activeSelf)) b |= G_OwnsWatch;
+            }
             if (Active(push)) b |= G_Push;
             if (Active(fluid)) b |= G_Piss;
             if (passOut != null && PassOutDown.Contains(passOut.ActiveStateName) || knockOut != null && KnockOutDown.Contains(knockOut.ActiveStateName)) b |= G_Down;

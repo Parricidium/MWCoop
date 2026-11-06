@@ -120,10 +120,12 @@ namespace MWCoop
         // Message du tchat au-dessus du joueur : apparait en grandissant et en montant, s'efface en continuant de monter ; lisible
         // jusqu'a 60 m, couleur du joueur sur le bord. Au-dessus du pseudo quand il est affiche.
         const float BubbleFar = 60f;
+        static Chat.Said bubbleLogged;
         static void Bubble(int id, Vector3 sp, float now, bool nameShown)
         {
             Chat.Said s = Chat.SaidBy(id);
             if (s == null || sp.z > BubbleFar) return;
+            if (Config.Testing && s != bubbleLogged) { bubbleLogged = s; Log.Info("bulle : joueur " + id + " dessinee en " + sp.ToString("F0") + " sur " + Screen.width + "x" + Screen.height); }
             float age = now - s.Born, left = s.Until - now;
             float inK = Mathf.Clamp01(age / 0.22f), outK = Mathf.Clamp01(left / 0.5f);
             // (entree : leger depassement, puis taille normale)

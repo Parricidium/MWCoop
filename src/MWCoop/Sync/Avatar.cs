@@ -375,6 +375,7 @@ namespace MWCoop
             if (table == null) { Log.Warn("montre : modele du jeu introuvable"); watchSrc = null; nextWatchFind = float.MaxValue; return; }
             watchHands.Clear();
             watchGo = new GameObject("montre");
+            watchGo.SetActive(false);
             watchGo.transform.SetParent(wrist, false);
             // (cadran : +Z du maillage, vers le dos de la main ; sorti du poignet, plus epais de ce cote que le bracelet)
             watchGo.transform.localRotation = Quaternion.Euler(V3("MontreRot", new Vector3(145f, 0f, 0f)));
@@ -409,12 +410,22 @@ namespace MWCoop
                 Log.Info(sb.ToString());
             }
         }
-        float nextWatch; int watchShots;
+        float nextWatch; int watchShots; bool watchShown;
+        // My Winter Car : tout le monde l'a des le debut. My Summer Car : seulement le joueur qui l'a obtenue (Gestures.G_OwnsWatch ; JD 06/11).
+        bool WatchWanted() { if (!Game.Msc) return true; Gestures.Remote g = Player != null ? Gestures.Of(Player.Id) : null; return g != null && (g.Bits & Gestures.G_OwnsWatch) != 0; }
+        void WatchShow()
+        {
+            bool w = WatchWanted();
+            if (watchGo.activeSelf != w) watchGo.SetActive(w);
+            if (Config.Testing && w != watchShown) Log.Info("montre : " + (Player != null ? Player.Name : "?") + " " + (w ? "visible" : "cachee"));
+            watchShown = w;
+        }
         void WatchTick(float now)
         {
             if (now < nextWatch) return;
             nextWatch = now + 2f;
             if (watchGo == null) { AttachWatch(); return; }
+            WatchShow();
             foreach (KeyValuePair<Transform, Transform> h in watchHands) if (h.Key != null) h.Value.localRotation = h.Key.localRotation;
             // ([Test] MontrePhoto=1 : photos du poignet)
             if (watchShots == 0 && Config.GetInt("Test", "MontrePhoto", 0) != 0 && Time.timeSinceLevelLoad > 55f && Bone("hand_left") != null)
