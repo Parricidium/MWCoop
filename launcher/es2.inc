@@ -375,7 +375,7 @@ static void SaveCheckOpen(int i)
     if (i < 0 || i >= (int)g_saves.size()) return;
     if (!g_saves[i].has) { SetStatus(K_NORMAL, T(L"Rien à vérifier : partie vide", L"Nothing to check: empty game")); return; }
     SaveCheckRun(g_saves[i].prof, g_saves[i].name);
-    g_saveModal = SM_CHECK;
+    g_saveModal = SM_CHECK; g_chkThenSolo = false;
 }
 static void SaveRepairApply();
 static void SaveRepair()
@@ -415,6 +415,7 @@ static void SaveRepairApply()
     SaveCheckRun(prof, name);   // (relue : ce qui reste)
 }
 // Contenu de la fenetre (cadre c, titre deja dessine ; y : sous le titre).
+static bool SaveChkProblems() { return g_chk.fix || g_chk.warn || g_chk.broken; }
 static void DrawSaveCheck(Graphics &g, RectF c, float y)
 {
     float x = c.X + 24, w = c.Width - 48;
@@ -428,7 +429,7 @@ static void DrawSaveCheck(Graphics &g, RectF c, float y)
         y += 46;
     }
     int rows = 0;
-    const int maxRows = 13;
+    const int maxRows = g_chkThenSolo ? 10 : 13;   // (Solo Coop : une rangee de boutons en plus)
     auto row = [&](Color col, const std::wstring &t) {
         if (rows++ >= maxRows) return;
         SolidBrush dot(col); g.FillEllipse(&dot, x, y + 7, 8.0f, 8.0f);
@@ -445,6 +446,10 @@ static void DrawSaveCheck(Graphics &g, RectF c, float y)
     }
     if (more) { wchar_t m[64]; swprintf_s(m, T(L"+ %d autre(s)", L"+ %d more"), more); Text(g, m, RectF(x, y, w, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear); }
     float by = c.Y + c.Height - 24 - 44;
+    if (g_chkThenSolo) {   // ouverte par Solo Coop : le joueur decide
+        UiButton(g, RectF(c.X + c.Width - 24 - 220, by - 56, 220, 44), SaveChkProblems() ? T(L"Lancer quand même", L"Launch anyway") : T(L"Lancer", L"Launch"), UI_SAVE_SCFORCE, !g_chk.fix, IC_PLAY);
+        UiButton(g, RectF(c.X + c.Width - 24 - 220 - 12 - 170, by - 56, 170, 44), T(L"Ne pas lancer", L"Don't launch"), UI_SAVE_MCLOSE, false, -1);
+    }
     if (g_chk.fix) { wchar_t b[64]; swprintf_s(b, T(L"Réparer (%d)", L"Repair (%d)"), g_chk.fix); UiButton(g, RectF(c.X + c.Width - 24 - 170, by, 170, 44), b, UI_SAVE_REPAIR, true, IC_CHECK); }
     UiButton(g, RectF(x, by, 200, 44), T(L"Copies de secours", L"Backup copies"), UI_SAVE_CHECKCOPIES, false, -1);
     if (!g_chk.fix) Text(g, T(L"Rien à réparer ici.", L"Nothing to repair here."), RectF(x + 210, by, w - 210, 44), 12, FontStyleRegular, kGrey, StringAlignmentFar);

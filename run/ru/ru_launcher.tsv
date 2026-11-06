@@ -2650,7 +2650,7 @@ F10, free	F10, бесплатно
 RALLI-VUOKRAAMO garage	гараж RALLI-VUOKRAAMO
 In F10, a rented car has two buttons: Put back on its wheels (on the spot, within 15 m) and Give back. The garage also has RETURN MINE. No Bring here or V key: those stay with the Fiad 131.	В F10 у арендованной машины две кнопки: «Поставить на колёса» (на месте, не дальше 15 м) и «Вернуть». В гараже есть ещё кнопка «ВЕРНУТЬ СВОЮ». Нет «Пригнать» и клавиши V: они остаются у Fiad 131.
 Alone, with the mod and its additions, no server and no guests. Pick the save to load.	Один, с модом и его дополнениями, без сервера и гостей. Выбери сохранение для загрузки.
-No save to load. Solo Coop does not create a new game: start one by hosting, or import a save from the Saves page.	Нет сохранения для загрузки. Соло Кооп не создаёт новую партию: начни её, став хостом, или импортируй сохранение на странице «Сохранения».
+No save marked Solo to load. Solo Coop does not create a new game: on the Saves page, mark a save Solo or import one.	Нет сохранения с отметкой «Соло» для загрузки. Соло Кооп не создаёт новую партию: на странице «Сохранения» отметь сохранение как «Соло» или импортируй его.
 This save no longer exists: pick another one.	Этого сохранения больше нет: выбери другое.
 SOLO	СОЛО
 SOLO COOP	СОЛО КООП
@@ -2662,7 +2662,15 @@ SOLO: the game without the mod, as its developer made it. SOLO COOP: alone, with
 Pick your game (MSC or MWC, top left), your nickname, then HOST, JOIN, SOLO or SOLO COOP. That's it!	Выбери игру (MSC или MWC, слева вверху), ник, затем ХОСТ, ПОДКЛЮЧИТЬСЯ, СОЛО или СОЛО КООП. Вот и всё!
 PLAY — Home: your nickname, the network (Steam or IP), HOST, JOIN, SOLO, SOLO COOP. Lobby: the players, the session code, the options, the chat, READY and START. Saves: your games, one per group of friends.	ИГРАТЬ — Главная: твой ник, сеть (Steam или IP), ХОСТИТЬ, ПРИСОЕДИНИТЬСЯ, СОЛО, СОЛО КООП. Лобби: игроки, код сессии, настройки, чат, ГОТОВ и СТАРТ. Сохранения: твои партии, по одной на компанию друзей.
 \"Main game\" is the game's normal save: SOLO always keeps it. The game's folder is shown at the bottom (Open).	«Основная партия» — обычное сохранение игры: СОЛО всегда его оставляет. Папка игры показана внизу (Открыть).
-SOLO COOP: on click, pick the save (the one in use is already selected), then Launch: the launcher makes a backup copy and the game loads it. Cancel launches nothing. No new game is created: without a save, the launcher says so.	СОЛО КООП: при нажатии выбери сохранение (используемое уже выбрано), затем «Запустить»: лаунчер делает резервную копию, и игра загружает его. «Отмена» ничего не запускает. Новая партия не создаётся: если сохранения нет, лаунчер об этом скажет.
+SOLO COOP: on click, pick among the saves marked Solo, then Launch: the launcher checks the save (it only shows the result if there is a problem, and you choose whether to launch), makes a backup copy, and the game loads it. Cancel launches nothing. No new game is created.	СОЛО КООП: при нажатии выбери среди сохранений с отметкой «Соло», затем «Запустить»: лаунчер проверяет сохранение (результат показывается только при проблеме, и ты решаешь, запускать или нет), делает резервную копию, и игра загружает его. «Отмена» ничего не запускает. Новая партия не создаётся.
 Solo or Solo Coop	Соло или Соло Кооп
 Two buttons on Home: SOLO, the game without the mod; SOLO COOP, alone with the mod and its additions, on the save of your choice.	Две кнопки на Главной: СОЛО — игра без мода; СОЛО КООП — один, с модом и его дополнениями, на сохранении по твоему выбору.
 1 network · 2 open a lobby · 3 enter a friend's · 4 without the mod · 5 alone, with the mod	1 сеть · 2 открыть лобби · 3 войти в лобби друга · 4 без мода · 5 один, с модом
+Each save can be marked Solo, Coop or Both (right card). HOST only offers Coop saves, SOLO COOP only Solo saves, and each keeps its own choice. Existing and imported saves are on Both.	Каждое сохранение можно отметить: «Соло», «Coop» или «Оба» (карточка справа). ХОСТ предлагает только сохранения Coop, СОЛО КООП — только «Соло», и у каждого свой выбор. Существующие и импортированные сохранения отмечены как «Оба».
+Your solo save (the game's) is only touched if you launch it with MWCoop.	Твоё соло-сохранение (игровое) затрагивается, только если ты запускаешь его с MWCoop.
+Use in	Использовать в
+Both	Оба
+Coop	Coop
+The save in use is marked Solo: pick a Coop save, or create one.	Используемое сохранение отмечено как «Соло»: выбери сохранение Coop или создай новое.
+Launch anyway	Всё равно запустить
+Don't launch	Не запускать

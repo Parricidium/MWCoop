@@ -19,7 +19,8 @@ static std::vector<std::wstring> SrvDirs()
 {
     std::wstring sub = g_launchMode == MODE_GUEST ? L"profils\\invite\\" : L"";
     std::vector<std::wstring> d = { g_modRoot + L"MWCoop\\" + sub };
-    if (g_launchMode != MODE_GUEST && !SaveCurrentProf().empty()) d.insert(d.begin(), SaveProfRoot() + SaveCurrentProf() + L"\\");   // (sauvegarde a part : saves.inc)
+    std::wstring sp = g_launchMode == MODE_SOLOCOOP ? SoloCoopProf() : SaveCurrentProf();
+    if (g_launchMode != MODE_GUEST && !sp.empty()) d.insert(d.begin(), SaveProfRoot() + sp + L"\\");   // (sauvegarde a part : saves.inc)
     if (!LocalDir().empty()) d.push_back(LocalDir() + sub);
     return d;
 }

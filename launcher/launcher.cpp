@@ -2964,6 +2964,8 @@ enum { NI_WAIT, NI_LOAD, NI_OK, NI_FAIL };
 struct NoteImg { int state; Bitmap *bmp; };
 static std::map<std::wstring, NoteImg> g_noteImgs;   // (sous g_cs)
 static std::wstring LocalDir();
+static std::wstring SoloCoopProf();                     // (saves.inc : sauvegarde de Solo Coop, a part de celle d'Heberger)
+static bool SaveHostCheck();                            // (saves.inc : la sauvegarde d'Heberger est-elle marquee Coop ? sinon ouvre le choix)
 static std::wstring SaveCurrentProf();                  // (saves.inc : sauvegarde utilisee, profil du chargeur ; vide : la principale)
 static std::wstring SaveCurrentName();
 static std::wstring SaveDirOf(const std::wstring &prof); // (dossier de la sauvegarde du jeu de ce profil)
@@ -3896,7 +3898,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += "Port=" + std::to_string(port) + "\r\n";
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
-    t += std::string("Profil=") + (g_exportPlaces ? "places-export" : !g_exportDir.empty() ? "carte-export" : mode == MODE_GUEST ? "invite" : mode == MODE_HOST || mode == MODE_SOLOCOOP ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
+    t += std::string("Profil=") + (g_exportPlaces ? "places-export" : !g_exportDir.empty() ? "carte-export" : mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : mode == MODE_SOLOCOOP ? Narrow(SoloCoopProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
     if (g_exportPlaces) t += "ExportPlaces=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (outil des places : copie de la partie en cours, SeatExport.cs)
     else if (!g_exportDir.empty()) t += "ExportCarte=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (editeur de carte : profil a part, jamais les sauvegardes du joueur)
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
@@ -4561,6 +4563,7 @@ static void LobbyClose(bool keepListen = false)
 // LANCER : actif quand tous les invites sont prets ; sinon, une question permet de forcer.
 static void HostStart()
 {
+    if (g_lobby == LB_HOST && !SaveHostCheck()) return;   // (marquee Solo : personne n'est lance, le choix s'ouvre)
     if (g_lobby != LB_HOST || g_goSent) return;
     if (g_testSalon.empty() && GameRunningAsk()) return;
     {   // un invite recoit encore l'envoi : pas de lancement, meme force (demande de JD, 13/10 : son jeu partirait sans les mods)
@@ -8740,8 +8743,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"solocoop" || st == L"solocoop-vide" || st == L"solocoop-long") {   // fenetre de Solo Coop : sauvegardes factices, aucune, ou plus d'une page
             g_tab = TAB_HOME; SavesFake();
             if (st == L"solocoop-vide") g_saves.clear();
-            if (st == L"solocoop-long") { SaveSlot o = g_saves[1]; for (int i = 3; i <= 9; i++) { o.prof = L"partie-" + std::to_wstring(i); o.name = L"Partie " + std::to_wstring(i); g_saves.push_back(o); } }
+            if (st == L"solocoop-long") { SaveSlot o = g_saves[1]; o.use = SU_BOTH; for (int i = 3; i <= 9; i++) { o.prof = L"partie-" + std::to_wstring(i); o.name = L"Partie " + std::to_wstring(i); g_saves.push_back(o); } }
             SoloCoopOpen();
+        }
+        else if (st == L"solocoop-verif") {   // verification ouverte par Solo Coop : un fichier illisible
+            g_tab = TAB_HOME; SavesFake();
+            g_chk = SaveCheckState(); g_chk.name = g_saves[0].name; g_chk.broken = 1;
+            SaveCheckFile cf; cf.name = L"savefile.txt"; cf.present = true; cf.err = "octet 0 : 61 au lieu du debut d'entree (7E)"; g_chk.files.push_back(cf);
+            g_chkThenSolo = true; g_saveModal = SM_CHECK;
         }
         else if (st == L"sauvegardes-nouvelle") { g_tab = TAB_SAVES; SaveOpenNewGame(); }
         else if (st == L"sauvegardes-choix") { g_tab = TAB_SAVES; SaveOpenPick(); }
