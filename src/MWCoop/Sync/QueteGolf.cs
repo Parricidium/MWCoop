@@ -76,6 +76,7 @@ namespace MWCoop
             }
             if (placed && Config.GetInt("Test", "QueteGolfEssai", 0) != 0) TestTick(now);
             if (placed && Config.GetInt("Test", "QueteCommandes", 0) != 0) StandaloneCar.QuestControlsTest(now - placedAt);
+            if (placed && Config.GetInt("Test", "PharesPhoto", 0) != 0) StandaloneCar.HeadlightTest(now - placedAt);
             if (Session.Active && Session.RemoteCount > 0 && now >= nextSend) { nextSend = now + 5f; Send(); }
         }
 

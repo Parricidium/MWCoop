@@ -161,7 +161,7 @@ namespace MWCoop
                 lg.localPosition = p + new Vector3(0f, 0f, 0.08f);
                 lg.localRotation = Quaternion.Euler(4f, 0f, 0f);
                 Light l = lg.gameObject.AddComponent<Light>();
-                l.type = LightType.Spot; l.range = 45f; l.spotAngle = 70f; l.intensity = 2.2f; l.color = new Color(1f, 0.96f, 0.86f); l.enabled = false;
+                HeadBeam(l, false); l.enabled = false;
                 heads.Add(l);
             }
             st.Heads = heads.ToArray();
@@ -2376,6 +2376,83 @@ namespace MWCoop
         static void ClearHover() { if (hovered < 0) return; hovered = -1; Game.SetGlobalBool("GUIuse", false); Game.SetGlobal("GUIinteraction", ""); }
 
         // Feux du modele : avant allumes avec les phares, arriere faibles avec les phares et forts au freinage, recul en marche arriere.
+        // Comme les phares des voitures du jeu (SATSUMA, FERNDALE, CORRIS : BeamsShort, BeamsLong) -- JD et Донской 06/11 : « les arbres s'allument comme
+        // un sapin de Noel ». Masque du jeu : sans la couche Forest (26). Les arbres (Nature/Tree Soft Occlusion) sont eclaires par sommet, ou un
+        // projecteur compte comme une lumiere ponctuelle : avec le masque par defaut, tout s'allumait autour de la voiture, derriere aussi.
+        const int BeamMask = -88084481;
+        static void HeadBeam(Light l, bool high)
+        {
+            l.type = LightType.Spot; l.cullingMask = BeamMask; l.renderMode = LightRenderMode.ForcePixel;
+            l.spotAngle = 50f; l.range = high ? 200f : 50f; l.intensity = high ? 4f : 3f; l.color = new Color(1f, 0.902f, 0.581f);
+        }
+        // ([Test] PharesPhoto=1 : memes vues, de jour puis de nuit, voiture face aux arbres puis dos a eux : phares eteints, ancien reglage,
+        // nouveau, pleins phares, et lumieres copiees d'une voiture du jeu au meme endroit)
+        static int headStep; static float headAt;
+        public static void HeadlightTest(float e)
+        {
+            if (headStep < 0 || e < 12f) return;
+            VazCar.Built b = null; State st = null;
+            foreach (VazCar.Built x in cars) if (QueteGolf.IsQuestCar(x)) { b = x; states.TryGetValue(x, out st); }
+            if (b == null || st == null || st.Heads == null) return;
+            if (headStep == 0) { headStep = 1; HeadSeries(b, st, "jour"); headAt = e; SetNight(); }
+            else if (headStep == 1 && e - headAt > 10f) { headStep = -1; HeadSeries(b, st, "nuit"); Log.Info("standalone : phares photographies"); }
+        }
+        static void SetNight()
+        {
+            PlayMakerFSM sun = Game.FindFsm(Game.Msc ? "MAP/SUN/Pivot/SUN" : "MAP/Sun/PivotSun/SUN", "Color");
+            if (sun == null) { Log.Warn("standalone : phares, soleil introuvable"); return; }
+            sun.FsmVariables.GetFsmInt("Time").Value = 24; sun.SendEvent("TIMESKIP");
+        }
+        static Light GameBeam(string prefix)
+        {
+            foreach (Light l in Resources.FindObjectsOfTypeAll<Light>())
+                if (l.gameObject.hideFlags == HideFlags.None && l.type == LightType.Spot && l.name.StartsWith(prefix)) return l;
+            return null;
+        }
+        static void HeadSeries(VazCar.Built b, State st, string when)
+        {
+            Transform c = b.Car.transform;
+            Vector3 p0 = c.position; Quaternion r0 = c.rotation;
+            Vector3 dir = c.forward; dir.y = 0f; dir.Normalize();
+            Vector3 eye = p0 - dir * 7f + Vector3.up * 2.2f, look = p0 + dir * 22f + Vector3.up * 0.5f;
+            Light[] mine = st.Heads;
+            System.Action<string> both = n =>
+            {
+                QueteGolf.Shot("phares-" + when + "-" + n + "-face", eye, look);
+                c.rotation = Quaternion.AngleAxis(180f, Vector3.up) * r0;
+                QueteGolf.Shot("phares-" + when + "-" + n + "-dos", eye, look);
+                c.rotation = r0;
+            };
+            System.Action<bool> own = on => { foreach (Light l in mine) if (l != null) l.enabled = on; };
+            own(false); both("0-eteints");
+            own(true);
+            foreach (Light l in mine) if (l != null) { l.cullingMask = -1; l.renderMode = LightRenderMode.Auto; l.range = 45f; l.spotAngle = 70f; l.intensity = 2.2f; l.color = new Color(1f, 0.96f, 0.86f); }
+            both("1-ancien");
+            foreach (Light l in mine) if (l != null) HeadBeam(l, false);
+            both("2-nouveau");
+            foreach (Light l in mine) if (l != null) HeadBeam(l, true);
+            both("3-pleins");
+            own(false);
+            foreach (string pre in new[] { "BeamShort", "BeamLong" })
+            {
+                Light src = GameBeam(pre);
+                if (src == null) { Log.Warn("standalone : phares, pas de " + pre + " dans le jeu"); continue; }
+                Log.Info("standalone : phares du jeu " + Recon.Path(src.transform) + " masque " + src.cullingMask + " portee " + src.range + " angle " + src.spotAngle + " force " + src.intensity);
+                var clones = new List<GameObject>();
+                foreach (Light l in mine)
+                {
+                    if (l == null) continue;
+                    var g = new GameObject("essai_" + pre); g.transform.SetParent(l.transform.parent, false);
+                    g.transform.position = l.transform.position; g.transform.rotation = l.transform.rotation;
+                    Light k = g.AddComponent<Light>();
+                    k.type = src.type; k.cullingMask = src.cullingMask; k.renderMode = src.renderMode; k.range = src.range; k.spotAngle = src.spotAngle; k.intensity = src.intensity; k.color = src.color; k.cookie = src.cookie; k.shadows = src.shadows;
+                    clones.Add(g);
+                }
+                both("4-jeu-" + pre);
+                foreach (GameObject g in clones) UnityEngine.Object.DestroyImmediate(g);
+            }
+            foreach (Light l in mine) if (l != null) { HeadBeam(l, false); l.enabled = st.LightsOn; }
+        }
         static void Lamps(VazCar.Built b, State st)
         {
             var d = b.Axis as CarController;
@@ -2385,7 +2462,7 @@ namespace MWCoop
             if (b.LampsInit && f == b.FrontOn && br == b.BrakeOn && rv == b.ReverseOn && blink == st.BlinkShown && high == st.HighShown && st.Turn == st.TurnShown) return;
             b.LampsInit = true; b.FrontOn = f; b.RearOn = f; b.BrakeOn = br; b.ReverseOn = rv; st.BlinkShown = blink; st.HighShown = high; st.TurnShown = st.Turn;
             // (pleins phares : plus loin et plus serres)
-            if (st.Heads != null) foreach (Light l in st.Heads) if (l != null) { l.enabled = f; l.range = high ? 120f : 45f; l.spotAngle = high ? 46f : 70f; l.intensity = high ? 3.4f : 2.2f; }
+            if (st.Heads != null) foreach (Light l in st.Heads) if (l != null) { l.enabled = f; HeadBeam(l, high); }
             foreach (KeyValuePair<MeshRenderer, string> kv in b.Lamps)
             {
                 if (kv.Key == null) continue;
