@@ -9,10 +9,12 @@ namespace MWCoop
     public static class PlayerSync
     {
         // Posture et actions du joueur, montrees par son avatar (Avatar).
+        static ParticleEmitter coldBreath; static float coldBreathLook;
         public const int F_Crouch = 1, F_Seated = 2, F_Smoke = 4, F_Drink = 8, F_Carry = 16, F_Hello = 32, F_Sleep = 64,
             F_SleepFast = 128,                      // le lit compte les heures : quand tous l'ont, l'hote accelere
             F_Inhale = 256, F_Exhale = 512,         // cigarette : tire (main a la bouche), souffle (fumee)
             F_Jacket = 1024, F_Coverall = 2048, F_Helmet = 4096,   // vetements portes (Wear) : caches chez les autres, montres par l'avatar
+            F_Breath = 16384,                       // buee de la respiration (ColdBreath du joueur : froid dehors) : montree par l'avatar
             F_Dead = 8192;                          // mort, en train de choisir ou revenir (Respawn) : avatar en pantin (ragdoll)
         const float SendRate = 1f / 20f;
         static float nextSend;
@@ -211,6 +213,15 @@ namespace MWCoop
                 bool seatedNow = Game.GlobalBool("PlayerSeated") || crouchFsm != null && crouchFsm.ActiveStateName == "Seated" || VehicleSync.LocalDriving >= 0 || Seats.Seated;
                 if (!seatedNow && st.Height < 1.2f) st.Flags |= F_Crouch;
                 if (seatedNow) st.Flags |= F_Seated;
+                // Buee de la respiration (Menos, 04/11) : l'emetteur du jeu, a la premiere personne (My Winter Car ; absent de My Summer Car). [Test] BueeForce=1 : toujours.
+                if (coldBreath == null && Time.realtimeSinceStartup >= coldBreathLook)
+                {
+                    coldBreathLook = Time.realtimeSinceStartup + 10f;
+                    GameObject cb = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/ColdBreath");
+                    coldBreath = cb != null ? cb.GetComponent<ParticleEmitter>() : null;
+                    if (cb != null && Config.GetInt("Test", "BueeSansMoi", 0) != 0) cb.SetActive(false);   // (essai : seule celle de l'avatar reste a l'image)
+                }
+                if (coldBreath != null && (coldBreath.emit && coldBreath.gameObject.activeInHierarchy || Config.GetInt("Test", "BueeForce", 0) != 0)) st.Flags |= F_Breath;
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
                 if (Game.GlobalBool("PlayerSleeps") && World.BedCounting()) st.Flags |= F_SleepFast;
                 // Au lit, le jeu couche le joueur avec le pivot du lit (AnimPivotSleep, animation sleep_bed_in) : son « haut »

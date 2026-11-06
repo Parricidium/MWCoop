@@ -726,6 +726,7 @@ namespace MWCoop
             Pose();
             if (deadSeated) SlumpPose();
             PlaceCigarette();
+            ColdBreath((Player.State.Flags & PlayerSync.F_Breath) != 0);
             PlaceDrink();
             PlacePee();
             // Assis sur un siege : ou tombe le bassin dans la pose assise (repere avatar) -> Apply y place le siege.
@@ -2238,6 +2239,31 @@ namespace MWCoop
             }
             smokeRaise = Mathf.MoveTowards(smokeRaise, (f & PlayerSync.F_Inhale) != 0 ? 1f : 0f, Time.deltaTime * 2.5f);
             s.normalizedTime = Mathf.Lerp(tDown, tUp, smokeRaise);
+        }
+
+        // Buee de la respiration (Menos, 04/11) : copie de l'emetteur ColdBreath du joueur local, a la bouche, quand le joueur souffle chez lui.
+        GameObject breath; ParticleEmitter[] breathEm; float breathMax = 2f;
+        void ColdBreath(bool on)
+        {
+            if (breath == null)
+            {
+                if (!on) return;
+                GameObject pl = Game.PlayerGo;
+                Transform bs = pl != null ? FindBone(pl.transform, "ColdBreath") : null;
+                if (bs == null) return;
+                breath = (GameObject)Object.Instantiate(bs.gameObject);
+                foreach (PlayMakerFSM pf in breath.GetComponentsInChildren<PlayMakerFSM>(true)) Object.Destroy(pf);
+                breath.name = "MWCoop-Buee";
+                breath.transform.parent = Root.transform;
+                breath.SetActive(true);
+                breathEm = breath.GetComponentsInChildren<ParticleEmitter>(true);
+                ParticleEmitter src = bs.GetComponent<ParticleEmitter>();
+                if (src != null && src.maxEmission > 0.5f) breathMax = src.maxEmission;
+                Log.Info("avatar " + Player.Name + " : buee de la respiration, " + breathEm.Length + " emetteur(s)");
+            }
+            if (headBone != null) breath.transform.position = headBone.position + Root.transform.forward * 0.12f - Root.transform.up * 0.05f;
+            breath.transform.rotation = Root.transform.rotation;
+            foreach (ParticleEmitter pe in breathEm) { pe.emit = on; if (on) pe.maxEmission = breathMax; }
         }
 
         // Cigarette dans la main gauche (copie de celle du joueur local) et fumee a la bouche (copie de
