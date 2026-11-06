@@ -2612,3 +2612,19 @@ With MWCOOP only: \"Separate mods folder\" (Mods page, off by default) keeps mod
 \"Copy my mods\" copies the solo ones: the originals do not move, and what is already in the separate folder is kept.	«Скопировать мои моды» копирует моды одиночной игры: исходные не перемещаются, а то, что уже есть в отдельной папке, сохраняется.
 Off: MWCoop goes back to the solo folder. Nothing is deleted. With OFFICIAL, nothing changes.	Выключено: MWCoop возвращается к папке одиночной игры. Ничего не удаляется. С ОФИЦИАЛЬНЫМ ничего не меняется.
 Autosave: the host can have the game saved every 5, 10, 15 or 30 minutes (off by default). At each save, a freeze of a few seconds for everyone, longer on a big game.	Автосохранение: хост может включить сохранение игры каждые 5, 10, 15 или 30 минут (по умолчанию выключено). При каждом сохранении зависание на несколько секунд у всех, в большой игре дольше.
+The game's watch shows on the other players' left wrist, from the start of the game.	Игровые часы видны на левом запястье других игроков с самого начала игры.
+The game's watch shows on the left wrist of the player who has obtained it, not before.	Игровые часы видны на левом запястье только у игрока, который их получил, и не раньше.
+Free position (Card, Rings or Strip): with the chat open (T), drag the HUD with the mouse and drop it where you want; the spot is kept. To go back to a fixed place: F10 › HUD.	Свободное положение (Карточка, Кольца или Полоса): при открытом чате (T) перетащи HUD мышью и отпусти, где хочешь; место сохраняется. Вернуться к постоянному месту: F10 › HUD.
+Chat bubbles: each message appears for a few seconds above the player who wrote it, readable up to 60 m. On by default, with every style; turn them off in F10 › HUD.	Облачка чата: каждое сообщение на несколько секунд появляется над игроком, который его написал, и читается на расстоянии до 60 м. Включены по умолчанию, при любом стиле; отключаются в F10 › HUD.
+Keys at the wheel	Клавиши за рулём
+Add-on cars and the s21 quest car are controlled with the game's keys, the ones set in its options:	Машины-дополнения и машина из квеста s21 управляются клавишами игры, теми, что заданы в её настройках:
+High beam: lights, then high beam, then off.	Дальний свет: фары, затем дальний свет, затем выключено.
+Wipers: on or off.	Дворники: включить или выключить.
+Left or right indicator; both together: hazard lights.	Левый или правый поворотник; оба вместе: аварийная сигнализация.
+Starting: hold the key (ignition, then starter). With the engine running, one press stops it.	Запуск: удерживай клавишу (зажигание, затем стартер). Когда двигатель работает, одно нажатие глушит его.
+The s21 quest car	Машина из квеста s21
+Car radio: aim at it, click to change station or turn it off, mouse wheel for the volume. With the ignition off, it goes silent.	Автомагнитола: наведись на неё, щелчок меняет станцию или выключает, колесо мыши меняет громкость. При выключенном зажигании она молчит.
+Rev counter: temperature and fuel as bars, in its two windows.	Тахометр: температура и топливо в виде полосок, в двух его окошках.
+40 L tank, with a warning when it's nearly empty. Filling up: engine off, car under 12 m from a pump, on foot next to it, hold the left click; 5 mk per litre, in cash.	Бак на 40 л, с предупреждением, когда он почти пуст. Заправка: двигатель выключен, машина ближе 12 м от колонки, стой рядом с ней пешком и держи левую кнопку мыши; 5 mk за литр, наличными.
+Out of fuel far from anything: 4 s on the starter find the bottom of the tank.	Кончилось топливо вдали от всего: 4 с работы стартера находят остаток на дне бака.
+Colour: F10 > Cars tab, under the grid, once the quest is done. Eight shades, kept in the save.	Цвет: F10 > вкладка «Машины», под сеткой, когда квест выполнен. Восемь оттенков; выбор остаётся в сохранении.
