@@ -38,14 +38,38 @@ namespace MWCoop
 
         static void RentVuokra(Stand s)
         {
+            if (saPay > 0f) return;   // (demande en cours)
             if (saColor < 1) { SaNote(Lang.T("Aucune couleur libre", "No free colour"), true); return; }
             if (money == null || money.Value < s.Price) { SaNote(Lang.T("Pas assez d'argent", "Not enough money"), true); return; }
             Vector3 pos; float yaw;
             if (!VuokraBay(out pos, out yaw)) SaNote(Lang.T("Plus de place libre : la voiture est posée sur la première", "No free spot: the car is put on the first one"), false);
             if (!Vaz.RequestAt(s.Model, pos, yaw, saColor)) { SaNote(Lang.T("Location refusée", "Rental refused"), true); return; }
-            money.Value -= s.Price;   // (Wallet : une depense reste au joueur)
-                        L("garage : " + s.Name + " louee " + s.Price + " mk (couleur " + saColor + "), reste " + money.Value.ToString("F0") + " mk");
-            SaNote(Lang.T("Louée ! Elle t'attend devant le garage", "Rented! It is waiting for you in front of the garage"), false);
+            // (on paye quand l'hote a dit oui : un joueur ne paye pas pour rien, JD 06/11)
+            saPay = s.Price; saPayModel = s.Model; saPayNumber = saColor; saPayName = s.Name; saPayAt = Time.realtimeSinceStartup;
+            VuokraPayStep();
+            if (saPay > 0f) SaNote(Lang.T("Demande envoy\u00E9e \u00E0 l'h\u00F4te\u2026", "Request sent to the host\u2026"), false);
+        }
+
+        static float saPay, saPayAt; static int saPayModel, saPayNumber; static string saPayName;
+        static void VuokraPayStep()
+        {
+            if (saPay <= 0f) return;
+            int n = Vaz.Mine, m = n != 0 ? Vaz.ModelOf(Vaz.OwnerOf(n)) : -1;
+            if (n == saPayNumber && (m == saPayModel || m == VazCar.Current(saPayModel)))
+            {
+                if (money != null) money.Value -= saPay;   // (Wallet : une depense reste au joueur)
+                L("garage : " + saPayName + " louee " + saPay + " mk (couleur " + n + "), reste " + (money != null ? money.Value.ToString("F0") : "?") + " mk");
+                SaNote(Lang.T("Lou\u00E9e ! Elle t'attend devant le garage", "Rented! It is waiting for you in front of the garage"), false);
+                saPay = 0f;
+                return;
+            }
+            if (Time.realtimeSinceStartup - saPayAt > 12f)
+            {
+                L("garage : " + saPayName + " refusee, rien de paye");
+                saPay = 0f;
+                string msg = Lang.T("Location refus\u00E9e : rien n'est pay\u00E9", "Rental refused: nothing was charged");
+                SaNote(msg, true); Hud.Toast(msg);
+            }
         }
 
         static float SP(float v) { return Style.Px(v); }

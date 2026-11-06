@@ -18,9 +18,10 @@ namespace MWCoop
             get { if (pick < 0) pick = Config.GetInt("Coop", "VoitureModele", 0); return VazCar.Has(pick) && !Rental(pick) ? pick : VazCar.Base; }
             set { pick = value; Config.Save("Coop", "VoitureModele", value.ToString()); }
         }
-        // Voitures de location (JD 06/11 : « retirer la possibilite d'invoquer les voitures par F10 ») : le garage RALLI-VUOKRAAMO est dans la partie, elles se prennent chez lui.
-        // Sans garage (l'hote a coupe le Cardinal ou le village), le F10 reste leur seul chemin.
-        static bool Rental(int m) { return Kauppa.VuokraBuilt && VazCar.ModelOf(m).Group != "MWCoop"; }
+        // Voitures de location (JD 06/11 : « retirer la possibilite d'invoquer les voitures par F10 ») : elles se prennent au garage RALLI-VUOKRAAMO, jamais ici.
+        // Sans garage (l'hote a coupe le Cardinal ou le village), pas de voiture de location du tout (JD 06/11 : « soit ils veulent jouer vanilla, soit avec nos ajouts ») : le panneau le dit.
+        static bool Rental(int m) { return VazCar.ModelOf(m).Group != "MWCoop"; }
+        static bool AnyRental { get { for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.InF10(i) && Rental(i)) return true; return false; } }
         static bool MineRental { get { int n = Vaz.Mine; return n != 0 && Rental(Vaz.ModelOf(Vaz.OwnerOf(n))); } }
         static int pvModel = -1; static string pvLivery = "";
         // filtre des modeles par categorie (Gr. A, Gr. B... -- JD, 23/10) : "" = tous ([Coop] VoitureFiltre)
@@ -67,7 +68,7 @@ namespace MWCoop
             get
             {
                 if (note != null && Time.realtimeSinceStartup < noteUntil) return note;
-                if (Vaz.EvoAvailable && !Kauppa.VuokraBuilt)
+                if (false)
                     return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  M : mod\u00E8le  \u00B7  glisser l'aper\u00E7u : tourner",
                                   "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  M: model  \u00B7  drag the preview: turn");
                 return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  glisser l'aper\u00E7u : tourner",
@@ -233,9 +234,9 @@ namespace MWCoop
             float cardW = P(236), gap = P(16);
             var left = new Rect(v.x, v.y, v.width - cardW - gap, v.height);
             var card = new Rect(left.xMax + gap, v.y, cardW, v.height);
-            if (Kauppa.VuokraBuilt)
+            if (Vaz.Enabled && AnyRental)
             {
-                float gh = P(140);
+                float gh = Kauppa.VuokraOn ? P(140) : P(84);
                 DrawGarage(new Rect(left.x, left.yMax - gh, left.width, gh), e);
                 left.height -= gh + P(10);
             }
@@ -310,6 +311,12 @@ namespace MWCoop
             if (e.type != EventType.Repaint) return;
             Style.Round(r, P(10), Kit.A(Color.white, 0.04f));
             Style.Ring(r, P(10), Kit.Edge);
+            if (!Kauppa.VuokraOn)
+            {
+                Style.Title(new Rect(r.x + P(12), r.y + P(6), r.width - P(24), P(22)), "RALLI-VUOKRAAMO", Kit.Ink, TextAnchor.MiddleLeft, 15);
+                Style.Text(new Rect(r.x + P(12), r.y + P(30), r.width - P(24), P(50)), Lang.T("Pas de garage dans cette partie : l'h\u00F4te a coup\u00E9 le Cardinal ou le village. Pas de voitures de rallye.", "No garage in this game: the host turned off the Cardinal or the village, so no rally cars."), 12, TextAnchor.UpperLeft, Kit.Amber, false, true);
+                return;
+            }
             float ih = r.height - P(12), iw = P(186);
             var ir = new Rect(r.x + P(6), r.y + P(6), iw, ih);
             Texture2D img = Kauppa.VuokraPicture;
@@ -397,7 +404,12 @@ namespace MWCoop
             Kit.Pill(r.x, cy + P(9), st, mine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber);
             cy += P(26);
             var br = new Rect(r.x, cy, r.width, P(34));
-            if (mine && MineRental) { if (Kit.Button(br, Lang.T("Rendre", "Give back"), 0, false)) Act(hi); }
+            if (mine && MineRental)
+            {
+                if (Kit.Button(br, Lang.T("Remettre sur ses roues", "Put back on its wheels"), 1, false, Vaz.NearMine) && Vaz.Upright()) Note(Lang.T("Voiture remise sur ses roues", "Car put back on its wheels"), false);
+                cy += P(40);
+                if (Kit.Button(new Rect(r.x, cy, r.width, P(34)), Lang.T("Rendre", "Give back"), 0, false)) Act(hi);
+            }
             else if (mine)
             {
                 float hw = (r.width - P(8)) / 2;
@@ -407,7 +419,7 @@ namespace MWCoop
             else if (owner == null) { if (Kit.Button(br, Lang.T("Prendre la n\u00B0 ", "Take no. ") + hi, 1, false, Vaz.Enabled && Vaz.Mine == 0 && pending == 0)) Act(hi); }
             else Kit.Button(br, Lang.T("D\u00E9j\u00E0 prise", "Already taken"), 0, false, false);
             cy += P(40);
-            string line = note != null && Time.realtimeSinceStartup < noteUntil ? note : Vaz.Mine != 0 && !mine && owner == null ? Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + Vaz.Mine + Lang.T("", " first") : null;
+            string line = note != null && Time.realtimeSinceStartup < noteUntil ? note : mine && MineRental && !Vaz.NearMine ? Lang.T("Approche-toi de ta voiture", "Move closer to your car") : Vaz.Mine != 0 && !mine && owner == null ? Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + Vaz.Mine + Lang.T("", " first") : null;
             if (line != null) Style.Text(new Rect(r.x, cy, r.width, P(32)), line, 12, TextAnchor.UpperLeft, note != null && noteBad ? Kit.Amber : note != null ? Kit.Green : Kit.Muted, false, true);
             cy += P(34);
             if (cy + P(16) > r.yMax) return;

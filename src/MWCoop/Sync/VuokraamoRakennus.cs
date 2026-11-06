@@ -34,8 +34,6 @@ namespace MWCoop
         const float VaLiftX = 7.73f, VaLiftZ = 10.13f;
 
         public static bool VuokraOn { get { return Ajouts.Osat && Ville.On && Vaz.Enabled && Config.GetInt("Vuokraamo", "Active", 1) != 0 && Config.GetInt("Test", "VuokraCoupe", 0) == 0; } }
-        // (F10 : le garage est la dans cette partie, les voitures de location se prennent chez lui)
-        public static bool VuokraBuilt { get { return vuokra != null; } }
         static Texture2D vaPicture;
         public static Texture2D VuokraPicture
         {
@@ -1145,7 +1143,9 @@ namespace MWCoop
         static int vaRent; static float vaRentAt;
         static void VaRentTest(float now)
         {
-            if (vaRent < 0 || Config.GetInt("Test", "VuokraLoue", 0) == 0 || stands.Count == 0 || money == null) return;
+            int mode = Config.GetInt("Test", "VuokraLoue", 0);
+            if (vaRent < 0 || mode == 0 || stands.Count == 0 || money == null) return;
+            if (mode == 2) { if (Vaz.TestFlipOthers() > 0) { vaRent = -1; L("essai location : voiture de l'invite retournee par l'hote"); } return; }
             if (vaRent == 0 && Time.timeSinceLevelLoad > 60f)
             {
                 vaRent = 1; vaRentAt = now;
@@ -1156,10 +1156,24 @@ namespace MWCoop
                 L("essai location : " + stands[0].Name + " demandee, argent " + money.Value + " ; note « " + saNote + " »");
                 VuokraOpen = false;
             }
-            if (vaRent == 1 && now - vaRentAt > 10f)
+            Transform car = Vaz.Mine != 0 ? Vaz.CarOf(Vaz.OwnerOf(Vaz.Mine)) : null;
+            if (vaRent == 1 && now - vaRentAt > 14f)
+            {
+                L("essai location : apres 14 s, ma voiture n " + Vaz.Mine + ", argent " + money.Value + " ; note « " + saNote + " »");
+                if (car == null) { vaRent = -1; L("essai location : fini"); return; }
+                L("essai location : retournee ? haut y " + car.up.y.ToString("F2") + " en " + car.position.ToString("F1"));
+                Autotest.PutPlayer(car.position + Vector3.right * 4f + Vector3.up);
+                vaRent = 2; vaRentAt = now;
+            }
+            if (vaRent == 2 && now - vaRentAt > 3f)
+            {
+                L("essai location : tout pres " + Vaz.NearMine + ", remettre -> " + Vaz.Upright());
+                vaRent = 3; vaRentAt = now;
+            }
+            if (vaRent == 3 && now - vaRentAt > 6f)
             {
                 vaRent = -1;
-                L("essai location : apres 10 s, ma voiture n " + Vaz.Mine + ", modele " + (Vaz.Mine != 0 ? VazCar.ModelOf(Vaz.ModelOf(Vaz.OwnerOf(Vaz.Mine))).Name : "-") + " ; fini");
+                L("essai location : apres, haut y " + (car != null ? car.up.y.ToString("F2") + " en " + car.position.ToString("F1") : "?") + " ; fini");
             }
         }
 
@@ -1240,6 +1254,7 @@ namespace MWCoop
             MoveLamp(now);
             VuokraKeys();
             // (JD 06/11 : la croix fermait et rouvrait le menu. Elle reagit a l'evenement de l'interface, et Input voit le meme clic ensuite, alors que le joueur vise encore le loueur)
+            VuokraPayStep();
             if (vaWasOpen && !VuokraOpen) vaShutAt = now;
             vaWasOpen = VuokraOpen;
             if (Config.Testing) { VaObjets(); VaRentTest(now); VuokraClickTest(now); VuokraTest(now); }

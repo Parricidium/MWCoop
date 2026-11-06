@@ -161,11 +161,11 @@ namespace MWCoop
 
         // La voiture (4,3 x 1,7 m environ, cap dir) tient-elle ici : sol trouve, pas de toit, rien de fixe dans trois spheres de
         // 0,85 m le long de la caisse (hors le sol lui-meme, declencheurs, objets legers, le joueur et ma voiture -- « Faire venir ») ?
-        static bool FreeSpot(Vector3 at, float feetY, Vector3 dir, out Vector3 pos)
+        static bool FreeSpot(Vector3 at, float feetY, Vector3 dir, out Vector3 pos, bool sky = true)
         {
             Transform mine = CarOf(Me);
             Collider ground = Ground(at, feetY, out pos);
-            if (ground == null || Roofed(pos)) return false;
+            if (ground == null || (sky && Roofed(pos))) return false;
             foreach (float d in new[] { -1.4f, 0f, 1.4f })
                 foreach (Collider c in Physics.OverlapSphere(pos + dir * d + Vector3.up * 0.25f, 0.85f))
                 {
@@ -265,6 +265,48 @@ namespace MWCoop
             Vector3 pos; float yaw; if (!SpotNearMe(out pos, out yaw)) { WetToast(); return; }
             if (Host) Move(Me, pos, yaw);
             else Session.SendToHost(new NetWriter(Msg.Race).U8(V_CALL).Vec(pos).F32(yaw), true);
+        }
+
+        // Remettre la sienne sur ses roues (voiture louee, JD 06/11 : « elle reste au meme endroit, mais elle est remise sur ces 4 roues ») :
+        // joueur tout pres, meme place, meme cap, et seulement si elle y tient sans toucher un mur (le toit ne compte pas : elle peut etre dans le garage). Vaut pour tous : l'hote la bouge, la synchro suit.
+        public const float UprightRange = 15f;
+        public static bool NearMine
+        {
+            get
+            {
+                Transform t = CarOf(Me); GameObject pl = Game.PlayerGo;
+                return t != null && pl != null && (t.position - pl.transform.position).sqrMagnitude <= UprightRange * UprightRange;
+            }
+        }
+        public static bool Upright()
+        {
+            Transform t = CarOf(Me);
+            if (t == null) return false;
+            if (!NearMine) { Hud.Toast(Lang.T("Approche-toi de ta voiture", "Move closer to your car")); return false; }
+            Vector3 f = t.forward; f.y = 0f;
+            if (f.sqrMagnitude < 0.04f) { f = t.up; f.y = 0f; }   // (sur le nez ou sur le coffre)
+            if (f.sqrMagnitude < 0.0001f) f = Vector3.forward;
+            f.Normalize();
+            Vector3 pos;
+            if (!FreeSpot(t.position, t.position.y, f, out pos, false)) { Hud.Toast(Lang.T("Pas assez de place ici pour la retourner", "Not enough room here to turn it over")); return false; }
+            float yaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+            Log.Info("vaz : remise sur ses roues en " + pos.ToString("F1"));
+            if (Host) Move(Me, pos, yaw);
+            else Session.SendToHost(new NetWriter(Msg.Race).U8(V_CALL).Vec(pos).F32(yaw), true);
+            return true;
+        }
+        // ([Test] VuokraLoue=2) l'hote retourne les voitures des autres
+        public static int TestFlipOthers()
+        {
+            int n = 0;
+            foreach (KeyValuePair<int, Rent> kv in rents)
+            {
+                if (kv.Key == Me || kv.Value.Car == null || kv.Value.Car.Car == null) continue;
+                Transform t = kv.Value.Car.Car.transform;
+                t.position += Vector3.up * 0.6f; t.rotation = Quaternion.Euler(0f, t.eulerAngles.y, 175f);
+                n++;
+            }
+            return n;
         }
 
         // Trappe de toit de la VAZ n (clic d'un joueur) : l'hote applique et diffuse ; un invite le demande a l'hote.
@@ -420,6 +462,7 @@ namespace MWCoop
                 if (VazCar.ModelOf(model).QuestOnly) { model = VazCar.Base; liv = ""; }   // (voiture de quete : jamais au F10)
                 if (n == 0) { if (wanted.Remove(from.Id)) { HostChanged("rendue par " + NameOf(from.Id)); } return; }
                 int why = !Enabled ? 4 : n < 1 || n > Count ? 3 : wanted.ContainsKey(from.Id) ? 2 : !IsFree(n) ? 1 : 0;
+                if (Config.Testing && Config.GetInt("Test", "VazRefus", 0) != 0) why = 1;   // (refus de l'hote : l'invite ne paye rien)
                 if (why != 0)
                 {
                     if (Session.T != null) Session.T.SendReliable(from, new NetWriter(Msg.Race).U8(V_DENY).U8(n).U8(why).ToArray());
