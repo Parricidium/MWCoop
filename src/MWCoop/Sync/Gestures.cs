@@ -55,6 +55,7 @@ namespace MWCoop
         static bool fingerWas, fistWas, found, fingerWas0, fistWas0;
         static int bits;
         static float drunk, leanSide, leanFwd, heldSize, seatYaw, windowHintAt;
+        public static float TestLeanSide { get { return leanSide; } }
         static Vector3 heldOff, seatPos;
         static PlayMakerFSM seatTrigger;
         static float seatCheckAt;
@@ -240,6 +241,8 @@ namespace MWCoop
                     }
                 }
             }
+            // (passager : son penche est le montage de Seats, au-dessus du joueur : la camera ne bouge pas par rapport a lui)
+            if (Seats.LeanRigged && VehicleSync.LocalDriving < 0 && (b & G_Down) == 0) { float seatLean = Seats.LeanDegrees; if (Mathf.Abs(seatLean) >= 2f) leanSide = seatLean; }
             // Objet tenu : centre de ses rendus dans le repere de la camera, plus grande largeur.
             GameObject held = Props.Holding && hand != null ? hand.FsmVariables.GetFsmGameObject("PickedObject").Value : null;
             if (held != null)

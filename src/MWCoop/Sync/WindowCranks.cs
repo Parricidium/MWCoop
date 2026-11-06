@@ -166,7 +166,7 @@ namespace MWCoop
         class Follow { public Transform Src, Dst; public Quaternion SrcRest, DstRest; }
         static readonly System.Collections.Generic.List<Follow> followers = new System.Collections.Generic.List<Follow>();
 
-        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); followers.Clear(); wins.Clear(); nextWinScan = 0f; VitreFiles.OnLevelLoaded(); vitreGen = -1; }
+        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); followers.Clear(); wins.Clear(); satsumaWins.Clear(); nextWinScan = 0f; VitreFiles.OnLevelLoaded(); vitreGen = -1; }
 
         static string PathIn(Transform car, Transform t) { return Recon.Path(t).Substring(Recon.Path(car).Length).TrimStart('/'); }
         // Fichiers de vitres changes (outil des places, meme en partie) : vitres deja animees reliees a leur reglage, les nouvelles
@@ -419,6 +419,8 @@ namespace MWCoop
         // variable Windows) vise une vitre, et le temoin de la vitre passager (Drive la pose en miroir).
         class Win { public string Key; public PlayMakerFSM Knob; public Transform Glass; public float AimAt = -9f, LastSend, RemoteAt = -9f, ReachAt = -9f; public Vector3 SentPos; public Quaternion SentRot, SentKnob; public bool Moving; }
         static readonly List<Win> wins = new List<Win>();
+        // (My Summer Car, SATSUMA : portieres en pieces detachees, vitre « coll » : hors de wins, seulement pour WindowOpenNear)
+        static readonly List<Win> satsumaWins = new List<Win>();
         static float nextWinScan, nextWinFull;
         public const string WinPrefix = "vitre:";
 
@@ -430,6 +432,13 @@ namespace MWCoop
                 FsmGameObject w = f.FsmVariables.FindFsmGameObject("Windows");
                 if (w == null || w.Value == null) continue;
                 string gn = w.Value.name;
+                if (Game.Msc && gn == "coll" && f.transform.parent != null && f.transform.parent.name.StartsWith("door "))
+                {
+                    bool had = false;
+                    foreach (Win x in satsumaWins) if (x.Knob == f) { had = true; break; }
+                    if (!had) satsumaWins.Add(new Win { Key = WinPrefix + Recon.Path(f.transform), Knob = f, Glass = w.Value.transform });
+                    continue;
+                }
                 if (gn != "vitre MWCoop" && gn.IndexOf("lass") < 0) continue;   // (pas les molettes du chauffage : Windows = CarTemp...)
                 if (VehicleSync.CarRoot(f.transform) == null) continue;
                 bool known = false;
@@ -445,16 +454,28 @@ namespace MWCoop
         // repos de plus de 8 cm.
         public static bool WindowOpenNear(Transform car, Vector3 seatLocal)
         {
-            if (car == null) return true;
+            bool open;
+            return !WindowNear(car, seatLocal, out open) || open;
+        }
+
+        // Vitre la plus proche de cette place, de son cote : false si aucune n'est connue a moins de 1,2 m (voiture sans manivelle, portiere absente) ; open : baissee.
+        public static bool WindowNear(Transform car, Vector3 seatLocal, out bool open)
+        {
+            open = false;
+            if (car == null) return false;
+            bool satsuma = Game.Msc && car.name.StartsWith("SATSUMA");   // (comme l'automate Strafe de la SATSUMA : vitre descendue de plus de 0,23)
             Win best = null; float bd = 1.2f;
-            foreach (Win w in wins)
+            foreach (Win w in satsuma ? satsumaWins : wins)
             {
                 if (w.Knob == null || w.Glass == null || !w.Knob.transform.IsChildOf(car)) continue;
                 Vector3 k = car.InverseTransformPoint(w.Knob.transform.position);
+                if (Mathf.Abs(seatLocal.x) > 0.15f && (k.x > 0f) != (seatLocal.x > 0f)) continue;   // (la manivelle de l'autre portiere, sur une voiture etroite)
                 float d = new Vector2(k.x - seatLocal.x, k.z - seatLocal.z).magnitude;
                 if (d < bd) { bd = d; best = w; }
             }
-            return best == null || best.Glass.localPosition.magnitude > 0.08f;
+            if (best == null) return false;
+            open = best.Glass.localPosition.magnitude > (satsuma ? 0.23f : 0.08f);
+            return true;
         }
 
         static void TickWins()

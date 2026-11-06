@@ -1501,6 +1501,32 @@ namespace MWCoop
             return car.InverseTransformPoint(pv.position).x;
         }
 
+        // Passager d'une voiture autonome, vers sa portiere : comme le conducteur (Lean), portiere ouverte de plus de 20 degres, ou vitre baissee ; places arriere : vitre fixe, jamais.
+        // false : pas une voiture autonome.
+        public static bool SeatSide(Transform car, Vector3 seat, out bool open)
+        {
+            open = false;
+            VazCar.Built b = car != null ? Find(car.gameObject) : null;
+            State st;
+            if (b == null || !states.TryGetValue(b, out st)) return false;
+            float doorSide = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
+            int i = Mathf.Sign(seat.x) == doorSide ? 0 : 1;
+            bool front = Mathf.Abs(seat.z - b.M.Head.z) < 0.45f;
+            open = front && (st.DoorAngle[i] > 20f || (st.Glass[i] != null && st.WinPos[i] > 0.2f));
+            return true;
+        }
+        public static string TestOpenSeat(Transform car, Vector3 seat)
+        {
+            VazCar.Built b = Find(car.gameObject);
+            State st;
+            if (b == null || !states.TryGetValue(b, out st)) return null;
+            float doorSide = Mathf.Abs(b.M.Head.x) > 0.01f ? Mathf.Sign(b.M.Head.x) : -1f;
+            int i = Mathf.Sign(seat.x) == doorSide ? 0 : 1;
+            if (st.Doors[i] == null) return "pas de portiere " + i;
+            if (!st.DoorOpen[i]) ToggleDoor(b, st, i);
+            return "portiere " + i + " ouverte";
+        }
+
         // 0 droit, 1 penche vers la portiere, 2 vers l'interieur ; touche ReachLeft / ReachRight tenue (gauche = cote conducteur ici)
         static int leanForce = -1;   // (essai : penche impose, les touches ne se simulent pas)
         static void Lean(VazCar.Built b, State st)
@@ -1545,6 +1571,7 @@ namespace MWCoop
         static void CabinPresence(VazCar.Built b, State st, Transform pl)
         {
             if (!st.HasCabin) return;
+            if (Seats.Seated && Config.GetInt("Test", "CabinePassager", 1) != 0) return;   // (passager assis : la camera basse est tenue par Seats ; penche vers sa portiere, le joueur depassait l'habitacle et la camera remontait de 0,8 m)
             Vector3 lp = b.Car.transform.InverseTransformPoint(pl.position);
             Bounds c = st.Cabin, d = st.DriverDoor;
             bool inside = Mathf.Abs(lp.x) < c.max.x + 0.05f && lp.z > c.min.z && lp.z < c.max.z && lp.y > -0.8f && lp.y < 1.8f;

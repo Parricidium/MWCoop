@@ -74,7 +74,7 @@ namespace MWCoop
         bool crouching;
         // Gestes (Gestures) : a terre (evanoui, assomme), penche et ivresse affiches, poids des bras vers leur cible,
         // assis sur un siege du jeu (bassin mesure dans la pose assise, repere avatar), jet.
-        float lieW, sideS, fwdS, swayT;
+        float lieW, sideS, fwdS, swayT, penLog; int penCapt; Transform penCar;
         readonly float[] wR = new float[5], wL = new float[4];
         Vector3 sitPelvis, chairSeatAt;
         float sitFeet = 9f;   // chevilles dans la pose assise (repere avatar) ; 9 : pas mesurees
@@ -841,14 +841,9 @@ namespace MWCoop
                     // Se pencher (demande de JD, 10/10) : la touche de penche du jeu (camera tournee), mesuree chez lui
                     // (Gestures) ; buste et tete comme a pied.
                     Gestures.Remote pg = Gestures.Of(Player.Id);
-                    sideS = Mathf.MoveTowards(sideS, pg != null ? Mathf.Clamp(pg.LeanSide, -30f, 30f) : 0f, Time.deltaTime * 90f);
+                    // (applique plus bas avec celui du conducteur, apres les yeux au repos : pris dans ces yeux, tout le corps glissait a l'oppose et la tete restait sur place -- JD, 06/11)
+                    sideS = Mathf.MoveTowards(sideS, pg != null ? Mathf.Clamp(pg.LeanSide, -40f, 40f) : 0f, Time.deltaTime * 90f);
                     fwdS = Mathf.MoveTowards(fwdS, pg != null ? Mathf.Clamp(pg.LeanFwd, -30f, 40f) : 0f, Time.deltaTime * 90f);
-                    if (Mathf.Abs(sideS) > 0.05f || Mathf.Abs(fwdS) > 0.05f)
-                        foreach (string sp in new[] { "spine_middle", "spine_upper" })
-                        {
-                            Transform b = Bone(sp);
-                            if (b != null) b.rotation = Quaternion.AngleAxis(-sideS * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdS * 0.5f, Root.transform.right) * b.rotation;
-                        }
                 }
                 if (!moto && sf == null) SeatFit(passenger);
                 // Passager : mains posees sur les genoux (JD, 21/10 : « plutot que pendantes »), une fois les jambes placees.
@@ -912,11 +907,30 @@ namespace MWCoop
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite). Avant les
                 // mains : elles se posent ensuite sur le volant depuis le buste penche.
                 float side = Mathf.Atan2(leanOff.x, 0.55f) * Mathf.Rad2Deg, fwdLean = Mathf.Atan2(leanOff.z, 0.55f) * Mathf.Rad2Deg;
+                if (passenger && !moto) { side += sideS; fwdLean += fwdS; }
                 foreach (string sp in new[] { "spine_middle", "spine_upper" })
                 {
                     Transform b = Bone(sp);
                     if (b == null) continue;
                     b.rotation = Quaternion.AngleAxis(-side * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdLean * 0.5f, Root.transform.right) * b.rotation;
+                }
+                if (passenger && !moto && (Mathf.Abs(sideS) > 0.05f || Mathf.Abs(fwdS) > 0.05f) && Config.GetInt("Coop", "MainsGenoux", 1) != 0 && (sf == null || !sf.ArmRight && !sf.ArmLeft)) HandsOnKnees();   // (les mains restent sur les genoux)
+                if (Config.GetInt("Test", "PencheCapture", 0) != 0 && headBone != null)
+                {
+                    if (penCar != vehicleT && vehicleT != null)
+                    {
+                        penCar = vehicleT;
+                        string penL = "";
+                        foreach (Renderer rr in vehicleT.GetComponentsInChildren<Renderer>(true))
+                        {
+                            string rn = rr.name.ToLowerInvariant();
+                            if (rn.Contains("frost") || rn.Contains("frozen") || rn.Contains("windshield") || rn.Contains("glass") || rn.Contains("window")) { rr.enabled = false; penL += " " + rr.name; }
+                        }
+                        Log.Info("autotest : penche vu, vitres retirees :" + penL);
+                    }
+                    int sg = side > 10f ? 1 : side < -10f ? -1 : 0;
+                    if (sg != penCapt) { penCapt = sg; Autotest.CaptureSoon("penche-vu" + (sg < 0 ? "G" : sg > 0 ? "D" : "0"), 1f); }
+                    if (Time.realtimeSinceStartup >= penLog) { penLog = Time.realtimeSinceStartup + 1f; Log.Info("autotest : penche vu, " + (passenger ? "passager" : "conducteur") + " buste " + side.ToString("F1") + " deg, tete a " + Root.transform.InverseTransformPoint(headBone.position).x.ToString("F3") + " m de cote, bassin " + (Bone("pelvis") != null ? Root.transform.InverseTransformPoint(Bone("pelvis").position).x.ToString("F3") : "?") + " m"); }
                 }
                 if (!passenger && !moto) DriverHands();
                 if (!moto) SeatLog();

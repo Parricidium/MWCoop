@@ -75,6 +75,7 @@ namespace MWCoop
         {
             zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
+            leanHead = null; leanAnim = null; leanState = 0;
             SeatFiles.OnLevelLoaded();
             belts.Clear(); rearModels.Clear(); partFitted.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false; blockedHandle = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
@@ -355,7 +356,7 @@ namespace MWCoop
                     Leave(); return;
                 }
                 // Tete : la ou la camera s'est posee (le jeu l'abaisse en 0,4 s), puis renvoyee de temps en temps.
-                if (now >= nextResend && now - satAt > 0.7f)
+                if (now >= nextResend && now - satAt > 0.7f && leanState == 0 && !(leanAnim != null && leanAnim.isPlaying))   // (pas penche : le corps entier glisserait chez les autres)
                 {
                     nextResend = now + 5f;
                     headLocal = current.CarT.InverseTransformPoint(cam.position);
@@ -516,22 +517,182 @@ namespace MWCoop
             else Log.Warn("passager : variable PlayerInCar introuvable (automate Crouch)");
         }
 
-        // Passager : la tete se deplace sur le cote comme celle du conducteur (Menos, 30/10 : EDM 500LX de My Summer Car ; toutes les voitures), touches ReachLeft / ReachRight
-        // tenues -- vers la portiere seulement si sa vitre est ouverte, des deux cotes a la place du milieu (Gestures redresse deja la camera vitre fermee). Les autres le voient :
-        // la tete de l'avatar suit la camera. [Test] PassagerPenche=-1|1 : penche impose ; [Test] PassagerTete=0 : comme avant.
-        const float LeanMax = 0.2f;
-        static float leanNow, leanSpeed, leanLog;
+        // Passager : se pencher comme le conducteur (Menos, 30/10 : EDM 500LX de My Summer Car ; toutes les voitures -- JD 06/11 : un simple decalage faisait « comme un slide », et le corps ne bougeait pas).
+        // Comme au volant (automate Strafe, DriverHeadPivot/CameraPivot/Pivot) : le montage du jeu recopie sous la voiture, ses animations car_strafe_left1/2 et right1/2 reprises de cette voiture, sinon
+        // d'une autre voiture du jeu, la place accrochee sous son Pivot : la camera penche et se deplace comme celle du conducteur. Touches ReachLeft / ReachRight tenues ; vers la portiere seulement
+        // vitre baissee ou portiere ouverte (LeanSideOpen ; [Coop] PencheVitre=0 : toujours), des deux cotes a la place du milieu. Les autres le voient : LeanDegrees part avec les gestes (Gestures.LeanSide), l'avatar penche le buste comme
+        // celui du conducteur. Pas sur les places couchees ou debout, ni moto, ni barque. [Test] PassagerPenche=-1|1 : penche impose ; 2 : gauche, droit, droite, droit, 4 s chacun ; [Test] PassagerTete=0 : aucun.
+        static readonly string[] LeanClips = { "car_strafe_left1", "car_strafe_left2", "car_strafe_right1", "car_strafe_right2" };
+        static Transform leanHead; static Animation leanAnim; static int leanState, leanPhase = -1; static float leanRestX, leanLog, leanCycle; static Vector3 leanCamRest, leanEye; static bool leanRestSet, leanFlip, leanSideOpen, leanSideLog, leanDoorTried; static float leanSideAt, leanHintAt;
+        public static bool LeanRigged { get { return leanAnim != null && current != null; } }
+        // Penche envoye aux autres, degres (droite +) : comme le buste du conducteur chez eux (Avatar : Atan2(ecart, 0,55)).
+        public static float LeanDegrees { get { return LeanRigged && pivot != null && current.CarT != null ? Mathf.Atan2(current.CarT.InverseTransformPoint(pivot.TransformPoint(leanEye)).x - leanRestX, 0.55f) * Mathf.Rad2Deg : 0f; } }
+
+        static Transform LeanSource(Transform car)
+        {
+            foreach (Animation a in car.GetComponentsInChildren<Animation>(true))
+                if (a.GetClip(LeanClips[0]) != null && a.GetClip(LeanClips[1]) != null && a.GetClip(LeanClips[2]) != null && a.GetClip(LeanClips[3]) != null && a.transform.Find("Pivot") != null) return a.transform;
+            foreach (string p in new[] { "SATSUMA(557kg, 248)/DriverHeadPivot", "RCO_RUSCKO12(270)/LOD/DriverHeadPivot", "SORBET(190-200psi)/Functions/PlayerTrigger/DriverHeadPivot", "CORRIS/Functions/DriverHeadPivot" })
+            {
+                GameObject g = Game.FindAny(p);
+                if (g == null) continue;
+                Transform cp = g.transform.Find("CameraPivot/Pivot") != null ? g.transform.Find("CameraPivot") : g.transform.Find("CameraPivotPLR");
+                Animation an = cp != null ? cp.GetComponent<Animation>() : null;
+                if (an != null && an.GetClip(LeanClips[0]) != null && an.GetClip(LeanClips[1]) != null && an.GetClip(LeanClips[2]) != null && an.GetClip(LeanClips[3]) != null && cp.Find("Pivot") != null) return cp;
+            }
+            return null;
+        }
+
+        static void LeanBuild(Seat s)
+        {
+            leanHead = null; leanAnim = null; leanState = 0; leanCycle = 0f; leanPhase = -1; leanRestSet = false; leanSideAt = 0f; leanDoorTried = false; leanSideLog = false;
+            if (s.Bed || s.Stand || s.Car.StartsWith("JONNEZ") || s.Car.StartsWith("BOAT") || Config.GetInt("Test", "PassagerTete", 1) == 0) return;
+            Transform scp = LeanSource(s.CarT);
+            if (scp == null) { Log.Warn("passager : animations pour se pencher introuvables (" + s.Car + ")"); return; }
+            Transform spv = scp.Find("Pivot"), srcHead = scp.parent;
+            Transform refT = srcHead.IsChildOf(s.CarT) ? s.CarT : srcHead.root;
+            leanHead = new GameObject("MWCoop-PassagerTete").transform;
+            leanHead.parent = s.CarT;
+            leanHead.localPosition = Vector3.zero;
+            leanHead.localRotation = Quaternion.Inverse(refT.rotation) * srcHead.rotation;
+            Transform cp = new GameObject("MWCoop-PassagerPenche").transform;
+            cp.parent = leanHead;
+            cp.localPosition = scp.localPosition; cp.localRotation = scp.localRotation;
+            Transform pv = new GameObject("Pivot").transform;
+            pv.parent = cp;
+            pv.localPosition = spv.localPosition; pv.localRotation = spv.localRotation;
+            Animation sa = scp.GetComponent<Animation>();
+            Animation an = cp.gameObject.AddComponent<Animation>();
+            an.playAutomatically = false; an.cullingType = AnimationCullingType.AlwaysAnimate;   // (aucun rendu sous le pivot : sinon jamais animee)
+            foreach (string c in LeanClips) { an.AddClip(sa.GetClip(c), c); an[c].wrapMode = c.EndsWith("1") ? WrapMode.ClampForever : WrapMode.Once; }
+            leanAnim = an;
+            LeanPoseRest();   // (la fin du retour : le conducteur peut etre en train de se pencher sur la voiture relevee)
+            // Sens des clips, mesure sur le montage : pas le meme partout (Satsuma de My Summer Car : touches croisees dans son automate).
+            float restX = s.CarT.InverseTransformPoint(pv.position).x;
+            AnimationState ls = leanAnim[LeanClips[0]];
+            ls.enabled = true; ls.weight = 1f; ls.time = ls.length; leanAnim.Sample(); ls.enabled = false;
+            leanFlip = s.CarT.InverseTransformPoint(pv.position).x > restX;
+            LeanPoseRest();
+            // Yeux -> centre de rotation (CameraPivot) comme chez le conducteur, repere de sa voiture : la tete fait le meme chemin (le joueur assis n'a pas la meme hauteur sous sa camera que celui au volant).
+            Vector3 srcEye;
+            if (!DriverHead(refT, out srcEye)) srcEye = refT.InverseTransformPoint(srcHead.position) + EyeFromPivot;
+            Vector3 eyeToCp = srcEye - refT.InverseTransformPoint(srcHead.position) - leanHead.localRotation * cp.localPosition;
+            Vector3 camHere = s.CarT.InverseTransformPoint(cam.position);
+            Vector3 eye = new Vector3(camHere.x, s.Head.y, camHere.z);   // (de cote et en long : ou il s'est assis ; en hauteur : la place, le jeu abaisse la camera ensuite)
+            leanHead.position += s.CarT.TransformPoint(eye - eyeToCp) - cp.position;
+            pivot.parent = pv;                                    // (garde sa pose dans le monde)
+            leanEye = pivot.InverseTransformPoint(s.CarT.TransformPoint(eye));
+            leanRestX = eye.x;
+            Log.Info("passager : se pencher, animations de " + (srcHead.IsChildOf(s.CarT) ? s.Car : srcHead.root.name) + ", centre " + eyeToCp.ToString("F2") + " sous les yeux" + (leanFlip ? ", clips croises" : ""));
+        }
+
+        static void LeanPoseRest()
+        {
+            if (leanAnim == null) return;
+            leanAnim.Stop();
+            AnimationState rs = leanAnim[LeanClips[1]];
+            rs.enabled = true; rs.weight = 1f; rs.time = rs.length; leanAnim.Sample(); rs.enabled = false;
+            leanState = 0;
+        }
+
+        // Descendre, dormir : le montage retire, le joueur remis droit d'abord (penche, il descendait a travers la portiere).
+        static void LeanRemove()
+        {
+            if (leanAnim != null) LeanPoseRest();
+            if (leanHead != null) Object.Destroy(leanHead.gameObject);
+            leanHead = null; leanAnim = null; leanState = 0;
+        }
+
+        // Vers sa portiere : comme l'automate Strafe du conducteur (Check door, Check window), vitre baissee ou portiere ouverte ; ni vitre ni portiere connues de ce cote (portiere demontee) : libre.
+        // (une voiture sans manivelle repondait « ouverte » : la tete sortait a travers la vitre, photo de la VAZ-16)
+        static bool LeanSideOpen(float now)
+        {
+            if (now < leanSideAt) return leanSideOpen;
+            leanSideAt = now + 0.25f;
+            bool wOpen, dOpen;
+            bool w = WindowCranks.WindowNear(current.CarT, current.Head, out wOpen);
+            bool d = StandaloneCar.SeatSide(current.CarT, current.Head, out dOpen) || CarDoors.SeatSide(current.CarT, current.Head, out dOpen);
+            leanSideOpen = (!w && !d) || (w && wOpen) || (d && dOpen);
+            if (Config.GetInt("Test", "PassagerPenche", 0) != 0 && leanSideOpen != leanSideLog) { leanSideLog = leanSideOpen; Log.Info("autotest : passager, cote portiere " + (leanSideOpen ? "ouvert" : "ferme") + " (vitre " + (w ? (wOpen ? "baissee" : "fermee") : "inconnue") + ", portiere " + (d ? (dOpen ? "ouverte" : "fermee") : "inconnue") + ")"); }
+            return leanSideOpen;
+        }
+
         static void PassengerLean()
         {
-            if (current.Bed || current.Stand || pivot == null || player.parent != pivot || Config.GetInt("Test", "PassagerTete", 1) == 0) return;
-            int forced = Config.GetInt("Test", "PassagerPenche", 0);
-            int want = forced != 0 ? forced : StandaloneCar.Held("ReachRight") ? 1 : StandaloneCar.Held("ReachLeft") ? -1 : 0;
+            if (leanAnim == null) return;
+            float now = Time.realtimeSinceStartup;
+            int forced = Config.GetInt("Test", "PassagerPenche", 0), want;
+            if (forced != 0 && now - satAt < 3f) want = 0;   // (essais : 3 s droit d'abord, le temps de mesurer le repos une fois pour toutes)
+            else if (forced == 2)
+            {
+                if (leanCycle == 0f) leanCycle = now;
+                int ph = (int)((now - leanCycle) / 4f) % 4;
+                want = ph == 0 ? -1 : ph == 2 ? 1 : 0;
+                if (ph != leanPhase) { leanPhase = ph; Autotest.CaptureSoon("penche-passager" + ph, 2f); }
+            }
+            else want = forced != 0 ? forced : StandaloneCar.Held("ReachRight") ? 1 : StandaloneCar.Held("ReachLeft") ? -1 : 0;
             float sx = current.Head.x;
-            if (want != 0 && Mathf.Abs(sx) > 0.15f && (want > 0) == (sx > 0f) && !WindowCranks.WindowOpenNear(current.CarT, current.Head)) want = 0;
-            leanNow = Mathf.SmoothDamp(leanNow, want * LeanMax, ref leanSpeed, 0.12f);
-            if (Mathf.Abs(leanNow) < 0.002f && want == 0) { leanNow = 0f; leanSpeed = 0f; }
-            player.localPosition = Quaternion.Inverse(pivot.localRotation) * new Vector3(leanNow, 0f, 0f);
-            if (forced != 0 && Time.realtimeSinceStartup >= leanLog) { leanLog = Time.realtimeSinceStartup + 5f; Log.Info("autotest : passager, penche " + leanNow.ToString("F3") + " (voulu " + want + ", place x " + sx.ToString("F2") + ")"); }
+            if (want != 0 && Mathf.Abs(sx) > 0.15f && (want > 0) == (sx > 0f) && Config.GetInt("Coop", "PencheVitre", 1) != 0 && !LeanSideOpen(now))
+            {
+                if (forced == 0 && now >= leanHintAt) { leanHintAt = now + 6f; Hud.Toast(Lang.T("Vitre ferm\u00E9e", "Window closed")); }
+                want = 0;
+            }
+            if (!leanDoorTried && now - satAt > 1f && Config.GetInt("Test", "PassagerPorte", 0) != 0)
+            {
+                leanDoorTried = true;
+                Log.Info("autotest : passager, portiere : " + (StandaloneCar.TestOpenSeat(current.CarT, current.Head) ?? CarDoors.TestOpenSeat(current.CarT, current.Head)));
+            }
+            // (comme l'automate Strafe : au relachement, le retour joue jusqu'au bout avant tout autre penche)
+            if (want != leanState)
+            {
+                if (leanState != 0) { leanAnim.Play((leanState > 0) != leanFlip ? LeanClips[3] : LeanClips[1], PlayMode.StopAll); leanState = 0; }
+                else if (!leanAnim.isPlaying) { leanAnim.Play((want > 0) != leanFlip ? LeanClips[2] : LeanClips[0], PlayMode.StopAll); leanState = want; }
+            }
+            if (forced != 0)
+            {
+                if (!leanRestSet && now - satAt > 2.5f && leanState == 0 && !leanAnim.isPlaying) { leanRestSet = true; leanCamRest = current.CarT.InverseTransformPoint(cam.position); Log.Info("autotest : passager, repos camera " + leanCamRest.ToString("F3") + ", place " + current.Head.ToString("F3")); Autotest.CaptureSoon("penche-passager-repos", 0.1f); }
+                if (now >= leanLog)
+                {
+                    leanLog = now + 1f;
+                    Log.Info("autotest : passager, penche " + leanState + " (voulu " + want + ", place x " + sx.ToString("F2") + ") : camera " + (current.CarT.InverseTransformPoint(cam.position) - leanCamRest).ToString("F3") + " m, roulis " + Vector3.Angle(current.CarT.up, pivot.up).ToString("F1") + " deg, envoye " + LeanDegrees.ToString("F1") + " deg, Gestures " + Gestures.TestLeanSide.ToString("F1"));
+                }
+            }
+        }
+
+        // [Test] Autotest=penchevolant (hote, temoin du passager) : au volant de [Test] TestVoiture, les animations du jeu tenues (sans touche, l'automate Strafe repart aussitot) : gauche, retour, droite, retour, memes photos et memes mesures.
+        static int volStep, volK; static float volNext; static Vector3 volRest; static PlayMakerFSM volStrafe;
+        public static void TestVolant(string mode, float t)
+        {
+            if (mode != "penchevolant" || !Session.IsHost) return;
+            string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            float now = Time.realtimeSinceStartup;
+            if (t > 30f && volStep == 0) { volStep = 1; Log.Info("autotest : volant, " + VehicleSync.TestEnter(car, false)); }
+            if (t > 34f && volStep == 1) { volStep = 2; Log.Info("autotest : volant, " + VehicleSync.TestEnter(car, true)); }
+            if (t < 44f || volStep < 2 || !FindPlayer()) return;
+            if (volStrafe == null)
+            {
+                Rigidbody rb = VehicleSync.Body(car);
+                if (rb != null) foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Strafe") volStrafe = f;
+                if (volStrafe == null) { Log.Info("autotest : volant, pas d'automate Strafe"); volStep = 99; return; }
+                volRest = rb.transform.InverseTransformPoint(cam.position);
+            }
+            if (volStep > 90) return;
+            if (now >= volNext)
+            {
+                volNext = now + 4f;
+                int k = volK++ % 4;
+                Animation va = volStrafe.GetComponent<Animation>();
+                string[] st = { LeanClips[0], LeanClips[1], LeanClips[2], LeanClips[3] };
+                if (va != null) va.Play(st[k], PlayMode.StopAll);
+                Log.Info("autotest : volant, animation " + st[k]);
+                Autotest.CaptureSoon("penche-volant" + k, 2f);
+            }
+            if (now >= leanLog)
+            {
+                leanLog = now + 1f;
+                Transform car2 = VehicleSync.Body(car).transform;
+                Log.Info("autotest : volant, Strafe " + volStrafe.ActiveStateName + " : camera " + (car2.InverseTransformPoint(cam.position) - volRest).ToString("F3") + " m, roulis " + Vector3.Angle(car2.up, player.up).ToString("F1") + " deg, parent " + (player.parent != null ? player.parent.name : "-"));
+            }
         }
 
         static void Sit(Seat s)
@@ -548,9 +709,9 @@ namespace MWCoop
             if (controller != null) controller.enabled = false;
             Game.SetGlobalBool("PlayerStop", true);
             player.parent = pivot;
-            leanNow = 0f; leanSpeed = 0f;
             player.localPosition = Vector3.zero;
             player.localRotation = Quaternion.identity; // tourne vers l'avant de la voiture
+            LeanBuild(s);
             InCar(true);
             current = s;
             satAt = Time.realtimeSinceStartup;
@@ -569,10 +730,12 @@ namespace MWCoop
             BlockHandle(false);
             BeltHint(null);
             Drop(null);
+            if (leanAnim != null) LeanPoseRest();
             if (player != null && pivot != null && player.parent == pivot) player.parent = null;
             InCar(false);
             if (pivot != null) Object.Destroy(pivot.gameObject);
             pivot = null;
+            LeanRemove();
             Log.Info("passager : endormi dans " + car + ", place rendue (le jeu couche le joueur)");
             SendSeat("", -1, Vector3.zero);
         }
@@ -584,6 +747,7 @@ namespace MWCoop
             BlockHandle(false);
             BeltHint(null);
             Drop(null);
+            if (leanAnim != null) LeanPoseRest();
             if (player != null)
             {
                 player.parent = null;                   // sur place, dans l'habitacle
@@ -595,6 +759,7 @@ namespace MWCoop
             Game.SetGlobalBool("PlayerStop", false);
             if (pivot != null) Object.Destroy(pivot.gameObject);
             pivot = null;
+            LeanRemove();
             crouchCheckAt = Time.realtimeSinceStartup + 0.6f;
             Log.Info("passager : sorti");
             SendSeat("", -1, Vector3.zero);

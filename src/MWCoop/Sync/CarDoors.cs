@@ -118,6 +118,40 @@ namespace MWCoop
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
 
+        // Portiere la plus proche d'une place, de son cote : false si aucune n'est suivie a moins de 1,1 m en long (absente) ; open : ouverte, comme la lit l'automate Strafe du conducteur.
+        static Door SeatDoor(Transform car, Vector3 seat)
+        {
+            Door best = null; float bd = 1.1f;
+            foreach (Door d in byKey.Values)
+            {
+                if (!d.IsDoor || d.Fsm == null || !d.Fsm.transform.IsChildOf(car)) continue;
+                Transform t = d.Body != null ? d.Body.transform : d.Fsm.transform;
+                Bounds bb = new Bounds(t.position, Vector3.zero);
+                foreach (Renderer r in t.GetComponentsInChildren<Renderer>()) bb.Encapsulate(r.bounds);   // (le milieu de la portiere : sa charniere est a la hauteur de la place de devant, ou de derriere)
+                Vector3 k = car.InverseTransformPoint(bb.center);
+                if ((k.x > 0f) != (seat.x > 0f)) continue;
+                float dz = Mathf.Abs(k.z - seat.z);
+                if (dz < bd) { bd = dz; best = d; }
+            }
+            return best;
+        }
+        public static bool SeatSide(Transform car, Vector3 seat, out bool open)
+        {
+            open = false;
+            Door d = car != null ? SeatDoor(car, seat) : null;
+            if (d == null) return false;
+            open = d.State != DoorState.Closed;
+            return true;
+        }
+        public static string TestOpenSeat(Transform car, Vector3 seat)
+        {
+            Scan();
+            Door d = SeatDoor(car, seat);
+            if (d == null) return "aucune portiere pres de la place";
+            Game.SetState(d.Fsm, d.Open);
+            return d.Key + " -> " + d.Open;
+        }
+
         // Automate 'Use' que Scan prendrait (memes etats : portiere, capot, hayon), meme pas encore sous une voiture -- portiere
         // de la SATSUMA demontee au chargement, que WorldFsms doit laisser libre pour ce module (desync du 02/11, voir WorldFsms.Skip).
         public static bool DoorLike(PlayMakerFSM f)

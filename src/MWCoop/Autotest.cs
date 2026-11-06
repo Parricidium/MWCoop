@@ -1964,6 +1964,20 @@ namespace MWCoop
             if (d > 25f && serLog == 0) { serLog = 1; Log.Info("autotest : serrage " + Fluids.TestScrew(sc)); }
         }
 
+        // [Test] PassagerSortie=s : descendre a s secondes, penche ou pas (PassagerPenche), puis se rasseoir 6 s apres : a sa place, droit, jamais a travers la portiere.
+        static void PassagerSortieTest(string mode, float t)
+        {
+            float ps = Config.GetFloat("Test", "PassagerSortie", 0f);
+            if (mode != "passager" || ps <= 0f || step < 1) return;
+            string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            Rigidbody b = VehicleSync.Body(car);
+            Transform pl = Game.PlayerT;
+            if (b == null || pl == null) return;
+            if (t > ps && step == 1) { step = 2; Log.Info("autotest : passager, avant de descendre " + b.transform.InverseTransformPoint(pl.position).ToString("F3") + " ; " + Seats.TestLeave()); }
+            if (t > ps + 1f && step == 2) { step = 3; Log.Info("autotest : passager, descendu " + b.transform.InverseTransformPoint(pl.position).ToString("F3") + ", parent " + (pl.parent != null ? pl.parent.name : "aucun") + ", haut " + pl.up.ToString("F2")); }
+            if (t > ps + 6f && step == 3) { step = 4; Log.Info("autotest : passager, rassis : " + Seats.TestSit(car, Config.GetInt("Test", "TestPlace", 0))); }
+        }
+
         static void MscTest(string mode, float t)
         {
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
@@ -1996,7 +2010,9 @@ namespace MWCoop
             if (mode == "outils") { HandTools.Test(mode, t); return; }
             if (mode == "gifumain") { Knobs.Test(mode, t); return; }   // (accelerateur a main de la GIFU tire par l'invite, Markos 24/10)
             if (mode == "portebuches") { WoodCarriers.Test(mode, t); return; }   // (outils en main sur MSC : hache, Markos/Squier 24/10)   // (plateau a bois : comptes et prix chez l'invite, rejeu de la paie, 24/10)
+            if (mode == "penchevolant") { Seats.TestVolant(mode, t); return; }   // (temoin du passager, aussi sur My Summer Car)
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SATSUMA"), Config.GetInt("Test", "TestPlace", 0))); }
+            PassagerSortieTest(mode, t);
             if (mode == "passager") return;
             if (mode == "sondeplaces" && t > 30f && !done) { done = true; Log.Info("autotest : places" + Seats.ProbeSeats(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
             if (mode == "sondeplaces") return;
@@ -6458,11 +6474,13 @@ namespace MWCoop
             // [Test] Autotest=apimods : (avec MSCLoader et MWCoopTestMod) l'hote sauvegarde sur place a 20 s : son Mods.txt
             // (compteur du mod d'essai) partira avec la sauvegarde a la partie suivante.
             Sieges.Test(mode, t);
+            Seats.TestVolant(mode, t);
             if (mode == "litparents" && !Game.Msc) ParentsBed.Test(t);   // (My Summer Car : dans MscTest)
             Gestures.TestCasque(mode, t);
             MyOutfits.Test(mode, t);
             if (mode == "apimods" && Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : sauvegarde de l'hote"); Game.SaveInPlace(); }
-            if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
+            PassagerSortieTest(mode, t);
+            if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0 && Config.GetFloat("Test", "PassagerSortie", 0f) <= 0f) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "tableau" && t > 35f && !done)
             {
                 done = true;
