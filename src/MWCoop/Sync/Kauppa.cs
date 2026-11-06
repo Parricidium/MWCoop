@@ -51,6 +51,7 @@ namespace MWCoop
             ResetMuseo();
             ResetKino();
             ResetOsat();
+            ResetVuokra();
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             ResetAsiakas();
@@ -97,6 +98,8 @@ namespace MWCoop
                             // magasin de pieces CARDINAL VARAOSAT (JD, 23/10)
                             if (OsatOn) try { if (!ShopOn && !Ajouts.Museum && !KinoOn) Materials(); BuildOsat(); } catch (Exception e) { L("magasin de pieces : " + e); }
                             else L("magasin de pieces coupe (ajouts COOP : lanceur, ou choix de l'hote)");
+                // garage de location RALLI-VUOKRAAMO (JD, 06/11), a gauche du Cardinal
+                if (VuokraOn) try { BuildVuokra(); } catch (Exception e) { L("garage : " + e); }
                             break;
                     }
                     buildStage++;
@@ -114,6 +117,7 @@ namespace MWCoop
             TickMuseo();
             TickKino(now);
             TickOsat(now);
+            TickVuokra(now);
             if (root == null)
             {
                 // (cinema ou magasin de pieces sans boutique : leurs objets -- popcorn, bobines... -- et les sous-titres des vendeurs)
