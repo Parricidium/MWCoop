@@ -7424,6 +7424,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             float x = (pt.x - g_offX) / g_scale - kM, y = (pt.y - g_offY) / g_scale - kM;
             float step = -(short)HIWORD(wp) / 120.0f * 64;
             if (g_saveModal == SM_SOLOCOOP) { SoloCoopScroll(step > 0 ? 1 : -1); return 0; }
+            if (g_saveModal == SM_PICK || g_saveModal == SM_RESTART) { SavePickScroll(step > 0 ? 1 : -1); return 0; }
             if (g_tab == TAB_SKIN && SkinWheel(x, y, (short)HIWORD(wp))) return 0;   // (apercu du personnage : zoom)
             if (g_railScrollMax > 0 && g_railView.Contains(x, y)) { g_railScroll = min(max(g_railScroll + step * 0.6f, 0.0f), g_railScrollMax); return 0; }   // (barre de gauche, quand elle defile)
             if (SigZipPickWheel(step)) return 0;   // (signalnatif.inc : fenetre de choix des zips, par-dessus la page)
@@ -8754,6 +8755,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"sauvegardes-nouvelle") { g_tab = TAB_SAVES; SaveOpenNewGame(); }
         else if (st == L"sauvegardes-choix") { g_tab = TAB_SAVES; SaveOpenPick(); }
+        else if (st == L"sauvegardes-choix-long") {   // (plus d'une page : la derniere, jusqu'a « Nouvelle sauvegarde… »)
+            g_tab = TAB_SAVES; SavesFake();
+            SaveSlot o = g_saves[1]; o.use = SU_BOTH;
+            for (int i = 3; i <= 10; i++) { o.prof = L"partie-" + std::to_wstring(i); o.name = L"Partie " + std::to_wstring(i); g_saves.push_back(o); }
+            SaveOpenPick(); SavePickScroll(1000);
+        }
         else if (st == L"sauvegardes-recommencer") { g_tab = TAB_SAVES; SavesScan(); g_saveModal = SM_RESTART; }
         else if (st == L"sauvegardes-nom") { g_tab = TAB_SAVES; SaveAskName(true); }
         else if (st == L"credits") g_tab = TAB_CREDITS;

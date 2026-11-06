@@ -30,6 +30,8 @@ static std::wstring g_soloCoopProf;                     // sauvegarde selectionn
 static bool g_soloCoopSel, g_soloCoopGone;              // une ligne est selectionnee ; la selection n'existait plus a la validation
 static int g_soloCoopTop;                               // premiere ligne montree
 static const int kSoloCoopPage = 6;
+static int g_savePickTop;                               // fenetres de choix d'Heberger et Recommencer : premiere ligne montree
+static const int kSavePickPage = 7;
 static void SaveCheckOpen(int i);                       // (es2.inc : Verifier la sauvegarde)
 static void SaveRepair();
 static void DrawSaveCheck(Graphics &g, RectF c, float y);      // fenetre par-dessus le lanceur
@@ -380,7 +382,28 @@ static bool SaveChar(wchar_t c)
 }
 
 // ---- ouverture de la fenetre
-static void SaveOpenPick() { SavesScan(); g_saveModal = SM_PICK; }      // salon : choisir la sauvegarde de l'hote
+// Lignes des fenetres de choix d'Heberger et Recommencer : les sauvegardes non marquees Solo, puis -1 : « Nouvelle sauvegarde… » (choix seulement).
+static std::vector<int> SavePickItems()
+{
+    std::vector<int> r;
+    for (int i = 0; i < (int)g_saves.size(); i++) if (g_saves[i].use != SU_SOLO) r.push_back(i);
+    if (g_saveModal == SM_PICK) r.push_back(-1);
+    return r;
+}
+static void SavePickScroll(int d)
+{
+    g_savePickTop = max(0, min(g_savePickTop + d, (int)SavePickItems().size() - kSavePickPage));
+}
+static void SaveOpenPick()   // salon : choisir la sauvegarde de l'hote (celle utilisee visible, meme loin dans la liste)
+{
+    SavesScan();
+    g_saveModal = SM_PICK;
+    std::vector<int> r = SavePickItems();
+    std::wstring cur = SaveCurrentProf();
+    int at = 0;
+    for (int k = 0; k < (int)r.size(); k++) if (r[k] >= 0 && g_saves[r[k]].prof == cur) at = k;
+    g_savePickTop = max(0, min(at - kSavePickPage + 1, (int)r.size() - kSavePickPage));
+}
 static void SaveOpenNewGame() { SavesScan(); g_saveModal = SM_NEWGAME; } // salon : « Nouvelle partie »
 static void SaveAskName(bool forGame) { SavesScan(); g_saveNameForGame = forGame; g_saveNameText = SaveDefaultName(); g_saveModal = SM_NAME; g_time = 0; }
 static void LobbyApplyPartie(int p);   // (launcher.cpp)
@@ -1250,12 +1273,12 @@ static void DrawSaveModal(Graphics &g)
     HotZone(RectF(0, 0, 1280, 800), UI_NONE);   // (rien en dessous)
     SolidBrush dim(Color(140, 0, 0, 0)); g.FillRectangle(&dim, RectF(0, 0, 1280, 800));
     bool list = g_saveModal == SM_PICK || g_saveModal == SM_RESTART;
-    int rows = g_saveModal == SM_PICK ? 1 : 0;
-    if (list) for (const SaveSlot &q : g_saves) if (q.use != SU_SOLO) rows++;
+    int rows = list ? (int)SavePickItems().size() : 0;
     if (rows > 7) rows = 7;
     int crows = min(14, (int)g_saveBak.size());
     float h = g_saveModal == SM_NAME ? 250 : g_saveModal == SM_NEWGAME ? 300 : g_saveModal == SM_CHECK ? 560 : g_saveModal == SM_COPIES ? 130 + max(1, crows) * 46 : 150 + rows * 62;
     if (g_saveModal == SM_SOLOCOOP) { int n = (int)SoloCoopRows().size(); h = n ? 180.0f + min(n, kSoloCoopPage) * 62 : 220.0f; }
+    if (list && (int)SavePickItems().size() > kSavePickPage) h += 56;   // (rangee de pages)
     RectF c(640 - 290, 400 - h / 2, 580, h);
     {   // (fond plein : le verre laissait voir la page dessous)
         GraphicsPath bp; RoundRect(bp, c, 20);
@@ -1360,12 +1383,22 @@ static void DrawSaveModal(Graphics &g)
                                    : T(L"Choisis la sauvegarde à effacer et recommencer.", L"Pick the save to erase and restart."), RectF(c.X + 24, y, c.Width - 48, 36), 12.5f, kGrey);
     y += 42;
     std::wstring cur = SaveCurrentProf();
-    int n = 0;
-    for (int i = 0; i < (int)g_saves.size() && n < 7; i++) {
+    std::vector<int> items = SavePickItems();
+    int top = max(0, min(g_savePickTop, (int)items.size() - kSavePickPage));
+    for (int k = top; k < (int)items.size() && k < top + kSavePickPage; k++) {
+        RectF r(c.X + 24, y + (k - top) * 62, c.Width - 48, 54);
+        int i = items[k];
+        if (i < 0) {   // « Nouvelle sauvegarde… » : toujours la derniere ligne
+            bool hot = g_uiHot == UI_SAVE_MNEW;
+            GraphicsPath p; RoundRect(p, r, 12);
+            SolidBrush b(hot ? TH(cardSel) : TH(card)); g.FillPath(&b, &p);
+            Pen pn(hot ? kAcc : TH(choiceBorder), 1.0f); g.DrawPath(&pn, &p);
+            Icon(g, IC_HOMEPLUS, r.X + 28, r.Y + r.Height / 2, 18, kAcc, 1.9f);
+            Text(g, T(L"Nouvelle sauvegarde…", L"New save…"), RectF(r.X + 50, r.Y, r.Width - 60, r.Height), 14.5f, FontStyleBold, kAcc, StringAlignmentNear);
+            HotZone(r, UI_SAVE_MNEW);
+            continue;
+        }
         const SaveSlot &s = g_saves[i];
-        if (s.use == SU_SOLO) continue;   // (marquee Solo : pas pour heberger)
-        RectF r(c.X + 24, y + n * 62, c.Width - 48, 54);
-        n++;
         bool hot = g_uiHot == UI_SAVE_PICK + i, used = s.prof == cur;
         GraphicsPath p; RoundRect(p, r, 12);
         SolidBrush b(hot ? TH(cardSel) : used ? WithA(kAcc, 0.10f) : TH(card)); g.FillPath(&b, &p);
@@ -1376,23 +1409,18 @@ static void DrawSaveModal(Graphics &g)
         if (g_saveModal == SM_RESTART && !s.has) continue;   // (vide : rien a recommencer)
         HotZone(r, UI_SAVE_PICK + i);
     }
-    if (g_saveModal == SM_PICK && n < 7) {
-        RectF r(c.X + 24, y + n * 62, c.Width - 48, 54);
-        bool hot = g_uiHot == UI_SAVE_MNEW;
-        GraphicsPath p; RoundRect(p, r, 12);
-        SolidBrush b(hot ? TH(cardSel) : TH(card)); g.FillPath(&b, &p);
-        Pen pn(hot ? kAcc : TH(choiceBorder), 1.0f); g.DrawPath(&pn, &p);
-        Icon(g, IC_HOMEPLUS, r.X + 28, r.Y + r.Height / 2, 18, kAcc, 1.9f);
-        Text(g, T(L"Nouvelle sauvegarde…", L"New save…"), RectF(r.X + 50, r.Y, r.Width - 60, r.Height), 14.5f, FontStyleBold, kAcc, StringAlignmentNear);
-        HotZone(r, UI_SAVE_MNEW);
+    if ((int)items.size() > kSavePickPage) {
+        float fy = c.Y + c.Height - 24 - 44;
+        UiButton(g, RectF(c.X + 24, fy, 44, 44), L"", UI_SAVE_SCPREV, false, IC_CHEVL, top > 0);
+        UiButton(g, RectF(c.X + 76, fy, 44, 44), L"", UI_SAVE_SCNEXT, false, IC_CHEVR, top + kSavePickPage < (int)items.size());
     }
 }
 
 static void SaveClick(int id)
 {
     if (id == UI_SAVE_MCLOSE) { g_saveModal = SM_NONE; g_chkThenSolo = false; return; }
-    if (id == UI_SAVE_SCPREV) { SoloCoopScroll(-kSoloCoopPage); return; }
-    if (id == UI_SAVE_SCNEXT) { SoloCoopScroll(kSoloCoopPage); return; }
+    if (id == UI_SAVE_SCPREV) { if (g_saveModal == SM_SOLOCOOP) SoloCoopScroll(-kSoloCoopPage); else SavePickScroll(-kSavePickPage); return; }
+    if (id == UI_SAVE_SCNEXT) { if (g_saveModal == SM_SOLOCOOP) SoloCoopScroll(kSoloCoopPage); else SavePickScroll(kSavePickPage); return; }
     if (id == UI_SAVE_SCGO) { SoloCoopGo(); return; }
     if (id == UI_SAVE_SCFORCE) { SoloCoopLaunch(); return; }
     if (id == UI_SAVE_SCSAVES) { g_saveModal = SM_NONE; g_tab = TAB_SAVES; SavesScan(); return; }
@@ -1402,7 +1430,7 @@ static void SaveClick(int id)
     if (id == UI_SAVE_LOBBY) { SaveOpenPick(); return; }
     if (id == UI_SAVE_MNEW) { if (SaveGuard()) SaveAskName(false); return; }
     if (id == UI_SAVE_MFRESH) { if (SaveGuard()) SaveAskName(true); return; }
-    if (id == UI_SAVE_MRESTART) { SavesScan(); g_saveModal = SM_RESTART; return; }
+    if (id == UI_SAVE_MRESTART) { SavesScan(); g_saveModal = SM_RESTART; g_savePickTop = 0; return; }
     if (id == UI_SAVE_MOK) { SaveNameDone(); return; }
     if (id == UI_SAVE_IMPORT) { std::wstring n = g_saveModal == SM_NAME ? SaveCleanName(g_saveNameText) : L""; SaveImportArchive(n == SaveDefaultName() ? L"" : n); return; }   // (nom saisi, sinon celui de l'archive)
     if (id >= UI_SAVE_PICK && id < UI_SAVE_END) { SavePickRow(id - UI_SAVE_PICK); return; }
@@ -1490,6 +1518,7 @@ static bool GameSet(int game, bool host)
 
 // /testsolocoop <journal> : la fenetre et ce qu'elle ecrit, sans fenetre ni jeu (g_testSalon : Launch s'arrete apres lancement.ini et les copies).
 // Dossier de jeu jetable et LOCALAPPDATA a cote obligatoires ; USERPROFILE a cote aussi : la Partie principale d'essai n'est pas celle du joueur.
+static void OnButton(int id);   // (launcher.cpp : le gestionnaire des boutons, celui du clic)
 static int SoloCoopSelfTest(const wchar_t *log)
 {
     DeleteFileW(log);
@@ -1659,6 +1688,43 @@ static int SoloCoopSelfTest(const wchar_t *log)
     SoloCoopScroll(-1000); say("butee haute", g_soloCoopTop == 0);
     SoloCoopScroll(1000); say("butee basse", g_soloCoopTop == n - kSoloCoopPage);
     SaveClick(UI_SAVE_MCLOSE);
+
+    // fenetre de choix d'Heberger : tout reste accessible
+    setCur(last.c_str());
+    SaveOpenPick();
+    { std::vector<int> it = SavePickItems();
+      int tot = (int)it.size();
+      say("choix : liste longue, Nouvelle sauvegarde en derniere ligne", tot > kSavePickPage && it.back() == -1);
+      say("choix : la sauvegarde utilisee est dans la page montree", g_savePickTop + kSavePickPage > tot - 2 && g_savePickTop <= tot - 2);
+      SaveClick(UI_SAVE_SCPREV);
+      say("choix : page precedente", g_savePickTop == max(0, tot - 2 * kSavePickPage));
+      SaveClick(UI_SAVE_SCNEXT);
+      say("choix : page suivante, jusqu'a Nouvelle sauvegarde", g_savePickTop == tot - kSavePickPage);
+      SavePickScroll(-1000); say("choix : butee haute", g_savePickTop == 0);
+      SavePickScroll(1000); say("choix : butee basse", g_savePickTop == tot - kSavePickPage);
+      SaveUseSet(p2, SU_SOLO); SavesScan();
+      say("choix : une sauvegarde Solo n'y est pas", (int)SavePickItems().size() == tot - 1);
+      SaveUseSet(p2, SU_BOTH); SavesScan(); }
+    SaveClick(UI_SAVE_MCLOSE);
+    SaveClick(UI_SAVE_MRESTART);
+    say("Recommencer : pas de Nouvelle sauvegarde, page du haut", g_saveModal == SM_RESTART && SavePickItems().back() != -1 && g_savePickTop == 0);
+    SaveClick(UI_SAVE_MCLOSE);
+
+    // LANCER dans un salon : le gestionnaire du bouton, sans socket ni invite (ecouter ferait monter le pare-feu de Windows)
+    setCur(p2.c_str()); SaveUseSet(p2, SU_SOLO); SavesScan();
+    g_lobby = LB_HOST; g_lobbySteam = false; g_goSent = false;
+    OnButton(B_HOST);
+    say("LANCER sur une sauvegarde Solo : rien de lance, choix ouvert, salon garde", !FileExists(li) && g_saveModal == SM_PICK && g_lobby == LB_HOST && !g_goSent);
+    SaveClick(UI_SAVE_MCLOSE);
+    OnButton(B_HOST);
+    say("LANCER apres Annuler : toujours refuse", !FileExists(li) && g_saveModal == SM_PICK);
+    SaveClick(UI_SAVE_PICK + row(p1));
+    say("choix d'une sauvegarde Coop : utilisee, rien de lance encore", SaveCurrentProf() == p1 && g_saveModal == SM_NONE && !FileExists(li));
+    OnButton(B_HOST);
+    t = ini();
+    say("LANCER ensuite : Mode=hote sur la sauvegarde choisie", has(t, "Mode=hote\r\n") && has(t, ("Profil=" + Narrow(p1, CP_UTF8) + "\r\n").c_str()) && has(t, "Partie=continuer\r\n"));
+    DeleteFileW(li.c_str());
+    g_lobby = LB_NONE; g_goSent = false; SaveUseSet(p2, SU_BOTH); SavesScan();
 
     setCur(p1.c_str());
     Launch(MODE_SOLO);

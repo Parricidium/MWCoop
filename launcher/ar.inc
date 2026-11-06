@@ -287,7 +287,6 @@ static const wchar_t *const kAr[][2] = {
     { L"Two buttons on Home: SOLO, the game without the mod; SOLO COOP, alone with the mod and its additions, on the save of your choice.", L"زران في الرئيسية: فردي، اللعبة بدون المود؛ فردي Coop، وحدك مع المود وإضافاته، على الحفظ الذي تختاره." },
     { L"1 network · 2 open a lobby · 3 enter a friend's · 4 without the mod · 5 alone, with the mod", L"1 الشبكة · 2 فتح ردهة · 3 دخول ردهة صديق · 4 بدون المود · 5 وحدك، مع المود" },
     { L"Each save can be marked Solo, Coop or Both (right card). HOST only offers Coop saves, SOLO COOP only Solo saves, and each keeps its own choice. Existing and imported saves are on Both.", L"يمكن وسم كل حفظ: «فردي» أو Coop أو «كلاهما» (البطاقة اليمنى). لا يعرض الاستضافة إلا حفظات Coop، ولا يعرض فردي Coop إلا الحفظات «فردي»، ولكل منهما اختياره. الحفظات الموجودة والمستوردة موسومة «كلاهما»." },
-    { L"Your solo save (the game's) is only touched if you launch it with MWCoop.", L"لا يتأثر حفظك الفردي (حفظ اللعبة) إلا إذا شغّلته مع MWCoop." },
     { L"Use in", L"الاستخدام في" },
     { L"Both", L"كلاهما" },
     { L"Coop", L"Coop" },

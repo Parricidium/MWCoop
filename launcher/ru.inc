@@ -2668,7 +2668,6 @@ static const wchar_t *const kRu[][2] = {
     { L"Two buttons on Home: SOLO, the game without the mod; SOLO COOP, alone with the mod and its additions, on the save of your choice.", L"Две кнопки на Главной: СОЛО — игра без мода; СОЛО КООП — один, с модом и его дополнениями, на сохранении по твоему выбору." },
     { L"1 network · 2 open a lobby · 3 enter a friend's · 4 without the mod · 5 alone, with the mod", L"1 сеть · 2 открыть лобби · 3 войти в лобби друга · 4 без мода · 5 один, с модом" },
     { L"Each save can be marked Solo, Coop or Both (right card). HOST only offers Coop saves, SOLO COOP only Solo saves, and each keeps its own choice. Existing and imported saves are on Both.", L"Каждое сохранение можно отметить: «Соло», «Coop» или «Оба» (карточка справа). ХОСТ предлагает только сохранения Coop, СОЛО КООП — только «Соло», и у каждого свой выбор. Существующие и импортированные сохранения отмечены как «Оба»." },
-    { L"Your solo save (the game's) is only touched if you launch it with MWCoop.", L"Твоё соло-сохранение (игровое) затрагивается, только если ты запускаешь его с MWCoop." },
     { L"Use in", L"Использовать в" },
     { L"Both", L"Оба" },
     { L"Coop", L"Coop" },
