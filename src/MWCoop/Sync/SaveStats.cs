@@ -60,7 +60,7 @@ namespace MWCoop
                 sb.Append("heures=").Append(heures.ToString("F2", ci)).Append('\n');
                 sb.Append("date=").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm", ci)).Append('\n');
                 sb.Append("avec=").Append(string.Join("|", names.ToArray())).Append('\n');
-                sb.Append("role=").Append(Session.Active ? (Session.IsHost ? "hote" : "invite") : "solo").Append('\n');
+                sb.Append("role=").Append(Session.Active && !Session.SoloCoop ? (Session.IsHost ? "hote" : "invite") : "solo").Append('\n');
                 // (version du mod qui a sauvegarde, et le jeu : « Verifier la sauvegarde » du lanceur signale les versions boguees, 26/10)
                 sb.Append("version=").Append(Version.Text).Append('\n');
                 sb.Append("jeu=").Append(Game.Msc ? "msc" : "mwc").Append('\n');

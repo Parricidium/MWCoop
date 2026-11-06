@@ -74,6 +74,7 @@ namespace MWCoop
         {
             if (Fr || string.IsNullOrEmpty(s)) return s;
             if (s == "solo") return R("solo");
+            if (s == "Solo Coop") return R(s);
             if (s.StartsWith("hote, port ")) return R("host, port ") + s.Substring(11);
             if (s == "hote Steam") return R("Steam host");
             if (s == "attente d'une invitation Steam") return R("waiting for a Steam invite");

@@ -60,6 +60,7 @@ namespace MWCoop.Net
             int late = Config.GetInt("Test", "HoteRetard", 0);
             if ((mode == "hote" || mode == "host") && late > 0) { hostLateAt = Time.realtimeSinceStartup + late; Log.Info("essai : hote dans " + late + " s"); }
             else if (mode == "hote" || mode == "host") StartHost();
+            else if (mode == "solocoop") StartSoloCoop();
             else if (mode == "invite" || mode == "client")
             {
                 if (Steam && hostSteam != 0) { Active = true; IsHost = false; Status = "connexion a l'hote Steam"; Log.Info("invite par Steam : hote " + hostSteam + " (salon du lanceur)"); }
@@ -109,6 +110,33 @@ namespace MWCoop.Net
                 Log.Info(Steam ? "hote par Steam (salon et pair-a-pair)" : "hote sur le port UDP " + port);
             }
             catch (Exception e) { Status = "erreur : " + e.Message; Log.Error("hote : " + e); }
+        }
+
+        // Solo Coop (JD 06/11, bouton du lanceur, lancement.ini Mode=solocoop) : seul, avec le mod et tous ses ajouts. Un hote sans lien : tout suit le chemin de
+        // l'hote seul (le plus eprouve), mais aucun port, aucun salon Steam, personne ne peut rejoindre. T existe sans lien (Transport : Update, Flush et Close
+        // s'arretent si link == null ; aucun pair, donc rien a envoyer) ; Reseau=steam ignore (SteamNet.Update n'est pas appele, ses rappels pair-a-pair jamais crees).
+        public static bool SoloCoop;
+        static void StartSoloCoop()
+        {
+            Steam = false; hostSteam = 0; SteamNet.DirectHost = 0;
+            T = NewTransport();
+            SoloCoop = Active = IsHost = true;
+            LocalId = Me.Id = 0;
+            Players[0] = Me;
+            Status = "Solo Coop";
+            Log.Info("Solo Coop : hote sans lien (aucun port, aucun salon)");
+        }
+
+        // [Test] Autotest=solocoop : l'etat, note une fois a 25 s de partie ; Autotest=sauver : le meme a 58 s, avant sa sauvegarde (a comparer apres rechargement).
+        static bool testSolo;
+        public static void TestSolo(string mode, float t)
+        {
+            if ((mode != "solocoop" && mode != "sauver") || testSolo || t < (mode == "sauver" ? 58f : 25f)) return;
+            testSolo = true;
+            GameObject car = Game.FindAny(Game.Msc ? "SATSUMA(557kg, 248)" : "CORRIS");
+            HutongGames.PlayMaker.FsmInt day = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmInt("GlobalDaysPassed");
+            Log.Info("autotest : solocoop, actif " + Active + ", hote " + IsHost + ", SoloCoop " + SoloCoop + ", Steam " + Steam + ", salon " + SteamNet.Lobby + ", pairs " + (T != null ? T.Peers.Count : -1) + ", joueurs " + Players.Count + ", etat " + Status
+                     + " ; joueur " + (Game.PlayerT != null ? Game.PlayerT.position.ToString("F1") : "?") + ", voiture " + (car != null ? car.transform.position.ToString("F1") : "?") + ", argent " + Wallet.Cash.ToString("F0") + ", jours " + (day != null ? day.Value : -1));
         }
 
         static void StartClient()

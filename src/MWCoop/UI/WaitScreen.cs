@@ -135,11 +135,12 @@ namespace MWCoop
         public static bool Host;             // ecran de demarrage de l'hote (sinon : attente de l'invite)
 
         static int Steps { get { return Host ? 3 : 4; } }
-        static string Badge { get { return Host ? L("HÔTE", "HOST") : L("INVITÉ", "GUEST"); } }
+        static string Badge { get { return Session.SoloCoop ? L("SOLO COOP", "SOLO COOP") : Host ? L("HÔTE", "HOST") : L("INVITÉ", "GUEST"); } }
         static string Subtitle
         {
             get
             {
+                if (Session.SoloCoop) return L("Solo Coop : seul, avec le mod et ses ajouts", "Solo Coop: alone, with the mod and its add-ons");
                 return Host ? L("Partie coop : tu héberges, tes amis te rejoignent", "Co-op game: you are hosting, your friends join you")
                             : L("Partie coop : tu rejoins la partie de l'hôte", "Co-op game: you are joining the host's game");
             }
@@ -170,7 +171,7 @@ namespace MWCoop
             if (Host)
             {
                 if (i == 1 && Current == 1) return Flow.HostChoice == "nouvelle" ? L("Le permis est rempli pour toi.", "The licence is filled in for you.") : L("Comme « Continuer » dans le menu.", "Like \"Continue\" in the menu.");
-                if (i == 2 && Current == 2) return L("Tes amis reçoivent ta sauvegarde dès que tu es en jeu.", "Your friends receive your save as soon as you are in game.");
+                if (i == 2 && Current == 2 && !Session.SoloCoop) return L("Tes amis reçoivent ta sauvegarde dès que tu es en jeu.", "Your friends receive your save as soon as you are in game.");
                 return "";
             }
             switch (i)
@@ -278,7 +279,7 @@ namespace MWCoop
                 y += Style.Px(18);
             }
 
-            if (Host)
+            if (Host && !Session.SoloCoop)
             {
                 // Les amis deja connectes (salon) : ils attendent sur leur propre ecran.
                 var names = new System.Text.StringBuilder();

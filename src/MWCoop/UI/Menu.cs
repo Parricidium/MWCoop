@@ -35,7 +35,7 @@ namespace MWCoop
                 return a;
             }
         }
-        static bool TabHidden(int i) { return false; }   // (My Summer Car : onglet des voitures ouvert le 24/10, JD)
+        static bool TabHidden(int i) { return i == TabSync && Session.SoloCoop; }   // (My Summer Car : onglet des voitures ouvert le 24/10, JD ; Solo Coop : personne avec qui se comparer)
         static int StepTab(int from, int d) { int n = tabsFr.Length, i = from; do i = (i + d + n) % n; while (TabHidden(i) && i != from); return i; }
         public const int TabPlayers = 0, TabChat = 1, TabRace = 2, TabRally = 3, TabVaz = 4, TabLook = 5, TabHud = 6, TabGfx = 7, TabSync = 8;   // (Rallye : 18/10)
         public static int Tab { get { return tab; } }
@@ -344,6 +344,7 @@ namespace MWCoop
             {
                 case TabPlayers:
                     if (!Session.Active) return Lang.T("Solo : lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs", "Solo: start the game from MWCoop.exe to play with friends");
+                    if (Session.SoloCoop) return Lang.T("Solo Coop : seul, personne ne peut rejoindre", "Solo Coop: alone, nobody can join");
                     return Lang.Status(Session.Status) + Sep + Session.Players.Count + Lang.T(" joueur(s)", " player(s)");
                 case TabChat: return Lang.T("En jeu, ", "In game, ") + Keys.Label(Keys.Chat) + Lang.T(" \u00E9crit sans ouvrir ce menu", " opens the chat without this menu");
                 case TabRace: return Game.Msc ? MscEvents.Sub(MscEvents.Kind.Drag) : RacePanel.Sub;
@@ -366,7 +367,7 @@ namespace MWCoop
             float lw = Style.Logo(new Rect(px + Style.Px(4), yy, pw - Style.Px(4), Style.Px(58)));
             if (lw <= 0f) Style.Title(new Rect(px + Style.Px(8), yy, pw, Style.Px(58)), Lang.Name, Kit.Ink, TextAnchor.MiddleLeft, 24);
             yy += Style.Px(64);
-            string badge = !Session.Active ? "SOLO" : Session.IsHost ? Lang.T("H\u00D4TE", "HOST") : Lang.T("INVIT\u00C9", "GUEST");
+            string badge = !Session.Active ? "SOLO" : Session.SoloCoop ? Lang.T("SOLO COOP", "SOLO COOP") : Session.IsHost ? Lang.T("H\u00D4TE", "HOST") : Lang.T("INVIT\u00C9", "GUEST");
             Kit.Pill(px + Style.Px(8), yy + Style.Px(9), badge, Kit.Ice);
             yy += Style.Px(30);
             int lastG = -1;
@@ -689,7 +690,7 @@ namespace MWCoop
                 if (n == prows.Count) prows.Add(new PRow());
                 PRow r = prows[n++];
                 r.P = pi;
-                r.Label = (pi.Id == 0 ? Lang.T("[h\u00F4te] ", "[host] ") : "") + pi.Name + (pi.Local ? Lang.T(" (vous)", " (you)") : "");
+                r.Label = (pi.Id == 0 && !Session.SoloCoop ? Lang.T("[h\u00F4te] ", "[host] ") : "") + pi.Name + (pi.Local ? Lang.T(" (vous)", " (you)") : "");
                 string where = pi.Level == 1 ? Lang.T("en partie", "in game") : Lang.T("au menu", "at the menu");
                 r.Value = !pi.Local && pi.Peer != null ? where + "  " + Mathf.RoundToInt(pi.Peer.Rtt * 1000) + " ms" : where;
             }
@@ -783,7 +784,7 @@ namespace MWCoop
                 Kit.Avatar(new Rect(r.x + Style.Px(10), r.center.y - av / 2, av, av), pi.Id, pi.Name, pi.SteamId, fade);
                 float tx = r.x + Style.Px(56), nw = Style.Width(pi.Name, 15);
                 Style.Text(new Rect(tx, r.y + Style.Px(8), nw + Style.Px(4), Style.Px(22)), pi.Name, 15, TextAnchor.MiddleLeft, inGame ? Kit.Ink : Kit.Faint);
-                string tag = pi.Local ? (pi.Id == 0 ? Lang.T("vous \u00B7 h\u00F4te", "you \u00B7 host") : Lang.T("vous", "you")) : pi.Id == 0 ? Lang.T("h\u00F4te", "host") : null;
+                string tag = pi.Local ? (pi.Id == 0 && !Session.SoloCoop ? Lang.T("vous \u00B7 h\u00F4te", "you \u00B7 host") : Lang.T("vous", "you")) : pi.Id == 0 ? Lang.T("h\u00F4te", "host") : null;
                 if (tag != null) Kit.Pill(tx + nw + Style.Px(8), r.y + Style.Px(19), tag, Kit.Ice);
                 string where = !inGame ? Lang.T("Au menu du jeu", "At the game's menu") : pi.Local ? Lang.T("En partie", "In game")
                              : NewHud.Where(pi.Id, Game.PlayerGo != null ? Game.PlayerGo.transform : null);
@@ -1008,7 +1009,7 @@ namespace MWCoop
         // en jeu. Une fois toutes les 30 s : en attendant, ligne grisee et le delai a droite.
         static void ResyncCard()
         {
-            if (!Session.Active) return;
+            if (!Session.Active || Session.SoloCoop) return;
             bool can; float wait; string val, help;
             ResyncInfo(out can, out wait, out val, out help);
             if (ActionRow("synchro", Lang.T("Resynchroniser le monde", "Resync the world"), val ?? help, help, can)) DoResync(can, wait);
@@ -1040,7 +1041,7 @@ namespace MWCoop
 
         static void ResyncRow()
         {
-            if (!Session.Active) return;
+            if (!Session.Active || Session.SoloCoop) return;
             float wait = PlayerSync.ResyncWait;
             bool guestsIn = false;
             foreach (PlayerInfo pi in Session.Players.Values) if (!pi.Local && pi.Level == 1) guestsIn = true;

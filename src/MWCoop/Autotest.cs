@@ -1998,6 +1998,7 @@ namespace MWCoop
                 foreach (Avatar a in PlayerSync.Avatars) Log.Info("autotest : mains " + a.HandsState() + " ; " + VehicleSync.GearState(Config.Get("Test", "TestVoiture", "SATSUMA")));
             }
             if (mode == "conduite") { Conduite(t); return; }
+            Net.Session.TestSolo(mode, t);
             if (mode == "vaz" || mode == "vazcle") { Vaz.Test(mode, t); return; }   // (24/10 : voitures sur la Ruscko)
             if (mode == "vaztenue") { StandaloneCar.Test(t); VazTenue.Test(mode, t); return; }
             if (mode == "litparents") { ParentsBed.Test(t); return; }   // (suggestion 35 : lit des parents sur MSC)
@@ -4141,6 +4142,7 @@ namespace MWCoop
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t); Gestures.TestPena(mode, t);
             VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); Usine.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); Pvp.Test(mode, t); ModRam1500.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); Kartturi.Test(mode, t); Net.ModServe.Test(mode, t); Kauppa.TestKartturi(mode, t); Kauppa.TestKartturiDrive(mode, t); PushDoors.Test(mode, t); WoodCarriers.Test(mode, t); NewHud.Test(mode, t); ExitGuard.Test(mode, t); LightsGuard.Test(mode, t);
             if (mode == "mainsvue") ThirdPerson.TestHands(t);   // (My Winter Car aussi : bras de la 1re personne en 3e personne -- JD 01/11)
+            Net.Session.TestSolo(mode, t);
             MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t); Vaz.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {

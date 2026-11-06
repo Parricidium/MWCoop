@@ -69,7 +69,7 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!PlayerSync.InGame || !Session.Active || !Enabled || failed || !SteamNet.Ready) { Stop(); return; }
+            if (!PlayerSync.InGame || !Session.Active || Session.SoloCoop || !Enabled || failed || !SteamNet.Ready) { Stop(); return; }   // (Solo Coop : personne a qui parler, micro jamais ouvert)
             // Activation par la voix (.formallybad, 18/10 : « vocal a activation vocale, avec une touche muet ») : [Coop] VocalActivation=1,
             // le micro reste ouvert et les paquets ne partent qu'au-dessus de [Coop] VocalSeuil (1..100, defaut 12 ; 0,7 s de maintien) ;
             // touche Keys.VoiceMute (F6) : muet / parle. Sinon, appui sur la touche Keys.Voice (V) comme avant.

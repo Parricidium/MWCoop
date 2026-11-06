@@ -67,7 +67,7 @@ namespace MWCoop
                 if (!Busy && Input.GetKeyDown(Keys.Drone)) Hud.Toast(Ajouts.LocalDrone ? Lang.T("Caméra drone coupée par l'hôte", "Drone camera turned off by the host") : Lang.T("Caméra drone coupée (lanceur : Options du jeu > Ajouts COOP)", "Drone camera turned off (launcher: Game options > CO-OP additions)"));
                 return;
             }
-            bool test = Config.GetInt("Test", "Drone", 0) != 0;
+            bool test = Config.GetInt("Test", "Drone", 0) != 0 && Time.timeSinceLevelLoad > 15f;   // (a la premiere image, la camera du joueur n'est pas encore connue)
             if (!Busy && Input.GetKeyDown(Keys.Drone) || test && !Active && !testDone)
             {
                 if (test) testDone = true;

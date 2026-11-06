@@ -1009,6 +1009,10 @@ namespace MWCoop
             { "Not enough room here to turn it over", "Здесь не хватает места, чтобы её перевернуть" },
             { "Rental refused: nothing was charged", "В аренде отказано: деньги не списаны" },
             { "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  drag the preview: turn", "Стрелки: цвет  \u00B7  Enter: взять или вернуть  \u00B7  перетащите превью: поворот" },
+            { "SOLO COOP", "СОЛО КООП" },
+            { "Solo Coop", "Соло Кооп" },
+            { "Solo Coop: alone, nobody can join", "Соло Кооп: ты один, никто не может присоединиться" },
+            { "Solo Coop: alone, with the mod and its add-ons", "Соло Кооп: один, с модом и его дополнениями" },
         };
     }
 }

@@ -1482,7 +1482,7 @@ namespace MWCoop
                 Vector3 c; float oy; string fl; OsatFrame(out c, out oy, out fl);
                 QueteGolf.Shot("va-cardinal", c + Quaternion.Euler(0f, oy, 0f) * new Vector3(14f, 0f, 44f) + Vector3.up * (vaFloor + 3f), c + Quaternion.Euler(0f, oy, 0f) * new Vector3(14f, 0f, 0f) + Vector3.up * (vaFloor + 2f));
                 OpenVuokra(stands[0]);
-                Autotest.CaptureSoon("va-menu", 1f);
+                Autotest.CaptureSoon("va-menu", 1f); vaTestAt = Time.realtimeSinceStartup;   // (les photos ci-dessus prennent plus d'une seconde : sans cela le menu etait referme avant sa photo)
             }
             if (vaTest == 2 && now - vaTestAt > 2f)
             {
