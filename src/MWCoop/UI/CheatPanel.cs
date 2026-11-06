@@ -119,7 +119,7 @@ namespace MWCoop
             {
                 float bt = t == T_Players ? Mathf.Max(1, players.Count) * (rowH + (HostHere ? bh + gap : 0f))
                          : t == T_Places ? placeRows * (bh + gap)
-                         : t == T_Me ? (HostHere ? 4 : 3) * (bh + gap)
+                         : t == T_Me ? (HostHere ? 5 : 4) * (bh + gap)
                          : t == T_Cars ? carRows * (bh + gap) + (Game.Msc ? 0f : P(10) + bh + gap)
                          : 2 * (bh + gap);
                 body = Mathf.Max(body, bt);
@@ -173,6 +173,9 @@ namespace MWCoop
                     cy += bh + gap;
                     if (Kit.Button(new Rect(ix, cy, hw2, bh), "+1 000 mk", 0, false, ok, null, 12)) Do("/argent 1000", "+1 000 mk");
                     if (Kit.Button(new Rect(ix + hw2 + gap, cy, hw2, bh), "+10 000 mk", 0, false, ok, null, 12)) Do("/argent 10000", "+10 000 mk");
+                    cy += bh + gap;
+                    if (Kit.Button(new Rect(ix, cy, hw2, bh), Lang.T("Fatigue \u00E0 100", "Fatigue to 100"), 0, false, ok, null, 12)) Do("/fatigue 100", Lang.T("Fatigue \u00E0 100", "Fatigue to 100"));
+                    if (Kit.Button(new Rect(ix + hw2 + gap, cy, hw2, bh), Lang.T("Livrer les commandes", "Deliver orders"), 0, false, ok, null, 12)) Do("/livraison", Lang.T("Livrer les commandes", "Deliver orders"));
                     cy += bh + gap;
                     if (Kit.Button(new Rect(ix, cy, iw, bh), Lang.T("Ramener mes v\u00EAtements (veste, combinaison, casque)", "Bring back my clothes (jacket, coverall, helmet)"), 0, false, ok, null, 12)) Do("/vetements", Lang.T("V\u00EAtements ramen\u00E9s", "Clothes brought back"));
                     cy += bh + gap;

@@ -989,8 +989,17 @@ namespace MWCoop
             }
         }
 
+        static float livNext; static int livStep;
         static void TestCall(float t)
         {
+            // ([Test] LivraisonA=s : triche /livraison ; la commande suivie avant et apres)
+            float liv = Config.GetFloat("Test", "LivraisonA", 0f);
+            if (liv > 0f && t > liv && Time.realtimeSinceStartup >= livNext && livStep < 8)
+            {
+                livNext = Time.realtimeSinceStartup + 5f; livStep++;
+                if (livStep == 2 && Session.IsHost) Log.Info("autotest : appel, /livraison -> " + (Cheats.Command("/livraison") ?? "ok"));
+                Log.Info("autotest : appel, livraison " + livStep + " : " + CallState());
+            }
             // (celui qui appelle : l'hote, ou l'invite avec [Test] AppelInvite=1)
             bool host = Config.GetInt("Test", "AppelInvite", 0) != 0 ? !Session.IsHost : Session.IsHost, whole = Config.GetInt("Test", "AppelEntier", 0) != 0;
             if (host && t > 40f && step == 0)
@@ -1164,6 +1173,24 @@ namespace MWCoop
                   .Append(", attente ").Append(wt != null ? wt.Value.ToString("F0") : "?").Append(", ").Append(Summary(ListOf(c.gameObject, "Parts"))).Append(']');
             }
             return sb.Append(" ; ").ToString();
+        }
+
+        // Triche /livraison : les commandes en attente (WaitTime, en parties de jeu) arrivent tout de suite. Chez l'hote : l'attente et l'etat suivent chez les invites (WorldFsms).
+        public static int SkipDeliveries()
+        {
+            int n = 0;
+            foreach (PlayMakerFSM sp in spawners)
+            {
+                if (sp == null) continue;
+                Transform tr = sp.transform;
+                for (int i = 0; i < tr.childCount; i++)
+                {
+                    PlayMakerFSM d = Game.FsmOn(tr.GetChild(i).gameObject, "Data");
+                    FsmFloat wt = d != null ? d.FsmVariables.FindFsmFloat("WaitTime") : null;
+                    if (wt != null && wt.Value > 0f) { wt.Value = 0f; n++; }
+                }
+            }
+            return n;
         }
 
         static PlayMakerFSM LastOrder(int s)

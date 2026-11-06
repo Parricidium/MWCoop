@@ -617,6 +617,16 @@ namespace MWCoop
             Log.Info("poste : enveloppe de #" + who + " (" + (computer ? "ordinateur" : lines + " pieces, " + price.ToString("F0") + " mk") + ") : livraison lancee ici" + (tm != null ? "" : " (minuteur introuvable)"));
         }
 
+        // Triche /livraison (My Summer Car) : le minuteur de la commande postee ici, a 5 s de l'arrivee (voir Autotest=mscposte).
+        public static int SkipDelivery()
+        {
+            PlayMakerFSM timer = Game.FindFsm("Sheets/OrderList/Timer", "Delivery");
+            FsmFloat cur = timer != null ? timer.FsmVariables.FindFsmFloat("Current") : null;
+            if (cur == null || !timer.gameObject.activeInHierarchy || timer.ActiveStateName != "State 1" || cur.Value >= 4995f) return 0;
+            cur.Value = 4995f;
+            return 1;
+        }
+
         // [Test] Autotest=mscposte (2 joueurs ; Kamixak et Mikol 25/10) : chacun avance son minuteur de livraison a 5 s de l'arrivee ;
         // l'invite (Triche=lieu magasin) remplit le bon avec les 2 premiers colis de STORE/Boxes et passe la boite du magasin a
         // 'Car parts' a 45 s, paie au guichet ('State 3') a 75 s ; chacun note l'etat de la commande toutes les 5 s de 40 a 110 s.

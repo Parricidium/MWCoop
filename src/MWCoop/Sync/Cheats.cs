@@ -146,6 +146,7 @@ namespace MWCoop
         static readonly string[] HelpFr = {
             "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet, village, cinema, musee, boutique, pieces",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
+            "/fatigue [0-100] : ma fatigue (100 sans nombre), pour dormir", "/livraison : les commandes en attente arrivent maintenant",
             "/heure <0-24> : l'heure de tous", "/neige oui|non : neige (ou pluie) pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (sorbet, rivett, tracteur, camion, fourgon, taxi, moto, remorque)",
             "/degivrer [voiture] : vitres dégivrées pour tous (toutes les voitures, ou rivett, sorbet, taxi)",
@@ -153,6 +154,7 @@ namespace MWCoop
         static readonly string[] HelpEn = {
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin, village, cinema, museum, shop, parts",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
+            "/fatigue [0-100]: my fatigue (100 without a number), to sleep", "/delivery: orders on their way arrive now",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (sorbet, rivett, tractor, truck, van, taxi, bike, trailer)",
             "/defrost [car]: windows defrosted for everyone (all cars, or rivett, sorbet, taxi)",
@@ -162,12 +164,14 @@ namespace MWCoop
         static readonly string[] HelpMscFr = {
             "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye, village, cinema, musee, boutique, pieces",
             "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
+            "/fatigue [0-100] : ma fatigue (100 sans nombre), pour dormir", "/livraison : les commandes en attente arrivent maintenant",
             "/heure <0-24> : l'heure de tous (par pas de 2 h)", "/pluie oui|non : pluie pour tous", "/vetements : ma veste, ma combinaison et mon casque devant moi",
             "/voiture <nom> : la voiture vient devant moi (satsuma, hayosiko, ferndale, ruscko, tracteur, camion, moto, remorque)",
             "/argentde <joueur> <montant> : (hôte) fixe l'argent d'un joueur, le sien compris" };
         static readonly string[] HelpMscEn = {
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally, village, cinema, museum, s21, parts",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
+            "/fatigue [0-100]: my fatigue (100 without a number), to sleep", "/delivery: orders on their way arrive now",
             "/time <0-24>: everyone's time of day (2-hour steps)", "/rain on|off: rain for everyone", "/clothes: my jacket, coverall and helmet in front of me",
             "/car <name>: the car comes in front of me (satsuma, hayosiko, ferndale, ruscko, tractor, truck, bike, trailer)",
             "/setmoney <player> <amount>: (host) sets a player's money, yours included" };
@@ -183,6 +187,8 @@ namespace MWCoop
                 case "place": case "go": return "lieu";
                 case "money": case "cash": return "argent";
                 case "heal": return "soin";
+                case "tired": return "fatigue";
+                case "delivery": case "deliver": case "livrer": return "livraison";
                 case "defrost": case "degivre": return "degivrer";
                 case "setmoney": case "argentjoueur": return "argentde";
                 case "free": case "nojail": return "liberer";
@@ -193,6 +199,8 @@ namespace MWCoop
             }
             return c;
         }
+
+        static int SkipDeliveries() { int n = Game.Msc ? FleetariMsc.SkipDelivery() : Calls.SkipDeliveries(); Log.Info("triches : livraison, " + n + " commande(s) avancee(s)"); return n; }
 
         // Qui fait les triches du monde (heure, meteo) : l'hote (le monde suit l'hote : World) ; sur My Summer Car, pas encore
         // de synchro du monde : chacun chez soi, a l'annonce.
@@ -298,6 +306,21 @@ namespace MWCoop
                     return null;
                 case "liberer":
                     return Free();
+                case "fatigue":
+                {
+                    // (hansuke et Reinmansed, 22-24/10 : se fatiguer pour dormir et passer les jours)
+                    int n = 100;
+                    if (arg.Length > 0 && (!int.TryParse(arg, out n) || n < 0 || n > 100)) return Lang.T("Fatigue : de 0 à 100.", "Fatigue: 0 to 100.");
+                    Game.SetGlobalFloat("PlayerFatigue", n);
+                    return null;
+                }
+                case "livraison":
+                {
+                    // (My Winter Car : les commandes suivent l'hote, il le fait, a l'annonce ; My Summer Car : le minuteur de chacun)
+                    if (!WorldHere) return null;
+                    if (SkipDeliveries() == 0) return Lang.T("Aucune commande en attente.", "No order on its way.");
+                    return null;
+                }
                 case "degivrer":
                 {
                     // (My Winter Car : CORRIS = la Rivett, MACHTWAGEN = le taxi ; My Summer Car : pas de givre l'ete)
@@ -342,6 +365,7 @@ namespace MWCoop
             if (Session.IsHost && !Allowed) { Log.Warn("triches : " + name + " : " + line + " refusee (coupees ici)"); return; }
             if (Session.IsHost && HostOnly) { Log.Warn("triches : " + name + " : " + line + " refusee (reservees a l'hote)"); return; }
             bool world = Session.IsHost || Game.Msc;   // (My Summer Car : chacun chez soi, voir WorldHere)
+            if (world && c == "livraison") SkipDeliveries();
             if (world && c == "heure") { int h; if (int.TryParse(arg, out h) && h >= 0 && h <= 24) SetHour(h); }
             if (world && (c == "neige" || c == "pluie")) { bool? on = OnOff(arg); if (on != null) { if (Game.Msc) SetRainMsc(on.Value); else SetSnow(on.Value); } }
             if (c == "amener" && from != null)
