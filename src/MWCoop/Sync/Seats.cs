@@ -1394,11 +1394,12 @@ namespace MWCoop
                 part("Ceinture", fast, m.Closed[k].transform);
                 RearPullPoints(m, k, ms[3 * k + 2]);
                 // decalage du fichier : la place arriere de ce cote, ceinture « modele » ; rotation autour du centre des pieces
+                // (pas pendant l'export des places : l'outil applique lui-meme le fichier, sinon il le compte deux fois -- JD 06/11)
                 float sx = k == 0 ? -1f : 1f;
                 Seat s = null;
                 foreach (Seat q in seats) if (q.CarT == car && q.Index > 0 && Mathf.Abs(q.Head.x) >= 0.15f && Mathf.Sign(q.Head.x) == sx) { s = q; break; }
                 SeatFiles.Belt fb = s != null ? SeatFiles.BeltFor(s.Car, s.Index) : null;
-                if (fb != null && fb.Kind == "modele" && fb.HasModel)
+                if (!SeatExport.Active && fb != null && fb.Kind == "modele" && fb.HasModel)
                 {
                     Vector3 piv = ms[3 * k].bounds.center;
                     side.localPosition = fb.ModelPos + piv - fb.ModelRot * piv; side.localRotation = fb.ModelRot;
