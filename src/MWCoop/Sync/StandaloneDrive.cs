@@ -1295,8 +1295,9 @@ namespace MWCoop
         // Circulation (JD 05/11 : aucune voiture sur la grande route, sauf le bus et le cousin) : le jeu allume TRAFFIC/VehiclesHighway ou
         // VehiclesDirtRoad quand un objet au tag Player passe une porte de TRAFFIC/TriggerManager. Au volant, c'est le <voiture>/TrafficTrigger
         // de la voiture du jeu (capsule, tag et couche Player, pas un declencheur), allume par son automate PlayerTrigger le temps de la
-        // conduite ; nos voitures n'en avaient pas : la route restait eteinte. Le notre : petite boule du meme tag sous le capot, dans la
-        // caisse (un declencheur ne reveille pas les portes, essai du 05/11), inertie et centre de gravite remis apres coup. [Test] TraficPorte=0 : sans.
+        // conduite ; nos voitures n'en avaient pas : la route restait eteinte. Le notre : meme forme que le sien (capsule de 2,5 m le long de la voiture, plus fine), sous le
+        // plancher, dans la caisse. Les portes sont des plans sans epaisseur : une boule de 20 cm (556b11c1) les sautait ou ne voyait que la seconde, des 79 km/h a l'essai (50 pas/s),
+        // qui eteint la route (JD 06/11). Un declencheur ne les reveille pas (essai du 05/11). Inertie et centre de gravite remis apres coup. [Test] TraficPorte=0 : sans.
         static readonly Dictionary<VazCar.Built, GameObject> trafficGates = new Dictionary<VazCar.Built, GameObject>();
         static void TrafficGate(VazCar.Built b, bool on)
         {
@@ -1312,9 +1313,10 @@ namespace MWCoop
                 g.tag = "Player";
                 if (layer >= 0) g.layer = layer;
                 g.transform.SetParent(b.Car.transform, false);
-                g.transform.localPosition = st != null && st.HasCabin ? new Vector3(0f, st.Cabin.min.y + 0.25f, st.Cabin.max.z + 0.3f) : new Vector3(0f, 0.6f, 0.9f);
-                var c = g.AddComponent<SphereCollider>();
-                c.radius = 0.1f;
+                Bounds bb; float zc = VazCar.ModelBounds(b.M, "carrosserie.p205", out bb) ? bb.center.z : 0f;
+                g.transform.localPosition = new Vector3(0f, st != null && st.HasCabin ? st.Cabin.min.y - 0.05f : 0.45f, zc);
+                var c = g.AddComponent<CapsuleCollider>();
+                c.direction = 2; c.height = 2.5f; c.radius = 0.04f;
                 trafficGates[b] = g;
                 Log.Info("standalone : TrafficTrigger pose sur " + b.Car.name + " en " + g.transform.localPosition.ToString("F2") + " (couche " + LayerMask.LayerToName(g.layer) + ")");
             }
