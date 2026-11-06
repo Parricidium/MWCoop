@@ -8372,6 +8372,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return rc;
     }
+    // /testhudlibre <journal> : position libre du HUD, jamais ecrasee sans clic ; dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testhudlibre")) {
+        int rc = HudLibreSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /testtenues <journal> : tenues enregistrees (lecture, ecriture, mise), dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testtenues")) {
         int rc = OutfitSelfTest(argv[2]);

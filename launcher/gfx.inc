@@ -184,8 +184,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "Style", L"Style du HUD", L"HUD style", 0, { 0, 1, 2, 3 }, { L"Vanilla", L"Carte", L"Anneaux", L"Bandeau" }, { L"Vanilla", L"Card", L"Rings", L"Strip" }, 0, 16, "Hud" },
         { "Taille", L"Taille", L"Size", 100, { 70, 80, 90, 100, 110, 125, 150 }, { L"70 %", L"80 %", L"90 %", L"100 %", L"110 %", L"125 %", L"150 %" }, { L"70 %", L"80 %", L"90 %", L"100 %", L"110 %", L"125 %", L"150 %" }, 0, 17, "Hud",
           { 80, 100, 125, 150 }, { L"Petite", L"Normale", L"Grande", L"Très grande" }, { L"Small", L"Normal", L"Large", L"Huge" } },
-        { "Position", L"Position", L"Position", -1, { -1, 0, 1, 2, 3, 4, 5 }, { L"Auto", L"Haut gauche", L"Haut droite", L"Bas gauche", L"Bas droite", L"Haut centre", L"Bas centre" },
-          { L"Auto", L"Top left", L"Top right", L"Bottom left", L"Bottom right", L"Top centre", L"Bottom centre" }, 0, 17, "Hud" },
+        { "Position", L"Position", L"Position", -1, { -1, 0, 1, 2, 3, 4, 5, 6 }, { L"Auto", L"Haut gauche", L"Haut droite", L"Bas gauche", L"Bas droite", L"Haut centre", L"Bas centre", L"Libre" },
+          { L"Auto", L"Top left", L"Top right", L"Bottom left", L"Bottom right", L"Top centre", L"Bottom centre", L"Free" }, 0, 17, "Hud" },   // (6 Libre : le joueur le place a la souris, tchat ouvert ; LibreX / LibreY ne sont ecrits que par le mod)
         { "Couleur", L"Couleur", L"Colour", 0, { 0, 1, 2, 3 }, { g_game == GAME_MSC ? L"Jaune" : L"Glace", g_game == GAME_MSC ? L"Orange" : L"Bleu ciel", L"Aurore", L"Lilas" },
           { g_game == GAME_MSC ? L"Yellow" : L"Ice", g_game == GAME_MSC ? L"Orange" : L"Sky blue", L"Aurora", L"Lilac" }, 0, 17, "Hud" },
         { "Fond", L"Opacité du fond", L"Background opacity", 60, { 0, 30, 45, 60, 75, 90 }, { L"Aucun", L"30 %", L"45 %", L"60 %", L"75 %", L"90 %" }, { L"None", L"30 %", L"45 %", L"60 %", L"75 %", L"90 %" }, 0, 17, "Hud" },
@@ -375,6 +375,8 @@ static void GfxLoad()
         GetPrivateProfileStringW(r.sec ? Widen(r.sec).c_str() : L"Graphismes", Widen(r.key).c_str(), L"", b, 32, ini.c_str());
         g_gfxVal[r.key] = b[0] ? _wtoi(b) : r.def;
     }
+    g_gfxVal["LibreX"] = (int)GetPrivateProfileIntW(L"Hud", L"LibreX", 30, ini.c_str());   // (lecture seule, pour l'apercu : memes defauts que le mod)
+    g_gfxVal["LibreY"] = (int)GetPrivateProfileIntW(L"Hud", L"LibreY", 120, ini.c_str());
     if (g_game == GAME_MSC && g_gfxVal["Retroviseurs"] > 1) g_gfxVal["Retroviseurs"] = 1;   // (« Complets » du F10 : oui dans My Summer Car)
     g_gfxReadT = GetTickCount();
 }
@@ -713,7 +715,7 @@ static const SetItem kSetItems[] = {
     { 20, SI_X, "footer", L"build", L"build", L"DE", NULL, 2 },
     { 21, SI_X, "hudstyles", L"Style du HUD", L"HUD style", NULL, NULL },
     { 22, SI_GFX, "Taille", NULL, NULL, L"Si le HUD te paraît trop gros ou trop petit", L"If the HUD looks too big or too small" },
-    { 22, SI_GFX, "Position", NULL, NULL, L"Auto : la place prévue pour ce style", L"Auto: the usual place for this style" },
+    { 22, SI_GFX, "Position", NULL, NULL, L"Auto : selon le style · Libre : à la souris, tchat ouvert", L"Auto: by style · Free: drag it with the chat open" },
     { 22, SI_GFX, "Couleur", NULL, NULL, NULL, NULL },
     { 22, SI_GFX, "Fond", NULL, NULL, NULL, NULL },
     { 22, SI_GFX, "Estomper", NULL, NULL, L"Presque vides, elles s'effacent", L"Nearly empty, they fade out" },
@@ -1021,6 +1023,8 @@ static void SetChip(Graphics &g, float rightX, float cy, const std::wstring &s, 
 // Bouton plat de ligne (hauteur 32) ; renvoie sa largeur.
 static float SetButtonW(const std::wstring &s) { return MeasureW(MeasureG(), s, 12.5f, FontStyleBold) + 32; }
 
+// Position du HUD : la liste boucle, Auto est a un clic de Libre.
+static bool GfxRowLoops(const GfxRow &r) { return !strcmp(r.key, "Position"); }
 // Valeurs montrees en pastilles pour un reglage (pv : les courtes, plus la valeur courante si elle n'y est pas, a sa place).
 static void SetGfxVals(const GfxRow &r, int v, std::vector<int> &vals, std::vector<std::wstring> &labs)
 {
@@ -1103,7 +1107,7 @@ static void SetGfxRow(Graphics &g, const SetItem &it, int idx, RectF row, const 
     GraphicsPath vp; RoundRect(vp, val, 10);
     SolidBrush vb(TH(btn2)); g.FillPath(&vb, &vp);
     Pen vpen(TH(fieldBorder), 1.0f); g.DrawPath(&vpen, &vp);
-    bool canL = p.k > 0, canR = p.k + 1 < (int)r.vals.size();
+    bool canL = p.k > 0 || GfxRowLoops(r), canR = p.k + 1 < (int)r.vals.size() || GfxRowLoops(r);
     Icon(g, IC_CHEVL, lft.X + 15, lft.Y + lft.Height / 2, 14, WithA(g_uiHot == id + 1 ? kAcc : kInk, canL ? 1.0f : 0.25f), 2.2f);
     Icon(g, IC_CHEVR, rgt.X + 15, rgt.Y + rgt.Height / 2, 14, WithA(g_uiHot == id + 2 ? kAcc : kInk, canR ? 1.0f : 0.25f), 2.2f);
     Text(g, T(r.lf[p.k], r.le[p.k]), RectF(lft.X + lft.Width, val.Y, val.Width - 60, val.Height), 12.5f, FontStyleBold, r.vals[p.k] == -1 ? kGrey : kInk);
@@ -1774,6 +1778,7 @@ static void HudPreview(Graphics &g, RectF box, int style, bool big)
     if (pos < 0) pos = style == 2 ? 2 : style == 3 ? 4 : 0;
     float m = 10 * sc;
     auto place = [&](float w, float h) {
+        if (pos == 6) return RectF(box.X + (box.Width - w) * min(1000, max(0, GfxGet("LibreX"))) / 1000.0f, box.Y + (box.Height - h) * min(1000, max(0, GfxGet("LibreY"))) / 1000.0f, w, h);   // (Libre : comme le mod, en milliemes de la place disponible)
         float px = (pos == 1 || pos == 3) ? box.X + box.Width - w - m : (pos == 4 || pos == 5) ? box.X + (box.Width - w) / 2 : box.X + m;
         float py = (pos == 2 || pos == 3 || pos == 5) ? box.Y + box.Height - h - m : box.Y + m;
         return RectF(px, py, w, h);
@@ -2035,10 +2040,87 @@ static bool GfxClick(int id)
     if (r.vals.empty()) { if (part == 0) GfxSet(r.key, v == 1 ? 0 : 1); return true; }
     int k = 0;
     for (int i = 0; i < (int)r.vals.size(); i++) if (r.vals[i] == v) k = i;
-    if (part == 1 && k > 0) GfxSet(r.key, r.vals[k - 1]);
-    if (part == 2 && k + 1 < (int)r.vals.size()) GfxSet(r.key, r.vals[k + 1]);
+    int n = (int)r.vals.size();
+    if (part == 1 && (k > 0 || GfxRowLoops(r))) GfxSet(r.key, r.vals[(k + n - 1) % n]);
+    if (part == 2 && (k + 1 < n || GfxRowLoops(r))) GfxSet(r.key, r.vals[(k + 1) % n]);
     return true;
 }
+// /testhudlibre <journal> : le lanceur ne touche pas a une position libre tant que le joueur n'a rien change. Dossier de jeu jetable seulement.
+static int HudLibreSelfTest(const wchar_t *log)
+{
+    DeleteFileW(log);
+    int bad = 0;
+    auto say = [&](const std::string &l, bool good) {
+        FILE *o = _wfopen(log, L"ab");
+        if (o) { fprintf(o, "%s %s\r\n", l.c_str(), good ? "ok" : "ECHEC"); fclose(o); }
+        if (!good) bad++;
+    };
+    std::wstring parent = g_dir.substr(0, g_dir.find_last_of(L'\\', g_dir.size() - 2) + 1);
+    if (g_gameDir.empty() || _wcsicmp(g_gameDir.c_str(), g_dir.c_str()) || _wcsnicmp(LocalDir().c_str(), parent.c_str(), parent.size())) { say("refuse : dossier de jeu jetable et LOCALAPPDATA a cote obligatoires", false); return 3; }
+    std::wstring ini = ModIni();
+    auto put = [&](const char *t) { FILE *o = _wfopen(ini.c_str(), L"wb"); if (o) { fputs(t, o); fclose(o); } };
+    auto bytes = [&]() { std::vector<unsigned char> d; ReadAll(ini, d); return std::string(d.begin(), d.end()); };
+    auto disk = [&](const wchar_t *k) { return (int)GetPrivateProfileIntW(L"Hud", k, -1000, ini.c_str()); };
+    int idx = SetGfxIdx("Position");
+    if (idx < 0) { say("ligne Position introuvable", false); return 3; }
+    const GfxRow &r = GfxRows()[idx];
+    const SetItem *item = NULL;
+    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].kind == SI_GFX && !strcmp(kSetItems[i].key, "Position")) item = &kSetItems[i];
+    if (!item) { say("reglage Position introuvable", false); return 3; }
+    int gauche = UI_GFX + idx * 3 + 1, droite = UI_GFX + idx * 3 + 2;
+
+    const char *ref = "[Coop]\r\nPseudo=Essai\r\n[Hud]\r\nStyle=1\r\nPosition=6\r\nLibreX=432\r\nLibreY=765\r\n";
+    put(ref);
+    std::string avant = bytes();
+    for (int i = 0; i < 3; i++) GfxLoad();
+    GfxPlan plan = SetGfxPlan(*item, idx, 600);
+    bool libre = plan.k >= 0 && plan.k < (int)r.vals.size() && r.vals[plan.k] == 6 && !wcscmp(r.lf[plan.k], L"Libre") && !wcscmp(r.le[plan.k], L"Free");
+    say("Position=6 affichee Libre / Free", libre);
+    say("LibreX et LibreY lus pour l'apercu", GfxGet("LibreX") == 432 && GfxGet("LibreY") == 765);
+    say("lecture et mise en page : fichier identique a l'octet", bytes() == avant);
+    bool preset = false;
+    for (const auto &ps : GfxPresets()) for (const auto &kv : ps.v) if (!strcmp(kv.first, "Position") || !strcmp(kv.first, "LibreX") || !strcmp(kv.first, "LibreY")) preset = true;
+    say("aucun preset n'ecrit la position", !preset);
+
+    GfxClick(droite);
+    say("Libre, droite : Auto (cle retiree)", GfxGet("Position") == -1 && disk(L"Position") == -1000);
+    say("Auto : la place libre reste dans le fichier", disk(L"LibreX") == 432 && disk(L"LibreY") == 765);
+    GfxClick(gauche);
+    say("Auto, gauche : Libre", GfxGet("Position") == 6 && disk(L"Position") == 6);
+    say("retour a Libre : meme place", disk(L"LibreX") == 432 && disk(L"LibreY") == 765);
+    GfxClick(gauche);
+    say("Libre, gauche : Bas centre", GfxGet("Position") == 5 && disk(L"Position") == 5);
+    GfxClick(droite);
+    say("Bas centre, droite : Libre", GfxGet("Position") == 6 && disk(L"Position") == 6);
+    std::string tour;
+    for (int i = 0; i < (int)r.vals.size(); i++) { GfxClick(droite); tour += std::to_string(GfxGet("Position")) + " "; }
+    say("tour complet a droite : " + tour, tour == "-1 0 1 2 3 4 5 6 ");
+    say("tour complet : place libre intacte", disk(L"LibreX") == 432 && disk(L"LibreY") == 765);
+
+    put("[Hud]\r\nStyle=0\r\nPosition=6\r\nLibreX=432\r\nLibreY=765\r\n");
+    avant = bytes();
+    GfxLoad();
+    GfxClick(droite); GfxClick(gauche);
+    say("style Vanilla : ligne coupee, clics sans ecriture", bytes() == avant);
+
+    put("[Hud]\r\nStyle=1\r\nPosition=42\r\n");
+    avant = bytes();
+    GfxLoad();
+    SetGfxPlan(*item, idx, 600);
+    say("valeur inconnue : pas d'ecriture sans clic", bytes() == avant);
+    GfxClick(gauche);
+    say("valeur inconnue, gauche : Libre", GfxGet("Position") == 6);
+
+    put("[Hud]\r\nStyle=1\r\n");
+    GfxLoad();
+    plan = SetGfxPlan(*item, idx, 600);
+    say("sans cle Position : Auto", r.vals[plan.k] == -1);
+    GfxClick(gauche);
+    say("Libre choisie au lanceur : defauts du mod a l'apercu", GfxGet("Position") == 6 && GfxGet("LibreX") == 30 && GfxGet("LibreY") == 120 && disk(L"LibreX") == -1000);
+    put(ref);
+    return bad ? 1 : 0;
+}
+
 // Clic sur la page (zones UI_SET_* et celles des reglages) ; vrai si pris.
 static bool SetClick(int id)
 {

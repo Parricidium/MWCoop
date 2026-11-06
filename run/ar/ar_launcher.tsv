@@ -2835,7 +2835,7 @@ Autosave: the host can have the game saved every 5, 10, 15 or 30 minutes (off by
 In minutes · a freeze of a few seconds or more, for everyone	بالدقائق · تجمّد لبضع ثوانٍ أو أكثر، للجميع
 The game's watch shows on the other players' left wrist, from the start of the game.	تظهر ساعة اللعبة على المعصم الأيسر للاعبين الآخرين منذ بداية اللعب.
 The game's watch shows on the left wrist of the player who has obtained it, not before.	تظهر ساعة اللعبة على المعصم الأيسر للاعب الذي حصل عليها، وليس قبل ذلك.
-Free position (Card, Rings or Strip): with the chat open (T), drag the HUD with the mouse and drop it where you want; the spot is kept. To go back to a fixed place: F10 › HUD.	الموضع الحر (بطاقة أو حلقات أو شريط): والدردشة مفتوحة (T)، اسحب الواجهة بالفأرة وأفلتها حيث تريد؛ ويُحفظ المكان. للعودة إلى مكان ثابت: F10 › HUD.
+Free position (Card, Rings or Strip): with the chat open (T), drag the HUD with the mouse and drop it where you want; the spot is kept. To go back to a fixed place: F10 › HUD, or Position in the HUD tab of Settings.	الموضع الحر (بطاقة أو حلقات أو شريط): والدردشة مفتوحة (T)، اسحب الواجهة بالفأرة وأفلتها حيث تريد؛ ويُحفظ المكان. للعودة إلى مكان ثابت: F10 › HUD، أو «الموضع» في تبويب HUD ضمن الإعدادات.
 Chat bubbles: each message appears for a few seconds above the player who wrote it, readable up to 60 m. On by default, with every style; turn them off in F10 › HUD.	فقاعات الدردشة: تظهر كل رسالة بضع ثوانٍ فوق اللاعب الذي كتبها، وتُقرأ حتى مسافة 60 م. مفعّلة تلقائياً مع كل الأنماط؛ ويمكن إيقافها من F10 › HUD.
 Keys at the wheel	المفاتيح أثناء القيادة
 Add-on cars and the s21 quest car are controlled with the game's keys, the ones set in its options:	تُتحكَّم السيارات الإضافية وسيارة مهمة s21 بمفاتيح اللعبة، تلك المضبوطة في إعداداتها:
@@ -2848,7 +2848,8 @@ Car radio: aim at it, click to change station or turn it off, mouse wheel for th
 Rev counter: temperature and fuel as bars, in its two windows.	عدّاد الدورات: الحرارة والوقود على شكل أشرطة، في نافذتيه.
 40 L tank, with a warning when it's nearly empty. Filling up: engine off, car under 12 m from a pump, on foot next to it, hold the left click; 5 mk per litre, in cash.	خزان سعة 40 لتراً، مع تنبيه عندما يوشك أن يفرغ. التعبئة: المحرك متوقف، والسيارة على بعد أقل من 12 م من مضخة، وأنت واقف بجانبها، مع إبقاء زر الفأرة الأيسر مضغوطاً؛ 5 mk للتر، نقداً.
 Out of fuel far from anything: 4 s on the starter find the bottom of the tank.	إذا نفد الوقود بعيداً عن كل شيء: 4 ثوانٍ على بادئ التشغيل تجد ما بقي في قاع الخزان.
-Colour: F10 > Cars tab, under the grid, once the quest is done. Eight shades, kept in the save.	اللون: F10 > تبويب السيارات، تحت الشبكة، بعد إتمام المهمة. ثمانية ألوان، ويبقى اللون محفوظاً.
+Free	حر
+Auto: by style · Free: drag it with the chat open	تلقائي: حسب النمط · حر: بالفأرة والدردشة مفتوحة
 MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.	يوضع MWCoop في مجلد اللعبة، بجانب mywintercar.exe. والمشغّل (MWCoop.exe) يتولى الباقي: يثبّت التعديل ويحدّثه ويشغّل اللعبة.
 Install in 4 steps	التثبيت في 4 خطوات
 In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.	في Steam: انقر بالزر الأيمن على My Winter Car > إدارة > استعراض الملفات المحلية. سيُفتح مجلد اللعبة.
