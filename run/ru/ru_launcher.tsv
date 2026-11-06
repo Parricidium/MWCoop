@@ -1541,11 +1541,11 @@ You are a guest · %s · %s · %d / %d players	Ты гость · %s · %s · и
 You were hosting	Ты был хостом
 You: outfit, car · another one: kick them out.	Ты: одежда, машина · другой игрок: выгнать.
 Your MSCLoader mods, and those you send to your guests when you host.	Твои моды MSCLoader и те, что ты отправляешь гостям, когда хостишь.
-Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it.	Твои партии MWCoop, отдельно от соло-сохранения игры. Хост выбирает, какую запустить; гости её получают.
+Your games, including the game's solo save. The host picks which one to start; guests receive it.	Твои партии, включая соло-сохранение игры. Хост выбирает, какую запустить; гости её получают.
 Your character	Твой персонаж
 Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.	Твоя покраска (peinture.png) отправляется вместо Images\\car.png. Настройки: Персонаж › Машина.
 Your personal files, copied to your lobby's guests. They see and hear the same as you.	Твои личные файлы, копируются гостям твоего лобби. Они видят и слышат то же, что и ты.
-Your solo save (the game's) is never touched by MWCoop.	Твоё соло-сохранение (игры) MWCoop никогда не трогает.
+Your solo save (the game's) is only touched if you launch it with MWCoop.	Твоё соло-сохранение (игровое) затрагивается, только если ты запускаешь его с MWCoop.
 \"%s\" created from the zip and in use	\"%s\" создана из zip и используется
 all received	всё получено
 at a friend's	у друга

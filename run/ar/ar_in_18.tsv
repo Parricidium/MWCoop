@@ -165,11 +165,11 @@ RY165	You are a guest · %s · %s · %d / %d players
 RY166	You were hosting
 RY167	You: outfit, car · another one: kick them out.
 RY168	Your MSCLoader mods, and those you send to your guests when you host.
-RY169	Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it.
+RY169	Your games, including the game's solo save. The host picks which one to start; guests receive it.
 RY170	Your character
 RY171	Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.
 RY172	Your personal files, copied to your lobby's guests. They see and hear the same as you.
-RY173	Your solo save (the game's) is never touched by MWCoop.
+RY173	Your solo save (the game's) is only touched if you launch it with MWCoop.
 RY174	\"%s\" created from the zip and in use
 RY175	all received
 RY176	at a friend's

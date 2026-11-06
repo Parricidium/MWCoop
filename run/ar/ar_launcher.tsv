@@ -698,11 +698,11 @@ You are a guest · %s · %s · %d / %d players	أنت ضيف · %s · %s · %d /
 You were hosting	كنت المضيف
 You: outfit, car · another one: kick them out.	أنت: الملابس، السيارة · لاعب آخر: طرده.
 Your MSCLoader mods, and those you send to your guests when you host.	تعديلات MSCLoader الخاصة بك، وتلك التي ترسلها إلى ضيوفك عندما تستضيف.
-Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it.	ألعاب MWCoop الخاصة بك، منفصلة عن ملف الحفظ الفردي للعبة. يختار المضيف أيها يبدأ؛ ويستلمها الضيوف.
+Your games, including the game's solo save. The host picks which one to start; guests receive it.	ألعابك، ومنها الحفظ الفردي للعبة. يختار المضيف أيها يبدأ؛ ويستلمها الضيوف.
 Your character	شخصيتك
 Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.	طلاؤك المخصص (peinture.png) يُرسل بدلاً من Images\\car.png. الإعدادات: الشخصية › السيارة.
 Your personal files, copied to your lobby's guests. They see and hear the same as you.	ملفاتك الشخصية، تُنسخ إلى ضيوف ردهتك. يرون ويسمعون ما تراه وتسمعه.
-Your solo save (the game's) is never touched by MWCoop.	ملف حفظك الفردي (الخاص باللعبة) لا يمسّه MWCoop أبداً.
+Your solo save (the game's) is only touched if you launch it with MWCoop.	لا يتأثر حفظك الفردي (حفظ اللعبة) إلا إذا شغّلته مع MWCoop.
 \"%s\" created from the zip and in use	أُنشئت \"%s\" من ملف zip وهي قيد الاستخدام
 all received	استُلم الكل
 at a friend's	عند صديق

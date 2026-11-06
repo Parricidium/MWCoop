@@ -1043,7 +1043,7 @@ static void DrawSaves(Graphics &g)
         }
         g.Restore(st);
         if (ms > 0) DrawScrollBar(g, kSaveList, sc, ms);
-        Text(g, T(L"Ta sauvegarde solo (celle du jeu) n'est jamais touchée par MWCoop.", L"Your solo save (the game's) is never touched by MWCoop."),
+        Text(g, T(L"Ta sauvegarde solo (celle du jeu) n'est touchée que si tu la lances avec MWCoop.", L"Your solo save (the game's) is only touched if you launch it with MWCoop."),
              RectF(c.X + 18, c.Y + 572, c.Width - 36, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         // dossier de la partie choisie + Ouvrir
         float fy = c.Y + c.Height - 16 - 36;
