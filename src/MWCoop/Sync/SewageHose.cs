@@ -733,7 +733,7 @@ namespace MWCoop
             Shot(tag + "-dos", mid - g.forward * 6f + Vector3.up * 2.5f, mid);
             Shot(tag + "-haut", mid + Vector3.up * 8f + g.right * 0.5f, mid);
         }
-        static void Shot(string name, Vector3 from, Vector3 at)
+        internal static void Shot(string name, Vector3 from, Vector3 at)
         {
             var go = new GameObject("tuyau_photo");
             try

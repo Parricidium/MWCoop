@@ -461,7 +461,7 @@ namespace MWCoop
                                     WiringMsc.OnLevelLoaded,   // (20/10 : fils de la SATSUMA)
                                     MecaMsc.OnLevelLoaded,   // (27/10 : casses et Damaged de la SATSUMA)
                                     WindowCranks.OnLevelLoaded,   // (27/10 : vitres de la SATSUMA)
-                                    Difficulty.OnLevelLoaded, Sleepers.OnLevelLoaded,
+                                    Difficulty.OnLevelLoaded, Sleepers.OnLevelLoaded, ParentsBed.OnLevelLoaded,
                                     Radio.OnLevelLoaded,   // (22/10 : radio et lecteur CD partages)
                                     Voices.OnLevelLoaded, Particles.OnLevelLoaded, Sauna.OnLevelLoaded, NearDoors.OnLevelLoaded, CarHits.OnLevelLoaded,
                                     CarLeaks.OnLevelLoaded, Knobs.OnLevelLoaded, AssembleIcon.OnLevelLoaded,   // (22/10 : modules generiques)
@@ -486,7 +486,7 @@ namespace MWCoop
             "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente", "export carte", "export places", "cartes",
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
-            "voitures", "portieres", "tableaux de bord", "passagers", "sommeil", "difficulte",
+            "voitures", "portieres", "tableaux de bord", "passagers", "sommeil", "lit des parents", "difficulte",
             "radio",   // (22/10 : canaux RadioChannels et lecteur CDPlayer de la SATSUMA, memes automates que MWC)
             // 22/10 (JD : « fait tout ») : modules generiques (ils balaient les automates et les objets, sans chemin de MWC) --
             // voix des PNJ (MasterAudio), particules du monde (TRAFFIC, RALLY), vapeur du sauna (Sauna.Stoves a les deux chemins),

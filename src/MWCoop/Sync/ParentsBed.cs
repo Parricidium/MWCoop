@@ -3,11 +3,11 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Dormir dans la chambre des parents (Maxim Pennis, 15/10 ; JD, 19/10 : oui). Le grand lit de la maison des parents
+    // Dormir dans la chambre des parents (Maxim Pennis, 15/10 ; JD, 19/10 : oui ; My Summer Car aussi, suggestion 35, JD 06/11). Le grand lit de la maison des parents
     // (YARD/Building/BEDROOM2 : bed_base/bed_soft) n'a pas de declencheur de sommeil ; celui du lit du joueur (BEDROOM1/
     // LOD_bedroom1/Sleep 1 : automate 'Activate' sur SleepTrigger, pivot anime AnimPivotSleep) est copie dessus : le corps dans
     // la longueur du lit, la tete du cote de la table de nuit, a la hauteur du matelas. Copie faite chez chacun, 14 s apres le
-    // chargement ; dormir y fait comme dans son lit (temps, sauvegarde : l'automate du jeu). My Winter Car seulement. Corps remonte de 80 cm vers
+    // chargement ; dormir y fait comme dans son lit (temps, sauvegarde : l'automate du jeu). Corps remonte de 80 cm vers
     // la tete de lit (le milieu pivot-tete de l'animation n'est pas le milieu du corps : il depassait au pied du lit, 22/10).
     // [Test] LitParents=dx,dy,dz : decalage du corps (repere du monde : axe du lit, haut, travers), par defaut 0 / 0,08 / 0.
     public static class ParentsBed
@@ -18,7 +18,7 @@ namespace MWCoop
         static Vector3 feetDir;   // (sens des pieds dans le lit, monde)
         static Transform lastPivot; static Quaternion savedLocal; static Vector3 wakeAt;
 
-        public static void OnLevelLoaded() { at = PlayerSync.InGame && !Game.Msc ? Time.realtimeSinceStartup + 14f : -1; done = false; aligned = false; releasing = false; pivots.Clear(); wakes.Clear(); }
+        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1; done = false; aligned = false; releasing = false; pivots.Clear(); wakes.Clear(); }
 
         public static void Update()
         {
@@ -92,7 +92,7 @@ namespace MWCoop
 
         static void Make()
         {
-            GameObject tpl = Game.FindAny("YARD/Building/BEDROOM1/LOD_bedroom1/Sleep 1");
+            GameObject tpl = Game.FindAny(Game.Msc ? "YARD/Building/BEDROOM1/LOD_bedroom1/Sleep" : "YARD/Building/BEDROOM1/LOD_bedroom1/Sleep 1");
             GameObject bed = Game.FindAny("YARD/Building/BEDROOM2/bed_base/bed_soft");
             if (tpl == null || bed == null) { Log.Warn("lit des parents : " + (tpl == null ? "declencheur de sommeil du lit du joueur" : "lit des parents (bed_soft)") + " introuvable"); return; }
             Transform room = bed.transform.parent != null ? bed.transform.parent.parent : bed.transform.parent;
@@ -126,7 +126,7 @@ namespace MWCoop
             sl.SetActive(true);
             PlayMakerFSM fsm = null;
             foreach (PlayMakerFSM f in sl.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Activate") fsm = f;
-            Transform pivot = sl.transform.Find("AnimPivotSleep");
+            Transform pivot = sl.transform.Find(Game.Msc ? "AnimPivot" : "AnimPivotSleep");
             if (pivot != null)
             {
                 pivots.Add(pivot);
@@ -138,7 +138,7 @@ namespace MWCoop
             Transform head = pivot != null ? pivot.Find("Sphere") : null;
             foreach (Renderer r in sl.GetComponentsInChildren<Renderer>(true)) r.enabled = false;   // (reperes du corps : invisibles)
             // (k.x : la tete -- le pivot final, ou le jeu pose la camera du dormeur -- a cette distance du milieu vers la tete de lit)
-            Vector3 k = ParseV(Config.Get("Test", "LitParents", ""), new Vector3(-0.35f, -0.37f, -0.50f));
+            Vector3 k = ParseV(Config.Get("Test", "LitParents", ""), Game.Msc ? new Vector3(-0.40f, -0.37f, 0f) : new Vector3(-0.35f, -0.37f, -0.50f));   // (My Summer Car : pas d'ecart de travers entre le pivot et le corps, le corps sortait du lit, photos 06/11)
             Vector3 across = Vector3.Cross(Vector3.up, ax);
             // L'animation du jeu (sleep_bed_in, sur AnimPivotSleep) deplace le pivot -- et le joueur, qui y est accroche -- de l'origine
             // du declencheur jusqu'au lit : c'est la pose FINALE du pivot qu'on aligne sur le lit (le modele « Sleep 1 » est a 1,4 m
@@ -165,6 +165,60 @@ namespace MWCoop
                 if (!fsm.enabled) fsm.enabled = true;
             }
             return fsm != null;
+        }
+
+        // [Test] Autotest=litparents : a 25 s, le joueur a cote du lit se couche (l'automate du jeu, seul le clic n'est pas rejoue) a la place [Test] LitPlace (1 ou 2) ; position du joueur
+        // et de la camera toutes les 2 s jusqu'au reveil, photos couche et debout (dumps	uyau-*lit*.png).
+        static int tStep; static float tNext, tAt;
+        public static void Test(float t)
+        {
+            // ([Test] LitVue=s : pas de sommeil ici, photos du lit toutes les 2 s pendant 24 s a partir de s : l'avatar couche de l'autre joueur)
+            float vue = Config.GetFloat("Test", "LitVue", 0f);
+            if (vue > 0f)
+            {
+                GameObject vb = Game.FindAny("YARD/Building/BEDROOM2/bed_base/bed_soft");
+                if (vb != null && t > vue && t < vue + 24f && Time.realtimeSinceStartup >= tNext)
+                {
+                    tNext = Time.realtimeSinceStartup + 2f; int k = (int)(t - vue);
+                    Vector3 c = vb.GetComponent<Collider>().bounds.center;
+                    SewageHose.Shot("lit-vue" + k + "-haut", c + Vector3.up * 2.4f + Vector3.right * 0.1f, c);
+                    SewageHose.Shot("lit-vue" + k + "-pied", c + feetDir * 2.4f + Vector3.up * 1.0f, c);
+                }
+                return;
+            }
+            if (t < Config.GetFloat("Test", "LitA", 25f)) return;
+            if (tStep == 0 && t > 25f)
+            {
+                tStep = 1;
+                string nom = "Sleep MWCoop " + Config.GetInt("Test", "LitPlace", 1);
+                GameObject room = Game.FindAny("YARD/Building/BEDROOM2");
+                Transform sl = room != null ? room.transform.Find(nom) : null;
+                PlayMakerFSM f = null;
+                if (sl != null) foreach (PlayMakerFSM x in sl.GetComponentsInChildren<PlayMakerFSM>(true)) if (x.FsmName == "Activate") f = x;
+                Log.Info("autotest : litparents, " + nom + " " + (sl != null ? "trouve en " + sl.position.ToString("F2") : "INTROUVABLE") + ", automate " + (f != null ? f.ActiveStateName : "absent") + ", places " + pivots.Count);
+                if (f == null) return;
+                GameObject pl = Game.PlayerGo; var cc = pl.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false; pl.transform.position = f.transform.position + feetDir * 1.6f + Vector3.up * 0.3f; if (cc != null) cc.enabled = true;
+                FsmFloat fat = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue"); if (fat != null) fat.Value = 30f;
+                Game.SetState(f, "Get positions");
+                tAt = Time.realtimeSinceStartup;
+            }
+            if (tStep == 0) return;
+            float now = Time.realtimeSinceStartup;
+            if (now >= tNext && now - tAt < 120f)
+            {
+                tNext = now + 2f;
+                Transform pl = Game.PlayerT; Camera cam = Camera.main;
+                bool sl = Game.GlobalBool("PlayerSleeps");
+                Log.Info("autotest : litparents +" + (now - tAt).ToString("F0") + " s : dort " + sl + ", joueur " + (pl != null ? pl.position.ToString("F2") + " haut " + pl.up.ToString("F2") + " parent " + (pl.parent != null ? pl.parent.name : "aucun") : "?") + ", camera " + (cam != null ? cam.transform.position.ToString("F2") : "?"));
+                GameObject bed = Game.FindAny("YARD/Building/BEDROOM2/bed_base/bed_soft");
+                if (bed != null && pl != null)
+                {
+                    Vector3 c = bed.transform.position;
+                    if (tStep == 1 && sl) { tStep = 2; SewageHose.Shot("lit-couche-haut", c + Vector3.up * 2.2f + Vector3.right * 0.2f, pl.position); SewageHose.Shot("lit-couche-cote", c + feetDir * 2.6f + Vector3.up * 1.1f, pl.position); }
+                    if (tStep == 2 && !sl && pl.parent == null) { tStep = 3; SewageHose.Shot("lit-debout", pl.position + feetDir * 2f + Vector3.up * 1f, pl.position); Log.Info("autotest : litparents, reveil ; sol sous le joueur " + Floor(pl.position, float.NaN).ToString("F2") + ", attendu lever " + wakeAt.ToString("F2")); }
+                }
+            }
         }
 
         static Vector3 ParseV(string s, Vector3 def)
