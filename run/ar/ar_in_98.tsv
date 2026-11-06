@@ -1,0 +1,4 @@
+L98-1	Paint, once the quest is done: bring the car to the front of Fleetari's repair shop, then open the \"Paint\" brochure, on the desk next to the other one. Regular (10,150 mk) or metallic (18,950 mk), then a factory or RGB colour.
+L98-2	The work takes 1,400 to 2,600 s and only moves forward while you're more than 100 m from the shop. Fleetari calls when it's done; the car must be at the shop by then, otherwise the work waits for it to come back.
+L98-3	You pay when ordering, with a 10% discount.
+L98-4	You order without paying. After the work, a bill (price + 15 mk) replaces the brochure on the desk: click it to pay.
