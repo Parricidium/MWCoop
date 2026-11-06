@@ -115,6 +115,7 @@ namespace MWCoop
             return car.StartsWith(Vaz.Prefix) ? Vaz.SeatKey(car) ?? car : car;   // (VAZ et addons : par modele, « modele-evo3 »...)
         }
 
+        public static string KeyOf(string car) { return Key(car); }   // (VitreFiles : memes noms de voitures)
         public static CarFile For(string car)
         {
             Check();

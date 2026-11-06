@@ -30,6 +30,7 @@ namespace MWCoop
             public bool Ready, Flip = true; public Matrix4x4 A, B; public float WaitLog, DownMag;   // vitre de droite (locale) = A * temoin (local) * B
             public bool Straight; public Vector3 RestP, RestS; public Quaternion RestQ; public Cut[] Cuts;   // vitre arriere : descend tout droit, maillages coupes a la ceinture
             public Vector3 LastP = new Vector3(1e9f, 0, 0); public Quaternion LastQ;
+            public VitreFiles.Glass V;   // (reglee dans l'outil des places, onglet Vitres : ses poses et son plan a la place du calcul)
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
 
@@ -38,7 +39,7 @@ namespace MWCoop
         // coupees sont interpolees : position, normale, UV). Le maillage d'origine reste intact (copie de travail).
         public class Cut
         {
-            public MeshFilter MF; public Mesh Work; public Vector3[] V, N; public Vector2[] UV; public int[][] T; public Vector3 Up; public float Min; public float Last = -1f;
+            public MeshFilter MF; public Mesh Work, Orig; public bool UsePlane; public Vector3 PlaneP, PlaneN; public float LastF = -1f; public Vector3[] V, N; public Vector2[] UV; public int[][] T; public Vector3 Up; public float Min; public float Last = -1f;
             public System.Collections.Generic.List<Vector3> v = new System.Collections.Generic.List<Vector3>(), n = new System.Collections.Generic.List<Vector3>();
             public System.Collections.Generic.List<Vector2> uv = new System.Collections.Generic.List<Vector2>();
             public System.Collections.Generic.List<int> t = new System.Collections.Generic.List<int>();
@@ -53,7 +54,7 @@ namespace MWCoop
                 if (src == null) continue;
                 try
                 {
-                    var c = new Cut { MF = mf, V = src.vertices, N = src.normals, UV = src.uv };
+                    var c = new Cut { MF = mf, Orig = src, V = src.vertices, N = src.normals, UV = src.uv };
                     if (c.V == null || c.V.Length == 0) continue;
                     if (c.N == null || c.N.Length != c.V.Length) c.N = null;
                     if (c.UV == null || c.UV.Length != c.V.Length) c.UV = null;
@@ -87,12 +88,29 @@ namespace MWCoop
             RebuildCut(c, c.Min + h);
         }
 
+        // Plan de l'outil (repere du parent de la vitre) ramene dans le repere du maillage, pour chaque pose (f : course de 0 a 1).
+        static void ApplyPlane(Cut c, Transform parent, VitreFiles.Glass g, float f)
+        {
+            if (c.MF == null || Mathf.Abs(f - c.LastF) < 0.002f) return;
+            c.LastF = f;
+            Matrix4x4 m = c.MF.transform.worldToLocalMatrix * parent.localToWorldMatrix;
+            c.PlaneP = m.MultiplyPoint3x4(g.CutP);
+            c.PlaneN = m.inverse.transpose.MultiplyVector(g.CutN).normalized;   // (echelles, portiere de droite en miroir)
+            c.UsePlane = true;
+            if (c.MF.sharedMesh != c.Work) c.MF.sharedMesh = c.Work;
+            RebuildCut(c, 0f);
+        }
+        static void RestoreCuts(Mirror m)
+        {
+            if (m.Cuts != null) foreach (Cut c in m.Cuts) if (c.MF != null && c.Orig != null) { c.MF.sharedMesh = c.Orig; c.LastF = -1f; c.UsePlane = false; c.Last = -1f; }
+        }
+
         static void RebuildCut(Cut c, float cutoff)
         {
             c.v.Clear(); c.n.Clear(); c.uv.Clear();
             int[][] subs = new int[c.T.Length][];
             float[] d = new float[c.V.Length];
-            for (int i = 0; i < c.V.Length; i++) d[i] = Vector3.Dot(c.V[i], c.Up) - cutoff;
+            for (int i = 0; i < c.V.Length; i++) d[i] = c.UsePlane ? Vector3.Dot(c.V[i] - c.PlaneP, c.PlaneN) : Vector3.Dot(c.V[i], c.Up) - cutoff;
             for (int k = 0; k < c.T.Length; k++)
             {
                 c.t.Clear();
@@ -148,10 +166,40 @@ namespace MWCoop
         class Follow { public Transform Src, Dst; public Quaternion SrcRest, DstRest; }
         static readonly System.Collections.Generic.List<Follow> followers = new System.Collections.Generic.List<Follow>();
 
-        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); followers.Clear(); wins.Clear(); nextWinScan = 0f; }
+        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); followers.Clear(); wins.Clear(); nextWinScan = 0f; VitreFiles.OnLevelLoaded(); vitreGen = -1; }
+
+        static string PathIn(Transform car, Transform t) { return Recon.Path(t).Substring(Recon.Path(car).Length).TrimStart('/'); }
+        // Fichiers de vitres changes (outil des places, meme en partie) : vitres deja animees reliees a leur reglage, les nouvelles
+        // manivelles au prochain passage.
+        static int vitreGen = -1;
+        static void BindVitres()
+        {
+            VitreFiles.Check();
+            if (vitreGen == VitreFiles.Generation) return;
+            bool first = vitreGen < 0;
+            vitreGen = VitreFiles.Generation;
+            foreach (Mirror m in mirrors)
+            {
+                if (m.Car == null || m.GlassR == null) continue;
+                VitreFiles.Glass g = VitreFiles.Find(m.Car.name, PathIn(m.Car, m.GlassR));
+                if (m.V != null && g == null) { m.GlassR.localPosition = m.RestP; m.GlassR.localRotation = m.RestQ; RestoreCuts(m); }
+                m.V = g;
+                m.LastP = new Vector3(1e9f, 0, 0);
+                if (m.Cuts != null) foreach (Cut c in m.Cuts) c.LastF = -1f;
+            }
+            if (!first && at < 0 && PlayerSync.InGame) at = Time.realtimeSinceStartup;
+        }
+        // Course de la manivelle du conducteur de cette voiture (export pour l'outil), 0 sans elle.
+        public static float TravelOf(Transform car)
+        {
+            foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Knob" && f.gameObject.name == "opener" && f.transform.parent != null && f.transform.parent.name == "FrontL") return DownTarget(f.gameObject);
+            return 0f;
+        }
 
         public static void Update()
         {
+            BindVitres();
             Drive();
             TickWins();
             if (at < 0 || Time.realtimeSinceStartup < at) return;
@@ -173,13 +221,16 @@ namespace MWCoop
             // Portieres arriere : chaque DoorRear* avec un pivot de vitre et une manivelle sans automate.
             // Coupe par defaut (JD, 15/10 : la vitre arriere, animee tout droit, inclinee ou coupee a la ceinture, restait
             // incorrecte chez lui -- a animer a la main plus tard) : manivelles arriere laissees telles que le jeu les
-            // dessine, inertes, vitres arriere d'origine. [Coop] VitresArriere=1 : l'animation (essais).
+            // dessine, inertes, vitres arriere d'origine. [Coop] VitresArriere=1 : l'animation (essais). Depuis le 06/11 : les vitres
+            // reglees a la main dans l'outil des places (VitreFiles), elles seules.
             int nr = 0;
-            if (Config.GetInt("Coop", "VitresArriere", 0) != 0) foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            bool allRear = Config.GetInt("Coop", "VitresArriere", 0) != 0;
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
                 if (f == null || f.FsmName != "Knob" || f.gameObject.name != "opener" || f.transform.parent == null || f.transform.parent.name != "FrontL") continue;
                 Transform doors = f.transform.parent.parent != null ? f.transform.parent.parent.parent : null;
                 if (doors == null) continue;
+                if (!allRear && (doors.parent == null || VitreFiles.For(doors.parent.name) == null)) continue;
                 foreach (Transform door in doors)
                 {
                     if (!door.name.StartsWith("DoorRear")) continue;
@@ -193,6 +244,7 @@ namespace MWCoop
                         foreach (PlayMakerFSM k in x.GetComponents<PlayMakerFSM>()) knob |= k.FsmName == "Knob";
                     }
                     if (glass == null || drawn == null || knob) continue;
+                    if (!allRear && VitreFiles.Find(doors.parent.name, PathIn(doors.parent, glass)) == null) continue;
                     Transform side = glass.parent != null && glass.parent.parent != null ? glass.parent.parent : door;
                     Transform car = doors.parent;
                     bool flip = car != null && car.InverseTransformPoint(glass.position).x * car.InverseTransformPoint(f.transform.position).x < 0f;
@@ -241,7 +293,9 @@ namespace MWCoop
                 if (glassL != null && glassL.parent != null && glassR.parent != null)
                     mirrors.Add(new Mirror { Proxy = proxy, GlassL = glassL, GlassR = glassR, PivotL = glassL.parent, PivotR = glassR.parent,
                         Car = frontL.parent != null && frontL.parent.parent != null ? frontL.parent.parent.parent : frontR.root,
-                        DoorL = frontL.parent, DoorR = drawnRear != null ? DoorOf(glassR) : frontR.parent, DownMag = DownTarget(c), Flip = flip, Straight = drawnRear != null });
+                        DoorL = frontL.parent, DoorR = drawnRear != null ? DoorOf(glassR) : frontR.parent, DownMag = DownTarget(c), Flip = flip, Straight = drawnRear != null,
+                        RestP = glassR.localPosition, RestQ = glassR.localRotation, RestS = glassR.localScale });
+                if (mirrors.Count > 0 && mirrors[mirrors.Count - 1].GlassR == glassR) { Mirror nm = mirrors[mirrors.Count - 1]; if (nm.Car != null) nm.V = VitreFiles.Find(nm.Car.name, PathIn(nm.Car, glassR)); }
                 if (logs++ < 8) Log.Info("vitres : manivelle " + (drawnRear != null ? "arriere (" + frontR.name + (flip ? ", miroir" : "") + ")" : "passager") + " de " + frontR.root.name + " (" + (drawn != null ? "a la place de " + drawn.name : "en miroir") + ")");
                 return true;
             }
@@ -249,6 +303,7 @@ namespace MWCoop
         }
 
         // Vitres de droite : etalonnage (une fois, les deux portieres fermees), puis le mouvement du temoin en miroir.
+        static bool allRearOn { get { return Config.GetInt("Coop", "VitresArriere", 0) != 0; } }
         static void Drive()
         {
             foreach (Follow fo in followers) if (fo.Src != null && fo.Dst != null) fo.Dst.localRotation = fo.DstRest * (Quaternion.Inverse(fo.SrcRest) * fo.Src.localRotation);
@@ -256,6 +311,27 @@ namespace MWCoop
             {
                 Mirror m = mirrors[i];
                 if (m.Proxy == null || m.GlassR == null || m.GlassL == null || m.Car == null) { mirrors.RemoveAt(i); continue; }
+                if (m.V != null)
+                {
+                    // Reglee dans l'outil : poses haute et basse, selon la manivelle (le temoin), plan de coupe de son fichier. Poses dans le
+                    // parent de la vitre : pas besoin d'etalonner, elle suit la portiere ouverte ou fermee.
+                    Vector3 vp = m.Proxy.localPosition;
+                    if (vp == m.LastP) continue;
+                    m.LastP = vp;
+                    if (m.DownMag < 0.01f) m.DownMag = DownTarget(m.Proxy.parent.gameObject);
+                    float vf = m.DownMag > 0.01f ? Mathf.Clamp01(vp.magnitude / m.DownMag) : 0f;
+                    VitreFiles.Glass g = m.V;
+                    m.GlassR.localPosition = Vector3.Lerp(g.HasUp ? g.UpP : m.RestP, g.DownP, vf);
+                    m.GlassR.localRotation = Quaternion.Slerp(g.HasUp ? g.UpQ : m.RestQ, g.DownQ, vf);
+                    if (g.HasCut)
+                    {
+                        if (m.Cuts == null) PrepareCuts(m);
+                        foreach (Cut c in m.Cuts) ApplyPlane(c, m.GlassR.parent, g, vf);
+                    }
+                    else RestoreCuts(m);
+                    continue;
+                }
+                if (!allRearOn && m.Straight) continue;   // (fichier retire en partie : vitre d'origine)
                 if (!m.Ready)
                 {
                     if (!Closed(m.DoorL) || !Closed(m.DoorR))
@@ -603,7 +679,8 @@ namespace MWCoop
                 suiviLogged = true;
                 GameObject s = GameObject.Find("SORBET(190-200psi)");
                 Transform a = s != null ? s.transform.Find("Doors/DoorFront(leftx)/FrontL/WindowPivot/GlassPivot") : null, b = s != null ? s.transform.Find("Doors/DoorFront(right)/FrontR/WindowPivot/GlassPivot") : null;
-                Log.Info("autotest : vitre-suivi, gauche " + (a != null ? a.localPosition.ToString("F3") : "?") + " ; droite " + (b != null ? b.localPosition.ToString("F3") : "?") + " (" + wins.Count + " vitres suivies)");
+                Transform ra = s != null ? s.transform.Find("Doors/DoorRear(leftx)/RearL/WindowPivot/GlassPivot") : null, rb = s != null ? s.transform.Find("Doors/DoorRear(right)/RearR/WindowPivot 1/GlassPivot") : null;
+                Log.Info("autotest : vitre-suivi, gauche " + (a != null ? a.localPosition.ToString("F3") : "?") + " ; droite " + (b != null ? b.localPosition.ToString("F3") : "?") + " ; arriere gauche " + (ra != null ? ra.localPosition.ToString("F3") : "?") + " ; arriere droite " + (rb != null ? rb.localPosition.ToString("F3") : "?") + " (" + wins.Count + " vitres suivies)");
                 return;
             }
             if (mode == "vitreporte") { TestDoorGlass(t); return; }

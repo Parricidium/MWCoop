@@ -242,6 +242,7 @@ namespace MWCoop
             Vector3 eyes;
             if (Seats.DriverHead(car, out eyes)) sb.Append(",\"yeux\":").Append(V(eyes));
             sb.Append(Controls(car, head));
+            sb.Append(Vitres(car));
             Transform zone = FindDeep(car, "DriveTrigger");
             Collider zc = zone != null ? zone.GetComponent<Collider>() : null;
             if (zc != null) sb.Append(",\"zone\":{\"c\":").Append(V(car.InverseTransformPoint(zc.bounds.center))).Append(",\"s\":").Append(V(zc.bounds.size)).Append('}');
@@ -249,6 +250,30 @@ namespace MWCoop
             File.WriteAllText(Path.Combine(dir, file + ".json"), sb.ToString(), Encoding.UTF8);
             cars.Add(new CarEntry { Key = key, Name = name, Kind = kind, File = file + ".json" });
             Log.Info("export des places : " + name + " (" + key + ") : " + nObj + " objets, " + nBelt + " de ceintures" + (att != null ? " (attaches)" : "") + ", " + mats.Count + " matieres" + (unreadable > 0 ? ", " + unreadable + " illisibles" : "") + (head != null ? "" : ", PAS de pivot de tete"));
+        }
+
+        // Vitres reglables dans l'outil (onglet Vitres, JD 06/11 -- WindowCranks, VitreFiles) : pour commencer, celles des portieres
+        // arriere qui ont une manivelle dessinee (la SORBET). Objet qui bouge (chemin), parent -> voiture (matrice, lignes), pose locale ;
+        // course de la manivelle du conducteur.
+        static string Vitres(Transform car)
+        {
+            var sb = new StringBuilder();
+            int n = 0;
+            if (Vaz.IsVaz(car)) return "";   // (copies de la SORBET : plus tard, voitures du jeu d'abord)
+            foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name != "GlassPivot" || t.parent == null) continue;
+                Transform door = t;
+                while (door != null && door != car && !door.name.StartsWith("DoorRear")) door = door.parent;
+                if (door == null || door == car) continue;
+                bool crank = false;
+                foreach (Transform x in door.GetComponentsInChildren<Transform>(true)) if (x.name.StartsWith("opener")) crank = true;
+                if (!crank) continue;
+                sb.Append(n++ > 0 ? "," : "").Append("{\"chemin\":").Append(S(Recon.Path(t).Substring(Recon.Path(car).Length).TrimStart('/')))
+                  .Append(",\"nom\":").Append(S(door.name)).Append(",\"parent\":").Append(Mx(car.worldToLocalMatrix * t.parent.localToWorldMatrix))
+                  .Append(",\"p\":").Append(V(t.localPosition)).Append(",\"q\":").Append(Q(t.localRotation)).Append(",\"s\":").Append(V(t.localScale)).Append('}');
+            }
+            return n == 0 ? "" : ",\"vitres\":[" + sb + "],\"vitresCourse\":" + F(WindowCranks.TravelOf(car));
         }
 
         // Volant et levier du conducteur (Avatar.SteerOf / GearOf, comme en jeu) pour choisir les prises des mains dans l'outil (JD 29/10) :

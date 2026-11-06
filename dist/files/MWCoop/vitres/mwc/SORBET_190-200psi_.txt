@@ -1,0 +1,12 @@
+VITRES 1
+# outil des places -- poses et plan dans le repere du parent de la vitre
+jeu mwc
+voiture SORBET(190-200psi)
+vitre Doors/DoorRear(leftx)/RearL/WindowPivot/GlassPivot
+haut 0 0 0 0 0 0 1
+bas 0 -0.1852 -0.38 0 0 0 1
+coupe -0.0167 0.1066 -0.0273 0 0 1
+vitre Doors/DoorRear(right)/RearR/WindowPivot 1/GlassPivot
+haut 0 0 0 0 0 0 1
+bas 0 -0.1852 -0.38 0 0 0 1
+coupe -0.0167 0.1064 -0.0278 0 0 1
