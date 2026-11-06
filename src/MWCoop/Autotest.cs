@@ -1639,7 +1639,7 @@ namespace MWCoop
             }
         }
 
-        static void PutPlayer(Vector3 at) { GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null; if (cc == null) return; cc.enabled = false; pl.transform.position = at; cc.enabled = true; }
+        internal static void PutPlayer(Vector3 at) { GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null; if (cc == null) return; cc.enabled = false; pl.transform.position = at; cc.enabled = true; }
         static PlayMakerFSM FleetariRegister() { GameObject rg = Game.FindAny("REPAIRSHOP/LOD/Store/ShopCashRegister/Register"); return rg != null ? Game.FsmOn(rg, "Data") : null; }
 
         // ([Test] ReglagesEssai=amorti,parallelisme,ralenti,allumage avec Autotest=mscreglages, 2 joueurs, audit MSC 02/11 lot D #35/#36/

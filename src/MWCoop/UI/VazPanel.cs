@@ -267,8 +267,6 @@ namespace MWCoop
                 string st = mine ? Lang.T("la v\u00F4tre", "yours") : owner == null ? Lang.T("libre", "free") : owner;
                 Style.Text(new Rect(tx, r.yMax - P(24), r.xMax - tx - P(6), P(18)), st, 11, TextAnchor.MiddleLeft, mine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber, false);
             }
-            // (sous la grille : la fiche de droite est deja pleine)
-            QuestPaint(left, top + Mathf.Ceil(Vaz.Count / (float)Cols) * (ch + cg) + P(4));
             var pvr = new Rect(card.x, card.y, card.width, Mathf.Round(card.width * RtH / (float)RtW));
             DrawPreview(pvr, e, now);
             DrawCard(new Rect(card.x, pvr.yMax + P(10), card.width, card.yMax - pvr.yMax - P(10)), e);
@@ -294,23 +292,6 @@ namespace MWCoop
             }
             else if (tex == null) Style.Text(r, pv == null && pvNumber == hi && Time.realtimeSinceStartup < pvRetryAt ? Lang.T("Aper\u00E7u indisponible", "Preview unavailable") : "\u2026", 13, TextAnchor.MiddleCenter, Kit.Muted, false);
             Style.Ring(r, rad, Kit.Sep);
-        }
-
-        // Couleur de la voiture de la quete s21 : pour tous, une fois la cle donnee (quete sur la route, pas de couleur sur une voiture encore a Teimo)
-        static float QuestPaint(Rect r, float cy)
-        {
-            if (!QueteGolf.On || !QueteGolf.Done) return cy;
-            Style.Text(new Rect(r.x, cy, r.width, P(18)), Lang.T("Couleur de la voiture de la qu\u00EAte s21", "s21 quest car colour"), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
-            cy += P(20);
-            float sz = Mathf.Min(P(26), (r.width - 7f * P(6)) / QueteGolf.Palette.Length);
-            for (int i = 0; i < QueteGolf.Palette.Length; i++)
-            {
-                var cr = new Rect(r.x + i * (sz + P(6)), cy, sz, sz);
-                Style.Round(cr, sz / 2, QueteGolf.Palette[i]);
-                if (i == QueteGolf.PaintIndex) Style.Ring(new Rect(cr.x - 2f, cr.y - 2f, cr.width + 4f, cr.height + 4f), sz / 2 + 2f, Kit.Ice);
-                if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && cr.Contains(Event.current.mousePosition)) { QueteGolf.ChoosePaint(i); Event.current.Use(); }
-            }
-            return cy + sz + P(8);
         }
 
         static void DrawCard(Rect r, Event e)

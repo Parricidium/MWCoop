@@ -917,6 +917,7 @@ namespace MWCoop
         {
             if (!b.M.QuestOnly) return;
             st.HasFuel = true; st.Fuel = QueteGolf.SavedFuel; st.EngineTemp = QueteGolf.SavedTemp;
+            if (QueteGolf.Metal) VazCar.Repaint(b, QueteGolf.Paint, true);
             // (autoradio : le poste du modele, au-dessus des commandes du chauffage)
             st.HasRadio = true; st.RadioAt = new Vector3(Config.GetFloat("Test", "RadioX", -0.02f), Config.GetFloat("Test", "RadioY", 0.905f), Config.GetFloat("Test", "RadioZ", 0.54f));
             var rg = new GameObject("autoradio"); rg.transform.SetParent(b.Body, false); rg.transform.localPosition = st.RadioAt;
@@ -995,16 +996,16 @@ namespace MWCoop
             foreach (VazCar.Built b in cars) { State st; if (QueteGolf.IsQuestCar(b) && states.TryGetValue(b, out st) && driving != b && !st.EngineOn) st.Fuel = f; }
         }
         // (couleur de la voiture de la quete : la matiere de peinture du modele, partagee par toutes ses pieces)
-        public static void RepaintQuest(Color c)
+        public static void RepaintQuest(Color c, bool metal)
         {
             foreach (VazCar.Built b in cars)
             {
                 if (!QueteGolf.IsQuestCar(b)) continue;
-                VazCar.Repaint(b, c);
+                VazCar.Repaint(b, c, metal);
             }
         }
         // [Test] QueteCommandes=1 (QueteGolf.TestTick) : au volant, photos de la planche, touches simulees, reservoir, temperature, couleur.
-        static int qStep; static float qAt, qNextLog; static bool qAsked;
+        static int qStep; static float qAt, qNextLog;
         public static void QuestControlsTest(float e)
         {
             VazCar.Built b = null; State st = null;
@@ -1019,14 +1020,14 @@ namespace MWCoop
                 {
                     qNextLog = e + 3f;
                     float rv; float rf = QuestFuel(out rv);
-                    Log.Info("standalone : commandes, invite : " + etat() + ", radio " + st.RadioCh + ", couleur " + QueteGolf.PaintIndex + ", reservoir vu " + rf.ToString("F3") + ", temp vue " + rv.ToString("F1"));
+                    Log.Info("standalone : commandes, invite : " + etat() + ", radio " + st.RadioCh + ", reservoir vu " + rf.ToString("F3") + ", temp vue " + rv.ToString("F1"));
                 }
-                if (!qAsked && QueteGolf.PaintIndex == 2) { qAsked = true; QueteGolf.ChoosePaint(5); Log.Info("standalone : commandes, invite demande la couleur 5"); qAt = e; }
-                if (qAsked && e - qAt > 8f && qStep == 0)
+                if (qAt <= 0f) qAt = e;
+                if (qStep == 0 && e - qAt > 45f)
                 {
                     qStep = 1;
                     QueteGolf.Shot("quete-invite", b.Car.transform.position + b.Car.transform.right * 5f + Vector3.up * 1.5f, b.Car.transform.position);
-                    Log.Info("standalone : commandes, fin2, invite, couleur " + QueteGolf.PaintIndex);
+                    Log.Info("standalone : commandes, fin2, invite");
                 }
                 return;
             }
@@ -1055,9 +1056,8 @@ namespace MWCoop
             if (qStep == seq.Length + 6 && d > 19.5f) { qStep++; simHeld = ""; Log.Info("standalone : commandes, 5 s de demarreur a vide (fond retrouve) : " + etat()); }
             if (qStep == seq.Length + 7 && d > 21f)
             {
-                qStep++; QueteGolf.ChoosePaint(2);
+                qStep++;
                 simHeld = "IndicatorRight"; simDown = "IndicatorLeft"; GameKeys(b, st); Log.Info("standalone : commandes, deux clignotants : " + etat()); GameKeys(b, st); simHeld = ""; simDown = "";
-                Photo(b, "quete-couleur", new Vector3(-3.4f, 1.3f, 3.6f));
                 Photo(b, "quete-radio", st.T.Yeux + new Vector3(0.2f, -0.03f, 0.1f), st.RadioAt, 20f);
                 st.RadioCh = 1; st.KeyIn = true; st.KeyPos = 1; RadioTick(b, st);
                 AudioSource rc = Radio.Channel(0);
@@ -1088,11 +1088,11 @@ namespace MWCoop
             {
                 qStep++;
                 Log.Info("standalone : commandes, plein : pompe proche " + NearPump(b.Car.transform.position) + ", propose " + qPrompt + ", argent " + refillMoney0.ToString("F0") + " -> " + Wallet.Cash.ToString("F0"));
-                Log.Info("standalone : commandes, fini, couleur " + QueteGolf.PaintIndex + " : " + etat());
+                Log.Info("standalone : commandes, fini : " + etat());
             }
-            // (a deux : la couleur demandee par l'invite revient-elle chez l'hote ?)
-            if (qStep == seq.Length + 9 && (QueteGolf.PaintIndex == 5 || d > 75f)) { qStep++; Log.Info("standalone : commandes, fin2, hote, couleur " + QueteGolf.PaintIndex); }
+            if (qStep == seq.Length + 9) { qStep++; Log.Info("standalone : commandes, fin2, hote"); }
         }
+        public static bool Driving { get { return driving != null; } }
         public static float QuestFuel(out float temp)
         {
             foreach (VazCar.Built b in cars) { State st; if (QueteGolf.IsQuestCar(b) && states.TryGetValue(b, out st)) { temp = st.EngineTemp; return st.Fuel; } }

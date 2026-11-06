@@ -573,13 +573,22 @@ namespace MWCoop
         static Shader FindShader(params string[] names) { foreach (string n in names) { Shader s = Shader.Find(n); if (s != null) return s; } return null; }
 
         // Peinture d'une voiture deja construite : les matieres de type « paint » de son modele.
-        public static void Repaint(Built b, Color c)
+        // (metallisee : plus de reflets sur le meme shader ; valeurs de depart gardees pour revenir a la peinture normale)
+        static readonly Dictionary<Material, Vector2> paintBase = new Dictionary<Material, Vector2>();
+        public static void Repaint(Built b, Color c, bool metal = false)
         {
             b.Paint = c;
             foreach (KeyValuePair<string, Material> kv in b.Mats)
             {
                 MatDef d;
-                if (kv.Value != null && matDefs.TryGetValue(b.M.Folder + "|" + kv.Key, out d) && d.Kind == "paint") kv.Value.color = c;
+                if (kv.Value == null || !matDefs.TryGetValue(b.M.Folder + "|" + kv.Key, out d) || d.Kind != "paint") continue;
+                Material m = kv.Value;
+                m.color = c;
+                if (!m.HasProperty("_Metallic") || !m.HasProperty("_Glossiness")) continue;
+                Vector2 v;
+                if (!paintBase.TryGetValue(m, out v)) paintBase[m] = v = new Vector2(m.GetFloat("_Metallic"), m.GetFloat("_Glossiness"));
+                m.SetFloat("_Metallic", metal ? Mathf.Max(v.x, 0.35f) : v.x);
+                m.SetFloat("_Glossiness", metal ? Mathf.Max(v.y, 0.75f) : v.y);
             }
         }
 
