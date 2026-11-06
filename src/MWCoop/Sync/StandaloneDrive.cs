@@ -1345,6 +1345,9 @@ namespace MWCoop
         // sort les objets portiere ou hayon ouvert) ; assises et dossiers des sieges sur HingedObjects (les dossiers avant suivent le
         // rabattement). Les deux couches retirees du rayon des roues (WheelMask) ; inertie de la caisse gardee (pas de changement de tenue).
         static int itemLayer = -1, seatItemLayer = -1;
+        // (le jeu affiche le nom de l'objet vise, moins ses 7 derniers signes -- son « (itemx) » : une boite « objets_assise_0 » donnait OBJETS_A au milieu de l'ecran, JD 07/11.
+        // Un nom de 7 signes : aucun texte. Couches et collisions inchangees.)
+        static string ShellName(string old) { return Config.Testing && Config.GetInt("Test", "CoqueNoms", 0) != 0 ? old : "coque_x"; }
         static void ItemShell(VazCar.Built b, State st, Bounds bb, float ix, float fl, float rf, float fb, float zMin, float zMax)
         {
             int IL = LayerMask.NameToLayer("Collider2"), SL = LayerMask.NameToLayer("HingedObjects"), parts = LayerMask.NameToLayer("Parts");
@@ -1354,26 +1357,26 @@ namespace MWCoop
             Vector3 inertia = b.Rb.inertiaTensor; Quaternion inertiaRot = b.Rb.inertiaTensorRotation;
             const float T = 0.08f;   // (epaisseur des parois)
             float zBack = bb.min.z + 0.14f;   // (fond du coffre : derriere, le hayon)
-            Box(ct, IL, "objets_plancher", new Vector3(0f, fl - T * 0.5f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zMin));
-            Box(ct, IL, "objets_coffre", new Vector3(0f, fb - T * 0.5f, (zBack + zMin) * 0.5f), new Vector3(2f * ix, T, zMin - zBack));
-            Box(ct, IL, "objets_toit", new Vector3(0f, rf + T * 0.5f, (zBack + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zBack));
-            Box(ct, IL, "objets_planche", new Vector3(0f, (fl + rf) * 0.5f, zMax + T * 0.5f), new Vector3(2f * ix, rf - fl, T));
+            Box(ct, IL, ShellName("objets_plancher"), new Vector3(0f, fl - T * 0.5f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zMin));
+            Box(ct, IL, ShellName("objets_coffre"), new Vector3(0f, fb - T * 0.5f, (zBack + zMin) * 0.5f), new Vector3(2f * ix, T, zMin - zBack));
+            Box(ct, IL, ShellName("objets_toit"), new Vector3(0f, rf + T * 0.5f, (zBack + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zBack));
+            Box(ct, IL, ShellName("objets_planche"), new Vector3(0f, (fl + rf) * 0.5f, zMax + T * 0.5f), new Vector3(2f * ix, rf - fl, T));
             // flancs : de l'arriere de chaque portiere au fond du coffre (sans portiere de ce cote : tout le long)
             for (int s = 0; s < 2; s++)
             {
                 float sx = s == 0 ? -1f : 1f; Bounds d = st.DoorBox[s];
                 float zEnd = d.size.y > 0.3f ? d.min.z : zMax;
-                Box(ct, IL, "objets_flanc_" + (s == 0 ? "g" : "d"), new Vector3(sx * (ix + T * 0.5f), (fl + rf) * 0.5f, (zBack + zEnd) * 0.5f), new Vector3(T, rf - fl, zEnd - zBack));
+                Box(ct, IL, ShellName("objets_flanc_" + (s == 0 ? "g" : "d")), new Vector3(sx * (ix + T * 0.5f), (fl + rf) * 0.5f, (zBack + zEnd) * 0.5f), new Vector3(T, rf - fl, zEnd - zBack));
                 // paroi dans la portiere (tourne avec elle)
                 if (st.Doors[s] != null && d.size.y > 0.3f)
                 {
                     Transform inner = st.Doors[s].Find("pieces");
-                    if (inner != null) Box(inner, IL, "objets_portiere", new Vector3(sx * (ix + T * 0.5f), (fl + rf) * 0.5f, d.center.z), new Vector3(T, rf - fl, d.size.z));
+                    if (inner != null) Box(inner, IL, ShellName("objets_portiere"), new Vector3(sx * (ix + T * 0.5f), (fl + rf) * 0.5f, d.center.z), new Vector3(T, rf - fl, d.size.z));
                 }
             }
             // fond du coffre : dans le hayon s'il s'ouvre
             Transform hp = st.Hatch != null ? st.Hatch.Find("pieces") : null;
-            Box(hp ?? ct, IL, "objets_hayon", new Vector3(0f, (fb + rf) * 0.5f, zBack - T * 0.5f), new Vector3(2f * ix, rf - fb, T));
+            Box(hp ?? ct, IL, ShellName("objets_hayon"), new Vector3(0f, (fb + rf) * 0.5f, zBack - T * 0.5f), new Vector3(2f * ix, rf - fb, T));
             // sieges : assises (avant, banquette) fixes ; dossiers avant dans leur pivot (rabattus avec eux), dossier de la banquette fixe
             for (int k = 0; k < 4; k++)
             {
@@ -1381,9 +1384,9 @@ namespace MWCoop
                 Vector3 c = st.SeatRef[k]; bool rear = k >= 2;
                 if (rear && k == 3) continue;   // (banquette : une seule assise et un seul dossier, sur toute la largeur)
                 float cx = rear ? 0f : c.x, w = rear ? 2f * ix - 0.1f : 0.46f;
-                Box(ct, SL, "objets_assise_" + k, new Vector3(cx, c.y - 0.06f, c.z + 0.27f), new Vector3(w, 0.12f, 0.46f));
+                Box(ct, SL, ShellName("objets_assise_" + k), new Vector3(cx, c.y - 0.06f, c.z + 0.27f), new Vector3(w, 0.12f, 0.46f));
                 Transform par = !rear && st.SeatBack[k] != null ? st.SeatBack[k].Find("pieces") : null;
-                Box(par ?? ct, SL, "objets_dossier_" + k, new Vector3(cx, c.y + 0.3f, c.z - 0.06f), new Vector3(w, 0.5f, 0.12f));
+                Box(par ?? ct, SL, ShellName("objets_dossier_" + k), new Vector3(cx, c.y + 0.3f, c.z - 0.06f), new Vector3(w, 0.5f, 0.12f));
             }
             b.Rb.inertiaTensor = inertia; b.Rb.inertiaTensorRotation = inertiaRot;
             GameObject pl = Game.PlayerGo;
@@ -2955,6 +2958,7 @@ namespace MWCoop
             }
         }
         static int cSon;
+        static int swView, swFrames, swHitN; static Camera swCam, swOld; static Vector3 swDir; static readonly HashSet<string> swTexts = new HashSet<string>(), swHits = new HashSet<string>();
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -3104,6 +3108,52 @@ namespace MWCoop
                 Transform pc = PlayerCam();
                 if (host && driving == b && pc != null && cHeat == 1 && t > 70f) { cHeat = 2; HeatShots(b, st, "a-fond"); TestHeater(b.Car, true, 1, 1f, 1f); }
                 if (host && driving == b && pc != null && cHeat == 2 && t > 72f) { cHeat = 3; HeatShots(b, st, "froid"); TestHeater(b.Car, true, 3, 0f, 0.7f); }
+            }
+            // ([Test] CoqueBalayage=s : a partir de s secondes, le regard balaie l'habitacle depuis trois places. Ce que la main du jeu a retenu (PickedPart : nom de l'objet
+            // vise a 1 m, moins 7 signes) est lu a chaque vue. Sa visee (MousePick) part de Camera.main et de la souris : camera d'essai, tournee pour que CE rayon soit celui voulu,
+            // car celle du joueur est replacee par le jeu et la souris d'une fenetre hors ecran est n'importe ou.)
+            float swAt = Config.GetFloat("Test", "CoqueBalayage", 0f);
+            if (host && swAt > 0f && t > swAt && b != null && st != null && swView >= 0)
+            {
+                HutongGames.PlayMaker.FsmString gt = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmString("PickedPart");
+                if (gt != null)
+                {
+                    if (swCam == null)
+                    {
+                        swOld = Camera.main; if (swOld != null) swOld.tag = "Untagged";
+                        GameObject swg = new GameObject("essai_regard"); swg.tag = "MainCamera";
+                        swCam = swg.AddComponent<Camera>(); swCam.cullingMask = 0; swCam.clearFlags = CameraClearFlags.Nothing; swCam.depth = -100f; swCam.nearClipPlane = 0.01f;
+                    }
+                    Vector3[] swAtP = { new Vector3(-0.32f, 1.05f, -0.2f), new Vector3(0.32f, 1.05f, -0.2f), new Vector3(0f, 0.95f, 0.25f) };
+                    const int Yaws = 12, Pitches = 7;
+                    int total = swAtP.Length * Yaws * Pitches;
+                    if (swView > 0 && swFrames == 3)
+                    {
+                        if (!string.IsNullOrEmpty(gt.Value)) swTexts.Add(gt.Value);
+                        int swMask = (1 << LayerMask.NameToLayer("HingedObjects")) | (1 << LayerMask.NameToLayer("Parts")) | (1 << LayerMask.NameToLayer("Collider2"));
+                        RaycastHit swh;
+                        if (Physics.Raycast(swCam.transform.position, swDir, out swh, 1f, swMask)) { swHitN++; swHits.Add(swh.collider.name + " (" + LayerMask.LayerToName(swh.collider.gameObject.layer) + ")"); }
+                    }
+                    if (swView >= total)
+                    {
+                        var sbt = new System.Text.StringBuilder(); foreach (string s0 in swTexts) sbt.Append(" [").Append(s0).Append("]");
+                        var sbh = new System.Text.StringBuilder(); foreach (string s0 in swHits) sbh.Append(" [").Append(s0).Append("]");
+                        Log.Info("standalone : balayage, " + total + " vues, " + swHitN + " sur la coque ; texte retenu par la main du jeu :" + (sbt.Length > 0 ? sbt.ToString() : " aucun") + " ; boites :" + sbh);
+                        swView = -1;
+                        UnityEngine.Object.Destroy(swCam.gameObject); if (swOld != null) swOld.tag = "MainCamera";
+                    }
+                    else
+                    {
+                        int pi = swView / (Yaws * Pitches), rest = swView % (Yaws * Pitches);
+                        swDir = b.Car.transform.rotation * Quaternion.Euler(-60f + 20f * (rest % Pitches), 30f * (rest / Pitches), 0f) * Vector3.forward;
+                        Vector3 swPos = b.Car.transform.TransformPoint(swAtP[pi]);
+                        swCam.transform.position = swPos; swCam.transform.rotation = Quaternion.identity;
+                        swCam.transform.rotation = Quaternion.FromToRotation(swCam.ScreenPointToRay(Input.mousePosition).direction, swDir);
+                        swCam.transform.position += swPos - swCam.ScreenPointToRay(Input.mousePosition).origin;
+                        swFrames++;
+                        if (swFrames >= 4) { swFrames = 0; swView++; }
+                    }
+                }
             }
             // ([Test] StandaloneObjets=1 : a 50 s, trois cubes du jeu (couche Parts, 2 kg) poses dans la voiture -- siege passager, plancher
             // arriere, coffre ; releves a 70 s (arret) et 88 s (apres le roulage et le freinage) : toujours dedans ?)
