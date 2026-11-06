@@ -331,7 +331,7 @@ namespace MWCoop
                     else RestoreCuts(m);
                     continue;
                 }
-                if (!allRearOn && m.Straight) continue;   // (fichier retire en partie : vitre d'origine)
+                if (m.Straight && !allRearOn) continue;   // (fichier retire en partie : vitre d'origine)
                 if (!m.Ready)
                 {
                     if (!Closed(m.DoorL) || !Closed(m.DoorR))
