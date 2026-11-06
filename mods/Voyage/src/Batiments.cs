@@ -285,9 +285,11 @@ namespace Voyage
             g.ChainLink("verkko", 0.5f);
             g.Mat("tolppa", "metal_galvanized", 1f, new Color(0.82f, 0.83f, 0.85f));
             // (fx0 : -545 avant le petit village de JD, 04/11 : cote ouest rentre de 12 m, sur la rue du village, mais toujours 3 m avant le bout de la piste)
-            const float fx0 = -533f, fx1 = -215f, fz0 = 1722f, fz1 = 1778f;
-            Fence(g, fx0, fz0, -412f, fz0); Fence(g, -348f, fz0, fx1, fz0);   // (sud, ouverture de l'aire)
-            Fence(g, fx1, fz0, fx1, fz1); Fence(g, fx1, fz1, fx0, fz1); Fence(g, fx0, fz1, fx0, fz0);
+            // (angle sud-ouest : contourne le garage RALLI-VUOKRAAMO, dont le mur nord s'arrete a z 1732,1 -- la piste commence a z 1735, JD 06/11)
+            const float fx0 = -533f, fx1 = -215f, fz0 = 1722f, fz1 = 1778f, gx = -512f, gz = 1733.6f;
+            Fence(g, gx, fz0, -412f, fz0); Fence(g, -348f, fz0, fx1, fz0);   // (sud, ouverture de l'aire)
+            Fence(g, fx1, fz0, fx1, fz1); Fence(g, fx1, fz1, fx0, fz1); Fence(g, fx0, fz1, fx0, gz);
+            Fence(g, fx0, gz, gx, gz); Fence(g, gx, gz, gx, fz0);
             Fence(g, -416f, 1668f, -416f, fz0); Fence(g, -344f, 1668f, -344f, fz0);   // (cotes de l'aire)
             Fence(g, -416f, 1668f, -386.2f, 1668f); Fence(g, -373.8f, 1668f, -344f, 1668f);   // (jusqu'aux pignons du terminal)
             Fence(g, -383f, 1626f, -412f, 1626f); Fence(g, -412f, 1626f, -412f, 1654f); Fence(g, -412f, 1654f, -386f, 1654f);   // (parking)
