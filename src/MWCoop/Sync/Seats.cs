@@ -340,6 +340,7 @@ namespace MWCoop
                 // reveil, puis on ne peut plus s'asseoir, le jeu croit qu'on l'est ») : le jeu couche le joueur lui-meme ;
                 // la place est rendue sans toucher au joueur (ni position, ni commandes : le jeu les reprend au reveil).
                 if (Game.GlobalBool("PlayerSleeps")) { LeaveForSleep(); return; }
+                PassengerLean();
                 if (debugFrames > 0)
                 {
                     debugFrames--;
@@ -515,6 +516,24 @@ namespace MWCoop
             else Log.Warn("passager : variable PlayerInCar introuvable (automate Crouch)");
         }
 
+        // Passager : la tete se deplace sur le cote comme celle du conducteur (Menos, 30/10 : EDM 500LX de My Summer Car ; toutes les voitures), touches ReachLeft / ReachRight
+        // tenues -- vers la portiere seulement si sa vitre est ouverte, des deux cotes a la place du milieu (Gestures redresse deja la camera vitre fermee). Les autres le voient :
+        // la tete de l'avatar suit la camera. [Test] PassagerPenche=-1|1 : penche impose ; [Test] PassagerTete=0 : comme avant.
+        const float LeanMax = 0.2f;
+        static float leanNow, leanSpeed, leanLog;
+        static void PassengerLean()
+        {
+            if (current.Bed || current.Stand || pivot == null || player.parent != pivot || Config.GetInt("Test", "PassagerTete", 1) == 0) return;
+            int forced = Config.GetInt("Test", "PassagerPenche", 0);
+            int want = forced != 0 ? forced : StandaloneCar.Held("ReachRight") ? 1 : StandaloneCar.Held("ReachLeft") ? -1 : 0;
+            float sx = current.Head.x;
+            if (want != 0 && Mathf.Abs(sx) > 0.15f && (want > 0) == (sx > 0f) && !WindowCranks.WindowOpenNear(current.CarT, current.Head)) want = 0;
+            leanNow = Mathf.SmoothDamp(leanNow, want * LeanMax, ref leanSpeed, 0.12f);
+            if (Mathf.Abs(leanNow) < 0.002f && want == 0) { leanNow = 0f; leanSpeed = 0f; }
+            player.localPosition = Quaternion.Inverse(pivot.localRotation) * new Vector3(leanNow, 0f, 0f);
+            if (forced != 0 && Time.realtimeSinceStartup >= leanLog) { leanLog = Time.realtimeSinceStartup + 5f; Log.Info("autotest : passager, penche " + leanNow.ToString("F3") + " (voulu " + want + ", place x " + sx.ToString("F2") + ")"); }
+        }
+
         static void Sit(Seat s)
         {
             Icon(false);
@@ -529,6 +548,7 @@ namespace MWCoop
             if (controller != null) controller.enabled = false;
             Game.SetGlobalBool("PlayerStop", true);
             player.parent = pivot;
+            leanNow = 0f; leanSpeed = 0f;
             player.localPosition = Vector3.zero;
             player.localRotation = Quaternion.identity; // tourne vers l'avant de la voiture
             InCar(true);
