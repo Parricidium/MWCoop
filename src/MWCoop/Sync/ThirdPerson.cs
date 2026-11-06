@@ -35,7 +35,7 @@ namespace MWCoop
         public static Vector3 EyeOf(Transform c) { return moved && cam != null && c == cam.transform ? eye : c.position; }
         public static Vector3 EyePosition { get { return moved ? eye : PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.position : Vector3.zero; } }
 
-        public static void OnLevelLoaded() { Off(); cam = null; handCam = null; handMaskWas = -1; }
+        public static void OnLevelLoaded() { Off(); cam = null; handCam = null; handMaskWas = -1; handOverlay = null; overlayCut = false; }
 
         static void Off()
         {
@@ -101,6 +101,24 @@ namespace MWCoop
             if (handCam == null || Config.GetInt("Test", "MainsMasqueLibre", 0) != 0) return;
             if (hide) { if (handMaskWas < 0) { handMaskWas = handCam.cullingMask; handCam.cullingMask = 0; } else if (handCam.cullingMask != 0) handCam.cullingMask = 0; }
             else if (handMaskWas >= 0) { handCam.cullingMask = handMaskWas; handMaskWas = -1; }
+        }
+
+        // Casque : son bord interieur est l'effet plein ecran ScreenOverlay de HandCamera (Helmet::Logic l'allume et l'eteint). Le masque vide de
+        // HandMask n'y change rien : a chaque image que rend cette camera, le bord couvrait l'ecran en troisieme personne, par intermittence (JD 06/11).
+        // Coupe le temps de ce rendu, remis a la fin de l'image : le jeu garde son etat (casque mis, retour a la premiere personne). [Test] CasqueMasqueLibre=1 : comme avant.
+        static Behaviour handOverlay; static bool overlayCut;
+        static void CutOverlay()
+        {
+            if (handOverlay == null) handOverlay = handCam.GetComponent("ScreenOverlay") as Behaviour;
+            if (handOverlay == null || !handOverlay.enabled || overlayCut || Config.GetInt("Test", "CasqueMasqueLibre", 0) != 0) return;
+            handOverlay.enabled = false; overlayCut = true;
+            if (Core.I != null) Core.I.StartCoroutine(RestoreOverlay()); else overlayCut = false;
+        }
+        static IEnumerator RestoreOverlay()
+        {
+            yield return new WaitForEndOfFrame();
+            if (overlayCut && handOverlay != null) handOverlay.enabled = true;
+            overlayCut = false;
         }
 
         // Avatar local invisible a la camera mais present pour les ombres et les rayons (premiere personne + ray tracing).
@@ -176,7 +194,7 @@ namespace MWCoop
 
         static void PreCull(Camera c)
         {
-            if (c != null && c == handCam && Active) { handCulls++; if (c.cullingMask != 0) handLeaks++; }
+            if (c != null && c == handCam && Active) { handCulls++; if (c.cullingMask != 0) handLeaks++; CutOverlay(); }
             if (!Active || DroneCam.Active || c == null || c != cam || Time.frameCount == lastFrame) return;
             if (moved) PutBack();   // (remise de l'image d'avant pas faite : d'abord aux yeux)
             Transform t = c.transform;
