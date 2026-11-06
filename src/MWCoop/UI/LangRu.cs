@@ -971,7 +971,8 @@ namespace MWCoop
             { "The message appears above the player who wrote it", "Сообщение появляется над игроком, который его написал" },
             { "Drag to move", "Перетащи, чтобы сдвинуть" },
             { "Fuel tank nearly empty", "Бак почти пуст" },
-            { "s21 quest car colour", "Цвет машины из квеста s21" },
+            { "PAINT", "ПОКРАСКА" },
+            { "Bring the car to the garage first.", "Сначала пригоните машину к гаражу." },
         };
     }
 }

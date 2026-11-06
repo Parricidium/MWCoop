@@ -18,27 +18,18 @@ namespace MWCoop
     {
         public const int Owner = 99, Number = 16;
         public static readonly Color PaintBase = new Color(0.72f, 0.05f, 0.05f);   // (rouge, comme celle de JD)
-        // Couleur choisie (F10, onglet des voitures -- suggestion de Донской, 04/11), reservoir et temperature gardes dans la sauvegarde de la quete.
-        public static readonly Color[] Palette = {
-            PaintBase, new Color(0.06f, 0.20f, 0.62f), new Color(0.18f, 0.50f, 0.86f), new Color(0.02f, 0.28f, 0.13f),
-            new Color(0.03f, 0.03f, 0.03f), new Color(0.86f, 0.86f, 0.84f), new Color(0.50f, 0.52f, 0.54f), new Color(0.90f, 0.66f, 0.05f) };
-        public static int PaintIndex { get; private set; }
-        public static Color Paint { get { return Palette[Mathf.Clamp(PaintIndex, 0, Palette.Length - 1)]; } }
+        // Couleur (chez Fleetari, QueteBrochure -- suggestion de Донской, 04/11), reservoir et temperature gardes dans la sauvegarde de la quete.
+        public static Color Paint { get; private set; } = PaintBase;
+        public static bool Metal { get; private set; }
         public static float SavedFuel = 1f, SavedTemp = float.NaN;
         // (joueur : demande a l'hote ; hote : pose, renvoie a tous, repeinte tout de suite)
-        public static void ChoosePaint(int i)
+        internal static void ApplyPaint(Color c, bool metal)
         {
-            i = Mathf.Clamp(i, 0, Palette.Length - 1);
-            if (Session.Active && !Session.IsHost) Session.SendToHost(new NetWriter(Msg.Race).U8(Vaz.V_QUETE).U8(10 + i), true);
-            ApplyPaint(i);
-            if (Host) Send();
-        }
-        static void ApplyPaint(int i)
-        {
-            if (i == PaintIndex) return;
-            PaintIndex = i;
-            StandaloneCar.RepaintQuest(Paint);
-            L("couleur " + i);
+            c.a = 1f;
+            if (metal == Metal && Mathf.Abs(c.r - Paint.r) + Mathf.Abs(c.g - Paint.g) + Mathf.Abs(c.b - Paint.b) < 0.01f) return;
+            Paint = c; Metal = metal;
+            StandaloneCar.RepaintQuest(c, metal);
+            L("couleur " + c + (metal ? ", metallisee" : ""));
         }
         // (garee chez Teimo, a droite de la terrasse du pub, l'arriere contre la cloture, le nez vers la route -- capture de JD, 31/10 ;
         // repere du magasin STORE : x vers le pub, z vers l'arriere ; [Test] QueteGolfPlace=x,z,cap pour la deplacer)
@@ -64,6 +55,8 @@ namespace MWCoop
         {
             EnsurePack();
             Done = false; loaded = placed = hasSaved = false; on = false; nextSend = nextCheck = 0f; firstInGame = -1f;
+            Paint = PaintBase; Metal = false;
+            QueteBrochure.OnLevelLoaded(); QueteBrochure.Clear();
         }
 
         public static void Update()
@@ -71,6 +64,7 @@ namespace MWCoop
             if (!StandaloneCar.Quest || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextCheck) { nextCheck = now + 2f; on = Kauppa.ShopOn && Vaz.Enabled && VazCar.Golf83.HasFiles; }
+            QueteBrochure.Update();
             if (!Host) { if (Config.GetInt("Test", "QueteCommandes", 0) != 0) StandaloneCar.QuestControlsTest(now); return; }
             if (!loaded) { loaded = true; Load(); }
             if (firstInGame < 0f) firstInGame = now;
@@ -185,11 +179,16 @@ namespace MWCoop
         }
 
         static float SavedFuelNow() { float t; float f = StandaloneCar.QuestFuel(out t); return f >= 0f ? f : SavedFuel; }
-        // (hote -> tous : 0 / 1 l'etat, 2 la cle vient d'etre donnee ; puis couleur et reservoir. Invite -> hote : 1 la cle, 10 + n la couleur)
+        // (hote -> tous : 0 / 1 l'etat, 2 la cle vient d'etre donnee ; puis couleur R V B, drapeaux (1 metallisee, 2 peinture commandee), reservoir, facture.
+        // Invite -> hote : 1 la cle, 20 la commande de peinture, 21 la facture payee)
         static void Send(bool fresh = false)
         {
-            if (Session.Active && Session.RemoteCount > 0) Session.Broadcast(new NetWriter(Msg.Race).U8(Vaz.V_QUETE).U8(fresh ? 2 : Done ? 1 : 0).U8(PaintIndex).U8(Mathf.RoundToInt(Mathf.Clamp01(SavedFuelNow()) * 255f)), true);
+            if (!Session.Active || Session.RemoteCount <= 0) return;
+            Session.Broadcast(new NetWriter(Msg.Race).U8(Vaz.V_QUETE).U8(fresh ? 2 : Done ? 1 : 0)
+                .U8(Mathf.RoundToInt(Paint.r * 255f)).U8(Mathf.RoundToInt(Paint.g * 255f)).U8(Mathf.RoundToInt(Paint.b * 255f))
+                .U8((Metal ? 1 : 0) | (QueteBrochure.Ordered ? 2 : 0)).U8(Mathf.RoundToInt(Mathf.Clamp01(SavedFuelNow()) * 255f)).I32(QueteBrochure.BillDue), true);
         }
+        internal static void SendState() { if (Host) Send(); }
 
         public static void OnMessage(Peer from, NetReader r)
         {
@@ -197,14 +196,19 @@ namespace MWCoop
             if (Session.IsHost)
             {
                 if (v == 1) SetDone(true, true);
-                else if (v >= 10) { ApplyPaint(Mathf.Clamp(v - 10, 0, Palette.Length - 1)); Send(); }
+                else if (v == 20) QueteBrochure.OnOrderMessage(from != null ? from.Id : -1, r);
+                else if (v == 21) QueteBrochure.OnBillPaid();
             }
             else
             {
                 SetDone(v != 0, v == 2);
                 byte[] rest = r.Rest();
-                if (rest.Length > 0) ApplyPaint(rest[0]);
-                if (rest.Length > 1) StandaloneCar.SetQuestFuelIfIdle(rest[1] / 255f);
+                if (rest.Length >= 9)
+                {
+                    ApplyPaint(new Color(rest[0] / 255f, rest[1] / 255f, rest[2] / 255f, 1f), (rest[3] & 1) != 0);
+                    StandaloneCar.SetQuestFuelIfIdle(rest[4] / 255f);
+                    QueteBrochure.OnState((rest[3] & 2) != 0, System.BitConverter.ToInt32(rest, 5));
+                }
             }
         }
 
@@ -294,7 +298,12 @@ namespace MWCoop
                 {
                     string[] p = line.Trim().Split(' ');
                     if (p[0] == "fait" && p.Length > 1) Done = p[1] == "1";
-                    else if (p[0] == "couleur" && p.Length > 1) { int ci2; if (int.TryParse(p[1], out ci2)) PaintIndex = Mathf.Clamp(ci2, 0, Palette.Length - 1); }
+                    else if (p[0] == "couleur" && p.Length > 4)
+                    {
+                        float cr, cg, cb; int cm; const System.Globalization.NumberStyles ns = System.Globalization.NumberStyles.Float;
+                        if (float.TryParse(p[1], ns, ci, out cr) && float.TryParse(p[2], ns, ci, out cg) && float.TryParse(p[3], ns, ci, out cb) && int.TryParse(p[4], out cm)) { Paint = new Color(cr, cg, cb, 1f); Metal = cm != 0; }
+                    }
+                    else if (p[0] == "commande" || p[0] == "facture") QueteBrochure.LoadLine(p);
                     else if (p[0] == "reservoir" && p.Length > 2)
                     {
                         float fu, te;
@@ -325,7 +334,7 @@ namespace MWCoop
                 string s = "fait " + (Done ? "1" : "0") + "\n" + (hasSaved ? "place " + savedPos.x.ToString("F3", ci) + " " + savedPos.y.ToString("F3", ci) + " " + savedPos.z.ToString("F3", ci) + " " + savedYaw.ToString("F1", ci) + "\n" : "");
                 float tt, ff = StandaloneCar.QuestFuel(out tt);
                 if (ff >= 0f) { SavedFuel = ff; SavedTemp = tt; }
-                s += "\ncouleur " + PaintIndex + "\nreservoir " + SavedFuel.ToString("F3", ci) + " " + (float.IsNaN(SavedTemp) ? "NaN" : SavedTemp.ToString("F1", ci));
+                s += "\ncouleur " + Paint.r.ToString("F3", ci) + " " + Paint.g.ToString("F3", ci) + " " + Paint.b.ToString("F3", ci) + " " + (Metal ? 1 : 0) + "\nreservoir " + SavedFuel.ToString("F3", ci) + " " + (float.IsNaN(SavedTemp) ? "NaN" : SavedTemp.ToString("F1", ci)) + QueteBrochure.SaveLines();
                 File.WriteAllText(FilePath, s);
                 L("sauvegardee : quete " + (Done ? "faite" : "a faire") + (hasSaved ? ", voiture en " + savedPos.ToString("F1") : ""));
             }
