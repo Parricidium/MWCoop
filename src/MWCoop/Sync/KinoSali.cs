@@ -659,7 +659,8 @@ namespace MWCoop
                 case "filmitila":   // (filmitila <film> : ou en est ce film ici -- reception, index)
                 {
                     Film f; filmCache.TryGetValue(a[2], out f);
-                    L("essai : film " + a[2] + " : " + (HaveFilm(a[2]) ? "complet" : "reception " + (FilmProgress(a[2]) * 100f).ToString("F0") + " %") + (f != null ? ", index " + f.Ms.Count + " images, " + (f.LengthMs / 1000f).ToString("F1") + " s" + (f.Done ? " (fin)" : "") : ", pas lu") + " ; salle 1 " + (projectors[1] != null ? (projectors[1].Playing ? "projette a " + (now - projectors[1].Start).ToString("F1") + " s" : "arretee") + (projectors[1].Behind ? " EN RETARD" : "") + ", image " + projectors[1].Frame + (projectors[1].Audio != null ? ", son " + (projectors[1].Audio.isPlaying ? "a " + projectors[1].Audio.time.ToString("F1") + " s" : "coupe") : "") : "-"));
+                    L("essai : film " + a[2] + " : " + (HaveFilm(a[2]) ? "complet" : "reception " + (FilmProgress(a[2]) * 100f).ToString("F0") + " %") + (f != null ? ", index " + f.Ms.Count + " images, " + (f.LengthMs / 1000f).ToString("F1") + " s" + (f.Done ? " (fin)" : "") : ", pas lu") + " ; salle 1 " + (projectors[1] != null ? (projectors[1].Playing ? "projette a " + (now - projectors[1].Start).ToString("F1") + " s" : "arretee") + (projectors[1].Behind ? " EN RETARD" : "") + ", image " + projectors[1].Frame + (projectors[1].Audio != null ? ", son " + (projectors[1].Audio.isPlaying ? "a " + projectors[1].Audio.time.ToString("F1") + " s" : "coupe") : "") : "-")
+                      + " ; memoire " + (GC.GetTotalMemory(false) >> 20) + " Mo geree, " + (System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 >> 20) + " Mo en tout");
                     break;
                 }
                 case "istu":

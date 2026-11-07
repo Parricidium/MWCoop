@@ -1017,6 +1017,8 @@ namespace MWCoop
             { "Enough of the film received: the show can start, the rest comes during it.", "Получено достаточно фильма: сеанс может начаться, остальное придёт во время показа." },
             { "Film \"{0}\": the rest is on its way ({1} %)", "Фильм «{0}»: продолжение уже в пути ({1} %)" },
             { "Film \"{0}\": {1} % received during the show", "Фильм «{0}»: {1} % получено во время сеанса" },
+            { "Film not saved (disk full?): ", "Фильм не сохранён (диск заполнен?): " },
+            { "This reel's film isn't on this PC: the show can't be shared.", "Фильма этой бобины нет на этом ПК: сеанс нельзя показать другим." },
         };
     }
 }

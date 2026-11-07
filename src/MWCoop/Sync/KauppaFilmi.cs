@@ -126,7 +126,7 @@ namespace MWCoop
         static readonly List<FilmOut> filmOut = new List<FilmOut>();
         static readonly Dictionary<string, FilmIn> filmIn = new Dictionary<string, FilmIn>();
         static readonly Dictionary<string, float> filmAsked = new Dictionary<string, float>();
-        const int FilmChunk = 1000, FilmMaxParts = 4000000;   // (4 Go au plus)
+        const int FilmChunk = 1000, FilmMaxParts = 10000000;   // (10 Go au plus : bobines de 3 h, 07/11 -- 4 Go avant)
         static float filmSendBudget, filmSendT;
         static byte[] filmBuf;
 
@@ -146,7 +146,7 @@ namespace MWCoop
 
         static void AskFilm(string film, float now)
         {
-            if (!Session.Active || Session.RemoteCount <= 0 || KinoFilmRefused(film)) return;
+            if (!Session.Active || Session.RemoteCount <= 0 || KinoFilmRefused(film) || filmFailed.Contains(film)) return;
             float last;
             FilmIn fi;
             if (filmIn.TryGetValue(film, out fi) && now - fi.Last < 20f) return;   // (arrive)
@@ -210,7 +210,7 @@ namespace MWCoop
         {
             string film = Session.Clean(r.Str(), 64); int i = r.I32(), n = r.I32(); byte[] b = r.Bytes();
             if (film.Length == 0 || film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || n <= 0 || n > FilmMaxParts || i < 0 || i >= n || b.Length > FilmChunk) return;
-            if (HaveFilm(film) || KinoFilmRefused(film)) return;
+            if (HaveFilm(film) || KinoFilmRefused(film) || filmFailed.Contains(film)) return;
             FilmIn fi;
             try
             {
@@ -223,6 +223,7 @@ namespace MWCoop
                 }
                 fi.Last = Time.realtimeSinceStartup;
                 if (fi.Have[i]) return;
+                if (Config.Testing && i > 2000 && Config.GetInt("Test", "FilmDisquePlein", 0) != 0) throw new IOException("essai : disque plein");   // (essai du message)
                 fi.Fs.Position = (long)i * FilmChunk;
                 fi.Fs.Write(b, 0, b.Length);
                 fi.Have[i] = true; fi.Got++;
@@ -238,6 +239,8 @@ namespace MWCoop
             {
                 L("video : film " + film + " pas ecrit : " + e.Message);
                 if (filmIn.TryGetValue(film, out fi)) { if (fi.Fs != null) fi.Fs.Close(); filmIn.Remove(film); }
+                // (disque plein, dossier refuse... : dit une fois au joueur, et plus redemande de la partie -- sinon il revenait sans fin)
+                if (filmFailed.Add(film)) { Chat.System(Lang.T("Film pas enregistré (disque plein ?) : ", "Film not saved (disk full?): ") + e.Message); KinoFilmFailed(film); }
             }
         }
 
@@ -323,7 +326,7 @@ namespace MWCoop
         static void OnLevelLoadedFilms()
         {
             foreach (Film f in filmCache.Values) { if (f.Clip != null) UnityEngine.Object.Destroy(f.Clip); if (f.Fs != null) try { f.Fs.Close(); } catch { } }
-            filmExpect.Clear();
+            filmExpect.Clear(); filmFailed.Clear();
             foreach (FilmOut o in filmOut) if (o.Fs != null) o.Fs.Close();
             foreach (FilmIn fi in filmIn.Values) if (fi.Fs != null) fi.Fs.Close();
             filmCache.Clear(); playStart.Clear(); filmOut.Clear(); filmIn.Clear(); filmAsked.Clear();

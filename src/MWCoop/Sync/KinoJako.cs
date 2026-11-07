@@ -72,7 +72,13 @@ namespace MWCoop
         {
             if (!Session.Active || Session.RemoteCount <= 0 || p == null) return;
             List<string> films = ShareFilms(p.Content);
-            if (films.Count == 0 || !films.TrueForAll(HaveFilm)) return;
+            if (films.Count == 0) return;
+            if (!films.TrueForAll(HaveFilm))
+            {
+                Chat.System(Lang.T("Le film de cette bobine n'est pas sur ce PC : la séance ne peut pas être partagée.", "This reel's film isn't on this PC: the show can't be shared."));
+                L("cinema : film de la bobine absent ici (" + string.Join(", ", films.FindAll(f => !HaveFilm(f)).ToArray()) + "), pas de partage");
+                return;
+            }
             long size = 0;
             foreach (string f in films) try { size += new FileInfo(FilmPath(f)).Length; } catch { }
             // (duree de chaque film, lue jusqu'au bout : les autres le liront avant de l'avoir en entier)
@@ -168,6 +174,15 @@ namespace MWCoop
             Hud.Toast(Lang.T("Film reçu : la séance commence quand tout le monde l'a.", "Film received: the show starts once everyone has it."));
         }
 
+        // reception du film impossible ici (disque plein...) : la seance ne m'attend plus (comme un refus)
+        static void KinoFilmFailed(string film)
+        {
+            if (kinoGetting == null || !kinoGetting.Contains(film)) return;
+            kinoGetting = null; kinoStreamOk = false;
+            KinoReply(0, 0f);
+            L("cinema : film " + film + " pas enregistre ici, la seance ne m'attend plus");
+        }
+
         static void KinoAnswer(bool yes)
         {
             KinoAsk a = kinoAsk;
@@ -259,7 +274,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- dessin (Core.OnGUI)
         public static void DrawKinoJako()
         {
-            if (Event.current.type != EventType.Repaint || (kinoAsk == null && kinoGetting == null && !KinoWaitHere())) return;   // (reception pendant la seance : kinoGetting)
+            if (Event.current.type != EventType.Repaint || (kinoAsk == null && kinoGetting == null && !KinoWaitHere() && !KinoBehindHere())) return;   // (reception pendant la seance : kinoGetting ; arrive en cours de film : en retard)
             float w = Style.Px(620), x = (Screen.width - w) / 2f, y = Style.Px(90);
             if (kinoAsk != null)
             {
@@ -278,7 +293,9 @@ namespace MWCoop
             string line = "";
             Projector here = null;
             for (int s = 1; s <= 2; s++) if (projectors[s] != null && projectors[s].Playing && InSalle(s)) here = projectors[s];
-            if (kinoGetting != null && kinoStreamOk && here != null)
+            if (here != null && here.Behind && (kinoGetting == null || !kinoStreamOk))
+                line = string.Format(Lang.T("Film « {0} » : la suite arrive ({1} %)", "Film \"{0}\": the rest is on its way ({1} %)"), TapeTitle(here.Content), here.Film != null ? Mathf.FloorToInt(Mathf.Max(0f, FilmProgress(here.Film.Id)) * 100f) : 0);
+            else if (kinoGetting != null && kinoStreamOk && here != null)
                 line = string.Format(here.Behind ? Lang.T("Film « {0} » : la suite arrive ({1} %)", "Film \"{0}\": the rest is on its way ({1} %)")
                                                  : Lang.T("Film « {0} » : {1} % reçus pendant la séance", "Film \"{0}\": {1} % received during the show"), kinoGettingTitle, Mathf.FloorToInt(GettingProgress() * 100f));
             else if (kinoGetting != null) line = string.Format(Lang.T("Film « {0} » : {1} % ({2} sur {3})", "Film \"{0}\": {1} % ({2} of {3})"), kinoGettingTitle, Mathf.FloorToInt(GettingProgress() * 100f), SizeText((long)(GettingProgress() * kinoGettingKb)), SizeText(kinoGettingKb));
@@ -320,6 +337,12 @@ namespace MWCoop
             if (ahead < need) return false;
             L("cinema : pret en flux (" + ahead.ToString("F0") + " s d'avance sur " + dur.ToString("F0") + " s, debit " + (rate / 1024.0).ToString("F0") + " Ko/s, film " + (filmRate / 1024.0).ToString("F0") + " Ko/s, il fallait " + need.ToString("F0") + " s)");
             return true;
+        }
+
+        static bool KinoBehindHere()
+        {
+            for (int s = 1; s <= 2; s++) if (projectors[s] != null && projectors[s].Playing && projectors[s].Behind && InSalle(s)) return true;
+            return false;
         }
 
         static bool KinoWaitHere()

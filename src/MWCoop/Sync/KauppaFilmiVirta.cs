@@ -19,6 +19,8 @@ namespace MWCoop
         const long FilmMemMax = 32L << 20;
         const int FilmStreamSamples = 4 * 3600 * RecRate;   // (AudioClip en flux : 4 h, silence au-dela du son)
         static readonly Dictionary<string, uint> filmExpect = new Dictionary<string, uint>();   // film -> duree annoncee (ms)
+        static readonly HashSet<string> filmFailed = new HashSet<string>();                     // (reception impossible ici : disque plein...)
+        static readonly HashSet<string> filmReadLogged = new HashSet<string>();
 
         class Film
         {
@@ -68,10 +70,19 @@ namespace MWCoop
             FileStream s = f.Fs;
             if (f.Growing) { FilmIn fi; s = filmIn.TryGetValue(f.Id, out fi) ? fi.Fs : null; if (pos + n > PrefixBytes(f.Id)) return false; }
             if (s == null) return false;
-            s.Position = pos;
-            int got = 0;
-            while (got < n) { int k = s.Read(buf, got, n - got); if (k <= 0) break; got += k; }
-            return got == n;
+            try
+            {
+                s.Position = pos;
+                int got = 0;
+                while (got < n) { int k = s.Read(buf, got, n - got); if (k <= 0) break; got += k; }
+                return got == n;
+            }
+            catch (Exception e)
+            {
+                // (fichier enleve ou disque debranche pendant la lecture : image et son s'arretent, pas de plantage)
+                if (filmReadLogged.Add(f.Id)) L("video : film " + f.Id + " illisible pendant la lecture : " + e.Message);
+                return false;
+            }
         }
 
         static byte[] FrameJpeg(Film f, int idx)
