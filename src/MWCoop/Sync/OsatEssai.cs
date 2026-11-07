@@ -85,6 +85,13 @@ namespace MWCoop
                     break;
                 }
                 case "osattesti": OsatTestItems(); break;
+                case "esineet":   // (objets de l'Osuuskauppa presents ici, et l'argent : achat vu par un invite, debit unique)
+                {
+                    var sb = new System.Text.StringBuilder();
+                    foreach (Esine e in esineet) if (e.Go != null) sb.Append(e.Kind).Append(' ').Append(e.Id).Append(" en ").Append(e.Go.transform.position.ToString("F1")).Append("; ");
+                    L("essai : " + esineet.Count + " objet(s) : " + sb + "argent " + (money != null ? money.Value.ToString("F0") : "?"));
+                    break;
+                }
                 case "osatkypara":   // (casque n du presentoir dans le panier, argent donne ; puis osatmaksa)
                 {
                     List<OsatOffer> ks = osatOffers.FindAll(x => x.Kypara != null);

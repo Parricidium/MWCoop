@@ -308,10 +308,11 @@ namespace MWCoop
                 if (on && !has) cnLamps[e] = lg = LampModel(e);
                 else if (!on && has) { UnityEngine.Object.Destroy(lg); cnLamps.Remove(e); continue; }
                 if (!on || lg == null) continue;
-                // a droite de la page, un peu au-dessus, dirigee vers son centre (repere du carnet : page vers -z)
+                // pres du bord droit de la page, un peu au-dessus, vers son centre (repere du carnet : page vers -z) -- essai du 07/11 :
+                // a 20 cm a droite et 16 cm devant, la lampe flottait pres du pare-brise
                 Transform target = e == cnEq && cnView != null ? cnView.transform : e.Go.transform;
                 Vector3 c = target.position, aim = c - target.forward * 0.02f;
-                Vector3 at = c + target.right * 0.2f + target.up * 0.12f - target.forward * 0.16f;
+                Vector3 at = c + target.right * 0.15f + target.up * 0.07f - target.forward * 0.11f;
                 lg.transform.position = at;
                 lg.transform.rotation = Quaternion.LookRotation(aim - at, target.up);
             }

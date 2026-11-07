@@ -10,7 +10,7 @@ namespace MWCoop
     //    cases de 128 px, fond retire par [Launcher]), couleurs gardees, images jamais retournees.
     //  - colonne de gauche, le « radar » : le trace de la speciale au stylo bleu, tremble de facon stable (decalage fonction de
     //    l'index du point sur la route, jamais du temps) ; la route monte toujours (sens de la route au point de la voiture) ;
-    //    la voiture est le rond vert, fixe ; la route defile dessous, 0,5 m par pixel.
+    //    la voiture est le rond vert, fixe ; la route defile dessous, 0,8 m par pixel.
     //  - colonne de droite, les notes : une note par ligne, tous les deux traits du papier ; la note du virage actuel sur le
     //    trait orange (fixe), les suivantes au-dessus (elles arrivent par le haut), les passees dessous ; defilement doux, la
     //    position est interpolee en metres entre deux notes. Pas de distances en chiffres.
@@ -29,7 +29,7 @@ namespace MWCoop
         const float CellH = 190f;                     // hauteur d'une case de la planche sur la page (corps des chiffres ~ 80 px)
         const float Base = 0.70f, Mid = 0.477f;       // bas des dessins de JD dans une case ; milieu du trait orange
         const float RadarX0 = 0.15f * W, RadarX1 = 0.49f * W, CarX = 0.31f * W, CarY = 0.48f * H;
-        static float MPerPx = 0.5f;
+        static float MPerPx = 0.8f;
 
         public class Page
         {
@@ -103,7 +103,7 @@ namespace MWCoop
                 dp[y * 64 + x] = new Color32(255, 255, 255, (byte)(255f * Mathf.Clamp01((1f - r) / 0.06f)));
             }
             disc.SetPixels32(dp); disc.Apply(false);
-            MPerPx = Config.GetFloat("Test", "CarnetEchelle", 0.5f);
+            MPerPx = Config.GetFloat("Test", "CarnetEchelle", 0.8f);   // (0,5 le 07/11 : la route sortait vite de la colonne dans les virages)
             LoadFont();
             Log.Info("carnet : page prete (shader " + sh.name + ", planche " + aw + "x" + ah + ", police " + glyphs.Count + " glyphes)");
             return true;
@@ -269,7 +269,7 @@ namespace MWCoop
             }
             // la voiture, toujours la
             Use(atlas); GL.Begin(GL.QUADS);
-            float cs = 120f, w = (inkX1[23] - inkX0[23]) * cs;
+            float cs = 150f, w = (inkX1[23] - inkX0[23]) * cs;
             CellAt(23, CarX - w / 2f, CarY, cs, 1f, true);
             GL.End();
             End();
@@ -301,7 +301,7 @@ namespace MWCoop
                 dir.Normalize();
                 Vector2 nrm = new Vector2(-dir.y, dir.x);
                 float wob = Mathf.Sin(i * 0.61f + 1.3f) * 1.6f + Mathf.Sin(i * 0.23f + 4.1f) * 1.2f + Mathf.Sin(i * 1.7f) * 0.5f;
-                float half = 3.4f + 0.7f * Mathf.Sin(i * 0.13f + 0.7f);
+                float half = 4.6f + 0.8f * Mathf.Sin(i * 0.13f + 0.7f);
                 s += nrm * wob;
                 Vector2 a = s - nrm * half, b = s + nrm * half;
                 float al = Mathf.Clamp01((s.x - RadarX0) / 40f) * Mathf.Clamp01((RadarX1 - s.x) / 40f) * Mathf.Clamp01((s.y - 24f) / 80f) * Mathf.Clamp01((H - 24f - s.y) / 80f);

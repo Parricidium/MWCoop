@@ -907,7 +907,7 @@ namespace MWCoop
                         // que KauppaCarnetRoue.TickCarnetLamp : a droite de la page, plus haut, vers les yeux) ; le jour, elle reste sur la cuisse
                         Vector3 upC = camRot * Vector3.up, toEye = (headBone.position - at).normalized;
                         ArmTo(false, at - sideH * 0.1f, 1f);
-                        if (cnLamp) ArmTo(true, at + sideH * 0.2f + upC * 0.12f + toEye * 0.16f, 1f);
+                        if (cnLamp) ArmTo(true, at + sideH * 0.15f + upC * 0.07f + toEye * 0.11f, 1f);
                     }
                     else
                     {

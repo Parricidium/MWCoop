@@ -92,9 +92,11 @@ namespace MWCoop
             {
                 if (dirt.Count < 3700 || ss2.Count < 630) { Log.Info("copilote : routes du rallye absentes (" + dirt.Count + ", " + ss2.Count + ")"); return false; }
                 stages.Clear();
-                stages.Add(MakeStage("SS1", dirt, 2168, 3512, Config.Get("Test", "CarnetArriveeSS1", "")));
-                stages.Add(MakeStage("SS2", ss2, 1, 627, Config.Get("Test", "CarnetArriveeSS2", "")));
-                stages.Add(MakeStage("SS3", dirt, 56, 1846, Config.Get("Test", "CarnetArriveeSS3", "")));
+                // (lignes d'arrivee relevees le 07/11 : les routes s'y arretent deja -- SS1 4 m apres Checkpoint04, SS3 1 m, SaturdaySS2
+                // 10 m apres FinishArea -- coupees quand meme, au cas ou le jeu les allonge)
+                stages.Add(MakeStage("SS1", dirt, 2168, 3512, "RACES/RALLY/SS1/TimingSS1/Checkpoint04"));
+                stages.Add(MakeStage("SS2", ss2, 1, 627, "RACES/RALLY/SS2/FinishArea"));
+                stages.Add(MakeStage("SS3", dirt, 56, 1846, "RACES/RALLY/SS3/TimingSS3/Checkpoint04"));
             }
             FindBridges();
             roadA.Clear(); roadB.Clear();

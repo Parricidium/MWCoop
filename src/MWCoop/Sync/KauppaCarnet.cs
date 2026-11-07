@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
+using MWCoop.Net;
 using UnityEngine;
 
 namespace MWCoop
@@ -121,7 +122,8 @@ namespace MWCoop
             cnLift = Mathf.Lerp(cnLift, down, 1f - Mathf.Exp(-10f * Time.deltaTime));
             if (cnView != null)
             {
-                Vector3 p = eye.position + eye.forward * Mathf.Lerp(0.40f, 0.34f, cnLift) - eye.up * Mathf.Lerp(0.20f, 0.06f, cnLift) - eye.right * Mathf.Lerp(0.13f, 0.03f, cnLift);
+                // (essai du 07/11 : a 0,20 m sous les yeux, le trait orange tombait au bord de l'ecran -- page relevee)
+                Vector3 p = eye.position + eye.forward * Mathf.Lerp(0.42f, 0.34f, cnLift) - eye.up * Mathf.Lerp(0.13f, 0.05f, cnLift) - eye.right * Mathf.Lerp(0.11f, 0.03f, cnLift);
                 cnView.transform.position = p;
                 cnView.transform.rotation = Quaternion.LookRotation(p - eye.position, eye.up) * Quaternion.Euler(0f, 0f, Mathf.Lerp(7f, 2f, cnLift));
             }
@@ -230,12 +232,76 @@ namespace MWCoop
         static void OnLevelLoadedCarnet()
         {
             foreach (CarnetSivu.Page p in pages.Values) CarnetSivu.Release(p);
-            pages.Clear(); cnStage = 0; cnEq = null; cnFsm = null; cnReenable = -1; cnView = null; cnHidden.Clear(); cnViewPage = null; cnPaper = null; cnTest = 0;
+            pages.Clear(); cnStage = 0; cnEq = null; cnFsm = null; cnReenable = -1; cnView = null; cnHidden.Clear(); cnViewPage = null; cnPaper = null; cnTest = 0; cn2 = 0;
             CarnetSivu.OnLevelLoaded();
             OnLevelLoadedCarnetNet();
         }
 
         // ---------------------------------------------------------------- essais
+        // [Test] Autotest=carnet2 (2 joueurs) : l'hote pose la SORBET (cinematique) au depart de SS1 a 32 s ; l'invite demande un
+        // carnet a 30 s, le prend a 34 s, s'assoit a l'avant a 37 s, le leve a 41 s (son carnet actif : celui de son dossier
+        // d'essai, [Test] RacineVisages ; lampe forcee par [Test] CarnetLampe=1) ; page de l'invite en PNG a 46 s ; l'hote : camera
+        // devant l'avatar du passager des 50 s, captures a 60 et 65 s, page du carnet de l'invite en PNG a 62 s (le carnet recu ?).
+        static int cn2;
+        static Camera cn2Cam;
+        public static void TestCarnet2(string mode, float t)
+        {
+            if (mode != "carnet2" || !Active || root == null) return;
+            bool guest = Session.Active && !Session.IsHost;
+            string carName = Config.Get("Test", "TestVoiture", Game.Msc ? "SATSUMA" : "SORBET");
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            if (!guest && t > 32f)
+            {
+                Rigidbody car = VehicleSync.Body(carName); Vector3 p, d;
+                if (car != null && Kartturi.StagePoint(0, 6f, out p, out d)) { car.isKinematic = true; car.transform.position = p + Vector3.up * 0.6f; car.transform.rotation = Quaternion.LookRotation(d, Vector3.up); car.velocity = Vector3.zero; }
+                if (cn2 == 0) { cn2 = 1; L("essai carnet2 : " + carName + " au depart de SS1 " + (car != null)); }
+            }
+            if (guest && cn2 == 0 && t > 30f && EyeT != null) { cn2 = 1; SpawnItem(KCarnet, "", EyeT.position + EyeT.forward * 0.6f, Quaternion.identity); L("essai carnet2 : carnet demande"); }
+            if (guest && cn2 == 1 && t > 34f)
+            {
+                cn2 = 2;
+                Esine k = esineet.FindLast(e => e.Kind == KCarnet); PlayMakerFSM pf = PickUpFsm();
+                if (k != null && pf != null) { k.Rb.isKinematic = false; if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, PickSetState); }
+                L("essai carnet2 : carnet " + (k != null ? k.Id : "absent") + ", main " + (pf != null ? pf.ActiveStateName : "?"));
+            }
+            if (guest && cn2 == 2 && t > 37f) { cn2 = 3; L("essai carnet2 : " + Seats.TestSit(carName, 0) + ", tenu " + (HeldCarnet() != null)); }
+            if (guest && cn2 == 3 && t > 41f) { cn2 = 4; cnTestUp = true; }
+            if (guest && cn2 == 4 && t > 46f)
+            {
+                cn2 = 5; CarnetSivu.Page pg;
+                if (cnEq != null && pages.TryGetValue(cnEq, out pg)) CarnetSivu.SavePng(pg, System.IO.Path.Combine(dir, "carnet2-page-invite.png"));
+                L("essai carnet2 : leve " + CarnetUp + ", carnet « " + (Carnet.Active != null ? Carnet.Active.Name : "auto") + " », lampe " + cnLampOn + ", empreinte " + cnMineHash);
+            }
+            if (!guest && t > 50f)
+                foreach (Avatar av in PlayerSync.Avatars)
+                {
+                    Transform hb = av.HeadBone, car = av.VehicleT;
+                    if (hb == null) continue;
+                    if (cn2Cam == null) { cn2Cam = new GameObject("MWCoop-CameraCarnet").AddComponent<Camera>(); cn2Cam.depth = 100; cn2Cam.nearClipPlane = 0.03f; cn2Cam.fieldOfView = 60f; }
+                    Vector3 fw = car != null ? car.forward : hb.forward, up = car != null ? car.up : Vector3.up, rt = car != null ? car.right : hb.right;
+                    cn2Cam.transform.position = hb.position + fw * 0.8f - up * 0.1f - rt * 0.3f;
+                    cn2Cam.transform.LookAt(hb.position - up * 0.32f - rt * 0.06f, up);
+                    break;
+                }
+            if (!guest && cn2 >= 1 && cn2 < 4)
+            {
+                if (cn2 == 1 && t > 60f) { cn2 = 2; Application.CaptureScreenshot(System.IO.Path.Combine(dir, "carnet2-hote-60.png")); }
+                if (cn2 == 2 && t > 62f)
+                {
+                    cn2 = 3;
+                    foreach (KeyValuePair<Esine, CarnetSivu.Page> kv in pages)
+                    {
+                        CarnetSivu.SavePng(kv.Value, System.IO.Path.Combine(dir, "carnet2-page-hote-" + kv.Key.Id + ".png"));
+                        CnSaid s; bool has = cnSaidBy.TryGetValue(kv.Key.Id, out s);
+                        L("essai carnet2 : page du carnet " + kv.Key.Id + " : carnet « " + (kv.Value.Book != null ? kv.Value.Book.Name : "auto") + " », annonce " + (has ? "#" + s.Who + " " + s.Hash + " lampe " + s.Lamp + " leve " + s.Up : "aucune") + ", lampe ici " + cnLamps.ContainsKey(kv.Key) + ", suivi " + (kv.Value.Stage >= 0 ? Kartturi.StageName(kv.Value.Stage) + " " + kv.Value.M.ToString("F0") + " m" : "aucun"));
+                    }
+                    bool lampOn = false, up = false; foreach (Avatar av in PlayerSync.Avatars) { up = CarnetRaisedBy(av.Player.Id, out lampOn); break; }
+                    L("essai carnet2 : avatar de l'invite, carnet leve " + up + ", lampe " + lampOn);
+                }
+                if (cn2 == 3 && t > 65f) { cn2 = 4; Application.CaptureScreenshot(System.IO.Path.Combine(dir, "carnet2-hote-65.png")); }
+            }
+        }
+
         // [Test] Autotest=carnet (seul) : carnet cree et pris en main (25-28 s), assis a l'avant de la SORBET / SATSUMA (31 s), leve
         // (34 s) ; puis la voiture (cinematique) roule la SS1 par troncons a 12 m/s autour du depart, du pont, du premier carre et de
         // l'arrivee : pages en PNG (dumps\carnet-page-<lieu>-<n>.png, lues sur le GPU) 30 m avant, sur la note, 12 m apres ; une
