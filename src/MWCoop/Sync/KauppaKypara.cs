@@ -251,13 +251,24 @@ namespace MWCoop
                 if (!KyImageOk(b, out png, out w, out hh) || KyHash(b) != h) { kyBad.Add(h); L("casque : image " + h + " refusee (format, taille ou empreinte)"); return null; }
                 t = new Texture2D(2, 2, TextureFormat.RGB24, true) { name = "kypara_" + h };
                 if (!t.LoadImage(b)) { UnityEngine.Object.Destroy(t); kyBad.Add(h); L("casque : image " + h + " illisible"); return null; }
-                t = KyShrink(t, KyparaTexSide);
+                t = KyShrink(KyOpaque(t), KyparaTexSide);
                 t.wrapMode = TextureWrapMode.Clamp; t.anisoLevel = 4; t.hideFlags = HideFlags.HideAndDontSave;
                 kyTex[h] = t;
                 L("casque : image " + h + " chargee (" + w + "x" + hh + (t.width != w ? " -> " + t.width + "x" + t.height : "") + ")");
             }
             catch (Exception e) { kyBad.Add(h); L("casque : image " + h + " : " + e.Message); t = null; }
             return t;
+        }
+
+        // PNG avec alpha (LoadImage le garde) : en RGB, l'alpha n'entre pas dans la matiere (lanceur : alpha ignore aussi)
+        static Texture2D KyOpaque(Texture2D t)
+        {
+            if (t.format == TextureFormat.RGB24) return t;
+            var o = new Texture2D(t.width, t.height, TextureFormat.RGB24, true) { name = t.name };
+            o.SetPixels32(t.GetPixels32());
+            o.Apply(true);
+            UnityEngine.Object.Destroy(t);
+            return o;
         }
 
         static Texture2D KyShrink(Texture2D t, int max)
