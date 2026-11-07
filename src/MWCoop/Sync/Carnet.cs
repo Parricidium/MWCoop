@@ -129,6 +129,11 @@ namespace MWCoop
 
         static Note ParseNote(Dictionary<string, object> o, string where)
         {
+            try { return ParseNote1(o, where); }
+            catch (FormatException e) { if (e.Message.StartsWith(where, StringComparison.Ordinal)) throw; throw new FormatException(where + " : " + e.Message); }
+        }
+        static Note ParseNote1(Dictionary<string, object> o, string where)
+        {
             if (o == null) throw new FormatException(where + " : objet attendu");
             var n = new Note { M = Int(o, "m"), Type = Str(o, "type") };
             if (n.M < 0 || n.M > MaxM) throw new FormatException(where + " : m hors de 0 a " + MaxM);
