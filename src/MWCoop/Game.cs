@@ -67,6 +67,7 @@ namespace MWCoop
 
         public static void SaveInPlace()
         {
+            var sw0 = System.Diagnostics.Stopwatch.StartNew();   // ([Test] SauveProfil=1 : temps de chaque etape et actions de sauvegarde, au journal)
             if (SeatExport.Active) { Log.Info("sauvegarde en jeu ignoree : export des places en cours"); return; }   // (l'export ne sauve jamais, JD 07/11)
             if (restore != null) return;
             // Hors de la partie (menu) : rien a sauver, SAVEGAME n'y ecrirait qu'une sauvegarde vide.
@@ -130,7 +131,10 @@ namespace MWCoop
             // ne vient qu'en quittant ou aux toilettes. Ces extinctions sont sautees pendant la sauvegarde en jeu ([Test] SauveCollisions=0 :
             // comme avant).
             List<HutongGames.PlayMaker.FsmStateAction> colliderOffs = Config.GetInt("Test", "SauveCollisions", 1) != 0 ? ColliderOffs(restore) : null;
-            try { SaveBatchMsc.Begin(restore, setup); PlayMakerFSM.BroadcastEvent("SAVEGAME"); }
+            bool profil = Config.Testing && Config.GetInt("Test", "SauveProfil", 0) != 0;
+            if (profil) Log.Info("sauvegarde en jeu, profil : preparation " + sw0.ElapsedMilliseconds + " ms ; " + SaveBatchMsc.Probe(restore));
+            long tBroad = sw0.ElapsedMilliseconds;
+            try { SaveBatchMsc.Begin(restore, setup); PlayMakerFSM.BroadcastEvent("SAVEGAME"); if (profil) Log.Info("sauvegarde en jeu, profil : diffusion de SAVEGAME " + (sw0.ElapsedMilliseconds - tBroad) + " ms"); }
             finally
             {
                 if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); RestoreSetup(false);
@@ -150,8 +154,10 @@ namespace MWCoop
                       : setup == null ? "chargement du joueur absent ou pas au repos, traite comme les autres"
                       : setup.ActiveStateName == "Save game" ? "chargement du joueur arrete apres l'ecriture de sa place"
                       : "ATTENTION chargement du joueur parti dans " + setup.ActiveStateName;
-            Log.Info("sauvegarde en jeu : " + restore.Count + " automates notes avant SAVEGAME ; " + wp);
+            Log.Info("sauvegarde en jeu : " + restore.Count + " automates notes avant SAVEGAME ; " + wp + (profil ? " (en tout " + sw0.ElapsedMilliseconds + " ms)" : ""));
+            if (Config.Testing && Config.GetInt("Test", "SauveCopie", 0) != 0) SaveBatchMsc.TestCopy("enjeu" + (++testCopies));   // (essai : fichiers juste apres l'ecriture)
         }
+        static int testCopies;
 
         public static void Update()
         {
@@ -182,10 +188,14 @@ namespace MWCoop
             }
             restore = null; afterSave = null; wasOff = null;
             RestoreSetup(true);
+            if (Config.Testing && Config.GetInt("Test", "SauveCopie", 0) != 0 && testCopies > 0) SaveBatchMsc.TestCopy("enjeu" + testCopies + "-remis");   // (essai : ecritures retardees comprises)
             if (deadly > 0) Respawn.RestartNeeds("sauvegarde en jeu");
             Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant" + (kept > 0 ? ", " + kept + " laisses (etat d'avant terminal : ses actions ne sont pas rejouees)" : "")
                      + (stale > 0 ? ", " + stale + " laisses (etat d'avant qui rallumerait un objet eteint depuis :" + staleNames + (stale > 5 ? " ..." : "") + ")" : ""));
         }
+
+        // Essai (SaveBatchMsc.Compare : deux sauvegardes en jeu dans la meme image) : automates remis tout de suite, sans attendre 2,5 s.
+        public static void RestoreNow() { if (restore == null) return; restoreAt = 0f; Update(); }
 
         // Objets ETEINTS maintenant qu'allumerait l'etat terminal 'state' (ActivateGameObject activate=true) ; null si aucun.
         // Actions 'Fix Collider' qui eteignent les collisionneurs d'un vehicule (ActivateGameObject false) dans les automates qui

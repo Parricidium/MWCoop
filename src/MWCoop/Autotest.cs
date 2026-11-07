@@ -2610,6 +2610,7 @@ namespace MWCoop
             if (mode == "mscposte") { FleetariMsc.Test(mode, t); return; }   // (commande par la poste partagee, Kamixak et Mikol 25/10)
             if (mode == "mscreprise") { MscReprise(t); return; }   // (Satsuma qui roule seule chez le second conducteur, 25/10)
             if (mode == "mscsauve") { SaveBatchMsc.Test(t); return; }   // (sauvegarde en jeu groupee contre une par une, gel de l'hote 24/10)
+            if (mode == "sauvecompare") { SaveBatchMsc.Compare(t); return; }   // (les deux chemins dans la meme image, fichiers compares -- 07/11)
             if (Config.Get("Test", "Triche", "").Length > 0 && t > Config.GetFloat("Test", "TricheA", 30f) && !tricheDone) { tricheDone = true; foreach (string tc in Config.Get("Test", "Triche", "").Split(';')) if (tc.Trim().Length > 0) Log.Info("autotest : triche " + tc.Trim() + " -> " + (Cheats.Command(tc.Trim()) ?? "ok")); if (Config.GetInt("Test", "TricheCapture", 0) != 0) CaptureSoon("triche", 4f); }   // (« ; » : plusieurs a la suite ; TricheCapture=1 : capture 4 s apres)
             if (mode == "cdmsc") { CdMsc(t); return; }
             if (mode == "mscguepe") { MscGuepe(t); return; }
@@ -4271,6 +4272,7 @@ namespace MWCoop
             }
             if (mode == "conduite") Conduite(t);
             if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
+            if (mode == "sauvecompare") { SaveBatchMsc.Compare(t); return; }   // (sauvegarde en jeu une par une puis groupee dans la meme image, 07/11)
             if (mode == "standalonecoop") { StandaloneCar.CoopTest(t); return; }   // (voiture de la quete s21 sur My Winter Car, [Test] QueteMwc=1 -- 01/11)
             if (mode == "mscphares") { LightsGuard.TestKey(mode, t); return; }   // (touche des phares, Jobs commun : [Test] PharesTouche=LightsDrive sur MWC, 27/10)
             if (mode == "mscleviers") { Leviers(t); return; }   // (leviers et pedales suivis par CarVisuals, commun : JONNEZ et KEKMET sur MWC, 28/10)

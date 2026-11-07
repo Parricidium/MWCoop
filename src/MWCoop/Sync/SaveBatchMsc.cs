@@ -17,7 +17,10 @@ namespace MWCoop
     // par fichier, dans la meme image (les Transform sont lus a ce moment-la : rien n'a bouge depuis).
     // Les sauvegardes des etats atteints plus tard (attente avant d'ecrire) passent par les actions d'origine, une
     // par une comme avant. Les autres types (listes, tables, matieres...) ne sont pas touches.
-    // Tout par reflexion : ES2.dll et les actions Easy Save sont dans les assemblies de MSC (MWC sauve autrement).
+    // Tout par reflexion : ES2.dll et les actions Easy Save sont dans les assemblies du jeu. My Winter Car aussi depuis le 07/11 :
+    // memes actions Easy Save 2 (SaveBool... saveValue / uniqueTag / saveFile, lues dans son Assembly-CSharp) et meme gel, 13,7 s
+    // pour l'hote seul et 17 s a l'arrivee d'un invite sur la CORRIS montee (carparts.txt de 150 Ko) -- le gel connu de 12 s par
+    // arrivant (Menor, 18/10). Le reste (points du sous-chassis, SnapOff) est propre a la SATSUMA : My Summer Car seulement.
     // Repli : un fichier dont l'ecriture groupee echoue est ecrit etiquette par etiquette. [Test] SauvegardeUneParUne=1 :
     // ancien comportement (comparer les temps).
     public static class SaveBatchMsc
@@ -32,7 +35,8 @@ namespace MWCoop
         static Dictionary<string, Pending> files;
         static List<KeyValuePair<FsmState, FsmStateAction[]>> swapped;
         static System.Diagnostics.Stopwatch watch;
-        static int added, skipped;
+        static int added, skipped, guarded;
+        static bool guard;
 
         // ES2 (assembly "ES2" du jeu) : ES2Writer.Create(string), Write<T>(T, string), Save(), Dispose().
         static System.Type writerType;
@@ -117,6 +121,54 @@ namespace MWCoop
             return true;
         }
 
+        // Autres actions Easy Save qui lisent, testent, effacent ou ecrivent un fichier pendant la diffusion (My Winter Car, 07/11 :
+        // Exists 1369, Delete 345, ArrayListEasyLoad 316, HashTableEasySave/Load 31 dans le jeu) : un Exists ou une relecture de
+        // liste d'une etiquette rangee dans le lot verrait le fichier d'AVANT (« absente », ancienne liste), un Delete serait
+        // annule par l'ecriture groupee. Juste avant elles, les etiquettes deja rangees pour LEUR fichier sont ecrites
+        // (FlushFirst) : le fichier qu'elles voient est celui de l'ancien chemin. [Test] SauveGardeBrute=1 : sans cette garde ;
+        // My Summer Car : pas encore ([Test] SauveGarde=1).
+        static readonly Dictionary<System.Type, FieldInfo> fileFields = new Dictionary<System.Type, FieldInfo>();
+        static FieldInfo FileFieldOf(FsmStateAction a)
+        {
+            System.Type t = a.GetType();
+            FieldInfo f;
+            if (fileFields.TryGetValue(t, out f)) return f;
+            f = null;
+            if (t.Namespace == "HutongGames.PlayMaker.Actions" && !Names.Contains(t.Name) && !LoadNames.Contains(t.Name))
+            {
+                FieldInfo sf = t.GetField("saveFile", BindingFlags.Public | BindingFlags.Instance);
+                if (sf != null && sf.FieldType == typeof(FsmString)) f = sf;
+            }
+            fileFields[t] = f;
+            return f;
+        }
+        class FlushFirst : FsmStateAction
+        {
+            public FsmStateAction Orig; public FieldInfo File;
+            public override void OnEnter()
+            {
+                try { Flush(Orig, File); }
+                catch (System.Exception e) { MWCoop.Log.Warn("sauvegarde groupee : ecriture avant " + Orig.GetType().Name + " : " + e.Message); }
+                Finish();
+            }
+        }
+        static int flushes, flushedTags;
+        static Dictionary<string, int> flushedBy;
+        static void Flush(FsmStateAction a, FieldInfo ff)
+        {
+            if (files == null) return;
+            FsmString f = ff.GetValue(a) as FsmString;
+            string name = f != null ? f.Value : null;
+            Pending p;
+            if (string.IsNullOrEmpty(name) || !files.TryGetValue(name, out p) || p.List.Count == 0) return;
+            if (!WriteAll(name, p.List)) foreach (Entry e in p.List) WriteAll(name, new List<Entry> { e });
+            flushedTags += p.List.Count;
+            p.List.Clear(); p.Index.Clear();
+            flushes++;
+            string k = a.GetType().Name + " " + name;
+            int c; flushedBy.TryGetValue(k, out c); flushedBy[k] = c + 1;
+        }
+
         static Kind KindOf(FsmStateAction a)
         {
             if (a == null) return null;
@@ -136,6 +188,7 @@ namespace MWCoop
             // puis ES2.Save(List<string>, saveFile?tag=uniqueTag) -- on reprend ses propres methodes.
             else if (t.Namespace == "HutongGames.PlayMaker.Actions" && t.Name == "ArrayListEasySave")
             {
+                Es2();   // (writeList : sans cet appel, une sonde passee avant Begin gardait « different » en cache)
                 const BindingFlags F = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
                 System.Type pu = t.Assembly.GetType("PlayMakerUtils");
                 var c = new Kind
@@ -180,21 +233,68 @@ namespace MWCoop
             return true;
         }
 
+        // Essai ([Test] SauveProfil=1, Game.SaveInPlace) : actions des etats atteints par SAVEGAME (et leurs suites FINISHED), par type,
+        // combien la sauvegarde groupee reconnaitrait (Kind / LoadKind), ES2 trouve ou non, et les actions de sauvegarde ou de lecture
+        // qu'elle ne reconnait pas (restent une par une).
+        public static string Probe(IEnumerable<KeyValuePair<PlayMakerFSM, string>> listeners)
+        {
+            var types = new Dictionary<string, int>();
+            var other = new Dictionary<string, int>();
+            int rec = 0, recLoad = 0, fsms = 0, states = 0;
+            foreach (KeyValuePair<PlayMakerFSM, string> kv in listeners)
+            {
+                PlayMakerFSM f = kv.Key;
+                if (f == null || f.Fsm == null) continue;
+                fsms++;
+                foreach (FsmTransition gt in f.Fsm.GlobalTransitions)
+                {
+                    if (gt.EventName != "SAVEGAME") continue;
+                    FsmState st = f.Fsm.GetState(gt.ToState);
+                    for (int depth = 0; st != null && depth < 6; depth++)
+                    {
+                        states++;
+                        if (st.Actions != null)
+                            foreach (FsmStateAction a in st.Actions)
+                            {
+                                if (a == null) continue;
+                                string n = a.GetType().Name; int c; types.TryGetValue(n, out c); types[n] = c + 1;
+                                if (KindOf(a) != null) rec++; else if (LoadKindOf(a) != null) recLoad++;
+                                else if (n.Contains("Save") || n.Contains("Load") || n.Contains("ES2")) { other.TryGetValue(n, out c); other[n] = c + 1; }
+                            }
+                        FsmState next = null;
+                        if (st.Transitions != null) foreach (FsmTransition t in st.Transitions) if (t.EventName == "FINISHED") { next = f.Fsm.GetState(t.ToState); break; }
+                        st = next;
+                    }
+                }
+            }
+            var l = new List<KeyValuePair<string, int>>(types);
+            l.Sort((x, y) => y.Value.CompareTo(x.Value));
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < l.Count && i < 18; i++) sb.Append(l[i].Key).Append(' ').Append(l[i].Value).Append(", ");
+            var so = new System.Text.StringBuilder();
+            foreach (KeyValuePair<string, int> kv in other) so.Append(kv.Key).Append(' ').Append(kv.Value).Append(", ");
+            return fsms + " automates, " + states + " etats atteints, ES2 " + (Es2() ? "trouve" : "ABSENT") + ", reconnues " + rec + " ecritures et " + recLoad + " lectures"
+                   + " ; non reconnues : " + (so.Length > 0 ? so.ToString() : "aucune, ") + "actions : " + sb;
+        }
+
         // Avant la diffusion de SAVEGAME : actions de sauvegarde des automates qui l'ecoutent remplacees par Batched.
         public static void Begin(IEnumerable<KeyValuePair<PlayMakerFSM, string>> listeners, PlayMakerFSM setup)
         {
             files = null; swapped = null; keepOff = null;
-            if (!Game.Msc) return;
-            if (Config.GetInt("Test", "SauvePointsBrut", 0) == 0) SnapOff(listeners);
+            if (Game.Msc && Config.GetInt("Test", "SauvePointsBrut", 0) == 0) SnapOff(listeners);
             if (testOld || Config.GetInt("Test", "SauvegardeUneParUne", 0) != 0 || !Es2()) return;
             watch = System.Diagnostics.Stopwatch.StartNew();
             files = new Dictionary<string, Pending>();
             swapped = new List<KeyValuePair<FsmState, FsmStateAction[]>>();
-            added = skipped = fromBatch = 0;
+            added = skipped = fromBatch = flushes = flushedTags = 0;
+            flushedBy = new Dictionary<string, int>();
             int n = 0;
+            // (My Summer Car : sans garde, comme depuis le 24/10, tant que [MSC] ne l'a pas essayee -- [Test] SauveGarde=1 l'allume)
+            guard = Game.Msc ? Config.GetInt("Test", "SauveGarde", 0) != 0 : Config.GetInt("Test", "SauveGardeBrute", 0) == 0;
+            guarded = 0;
             foreach (KeyValuePair<PlayMakerFSM, string> kv in listeners) { Swap(kv.Key); n++; }
             if (setup != null) Swap(setup);
-            Log.Info("sauvegarde groupee : " + swapped.Count + " etats de " + n + " automates accroches en " + watch.ElapsedMilliseconds + " ms");
+            Log.Info("sauvegarde groupee : " + swapped.Count + " etats de " + n + " automates accroches en " + watch.ElapsedMilliseconds + " ms, " + guarded + " autres actions Easy Save gardees");
         }
 
         // Points de montage rallumes par SAVEGAME (24/10, cause du controle de l'hote qui demontait la SATSUMA de Markos) :
@@ -256,20 +356,26 @@ namespace MWCoop
                 FsmStateAction[] acts;
                 try { if (s == null || s.Fsm == null) continue; acts = s.Actions; } catch { continue; }
                 if (acts == null) continue;
-                FsmStateAction[] n = null;
+                List<FsmStateAction> n = null;
                 for (int i = 0; i < acts.Length; i++)
                 {
-                    if (acts[i] == null || !acts[i].Enabled) continue;
-                    Kind k = KindOf(acts[i]);
-                    LoadKind lk = k == null && Config.GetInt("Test", "SauveLecturesBrutes", 0) == 0 ? LoadKindOf(acts[i]) : null;   // ([Test] SauveLecturesBrutes=1 : comme avant)
-                    if (k == null && lk == null) continue;
-                    if (n == null) n = (FsmStateAction[])acts.Clone();
-                    if (k != null) n[i] = new Batched { Orig = acts[i], K = k };
-                    else n[i] = new BatchedLoad { Orig = acts[i], K = lk };
+                    FsmStateAction a = acts[i];
+                    Kind k = null; LoadKind lk = null; FieldInfo ff = null;
+                    if (a != null && a.Enabled)
+                    {
+                        k = KindOf(a);
+                        lk = k == null && Config.GetInt("Test", "SauveLecturesBrutes", 0) == 0 ? LoadKindOf(a) : null;   // ([Test] SauveLecturesBrutes=1 : comme avant)
+                        ff = k == null && lk == null && guard ? FileFieldOf(a) : null;
+                    }
+                    if (k == null && lk == null && ff == null) { if (n != null) n.Add(a); continue; }
+                    if (n == null) { n = new List<FsmStateAction>(acts.Length + 4); for (int j = 0; j < i; j++) n.Add(acts[j]); }
+                    if (k != null) n.Add(new Batched { Orig = a, K = k });
+                    else if (lk != null) n.Add(new BatchedLoad { Orig = a, K = lk });
+                    else { n.Add(new FlushFirst { Orig = a, File = ff }); n.Add(a); guarded++; }
                 }
                 if (n == null) continue;
                 swapped.Add(new KeyValuePair<FsmState, FsmStateAction[]>(s, acts));
-                s.Actions = n;
+                s.Actions = n.ToArray();
             }
         }
 
@@ -332,11 +438,17 @@ namespace MWCoop
         {
             RestoreOff();
             if (swapped == null) return;
+            // (une action de remplacement restee en place, la sauvegarde suivante du jeu -- sauver et quitter -- n'ecrirait rien pour elle)
+            int left = 0, states = swapped.Count;
             foreach (KeyValuePair<FsmState, FsmStateAction[]> kv in swapped)
+            {
                 try { kv.Key.Actions = kv.Value; } catch (System.Exception e) { Log.Warn("sauvegarde groupee : etat " + kv.Key.Name + " : " + e.Message); }
+                FsmStateAction[] now = kv.Key.Actions;
+                if (now != null) foreach (FsmStateAction a in now) if (a is Batched || a is BatchedLoad || a is FlushFirst) left++;
+            }
             swapped = null;
             long hooked = watch.ElapsedMilliseconds;
-            int tags = 0, fallback = 0;
+            int tags = flushedTags, fallback = 0;
             var sb = new System.Text.StringBuilder();
             foreach (KeyValuePair<string, Pending> kv in files)
             {
@@ -347,7 +459,16 @@ namespace MWCoop
             files = null;
             Log.Info("sauvegarde groupee : " + tags + " etiquettes (" + added + " sauvegardes" + (skipped > 0 ? ", " + skipped + " sans valeur" : "") + ") ecrites en "
                      + (watch.ElapsedMilliseconds - hooked) + " ms, " + watch.ElapsedMilliseconds + " ms en tout : " + sb.ToString().TrimEnd(' ', ',')
-                     + (fallback > 0 ? " ; " + fallback + " fichier(s) ecrit(s) un par un" : "") + (fromBatch > 0 ? " ; " + fromBatch + " lecture(s) dans la meme diffusion prise(s) au lot" : ""));
+                     + (fallback > 0 ? " ; " + fallback + " fichier(s) ecrit(s) un par un" : "") + (fromBatch > 0 ? " ; " + fromBatch + " lecture(s) dans la meme diffusion prise(s) au lot" : "")
+                     + " ; actions du jeu remises dans " + states + " etats" + (left > 0 ? ", ATTENTION " + left + " de remplacement encore en place" : "")
+                     + (flushes > 0 ? " ; " + flushes + " ecriture(s) avant une autre action Easy Save : " + FlushList() : ""));
+        }
+
+        static string FlushList()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (KeyValuePair<string, int> kv in flushedBy) sb.Append(kv.Key).Append(" x").Append(kv.Value).Append(", ");
+            return sb.ToString().TrimEnd(' ', ',');
         }
 
         // [Test] Autotest=mscsauve (solo, MSC) : a 40 s sauvegarde en jeu groupee, a 55 s une par une (ancien comportement) ;
@@ -478,6 +599,65 @@ namespace MWCoop
                 if (watched != null) Watch("juste apres " + tName);
                 tWorst = 0; tCopyAt = t + 5f; tProbeAt = t + 3.5f;
             }
+        }
+
+        // [Test] Autotest=sauvecompare (les deux jeux, solo ou hote seul -- 07/11, sauvegarde groupee allumee sur My Winter Car) :
+        // a [Test] CompareA s (40), dans la MEME image, sauvegarde en jeu une par une (ancien chemin) puis groupee ; entre les deux,
+        // fichiers de la sauvegarde remis tels qu'avant la premiere et automates remis aussitot (Game.RestoreNow) : meme partie, meme
+        // instant, seul le chemin d'ecriture change. Fichiers copies dans dumps/es2cmp/avant, uneparune et groupee (a comparer
+        // etiquette par etiquette : run/es2/es2cmp.py). [Test] SauveInverse=1 : groupee d'abord.
+        static bool cmpDone;
+        static readonly string[] CmpDirs = { "avant", "uneparune", "groupee" };
+        public static void Compare(float t)
+        {
+            if (cmpDone || t < Config.GetFloat("Test", "CompareA", 40f)) return;
+            cmpDone = true;
+            string src = Net.SaveTransfer.SaveDir;
+            string root = System.IO.Path.Combine(System.IO.Path.Combine(MWCoop.Log.DataDir, "dumps"), "es2cmp");
+            try
+            {
+                foreach (string d in CmpDirs)   // (fichiers de l'essai precedent ; dossiers crees ici, sans jonction)
+                {
+                    string p = System.IO.Path.Combine(root, d);
+                    if (System.IO.Directory.Exists(p)) foreach (string f in System.IO.Directory.GetFiles(p)) System.IO.File.Delete(f);
+                }
+                string before = System.IO.Path.Combine(root, "avant");
+                CopyFiles(src, before);
+                bool groupedFirst = Config.GetInt("Test", "SauveInverse", 0) != 0;
+                for (int k = 0; k < 2; k++)
+                {
+                    testOld = (k == 0) != groupedFirst;
+                    string name = testOld ? "uneparune" : "groupee";
+                    if (k == 1)
+                    {
+                        Game.RestoreNow();
+                        CopyFiles(before, src);
+                        foreach (string f in System.IO.Directory.GetFiles(src))
+                            if (!System.IO.File.Exists(System.IO.Path.Combine(before, System.IO.Path.GetFileName(f)))) Log.Info("autotest sauvecompare : " + System.IO.Path.GetFileName(f) + " cree par la 1re sauvegarde (laisse)");
+                    }
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    Game.SaveInPlace();
+                    long ms = sw.ElapsedMilliseconds;
+                    testOld = false;
+                    CopyFiles(src, System.IO.Path.Combine(root, name));
+                    Log.Info("autotest sauvecompare : " + name + ", Game.SaveInPlace en " + ms + " ms, fichiers copies dans dumps/es2cmp/" + name);
+                }
+            }
+            catch (System.Exception e) { testOld = false; Log.Warn("autotest sauvecompare : " + e.GetType().Name + " " + e.Message); }
+        }
+        public static void TestCopy(string name)
+        {
+            try
+            {
+                CopyFiles(Net.SaveTransfer.SaveDir, System.IO.Path.Combine(System.IO.Path.Combine(System.IO.Path.Combine(MWCoop.Log.DataDir, "dumps"), "es2cmp"), name));
+                Log.Info("essai : fichiers de la sauvegarde copies dans dumps/es2cmp/" + name);
+            }
+            catch (System.Exception e) { Log.Warn("essai : copie de la sauvegarde : " + e.Message); }
+        }
+        static void CopyFiles(string from, string to)
+        {
+            System.IO.Directory.CreateDirectory(to);
+            foreach (string f in System.IO.Directory.GetFiles(from)) System.IO.File.Copy(f, System.IO.Path.Combine(to, System.IO.Path.GetFileName(f)), true);
         }
 
         static bool WriteAll(string file, List<Entry> list)
