@@ -357,7 +357,7 @@ Less than 1 GB free on the disk (%s): click again to import anyway	المساح�
 Choose the video for a VHS tape	اختر الفيديو لشريط VHS
 Choose the video for a cinema reel	اختر الفيديو لبكرة السينما
 Conversion cancelled	أُلغي التحويل
-Video imported: \"%s\" (%s). In game, reel in hand, R: READY FILMS.	استُورد الفيديو: «%s» (%s). في اللعبة، والبكرة في يدك، R: الأفلام الجاهزة.
+Video imported: \"%s\" (%s). In game, reel in hand, R: READY FILMS.	استُورد الفيديو: «%s» (%s). في اللعبة، والبكرة في يدك، R: READY FILMS (الأفلام الجاهزة).
 Close the game to rename a film	أغلق اللعبة لإعادة تسمية فيلم
 Film renamed	أُعيدت تسمية الفيلم
 Title not written	لم يُكتب العنوان
@@ -394,7 +394,7 @@ On a reel or tape: its title is in the save, rename it in game (/titre).	على 
 Reels	البكرات
 Cinema reels	بكرات السينما
 The films of each game: import, rename, export, free up space.	أفلام كل لعبة: استيراد، إعادة تسمية، تصدير، إفراغ مساحة.
-In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	في المشغّل، صفحة VHS، تبويب «البكرات»: أفلام كل لعبة ومدتها وأين تُستخدم ومن أين أتت. استورد فيديو لبكرة، أو أعد التسمية، أو صدّر بصيغة .mp4، أو احذف (واللعبة مغلقة)؛ في اللعبة، والبكرة في يدك، R: الأفلام الجاهزة.
+In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	في المشغّل، صفحة VHS، تبويب «البكرات»: أفلام كل لعبة ومدتها وأين تُستخدم ومن أين أتت. استورد فيديو لبكرة، أو أعد التسمية، أو صدّر بصيغة .mp4، أو احذف (واللعبة مغلقة)؛ في اللعبة، والبكرة في يدك، R: READY FILMS (الأفلام الجاهزة).
 New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.	تبويب جديد «البكرات» في صفحة VHS: أفلام كل لعبة ومدتها وأين تُستخدم. استورد فيديو، أو أعد التسمية، أو صدّر بصيغة .mp4، أو أفرغ مساحة.
 if private	إذا كانت خاصة
 Yes	نعم

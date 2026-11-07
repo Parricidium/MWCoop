@@ -2738,7 +2738,7 @@ Less than 1 GB free on the disk (%s): click again to import anyway	На диск
 Choose the video for a VHS tape	Выбери видео для кассеты VHS
 Choose the video for a cinema reel	Выбери видео для бобины кинотеатра
 Conversion cancelled	Конвертация отменена
-Video imported: \"%s\" (%s). In game, reel in hand, R: READY FILMS.	Видео импортировано: «%s» (%s). В игре: бобина в руке, R — готовые фильмы.
+Video imported: \"%s\" (%s). In game, reel in hand, R: READY FILMS.	Видео импортировано: «%s» (%s). В игре: бобина в руке, R — «ГОТОВЫЕ ФИЛЬМЫ».
 Close the game to rename a film	Закрой игру, чтобы переименовать фильм
 Film renamed	Фильм переименован
 Title not written	Название не записано
@@ -2775,5 +2775,5 @@ On a reel or tape: its title is in the save, rename it in game (/titre).	На б
 Reels	Бобины
 Cinema reels	Бобины кинотеатра
 The films of each game: import, rename, export, free up space.	Фильмы каждой игры: импорт, переименование, экспорт, освобождение места.
-In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	В лаунчере, страница VHS, вкладка «Бобины»: фильмы каждой игры, их длина, где они используются и откуда они. Импортируй видео для бобины, переименуй, экспортируй в .mp4 или удали (при закрытой игре); в игре, с бобиной в руке, R — готовые фильмы.
+In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	В лаунчере, страница VHS, вкладка «Бобины»: фильмы каждой игры, их длина, где они используются и откуда они. Импортируй видео для бобины, переименуй, экспортируй в .mp4 или удали (при закрытой игре); в игре, с бобиной в руке, R — «ГОТОВЫЕ ФИЛЬМЫ».
 New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.	Новая вкладка «Бобины» на странице VHS: фильмы каждой игры, их длина и где они используются. Импортируй видео, переименуй, экспортируй в .mp4 или освободи место.
