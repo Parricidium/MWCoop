@@ -425,7 +425,7 @@ namespace MWCoop
         // variable Windows) vise une vitre, et le temoin de la vitre passager (Drive la pose en miroir).
         class Win { public string Key; public PlayMakerFSM Knob; public Transform Glass; public float AimAt = -9f, LastSend, RemoteAt = -9f, ReachAt = -9f; public Vector3 SentPos; public Quaternion SentRot, SentKnob; public bool Moving; }
         static readonly List<Win> wins = new List<Win>();
-        // (My Summer Car, SATSUMA : portieres en pieces detachees, vitre « coll » : hors de wins, seulement pour WindowOpenNear)
+        // (My Summer Car, SATSUMA : portieres en pieces detachees, vitre « coll » : liste a part pour WindowOpenNear, et dans wins aussi)
         static readonly List<Win> satsumaWins = new List<Win>();
         static float nextWinScan, nextWinFull;
         public const string WinPrefix = "vitre:";
@@ -443,6 +443,16 @@ namespace MWCoop
                     bool had = false;
                     foreach (Win x in satsumaWins) if (x.Knob == f) { had = true; break; }
                     if (!had) satsumaWins.Add(new Win { Key = WinPrefix + Recon.Path(f.transform), Knob = f, Glass = w.Value.transform });
+                    // Sa vitre suit aussi la pose de celui qui tourne la manivelle, comme celle de la FERNDALE. Elle ne partait par aucun chemin
+                    // (JD 07/11 : « verifier que l'etat d'ouverture des fenetres est bien synchronise ») : hors de wins, et son automate Knob
+                    // (« Get scroll », « Mouse off 2 ») ecarte de Jobs comme les molettes de la radio. Essais caches a deux : hote vers invite,
+                    // invite vers hote et invite arrive apres le geste, la vitre restait fermee chez l'autre. Cle refaite a chaque releve
+                    // (portiere montee ou demontee depuis : son chemin peut changer). Duree du jeu gardee (pas de SpeedUp).
+                    Win inW = null;
+                    foreach (Win x in wins) if (x.Knob == f) { inW = x; break; }
+                    string key = WinPrefix + Recon.Path(f.transform);
+                    if (inW == null) wins.Add(new Win { Key = key, Knob = f, Glass = w.Value.transform });
+                    else inW.Key = key;
                     continue;
                 }
                 if (gn != "vitre MWCoop" && gn.IndexOf("lass") < 0) continue;   // (pas les molettes du chauffage : Windows = CarTemp...)
