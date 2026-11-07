@@ -360,24 +360,29 @@ static void CnCommit()
 }
 static CnNote *CnSelEdit() { std::vector<CnNote> *v = CnEditable(); if (!v) return NULL; for (auto &n : *v) if (n.uid == g_cnSelUid) return &n; return NULL; }
 
-// ---- note devinee au clic (virage selon le trace : seuils du KARTTURI, carre pour ~90 deg sur moins de 25 m)
-static float CnTurnDeg(const CnStage &s, int i, float metres)
-{
-    int n = (int)s.p.size(), k = max(1, (int)(metres / s.step + 0.5f));
-    int a0 = max(0, i - 1), a1 = min(n - 1, i + 1), b0 = min(n - 2, i + k), b1 = min(n - 1, b0 + 2);
-    if (a1 <= a0 || b1 <= b0) return 0;
-    float ax = s.p[a1].X - s.p[a0].X, az = s.p[a1].Y - s.p[a0].Y, bx = s.p[b1].X - s.p[b0].X, bz = s.p[b1].Y - s.p[b0].Y;
-    float cr = ax * bz - az * bx, dt = ax * bx + az * bz;
-    return -atan2f(cr, dt) * 57.29578f;   // (> 0 : a droite ; x a droite, z en haut vu du ciel)
-}
+// ---- note devinee au clic, sur les 50 m qui suivent : virage (seuils du KARTTURI), carre (regle de la spec et de [MWC],
+// 07/11 : angle de 65 a 115 deg ET (80 % de l'angle sur 25 m au plus OU rayon mini sous 20 m) -- [MSC] : le lissage etale
+// un carre sur 32 a 34 m, « ~90 deg sur moins de 25 m » n'en attrapait aucun), H au-dela de 150 deg.
+static float CnHeading(const CnStage &s, int j) { return atan2f(s.p[j + 1].X - s.p[j].X, s.p[j + 1].Y - s.p[j].Y); }   // (croit a droite : x a droite, z en haut vu du ciel)
 static CnNote CnGuess(const CnStage &s, int i)
 {
     CnNote n; n.m = (int)(i * s.step + 0.5f); n.uid = g_cnUid++;
-    float a40 = CnTurnDeg(s, i, 40), a24 = CnTurnDeg(s, i, 24), ang = fabsf(a40);
-    if (ang < 10) { n.type = CT_DROIT; return n; }
-    n.side = a40 < 0 ? -1 : 1;
-    if (fabsf(a24) >= 70 && fabsf(a24) <= 110 && ang < 135) { n.type = CT_CARRE; return n; }
-    float r = 40.0f / (ang / 57.29578f);
+    int np = (int)s.p.size(), w = max(2, (int)(50 / s.step + 0.5f));
+    int a = max(1, i), b = min(np - 2, i + w);
+    std::vector<float> dh;   // (virage de chaque pas, en radians, > 0 a droite)
+    for (int j = a; j <= b; j++) { float d = CnHeading(s, j) - CnHeading(s, j - 1); while (d > 3.14159265f) d -= 6.2831853f; while (d < -3.14159265f) d += 6.2831853f; dh.push_back(d); }
+    float tot = 0; for (float d : dh) tot += d;
+    float ang = fabsf(tot) * 57.29578f;
+    if (dh.empty() || ang < 10) { n.type = CT_DROIT; return n; }
+    n.side = tot < 0 ? -1 : 1;
+    float sg = tot < 0 ? -1.0f : 1.0f;
+    // longueur la plus courte qui porte 80 % de l'angle ; rayon mini sur 3 pas
+    size_t best = dh.size();
+    for (size_t x = 0; x < dh.size(); x++) { float acc = 0; for (size_t y = x; y < dh.size(); y++) { acc += dh[y] * sg; if (acc >= 0.8f * fabsf(tot)) { best = min(best, y - x + 1); break; } } }
+    float l80 = best * s.step, rmin = 1e9f;
+    for (size_t x = 0; x + 2 < dh.size(); x++) { float k = (dh[x] + dh[x + 1] + dh[x + 2]) * sg / (3 * s.step); if (k > 1e-4f) rmin = min(rmin, 1 / k); }
+    if (ang >= 65 && ang <= 115 && (l80 <= 25 || rmin < 20)) { n.type = CT_CARRE; return n; }
+    float r = l80 / (0.8f * fabsf(tot));
     n.type = CT_VIRAGE;
     n.grade = r < 14 || ang > 150 ? 0 : r < 22 ? 1 : r < 35 ? 2 : r < 55 ? 3 : r < 85 ? 4 : r < 130 ? 5 : 6;
     return n;
@@ -502,11 +507,12 @@ static void DrawCnCell(Graphics &g, int c, RectF r)   // (une case entiere, cent
 static void DrawCnPaper(Graphics &g, RectF p)
 {
     { SolidBrush sh(Color(60, 0, 0, 0)); g.FillRectangle(&sh, p.X + 3, p.Y + 4, p.Width, p.Height); }
-    SolidBrush pb(Color(255, 250, 245, 228)); g.FillRectangle(&pb, p);
-    float lh = p.Height / 22;
-    Pen lp(Color(110, 120, 170, 220), 1.0f);
-    for (float y = p.Y + lh * 2.2f; y < p.Y + p.Height - 4; y += lh) g.DrawLine(&lp, p.X + 1, y, p.X + p.Width - 1, y);
-    Pen mp(Color(150, 220, 80, 80), 1.2f); g.DrawLine(&mp, p.X + p.Width * 0.12f, p.Y, p.X + p.Width * 0.12f, p.Y + p.Height);
+    // (memes cotes que la page du mod, assets\carnet\page.png de [MWC] : creme, lignes tous les 4,6 % des 7,5 %, marge a 13 %)
+    SolidBrush pb(Color(255, 250, 246, 233)); g.FillRectangle(&pb, p);
+    float lh = p.Height * 0.046f;
+    Pen lp(Color(255, 170, 206, 236), max(1.0f, p.Height / 724));
+    for (float y = p.Y + p.Height * 0.075f; y < p.Y + p.Height - 2; y += lh) g.DrawLine(&lp, p.X + 1, y, p.X + p.Width - 1, y);
+    Pen mp(Color(255, 226, 150, 142), max(1.0f, p.Width / 512)); g.DrawLine(&mp, p.X + p.Width * 0.13f, p.Y, p.X + p.Width * 0.13f, p.Y + p.Height);
     Pen sp(Color(200, 70, 70, 76), 2.0f); SolidBrush hole(Color(255, 60, 60, 66));
     for (float y = p.Y + 8; y < p.Y + p.Height - 6; y += 13) { g.FillEllipse(&hole, p.X + 6, y + 2, 4.0f, 4.0f); g.DrawArc(&sp, p.X - 6, y, 16.0f, 8.0f, 90.0f, 250.0f); }
 }
@@ -642,7 +648,7 @@ static void DrawCnMap(Graphics &g, RectF r)
             if (sel) { Pen sp(kAcc, 2.4f); g.DrawEllipse(&sp, q.X - 9, q.Y - 9, 18.0f, 18.0f); }
             if (labels || sel) {
                 RectF lb(q.X + 10, q.Y - 13, 120, 26);
-                SolidBrush lbg(Color(sel ? 235 : 200, 250, 245, 228));
+                SolidBrush lbg(Color(sel ? 235 : 200, 250, 246, 233));
                 std::vector<int> cells; CnCells(n, cells);
                 float wEst = n.type == CT_TEXTE ? min(130.0f, n.text.size() * 8.0f + 10) : cells.size() * 20.0f + 6;
                 GraphicsPath lp; RoundRect(lp, RectF(lb.X, lb.Y, wEst, lb.Height), 6); g.FillPath(&lbg, &lp);
@@ -748,7 +754,7 @@ static void DrawCnPop(Graphics &g, RectF card)
     Text(g, hd, RectF(ix, iy, iw - 30, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
     UiButton(g, RectF(r.X + r.Width - 16 - 26, iy - 2, 26, 26), L"", UI_CN_NOK, false, IC_CLOSE, true, 9);
     iy += 30;
-    { RectF lr(ix, iy, iw, 40); SolidBrush lb(Color(255, 250, 245, 228)); GraphicsPath lp; RoundRect(lp, lr, 8); g.FillPath(&lb, &lp); DrawCnLine(g, *n, lr.X + 8, lr.Y + 20, 30, lr.X + lr.Width - 6); }
+    { RectF lr(ix, iy, iw, 40); SolidBrush lb(Color(255, 250, 246, 233)); GraphicsPath lp; RoundRect(lp, lr, 8); g.FillPath(&lb, &lp); DrawCnLine(g, *n, lr.X + 8, lr.Y + 20, 30, lr.X + lr.Width - 6); }
     iy += 48;
     iy += body(g, ix, iy);
     float bw = (iw - 8) / 2;
@@ -1199,7 +1205,16 @@ static bool CarnetSelfTest(const std::wstring &logPath)
     {   // note devinee : un virage a droite de 60 m de rayon (SS1 : 2e virage, 40 deg sur 60 m), un carre (30 m, 90 deg)
         CnNote g1 = CnGuess(g_cnStages[0], (int)(120 / 2) + 2), g2 = CnGuess(g_cnStages[0], (int)((120 + 60 + 80 + 45 + 150) / 2) + 1);
         say("note devinee : virage a droite au 1er virage", g1.type == CT_VIRAGE && g1.side > 0);
-        say("note devinee : carre au virage de 90 deg sur 30 m", g2.type == CT_CARRE && g2.side > 0); }
+        say("note devinee : carre au virage de 90 deg sur 30 m", g2.type == CT_CARRE && g2.side > 0);
+        // regle du carre ([MWC] / [MSC] 07/11) sur des traces faits ici : carre etale par le lissage, grand virage, epingle
+        auto mk = [](std::initializer_list<std::pair<float, float>> sg) { CnStage c; c.step = 2; float x = 0, z = 0, hd = 0; c.p.push_back(PointF(0, 0));
+            for (auto &q : sg) { int k = max(1, (int)(q.first / 2)); for (int j = 0; j < k; j++) { hd += q.second / 57.29578f / k; x += sinf(hd) * 2; z += cosf(hd) * 2; c.p.push_back(PointF(x, z)); } }
+            c.len = (int)((c.p.size() - 1) * 2); return c; };
+        CnStage sq = mk({ { 40.0f, 0.0f }, { 12.0f, -10.0f }, { 10.0f, -70.0f }, { 12.0f, -10.0f }, { 80.0f, 0.0f } }), big = mk({ { 40.0f, 0.0f }, { 60.0f, 90.0f }, { 80.0f, 0.0f } }), hp = mk({ { 40.0f, 0.0f }, { 40.0f, 170.0f }, { 80.0f, 0.0f } });
+        CnNote q1 = CnGuess(sq, 20), q2 = CnGuess(big, 20), q3 = CnGuess(hp, 20);
+        say("regle du carre : 90 deg etale sur 34 m (coeur serre) = carre a gauche", q1.type == CT_CARRE && q1.side < 0);
+        say("regle du carre : 90 deg sur 60 m = virage, pas carre", q2.type == CT_VIRAGE && q2.side > 0);
+        say("regle du carre : 170 deg = epingle (H)", q3.type == CT_VIRAGE && q3.grade == 0); }
     // carnet actif : un fichier hors format n'est jamais pris
     CnWriteAtomic(CnActivePath(), "..\\..\\x.json");
     say("carnet actif : chemin refuse", CnReadActive().empty());
