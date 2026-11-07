@@ -26,7 +26,7 @@ namespace MWCoop
         class Projector
         {
             public int Sali; public float S; public Collider Col; public Transform[] Reels; public string Content = ""; public bool Playing; public float Start;
-            public Renderer Screen; public Material Idle, Mat; public Texture2D Tex; public AudioSource Audio; public Film Film; public int Frame = -1;
+            public Renderer Screen; public Material Idle, Mat; public Texture2D Tex; public AudioSource Audio; public Film Film; public int Frame = -1; public bool Behind;
             public GameObject Beam; public float FDown = -1f;
             public LinkPlay Link; public bool LinkFailTold;   // (bobine « lien » : KinoLinkki)
         }
@@ -449,7 +449,7 @@ namespace MWCoop
             if (all)
                 foreach (Film x in loaded)
                 {
-                    float len = x.LengthMs / 1000f;
+                    float len = FilmSeconds(x);   // (pas lu jusqu'au bout : duree annoncee -- pas de fin avant)
                     if (t < at + len) { f = x; clipStart = at; break; }
                     at += len;
                 }
@@ -473,15 +473,13 @@ namespace MWCoop
                 L("cinema : salle " + p.Sali + " projette " + f.Id + " depuis " + tc.ToString("F1") + " s");
             }
             if (p.Screen.sharedMaterial != p.Mat) p.Screen.sharedMaterial = p.Mat;
-            uint ms = (uint)Mathf.Max(0f, tc * 1000f);
-            int lo = 0, hi = f.Ms.Count - 1, idx = -1;
-            while (lo <= hi) { int mid = (lo + hi) / 2; if (f.Ms[mid] <= ms) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+            // (en avance sur la reception : la derniere image arrivee, le son en silence -- la suite reprend a l'instant commun)
+            p.Behind = FilmBehind(f, tc);
+            int idx = FrameAt(f, (uint)Mathf.Max(0f, tc * 1000f));
             if (idx >= 0 && idx != p.Frame)
             {
-                p.Frame = idx;
-                var jpg = new byte[f.Len[idx]];
-                Buffer.BlockCopy(f.Data, f.Off[idx], jpg, 0, jpg.Length);
-                p.Tex.LoadImage(jpg);
+                byte[] jpg = FrameJpeg(f, idx);
+                if (jpg != null) { p.Frame = idx; p.Tex.LoadImage(jpg); }
             }
         }
 
@@ -650,6 +648,20 @@ namespace MWCoop
                     break;
                 }
                 case "jako": KinoAnswer(a[2] == "1"); break;   // (jako 1 / 0 : reponse a la question du film)
+                case "kelafilmi":   // (kelafilmi <film> [titre] : bobine a ce film devant les yeux)
+                {
+                    Transform eye = EyeT;
+                    if (eye == null) break;
+                    SpawnItem(KKela, a[2] + "~" + (a.Length > 3 ? string.Join(" ", a, 3, a.Length - 3) : "Essai"), eye.position + eye.forward * 0.6f, Quaternion.identity);
+                    L("essai : bobine " + a[2] + (HaveFilm(a[2]) ? " (film ici)" : " (film absent)"));
+                    break;
+                }
+                case "filmitila":   // (filmitila <film> : ou en est ce film ici -- reception, index)
+                {
+                    Film f; filmCache.TryGetValue(a[2], out f);
+                    L("essai : film " + a[2] + " : " + (HaveFilm(a[2]) ? "complet" : "reception " + (FilmProgress(a[2]) * 100f).ToString("F0") + " %") + (f != null ? ", index " + f.Ms.Count + " images, " + (f.LengthMs / 1000f).ToString("F1") + " s" + (f.Done ? " (fin)" : "") : ", pas lu") + " ; salle 1 " + (projectors[1] != null ? (projectors[1].Playing ? "projette a " + (now - projectors[1].Start).ToString("F1") + " s" : "arretee") + (projectors[1].Behind ? " EN RETARD" : "") + ", image " + projectors[1].Frame + (projectors[1].Audio != null ? ", son " + (projectors[1].Audio.isPlaying ? "a " + projectors[1].Audio.time.ToString("F1") + " s" : "coupe") : "") : "-"));
+                    break;
+                }
                 case "istu":
                 {
                     // istu <sali> <rang> <place> : joueur pose sur le fauteuil, declencheur force en « Press return » (comme

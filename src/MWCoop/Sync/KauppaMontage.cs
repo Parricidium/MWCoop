@@ -94,7 +94,7 @@ namespace MWCoop
             mClips.Clear(); mMissing = false; mTotal = 0f;
             foreach (string c in Clips(mTape.Data))
             {
-                Film f = LoadFilm(c);
+                Film f = LoadFilmAll(c);   // (lu jusqu'au bout : duree exacte ; en reception : manquant)
                 if (f == null) { mMissing = true; AskFilm(c, Time.realtimeSinceStartup); continue; }
                 mClips.Add(f); mTotal += f.LengthMs / 1000f;
             }
@@ -140,16 +140,12 @@ namespace MWCoop
             float tc = Mathf.Max(0f, mT - off);
             if (mTex == null) mTex = new Texture2D(2, 2, TextureFormat.RGB24, false) { name = "kauppa_montage", wrapMode = TextureWrapMode.Clamp };
             if (ci != mClip) { mClip = ci; mFrame = -1; seek = true; }
-            uint ms = (uint)(tc * 1000f);
-            int lo = 0, hi = f.Ms.Count - 1, idx = -1;
-            while (lo <= hi) { int mid = (lo + hi) / 2; if (f.Ms[mid] <= ms) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+            int idx = FrameAt(f, (uint)(tc * 1000f));
             if (idx < 0 && f.Ms.Count > 0) idx = 0;
             if (idx >= 0 && idx != mFrame)
             {
-                mFrame = idx;
-                var jpg = new byte[f.Len[idx]];
-                Buffer.BlockCopy(f.Data, f.Off[idx], jpg, 0, jpg.Length);
-                mTex.LoadImage(jpg);
+                byte[] jpg = FrameJpeg(f, idx);
+                if (jpg != null) { mFrame = idx; mTex.LoadImage(jpg); }
             }
             if (mAudioGo == null) { mAudioGo = new GameObject("MWCoop montage"); UnityEngine.Object.DontDestroyOnLoad(mAudioGo); mAudio = mAudioGo.AddComponent<AudioSource>(); mAudio.spatialBlend = 0f; mAudio.volume = 0.9f; mAudio.loop = false; }
             if (!mPlaying) { if (mAudio.isPlaying) mAudio.Stop(); return; }
@@ -174,12 +170,11 @@ namespace MWCoop
             int frames = 0;
             int w = 256, h = 192, fps = 10;
             foreach (Film f in clips)
-                if (f.Data.Length >= 11)
-                {
-                    if (frames == 0) { w = f.Data[4] | f.Data[5] << 8; h = f.Data[6] | f.Data[7] << 8; }
-                    fps = Mathf.Max(fps, f.Data[8]);
-                    frames = 1;
-                }
+            {
+                if (frames == 0) { w = f.W; h = f.H; }
+                fps = Mathf.Max(fps, f.Fps);
+                frames = 1;
+            }
             frames = 0;
             using (var wr = new BinaryWriter(new FileStream(path, FileMode.Create, FileAccess.Write)))
             {
@@ -201,7 +196,9 @@ namespace MWCoop
                             float tf = f.Ms[i] / 1000f;
                             if (i > first && tf >= cb) break;
                             float tg = Mathf.Max(0f, off + tf - a);
-                            wr.Write((byte)1); wr.Write((uint)(tg * 1000f)); wr.Write(f.Len[i]); wr.Write(f.Data, f.Off[i], f.Len[i]);
+                            byte[] jpg = FrameJpeg(f, i);
+                            if (jpg == null) continue;
+                            wr.Write((byte)1); wr.Write((uint)(tg * 1000f)); wr.Write(jpg.Length); wr.Write(jpg);
                             frames++;
                         }
                         // son de la plage (silence s'il en manque)
@@ -209,8 +206,8 @@ namespace MWCoop
                         if (s1 > s0)
                         {
                             var mu = new byte[s1 - s0];
-                            byte silence = MuLaw(0f);
-                            for (int i = 0; i < mu.Length; i++) { int k = s0 + i; mu[i] = f.Sound != null && k < f.Sound.Length ? MuLaw(f.Sound[k]) : silence; }
+                            long nmu = f.MuCount;
+                            for (int i = 0; i < mu.Length; i++) { long k = s0 + i; mu[i] = k < nmu ? f.MuAt(k) : (byte)0xFF; }   // (0xFF : silence en mu-law)
                             wr.Write((byte)2); wr.Write((uint)(Mathf.Max(0f, off + ca - a) * 1000f)); wr.Write(mu.Length); wr.Write(mu);
                         }
                     }

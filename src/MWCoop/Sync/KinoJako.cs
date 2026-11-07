@@ -17,6 +17,10 @@ namespace MWCoop
     //  - le partageur envoie le film des le premier « oui » (KauppaFilmi, au debit du canal fiable), dit l'attente a tous
     //    (op 3 : salle, texte) ; quand tous ont repondu et que ceux qui ont dit oui l'ont recu : la seance commence toute seule.
     //  - la bobine retiree pendant l'attente : partage annule (op 4).
+    //  - en flux (JD 07/11 : « un systeme de streaming au lieu d'uploader toute la video d'un coup ») : la duree de chaque film part
+    //    avec la proposition ; celui qui telecharge se dit pret (op 2, etat 2) des qu'il a assez d'avance pour ne pas etre rattrape :
+    //    au moins 30 s de film, et plus si sa reception est plus lente que le film (duree x (1 - debit / debit du film) x 1,25 + 15 s),
+    //    mesuree sur 8 s ; sinon il attend le film entier. La seance lit le film pendant qu'il arrive (KauppaFilmiVirta).
     public static partial class Kauppa
     {
         class KinoShare
@@ -25,7 +29,7 @@ namespace MWCoop
             public readonly Dictionary<int, int> State = new Dictionary<int, int>();
             public readonly Dictionary<int, float> Pct = new Dictionary<int, float>();
         }
-        class KinoAsk { public List<string> Films; public string Title; public long Size; public int From, Sali; public float At; }   // (Size en Ko)
+        class KinoAsk { public List<string> Films; public string Title; public long Size; public int From, Sali; public float At; public uint TotalMs; }   // (Size en Ko)
 
         static KinoShare kinoShare;                 // (chez le partageur)
         static KinoAsk kinoAsk;                     // (chez un autre : la question affichee)
@@ -34,6 +38,11 @@ namespace MWCoop
         static List<string> kinoGetting;            // films acceptes ici, en cours de telechargement
         static string kinoGettingTitle = "";
         static long kinoGettingKb;
+        static List<string> kinoGettingAll;         // (films de la bobine, dans l'ordre : avance de lecture)
+        static uint kinoGettingMs;                  // (duree annoncee de la bobine)
+        static float kinoGetStart;
+        static bool kinoStreamOk;                   // (pret en flux : la seance peut commencer avant la fin de la reception)
+        static readonly List<KeyValuePair<float, long>> kinoRateHist = new List<KeyValuePair<float, long>>();
         static string SizeText(long kb) { return kb >= 1024 * 1024 ? (kb / 1048576f).ToString("F1") + Lang.T(" Go", " GB") : Mathf.Max(1, Mathf.RoundToInt(kb / 1024f)) + Lang.T(" Mo", " MB"); }
         static float kinoNextPct;
         const float KinoAskTimeout = 60f;
@@ -44,6 +53,7 @@ namespace MWCoop
         static void ResetKinoJako()
         {
             kinoShare = null; kinoAsk = null; kinoWait[1] = kinoWait[2] = ""; kinoGetting = null; kinoGettingTitle = "";
+            kinoGettingAll = null; kinoGettingMs = 0; kinoStreamOk = false; kinoRateHist.Clear();
         }
 
         static List<string> ShareFilms(string content)
@@ -65,15 +75,21 @@ namespace MWCoop
             if (films.Count == 0 || !films.TrueForAll(HaveFilm)) return;
             long size = 0;
             foreach (string f in films) try { size += new FileInfo(FilmPath(f)).Length; } catch { }
+            // (duree de chaque film, lue jusqu'au bout : les autres le liront avant de l'avoir en entier)
+            var durs = new List<uint>();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            foreach (string f in films) { Film x = LoadFilmAll(f); durs.Add(x != null && x.Done ? x.LengthMs : 0u); }
             var sh = new KinoShare { Films = films, Title = TapeTitle(p.Content), Content = p.Content, Sali = p.Sali, Size = size, Started = Time.realtimeSinceStartup };
             foreach (int id in Session.Players.Keys) if (id != Session.LocalId) sh.State[id] = -1;
             kinoShare = sh;
             var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@kinojako").U8(1).U8(p.Sali).Str(sh.Title).I32((int)(size / 1024)).U8(films.Count);
             foreach (string f in films) w.Str(f);
+            foreach (uint d in durs) w.I32((int)d);
             Session.SendAll(w, true);
             KinoSayWait(sh);
-            L("cinema : film de la salle " + p.Sali + " propose aux autres (" + string.Join(", ", films.ToArray()) + ", " + size / 1048576 + " Mo)");
-            Hud.Toast(Lang.T("Film proposé aux autres joueurs (", "Film offered to the other players (") + SizeText(size / 1024) + Lang.T(") : la séance commence quand chacun l'a.", "): the show starts once everyone has it."));
+            uint tot = 0; foreach (uint d in durs) tot += d;
+            L("cinema : film de la salle " + p.Sali + " propose aux autres (" + string.Join(", ", films.ToArray()) + ", " + size / 1048576 + " Mo, " + (tot / 60000f).ToString("F1") + " min ; durees lues en " + sw.ElapsedMilliseconds + " ms)");
+            Hud.Toast(Lang.T("Film proposé aux autres joueurs (", "Film offered to the other players (") + SizeText(size / 1024) + Lang.T(") : la séance commence dès que chacun en a assez.", "): the show starts once everyone has enough of it."));
         }
 
         static void KinoShareCancel(string why)
@@ -166,6 +182,7 @@ namespace MWCoop
             }
             foreach (string f in a.Films) { kinoAccepted.Add(f); kinoRefused.Remove(f); }
             kinoGetting = a.Films.FindAll(f => !HaveFilm(f)); kinoGettingTitle = a.Title; kinoGettingKb = a.Size;
+            kinoGettingAll = new List<string>(a.Films); kinoGettingMs = a.TotalMs; kinoGetStart = Time.realtimeSinceStartup; kinoStreamOk = false; kinoRateHist.Clear();
             if (kinoGetting.Count == 0) { kinoGetting = null; KinoReply(2, 1f); return; }
             KinoReply(1, 0f);
             L("cinema : film « " + a.Title + " » accepte, telechargement (" + SizeText(a.Size) + ")");
@@ -185,6 +202,13 @@ namespace MWCoop
             {
                 kinoNextPct = now + 1f;
                 if (kinoGetting.TrueForAll(HaveFilm)) { kinoGetting = null; KinoReply(2, 1f); }
+                else if (kinoStreamOk) { }   // (deja pret en flux : la reception continue pendant la seance)
+                else if (KinoStreamReady(now))
+                {
+                    kinoStreamOk = true;
+                    KinoReply(2, GettingProgress());
+                    Hud.Toast(Lang.T("Assez de film reçu : la séance peut commencer, la suite arrive pendant.", "Enough of the film received: the show can start, the rest comes during it."));
+                }
                 else KinoReply(1, GettingProgress());
             }
         }
@@ -196,11 +220,18 @@ namespace MWCoop
             {
                 int sali = r.U8(); string title = r.Str(); long kb = r.I32(); int n = r.U8();
                 var films = new List<string>();
-                for (int i = 0; i < n; i++) { string f = Session.Clean(r.Str(), 64); if (f.Length > 0 && f.IndexOfAny(Path.GetInvalidFileNameChars()) < 0) films.Add(f); }
+                var names = new List<string>();
+                for (int i = 0; i < n; i++) { string f = Session.Clean(r.Str(), 64); names.Add(f); if (f.Length > 0 && f.IndexOfAny(Path.GetInvalidFileNameChars()) < 0) films.Add(f); }
+                uint total = 0;
+                for (int i = 0; i < n && r.More; i++)
+                {
+                    uint d = (uint)Math.Max(0, r.I32());
+                    if (d > 0 && d < 24u * 3600000u && names[i].Length > 0 && films.Contains(names[i])) { filmExpect[names[i]] = d; total += d; }
+                }
                 if (films.Count == 0) return;
                 if (films.TrueForAll(HaveFilm)) { KinoReply(2, 1f); return; }
-                if (films.TrueForAll(f => kinoAccepted.Contains(f))) { kinoAsk = new KinoAsk { Films = films, Title = title, Size = kb, From = who, Sali = sali }; KinoAnswer(true); return; }
-                kinoAsk = new KinoAsk { Films = films, Title = title, Size = kb, From = who, Sali = sali, At = Time.realtimeSinceStartup };
+                if (films.TrueForAll(f => kinoAccepted.Contains(f))) { kinoAsk = new KinoAsk { Films = films, Title = title, Size = kb, From = who, Sali = sali, TotalMs = total }; KinoAnswer(true); return; }
+                kinoAsk = new KinoAsk { Films = films, Title = title, Size = kb, From = who, Sali = sali, At = Time.realtimeSinceStartup, TotalMs = total };
                 L("cinema : #" + who + " propose le film « " + title + " » (" + SizeText(kb) + ") pour la salle " + sali);
                 return;
             }
@@ -228,7 +259,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- dessin (Core.OnGUI)
         public static void DrawKinoJako()
         {
-            if (Event.current.type != EventType.Repaint || (kinoAsk == null && kinoGetting == null && !KinoWaitHere())) return;
+            if (Event.current.type != EventType.Repaint || (kinoAsk == null && kinoGetting == null && !KinoWaitHere())) return;   // (reception pendant la seance : kinoGetting)
             float w = Style.Px(620), x = (Screen.width - w) / 2f, y = Style.Px(90);
             if (kinoAsk != null)
             {
@@ -245,7 +276,12 @@ namespace MWCoop
                 return;
             }
             string line = "";
-            if (kinoGetting != null) line = string.Format(Lang.T("Film « {0} » : {1} % ({2} sur {3})", "Film \"{0}\": {1} % ({2} of {3})"), kinoGettingTitle, Mathf.FloorToInt(GettingProgress() * 100f), SizeText((long)(GettingProgress() * kinoGettingKb)), SizeText(kinoGettingKb));
+            Projector here = null;
+            for (int s = 1; s <= 2; s++) if (projectors[s] != null && projectors[s].Playing && InSalle(s)) here = projectors[s];
+            if (kinoGetting != null && kinoStreamOk && here != null)
+                line = string.Format(here.Behind ? Lang.T("Film « {0} » : la suite arrive ({1} %)", "Film \"{0}\": the rest is on its way ({1} %)")
+                                                 : Lang.T("Film « {0} » : {1} % reçus pendant la séance", "Film \"{0}\": {1} % received during the show"), kinoGettingTitle, Mathf.FloorToInt(GettingProgress() * 100f));
+            else if (kinoGetting != null) line = string.Format(Lang.T("Film « {0} » : {1} % ({2} sur {3})", "Film \"{0}\": {1} % ({2} of {3})"), kinoGettingTitle, Mathf.FloorToInt(GettingProgress() * 100f), SizeText((long)(GettingProgress() * kinoGettingKb)), SizeText(kinoGettingKb));
             else
                 for (int s = 1; s <= 2; s++)
                     if (KinoWaiting(s) && (InSalle(s) || (kinoShare != null && kinoShare.Sali == s)))
@@ -253,6 +289,37 @@ namespace MWCoop
             if (line.Length == 0) return;
             Style.Round(new Rect(x, y, w, Style.Px(40)), Style.Px(12), new Color(0.05f, 0.07f, 0.12f, 0.8f));
             Style.Text(new Rect(x, y, w, Style.Px(40)), line, 15, TextAnchor.MiddleCenter, Color.white, false);
+        }
+
+        // pret en flux ? (voir l'en-tete) ; mesure du debit sur les 8 dernieres secondes
+        static bool KinoStreamReady(float now)
+        {
+            if (kinoGettingAll == null || kinoGettingMs == 0) return false;
+            long got = 0;
+            foreach (string f in kinoGetting) { FilmIn fi; if (filmIn.TryGetValue(f, out fi)) got += (long)fi.Got * FilmChunk; }
+            kinoRateHist.Add(new KeyValuePair<float, long>(now, got));
+            while (kinoRateHist.Count > 0 && now - kinoRateHist[0].Key > 8.5f) kinoRateHist.RemoveAt(0);
+            if (now - kinoGetStart < 8f || kinoRateHist.Count < 4) return false;
+            if (Config.Testing && Config.GetInt("Test", "KinoFluxTot", 0) != 0) { L("cinema : pret en flux force (essai)"); return true; }   // (essai : seance plus rapide que la reception)
+            float dt = now - kinoRateHist[0].Key;
+            double rate = dt > 0.5f ? (got - kinoRateHist[0].Value) / (double)dt : 0.0;
+            double dur = kinoGettingMs / 1000.0, filmRate = kinoGettingKb * 1024.0 / Math.Max(1.0, dur);
+            if (rate <= 0.0 || filmRate <= 0.0) return false;
+            double need = Math.Max(30.0, dur * (1.0 - rate / filmRate) * 1.25 + 15.0);
+            if (need >= dur - 2.0) return false;   // (trop lent : le film entier d'abord)
+            // avance : films deja la en entier, puis ce qui est arrive du premier en reception
+            double ahead = 0.0;
+            foreach (string f in kinoGettingAll)
+            {
+                uint e;
+                if (HaveFilm(f)) { ahead += filmExpect.TryGetValue(f, out e) ? e / 1000.0 : 0.0; continue; }
+                Film x = LoadFilm(f);
+                if (x != null) ahead += x.LengthMs / 1000.0;
+                break;
+            }
+            if (ahead < need) return false;
+            L("cinema : pret en flux (" + ahead.ToString("F0") + " s d'avance sur " + dur.ToString("F0") + " s, debit " + (rate / 1024.0).ToString("F0") + " Ko/s, film " + (filmRate / 1024.0).ToString("F0") + " Ko/s, il fallait " + need.ToString("F0") + " s)");
+            return true;
         }
 
         static bool KinoWaitHere()

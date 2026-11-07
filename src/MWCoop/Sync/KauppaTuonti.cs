@@ -99,7 +99,8 @@ namespace MWCoop
                 // bobine de cinema : image plus grande et plus fluide pour le grand ecran ([Kino] ImportLargeur...)
                 w = Mathf.Clamp(Config.GetInt("Kino", "ImportLargeur", 480), 64, 960); h = Mathf.Clamp(Config.GetInt("Kino", "ImportHauteur", 270), 48, 540);
                 fps = Mathf.Clamp(Config.GetInt("Kino", "ImportImages", 18), 1, 30);
-                maxSec = Mathf.RoundToInt(Mathf.Clamp(Config.GetFloat("Kino", "ImportMinutes", 30f), 0.2f, 180f) * 60f);
+                // (films longs : lus sur le disque et partages en flux depuis le 07/11 -- 3 h par defaut, 30 min avant)
+                maxSec = Mathf.RoundToInt(Mathf.Clamp(Config.GetFloat("Kino", "ImportMinutes", 180f), 0.2f, 240f) * 60f);
                 q = Mathf.Clamp(Config.GetInt("Kino", "ImportQualite", 60), 10, 95) + 1000;   // (+1000 : sans l'effet VHS)
             }
             int r = vStart(src, FilmPath(film), w, h, fps, maxSec, q);

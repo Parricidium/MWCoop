@@ -1017,3 +1017,7 @@ SOLO COOP	СОЛО КООП
 Solo Coop	Соло Кооп
 Solo Coop: alone, nobody can join	Соло Кооп: ты один, никто не может присоединиться
 Solo Coop: alone, with the mod and its add-ons	Соло Кооп: один, с модом и его дополнениями
+): the show starts once everyone has enough of it.	): сеанс начнётся, когда у всех будет достаточно фильма.
+Enough of the film received: the show can start, the rest comes during it.	Получено достаточно фильма: сеанс может начаться, остальное придёт во время показа.
+Film \"{0}\": the rest is on its way ({1} %)	Фильм «{0}»: продолжение уже в пути ({1} %)
+Film \"{0}\": {1} % received during the show	Фильм «{0}»: {1} % получено во время сеанса
