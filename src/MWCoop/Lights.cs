@@ -147,12 +147,22 @@ namespace MWCoop
             for (int i = 0; i < lampNear.Count && i < n; i++) outl.Add(lampNear[i].Value);
         }
 
-        // Portee longue : x1,5 (intensite x1,25) ; si le jeu change lui-meme la portee ou l'intensite, c'est sa nouvelle base.
+        // Portee longue : x1,5 (intensite x1,25) ; si le jeu change lui-meme la portee ou l'intensite, CETTE valeur est sa nouvelle base.
+        // (Avant le 07/11 : les deux valeurs reprises a chaque changement. La SATSUMA regle l'intensite de ses phares d'apres la batterie,
+        // environ deux fois par seconde : la portee deja multipliee redevenait la base et grandissait sans fin -- 75, 6e15 en 40 s, Infinity
+        // en ~110 s ; plus de lumiere au sol, verre toujours allume, images par seconde divisees par deux. Retour des joueurs via JD.)
         static void Boost(L l, bool on)
         {
             Light li = l.Li;
             if (li == null) return;
-            if (l.Boosted && (Mathf.Abs(li.range - l.SetRange) > 0.01f || Mathf.Abs(li.intensity - l.SetInt) > 0.001f)) { l.OrigRange = li.range; l.OrigInt = li.intensity; l.Boosted = false; }
+            if (l.Boosted)
+            {
+                bool r = Mathf.Abs(li.range - l.SetRange) > 0.01f, i = Mathf.Abs(li.intensity - l.SetInt) > 0.001f;
+                if (r) l.OrigRange = li.range;
+                if (i) l.OrigInt = li.intensity;
+                if (r || i) l.Boosted = false;
+            }
+            else { l.OrigRange = li.range; l.OrigInt = li.intensity; }   // (pas multipliee : les valeurs du jeu, base a jour au passage en Longue)
             if (on == l.Boosted) return;
             l.Boosted = on;
             li.range = on ? l.OrigRange * 1.5f : l.OrigRange;
