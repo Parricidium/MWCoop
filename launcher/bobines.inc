@@ -73,24 +73,43 @@ static std::vector<std::wstring> BobLines(const std::wstring &file)
 }
 static std::wstring BobCleanTitle(std::wstring s) { for (auto &c : s) if (c == L'\t') c = L' '; return VhsClean(s); }
 
-// ---- titres.txt (« film<TAB>titre », UTF-8) : seul fichier ecrit a cote des films, avec les films importes
-static std::map<std::wstring, std::wstring> BobTitles(const std::wstring &dir)
+// ---- titres.txt (« film<TAB>titre<TAB>duree en ms », UTF-8 ; la duree est facultative) : seul fichier ecrit a cote des
+// films. Le mod y prend le titre et la duree (liste FILMS PRETS sans relire un film de plusieurs Go).
+struct BobTitle { std::wstring title; long long ms = -1; };
+static std::map<std::wstring, BobTitle> BobTitles(const std::wstring &dir)
 {
-    std::map<std::wstring, std::wstring> m;
-    for (auto &l : BobLines(dir + L"titres.txt")) { size_t t = l.find(L'\t'); if (t != std::wstring::npos && t > 0) m[l.substr(0, t)] = l.substr(t + 1); }
+    std::map<std::wstring, BobTitle> m;
+    for (auto &l : BobLines(dir + L"titres.txt")) {
+        size_t a = l.find(L'\t');
+        if (a == std::wstring::npos || a == 0) continue;
+        size_t b = l.find(L'\t', a + 1);
+        BobTitle e; e.title = l.substr(a + 1, b == std::wstring::npos ? std::wstring::npos : b - a - 1);
+        if (b != std::wstring::npos) { std::wstring d = Trim(l.substr(b + 1)); if (!d.empty() && iswdigit(d[0])) e.ms = _wtoi64(d.c_str()); }
+        m[l.substr(0, a)] = e;
+    }
     return m;
 }
-static bool BobTitleSet(const std::wstring &dir, const std::wstring &id, const std::wstring &title)
+static std::wstring BobTitleLine(const std::wstring &id, const BobTitle &e) { return id + L"\t" + e.title + (e.ms >= 0 ? L"\t" + std::to_wstring(e.ms) : std::wstring()) + L"\r\n"; }
+// ecrit les changements (titre et/ou duree) ; title NULL : titre garde ; ms < 0 : duree gardee. Les autres lignes restent.
+static bool BobTitleWrite(const std::wstring &dir, const std::map<std::wstring, std::pair<const std::wstring *, long long>> &chg)
 {
-    if (!BobNameOk(id)) return false;
+    for (auto &c : chg) if (!BobNameOk(c.first)) return false;
     std::vector<std::wstring> lines = BobLines(dir + L"titres.txt");
-    std::wstring out; bool done = false;
+    std::wstring out; std::set<std::wstring> done;
+    auto merged = [&](const std::wstring &id, BobTitle e) { auto c = chg.find(id); if (c->second.first) e.title = *c->second.first; if (c->second.second >= 0) e.ms = c->second.second; return e; };
     for (auto &l : lines) {
-        size_t t = l.find(L'\t');
-        if (t != std::wstring::npos && l.substr(0, t) == id) { if (!done && !title.empty()) out += id + L"\t" + title + L"\r\n"; done = true; continue; }
-        out += l + L"\r\n";
+        size_t a = l.find(L'\t');
+        std::wstring id = a == std::wstring::npos ? L"" : l.substr(0, a);
+        if (a == std::wstring::npos || !chg.count(id)) { out += l + L"\r\n"; continue; }
+        if (done.count(id)) continue;
+        done.insert(id);
+        size_t b = l.find(L'\t', a + 1);
+        BobTitle e; e.title = l.substr(a + 1, b == std::wstring::npos ? std::wstring::npos : b - a - 1);
+        if (b != std::wstring::npos) { std::wstring d = Trim(l.substr(b + 1)); if (!d.empty() && iswdigit(d[0])) e.ms = _wtoi64(d.c_str()); }
+        e = merged(id, e);
+        if (!e.title.empty() || e.ms >= 0) out += BobTitleLine(id, e);
     }
-    if (!done && !title.empty()) out += id + L"\t" + title + L"\r\n";
+    for (auto &c : chg) if (!done.count(c.first)) { BobTitle e = merged(c.first, BobTitle()); if (!e.title.empty() || e.ms >= 0) out += BobTitleLine(c.first, e); }
     std::string u = Narrow(out, CP_UTF8);
     std::wstring f = dir + L"titres.txt", tmp = f + L".lanceur";
     SHCreateDirectoryExW(NULL, dir.c_str(), NULL);
@@ -99,6 +118,11 @@ static bool BobTitleSet(const std::wstring &dir, const std::wstring &id, const s
     DWORD w = 0; BOOL ok = u.empty() || WriteFile(h, u.data(), (DWORD)u.size(), &w, NULL); CloseHandle(h);
     if (!ok || w != u.size() || !MoveFileExW(tmp.c_str(), f.c_str(), MOVEFILE_REPLACE_EXISTING)) { DeleteFileW(tmp.c_str()); return false; }
     return true;
+}
+static bool BobTitleSet(const std::wstring &dir, const std::wstring &id, const std::wstring &title)
+{
+    std::map<std::wstring, std::pair<const std::wstring *, long long>> c; c[id] = std::make_pair(&title, -1LL);
+    return BobTitleWrite(dir, c);
 }
 
 // ---- usage : bobines et cassettes de la partie (lecture seule des fichiers du monde)
@@ -279,7 +303,7 @@ static void BobScan()
     std::wstring dir = BobFilmDirOf(g_bobProf);
     std::map<std::wstring, BobUse> uses; BobUses(g_bobProf, uses);
     std::set<std::wstring> recus; for (auto &l : BobLines(dir + L"recus.txt")) recus.insert(Trim(l));
-    std::map<std::wstring, std::wstring> titles = BobTitles(dir);
+    std::map<std::wstring, BobTitle> titles = BobTitles(dir);
     std::vector<BobFilm> out; std::map<std::wstring, size_t> at;
     unsigned long long total = 0;
     WIN32_FIND_DATAW fd;
@@ -309,8 +333,20 @@ static void BobScan()
         f.recu = recus.count(f.id) != 0;
         auto u = uses.find(f.id);
         if (u != uses.end()) { f.use = u->second.use; f.room = u->second.room; f.title = u->second.title; }
-        if (f.title.empty()) { auto t = titles.find(f.id); if (t != titles.end()) { f.title = t->second; f.titled = true; } }
+        if (f.title.empty()) { auto t = titles.find(f.id); if (t != titles.end() && !t->second.title.empty()) { f.title = t->second.title; f.titled = true; } }
         if (!f.partial) BobQueueInfo(f);
+    }
+    // duree lue (fil) et pas encore dans titres.txt : ecrite pour la liste FILMS PRETS du mod -- jeu ferme seulement
+    if (!g_bobGameOn && !g_gameDir.empty()) {
+        std::map<std::wstring, std::pair<const std::wstring *, long long>> chg;
+        for (auto &f : out) {
+            BobInfo i;
+            if (f.partial || !BobGetInfo(f, i) || !i.ok) continue;
+            long long ms = (long long)(i.secs * 1000.0 + 0.5);
+            auto t = titles.find(f.id);
+            if (t == titles.end() || t->second.ms < 0 || llabs(t->second.ms - ms) > 1000) chg[f.id] = std::make_pair((const std::wstring *)NULL, ms);
+        }
+        if (!chg.empty()) BobTitleWrite(dir, chg);
     }
     std::sort(out.begin(), out.end(), [](const BobFilm &a, const BobFilm &b) { return a.mt != b.mt ? a.mt > b.mt : a.id < b.id; });
     g_bob = out; g_bobTotal = total;
@@ -882,19 +918,36 @@ static int BobSelfTest(const wchar_t *log)
     say("noms refuses : .., \\, /, :, vide", !BobNameOk(L"..\\x") && !BobNameOk(L"a/b") && !BobNameOk(L"a\\b") && !BobNameOk(L"c:x") && !BobNameOk(L"") && !BobNameOk(L"a..b") && BobNameOk(L"f1-aaaa"));
     // titres.txt
     say("titre ecrit (nettoye)", BobTitleSet(dir, L"f3-cccc", BobCleanTitle(L"Nouveau;titre|\tlong long long long long")));
-    std::map<std::wstring, std::wstring> tt = BobTitles(dir);
-    say("titre relu, 24 caracteres au plus, sans ; | tab", tt.count(L"f3-cccc") && tt[L"f3-cccc"].size() <= 24 && tt[L"f3-cccc"].find_first_of(L";|\t") == std::wstring::npos);
-    say("titres.txt : les autres lignes gardees", tt[L"fl-0000000000000001"] == L"Mon film" && tt[L"f1-aaaa"] == L"Pas celui-ci");
+    std::map<std::wstring, BobTitle> tt = BobTitles(dir);
+    say("titre relu, 24 caracteres au plus, sans ; | tab", tt.count(L"f3-cccc") && tt[L"f3-cccc"].title.size() <= 24 && tt[L"f3-cccc"].title.find_first_of(L";|\t") == std::wstring::npos);
+    say("titres.txt : les autres lignes gardees", tt[L"fl-0000000000000001"].title == L"Mon film" && tt[L"f1-aaaa"].title == L"Pas celui-ci");
     say("titre refuse pour un nom interdit", !BobTitleSet(dir, L"..\\x", L"t"));
     BobScan();
     c3 = find(L"f3-cccc");
     say("f3 : titre de titres.txt apres relecture", c3 && c3->titled && !c3->title.empty());
+    tt = BobTitles(dir);
+    say("titres.txt : durees ecrites (fl 70000, f2 5000, f8 9000 ms)", tt[L"fl-0000000000000001"].ms == 70000 && tt[L"f2-bbbb"].ms == 5000 && tt[L"f8-gros"].ms == 9000);
+    say("titres.txt : duree seule pour un film sans titre", tt.count(L"f5-eeee") && tt[L"f5-eeee"].title.empty() && tt[L"f5-eeee"].ms == 2000);
+    say("titres.txt : pas de ligne pour une reception inachevee", !tt.count(L"f4-dddd"));
+    std::vector<std::wstring> tl = BobLines(dir + L"titres.txt"); bool fmt = false;
+    for (auto &x : tl) if (x == L"fl-0000000000000001\tMon film\t70000") fmt = true;
+    say("titres.txt : ligne « film<TAB>titre<TAB>ms »", fmt);
+    BobTitleSet(dir, L"fl-0000000000000001", L"Autre titre");
+    tt = BobTitles(dir);
+    say("renommer garde la duree", tt[L"fl-0000000000000001"].title == L"Autre titre" && tt[L"fl-0000000000000001"].ms == 70000);
+    BobTitleSet(dir, L"fl-0000000000000001", L"Mon film");
     // avertissement de suppression
     std::vector<int> vb; for (int i = 0; i < (int)g_bob.size(); i++) if (g_bob[i].id == L"f2-bbbb") vb.push_back(i);
     std::wstring warn = BobDeleteWarn(vb);
     say("avertissement : bobine de la salle 1", warn.find(L"Film salle") != std::wstring::npos && warn.find(L"1") != std::wstring::npos);
     // suppression : refusee jeu ouvert, puis faite (effacement direct : dossier jetable)
     g_bobTestGame = 1;
+    std::vector<unsigned char> ti1, ti2; ReadAll(dir + L"titres.txt", ti1);
+    BobWriteFile(dir + L"f9-neuf.mwv", f2); BobScan();
+    for (int k = 0; k < 200; k++) { BobLock(); bool run = g_bobRun; BobUnlock(); if (!run) break; Sleep(50); }
+    BobScan(); ReadAll(dir + L"titres.txt", ti2);
+    say("jeu ouvert : titres.txt pas reecrit", ti1 == ti2);
+    DeleteFileW((dir + L"f9-neuf.mwv").c_str());
     g_bobChk.clear(); g_bobChk.insert(L"f3-cccc"); g_bobChk.insert(L"f4-dddd"); g_bobDelT = GetTickCount();
     BobDelete();
     say("jeu ouvert : rien supprime", FileExists(dir + L"f3-cccc.mwv") && FileExists(dir + L"f4-dddd.mwv.osa"));
