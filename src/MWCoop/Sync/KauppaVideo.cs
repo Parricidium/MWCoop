@@ -72,13 +72,20 @@ namespace MWCoop
             screen = null;
             var g = new GameObject("osuus_" + kind);
             if (blackPlastic == null) { blackPlastic = Plain(new Color(0.07f, 0.07f, 0.08f)); greyMetal = Plain(new Color(0.2f, 0.2f, 0.21f)); }
-            if (kind == KVhs)
+            if (kind == KVhs && ModelFile("cassette", g, out size))
+            {
+                // (modele : etiquette du dessus, prise dans l'ancienne image, et tranche a titre par-dessus la sienne)
+                LabelQuad(g, "etiquette", "vhs-kansi.png", new Rect(0.12f, 0.556f, 0.766f, 0.369f), new Vector3(0f, size.y / 2f + 0.0006f, 0.0232f), Vector3.up, Vector3.forward, new Vector2(0.138f, 0.0357f));
+                Piece(g, PrimitiveType.Quad, new Vector3(0, 0, -size.z / 2 - 0.0008f), Vector3.zero, new Vector3(size.x * 0.97f, size.y * 0.86f, 1), TexMat("vhs-selka.png"));
+            }
+            else if (kind == KVhs)
             {
                 size = new Vector3(0.188f, 0.025f, 0.103f);
                 Piece(g, PrimitiveType.Cube, Vector3.zero, Vector3.zero, size, blackPlastic);
                 Piece(g, PrimitiveType.Quad, new Vector3(0, size.y / 2 + 0.0008f, 0), new Vector3(90, 0, 0), new Vector3(size.x * 0.96f, size.z * 0.94f, 1), TexMat("vhs-kansi.png"));
                 Piece(g, PrimitiveType.Quad, new Vector3(0, 0, -size.z / 2 - 0.0008f), Vector3.zero, new Vector3(size.x * 0.97f, size.y * 0.86f, 1), TexMat("vhs-selka.png"));
             }
+            else if (kind == KNauhuri && ModelFile("magnetoscope", g, out size)) { }
             else if (kind == KNauhuri)
             {
                 size = new Vector3(0.36f, 0.09f, 0.28f);
@@ -92,6 +99,12 @@ namespace MWCoop
             else if (kind == KKartturi) KartturiModel(g, out size, out screen);
             else if (EpiModel(kind, g, out size)) { }   // (epicerie : biere, eau-de-vie, casque -- KauppaEpicerie)
             else if (KinoModel(kind, g, out size)) { }   // (cinema : popcorn, chips, boisson, bonbons, bobine -- KinoEsineet)
+            else if (ModelFile("tele", g, out size))
+            {
+                // (television : son ecran, « TVScreen », recoit la video ; sans ombres, comme celui du jeu)
+                screen = g.transform.Find("TVScreen");
+                if (screen != null) { Renderer sr = screen.GetComponent<Renderer>(); sr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; sr.receiveShadows = false; }
+            }
             else
             {
                 // television : copie des maillages de la TV de la prison (tv_14 + son ecran)

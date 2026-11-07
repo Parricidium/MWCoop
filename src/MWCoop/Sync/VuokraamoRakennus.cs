@@ -1280,7 +1280,7 @@ namespace MWCoop
             VuokraPayStep();
             if (vaWasOpen && !VuokraOpen) vaShutAt = now;
             vaWasOpen = VuokraOpen;
-            if (Config.Testing) { VaObjets(); VaRentTest(now); VuokraClickTest(now); VuokraTest(now); }
+            if (Config.Testing) { VaObjets(); VaRentTest(now); VuokraClickTest(now); VuokraTest(now); ObjetsPhotoTest(); }
             Camera cam = Game.MainCam;
             bool near = cam != null && (cam.transform.position - vuokra.transform.position).sqrMagnitude < 3600f;
             if (guiText == null)

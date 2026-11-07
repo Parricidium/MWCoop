@@ -24,6 +24,15 @@ namespace MWCoop
         // ---------------------------------------------------------------- modele (ecran vers -z, debout)
         static void KartturiModel(GameObject g, out Vector3 size, out Transform screen)
         {
+            if (ModelFile("gps", g, out size))
+            {
+                // (modele : notre ecran pose sur sa face, en haut, a ses proportions)
+                if (blackPlastic == null) blackPlastic = Plain(new Color(0.07f, 0.07f, 0.08f));
+                GameObject sc = Piece(g, PrimitiveType.Quad, new Vector3(0f, 0.03f, -size.z / 2f - 0.0009f), Vector3.zero, new Vector3(0.056f, 0.0504f, 1f), blackPlastic);
+                sc.name = "naytto";
+                screen = sc.transform;
+                return;
+            }
             if (gpsBody == null)
             {
                 gpsBody = Plain(new Color(0.74f, 0.73f, 0.70f));

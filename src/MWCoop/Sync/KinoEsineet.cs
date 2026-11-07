@@ -51,7 +51,13 @@ namespace MWCoop
             size = Vector3.one * 0.1f;
             if (!IsKinoKind(kind) || kind == KOlut || kind == KViina) return false;
             if (blackPlastic == null) { blackPlastic = Plain(new Color(0.07f, 0.07f, 0.08f)); greyMetal = Plain(new Color(0.2f, 0.2f, 0.21f)); }
-            if (kind == KPopcorn)
+            if (kind == KPopcorn && ModelFile("popcorn", g, out size)) { }
+            else if (kind == KKela && ModelFile("bobine", g, out size))
+            {
+                // (modele : etiquette du couvercle, prise dans l'ancienne image ; texte lisible boite debout, haut vers -z, droite vers -x)
+                LabelQuad(g, "kansi", "kino-kela.png", new Rect(0.19f, 0.385f, 0.62f, 0.23f), new Vector3(0f, size.y / 2f + 0.0008f, 0f), Vector3.up, Vector3.back, new Vector2(0.22f, 0.082f));
+            }
+            else if (kind == KPopcorn)
             {
                 // pot a rayures (cylindre), dome de popcorn jaune dessus
                 size = new Vector3(0.17f, 0.24f, 0.17f);

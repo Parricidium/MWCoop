@@ -37,6 +37,18 @@ namespace MWCoop
         // ---------------------------------------------------------------- modele (objectif vers +z)
         static void KameraModel(GameObject g, out Vector3 size)
         {
+            if (ModelFile("camescope", g, out size))
+            {
+                // (modele : vitre de l'objectif, la ou se pose la camera qui filme, et voyant d'enregistrement)
+                GameObject lens = Piece(g, PrimitiveType.Cylinder, new Vector3(-0.018f, -0.0135f, size.z / 2f + 0.001f), new Vector3(90, 0, 0), new Vector3(0.019f, 0.001f, 0.019f), Plain(new Color(0.07f, 0.09f, 0.16f)));
+                lens.name = "linssi";
+                Shader us = Shader.Find("Unlit/Color");
+                GameObject rec = Piece(g, PrimitiveType.Sphere, new Vector3(size.x / 2f * 0.55f, size.y / 2f - 0.012f, size.z / 2f - 0.05f), Vector3.zero, new Vector3(0.008f, 0.008f, 0.008f),
+                                       us != null ? new Material(us) { color = new Color(1f, 0.08f, 0.05f) } : Plain(Color.red));
+                rec.name = "rec";
+                rec.GetComponent<Renderer>().enabled = false;
+                return;
+            }
             Material body = Plain(new Color(0.16f, 0.16f, 0.17f)), side = TexMat("kamera-sivu.png");
             Piece(g, PrimitiveType.Cube, Vector3.zero, Vector3.zero, new Vector3(0.11f, 0.14f, 0.30f), body);
             Piece(g, PrimitiveType.Quad, new Vector3(-0.0558f, 0f, 0f), new Vector3(0, 90, 0), new Vector3(0.285f, 0.126f, 1f), side);
