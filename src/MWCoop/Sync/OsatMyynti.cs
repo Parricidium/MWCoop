@@ -409,7 +409,7 @@ namespace MWCoop
                 // casque personnalise : une copie du casque du jeu a ce style (Wear : creee par l'hote, sauvee, envoyee a tous)
                 if (!Wear.HelmetAvailable) { Say("Myyjä : plus de casque en réserve, désolé (pas payé).", "Vendor: out of helmets, sorry (not charged)."); L("magasin de pieces : casque du jeu introuvable, casque pas vendu"); return false; }
                 L("magasin de pieces : achat du casque " + o.Kypara + " (" + o.Name + ") " + o.Price + " mk");
-                Wear.BuyHelmet(pos, rot, o.Kypara);
+                Wear.BuyHelmet(pos, rot * Quaternion.Inverse(KyparaRot), o.Kypara);   // (pose debout sur la palette : notre dessin a l'endroit, pas l'objet du jeu)
                 return true;
             }
             OsatUsed u = o.Used;

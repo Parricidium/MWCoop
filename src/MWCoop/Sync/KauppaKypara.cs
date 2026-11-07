@@ -154,9 +154,15 @@ namespace MWCoop
             Vector3 ms = ModelSize("casque", new Vector3(0.26f, 0.27f, 0.32f));
             float big = Mathf.Max(ms.x, Mathf.Max(ms.y, ms.z));
             float k = any && big > 0.01f ? Mathf.Clamp(Mathf.Max(gb.size.x, Mathf.Max(gb.size.y, gb.size.z)) / big, 0.5f, 2f) : 1f;
-            Quaternion q = Quaternion.LookRotation(Vector3.up, Vector3.forward);   // (notre -z -> -y, notre +y -> +z)
-            string rs = Config.Get("Test", "KyparaRot", "");
-            if (rs.Length > 0) { string[] a = rs.Split(','); if (a.Length == 3) q = Quaternion.Euler(F(a[0]), F(a[1]), F(a[2])); }
+            Quaternion q = KyparaRot;
+            if (!kyDressLogged)
+            {
+                kyDressLogged = true;
+                var cs = new System.Text.StringBuilder();
+                foreach (Collider c in go.GetComponentsInChildren<Collider>(true))
+                    cs.Append(' ').Append(c.GetType().Name).Append(c.isTrigger ? "(declencheur)" : "").Append(" centre ").Append(gt.InverseTransformPoint(c.bounds.center).ToString("F3")).Append(" taille ").Append(c.bounds.size.ToString("F3"));
+                L("casque : dessin du jeu " + gb.center.ToString("F3") + " x " + gb.size.ToString("F3") + " (repere de l'objet), notre casque x" + k.ToString("F2") + " ; collisions :" + cs);
+            }
             vis.name = KyparaVis;
             vis.transform.SetParent(gt, false);
             vis.transform.localRotation = q;
@@ -164,6 +170,18 @@ namespace MWCoop
             vis.transform.localPosition = any ? gb.center : Vector3.zero;
             foreach (Transform c in vis.GetComponentsInChildren<Transform>(true)) c.gameObject.layer = go.layer;
             return true;
+        }
+
+        static bool kyDressLogged;
+        // rotation de notre dessin dans le repere du casque du jeu (son avant vers -y, son haut vers +z ; [Test] KyparaRot = x,y,z)
+        public static Quaternion KyparaRot
+        {
+            get
+            {
+                string rs = Config.Get("Test", "KyparaRot", "");
+                if (rs.Length > 0) { string[] a = rs.Split(','); if (a.Length == 3) return Quaternion.Euler(F(a[0]), F(a[1]), F(a[2])); }
+                return Quaternion.LookRotation(Vector3.up, Vector3.forward);   // (notre -z -> -y, notre +y -> +z)
+            }
         }
 
         // ---------------------------------------------------------------- images des joueurs

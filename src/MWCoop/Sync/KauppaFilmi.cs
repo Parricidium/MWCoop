@@ -304,29 +304,43 @@ namespace MWCoop
             {
                 if (e.Kind != KVhs || e.Go == null) continue;
                 string title = TapeTitle(e.Data);
-                Transform t = e.Go.transform.Find("nimi");
-                TextMesh tm = t != null ? t.GetComponent<TextMesh>() : null;
-                if (tm == null)
+                TitleMesh(e.Go, "nimi", title, new Vector3(0.012f, 0f, -0.103f / 2f - 0.0014f), Quaternion.identity, 0.0101f, 1f);
+                // (etiquette du dessus du modele : le titre sur sa premiere ligne -- JD 07/11 ; 6,3 cm de large au plus)
+                if (e.Go.transform.Find("etiquette") != null)
+                    TitleMesh(e.Go, "nimi_dessus", title, VhsTop + new Vector3(0f, 0.0002f, VhsTopSize.y * (0.5f - 0.36f)), Quaternion.LookRotation(Vector3.down, Vector3.forward), 0.0085f, 0.063f);
+            }
+        }
+
+        // titre ecrit (police Arial du jeu) : em = hauteur des lettres (m), plus petit si le titre depasse width (m ; 1 : sans limite)
+        static void TitleMesh(GameObject go, string name, string title, Vector3 pos, Quaternion rot, float em, float width)
+        {
+            Transform t = go.transform.Find(name);
+            TextMesh tm = t != null ? t.GetComponent<TextMesh>() : null;
+            if (tm == null)
+            {
+                if (title.Length == 0) return;
+                if (arial == null) arial = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                if (arial == null) return;
+                var g = new GameObject(name);
+                g.transform.SetParent(go.transform, false);
+                g.transform.localPosition = pos;
+                g.transform.localRotation = rot;
+                tm = g.AddComponent<TextMesh>();
+                tm.font = arial; tm.fontSize = 48; tm.characterSize = em * 10f / 48f; tm.anchor = TextAnchor.MiddleCenter;
+                tm.alignment = TextAlignment.Center; tm.color = new Color(0.08f, 0.1f, 0.32f);
+                if (labelMat == null)
                 {
-                    if (title.Length == 0) continue;
-                    if (arial == null) arial = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                    if (arial == null) continue;
-                    var g = new GameObject("nimi");
-                    g.transform.SetParent(e.Go.transform, false);
-                    g.transform.localPosition = new Vector3(0.012f, 0f, -0.103f / 2f - 0.0014f);
-                    g.transform.localRotation = Quaternion.identity;
-                    tm = g.AddComponent<TextMesh>();
-                    tm.font = arial; tm.fontSize = 48; tm.characterSize = 0.0021f; tm.anchor = TextAnchor.MiddleCenter;
-                    tm.alignment = TextAlignment.Center; tm.color = new Color(0.08f, 0.1f, 0.32f);
-                    if (labelMat == null)
-                    {
-                        Shader sh = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Transparent/Diffuse") ?? arial.material.shader;
-                        labelMat = new Material(sh) { name = "kauppa_tranche", color = new Color(0.06f, 0.07f, 0.2f, 1f) };
-                    }
-                    g.GetComponent<MeshRenderer>().sharedMaterial = labelMat;
+                    Shader sh = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Transparent/Diffuse") ?? arial.material.shader;
+                    labelMat = new Material(sh) { name = "kauppa_tranche", color = new Color(0.06f, 0.07f, 0.2f, 1f) };
                 }
-                if (labelMat != null && labelMat.mainTexture != arial.material.mainTexture) labelMat.mainTexture = arial.material.mainTexture;   // (atlas refait par la police)
-                if (tm.text != title) tm.text = title;
+                g.GetComponent<MeshRenderer>().sharedMaterial = labelMat;
+            }
+            if (labelMat != null && labelMat.mainTexture != arial.material.mainTexture) labelMat.mainTexture = arial.material.mainTexture;   // (atlas refait par la police)
+            if (tm.text != title)
+            {
+                tm.text = title;
+                float e2 = width < 1f ? Mathf.Min(em, width / Mathf.Max(1f, title.Length * 0.52f)) : em;   // (Arial : ~0,52 em par lettre)
+                tm.characterSize = e2 * 10f / 48f;
             }
         }
 

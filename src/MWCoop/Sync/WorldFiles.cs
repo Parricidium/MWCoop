@@ -14,7 +14,8 @@ namespace MWCoop
     // une ligne par monde (PlayerID).
     public static class WorldFiles
     {
-        static readonly string[] Files = { "MWCoop-esineet.txt", "MWCoop-pussit.txt", "MWCoop-sacs.txt", "MWCoop-vetements.txt", "MWCoop-s21.txt", "MWCoop-location.txt" };
+        // (MWCoop-kyparat.txt : casques achetes, Osuuskauppa et CARDINAL -- ils revenaient dans une nouvelle partie, vu le 07/11)
+        static readonly string[] Files = { "MWCoop-esineet.txt", "MWCoop-pussit.txt", "MWCoop-sacs.txt", "MWCoop-vetements.txt", "MWCoop-s21.txt", "MWCoop-location.txt", "MWCoop-kyparat.txt" };
         static readonly HashSet<string> done = new HashSet<string>();
 
         public static void OnLevelLoaded() { done.Clear(); if (!Game.Msc && Game.LevelName == "GAME") LoadPlayerId(); }

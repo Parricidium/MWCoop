@@ -354,6 +354,7 @@ namespace MWCoop
             Game.SetState(helmetLogic, "Anim off1");
             return "casque enleve : " + before + " -> " + helmetLogic.ActiveStateName;
         }
+        public static GameObject OstoGo(int j) { if (j <= 0 || j > osto.Count) j = osto.Count; return j > 0 ? osto[j - 1].Go : null; }   // (essais : casque achete j, 0 = le dernier)
         public static string OstoState() { return osto.Count + " casque(s) achete(s)" + (osto.Count > 0 ? ", dernier : " + State2(osto[osto.Count - 1]) : ""); }
         static string State2(Item it) { return it.Name + (it.Go == null ? " absent" : (it.Go.activeSelf ? " visible en " + it.Go.transform.position.ToString("F2") : " inactif") + ", porte ici " + it.LocalWorn + ", PlayerHelmet " + Game.GlobalBool("PlayerHelmet")); }
 

@@ -65,6 +65,8 @@ namespace MWCoop
         }
 
         static Material blackPlastic, greyMetal;
+        static readonly Vector3 VhsTop = new Vector3(0.0002f, 0.0122f, 0.0034f);   // (centre de l'etiquette du dessus, repere de la cassette)
+        static readonly Vector2 VhsTopSize = new Vector2(0.0728f, 0.0502f);
 
         // Modele seul (sans physique) : pour les objets et pour l'etalage. Taille de la boite renvoyee.
         static GameObject Model(string kind, out Vector3 size, out Transform screen)
@@ -74,8 +76,9 @@ namespace MWCoop
             if (blackPlastic == null) { blackPlastic = Plain(new Color(0.07f, 0.07f, 0.08f)); greyMetal = Plain(new Color(0.2f, 0.2f, 0.21f)); }
             if (kind == KVhs && ModelFile("cassette", g, out size))
             {
-                // (modele : etiquette du dessus, prise dans l'ancienne image, et tranche a titre par-dessus la sienne)
-                LabelQuad(g, "etiquette", "vhs-kansi.png", new Rect(0.12f, 0.556f, 0.766f, 0.369f), new Vector3(0f, size.y / 2f + 0.0006f, 0.0232f), Vector3.up, Vector3.forward, new Vector2(0.138f, 0.0357f));
+                // (modele : etiquette du dessus dans le renfoncement du modele, entre les deux fenetres -- JD 07/11 : 7,28 x 5,02 cm, 0,6 mm sous le
+                // dessus ; bande rouge vers l'arriere, titre ecrit dessus par TickLabels -- et tranche a titre par-dessus la sienne)
+                LabelQuad(g, "etiquette", "vhs-etiketti.png", new Rect(0f, 0f, 1f, 1f), VhsTop, Vector3.up, Vector3.forward, VhsTopSize);
                 Piece(g, PrimitiveType.Quad, new Vector3(0, 0, -size.z / 2 - 0.0008f), Vector3.zero, new Vector3(size.x * 0.97f, size.y * 0.86f, 1), TexMat("vhs-selka.png"));
             }
             else if (kind == KVhs)

@@ -711,6 +711,40 @@ namespace MWCoop
                         case "kypara": L("essai : " + Wear.OstoState()); break;
                         case "kyparat": L("essai : " + KyparaState() + " | " + Wear.OstoState()); break;
                         case "kyparapois": L("essai : " + Wear.TestOstoOff()); break;
+                        case "vhsvue":   // (photo de la derniere cassette de pres, dessus et tranche, devant les yeux : vhsvue nom [hauteur m])
+                        {
+                            Esine tp = esineet.FindLast(e => e.Kind == KVhs);
+                            Transform ey = EyeT;
+                            if (tp == null || tp.Go == null || ey == null) { L("essai : pas de cassette"); break; }
+                            Vector3 fw = ey.forward; fw.y = 0f; fw = fw.sqrMagnitude > 1e-4f ? fw.normalized : Vector3.forward;
+                            Vector3 at = ey.position + fw * 0.6f;
+                            if (tp.Rb != null) { tp.Rb.isKinematic = true; tp.Rb.velocity = Vector3.zero; }
+                            tp.Go.transform.SetParent(null, true);
+                            tp.Go.transform.position = at; tp.Go.transform.rotation = Quaternion.LookRotation(fw);   // (tranche vers la camera)
+                            float hh = a.Length > 3 ? F(a[3]) : 0.2f;
+                            if (testCam == null) { testCam = new GameObject("MWCoop-CameraBoutique").AddComponent<Camera>(); if (Game.MainCam != null) testCam.CopyFrom(Game.MainCam); testCam.depth = 100; }
+                            testCam.farClipPlane = 3000f; testCam.nearClipPlane = 0.02f; testCam.fieldOfView = 40f;
+                            Vector3 cp = at + Vector3.up * hh - fw * 0.17f;
+                            testCam.transform.position = cp; testCam.transform.rotation = Quaternion.LookRotation(at - cp);
+                            L("essai : cassette " + tp.Data + " en vue");
+                            shotName = a[2]; shotAt = now + 1f;
+                            break;
+                        }
+                        case "kyparavue":   // (photo du dernier casque achete, de trois quarts a 1 m)
+                        {
+                            GameObject kg = Wear.OstoGo(a.Length > 3 ? int.Parse(a[3]) : 0);
+                            if (kg == null || !kg.activeInHierarchy) { L("essai : pas de casque achete visible"); break; }
+                            Vector3 kc = kg.transform.position;
+                            Transform kv = kg.transform.Find(KyparaVis);
+                            if (kv != null) kc = kv.position;
+                            if (testCam == null) { testCam = new GameObject("MWCoop-CameraBoutique").AddComponent<Camera>(); if (Game.MainCam != null) testCam.CopyFrom(Game.MainCam); testCam.depth = 100; }
+                            testCam.farClipPlane = 3000f; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 50f;
+                            Vector3 kat = kc + new Vector3(0.6f, 0.55f, 0.6f);
+                            testCam.transform.position = kat; testCam.transform.rotation = Quaternion.LookRotation(kc - kat);
+                            L("essai : casque achete en " + kc.ToString("F2") + ", haut du dessin vers " + (kv != null ? kv.up.ToString("F2") : "?"));
+                            shotName = a[2]; shotAt = now + 1f;
+                            break;
+                        }
                         case "vitriini": { Vitriini v = vitriinit.Find(x => x.Name == a[2]); if (v != null) { v.OpenHalf = int.Parse(a[3]); L("essai : vitrine " + a[2] + " moitie " + a[3]); } break; }
                         case "fin": if (testCam != null) { UnityEngine.Object.Destroy(testCam.gameObject); testCam = null; } break;
                         default: KinoEssai(a, now); break;   // (actions du cinema : KinoRakennus.cs)
