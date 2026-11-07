@@ -1535,7 +1535,6 @@ Unreadable zip (%s): the game \"%s\" stays empty	Нечитаемый zip (%s): 
 VHS quality, mono sound, 4:3 · can be exported as a normal video.	Качество VHS, моно-звук, 4:3 · можно экспортировать как обычное видео.
 Vanilla test	Ванильный тест
 What goes out	Что отправляется
-What the others see of you: outfit, face, car. Visible as soon as you enter a lobby.	Что видят другие: одежда, лицо, машина. Видно, как только ты входишь в лобби.
 Yesterday	Вчера
 You are a guest · %s · %s · %d / %d players	Ты гость · %s · %s · игроков: %d / %d
 You were hosting	Ты был хостом
@@ -2688,3 +2687,27 @@ Don't launch	Не запускать
 \"GPS Navigation Free\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«GPS Navigation Free» на Sketchfab, лицензия CC BY 4.0. Изменено для игры: конвертация, масштаб, ориентация, меньше треугольников, уменьшенные текстуры. Полная ссылка: MWCoop\\CREDITS-objets.txt.
 3D model: television	3D-модель: телевизор
 \"PONY - 90's TV set.\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«PONY - 90's TV set.» на Sketchfab, лицензия CC BY 4.0. Изменено для игры: конвертация, масштаб, ориентация, меньше треугольников, уменьшенные текстуры. Полная ссылка: MWCoop\\CREDITS-objets.txt.
+A helmet with your own paint, on top of the game's helmet (it does not replace it). It is sold at the CARDINAL shop, and the other players see it.	Шлем с твоей покраской, в дополнение к шлему из игры (он его не заменяет). Он продаётся в магазине CARDINAL, и другие игроки его видят.
+3/4 front	3/4 спереди
+3/4 back	3/4 сзади
+No preview yet: it comes with the mod update (MWCoop\\casque).	Предпросмотра пока нет: он появится с обновлением мода (MWCoop\\casque).
+Your helmet	Твой шлем
+Default helmet	Шлем по умолчанию
+1. Template: the shell unfolded into a disc (1024 x 1024). The centre is the top of the helmet, the front is at the bottom of the image; left and right are the driver's. Write with the top of the letters towards the centre.	1. Шаблон: оболочка, развёрнутая в диск (1024 x 1024). Центр — верх шлема, перед — внизу картинки; левая и правая стороны — как у пилота. Пиши так, чтобы верх букв смотрел к центру.
+2. Paint over it, then \"My image…\". A square image is best: it is brought to 1024 x 1024.	2. Рисуй поверх, затем «Моя картинка…». Лучше квадратная картинка: она приводится к 1024 x 1024.
+3. In game, buy it at the CARDINAL shop: the other players see your paint.	3. В игре купи его в магазине CARDINAL: другие игроки видят твою покраску.
+Remove deletes your image: the helmet goes back to the default one.	«Убрать» удаляет твою картинку: шлем снова становится шлемом по умолчанию.
+Choose the helmet (painted on the helmet template)	Выбери шлем (нарисованный на шаблоне шлема)
+Helmet imported: buy it in game at the CARDINAL shop	Шлем импортирован: купи его в игре в магазине CARDINAL
+The helmet template was not found (MWCoop\\casque\\gabarit-casque.png): update the mod.	Шаблон шлема не найден (MWCoop\\casque\\gabarit-casque.png): обнови мод.
+Save the helmet template	Сохранить шаблон шлема
+Helmet template: can't copy it (error %lu)	Шаблон шлема: не удалось скопировать (ошибка %lu)
+image too large	слишком большая картинка
+A helmet with your own paint, on top of the game's: Character > Helmet. \"Template\" saves the shell unfolded into a disc (1024 x 1024): the centre is the top of the helmet, the front is at the bottom of the image, left and right are the driver's; write with the top of the letters towards the centre. Paint over it, then \"My image…\".	Шлем с твоей покраской, в дополнение к игровому: Персонаж > Шлем. «Шаблон» сохраняет оболочку, развёрнутую в диск (1024 x 1024): центр — верх шлема, перед — внизу картинки, левая и правая стороны — как у пилота; пиши так, чтобы верх букв смотрел к центру. Рисуй поверх, затем «Моя картинка…».
+In game, it is sold at the CARDINAL shop, and the other players see it. The two preview views (3/4 front, 3/4 back) show your paint. \"Remove\" deletes your image.	В игре он продаётся в магазине CARDINAL, и другие игроки его видят. Два вида предпросмотра (3/4 спереди, 3/4 сзади) показывают твою покраску. «Убрать» удаляет твою картинку.
+A square image is best: it is brought to 1024 x 1024. Transparency is ignored: the whole image is painted on.	Лучше квадратная картинка: она приводится к 1024 x 1024. Прозрачность не учитывается: рисуется вся картинка.
+3D model: helmet	3D-модель: шлем
+\"F1 Helmet\" by nv (@nielsvalckenaere) on Sketchfab, CC BY 4.0 license. Modified for the game: shape only, reduced, original decoration removed.	«F1 Helmet» от nv (@nielsvalckenaere) на Sketchfab, лицензия CC BY 4.0. Изменено для игры: только форма, уменьшено, исходное оформление убрано.
+Custom helmet	Свой шлем
+New Helmet tab on the Character page: paint your helmet on the template, then buy it in game at the CARDINAL shop.	Новая вкладка «Шлем» на странице «Персонаж»: нарисуй свой шлем на шаблоне, затем купи его в игре в магазине CARDINAL.
+What the others see of you: outfit, face, helmet, car. Visible as soon as you enter a lobby.	Что видят другие: одежда, лицо, шлем, машина. Видно, как только ты входишь в лобби.

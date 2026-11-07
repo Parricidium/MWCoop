@@ -718,7 +718,7 @@ static void DrawHeader(Graphics &g)
         sub = b;
         break;
     }
-    case TAB_SKIN: case TAB_CAR: title = T(L"Personnage", L"Character"); sub = T(L"Ce que les autres voient de toi : tenue, visage, voiture. Visible dès que tu entres dans un salon.", L"What the others see of you: outfit, face, car. Visible as soon as you enter a lobby."); break;
+    case TAB_SKIN: case TAB_CAR: title = T(L"Personnage", L"Character"); sub = T(L"Ce que les autres voient de toi : tenue, visage, casque, voiture. Visible dès que tu entres dans un salon.", L"What the others see of you: outfit, face, helmet, car. Visible as soon as you enter a lobby."); break;
     case TAB_CONTENT: title = T(L"Contenu envoyé", L"Sent content"); sub = T(L"Tes fichiers perso, copiés chez les invités de ton salon. Ils voient et entendent la même chose que toi.", L"Your personal files, copied to your lobby's guests. They see and hear the same as you."); break;
     case TAB_MODS: title = T(L"Mods", L"Mods"); sub = T(L"Tes mods MSCLoader, et ceux que tu envoies à tes invités quand tu héberges.", L"Your MSCLoader mods, and those you send to your guests when you host."); break;
     case TAB_NOTES: case TAB_CREDITS: case TAB_WIKI:   // (une page, trois pilules : wiki.inc DrawGuideHead)
@@ -1477,6 +1477,10 @@ enum { CRED_3D, CRED_IMG, CRED_THANKS, CRED_SUPPORT };
 struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    // (casque perso du magasin CARDINAL, [Addons] 07/11 : forme seule ; le nom du pilote du modele d'origine n'apparait nulle part)
+    { CRED_3D, L"nv", L"Modèle 3D : casque", L"3D model: helmet",
+      L"« F1 Helmet » de nv (@nielsvalckenaere) sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : forme seule, réduit, décoration d'origine retirée.",
+      L"\"F1 Helmet\" by nv (@nielsvalckenaere) on Sketchfab, CC BY 4.0 license. Modified for the game: shape only, reduced, original decoration removed.", L"07/11/2026", 0 },
     // (objets du mod, msc-1.15.97 / mwc-1.15.66, [Addons] 07/11 : Sketchfab, CC BY 4.0, liens complets dans MWCoop\CREDITS-objets.txt)
     { CRED_3D, L"Nokaisho", L"Modèle 3D : caméscope", L"3D model: camcorder",
       L"« Nokaisho Calc&Misc: VHS Camcorder », dessiné par Artiaaa Umrplex, sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
@@ -1829,6 +1833,9 @@ static bool UiClick(int id)
     case UI_CAR_PAINTTPL: PaintTemplate(); return true;
     case UI_CAR_PAINTUSE: PaintUse(!PaintOn()); return true;
     case UI_CAR_PAINTDEL: PaintRemove(); return true;
+    case UI_CASQUE_IMP: CasqueImport(); return true;
+    case UI_CASQUE_TPL: CasqueTemplate(); return true;
+    case UI_CASQUE_DEL: CasqueRemove(); return true;
     case UI_FACE_TPL: FaceTemplate(); return true;
     case UI_FACE_DEL: FaceRemove(); return true;
     case UI_SET_KEY: case UI_SET_KEY + 1: case UI_SET_KEY + 2: g_keyCapture = g_keyCapture == id - UI_SET_KEY ? -1 : id - UI_SET_KEY; return true;

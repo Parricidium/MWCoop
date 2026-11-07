@@ -598,8 +598,9 @@ struct TileSec { int id, f; const wchar_t *fr, *en; };     // f : partie (PF_*),
 // (plus de rangee « Tete » melangee dans Tenue -- retour de JD, 18/10 : visage, chapeau, lunettes, cheveux sont l'onglet Visage)
 static const TileSec kTenueSecs[] = { { SEC_SHIRT, PF_SHIRT, L"Haut", L"Top" }, { SEC_PANTS, PF_PANTS, L"Bas", L"Bottom" }, { SEC_BODY, PF_BODY, L"Silhouette", L"Build" } };
 static const TileSec kVisageSecs[] = { { SEC_FACE, PF_FACE, L"Visage", L"Face" }, { SEC_HAT, PF_HAT, L"Chapeau", L"Hat" }, { SEC_GLASSES, PF_GLASSES, L"Lunettes", L"Glasses" }, { SEC_HAIR, PF_HAIR, L"Cheveux", L"Hair" } };
-static const wchar_t *kPersoTabFr[5] = { L"Tenue", L"Visage", L"Mes tenues", L"Voiture", L"Addons" }, *kPersoTabEn[5] = { L"Outfit", L"Face", L"My outfits", L"Car", L"Add-ons" };   // (Addons : voiture.inc, g_addonsTab)
-static int PersoTabCount() { return 5; }   // (Addons aussi sur My Summer Car depuis le 24/10 : voitures sur la Ruscko)
+static const wchar_t *kPersoTabFr[6] = { L"Tenue", L"Visage", L"Mes tenues", L"Casque", L"Voiture", L"Addons" }, *kPersoTabEn[6] = { L"Outfit", L"Face", L"My outfits", L"Helmet", L"Car", L"Add-ons" };   // (Casque : casque.inc, 07/11 ; Addons : voiture.inc, g_addonsTab)
+static const int kPersoTabCar = 4;   // premier onglet de la page VOITURE (g_tab == TAB_CAR) : Voiture, puis Addons
+static int PersoTabCount() { return 6; }   // (Addons aussi sur My Summer Car depuis le 24/10 : voitures sur la Ruscko)
 static const wchar_t *kViewFr[3] = { L"Pied", L"Portrait", L"Volant" }, *kViewEn[3] = { L"Full", L"Portrait", L"Wheel" };
 static void LookReset();
 
@@ -673,7 +674,7 @@ static RectF PersoTabRect(int k) { float x = g_persoTabRight - PersoTabsW(); for
 // Onglets de la page (TENUE et VOITURE), dessines par l'en-tete (ui.inc DrawHeader) : pilules comme la maquette.
 static void PersoTabsDraw(Graphics &g)
 {
-    int sel = g_tab == TAB_CAR ? (g_addonsTab ? 4 : 3) : g_persoTab;
+    int sel = g_tab == TAB_CAR ? kPersoTabCar + (g_addonsTab ? 1 : 0) : g_persoTab;
     for (int k = 0; k < PersoTabCount(); k++) {
         RectF r = PersoTabRect(k);
         bool on = k == sel, hot = g_tab == TAB_CAR ? g_carHot == 1000 + HT_TAB + k : g_skinRowHot == HT_TAB + k;
@@ -915,6 +916,7 @@ static int PersoPageHit(float x, float y)
 {
     for (int k = 0; k < PersoTabCount(); k++) if (PersoTabRect(k).Contains(x, y)) return HT_TAB + k;
     if (g_tab != TAB_SKIN) return -1;
+    if (g_persoTab == 3) return -1;   // (Casque : ses boutons sont des UiButton, casque.inc)
     if (g_perso.state == 1) {
         for (int i = 0; i < 3; i++) if (PersoViewBtnRect(i).Contains(x, y)) return HT_VIEW + i;
         if (LookChanged() && PersoUndoRect().Contains(x, y)) return HT_UNDO;
@@ -939,10 +941,10 @@ static bool PersoPageMouseDown(float x, float y)
 {
     int t = PersoPageHit(x, y);
     if (t < 0) return false;
-    if (t < HT_TAB + 5) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
+    if (t < HT_TAB + PersoTabCount()) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
         int k = t - HT_TAB;
         g_outfitEdit = -1;
-        if (k == 3 || k == 4) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); g_addonsTab = k == 4; if (k == 4) { g_addonSel = -1; g_addonScanT = 0; g_addonsPage = 0; } }
+        if (k >= kPersoTabCar) { bool ad = k == kPersoTabCar + 1; g_tab = TAB_CAR; g_carIdleT = GetTickCount(); g_addonsTab = ad; if (ad) { g_addonSel = -1; g_addonScanT = 0; g_addonsPage = 0; } }
         else { g_tab = TAB_SKIN; g_persoTab = k; g_skinIdleT = GetTickCount(); for (auto &p : g_tilePage) p = -1; }
         g_skinRowHot = -1; g_carHot = -1;
         return true;
@@ -1313,6 +1315,7 @@ static void DrawSkins(Graphics &g)
     if (!ap) return;
     Glass(kSkinCard);
     Glass(kSkinPanel);
+    if (g_persoTab == 3) { DrawCasque(g, kSkinCard, kSkinPanel); return; }   // (Casque : ses deux vues a gauche, casque.inc)
     int sel = OptGet(*ap);
     const std::string &skin = ap->svals[sel];
     PersoCheck();
@@ -1490,7 +1493,7 @@ static void LookReset()
 static bool SkinMouseDown(float x, float y)
 {
     if (PersoPageMouseDown(x, y)) return true;
-    if (kSkinView.Contains(x, y)) {
+    if (g_persoTab != 3 && kSkinView.Contains(x, y)) {   // (Casque : pas de personnage a tourner)
         g_skinDrag = true;
         g_skinDragX = x;
         SetCapture(g_wnd);

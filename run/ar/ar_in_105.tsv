@@ -1,0 +1,24 @@
+L105-1	A helmet with your own paint, on top of the game's helmet (it does not replace it). It is sold at the CARDINAL shop, and the other players see it.
+L105-2	3/4 front
+L105-3	3/4 back
+L105-4	No preview yet: it comes with the mod update (MWCoop\\casque).
+L105-5	Your helmet
+L105-6	Default helmet
+L105-7	1. Template: the shell unfolded into a disc (1024 x 1024). The centre is the top of the helmet, the front is at the bottom of the image; left and right are the driver's. Write with the top of the letters towards the centre.
+L105-8	2. Paint over it, then \"My image…\". A square image is best: it is brought to 1024 x 1024.
+L105-9	3. In game, buy it at the CARDINAL shop: the other players see your paint.
+L105-10	Remove deletes your image: the helmet goes back to the default one.
+L105-11	Choose the helmet (painted on the helmet template)
+L105-12	Helmet imported: buy it in game at the CARDINAL shop
+L105-13	The helmet template was not found (MWCoop\\casque\\gabarit-casque.png): update the mod.
+L105-14	Save the helmet template
+L105-15	Helmet template: can't copy it (error %lu)
+L105-16	image too large
+L105-17	A helmet with your own paint, on top of the game's: Character > Helmet. \"Template\" saves the shell unfolded into a disc (1024 x 1024): the centre is the top of the helmet, the front is at the bottom of the image, left and right are the driver's; write with the top of the letters towards the centre. Paint over it, then \"My image…\".
+L105-18	In game, it is sold at the CARDINAL shop, and the other players see it. The two preview views (3/4 front, 3/4 back) show your paint. \"Remove\" deletes your image.
+L105-19	A square image is best: it is brought to 1024 x 1024. Transparency is ignored: the whole image is painted on.
+L105-20	3D model: helmet
+L105-21	\"F1 Helmet\" by nv (@nielsvalckenaere) on Sketchfab, CC BY 4.0 license. Modified for the game: shape only, reduced, original decoration removed.
+L105-22	Custom helmet
+L105-23	New Helmet tab on the Character page: paint your helmet on the template, then buy it in game at the CARDINAL shop.
+L105-24	What the others see of you: outfit, face, helmet, car. Visible as soon as you enter a lobby.

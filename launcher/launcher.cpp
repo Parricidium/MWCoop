@@ -3053,6 +3053,7 @@ static float NotesMaxScroll() { return max(0.0f, g_notesH - NotesArea().Height);
 
 #include "voiture.inc"
 #include "modules.inc"   // (page Addons : accueil Voitures / Mods, Kupla)
+#include "casque.inc"    // (onglet Casque de la page Personnage, 07/11)
 
 #include "tenue.inc"
 
@@ -8475,6 +8476,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return rc;
     }
+    // /testcasque <journal> : casque perso (import, Retirer, interrupteur, apercu) ; dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testcasque")) {
+        int rc = CasqueSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /testhudlibre <journal> : position libre du HUD, jamais ecrasee sans clic ; dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testhudlibre")) {
         int rc = HudLibreSelfTest(argv[2]);
@@ -8665,11 +8672,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             int k = _wtoi(st.c_str() + 7) - 1;
             g_addonSel = k >= 0 && k < (int)g_addonList.size() && g_addonList[k].installed ? k : -1;
         }
-        else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso" || st == L"visage" || st == L"volant" || st == L"tenue-miennes" || st == L"tenue-miennes-nom") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s) ; visage : onglet Visage ; volant : vue Volant
+        else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso" || st == L"visage" || st == L"volant" || st == L"tenue-miennes" || st == L"tenue-miennes-nom" || st == L"casque") {   // tenue : Apparence ; casque : onglet Casque du mwcoop.ini ; angle : /temps (un tour en 10 s) ; visage : onglet Visage ; volant : vue Volant
             g_tab = TAB_SKIN;
             g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);
             if (st == L"tenue-survol") { g_skinRowHot = HT_TILE + 2; g_lookZone = 1; }   // (3e tuile des hauts survolee)
             if (st == L"visage") g_persoTab = 1;
+            if (st == L"casque") g_persoTab = 3;
             if (st == L"tenue-miennes" || st == L"tenue-miennes-nom") {
                 g_persoTab = 2;
                 g_outfitsFor = L"capture";

@@ -169,6 +169,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.16.25 (07/11) : SOLO et SOLO COOP sur l'Accueil (70)
     { L"Solo ou Solo Coop", L"Deux boutons sur l'Accueil : SOLO, le jeu sans le mod ; SOLO COOP, seul avec le mod et ses ajouts, sur la sauvegarde de ton choix.",
       L"Solo or Solo Coop", L"Two buttons on Home: SOLO, the game without the mod; SOLO COOP, alone with the mod and its additions, on the save of your choice.", "1.16.25" },
+    // lanceur-1.16.28 (07/11) : onglet Casque de la page Personnage (71)
+    { L"Casque perso", L"Nouvel onglet Casque sur la page Personnage : peins ton casque sur le gabarit, puis achète-le en jeu au magasin CARDINAL.",
+      L"Custom helmet", L"New Helmet tab on the Character page: paint your helmet on the template, then buy it in game at the CARDINAL shop.", "1.16.28" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -247,7 +250,7 @@ static RectF TutoTarget(int i)
     case 43: return TutoSetSearch();                         // Chercher un reglage (en-tete de la page Reglages)
     case 44: return TutoSetTab(SET_THEME);                   // onglet Theme (TutoGo l'ouvre)
     case 45: return kGfxTop;                                 // carte Prereglage (onglet Jeu)
-    case 46: return join(PersoTabRect(0), PersoTabRect(3));  // Tenue / Visage / Voiture (en-tete de la page Personnage : tenue.inc)
+    case 46: return join(PersoTabRect(0), PersoTabRect(kPersoTabCar));  // Tenue / Visage / Voiture (en-tete de la page Personnage : tenue.inc)
     case 47: return RectF(kSaveR.X, kSaveR.Y + 28, kSaveR.Width, 240);   // haut de la carte de droite des Sauvegardes : chiffres et derniere partie (saves.inc)
     case 48: return RectF(kContentR.X, kContentR.Y, kContentR.Width, 160);   // haut de la carte de droite : les pistes du CD (modsync.inc)
     case 49: return RectF(g_guideTabRight - GuideTabsW(), 26, GuideTabsW(), 36);   // Guide / Nouveautes / Credits (wiki.inc GuideTabsDraw)
@@ -271,6 +274,7 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 71: return PersoTabRect(3);                         // Casque (en-tete de la page Personnage : tenue.inc, casque.inc)
     case 70: return g_btn[B_SOLOCOOP].r;                     // SOLO COOP (Accueil)
     case 69: return TutoSetTab(SET_COOP);                    // onglet Co-op (SetTutoTab l'ouvre) : sauvegarde automatique
     case 68: return g_mscSepR;                               // Dossier de mods a part (page Mods, MSCLoader de MWCoop ; sinon bulle au centre)
@@ -283,7 +287,7 @@ static RectF TutoTarget(int i)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 || i == 68 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 || i == 65 || i == 69 ? TAB_COOP : i == 24 || i == 46 || i == 66 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 57 ? TAB_TOOLS : i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 || i == 53 || i == 63 ? TAB_GFX : i == 16 || i == 35 || i == 36 || i == 68 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 || i == 65 || i == 69 ? TAB_COOP : i == 24 || i == 46 || i == 66 || i == 71 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 || i == 55 || i == 56 || i == 59 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

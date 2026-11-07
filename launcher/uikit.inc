@@ -93,6 +93,7 @@ enum {
     UI_CAR_VIN = 430,             // VOITURE : options de la plaque VIN (montrer / cacher)
     UI_CAR_VINOPT = 431,          // + k : option k de la plaque (clic : valeur suivante ; 431-442)
     UI_CAR_PAINT = 445, UI_CAR_PAINTIMP, UI_CAR_PAINTTPL, UI_CAR_PAINTUSE, UI_CAR_PAINTDEL,   // VOITURE : peinture perso (volet, importer, gabarit, utiliser, retirer)
+    UI_CASQUE_IMP = 464, UI_CASQUE_TPL, UI_CASQUE_DEL,   // CASQUE (Personnage) : importer, gabarit, retirer (casque.inc)
     UI_CAR_DENTS = 450,           // VOITURE : retirer les bosses (meshsave.txt de la sauvegarde mis de cote)
     UI_CAR_EVO = 451, UI_CAR_EVOIMP, UI_CAR_EVOTPL, UI_CAR_EVOUSE, UI_CAR_EVODEL,   // ADDONS : livree de l'addon ouvert (451 libre ; importer, gabarit, utiliser, retirer)
     UI_ADDON_CARD = 470,          // ADDONS : + i, carte de l'addon i (470-489)
