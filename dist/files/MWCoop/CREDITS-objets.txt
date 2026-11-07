@@ -1,14 +1,15 @@
 MWCoop - 3D models of the items added by the mod / Modeles 3D des objets ajoutes par le mod
 
 All models below are licensed under Creative Commons Attribution 4.0 (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/).
+Licence checked on each Sketchfab page on 2026-11-07 (CC Attribution, no NC/ND).
 Changes made for the mod: converted to the game, rescaled, reoriented, reduced (fewer triangles), smaller textures,
 flat-colour parts merged; the shop's own labels and screens added on top.
 Tous les modeles ci-dessous sont sous licence Creative Commons Attribution 4.0 (CC BY 4.0). Modifications pour le mod :
 conversion, echelle, orientation, reduction, textures reduites, couleurs unies regroupees ; etiquettes et ecrans du mod ajoutes.
 
-Camcorder / Camescope : "VHS Camcorder" by arti.aaa - https://sketchfab.com/3d-models/vhs-camcorder-5f875620d120484dbb2aedc9acd05ac7 (shared as nokaisho-calcmisc-vhs-camcorder)
+Camcorder / Camescope : "Nokaisho Calc&Misc: VHS Camcorder" by Nokaisho (@nokaishomodels), designed by Artiaaa Umrplex (arti.aaa) - https://sketchfab.com/3d-models/nokaisho-calcmisc-vhs-camcorder-e2e7962ef5534fce86c433d93e0f8284
 VHS player / Magnetoscope : "Vintage VHS Player 1" by Tejay21 - https://sketchfab.com/3d-models/vintage-vhs-player-1-19e9ec41b4234e46a3503e8376f3e7a5
-VHS tape / Cassette VHS : "VHS Tape" by MaggaModels - https://sketchfab.com/3d-models/vhs-tape-abdc9267d59046909d1ce34b2f93a596
+VHS tape / Cassette VHS : "VHS Tape" by Maggatron (@MaggaModels) - https://sketchfab.com/3d-models/vhs-tape-abdc9267d59046909d1ce34b2f93a596
 Film reel / Bobine de film : "Film Reel" by fisherfx.pro - https://sketchfab.com/3d-models/film-reel-ed2f560e03394c61acac3f097db6e8a6
 Popcorn : "Popcorn Bucket" by beastybevan - https://sketchfab.com/3d-models/popcorn-bucket-115700b607424d7d92b133cb44ec6166
 Rally GPS / GPS de rallye (KARTTURI) : "GPS Navigation Free" by Cenk YENER - https://sketchfab.com/3d-models/gps-navigation-free-97ccde4912bc49568ec8a91315314dea

@@ -27,11 +27,12 @@ from reduire import reduire   # noqa: E402
 # nom : (fichier, rotation (degres, x y z, appliquee apres le passage au repere du mod), taille visee (un nombre : le plus grand
 #        cote, echelle uniforme ; trois : la boite exacte, celle de l'ancien modele), seuil de reduction, cote des textures,
 #        pieces ignorees (nom contient), triangles vises au plus[, options : "ecran" (matiere dont la piece devient l'ecran
-#        « TVScreen » : sa texture recoupee a ses UV, UV ramenees a 0..1 pour la video), "couleur" (pieces sans texture)])
+#        « TVScreen » : sa texture recoupee a ses UV, UV ramenees a 0..1 pour la video), "couleur" (pieces sans texture),
+#        "double" (matieres dessinees des deux cotes : faces doublees, retournees -- coques de la tele, vues de l'interieur sinon)])
 OBJETS = {
     "popcorn":      ("popcorn.glb",      (0, 0, 0),     0.24,                   0.0,    256, (), 0),
     "camescope":    ("camescope.glb",    (0, 90, 0),    0.30,                   0.0,    512, (), 0),      # (objectif vers +z)
-    "tele":         ("tele.glb",         (0, 180, 0),   0.55,                   0.0,    512, (), 0, {"ecran": "monitor_screen"}),   # (ecran vers -z)
+    "tele":         ("tele.glb",         (0, 180, 0),   0.55,                   0.0,    512, (), 0, {"ecran": "monitor_screen", "double": ("monitor_right", "profeel_monitor_left")}),   # (ecran vers -z)
     "cassette":     ("cassette.glb",     (0, 180, 0),   (0.188, 0.025, 0.103),  0.0,    0,   (), 0),      # (etiquette de tranche vers -z)
     "bobine":       ("bobine.glb",       (0, 0, 0),     0.36,                   0.0006, 256, (), 9000),
     "magnetoscope": ("magnetoscope.glb", (0, 180, 0),   0.36,                   0.0006, 512, (), 9000),   # (facade vers -z)
@@ -83,7 +84,10 @@ def build(name, spec, apercu):
         P[:, 0] *= -1; Nn[:, 0] *= -1
         P = P @ R.T; Nn = Nn @ R.T
         I = np.asarray(m.idx, np.int64).reshape(-1, 3)
-        if np.linalg.det(m.matrix[:3, :3]) > 0: I = I[:, ::-1]   # (miroir en x : sens des faces retourne -- sauf piece deja en miroir dans le fichier, le flanc gauche de la tele)
+        if np.linalg.det(m.matrix[:3, :3]) > 0: I = I[:, ::-1]
+        if any(s in g.materials[m.material].name for s in opt.get("double", ())):
+            n0 = len(P); P = np.r_[P, P]; Nn = np.r_[Nn, -Nn]; I = np.r_[I, I[:, ::-1] + n0]
+            m.uv = np.r_[np.asarray(m.uv, float), np.asarray(m.uv, float)]   # (miroir en x : sens des faces retourne -- sauf piece deja en miroir dans le fichier, le flanc gauche de la tele)
         # (sens de chaque triangle d'apres les normales du fichier : les matieres « doubleSided » de Sketchfab cachent des faces
         # retournees -- un flanc de la tele etait vu de l'interieur)
         fn = np.cross(P[I[:, 1]] - P[I[:, 0]], P[I[:, 2]] - P[I[:, 0]])

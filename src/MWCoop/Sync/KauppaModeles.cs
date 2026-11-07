@@ -142,6 +142,40 @@ namespace MWCoop
             L("essai objets : photos faites ; fini");
         }
 
+        // [Test] ObjetsMesure=s : a s secondes, les 7 objets poses devant la camera du joueur (a 1,6 m, en rang), temps moyen par image
+        // de s+2 a s+12 ; ObjetsAnciens=1 : avec les anciens modeles ; ObjetsMesureVide=1 : sans objets (reference). Capture a s+4.
+        static List<GameObject> objMes; static float objMesT; static int objMesN; static bool objMesShot;
+        static void ObjetsMesureTest()
+        {
+            float at = Config.GetFloat("Test", "ObjetsMesure", 0f), t = Time.timeSinceLevelLoad;
+            if (at <= 0f || objMesN < 0 || t < at) return;
+            Camera cam = Game.MainCam;
+            if (cam == null) return;
+            bool empty = Config.GetInt("Test", "ObjetsMesureVide", 0) != 0;
+            if (objMes == null)
+            {
+                objMes = new List<GameObject>();
+                string[] kinds = { KVhs, KNauhuri, KTv, KKamera, KKartturi, KPopcorn, KKela };
+                Vector3 fw = cam.transform.forward; fw.y = 0f; fw = fw.sqrMagnitude > 0.01f ? fw.normalized : Vector3.forward;
+                Vector3 rt = Vector3.Cross(Vector3.up, fw);
+                for (int i = 0; i < kinds.Length && !empty; i++)
+                {
+                    Vector3 size; Transform scr;
+                    GameObject g = Model(kinds[i], out size, out scr);
+                    g.transform.position = cam.transform.position + fw * 1.6f + rt * ((i - 3) * 0.42f) - Vector3.up * 0.35f;
+                    g.transform.rotation = Quaternion.LookRotation(-fw);   // (facades vers la camera)
+                    objMes.Add(g);
+                }
+                return;
+            }
+            if (t < at + 2f) return;
+            if (!objMesShot && t > at + 4f) { objMesShot = true; Autotest.CaptureSoon("objets-mesure", 0f); }
+            if (t < at + 12f) { objMesT += Time.unscaledDeltaTime; objMesN++; return; }
+            L("essai objets : mesure, " + objMesN + " images, " + (objMesT / Mathf.Max(1, objMesN) * 1000f).ToString("F2") + " ms par image (" + (empty ? "sans objets" : Config.GetInt("Test", "ObjetsAnciens", 0) != 0 ? "7 anciens modeles" : "7 nouveaux modeles") + " a l'ecran)");
+            foreach (GameObject g in objMes) UnityEngine.Object.Destroy(g);
+            objMesN = -1;
+        }
+
         // Rectangle d'une texture du mod (uv : partie de l'image, 0..1, origine en bas a gauche), pose a plat : normale vers « up »,
         // haut de l'image vers « fwd ». Pour une etiquette posee sur un modele.
         static GameObject LabelQuad(GameObject parent, string name, string png, Rect uv, Vector3 pos, Vector3 up, Vector3 fwd, Vector2 size)
