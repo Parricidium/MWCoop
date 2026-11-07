@@ -721,7 +721,7 @@ static void DrawBob(Graphics &g)
     // a droite : le film choisi
     float fy = v.Y + v.Height - 16 - 40, hw = (v.Width - 48 - 10) / 2;
     std::wstring dirS = T(L"Dossier des films", L"Films folder"), vidS = T(L"Vidéos exportées", L"Exported videos");
-    if (max(MeasureW(g, dirS, 13, FontStyleBold), MeasureW(g, vidS, 13, FontStyleBold)) + 52 > hw) {   // (trop long cote a cote : l'un sur l'autre)
+    if (max(MeasureW(g, dirS, 12, FontStyleBold), MeasureW(g, vidS, 12, FontStyleBold)) + 40 > hw) {   // (trop long cote a cote : l'un sur l'autre)
         UiButton(g, RectF(v.X + 24, fy - 48, v.Width - 48, 40), dirS, UI_BOB_DIR, false, IC_FOLDER, true, 12);
         UiButton(g, RectF(v.X + 24, fy, v.Width - 48, 40), vidS, UI_BOB_VIDDIR, false, IC_FOLDER, true, 12);
     } else {
