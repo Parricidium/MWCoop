@@ -14,7 +14,9 @@ static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "Por
     { "DroneDescendre", "C", L"Descendre", L"Down" }, { "DroneRapide", "LeftShift", L"Rapide", L"Fast" }, { "DroneZoomPlus", "R", L"Zoom +", L"Zoom +" },
     { "DroneZoomMoins", "F", L"Zoom -", L"Zoom -" }, { "DronePencherG", "Q", L"Pencher à gauche", L"Tilt left", "A" }, { "DronePencherD", "E", L"Pencher à droite", L"Tilt right" },
     { "DroneRecentrer", "X", L"Recentrer", L"Reset" }, { "DronePhoto", "Mouse0", L"Photo", L"Photo" }, { "DroneGrille", "G", L"Grille", L"Grid" },
-    { "DroneInterface", "H", L"Interface", L"Interface" } };
+    { "DroneInterface", "H", L"Interface", L"Interface" },
+    // Carnet du copilote (leve, en passager) : memes noms et defauts que MWCoop\UI\Keys.cs ([MWC] 07/11).
+    { "CarnetRoue", "R", L"Carnet : roue", L"Notebook: wheel" }, { "CarnetEffacer", "Backspace", L"Carnet : retirer", L"Notebook: remove" }, { "CarnetLampe", "L", L"Carnet : lampe", L"Notebook: lamp" } };
 // Clavier AZERTY (francais de France, de Belgique, du Luxembourg, de Monaco ; pas le canadien ni le suisse) : comme Keys.Azerty du mod.
 static bool KeyboardAzerty()
 {
@@ -265,6 +267,9 @@ static const std::vector<GfxRow> &GfxRows()
         { "Touche:Carte", L"Carte (joueurs en direct)", L"Map (live players)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Vue", L"Vue à la 3e personne (à pied, en véhicule)", L"Third-person view (on foot, in vehicles)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Marqueur", L"Marqueur partagé (court : poser, tenu : retirer)", L"Shared marker (tap: place, hold: remove)", 0, {}, {}, {}, 0, 9, "Touches" },
+        { "Touche:CarnetRoue", L"Carnet du copilote : roue des symboles (touche tenue)", L"Co-driver's notebook: symbol wheel (hold the key)", 0, {}, {}, {}, 0, 9, "Touches" },
+        { "Touche:CarnetEffacer", L"Carnet du copilote : retirer la note la plus proche", L"Co-driver's notebook: remove the nearest note", 0, {}, {}, {}, 0, 9, "Touches" },
+        { "Touche:CarnetLampe", L"Carnet du copilote : lampe", L"Co-driver's notebook: lamp", 0, {}, {}, {}, 0, 9, "Touches" },
         // Camera drone (13) : une pastille par action.
         { "Touche:Drone", L"Passer en drone / revenir (mode photo)", L"Drone on / off (photo mode)", 0, {}, {}, {}, 0, 13, "Touches" },
         { "Touche:DronePhoto", L"Prendre la photo", L"Take the photo", 0, {}, {}, {}, 0, 13, "Touches" },
@@ -669,6 +674,10 @@ static const SetItem kSetItems[] = {
     { 12, SI_GFX, "Touche:Vue", L"Vue à la 3e personne", L"Third-person view", L"À pied, en véhicule", L"On foot, in vehicles" },
     { 12, SI_GFX, "Touche:Triches", L"Panneau des triches", L"Cheat panel", L"Si l'hôte les autorise", L"If the host allows them" },
     { 12, SI_X, "f10", L"Menu MWCoop", L"MWCoop menu", L"Joueurs, synchro, options", L"Players, sync, options" },
+    { 12, SI_SEC, NULL, L"Carnet du copilote", L"Co-driver's notebook", NULL, NULL },   // (carnet leve, en passager : Keys.cs de [MWC])
+    { 12, SI_GFX, "Touche:CarnetRoue", L"Roue des symboles", L"Symbol wheel", L"Touche tenue : vise un symbole, clic pour l'ajouter", L"Hold the key: aim at a symbol, click to add it" },
+    { 12, SI_GFX, "Touche:CarnetEffacer", L"Retirer une note", L"Remove a note", L"La plus proche, à 80 m au plus", L"The nearest one, 80 m away at most" },
+    { 12, SI_GFX, "Touche:CarnetLampe", L"Lampe", L"Lamp", L"Elle s'allume seule la nuit", L"It lights up by itself at night" },
     { 13, SI_GFX, "Touche:Drone", NULL, NULL, NULL, NULL, 1 },
     { 13, SI_SEC, NULL, L"Déplacer", L"Move", NULL, NULL },
     { 13, SI_GFX, "Touche:DroneAvant", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DroneArriere", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DroneGauche", NULL, NULL, NULL, NULL },

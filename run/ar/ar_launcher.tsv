@@ -474,6 +474,26 @@ Open Pace notes	فتح «دفتر الملاحظات»
 The co-driver's notebook	دفتر الملاح
 Your notes on the stages' layout	ملاحظاتك على مسار المراحل
 Long corner	طويل
+Buy the notebook (59 mk, lamp included) at the OSUUSKAUPPA s21 shop, on the shelf under the KARTTURI.	اشترِ الدفتر (59 mk، مع المصباح) من متجر OSUUSKAUPPA s21، على الرف تحت أجهزة KARTTURI.
+Also at the CARDINAL shop, in the slot under the KARTTURI.	وأيضًا في متجر CARDINAL، في الخانة تحت أجهزة KARTTURI.
+Seated as a passenger, F raises the notebook; F or right click lowers it.	وأنت جالس راكبًا، F ترفع الدفتر؛ F أو النقر الأيمن يخفضه.
+Hold R: the symbol wheel. Aim at a symbol with the mouse, click to add it (grade, arrow, modifiers), right click to remove the last one. Release R: the note is placed where the car was when the wheel opened.	اضغط مع الاستمرار على R: عجلة الرموز. وجّه الفأرة إلى رمز، وانقر لإضافته (الدرجة، السهم، المعدِّلات)، والنقر الأيمن لإزالة الأخير. حرّر R: توضع الملاحظة حيث كانت السيارة عند فتح العجلة.
+Backspace: remove the nearest note (80 m away at most). L: the lamp, which lights up by itself at night. Keys can be changed: Settings > Keys.	Backspace: إزالة أقرب ملاحظة (على بعد 80 م على الأكثر). L: المصباح، الذي يضيء وحده ليلًا. يمكن تغيير المفاتيح: الإعدادات > المفاتيح.
+Your notes go straight into the active notebook; without one, \"My notes\" is created and becomes active.	تذهب ملاحظاتك فورًا إلى الدفتر النشط؛ وإن لم يوجد، يُنشأ «ملاحظاتي» ويصبح نشطًا.
+The other players see the real page (your notebook is sent to them) and the lamp's beam.	يرى اللاعبون الآخرون الصفحة الحقيقية (يُرسل إليهم دفترك) وشعاع المصباح.
+Notebook: wheel	الدفتر: العجلة
+Notebook: remove	الدفتر: إزالة
+Notebook: lamp	الدفتر: المصباح
+Co-driver's notebook: symbol wheel (hold the key)	دفتر الملاح: عجلة الرموز (مع الاستمرار على المفتاح)
+Co-driver's notebook: remove the nearest note	دفتر الملاح: إزالة أقرب ملاحظة
+Co-driver's notebook: lamp	دفتر الملاح: المصباح
+Co-driver's notebook	دفتر الملاح
+Symbol wheel	عجلة الرموز
+Hold the key: aim at a symbol, click to add it	مع الاستمرار على المفتاح: وجّه إلى رمز وانقر لإضافته
+Remove a note	إزالة ملاحظة
+The nearest one, 80 m away at most	الأقرب، على بعد 80 م على الأكثر
+Lamp	المصباح
+It lights up by itself at night	يضيء وحده ليلًا
 if private	إذا كانت خاصة
 Yes	نعم
 No	لا

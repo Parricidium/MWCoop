@@ -424,6 +424,11 @@ static Bitmap *CnSym()
         }
         if (x1 >= 0) g_cnBox[c] = Rect(cx + x0, cy + y0, x1 - x0 + 1, y1 - y0 + 1);
     }
+    {   // (trait orange : une image sur les cases 24 a 27, une seule boite)
+        int x0 = 4096, y0 = 4096, x1 = -1, y1 = -1;
+        for (int c = 24; c <= 27; c++) { const Rect &r = g_cnBox[c]; if (r.Width == 64 && r.Height == 64 && r.X == (c % 8) * 128 + 32) continue; x0 = min(x0, r.X); y0 = min(y0, r.Y); x1 = max(x1, r.X + r.Width); y1 = max(y1, r.Y + r.Height); }
+        if (x1 > x0) g_cnBox[24] = Rect(x0, y0, x1 - x0, y1 - y0);
+    }
     g_cnSym->UnlockBits(&bd);
     return g_cnSym;
 }
@@ -490,27 +495,57 @@ static float CnHandText(Graphics &g, const std::wstring &s, float x, float cy, f
     g.SetSmoothingMode(sm);
     return b.Width * k;
 }
-// Une ligne de note a la hauteur h (encre des symboles ~ h), centree sur cy, a partir de x ; rend la largeur.
-static float DrawCnLine(Graphics &g, const CnNote &n, float x, float cy, float h, float maxX)
+// Une ligne de note (cotes de la page du mod, [MWC] 07/11) : case dessinee a cellH de haut, le bas des dessins (70 % de la
+// case) sur la ligne baseY, chaque symbole a sa largeur d'encre, 8/190 de case entre deux ; texte libre en Caveat a 1,55 x 60
+// pour une case de 190. Ligne trop longue pour maxX : reduite. Rend la largeur dessinee.
+static float CnHandW(const std::wstring &s, float px)
+{
+    FontFamily *f = CnHandFamily(); if (!f || s.empty()) return 0;
+    GraphicsPath p; StringFormat sf(StringFormat::GenericTypographic());
+    p.AddString(s.c_str(), -1, f, FontStyleRegular, px, PointF(0, 0), &sf);
+    RectF b; p.GetBounds(&b); return b.Width;
+}
+static float DrawCnLineB(Graphics &g, const CnNote &n, float x, float baseY, float cellH, float maxX)
 {
     Bitmap *sym = CnSym();
-    float x0 = x, k = h / 64.0f;
-    if (n.type == CT_TEXTE) x += CnHandText(g, n.text, x, cy, h * 0.95f, maxX - x, kCnPen) + h * 0.12f;
     std::vector<int> cells; CnCells(n, cells);
-    if (!sym) { if (n.type != CT_TEXTE) Text(g, Widen(kCnType[n.type]), RectF(x, cy - h / 2, maxX - x, h), h * 0.4f, FontStyleBold, kCnPen, StringAlignmentNear); return maxX - x0; }
+    float k = cellH / 128.0f, gap = cellH * 8 / 190, px = cellH * 1.55f * 60 / 190;
+    float tw = n.type == CT_TEXTE ? CnHandW(n.text, px) : 0, total = tw;
+    for (size_t i = 0; i < cells.size(); i++) total += g_cnBox[cells[i]].Width * k + (i || tw > 0 ? gap : 0);
+    if (total <= 0) return 0;
+    float sc = min(1.0f, max(0.05f, (maxX - x) / total));
+    k *= sc; gap *= sc; px *= sc;
+    float x0 = x;
+    if (n.type == CT_TEXTE) {
+        FontFamily *f = CnHandFamily();
+        bool arabic = false; for (wchar_t ch : n.text) if (ch >= 0x0600 && ch <= 0x06FF) arabic = true;
+        if (f && !arabic) {   // (pied des lettres sur la ligne : ascendante de la police)
+            float asc = px * f->GetCellAscent(FontStyleRegular) / max(1, (int)f->GetEmHeight(FontStyleRegular));
+            GraphicsPath gp; StringFormat sf(StringFormat::GenericTypographic());
+            gp.AddString(n.text.c_str(), -1, f, FontStyleRegular, px, PointF(0, 0), &sf);
+            RectF bb; gp.GetBounds(&bb);
+            Matrix mt; mt.Translate(x - bb.X, baseY - asc); gp.Transform(&mt);
+            SmoothingMode sm = g.GetSmoothingMode(); g.SetSmoothingMode(SmoothingModeAntiAlias);
+            SolidBrush br(kCnPen); g.FillPath(&br, &gp); g.SetSmoothingMode(sm);
+            x += bb.Width;
+        } else x += CnHandText(g, n.text, x, baseY - px * 0.35f, px, maxX - x, kCnPen);
+    }
+    if (!sym) { if (n.type != CT_TEXTE) Text(g, Widen(kCnType[n.type]), RectF(x, baseY - cellH * 0.6f, maxX - x, cellH * 0.6f), cellH * 0.25f, FontStyleBold, kCnPen, StringAlignmentNear); return maxX - x0; }
     InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-    for (int c : cells) {
-        const Rect &b = g_cnBox[c];
-        int cellY = (c / 8) * 128;
-        float w = b.Width * k, hh = b.Height * k, y = cy + (b.Y - cellY - 64) * k;
-        if (x + w > maxX) break;
-        g.DrawImage(sym, RectF(x, y, w, hh), (REAL)b.X, (REAL)b.Y, (REAL)b.Width, (REAL)b.Height, UnitPixel);
-        x += w + h * 0.08f;
+    float top = baseY - 0.70f * 128 * k;
+    for (size_t i = 0; i < cells.size(); i++) {
+        const Rect &bx = g_cnBox[cells[i]];
+        if (i || x > x0) x += gap;
+        int cellY = (cells[i] / 8) * 128;
+        g.DrawImage(sym, RectF(x, top + (bx.Y - cellY) * k, bx.Width * k, bx.Height * k), (REAL)bx.X, (REAL)bx.Y, (REAL)bx.Width, (REAL)bx.Height, UnitPixel);
+        x += bx.Width * k;
     }
     g.SetInterpolationMode(im);
     return x - x0;
 }
-static void DrawCnCell(Graphics &g, int c, RectF r)   // (une case entiere, centree dans r : rond de la voiture, trait orange)
+// Ligne de note centree sur cy, encre ~ h de haut (etiquettes du trace, champs d'une note) : case de 2 h, ligne a cy + 0,4 h.
+static float DrawCnLine(Graphics &g, const CnNote &n, float x, float cy, float h, float maxX) { return DrawCnLineB(g, n, x, cy + 0.4f * h, 2 * h, maxX); }
+static void DrawCnCell(Graphics &g, int c, RectF r)   // (une case entiere, centree dans r)
 {
     Bitmap *sym = CnSym(); if (!sym) return;
     const Rect &b = g_cnBox[c];
@@ -520,16 +555,16 @@ static void DrawCnCell(Graphics &g, int c, RectF r)   // (une case entiere, cent
     g.SetInterpolationMode(im);
 }
 
-// ---- la page du carnet (apercu) : radar a gauche, notes a droite, trait orange fixe
+// ---- la page du carnet (apercu), en pixels de la page du mod (1024 x 1448) multiplies par u
 static void DrawCnPaper(Graphics &g, RectF p)
 {
+    float u = p.Width / 1024;
     { SolidBrush sh(Color(60, 0, 0, 0)); g.FillRectangle(&sh, p.X + 3, p.Y + 4, p.Width, p.Height); }
-    // (memes cotes que la page du mod, assets\carnet\page.png de [MWC] : creme, lignes tous les 4,6 % des 7,5 %, marge a 13 %)
+    // (page.png de [MWC] : creme, traits tous les 66,6 des 108,6, marge a 13 %)
     SolidBrush pb(Color(255, 250, 246, 233)); g.FillRectangle(&pb, p);
-    float lh = p.Height * 0.046f;
-    Pen lp(Color(255, 170, 206, 236), max(1.0f, p.Height / 724));
-    for (float y = p.Y + p.Height * 0.075f; y < p.Y + p.Height - 2; y += lh) g.DrawLine(&lp, p.X + 1, y, p.X + p.Width - 1, y);
-    Pen mp(Color(255, 226, 150, 142), max(1.0f, p.Width / 512)); g.DrawLine(&mp, p.X + p.Width * 0.13f, p.Y, p.X + p.Width * 0.13f, p.Y + p.Height);
+    Pen lp(Color(255, 170, 206, 236), max(1.0f, 2 * u));
+    for (float y = 108.6f; y * u < p.Height - 2; y += 66.6f) g.DrawLine(&lp, p.X + 1, p.Y + y * u, p.X + p.Width - 1, p.Y + y * u);
+    Pen mp(Color(255, 226, 150, 142), max(1.0f, 2 * u)); g.DrawLine(&mp, p.X + p.Width * 0.13f, p.Y, p.X + p.Width * 0.13f, p.Y + p.Height);
     Pen sp(Color(200, 70, 70, 76), 2.0f); SolidBrush hole(Color(255, 60, 60, 66));
     for (float y = p.Y + 8; y < p.Y + p.Height - 6; y += 13) { g.FillEllipse(&hole, p.X + 6, y + 2, 4.0f, 4.0f); g.DrawArc(&sp, p.X - 6, y, 16.0f, 8.0f, 90.0f, 250.0f); }
 }
@@ -538,51 +573,54 @@ static void DrawCnPage(Graphics &g, RectF p)
     DrawCnPaper(g, p);
     CnStage *s = CnStageCur();
     if (!s) return;
+    float u = p.Width / 1024;
     const std::vector<CnNote> &ns = CnNotesShown();
     float pos = min(max(g_cnPos, 0.0f), (float)s->len);
-    float yLine = p.Y + p.Height * 0.62f;
-    // radar : trace au stylo autour de la position, tourne pour monter, rond de la voiture fixe
-    RectF rad(p.X + p.Width * 0.13f, p.Y + 6, p.Width * 0.30f, p.Height - 12);
+    // radar : colonne x 154 a 502, rond vert fixe en (317, 695), 0,5 m par pixel ; trace tourne pour monter, tremble lie a l'index
     {
+        RectF rad(p.X + 154 * u, p.Y, 348 * u, p.Height);
+        float cx = p.X + 317 * u, cy = p.Y + 695 * u, sc = 2 * u;
         GraphicsState st = g.Save(); g.SetClip(rad, CombineModeIntersect);
         int n = (int)s->p.size(), i0 = min(n - 1, max(0, (int)(pos / s->step + 0.5f)));
         int a = max(0, i0 - (int)(6 / s->step)), b = min(n - 1, i0 + max(1, (int)(14 / s->step)));
         float dx = s->p[b].X - s->p[a].X, dz = s->p[b].Y - s->p[a].Y, dl = sqrtf(dx * dx + dz * dz);
         if (dl < 1e-3f) { dx = 0; dz = 1; dl = 1; }
         float ux = dx / dl, uz = dz / dl;   // (le sens de la route : vers le haut de la page)
-        float sc = (yLine - rad.Y) / 190.0f, cx = rad.X + rad.Width / 2;
         std::vector<PointF> pts;
-        int lo = max(0, i0 - (int)(130 / s->step)), hi = min(n - 1, i0 + (int)(230 / s->step));
+        int lo = max(0, i0 - (int)(390 / s->step)), hi = min(n - 1, i0 + (int)(360 / s->step));
         for (int i = lo; i <= hi; i++) {
             float rx = s->p[i].X - s->p[i0].X, rz = s->p[i].Y - s->p[i0].Y;
             float fw = rx * ux + rz * uz, sd = rx * uz - rz * ux;   // (en avant, a droite)
-            float wob = sinf(i * 0.83f) * 0.55f + sinf(i * 0.29f + 1.7f) * 0.85f;   // (tremble lie a l'index du point : ne nage pas)
-            pts.push_back(PointF(cx + sd * sc + wob, yLine - fw * sc));
+            float wob = (sinf(i * 0.83f) * 1.1f + sinf(i * 0.29f + 1.7f) * 1.7f) * u;   // (ne nage pas d'une image a l'autre)
+            pts.push_back(PointF(cx + sd * sc + wob, cy - fw * sc));
         }
-        if (pts.size() > 1) { Pen rp(kCnPen, max(1.6f, p.Width / 180)); rp.SetLineJoin(LineJoinRound); g.DrawLines(&rp, pts.data(), (INT)pts.size()); }
+        if (pts.size() > 1) { Pen rp(kCnPen, max(1.4f, 5 * u)); rp.SetLineJoin(LineJoinRound); rp.SetStartCap(LineCapRound); rp.SetEndCap(LineCapRound); g.DrawLines(&rp, pts.data(), (INT)pts.size()); }
         g.Restore(st);
-        float cs = p.Width * 0.11f;
-        DrawCnCell(g, 23, RectF(cx - cs / 2, yLine - cs / 2, cs, cs));
+        const Rect &cb = g_cnBox[23]; float k = 190 * u / 128;
+        DrawCnCell(g, 23, RectF(cx - cb.Width * k / 2, cy - cb.Height * k / 2, cb.Width * k, cb.Height * k));
     }
-    // notes : une par ligne, pas fixe, interpolees entre deux notes selon les metres
-    RectF col(p.X + p.Width * 0.46f, p.Y + 4, p.Width * 0.52f, p.Height - 8);
-    float pitch = p.Height / 7.5f, h = pitch * 0.55f;
+    // notes : la note actuelle sur le 13e trait (908), une note tous les 2 traits (133,2), interpolees selon les metres ;
+    // trait orange 10 px sous la note, de x 497 a 998 ; colonne des notes x 517 a 998
+    float base = p.Y + 908 * u, pitch = 133.2f * u, cellH = 190 * u;
     std::vector<const CnNote *> v;
     for (auto &n : ns) if (n.m <= s->len) v.push_back(&n);
     int k = -1; for (int i = 0; i < (int)v.size(); i++) if (v[i]->m <= pos) k = i;
     float m0 = k >= 0 ? (float)v[k]->m : 0.0f, m1 = k + 1 < (int)v.size() ? (float)v[k + 1]->m : -1.0f;
     float f = m1 > m0 ? min(1.0f, max(0.0f, (pos - m0) / (m1 - m0))) : 0.0f;
+    RectF col(p.X + 497 * u, p.Y, p.Width - 497 * u, p.Height);
     GraphicsState st = g.Save(); g.SetClip(col, CombineModeIntersect);
-    DrawCnCell(g, 24, RectF(col.X - 4, yLine + h * 0.55f - 10, col.Width + 8, 20));   // (trait orange, sous la note actuelle)
+    {
+        const Rect &ob = g_cnBox[24]; float oh = max(2.0f, ob.Height * 190 * u / 128);
+        if (Bitmap *sym = CnSym()) { InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeHighQualityBicubic); g.DrawImage(sym, RectF(p.X + 497 * u, base + 10 * u - oh / 2, 501 * u, oh), (REAL)ob.X, (REAL)ob.Y, (REAL)ob.Width, (REAL)ob.Height, UnitPixel); g.SetInterpolationMode(im); }
+    }
     for (int i = 0; i < (int)v.size(); i++) {
-        float y = yLine - (i - k - f) * pitch;
-        if (y < col.Y - pitch || y > col.Y + col.Height + pitch) continue;
-        DrawCnLine(g, *v[i], col.X + 4, y, h, col.X + col.Width - 2);
-        if (v[i]->uid == g_cnSelUid) { Pen sp(WithA(kAcc, 0.8f), 1.4f); sp.SetDashStyle(DashStyleDash); g.DrawRectangle(&sp, col.X + 1, y - pitch * 0.42f, col.Width - 3, pitch * 0.84f); }
+        float y = base - (i - k - f) * pitch;
+        if (y < p.Y - pitch || y > p.Y + p.Height + pitch) continue;
+        float w = DrawCnLineB(g, *v[i], p.X + 517 * u, y, cellH, p.X + 998 * u);
+        if (v[i]->uid == g_cnSelUid) { Pen sp(WithA(kAcc, 0.8f), 1.4f); sp.SetDashStyle(DashStyleDash); g.DrawRectangle(&sp, p.X + 509 * u, y - 0.62f * cellH, max(40 * u, w) + 16 * u, 0.74f * cellH); }
     }
     g.Restore(st);
 }
-
 // ---- le trace (vue du ciel, nord en haut) et les notes posees dessus
 static PointF CnToScr(float x, float z) { return PointF(g_cnMapR.X + g_cnMapR.Width / 2 + (x - g_cnCx) * g_cnZoom, g_cnMapR.Y + g_cnMapR.Height / 2 - (z - g_cnCz) * g_cnZoom); }
 static void CnFit()
