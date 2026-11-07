@@ -22,6 +22,7 @@ namespace MWCoop.Net
         internal uint Token;          // jeton de session de l'invite (T_CONNECT) : 0 pour une version sans jeton
         internal uint Instance;       // identifiant de son processus (T_CONNECT) : 0 pour une version sans
         internal ushort sendSeq, recvSeq;
+        internal ushort sendBase;     // plus vieux numero fiable peut-etre pas encore acquitte (sendSeq s'il n'y en a aucun)
         internal readonly Dictionary<ushort, Pending> unacked = new Dictionary<ushort, Pending>();
         internal readonly Queue<byte[]> waiting = new Queue<byte[]>();
         internal readonly Dictionary<ushort, byte[]> early = new Dictionary<ushort, byte[]>();
@@ -41,6 +42,13 @@ namespace MWCoop.Net
         // au lieu d'un par message (refonte du 14/10 : en-tetes UDP / Steam par paquet). Envoyes a Flush (fin d'image, Core).
         internal const int MaxBatch = 1180;
         const int Window = 192;
+        // Ecart maximal entre le plus vieux message fiable non acquitte et le prochain numero. Window compte les messages en
+        // attente, pas l'ecart des numeros : un vieux message perdu et renvoye en vain pendant que les suivants etaient acquittes
+        // laissait l'expediteur prendre plus de 32 768 numeros d'avance (cinema, 4,75 Go a 3,3 Mo/s, essai de [Addons] 07/11).
+        // Les numeros etant sur 16 bits, le recepteur prenait alors les neufs pour deja recus : acquittes puis jetes (65 364
+        // messages en 8 plages), et au-dela de 65 536 un nouveau message ecrasait l'ancien dans unacked. Au-dela de MaxSpan, les
+        // nouveaux attendent dans waiting. Cote expediteur seulement : le recepteur ne change pas.
+        const int MaxSpan = 16384;
         public const float Timeout = 15f;
 
         ILink link;
@@ -288,7 +296,8 @@ namespace MWCoop.Net
         public void SendReliable(Peer p, byte[] msg)
         {
             if (msg.Length > MaxPayload) throw new ArgumentException("message fiable trop long : " + msg.Length);
-            if (p.unacked.Count >= Window) { p.waiting.Enqueue(msg); return; }
+            // (file deja non vide : derriere elle, sinon un message passerait devant les plus anciens)
+            if (p.waiting.Count > 0 || p.unacked.Count >= Window || (ushort)(p.sendSeq - p.sendBase) >= MaxSpan) { p.waiting.Enqueue(msg); return; }
             // Le lot non fiable de l'image part d'abord (relecture du 15/10, 3.1) : un fiable partait tout de suite et les
             // non fiables de la meme image au Flush -- la « finale » (Knobs, @drone) etait depassee par le flux d'avant.
             FlushBatch(p);
@@ -326,7 +335,7 @@ namespace MWCoop.Net
                 float resend = Math.Max(0.2f, p.Rtt * 1.5f);
                 foreach (Peer.Pending pd in p.unacked.Values)
                     if (Now - pd.SentAt > resend) { pd.SentAt = Now; pd.Tries++; SendRaw(p, pd.Packet); }
-                while (p.waiting.Count > 0 && p.unacked.Count < Window) SendReliableNow(p, p.waiting.Dequeue());
+                while (p.waiting.Count > 0 && p.unacked.Count < Window && (ushort)(p.sendSeq - p.sendBase) < MaxSpan) SendReliableNow(p, p.waiting.Dequeue());
             }
         }
 
@@ -419,6 +428,7 @@ namespace MWCoop.Net
                     break;
                 case T_ACK:
                     for (int i = 3; i + 1 < n; i += 2) p.unacked.Remove((ushort)(buf[i] | buf[i + 1] << 8));
+                    while (p.sendBase != p.sendSeq && !p.unacked.ContainsKey(p.sendBase)) p.sendBase++;
                     break;
                 case T_UNREL:
                     InReliable = false;
