@@ -360,10 +360,27 @@ static void CnCommit()
 }
 static CnNote *CnSelEdit() { std::vector<CnNote> *v = CnEditable(); if (!v) return NULL; for (auto &n : *v) if (n.uid == g_cnSelUid) return &n; return NULL; }
 
-// ---- note devinee au clic, sur les 50 m qui suivent : virage (seuils du KARTTURI), carre (regle de la spec et de [MWC],
+// ---- estimation au clic (sans note automatique proche), sur les 50 m qui suivent : virage (seuils du KARTTURI), carre (regle de la spec et de [MWC],
 // 07/11 : angle de 65 a 115 deg ET (80 % de l'angle sur 25 m au plus OU rayon mini sous 20 m) -- [MSC] : le lissage etale
 // un carre sur 32 a 34 m, « ~90 deg sur moins de 25 m » n'en attrapait aucun), H au-dela de 150 deg.
 static float CnHeading(const CnStage &s, int j) { return atan2f(s.p[j + 1].X - s.p[j].X, s.p[j + 1].Y - s.p[j].Y); }   // (croit a droite : x a droite, z en haut vu du ciel)
+static CnNote CnGuess(const CnStage &s, int i);
+// Note proposee au clic ([MWC] 07/11) : la note automatique du mod (virage, carre ou bosse) la plus proche, a moins de 25 m
+// -- calculee sur le trace brut du jeu, avant lissage, que le lanceur n'a pas : lanceur et jeu proposent la meme ; sinon
+// l'estimation du lanceur sur le trace exporte (CnGuess). Le joueur corrige ensuite.
+static CnNote CnSuggest(const CnStage &s, int i)
+{
+    int m = (int)(i * s.step + 0.5f), bd = 26;
+    const CnNote *best = NULL;
+    for (auto &a : s.autoN) {
+        if (a.type != CT_VIRAGE && a.type != CT_CARRE && a.type != CT_BOSSE) continue;
+        int d = abs(a.m - m);
+        if (d < bd) { bd = d; best = &a; }
+    }
+    if (!best) return CnGuess(s, i);
+    CnNote n = *best; n.m = m; n.uid = g_cnUid++; n.text.clear();
+    return n;
+}
 static CnNote CnGuess(const CnStage &s, int i)
 {
     CnNote n; n.m = (int)(i * s.step + 0.5f); n.uid = g_cnUid++;
@@ -875,7 +892,7 @@ static bool CarnetMouseDown(float x, float y)
         std::vector<CnNote> *v = CnEditable();
         if (!v) return true;
         if ((int)v->size() >= kCnMaxNotes) { SetStatus(K_WARN, T(L"1000 notes au plus sur une spéciale", L"1000 notes at most on a stage")); return true; }
-        CnNote n = CnGuess(*s, i);
+        CnNote n = CnSuggest(*s, i);
         v->push_back(n);
         CnCommit();
         CnSelect(n.uid);
@@ -1214,7 +1231,14 @@ static bool CarnetSelfTest(const std::wstring &logPath)
         CnNote q1 = CnGuess(sq, 20), q2 = CnGuess(big, 20), q3 = CnGuess(hp, 20);
         say("regle du carre : 90 deg etale sur 34 m (coeur serre) = carre a gauche", q1.type == CT_CARRE && q1.side < 0);
         say("regle du carre : 90 deg sur 60 m = virage, pas carre", q2.type == CT_VIRAGE && q2.side > 0);
-        say("regle du carre : 170 deg = epingle (H)", q3.type == CT_VIRAGE && q3.grade == 0); }
+        say("regle du carre : 170 deg = epingle (H)", q3.type == CT_VIRAGE && q3.grade == 0);
+        // suggestion au clic : la note automatique du mod a moins de 25 m, sinon l'estimation
+        CnStage sg = g_cnStages[0];
+        CnNote au; au.type = CT_CARRE; au.side = -1; au.m = 400; au.mods = 1u << CM_NC;
+        sg.autoN = { au };
+        CnNote s1 = CnSuggest(sg, 210), s2 = CnSuggest(sg, 300);
+        say("suggestion : note automatique a 20 m reprise (type, sens, mods), a l'endroit du clic", s1.type == CT_CARRE && s1.side < 0 && s1.mods == (1u << CM_NC) && s1.m == 420 && s1.uid != au.uid);
+        say("suggestion : rien a moins de 25 m, estimation du lanceur", CnGuess(sg, 300).type == s2.type && s2.m == 600); }
     // carnet actif : un fichier hors format n'est jamais pris
     CnWriteAtomic(CnActivePath(), "..\\..\\x.json");
     say("carnet actif : chemin refuse", CnReadActive().empty());
