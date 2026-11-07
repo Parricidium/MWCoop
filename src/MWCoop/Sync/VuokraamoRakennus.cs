@@ -34,6 +34,9 @@ namespace MWCoop
         const float VaLiftX = 7.73f, VaLiftZ = 10.13f;
 
         public static bool VuokraOn { get { return Ajouts.Osat && Ville.On && Vaz.Enabled && Config.GetInt("Vuokraamo", "Active", 1) != 0 && Config.GetInt("Test", "VuokraCoupe", 0) == 0; } }
+        // (voiture louee reprise : le garage est construit ; sa premiere place libre)
+        public static bool VuokraReady { get { return vuokra != null; } }
+        public static bool VuokraSpot(out Vector3 pos, out float yaw) { pos = Vector3.zero; yaw = 0f; return vuokra != null && VuokraBay(out pos, out yaw); }
         static Texture2D vaPicture;
         public static Texture2D VuokraPicture
         {
@@ -72,7 +75,7 @@ namespace MWCoop
             foreach (Stand s in stands) { if (s.Hold != null) VazCar.DestroyPreview(s.Hold); if (s.Poster != null) UnityEngine.Object.Destroy(s.Poster); }
             foreach (UnityEngine.Object o in vaBaked) if (o != null) UnityEngine.Object.Destroy(o);
             vaBaked.Clear();
-            stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0; vaClick = 0; vaAim = false; vaObjDone = false; vaMeshes = null; vaDeskColl = null; vaWasOpen = false; vaShutAt = -10f; vaColl = null; vaInner = null; vaDyno = null; vaBaseColl = null; vaRent = 0; vaHall = null; vaLampDone = false; vaLampUntil = 0f;
+            stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0; vaClick = 0; vaAim = false; vaObjDone = false; vaMeshes = null; vaDeskColl = null; vaWasOpen = false; vaShutAt = -10f; vaColl = null; vaInner = null; vaDyno = null; vaBaseColl = null; vaRent = 0; vaSaved = vaGiven = vaMineLogged = false; vaHall = null; vaLampDone = false; vaLampUntil = 0f;
         }
 
         // prix de location : d'apres le rapport puissance / poids (mk, arrondi a 10) ; [Vuokraamo] Hinta_<dossier>=n
@@ -1140,9 +1143,22 @@ namespace MWCoop
         static int vaTest; static float vaTestAt; static bool vaAim; static int vaClick; static bool vaObjDone;
         static bool vaWasOpen; static float vaShutAt = -10f;
         // [Test] VuokraLoue=1 (invite) : le F10 ne sort plus ces voitures, la location est le seul chemin
-        static int vaRent; static float vaRentAt;
+        static int vaRent; static float vaRentAt; static bool vaSaved, vaGiven, vaMineLogged, vaFlipped;
         static void VaRentTest(float now)
         {
+            // ([Test] VuokraRetourneA=s : sa voiture sur le toit a s secondes)
+            float flipAt = Config.GetFloat("Test", "VuokraRetourneA", 0f);
+            if (flipAt > 0f && !vaFlipped && Time.timeSinceLevelLoad > flipAt) { vaFlipped = true; Transform tf = Vaz.Mine != 0 ? Vaz.CarOf(Vaz.OwnerOf(Vaz.Mine)) : null; if (tf != null) { tf.rotation = Quaternion.Euler(0f, tf.eulerAngles.y, 180f); tf.position += Vector3.up; L("essai location : ma voiture retournee"); } }
+            // ([Test] VuokraSauveA=s : sauvegarde du jeu a s secondes ; VuokraRendA=s : rendre la sienne)
+            float saveAt = Config.GetFloat("Test", "VuokraSauveA", 0f), giveAt = Config.GetFloat("Test", "VuokraRendA", 0f);
+            if (saveAt > 0f && !vaSaved && Time.timeSinceLevelLoad > saveAt) { vaSaved = true; L("essai location : sauvegarde du jeu, ma voiture n " + Vaz.Mine); Game.SaveInPlace(); }
+            if (giveAt > 0f && !vaGiven && Time.timeSinceLevelLoad > giveAt) { vaGiven = true; L("essai location : rendue, c'etait la n " + Vaz.Mine); Vaz.Release(); }
+            if (Time.timeSinceLevelLoad > 40f && !vaMineLogged && Config.GetInt("Test", "VuokraQui", 0) != 0 && Time.timeSinceLevelLoad > Config.GetFloat("Test", "VuokraQuiA", 75f))
+            {
+                vaMineLogged = true;
+                Transform tq = Vaz.Mine != 0 ? Vaz.CarOf(Vaz.OwnerOf(Vaz.Mine)) : null;
+                L("essai location : apres chargement, ma voiture n " + Vaz.Mine + (tq != null ? ", haut y " + tq.up.y.ToString("F2") + " en " + tq.position.ToString("F1") : "") + ", argent " + (money != null ? money.Value.ToString("F0") : "?") + " ; fini");
+            }
             int mode = Config.GetInt("Test", "VuokraLoue", 0);
             if (vaRent < 0 || mode == 0 || stands.Count == 0 || money == null) return;
             if (mode == 2)

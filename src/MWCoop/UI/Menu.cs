@@ -350,7 +350,7 @@ namespace MWCoop
                 case TabRace: return Game.Msc ? MscEvents.Sub(MscEvents.Kind.Drag) : RacePanel.Sub;
                 case TabRally: return Game.Msc ? MscEvents.Sub(MscEvents.Kind.Rally) : RacePanel.RallySub;
                 case TabVaz:
-                    if (Kauppa.VuokraOn) return Lang.T("Fiad gratuite \u00B7 voitures de rallye au garage \u00B7 une couleur et un num\u00E9ro chacun \u00B7 rendue en quittant", "Fiad is free \u00B7 rally cars at the garage \u00B7 a colour and a number each \u00B7 given back when you leave");
+                    if (Kauppa.VuokraOn) return Lang.T("Fiad gratuite \u00B7 voitures de rallye au garage \u00B7 une couleur et un num\u00E9ro chacun", "Fiad is free \u00B7 rally cars at the garage \u00B7 a colour and a number each");
                     return Lang.T("Une par joueur, gratuite \u00B7 une couleur et un num\u00E9ro chacun \u00B7 rendue en quittant", "One per player, free \u00B7 a colour and a number each \u00B7 given back when you leave");
                 case TabLook: return Lang.T("Ce que les autres voient \u00B7 chang\u00E9 tout de suite chez eux", "What the others see \u00B7 changed right away for them");
                 case TabHud: return Lang.T("Pour vous seul \u00B7 aussi dans le lanceur (R\u00E9glages \u203A HUD) \u00B7 le HUD change autour du menu", "Just for you \u00B7 also in the launcher (Settings \u203A HUD) \u00B7 the HUD changes around this menu");

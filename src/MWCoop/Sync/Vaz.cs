@@ -328,17 +328,122 @@ namespace MWCoop
                 if (r.Number == n && r.Car != null) r.Car.RoofOpen = open;
         }
 
+        // ---------------------------------------------------------------- voiture louee gardee
+        // Une voiture de location reste louee d'une session a l'autre (JD 07/11) : MWCoop-location.txt, a cote de la sauvegarde de l'hote, ecrit quand le jeu sauvegarde (une ligne par joueur) ;
+        // au chargement, elle revient a sa place, sur ses roues, sans nouveau paiement ; place plus sure : devant le garage. Invite absent : sa ligne attend qu'il revienne.
+        // Rendue : elle n'est plus dans la table, sa ligne disparait a la sauvegarde suivante. La Fiad, gratuite, n'est pas gardee.
+        class Kept { public string Key, Livery; public int Number, Model; public Vector3 Pos; public float Yaw; }
+        static readonly List<Kept> kept = new List<Kept>();
+        static bool keptLoaded;
+        const string KeptFile = "MWCoop-location.txt";
+        static bool Rental(int model) { VazCar.Model m = VazCar.ModelOf(model); return m != null && !m.QuestOnly && m.Group != "MWCoop"; }
+        static string KeyOf(int id)
+        {
+            if (id == Me) return "hote";
+            PlayerInfo pi;
+            if (!Session.Players.TryGetValue(id, out pi)) return null;
+            return pi.SteamId != 0 ? pi.SteamId.ToString() : "n:" + Clean(pi.Name);
+        }
+        static Kept KeptOf(int id, Slot s)
+        {
+            Transform t = CarOf(id);
+            return new Kept { Key = KeyOf(id), Number = s.Number, Model = s.Model, Livery = s.Livery ?? "", Pos = t != null ? t.position : s.Pos, Yaw = t != null ? YawOf(t) : s.Yaw };
+        }
+        static float YawOf(Transform t)
+        {
+            Vector3 f = t.forward; f.y = 0f;
+            if (f.sqrMagnitude < 0.04f) { f = t.up; f.y = 0f; }
+            return f.sqrMagnitude < 0.0001f ? 0f : Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+        }
+        static void KeepOnLeave(PlayerInfo pi)
+        {
+            Slot s;
+            if (!wanted.TryGetValue(pi.Id, out s) || !Rental(s.Model)) return;
+            Kept k = KeptOf(pi.Id, s);
+            if (k.Key == null) return;
+            kept.RemoveAll(x => x.Key == k.Key);
+            kept.Add(k);
+            Log.Info("vaz : voiture louee de " + pi.Name + " gardee pour son retour");
+        }
+        public static void OnGameSave()
+        {
+            if (!Host || !keptLoaded) return;
+            try
+            {
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                var sb = new System.Text.StringBuilder();
+                var all = new List<Kept>(kept);
+                foreach (KeyValuePair<int, Slot> kv in wanted)
+                {
+                    if (!Rental(kv.Value.Model)) continue;
+                    Kept k = KeptOf(kv.Key, kv.Value);
+                    if (k.Key != null) all.Add(k);
+                }
+                foreach (Kept k in all)
+                    sb.Append(k.Key).Append('|').Append(k.Number).Append('|').Append(k.Model).Append('|').Append(k.Pos.x.ToString("F3", ci)).Append('|').Append(k.Pos.y.ToString("F3", ci)).Append('|').Append(k.Pos.z.ToString("F3", ci)).Append('|').Append(k.Yaw.ToString("F1", ci)).Append('|').Append(k.Livery).Append('\n');
+                System.IO.File.WriteAllText(WorldFiles.PathOf(KeptFile), sb.ToString());
+                Log.Info("vaz : " + all.Count + " voiture(s) louee(s) gardee(s) dans la sauvegarde");
+            }
+            catch (System.Exception e) { Log.Warn("vaz : location non sauvee : " + e.Message); }
+        }
+        static void LoadKept()
+        {
+            keptLoaded = true;
+            kept.Clear();
+            try
+            {
+                string path = WorldFiles.PathOf(KeptFile);
+                WorldFiles.Check(System.IO.Path.GetDirectoryName(path));
+                if (!System.IO.File.Exists(path)) return;
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                foreach (string line in System.IO.File.ReadAllLines(path))
+                {
+                    string[] a = line.Split('|');
+                    if (a.Length < 8) continue;
+                    kept.Add(new Kept { Key = a[0], Number = int.Parse(a[1], ci), Model = int.Parse(a[2], ci), Pos = new Vector3(float.Parse(a[3], ci), float.Parse(a[4], ci), float.Parse(a[5], ci)), Yaw = float.Parse(a[6], ci), Livery = a[7] });
+                }
+                Log.Info("vaz : " + kept.Count + " voiture(s) louee(s) a reprendre");
+            }
+            catch (System.Exception e) { Log.Warn("vaz : location illisible : " + e.Message); kept.Clear(); }
+        }
+        // (hote, a chaque tour) rend sa voiture a chaque joueur revenu, une fois le garage construit
+        static void RestoreKept()
+        {
+            if (!keptLoaded) { LoadKept(); return; }
+            if (kept.Count == 0 || !Enabled || !Kauppa.VuokraReady) return;
+            for (int i = kept.Count - 1; i >= 0; i--)
+            {
+                Kept k = kept[i];
+                int id = -1;
+                if (k.Key == "hote") id = Me;
+                else foreach (PlayerInfo pi in Session.Players.Values) if (pi.Level == 1 && KeyOf(pi.Id) == k.Key) { id = pi.Id; break; }
+                if (id < 0) continue;
+                kept.RemoveAt(i);
+                if (wanted.ContainsKey(id) || !VazCar.Has(k.Model) || !Rental(k.Model)) continue;
+                int n = IsFree(k.Number) ? k.Number : 0;
+                for (int c = 1; c <= Count && n == 0; c++) if (IsFree(c)) n = c;
+                if (n == 0) continue;
+                Vector3 p; float yaw = k.Yaw;
+                Vector3 dir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                bool safe = FreeSpot(k.Pos, k.Pos.y, dir, out p, false) && Dry(p);
+                if (!safe && !Kauppa.VuokraSpot(out p, out yaw)) { p = k.Pos + Vector3.up; yaw = k.Yaw; }
+                Log.Info("vaz : voiture louee de " + NameOf(id) + " reprise, n " + n + " " + VazCar.ModelOf(k.Model).Name + (safe ? " a sa place " : " au garage ") + p.ToString("F1"));
+                Assign(id, new Slot { Number = n, Model = k.Model, Livery = k.Livery ?? "", Pos = p, Yaw = yaw });
+            }
+        }
+
         // ---------------------------------------------------------------- cycle
         public static void OnLevelLoaded()
         {
             QueteGolf.OnLevelLoaded();
             VazCar.OnLevelLoadedSnow();
+            kept.Clear(); keptLoaded = false;
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
             rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f; gearStep = 0; gearLog = 0f; stageStep = stageIdx = 0; stageLog = stageEnd = 0f;
             if (!hooked)
             {
                 hooked = true;
-                Session.PlayerLeft += pi => { if (Session.IsHost && wanted.ContainsKey(pi.Id)) { wanted.Remove(pi.Id); HostChanged("depart de " + pi.Name); } lastLevel.Remove(pi.Id); };
+                Session.PlayerLeft += pi => { if (Session.IsHost && wanted.ContainsKey(pi.Id)) { KeepOnLeave(pi); wanted.Remove(pi.Id); HostChanged("depart de " + pi.Name); } lastLevel.Remove(pi.Id); };
             }
         }
 
@@ -366,7 +471,7 @@ namespace MWCoop
             nextTick = now + 0.5f;
             if (EvoLivery.Poll(MineModel)) MyLiveryChanged();
             RequestAtStep(now);
-            if (Host) HostStep(now);
+            if (Host) { RestoreKept(); HostStep(now); }
             Reconcile(now);
             // numero de course sur les portieres (course sur glace : celui de la voiture IA remplacee), sinon celui de la place
             foreach (KeyValuePair<int, Rent> kv in rents)

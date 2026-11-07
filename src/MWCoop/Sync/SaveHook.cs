@@ -44,6 +44,7 @@ namespace MWCoop
                     MWCoop.Log.Info("sauvegarde du jeu : objets des ajouts ecrits");
                     SleepingBags.OnGameSave();
                     Kauppa.OnGameSave();
+                    Vaz.OnGameSave();
                     Wear.OnGameSave();   // (avant : toutes les 60 s ; revue du 14/10)
                     SaveStats.OnGameSave();   // resume pour le lanceur (jour, argent, heures, avec qui)
                 }
