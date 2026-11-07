@@ -1366,7 +1366,9 @@ namespace MWCoop
                 float top, lo, hi;
                 if (VazCar.RoofSpan(b.M, zMin, zMax, b.M.Head.y, out top, out lo, out hi)) { rf = top - T; roofBack = Mathf.Max(zBack, lo); roofFront = Mathf.Min(zMax, hi); }
             }
-            Box(ct, IL, ShellName("objets_plancher"), new Vector3(0f, fl - T * 0.5f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zMin));
+            // (plancher sur la couche que le joueur ne heurte pas, comme les sieges : sur celle des parois, il marchait 8 cm plus haut que sur son propre plancher, et la tete,
+            // gardee ou elle etait en s'asseyant, restait dans le toit -- JD 07/11 : « je suis trop haut a l'interieur »)
+            Box(ct, SL, ShellName("objets_plancher"), new Vector3(0f, fl - T * 0.5f, (zMin + zMax) * 0.5f), new Vector3(2f * ix, T, zMax - zMin));
             Box(ct, IL, ShellName("objets_coffre"), new Vector3(0f, fb - T * 0.5f, (zBack + zMin) * 0.5f), new Vector3(2f * ix, T, zMin - zBack));
             Box(ct, IL, ShellName("objets_toit"), new Vector3(0f, rf + T * 0.5f, (roofBack + roofFront) * 0.5f), new Vector3(2f * ix, T, roofFront - roofBack));
             // (marche entre le plancher et le coffre, plus haut : un objet y passait dessous et sortait de la voiture au premier coup de frein -- essai du 07/11)
@@ -2970,8 +2972,140 @@ namespace MWCoop
             }
         }
         static int cSon;
-        static bool cCoupe, cPneu, cEntree; static float cMesT; static int cMesN;
+        static bool cCoupe, cPneu, cEntree; static float cMesT, cEntreeAt, cEntreeLog;
+        static void LayerRows()
+        {
+            foreach (string n in new[] { "Collider2", "HingedObjects" })
+            {
+                int l = LayerMask.NameToLayer(n); var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < 32; i++) if (!Physics.GetIgnoreLayerCollision(l, i)) { string q = LayerMask.LayerToName(i); sb.Append(' ').Append(q.Length > 0 ? q : i.ToString()); }
+                Log.Info("standalone : couche " + n + " heurte :" + sb);
+            }
+        } static int cMesN;
         static int swView, swFrames, swHitN; static Camera swCam, swOld; static Vector3 swDir; static readonly HashSet<string> swTexts = new HashSet<string>(), swHits = new HashSet<string>();
+        // [Test] CoqueTour=12,14,... (StandaloneModele = le premier) : dans une seule partie, chaque voiture, sans les boites, avec le plancher que le joueur heurte (ancien), avec celui qu'il ne heurte pas :
+        // le joueur marche de dehors vers le siege, portiere ouverte, puis est pose dedans. Pieds, ecart des yeux au point de vue du siege : ce que la tete gardee en s'asseyant reprendrait.
+        static int tourCar, tourVar, tourStep, tourTrace; static float tourAt, tourPrevY = -10f; static string tourLine;
+        static int TV(int i) { string[] v = Config.Get("Test", "CoqueTourVar", "0,1,2").Split(','); return i < 0 ? v.Length : int.Parse(v[i]); }
+        static string TourUnder(GameObject pl, Transform car)
+        {
+            var sb = new System.Text.StringBuilder(" sous :"); int n = 0; var seen = new HashSet<string>();
+            foreach (Vector3 off in new[] { Vector3.zero, Vector3.right * 0.25f, Vector3.left * 0.25f, Vector3.forward * 0.25f, Vector3.back * 0.25f })
+                foreach (RaycastHit h in Physics.RaycastAll(pl.transform.position + car.TransformDirection(off) + Vector3.up * 0.5f, Vector3.down, 1.6f))
+                {
+                    if (h.collider.isTrigger || h.collider.transform.root == pl.transform.root || n >= 8) continue;
+                    string q = h.collider.name + "/" + LayerMask.LayerToName(h.collider.gameObject.layer) + "@" + car.InverseTransformPoint(h.point).y.ToString("F2");
+                    if (seen.Add(q)) { sb.Append(' ').Append(q); n++; }
+                }
+            // (ce que la capsule du joueur touche, couches qu'il heurte)
+            CharacterController cc = pl.GetComponent<CharacterController>();
+            if (cc != null)
+            {
+                sb.Append(" ; touche (rayon ").Append(cc.radius.ToString("F2")).Append(", posee ").Append(cc.isGrounded).Append(") :");
+                Vector3 c = pl.transform.position + cc.center;
+                var near = new HashSet<string>();
+                foreach (Collider q in Physics.OverlapSphere(c + Vector3.down * Mathf.Max(0f, cc.height * 0.5f - cc.radius), cc.radius + 0.12f))
+                {
+                    if (q.isTrigger || q.transform.root == pl.transform.root || Physics.GetIgnoreLayerCollision(pl.layer, q.gameObject.layer)) continue;
+                    if (near.Add(q.name)) { Bounds bq = q.bounds; sb.Append(' ').Append(q.name).Append('/').Append(LayerMask.LayerToName(q.gameObject.layer)).Append(' ').Append(car.InverseTransformPoint(bq.min).ToString("F2")).Append("..").Append(car.InverseTransformPoint(bq.max).ToString("F2")); }
+                }
+            }
+            return sb.ToString();
+        }
+        static void Tour(float t, string ids, Transform car, VazCar.Built b, State st, GameObject pl)
+        {
+            string[] list = ids.Split(',');
+            if (tourCar >= list.Length) return;
+            CharacterController cc = pl.GetComponent<CharacterController>();
+            Transform cam = PlayerCam();
+            if (cc == null || cam == null) return;
+            if (tourStep == 4)
+            {
+                if (t < tourAt + 1.5f) return;
+                tourCar++;
+                if (tourCar >= list.Length) { Log.Info("coque tour : fini"); return; }
+                Log.Info("coque tour : demande -> " + Vaz.Request(3, int.Parse(list[tourCar])));
+                tourStep = 0; tourAt = t;
+                return;
+            }
+            if (tourStep == 0)
+            {
+                if (b != null && st != null && st.HasCabin && b.M.Folder == VazCar.ModelOf(int.Parse(list[tourCar])).Folder && t > tourAt + 3f) { tourStep = 1; tourVar = 0; }
+                return;
+            }
+            if (b == null || st == null) { tourStep = 0; tourAt = t; return; }
+            float zw = st.DoorBox[0].center.z - 0.1f;
+            if (tourStep == 1)
+            {
+                int cab = 0;
+                foreach (BoxCollider bc in b.Car.GetComponentsInChildren<BoxCollider>(true))
+                {
+                    if (bc.name != "coque_x") continue;
+                    bc.enabled = TV(tourVar) != 0;
+                    if (bc.gameObject.layer == seatItemLayer || bc.gameObject.layer == itemLayer) { Bounds wb = bc.bounds; Vector3 lc = car.InverseTransformPoint(wb.center); if (Mathf.Abs(lc.y - (st.Cabin.min.y - 0.04f)) < 0.02f && Mathf.Abs(lc.z - st.Cabin.center.z) < 0.02f) { bc.gameObject.layer = TV(tourVar) == 1 ? itemLayer : seatItemLayer; cab++; } }
+                }
+                st.DoorOpen[0] = true; st.DoorAngle[0] = 70f; st.DoorVel[0] = 0f; DoorAnim(b, st);
+                cc.enabled = false; pl.transform.position = car.TransformPoint(new Vector3(-2.6f, 0.4f, zw)); cc.enabled = true;   // (loin de la portiere ouverte : pose contre elle, le joueur etait pousse sur le toit)
+                tourStep = 2; tourAt = t;
+                if (cab != 1) Log.Warn("coque tour : " + cab + " plancher(s) trouves");
+                return;
+            }
+            if (tourStep == 2)
+            {
+                Vector3 go = car.TransformPoint(new Vector3(b.M.Head.x, 0f, zw)) - pl.transform.position; go.y = 0f;
+                if (t < tourAt + 3.5f)
+                {
+                    Vector3 l0 = car.InverseTransformPoint(pl.transform.position);
+                    if (tourPrevY > -9f && l0.y > tourPrevY + 0.03f && tourTrace < 12) { tourTrace++; Log.Info("coque tour : monte de " + tourPrevY.ToString("F2") + " a " + l0.ToString("F2") + ", voiture " + car.position.ToString("F2") + " haut " + car.up.ToString("F2") + " vitesse " + b.Rb.velocity.ToString("F2") + " joueur " + pl.transform.position.ToString("F2") + TourUnder(pl, car)); }
+                    tourPrevY = l0.y;
+                    cc.Move(go.normalized * Mathf.Min(1.5f * Time.deltaTime, go.magnitude) + Vector3.down * 2f * Time.deltaTime);
+                    return;
+                }
+                tourPrevY = -10f;
+                Vector3 lp = car.InverseTransformPoint(pl.transform.position), dv = car.InverseTransformPoint(cam.position) - st.T.Yeux;
+                tourLine = "marche " + (Mathf.Abs(lp.x - b.M.Head.x) < 0.15f ? "ENTRE" : "BLOQUE") + " en " + lp.ToString("F2") + " yeux " + dv.ToString("F2") + TourUnder(pl, car);
+                cc.enabled = false; pl.transform.position = car.TransformPoint(new Vector3(b.M.Head.x, st.Cabin.min.y + 0.45f, st.T.EntreeZ)); cc.enabled = true;
+                tourStep = 3; tourAt = t;
+                return;
+            }
+            if (tourStep == 3)
+            {
+                if (t < tourAt + 1.2f) { cc.Move(Vector3.down * 2f * Time.deltaTime); return; }
+                Vector3 lp = car.InverseTransformPoint(pl.transform.position), dv = car.InverseTransformPoint(cam.position) - st.T.Yeux;
+                Log.Info("coque tour : " + b.M.Folder + " " + (TV(tourVar) == 0 ? "sans" : TV(tourVar) == 1 ? "ancien" : "nouveau") + " : " + tourLine + " ; pose dedans, y " + lp.y.ToString("F2") + " yeux " + dv.ToString("F2") + " (plancher " + st.Cabin.min.y.ToString("F2") + ")" + TourUnder(pl, car));
+                tourVar++;
+                if (tourVar < TV(-1)) { tourStep = 1; return; }
+                // (pour finir, le vrai chemin : boites en place, a pied depuis dehors, assis, tete gardee)
+                foreach (BoxCollider bc in b.Car.GetComponentsInChildren<BoxCollider>(true)) if (bc.name == "coque_x") { bc.enabled = true; Vector3 lc = car.InverseTransformPoint(bc.bounds.center); if (Mathf.Abs(lc.y - (st.Cabin.min.y - 0.04f)) < 0.02f && Mathf.Abs(lc.z - st.Cabin.center.z) < 0.02f) bc.gameObject.layer = seatItemLayer; }
+                st.DoorOpen[0] = true; st.DoorAngle[0] = 70f; st.DoorVel[0] = 0f; DoorAnim(b, st);
+                cc.enabled = false; pl.transform.position = car.TransformPoint(new Vector3(-2.6f, 0.4f, zw)); cc.enabled = true;
+                tourStep = 5; tourAt = t;
+                return;
+            }
+            if (tourStep == 5)
+            {
+                Vector3 go = car.TransformPoint(new Vector3(b.M.Head.x, 0f, zw)) - pl.transform.position; go.y = 0f;
+                if (t < tourAt + 3.5f) { cc.Move(go.normalized * Mathf.Min(1.5f * Time.deltaTime, go.magnitude) + Vector3.down * 2f * Time.deltaTime); return; }
+                Enter(b, st); tourStep = 6; tourAt = t;
+                return;
+            }
+            if (tourStep == 6)
+            {
+                if (t < tourAt + 2f) return;
+                Vector3 e = car.InverseTransformPoint(cam.position);
+                Log.Info("coque tour : " + b.M.Folder + " assis : yeux " + (e - st.T.Yeux).ToString("F2") + " du siege, tete gardee " + st.HasEyeHold);
+                Photo(b, "assis-" + b.M.Folder, e, e + new Vector3(0f, -0.08f, 1f), 60f);
+                Exit(b, true); tourStep = 7; tourAt = t;
+                return;
+            }
+            if (tourStep == 7)
+            {
+                if (t < tourAt + 0.5f) return;
+                cc.enabled = false; pl.transform.position = car.position + car.right * 7f + Vector3.up; cc.enabled = true;
+                Vaz.Release(); tourStep = 4; tourAt = t;
+                return;
+            }
+        }
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -3031,15 +3165,31 @@ namespace MWCoop
                 {
                     if (!cEntree)
                     {
-                        cEntree = true; ce.enabled = false; st.DoorOpen[0] = true; st.DoorAngle[0] = 70f; st.DoorVel[0] = 0f; DoorAnim(b, st);
-                        pl.transform.position = car.TransformPoint(new Vector3(-1.5f, 0.9f, st.DoorBox[0].center.z - 0.1f)); ce.enabled = true;
+                        cEntree = true; LayerRows(); ce.enabled = false; st.DoorOpen[0] = true; st.DoorAngle[0] = 70f; st.DoorVel[0] = 0f; DoorAnim(b, st);
+                        pl.transform.position = car.TransformPoint(new Vector3(-2.6f, 0.4f, st.DoorBox[0].center.z - 0.1f)); ce.enabled = true;
                         Log.Info("standalone : entree, depart " + car.InverseTransformPoint(pl.transform.position).ToString("F2") + ", marche du joueur " + ce.stepOffset.ToString("F2") + " m");
                     }
                     Vector3 go = car.TransformPoint(new Vector3(b.M.Head.x, 0f, st.DoorBox[0].center.z - 0.1f)) - pl.transform.position; go.y = 0f;
+                    if (t >= cEntreeLog) { cEntreeLog = t + 1f; Log.Info("standalone : entree, en marche " + car.InverseTransformPoint(pl.transform.position).ToString("F2") + ", capsule " + ce.height.ToString("F2")); }
                     if (t < 44f) ce.Move(go.normalized * Mathf.Min(1.5f * Time.deltaTime, go.magnitude) + Vector3.down * 2f * Time.deltaTime);
-                    else { cStep = 3; Log.Info("standalone : entree a pied, arrive en " + car.InverseTransformPoint(pl.transform.position).ToString("F2") + " (place : x " + b.M.Head.x.ToString("F2") + ")" + (Mathf.Abs(car.InverseTransformPoint(pl.transform.position).x - b.M.Head.x) < 0.15f ? " : ENTRE" : " : BLOQUE")); }
+                    else
+                    {
+                        // (debout a la place : pieds et yeux ; puis assis par le vrai chemin, tete gardee ou elle etait)
+                        cStep = 3; Transform ec = PlayerCam(); Vector3 ep = car.InverseTransformPoint(pl.transform.position), ee = ec != null ? car.InverseTransformPoint(ec.position) : Vector3.zero;
+                        Log.Info("standalone : entree a pied, arrive en " + ep.ToString("F2") + " (place : x " + b.M.Head.x.ToString("F2") + ")" + (Mathf.Abs(ep.x - b.M.Head.x) < 0.15f ? " : ENTRE" : " : BLOQUE") + ", yeux debout " + ee.ToString("F2") + ", yeux du siege " + st.T.Yeux.ToString("F2") + ", marche " + ce.stepOffset.ToString("F2") + ", capsule " + ce.height.ToString("F2") + " centre " + ce.center.y.ToString("F2"));
+                        Enter(b, st); cEntreeAt = t;
+                    }
                 }
             }
+            if (host && cEntreeAt > 0f && t > cEntreeAt + 2.5f && b != null && st != null)
+            {
+                cEntreeAt = 0f; Transform ec = PlayerCam();
+                Log.Info("standalone : entree, assis, yeux " + (ec != null ? car.InverseTransformPoint(ec.position).ToString("F2") : "?") + " pour " + st.T.Yeux.ToString("F2") + ", tete gardee " + st.HasEyeHold + " " + st.EyeHold.ToString("F2") + " ; ecart " + (st.HasEyeHold ? (st.EyeHold - st.T.Yeux).ToString("F2") : "0"));
+                Photo(b, "entree-" + b.M.Folder, ec != null ? car.InverseTransformPoint(ec.position) : st.T.Yeux, (ec != null ? car.InverseTransformPoint(ec.position) : st.T.Yeux) + new Vector3(0f, -0.08f, 1f), 60f);
+                Log.Info("standalone : entree, fini");
+            }
+            string tourIds = host ? Config.Get("Test", "CoqueTour", "") : "";
+            if (tourIds.Length > 0 && cStep == 2 && t > 32f) { Tour(t, tourIds, car, b, st, pl); return; }
             if (host && cStep == 2 && t > 36f && b != null && Config.GetInt("Test", "CoqueEntree", 0) == 0)
             {
                 cStep = 3;
@@ -3190,7 +3340,7 @@ namespace MWCoop
             float cpAt = Config.GetFloat("Test", "CoqueCoupe", 0f);
             if (host && cpAt > 0f && t > cpAt && !cCoupe && b != null && st != null)
             {
-                cCoupe = true; Vector3 cc = st.Cabin.center; string cn = b.M.Folder; int boxes = 0;
+                cCoupe = true; LayerRows(); Vector3 cc = st.Cabin.center; string cn = b.M.Folder; int boxes = 0;
                 var lg = new GameObject("essai_lampe"); lg.transform.SetParent(b.Car.transform, false); lg.transform.localPosition = new Vector3(1.6f, cc.y + 0.6f, cc.z);
                 Light li = lg.AddComponent<Light>(); li.type = LightType.Point; li.range = 7f; li.intensity = 2f;
                 var made = new List<GameObject>();
