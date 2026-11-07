@@ -61,7 +61,7 @@ namespace MWCoop
                     for (int i = 0; i < osatOffers.Count; i++)
                     {
                         OsatOffer o = osatOffers[i];
-                        L("essai : article " + i + " aile " + o.Wing + " : " + o.Name + " " + o.Price + " mk" + (o.Used != null ? " (" + o.Used.Vin + ", usure " + o.Used.Wear + ")" : "") + (o.Slot != null ? " case " + o.Slot.Pos.ToString("F2") + (o.Slot.Big ? " estrade" : "") : "") + (o.Display != null ? "" : " sans modele"));
+                        L("essai : article " + i + " aile " + o.Wing + " : " + o.Name + " " + o.Price + " mk" + (o.Used != null ? " (" + o.Used.Vin + ", usure " + o.Used.Wear + ")" : "") + (o.Esine != null ? " (objet " + o.Esine + ")" : "") + (o.Slot != null ? " case " + o.Slot.Pos.ToString("F2") + (o.Slot.Big ? " estrade" : "") : "") + (o.Display != null ? "" : " sans modele"));
                     }
                     break;
                 case "osatosta":

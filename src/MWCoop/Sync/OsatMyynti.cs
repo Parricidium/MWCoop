@@ -51,11 +51,12 @@ namespace MWCoop
         static int osatStockDay = -1;
         static bool osatLoaded, osatAsked, osatDirty;
 
-        // une offre en rayon (objet de mod ou piece d'occasion)
-        class OsatOffer { public int Wing; public string Name; public int Price; public OsatModItem Mod; public OsatUsed Used; public int UsedIndex; public GameObject Display, Tag; public BoxCollider Col; public OsatSlot Slot; public string Kypara; }
+        // une offre en rayon (objet de mod, piece d'occasion, casque, ou objet de l'Osuuskauppa : Esine = son genre, KKartturi)
+        class OsatOffer { public int Wing; public string Name; public int Price; public OsatModItem Mod; public OsatUsed Used; public int UsedIndex; public GameObject Display, Tag; public BoxCollider Col; public OsatSlot Slot; public string Kypara, Esine; }
         static readonly List<OsatOffer> osatOffers = new List<OsatOffer>();
         // panier (comme a l'Osuuskauppa : on prend en rayon, on paie a la caisse, puis tout sort sur la palette NOUTO -- JD, 23/10) :
-        // cles d'offres ("m:<id>" objet de mod, plusieurs fois possible ; "u:<n>" piece d'occasion n du stock)
+        // cles d'offres ("m:<id>" objet de mod, plusieurs fois possible ; "u:<n>" piece d'occasion n du stock ; "e:<genre>" objet
+        // de l'Osuuskauppa, plusieurs fois possible)
         static readonly List<string> osatBasket = new List<string>();
         static BoxCollider osatRegCol;
         static TextMesh osatRegText;
@@ -201,6 +202,7 @@ namespace MWCoop
             foreach (OsatOffer o in osatOffers) { if (o.Display != null) UnityEngine.Object.Destroy(o.Display); if (o.Tag != null) UnityEngine.Object.Destroy(o.Tag); if (o.Col != null) UnityEngine.Object.Destroy(o.Col.gameObject); }
             osatOffers.Clear(); osatLooked = null;
             foreach (OsatSlot s in osatSlots) s.Item = null;
+            try { OsatRallyGear(); } catch (Exception e) { L("magasin de pieces : KARTTURI " + e); }   // (avant les objets des mods : sa case est fixe)
             foreach (OsatModItem it in osatModItems)
                 OsatPlace(new OsatOffer { Wing = 0, Name = it.Name, Price = Mathf.RoundToInt(it.Price), Mod = it }, it.Model);
             if (osatStock != null)
@@ -263,6 +265,73 @@ namespace MWCoop
         }
 
         static Vector3 Abs(Vector3 v) { return new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z)); }
+
+        // KARTTURI 2000 aussi ici (JD 07/11, en plus de l'Osuuskauppa : KauppaKartturi.cs), au meme prix : trois exemplaires
+        // debout, ecran vers l'allee (ecran de demarrage), dans la case de l'aile CARDINAL a hauteur des yeux la plus proche du
+        // comptoir, prise avant les objets des mods (le carnet du copilote viendra dans la case du dessous).
+        // A l'achat, un vrai objet sort sur la palette NOUTO (OsatDeliver -> SpawnItem, comme a la caisse de l'Osuuskauppa).
+        static Material osatGpsSplash;
+        static void OsatRallyGear()
+        {
+            OsatSlot slot = null; float best = float.MaxValue;
+            foreach (OsatSlot s in osatSlots)
+            {
+                if (s.Wing != 0 || s.Big || s.Item != null || s.Face.x != 0f || s.Pos.y < 1f || s.Pos.y > 1.2f) continue;
+                float d = Mathf.Abs(s.Pos.x);
+                if (d < best) { best = d; slot = s; }
+            }
+            if (slot == null) { L("magasin de pieces : pas de case pour le KARTTURI"); return; }
+            if (osatGpsSplash == null)
+            {
+                Shader us = Shader.Find("Unlit/Texture");
+                osatGpsSplash = new Material(us != null ? us : Shader.Find("Legacy Shaders/Diffuse")) { name = "osat_kartturi_naytto", mainTexture = Kartturi.NewDevice().Tex };
+            }
+            OsatEsine(slot, KKartturi, KartturiPrice, "KARTTURI 2000", new[] { -0.2f, 0f, 0.2f }, 12f, osatGpsSplash);
+        }
+
+        // un objet de l'Osuuskauppa dans une case : exemplaires debout cote a cote (decalages us le long de la case), facade (-z du
+        // modele) vers l'allee, penches de tilt degres en arriere ; screen : matiere de l'ecran (KARTTURI), sinon celle du modele
+        static void OsatEsine(OsatSlot slot, string kind, int price, string name, float[] us, float tilt, Material screen)
+        {
+            var o = new OsatOffer { Wing = slot.Wing, Name = name, Price = price, Esine = kind, Slot = slot };
+            slot.Item = o;
+            var holder = new GameObject("osat_" + kind);
+            holder.transform.SetParent(osat.transform, false);
+            Vector3 along = Vector3.Cross(Vector3.up, slot.Face).normalized;
+            foreach (float u in us)
+            {
+                Vector3 size; Transform scr;
+                GameObject g = Model(kind, out size, out scr);
+                if (screen != null && scr != null) { Renderer sr = scr.GetComponent<Renderer>(); if (sr != null) sr.sharedMaterial = screen; }
+                g.transform.SetParent(holder.transform, false);
+                g.transform.localRotation = Quaternion.LookRotation(-slot.Face) * Quaternion.Euler(tilt, 0f, 0f);
+                g.transform.localPosition = Vector3.zero;
+                float bottom = float.MaxValue;
+                foreach (MeshFilter mf in g.GetComponentsInChildren<MeshFilter>())
+                {
+                    if (mf.sharedMesh == null) continue;
+                    Bounds mb = mf.sharedMesh.bounds;
+                    for (int i = 0; i < 8; i++)
+                    {
+                        Vector3 c = mb.center + Vector3.Scale(mb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                        bottom = Mathf.Min(bottom, holder.transform.InverseTransformPoint(mf.transform.TransformPoint(c)).y);
+                    }
+                }
+                if (bottom == float.MaxValue) bottom = 0f;
+                g.transform.localPosition = slot.Pos + along * u + Vector3.up * (0.004f - bottom);
+            }
+            o.Display = holder;
+            var cg = new GameObject("osat_article_" + kind);
+            cg.transform.SetParent(osat.transform, false);
+            cg.transform.localPosition = slot.Pos + Vector3.up * slot.Size.y / 2f;
+            cg.transform.localRotation = Quaternion.LookRotation(slot.Face);
+            o.Col = cg.AddComponent<BoxCollider>();
+            o.Col.size = slot.Size;
+            o.Col.isTrigger = true;
+            o.Tag = OsatTag(o.Name, o.Price, slot);
+            osatOffers.Add(o);
+            L("magasin de pieces : " + kind + " " + price + " mk, case " + slot.Pos.ToString("F2") + " (face " + slot.Face.ToString("F0") + ")");
+        }
 
         // etiquette de prix sur le bord de la case (nom et prix), lisible depuis l'allee
         static GameObject OsatTag(string name, int price, OsatSlot slot)
@@ -331,7 +400,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- panier, caisse, achat
-        static string OfferKey(OsatOffer o) { return o.Mod != null ? "m:" + o.Mod.Id : o.Kypara != null ? "k:" + o.Kypara : "u:" + o.UsedIndex; }
+        static string OfferKey(OsatOffer o) { return o.Mod != null ? "m:" + o.Mod.Id : o.Kypara != null ? "k:" + o.Kypara : o.Esine != null ? "e:" + o.Esine : "u:" + o.UsedIndex; }
 
         static OsatOffer OfferOf(string key)
         {
@@ -397,6 +466,13 @@ namespace MWCoop
             Vector3 pk = OsatPickup(o.Wing) + new Vector3(UnityEngine.Random.Range(-0.35f, 0.35f), 0.25f + 0.1f * (osatBuyN++ % 4), UnityEngine.Random.Range(-0.2f, 0.2f));
             Vector3 pos = osat.transform.TransformPoint(pk);
             Quaternion rot = osat.transform.rotation * Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
+            if (o.Esine != null)
+            {
+                // objet de l'Osuuskauppa : le meme qu'a sa caisse (cree par l'hote, sauve, suivi par Props)
+                L("magasin de pieces : achat d'un objet " + o.Esine + " " + o.Price + " mk");
+                SpawnItem(o.Esine, "", pos, rot);
+                return true;
+            }
             if (o.Mod != null)
             {
                 L("magasin de pieces : achat de '" + o.Mod.Id + "' " + o.Price + " mk");
