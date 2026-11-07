@@ -339,7 +339,7 @@ namespace MWCoop
                     Vector3 ps = parent != null ? parent.lossyScale : Vector3.one;   // (os a l'echelle du modele : la lampe garde sa taille)
                     lg.transform.localScale = new Vector3(1f / Mathf.Max(1e-4f, Mathf.Abs(ps.x)), 1f / Mathf.Max(1e-4f, Mathf.Abs(ps.y)), 1f / Mathf.Max(1e-4f, Mathf.Abs(ps.z)));
                 }
-                if (eyeHeld) lg.transform.localPosition = new Vector3(0.17f, -0.19f, 0.30f);
+                if (eyeHeld) lg.transform.localPosition = new Vector3(0.16f, -0.15f, 0.30f);   // (essai du 08/11 : a 0,19 m sous les yeux, la lampe sortait du cadre)
                 else if (parent != null)
                 {
                     // (l'os de la main est au poignet : la lampe dans la paume, 8 cm plus loin dans l'axe de l'avant-bras -- essai de jour
