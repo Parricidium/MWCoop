@@ -1,0 +1,1 @@
+L103-1	When the game loads, it returns to its spot at no new cost, or in front of the garage if its spot isn't safe. Give back removes it for good. It is kept with the host's save: without a save, it does not carry over.

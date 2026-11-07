@@ -293,6 +293,7 @@ static const wchar_t *const kAr[][2] = {
     { L"The save in use is marked Solo: pick a Coop save, or create one.", L"الحفظ المستخدم موسوم «فردي»: اختر حفظ Coop، أو أنشئ واحدًا." },
     { L"Launch anyway", L"التشغيل رغم ذلك" },
     { L"Don't launch", L"عدم التشغيل" },
+    { L"When the game loads, it returns to its spot at no new cost, or in front of the garage if its spot isn't safe. Give back removes it for good. It is kept with the host's save: without a save, it does not carry over.", L"عند التحميل تعود إلى مكانها دون دفع جديد، أو إلى أمام المرآب إذا لم يكن مكانها آمنًا. يزيلها «إرجاع» نهائيًا. وتُحفظ مع حفظ المضيف: بدون حفظ لا تنتقل." },
     { L"if private", L"إذا كانت خاصة" },
     { L"Yes", L"نعم" },
     { L"No", L"لا" },

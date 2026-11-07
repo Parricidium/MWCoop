@@ -694,6 +694,8 @@ static const WikiBlock kW_Addons[] = {   // (1.5.1, JD : comment installer une v
             L"The rental agent is in the left-hand room, behind the desk: click on the agent, pick the car and a free colour, then pay." },
     { WB_S, L"La voiture t'attend devant le garage et remplace ta voiture actuelle. Elle reste louée d'une session à l'autre, jusqu'à ce que tu la rendes.",
             L"The car waits for you in front of the garage and replaces your current car. It stays rented from one session to the next until you give it back." },
+    { WB_B, L"Au chargement, elle revient à sa place, sans nouveau paiement, ou devant le garage si sa place n'est pas sûre. Rendre la retire pour de bon. Elle est gardée avec la sauvegarde de l'hôte : sans sauvegarde, elle ne suit pas.",
+            L"When the game loads, it returns to its spot at no new cost, or in front of the garage if its spot isn't safe. Give back removes it for good. It is kept with the host's save: without a save, it does not carry over." },
     { WB_B, L"Le prix va de 240 à 490 mk selon le rapport puissance / poids. Tu ne paies que si l'hôte accepte. Le menu propose les voitures de rallye installées sur ton PC.",
             L"The price runs from 240 to 490 mk depending on the power-to-weight ratio. You only pay if the host accepts. The menu offers the rally cars installed on your PC." },
     { WB_B, L"Au F10, une voiture louée a deux boutons : Remettre sur ses roues (sur place, à 15 m au plus) et Rendre. Le garage a aussi RENDRE LA MIENNE. Pas de Faire venir ni de touche V : ils restent à la Fiad 131. Louer la même voiture et la même couleur la ramène sur le parking, en repayant.",
