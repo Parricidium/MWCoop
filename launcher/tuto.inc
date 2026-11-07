@@ -172,9 +172,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.16.28 (07/11) : onglet Casque de la page Personnage (71)
     { L"Casque perso", L"Nouvel onglet Casque sur la page Personnage : peins ton casque sur le gabarit, puis achète-le en jeu au magasin CARDINAL.",
       L"Custom helmet", L"New Helmet tab on the Character page: paint your helmet on the template, then buy it in game at the CARDINAL shop.", "1.16.28" },
-    // lanceur-1.16.30 (07/11) : onglet Bobines de la page VHS (72)
+    // lanceur-1.16.29 (07/11) : onglet Bobines de la page VHS (72), avec le Guide du cinema
     { L"Bobines du cinéma", L"Nouvel onglet Bobines sur la page VHS : les films de chaque partie, avec leur durée et où ils servent. Importe une vidéo, renomme, exporte en .mp4 ou fais de la place.",
-      L"Cinema reels", L"New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.", "1.16.30" },
+      L"Cinema reels", L"New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.", "1.16.29" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
