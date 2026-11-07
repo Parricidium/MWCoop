@@ -36,6 +36,7 @@ from reduire import reduire   # noqa: E402
 #        "enlever" (matieres retirees, apres lecture de leurs points), "unis" (matieres en couleur unie, moyenne de leur texture),
 #        "souder" (vrai : pieces unies soudees par position avant reduction -- coutures d'UV inutiles, la reduction va plus loin),
 #        "tourner" (matiere -> (degres, pivot) : piece tournee autour de l'axe x du repere final -- visiere rabattue),
+#        "lacet" (degres : tout le modele tourne autour de l'axe vertical, avant le reste -- modele de travers dans son fichier),
 #        "gonfler" (matiere -> metres : sommets pousses le long de leurs normales -- visiere rabattue qui frolait la mentonniere),
 #        "couleur_verre" (couleur des pieces « verre »), "coque" (matiere peinte par les joueurs : triangles tournes vers l'exterieur
 #        -> piece « coque », texture = masque de la deco par defaut ; vers l'interieur -> couleur sombre unie)])
@@ -56,7 +57,7 @@ OBJETS = {
     # (casque personnalise, JD 07/11 : « F1 Helmet », nv, CC BY 4.0 -- forme seule, sa deco et ses sponsors retires)
     "casque":       ("casque.glb",       (0, 90, 0),    0.30,                   0.003,  512, (), 0, {
         "unis": ("Helmet_Rubber", "Helmet_Plastic", "Helmet_Metal", "Helmet_Metal_Black", "Helmet_Inside", "Helmet_SoftFabric"), "souder": True, "grille": 0.005,
-        "verre": {"Helmet_Visors": 0.45}, "couleur_verre": (0.12, 0.14, 0.17), "tourner": {"Helmet_Visors": (-68, (0.0, -0.003, -0.001))}, "gonfler": {"Helmet_Visors": 0.003},
+        "verre": {"Helmet_Visors": 0.45}, "couleur_verre": (0.12, 0.14, 0.17), "tourner": {"Helmet_Visors": (-68, (0.0, -0.003, -0.001))}, "gonfler": {"Helmet_Visors": 0.003}, "lacet": -8.0,
         "coque": "Helmet_Base"}),
     "gps":          ("gps.glb",          (-90, 180, 0), 0.165,                  0.0,    0,   (), 0, {"couleur": (0.24, 0.25, 0.27)}),   # (debout, ecran vers -z ; gris fonce, le modele n'a qu'un blanc)
 }
@@ -108,6 +109,10 @@ def build(name, spec, apercu):
         Nn /= np.maximum(np.linalg.norm(Nn, axis=1, keepdims=True), 1e-9)
         P[:, 0] *= -1; Nn[:, 0] *= -1
         P = P @ R.T; Nn = Nn @ R.T
+        if "lacet" in opt:
+            # (modele tourne dans son fichier : le casque l'est de 8 degres -- la visiere, rabattue autour de l'axe x, se tordait de face, JD 07/11)
+            ay = np.radians(opt["lacet"]); Ry = np.array([[np.cos(ay), 0, np.sin(ay)], [0, 1, 0], [-np.sin(ay), 0, np.cos(ay)]])
+            P = P @ Ry.T; Nn = Nn @ Ry.T
         I = np.asarray(m.idx, np.int64).reshape(-1, 3)
         if np.linalg.det(m.matrix[:3, :3]) > 0: I = I[:, ::-1]
         if any(s in g.materials[m.material].name for s in opt.get("double", ())):
