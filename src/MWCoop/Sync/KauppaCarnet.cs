@@ -272,15 +272,30 @@ namespace MWCoop
                 if (cnEq != null && pages.TryGetValue(cnEq, out pg)) CarnetSivu.SavePng(pg, System.IO.Path.Combine(dir, "carnet2-page-invite.png"));
                 L("essai carnet2 : leve " + CarnetUp + ", carnet « " + (Carnet.Active != null ? Carnet.Active.Name : "auto") + " », lampe " + cnLampOn + ", empreinte " + cnMineHash);
             }
+            // (hote : son joueur pres de la voiture -- les pages ne se dessinent qu'a 15 m de ses yeux -- et une camera par-dessus
+            // l'epaule du passager, vers son carnet : la page recue doit etre lisible ; essai du 07/11 : camera devant lui, dos du carnet)
+            if (!guest && t > 44f)
+            {
+                Rigidbody car0 = VehicleSync.Body(carName); Transform pl = Game.PlayerT;
+                if (car0 != null && pl != null && (pl.position - car0.position).sqrMagnitude > 25f)
+                {
+                    var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                    pl.position = car0.position + car0.transform.right * 3.5f + Vector3.up * 0.5f;
+                    L("essai carnet2 : joueur de l'hote pose a 3,5 m de la voiture");
+                }
+            }
             if (!guest && t > 50f)
                 foreach (Avatar av in PlayerSync.Avatars)
                 {
                     Transform hb = av.HeadBone, car = av.VehicleT;
                     if (hb == null) continue;
-                    if (cn2Cam == null) { cn2Cam = new GameObject("MWCoop-CameraCarnet").AddComponent<Camera>(); cn2Cam.depth = 100; cn2Cam.nearClipPlane = 0.03f; cn2Cam.fieldOfView = 60f; }
+                    if (cn2Cam == null) { cn2Cam = new GameObject("MWCoop-CameraCarnet").AddComponent<Camera>(); cn2Cam.depth = 100; cn2Cam.nearClipPlane = 0.02f; cn2Cam.fieldOfView = 55f; }
                     Vector3 fw = car != null ? car.forward : hb.forward, up = car != null ? car.up : Vector3.up, rt = car != null ? car.right : hb.right;
-                    cn2Cam.transform.position = hb.position + fw * 0.8f - up * 0.1f - rt * 0.3f;
-                    cn2Cam.transform.LookAt(hb.position - up * 0.32f - rt * 0.06f, up);
+                    Esine ce = null;
+                    foreach (KeyValuePair<string, CnSaid> kv in cnSaidBy) if (kv.Value.Who == av.Player.Id) ce = FindItem(kv.Key);
+                    Vector3 target = ce != null && ce.Go != null ? ce.Go.transform.position : hb.position + fw * 0.33f - up * 0.27f;
+                    cn2Cam.transform.position = hb.position - fw * 0.12f + up * 0.1f + rt * 0.12f;
+                    cn2Cam.transform.LookAt(target, up);
                     break;
                 }
             if (!guest && cn2 >= 1 && cn2 < 4)
