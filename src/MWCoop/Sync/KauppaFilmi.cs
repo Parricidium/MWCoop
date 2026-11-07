@@ -284,6 +284,8 @@ namespace MWCoop
             {
                 L("video : film " + film + " pas ecrit : " + e.Message);
                 if (filmIn.TryGetValue(film, out fi)) { if (fi.Fs != null) fi.Fs.Close(); filmIn.Remove(film); }
+                // (morceaux deja recus : inutilisables, le film n'est plus redemande -- fichier .osa du mod lui-meme, rendu au disque)
+                try { if (File.Exists(FilmPath(film) + ".osa")) File.Delete(FilmPath(film) + ".osa"); } catch { }
                 // (disque plein, dossier refuse... : dit une fois au joueur, et plus redemande de la partie -- sinon il revenait sans fin)
                 if (filmFailed.Add(film)) { Chat.System(Lang.T("Film pas enregistré (disque plein ?) : ", "Film not saved (disk full?): ") + e.Message); KinoFilmFailed(film); }
             }
