@@ -268,12 +268,12 @@ namespace MWCoop
 
         // KARTTURI 2000 aussi ici (JD 07/11, en plus de l'Osuuskauppa : KauppaKartturi.cs), au meme prix : trois exemplaires
         // debout, ecran vers l'allee (ecran de demarrage), dans la case de l'aile CARDINAL a hauteur des yeux la plus proche du
-        // comptoir, prise avant les objets des mods (le carnet du copilote viendra dans la case du dessous).
+        // comptoir, prise avant les objets des mods ; le carnet du copilote (KauppaCarnet.cs, 59 mk) dans la case du dessous.
         // A l'achat, un vrai objet sort sur la palette NOUTO (OsatDeliver -> SpawnItem, comme a la caisse de l'Osuuskauppa).
         static Material osatGpsSplash;
         static void OsatRallyGear()
         {
-            OsatSlot slot = null; float best = float.MaxValue;
+            OsatSlot slot = null, below = null; float best = float.MaxValue;
             foreach (OsatSlot s in osatSlots)
             {
                 if (s.Wing != 0 || s.Big || s.Item != null || s.Face.x != 0f || s.Pos.y < 1f || s.Pos.y > 1.2f) continue;
@@ -281,12 +281,17 @@ namespace MWCoop
                 if (d < best) { best = d; slot = s; }
             }
             if (slot == null) { L("magasin de pieces : pas de case pour le KARTTURI"); return; }
+            foreach (OsatSlot s in osatSlots)
+                if (s != slot && s.Wing == 0 && !s.Big && s.Item == null && s.Face == slot.Face && Mathf.Abs(s.Pos.x - slot.Pos.x) < 0.05f && Mathf.Abs(s.Pos.z - slot.Pos.z) < 0.05f
+                    && s.Pos.y < slot.Pos.y && (below == null || s.Pos.y > below.Pos.y)) below = s;
             if (osatGpsSplash == null)
             {
                 Shader us = Shader.Find("Unlit/Texture");
                 osatGpsSplash = new Material(us != null ? us : Shader.Find("Legacy Shaders/Diffuse")) { name = "osat_kartturi_naytto", mainTexture = Kartturi.NewDevice().Tex };
             }
             OsatEsine(slot, KKartturi, KartturiPrice, "KARTTURI 2000", new[] { -0.2f, 0f, 0.2f }, 12f, osatGpsSplash);
+            if (below != null) OsatEsine(below, KCarnet, CarnetPrice, Lang.T("CARNET COPILOTE", "CO-DRIVER NOTES"), new[] { -0.15f, 0.15f }, 8f, null);
+            else L("magasin de pieces : pas de case pour le carnet du copilote");
         }
 
         // un objet de l'Osuuskauppa dans une case : exemplaires debout cote a cote (decalages us le long de la case), facade (-z du

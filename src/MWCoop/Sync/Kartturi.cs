@@ -23,12 +23,15 @@ namespace MWCoop
         public const int W = 160, H = 144;
         const float Step = 2f;
 
-        public class Note { public int I, J; public int Side; public int Grade; public bool Tightens, Opens, Long, Crest; }
-        class Stage { public string Name; public Vector3[] P; public Vector3[] Dir; public List<Note> Notes = new List<Note>(); }
+        // (Square : virage carre, pour le carnet du copilote -- l'ecran du KARTTURI le montre comme avant ; Angle en degres, Radius
+        // le rayon le plus serre, Len80 la longueur sur laquelle se fait 80 % de l'angle)
+        public class Note { public int I, J; public int Side; public int Grade; public bool Tightens, Opens, Long, Crest, Square; public float Angle, Radius, Len80; }
+        class Stage { public string Name; public Vector3[] P; public Vector3[] Dir; public List<Note> Notes = new List<Note>(); public readonly List<int> Bridges = new List<int>(); public int Cut = -1; public float CutDist; }
         static readonly List<Stage> stages = new List<Stage>();
         static readonly List<Vector2> roadA = new List<Vector2>(), roadB = new List<Vector2>();   // fond de carte (segments)
         static bool built;
         static float buildAt;
+        static float sqMin = 65f, sqMax = 115f, sqLen = 25f, sqR = 20f;
 
         public static void OnLevelLoaded() { built = false; stages.Clear(); roadA.Clear(); roadB.Clear(); buildAt = 0f; }
 
@@ -37,6 +40,17 @@ namespace MWCoop
         public static Vector3[] StageRoute(int ss) { if (!Build() || ss < 1 || ss > stages.Count) return null; return stages[ss - 1].P; }
         // Liste de points d'une route du jeu (TRAFFIC/Routes/<nom>) : la piste de glace (Icetrack...) pour la carte.
         public static List<Vector3> GameRoute(string name) { return Route(name); }
+
+        // Pour le carnet du copilote (Carnet.cs) : speciales k = 0.. (nom SS1.., points tous les Step m jusqu'a l'arrivee, notes
+        // calculees, entrees du pont) ; faux tant que les routes du rallye ne sont pas chargees.
+        public static bool Ready { get { return Build(); } }
+        public static int StageCount { get { return Build() ? stages.Count : 0; } }
+        public static float StepM { get { return Step; } }
+        public static string StageName(int k) { return stages[k].Name; }
+        public static Vector3[] StagePoints(int k) { return stages[k].P; }
+        public static Vector3[] StageDirs(int k) { return stages[k].Dir; }
+        public static List<Note> StageNotes(int k) { return stages[k].Notes; }
+        public static List<int> StageBridges(int k) { return stages[k].Bridges; }
 
         // ---------------------------------------------------------------- trace et notes
         static List<Vector3> Route(string name)
@@ -60,6 +74,9 @@ namespace MWCoop
             if (Time.realtimeSinceStartup < buildAt) return false;
             buildAt = Time.realtimeSinceStartup + 10f;
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            // ([Test] CarreMin, CarreMax, CarreLongueur, CarreRayon : seuils du carre)
+            sqMin = Config.GetFloat("Test", "CarreMin", 65f); sqMax = Config.GetFloat("Test", "CarreMax", 115f);
+            sqLen = Config.GetFloat("Test", "CarreLongueur", 25f); sqR = Config.GetFloat("Test", "CarreRayon", 20f);
             List<Vector3> dirt = Route("DirtRoad"), ss2 = Game.Msc ? new List<Vector3>() : Route("SaturdaySS2");
             if (Game.Msc)
             {
@@ -67,17 +84,19 @@ namespace MWCoop
                 // WaypointStart/EndSaturday 2168 -> 3640, Sunday 56 -> 1875) ; pas de SaturdaySS2
                 if (dirt.Count < 3642) { Log.Info("copilote : routes du rallye absentes (" + dirt.Count + ")"); return false; }
                 stages.Clear();
-                stages.Add(MakeStage("SS1", dirt, 2168, 3640));
-                stages.Add(MakeStage("SS2", dirt, 56, 1875));
+                // (coupees a l'arrivee, Checkpoint04 : la route des IA continue 720 m le samedi, 167 m le dimanche -- carnet, 07/11)
+                stages.Add(MakeStage("SS1", dirt, 2168, 3640, "RALLY/Saturday/TimingSaturday/Checkpoint04"));
+                stages.Add(MakeStage("SS2", dirt, 56, 1875, "RALLY/Sunday/TimingSunday/Checkpoint04"));
             }
             else
             {
                 if (dirt.Count < 3700 || ss2.Count < 630) { Log.Info("copilote : routes du rallye absentes (" + dirt.Count + ", " + ss2.Count + ")"); return false; }
                 stages.Clear();
-                stages.Add(MakeStage("SS1", dirt, 2168, 3512));
-                stages.Add(MakeStage("SS2", ss2, 1, 627));
-                stages.Add(MakeStage("SS3", dirt, 56, 1846));
+                stages.Add(MakeStage("SS1", dirt, 2168, 3512, Config.Get("Test", "CarnetArriveeSS1", "")));
+                stages.Add(MakeStage("SS2", ss2, 1, 627, Config.Get("Test", "CarnetArriveeSS2", "")));
+                stages.Add(MakeStage("SS3", dirt, 56, 1846, Config.Get("Test", "CarnetArriveeSS3", "")));
             }
+            FindBridges();
             roadA.Clear(); roadB.Clear();
             GameObject routes = Game.FindAny("TRAFFIC/Routes");
             if (routes != null)
@@ -95,10 +114,49 @@ namespace MWCoop
                 }
             built = true;
             var sb = new StringBuilder("copilote : speciales");
-            foreach (Stage s in stages) sb.Append(' ').Append(s.Name).Append(' ').Append((s.P.Length * Step / 1000f).ToString("F1")).Append(" km ").Append(s.Notes.Count).Append(" notes");
+            foreach (Stage s in stages)
+            {
+                sb.Append(' ').Append(s.Name).Append(' ').Append((s.P.Length * Step / 1000f).ToString("F1")).Append(" km ").Append(s.Notes.Count).Append(" notes (")
+                  .Append(s.Notes.FindAll(x => x.Square).Count).Append(" carres, pont ").Append(s.Bridges.Count > 0 ? (s.Bridges[0] * Step).ToString("F0") + " m" : "-")
+                  .Append(s.Cut >= 0 ? ", coupee a l'arrivee a " + s.CutDist.ToString("F1") + " m de la ligne" : "").Append(')');
+            }
             Log.Info(sb.Append(", fond de carte ").Append(roadA.Count).Append(" segments (").Append(sw.ElapsedMilliseconds).Append(" ms)").ToString());
             return true;
         }
+
+        // Pont (note par defaut du carnet, JD 07/11 : le calcul ne peut pas le deviner) : le seul pont de terre de la carte,
+        // MAP/MESH/BRIDGE_dirt ([MSC] 07/11, scenes des deux jeux : tablier x 1421-1451, z 747-752, est-ouest ; SS1 y passe vers
+        // 2920 m, la speciale du dimanche vers 5930 m en sens inverse ; pas SaturdaySS2). Entree du pont = premier point du trace
+        // sur le tablier (boite du modele s'il est la et a sa taille, sinon celle relevee), quelle que soit la version du jeu.
+        static void FindBridges()
+        {
+            var box = new Bounds(new Vector3(1436f, 0f, 749.5f), new Vector3(30f, 2000f, 5f));
+            string src = "boite relevee";
+            GameObject g = Game.FindAny("MAP/MESH/BRIDGE_dirt");
+            Renderer br = g != null ? g.GetComponent<Renderer>() : null;
+            if (br != null && br.bounds.size.x > 5f && br.bounds.size.x < 80f && br.bounds.size.z > 2f && br.bounds.size.z < 80f
+                && Mathf.Abs(br.bounds.center.x - box.center.x) < 50f && Mathf.Abs(br.bounds.center.z - box.center.z) < 50f)
+            {
+                Bounds b = br.bounds;
+                box = new Bounds(new Vector3(b.center.x, 0f, b.center.z), new Vector3(b.size.x, 2000f, b.size.z));
+                src = "modele du jeu";
+            }
+            box.Expand(new Vector3(0f, 0f, 2f));   // (le trace des IA peut passer pres du bord du tablier)
+            foreach (Stage s in stages)
+            {
+                s.Bridges.Clear();
+                bool on = false;
+                for (int i = 0; i < s.P.Length; i++)
+                {
+                    Vector3 p = s.P[i];
+                    bool inside = p.x >= box.min.x && p.x <= box.max.x && p.z >= box.min.z && p.z <= box.max.z;
+                    if (inside && !on) s.Bridges.Add(i);
+                    on = inside;
+                }
+            }
+            bridgeSrc = src + " " + box.min.x.ToString("F0") + ".." + box.max.x.ToString("F0") + " x " + box.min.z.ToString("F0") + ".." + box.max.z.ToString("F0");
+        }
+        static string bridgeSrc = "";
 
         static float[] Smooth(float[] v, int w)
         {
@@ -112,7 +170,8 @@ namespace MWCoop
             return o;
         }
 
-        static Stage MakeStage(string name, List<Vector3> route, int a, int b)
+        // finish : chemin de la ligne d'arrivee (vide : la route jusqu'a b, deja coupee a l'arrivee)
+        static Stage MakeStage(string name, List<Vector3> route, int a, int b, string finish)
         {
             // reprise tous les 2 m (au sol : x, z ; hauteur suivie)
             var pts = new List<Vector3> { route[a] };
@@ -126,11 +185,22 @@ namespace MWCoop
                 while (t <= seg) { pts.Add(Vector3.Lerp(p, q, t / seg)); t += Step; }
                 acc = seg - (t - Step);
             }
+            // coupee au point le plus proche de la ligne d'arrivee (a moins de 40 m ; [Test] CarnetSansCoupe=1 : la route entiere)
+            int cut = -1; float cutD = 0f;
+            GameObject fin = !string.IsNullOrEmpty(finish) && Config.GetInt("Test", "CarnetSansCoupe", 0) == 0 ? Game.FindAny(finish) : null;
+            if (!string.IsNullOrEmpty(finish) && fin == null) Log.Info("copilote : " + name + ", ligne d'arrivee " + finish + " introuvable, route des IA entiere");
+            if (fin != null)
+            {
+                Vector3 f = fin.transform.position; float bd = 40f * 40f;
+                for (int i = 0; i < pts.Count; i++) { float dx = pts[i].x - f.x, dz = pts[i].z - f.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; cut = i; } }
+                if (cut > 20 && cut < pts.Count - 1) { cutD = Mathf.Sqrt(bd); pts.RemoveRange(cut + 1, pts.Count - cut - 1); }
+                else cut = -1;
+            }
             int n = pts.Count;
             var xs = new float[n]; var ys = new float[n]; var zs = new float[n];
             for (int i = 0; i < n; i++) { xs[i] = pts[i].x; ys[i] = pts[i].y; zs[i] = pts[i].z; }
             xs = Smooth(xs, 3); zs = Smooth(zs, 3); ys = Smooth(ys, 5);
-            var s = new Stage { Name = name, P = new Vector3[n], Dir = new Vector3[n] };
+            var s = new Stage { Name = name, P = new Vector3[n], Dir = new Vector3[n], Cut = cut, CutDist = cutD };
             for (int i = 0; i < n; i++) s.P[i] = new Vector3(xs[i], ys[i], zs[i]);
             var hd = new float[n];
             for (int i = 0; i < n; i++)
@@ -161,6 +231,15 @@ namespace MWCoop
                     for (int q = mid; q < c1; q++) m2 = Mathf.Max(m2, Mathf.Abs(k1[q]));
                     float r1 = 1f / m1, r2 = 1f / m2;
                     nt.Tightens = r2 < r1 * 0.7f; nt.Opens = r1 < r2 * 0.7f;
+                    // carre (carnet du copilote) : angle presque droit, court. Regle de [MSC] (07/11, sur les vraies routes de My Summer
+                    // Car : 4 carres sur 4 -- deux carrefours pris dans les deux sens --, aucun faux) : de 65 a 115 degres, et 80 % de
+                    // l'angle sur 25 m au plus ou rayon le plus serre sous 20 m (le lissage etale un carre sur 32-34 m : c1 - c0 ne suffit
+                    // pas). Passe avant H : le KARTTURI les note H (rayon sous 14 m) et les montre toujours ainsi.
+                    float tot = 0f; for (int q = c0; q < c1; q++) tot += Mathf.Abs(k1[q]);
+                    float cum = 0f; int q10 = c0, q90 = c1 - 1; bool got10 = false;
+                    for (int q = c0; q < c1; q++) { cum += Mathf.Abs(k1[q]); if (!got10 && cum >= 0.1f * tot) { q10 = q; got10 = true; } if (cum >= 0.9f * tot) { q90 = q; break; } }
+                    nt.Angle = ang; nt.Radius = r; nt.Len80 = (q90 - q10) * Step;
+                    nt.Square = ang >= sqMin && ang <= sqMax && (nt.Len80 <= sqLen || r < sqR);
                     s.Notes.Add(nt);
                 }
                 c0 = Mathf.Max(c1, c0 + 1);
@@ -212,6 +291,21 @@ namespace MWCoop
             TextC(d, 100, "RALLI GPS", 1, 2);
             d.Tex.SetPixels32(d.Px); d.Tex.Apply(false);
         }
+
+        // Suivi seul, sans ecran (carnet du copilote : CarnetSivu) : meme suivi que le GPS.
+        public static Device NewTracker() { return new Device { Px = null }; }
+        public static void Follow(Device d, Vector3 pos, Vector3 carHint, float now)
+        {
+            if (!Build()) return;
+            Vector3 v = carHint;
+            if (v.sqrMagnitude < 1f && d.LastT > 0f && now > d.LastT) v = (pos - d.LastPos) / (now - d.LastT);
+            v.y = 0f;
+            if (v.sqrMagnitude > 2.25f) d.Dir = Vector3.Slerp(d.Dir, v.normalized, 0.5f).normalized;
+            d.LastPos = pos; d.LastT = now;
+            Track(d, pos, v.sqrMagnitude > 2.25f);
+        }
+        public static int TrackedStage(Device d) { return d.Stage; }
+        public static int TrackedIndex(Device d) { return d.Prog; }
 
         // Suivi et dessin (au plus 10 fois par seconde) : pos = position du GPS, carHint = vitesse connue (voiture) ou zero.
         public static void Tick(Device d, Vector3 pos, Vector3 carHint, float now)
@@ -503,16 +597,37 @@ namespace MWCoop
         static bool probed;
         public static void Test(string mode, float t)
         {
-            if (mode != "copilote" || probed || t < 40f) return;
+            if ((mode != "copilote" && mode != "carnet") || probed || t < 40f) return;   // (carnet : la meme sonde)
             probed = true;
             if (!Build()) return;
             var sb = new StringBuilder();
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            sb.Append("pont : ").Append(bridgeSrc).Append('\n');
             foreach (Stage s in stages)
             {
-                sb.Append("== ").Append(s.Name).Append(' ').Append(s.P.Length * Step).Append(" m\n");
+                sb.Append("== ").Append(s.Name).Append(' ').Append((s.P.Length - 1) * Step).Append(" m")
+                  .Append(s.Cut >= 0 ? ", coupee a l'arrivee (point " + s.Cut + ", " + s.CutDist.ToString("F1", ci) + " m de la ligne)" : ", non coupee")
+                  .Append(", pont").Append(s.Bridges.Count == 0 ? " aucun" : "").Append('\n');
+                foreach (int b in s.Bridges) sb.Append("   pont a ").Append(b * Step).Append(" m (").Append(s.P[b].x.ToString("F1", ci)).Append(", ").Append(s.P[b].z.ToString("F1", ci)).Append(")\n");
                 foreach (Note n in s.Notes)
                     sb.Append((n.I * Step).ToString("F0")).Append(" m : ").Append(n.Crest ? "bosse" : (n.Side < 0 ? "G" : "D") + (n.Grade == 0 ? "H" : n.Grade.ToString()))
-                      .Append(n.Tightens ? " resserre" : "").Append(n.Opens ? " s'ouvre" : "").Append(n.Long ? " long" : "").Append('\n');
+                      .Append(n.Square ? " CARRE" : "").Append(n.Tightens ? " resserre" : "").Append(n.Opens ? " s'ouvre" : "").Append(n.Long ? " long" : "")
+                      .Append(n.Crest ? "" : "  (" + n.Angle.ToString("F0", ci) + " deg, rayon " + n.Radius.ToString("F0", ci) + " m, 80 % sur " + n.Len80.ToString("F0", ci) + " m, " + ((n.J - n.I) * Step).ToString("F0", ci) + " m)").Append('\n');
+            }
+            // sonde (07/11) : objets du rallye pres de la fin de chaque speciale (ligne d'arrivee de My Winter Car a trouver)
+            GameObject rr = Game.FindAny(Game.Msc ? "RALLY" : "RACES/RALLY");
+            if (rr != null)
+            {
+                sb.Append("== objets de ").Append(rr.name).Append(" a moins de 60 m d'un trace\n");
+                foreach (Transform tr in rr.GetComponentsInChildren<Transform>(true))
+                {
+                    Vector3 p = tr.position; string best = ""; float bd = 60f * 60f;
+                    foreach (Stage s in stages)
+                        for (int i = 0; i < s.P.Length; i++) { float d = Flat(s.P[i] - p); if (d < bd) { bd = d; best = s.Name + " a " + (i * Step) + " m sur " + ((s.P.Length - 1) * Step); } }
+                    if (best.Length == 0) continue;
+                    string path = tr.name; for (Transform q = tr.parent; q != null && q != rr.transform.parent; q = q.parent) path = q.name + "/" + path;
+                    sb.Append(path).Append(tr.gameObject.activeInHierarchy ? "" : " (inactif)").Append(" : ").Append(best).Append(", ").Append(Mathf.Sqrt(bd).ToString("F1", ci)).Append(" m\n");
+                }
             }
             string dir = Path.Combine(Log.DataDir, "dumps");
             Directory.CreateDirectory(dir);

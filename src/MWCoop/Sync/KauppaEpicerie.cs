@@ -374,6 +374,7 @@ namespace MWCoop
             }
             OfferCol(kyp, new Vector3(x, rallyTops[3] + 0.15f, zc), new Vector3(0.38f, 0.3f, 1.0f));
             Plane("hlkypara", new Vector3(tagX, rallyTops[3] - 0.035f, zc), 0.12f, 0.06f, Vector3.left);
+            CarnetOffer(x, rallyTops[1], zc, tagX);   // (carnet du copilote : planche sous les KARTTURI, JD 07/11)
             L("rallye : KARTTURI " + KartturiPrice + ", casque " + KyparaPrice + " mk");
         }
 

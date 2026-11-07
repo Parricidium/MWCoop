@@ -901,8 +901,19 @@ namespace MWCoop
                     Vector3 at = headBone.position + camRot * pgh.Held;
                     float half = pgh.HeldSize > 0.25f ? Mathf.Min(pgh.HeldSize * 0.3f, 0.2f) : 0f;   // (mains sur les cotes)
                     Vector3 sideH = camRot * Vector3.right;
-                    ArmTo(true, at + sideH * half, 1f);
-                    if (half > 0f) ArmTo(false, at - sideH * half, 1f);
+                    bool cnLamp;
+                    if (Kauppa.CarnetRaisedBy(Player.Id, out cnLamp))
+                    {   // carnet du copilote (JD 07/11) : main gauche sur son bord gauche ; la nuit, main droite sur la lampe (meme place
+                        // que KauppaCarnetRoue.TickCarnetLamp : a droite de la page, plus haut, vers les yeux) ; le jour, elle reste sur la cuisse
+                        Vector3 upC = camRot * Vector3.up, toEye = (headBone.position - at).normalized;
+                        ArmTo(false, at - sideH * 0.1f, 1f);
+                        if (cnLamp) ArmTo(true, at + sideH * 0.2f + upC * 0.12f + toEye * 0.16f, 1f);
+                    }
+                    else
+                    {
+                        ArmTo(true, at + sideH * half, 1f);
+                        if (half > 0f) ArmTo(false, at - sideH * half, 1f);
+                    }
                 }
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite). Avant les
                 // mains : elles se posent ensuite sur le volant depuis le buste penche.

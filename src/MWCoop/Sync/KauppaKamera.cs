@@ -389,6 +389,7 @@ namespace MWCoop
         {
             if (Viewfinder || !Active || root == null || Event.current.type != EventType.Repaint) return;
             if (DrawKartturiHint()) return;
+            if (DrawCarnetHint()) return;
             Esine k = HeldKamera();
             if (k == null)
             {

@@ -100,6 +100,7 @@ namespace MWCoop
             }
             else if (kind == KKamera) KameraModel(g, out size);
             else if (kind == KKartturi) KartturiModel(g, out size, out screen);
+            else if (kind == KCarnet) CarnetModel(g, out size, out screen);   // (carnet du copilote : « screen » = la page)
             else if (EpiModel(kind, g, out size)) { }   // (epicerie : biere, eau-de-vie, casque -- KauppaEpicerie)
             else if (KinoModel(kind, g, out size)) { }   // (cinema : popcorn, chips, boisson, bonbons, bobine -- KinoEsineet)
             else if (ModelFile("tele", g, out size))
@@ -166,11 +167,11 @@ namespace MWCoop
         {
             Vector3 size; Transform screen;
             GameObject g = Model(kind, out size, out screen);
-            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : kind == KKartturi ? "kartturi gps" : kind == KKypara ? "rally kypara" : IsKinoKind(kind) ? KinoItemName(kind) : "television") + " osuuskauppa(itemx)";
+            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : kind == KKartturi ? "kartturi gps" : kind == KCarnet ? "rally notebook" : kind == KKypara ? "rally kypara" : IsKinoKind(kind) ? KinoItemName(kind) : "television") + " osuuskauppa(itemx)";
             g.transform.position = pos; g.transform.rotation = rot;
             var e = new Esine { Id = id, Kind = kind, Data = data ?? "", Go = g, Screen = screen };
             e.Col = g.AddComponent<BoxCollider>(); e.Col.size = size;
-            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : kind == KKartturi ? 0.4f : kind == KKypara ? 1.4f : IsKinoKind(kind) ? KinoItemMass(kind) : 9f;
+            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : kind == KKartturi ? 0.4f : kind == KCarnet ? 0.35f : kind == KKypara ? 1.4f : IsKinoKind(kind) ? KinoItemMass(kind) : 9f;
             e.Rb.collisionDetectionMode = CollisionDetectionMode.Continuous;   // (cassette fine : ne traverse pas le sol en tombant)
             g.layer = 19; g.tag = "PART";
             esineet.Add(e);
@@ -286,6 +287,7 @@ namespace MWCoop
             TickVcrs(now);
             TickKamera(now);
             TickKartturi(now);
+            TickCarnet(now);
             TickFilms(now);
             TickLabels();
             TickMontageKey(KameraBusy || Viewfinder ? null : aimedTape ?? HeldTape(), now);
@@ -580,6 +582,7 @@ namespace MWCoop
             OnLevelLoadedKamera();
             OnLevelLoadedVcr();
             OnLevelLoadedKartturi();
+            OnLevelLoadedCarnet();
             OnLevelLoadedFilms();
             OnLevelLoadedMontage();
             esineet.Clear(); esineLoaded = false; showing.Clear(); gameScreens = null; lookedItem = null; pendingTape = null;

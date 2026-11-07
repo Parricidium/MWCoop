@@ -49,14 +49,20 @@ namespace MWCoop
         {
             if (objTried) return;
             objTried = true;
+            ReadPak("objets");
+            ReadPak("carnet");   // (carnet du copilote, JD 07/11 : son fichier a lui, run/carnet/carnet.py, meme format)
+        }
+
+        static void ReadPak(string pak)
+        {
             try
             {
-                using (Stream s = typeof(Kauppa).Assembly.GetManifestResourceStream("MWCoop.objets.pak"))
+                using (Stream s = typeof(Kauppa).Assembly.GetManifestResourceStream("MWCoop." + pak + ".pak"))
                 {
-                    if (s == null) { L("objets : objets.pak absent de la DLL, anciens modeles"); return; }
+                    if (s == null) { L("objets : " + pak + ".pak absent de la DLL, anciens modeles"); return; }
                     var r = new BinaryReader(s);
                     string magic = new string(r.ReadChars(4)); int ver = r.ReadInt32();
-                    if (magic != "MWOB" || ver < 1 || ver > 2) { L("objets : objets.pak illisible"); return; }
+                    if (magic != "MWOB" || ver < 1 || ver > 2) { L("objets : " + pak + ".pak illisible"); return; }
                     Material tpl = GameMat("wood_panel7");
                     Shader sh = tpl != null ? tpl.shader : Shader.Find("Legacy Shaders/Diffuse");
                     // (etiquettes a fond transparent : decoupe ; vitres : transparent)
@@ -109,11 +115,12 @@ namespace MWCoop
                         for (int k = 0; k < npt; k++) { string key = r.ReadString(); m.Points[key] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()); }
                         all[name] = m;
                     }
-                    objModels = all;
-                    L("objets : " + all.Count + " modeles (" + tris + " triangles)");
+                    if (objModels == null) objModels = all;
+                    else foreach (KeyValuePair<string, ObjModel> kv in all) objModels[kv.Key] = kv.Value;
+                    L("objets : " + pak + ".pak, " + all.Count + " modeles (" + tris + " triangles)");
                 }
             }
-            catch (Exception e) { L("objets : modeles illisibles, anciens gardes : " + e.Message); objModels = null; }
+            catch (Exception e) { L("objets : " + pak + ".pak illisible, anciens modeles gardes : " + e.Message); }
         }
 
         // [Test] ObjetsPhotos=s : a s secondes, chaque objet seul en l'air (loin de tout, une lampe), vu de trois quarts et de face ;

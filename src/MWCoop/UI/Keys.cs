@@ -21,6 +21,11 @@ namespace MWCoop
         public static KeyCode CameraViewfinder { get { return Get("CameraViseur", KeyCode.F); } }
         public static KeyCode CameraRec { get { return Get("CameraEnregistrer", KeyCode.R); } }
 
+        // Carnet du copilote (leve, en passager) : roue des symboles (tenue), retirer la note la plus proche, lampe.
+        public static KeyCode CarnetWheel { get { return Get("CarnetRoue", KeyCode.R); } }
+        public static KeyCode CarnetErase { get { return Get("CarnetEffacer", KeyCode.Backspace); } }
+        public static KeyCode CarnetLamp { get { return Get("CarnetLampe", KeyCode.L); } }
+
         // Camera drone (mode photo, demande de JD, 11/10) : categorie « Camera drone » des Touches du lanceur. Lettres par
         // defaut selon le clavier (AZERTY : ZQSD, A/E pour pencher ; sinon WASD, Q/E).
         public static KeyCode Drone { get { return Get("Drone", KeyCode.F8); } }

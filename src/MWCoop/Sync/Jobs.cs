@@ -2379,6 +2379,9 @@ namespace MWCoop
                 case "@kyparaj": Kauppa.OnKyparaPlayer(who, r.Str()); break;   // (casque personnalise : l'image d'un joueur, son empreinte)
                 case "@kypara?": Kauppa.OnKyparaAsk(who, r.Str()); break;
                 case "@kyparap": { string h = r.Str(); int i = r.U16(), n = r.U16(); Kauppa.OnKyparaPart(who, h, i, n, r.Bytes()); break; }
+                case "@carnetj": { string cid = r.Str(), ch = r.Str(); bool cl = r.Bool(); Kauppa.OnCarnetSaid(who, cid, ch, cl, r.Bool()); break; }   // (carnet du copilote leve : son carnet, sa lampe)
+                case "@carnet?": Kauppa.OnCarnetAsk(who, r.Str()); break;
+                case "@carnetp": { string ch = r.Str(); int i = r.U16(), n = r.U16(); Kauppa.OnCarnetPart(who, ch, i, n, r.Bytes()); break; }
                 case "@drone": { int dn = r.U8(); Vector3 dp = r.Vec(); DroneCam.OnRemote(who, dn, dp, r.Quat()); break; }
                 case "@flash": DroneCam.OnFlash(who, r.Vec()); break;
                 case "@fendattel": { int fa = r.U8(); Vector3 fp = r.Vec(); CutterHitch.OnRemote(who, fa, fp, r.Quat()); break; }

@@ -109,6 +109,7 @@ namespace MWCoop
             }
             else if (!KameraBusy && (Input.GetKeyDown(Keys.CameraViewfinder) || Input.GetMouseButtonDown(1))) KartturiDown();
             TickGpsScreens(now);
+            Carnet.Tick(now);   // (carnet du copilote : export des traces pour le lanceur, carnet actif)
         }
 
         // Pose devant les yeux (a chaque image, apres la camera) : en bas de l'image, plus haut quand on baisse les yeux.
@@ -327,6 +328,7 @@ namespace MWCoop
             gpsDev.Clear(); gpsStage = 0; gpsEq = null; gpsFsm = null; gpsReenable = -1; gpsView = null; gpsHidden.Clear();
             gpsBody = null; gpsBezel = null; gpsButton = null; gpsLabel = null;
             Kartturi.OnLevelLoaded();
+            Carnet.OnLevelLoaded();
         }
     }
 }
