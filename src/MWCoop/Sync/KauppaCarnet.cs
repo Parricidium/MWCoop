@@ -171,8 +171,8 @@ namespace MWCoop
             int l = cam != null && (cam.cullingMask & (1 << held)) == 0 ? 0 : held;
             Transform hc = eye != null ? eye.Find("HandCamera") : null;
             Camera hcam = hc != null ? hc.GetComponent<Camera>() : null;
-            L(what + " : copie devant les yeux sur le calque " + l + " (objet tenu " + held + ", camera " + (cam != null ? cam.name + " masque " + cam.cullingMask.ToString("x") : "?")
-              + ", HandCamera " + (hcam != null ? (hcam.enabled ? "active" : "eteinte") + " masque " + hcam.cullingMask.ToString("x") : "absente") + ")");
+            L(what + " : copie devant les yeux sur le calque " + l + " (objet tenu " + held + ", camera " + (cam != null ? cam.name + " masque " + cam.cullingMask.ToString("x") + " plan proche " + cam.nearClipPlane.ToString("F2") : "?")
+              + ", HandCamera " + (hcam != null ? (hcam.enabled ? "active" : "eteinte") + " masque " + hcam.cullingMask.ToString("x") + " plan proche " + hcam.nearClipPlane.ToString("F2") : "absente") + ")");
             return l;
         }
 
@@ -325,7 +325,7 @@ namespace MWCoop
                     // (jusqu'a 62 s : depuis la place du conducteur, vers les mains du passager -- carnet a gauche, lampe a droite ;
                     // ensuite au-dessus de sa tete, vers la page. Essai du 08/11 : par la vitre, la portiere cachait tout ; par-dessus
                     // l'epaule, la tete)
-                    if (t < 62f) { cn2Cam.transform.position = hb.position - rt * 0.62f + fw * 0.08f - up * 0.06f; cn2Cam.transform.LookAt(hb.position - up * 0.3f + fw * 0.22f + rt * 0.04f, up); }
+                    if (t < 62f) { cn2Cam.transform.position = hb.position - rt * (Game.Msc ? 0.75f : 0.62f) + fw * 0.08f - up * 0.04f; cn2Cam.transform.LookAt(hb.position - up * 0.3f + fw * 0.22f + rt * 0.04f, up); }
                     else { cn2Cam.transform.position = hb.position - fw * 0.5f + up * 0.02f + rt * 0.14f; cn2Cam.transform.LookAt(target, up); }   // (banquette arriere : au-dessus de la tete, la camera etait dans le pavillon)
                     break;
                 }

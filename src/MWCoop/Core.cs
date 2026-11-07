@@ -55,9 +55,9 @@ namespace MWCoop
             if (Game.Msc)   // (My Summer Car : voitures, avatars et tenues ; CarVisuals avant les mains, comme dans MWC)
             {
                 // (HandTools : outils dans la main des avatars -- manquait sur MSC, la hache des autres restait invisible : Markos et Squier, 24/10)
-                // (KARTTURI leve en passager : copie devant les yeux, objet tenu pour les autres -- manquait sur MSC, la copie restait a l'origine
-                // du monde, invisible ; [MSC] 08/11)
-                try { CarVisuals.LateUpdate(); HandTools.LateUpdate(); Kauppa.LateKartturi(); PlayerSync.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); Studio.LateUpdate(); }
+                // (KARTTURI et carnet du copilote leves : copie devant les yeux, objet tenu pour les autres -- manquaient sur MSC, la copie
+                // restait a l'origine du monde, invisible ; [MSC] 08/11)
+                try { CarVisuals.LateUpdate(); HandTools.LateUpdate(); Kauppa.LateKartturi(); Kauppa.LateCarnet(); PlayerSync.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); Studio.LateUpdate(); }
                 catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
                 // (audit MSC 02/11 : table du ventti du chalet -- cartes du joueur posees chez le spectateur, Machines)
                 try { Machines.LateUpdate(); }

@@ -278,6 +278,14 @@ namespace MWCoop
 
         static bool Dark()
         {
+            // (My Summer Car, [MSC] 08/11 : a minuit l'ete, la lumiere du soleil restait au-dessus du seuil -- lampe eteinte ;
+            // l'heure du jeu en plus, MAP/SUN/Pivot/SUN::Color « Time », par pas de 2 h : nuit de 22 h a 2 h)
+            if (Game.Msc)
+            {
+                PlayMakerFSM sun = Game.FindFsm("MAP/SUN/Pivot/SUN", "Color");
+                HutongGames.PlayMaker.FsmInt hour = sun != null ? sun.FsmVariables.FindFsmInt("Time") : null;
+                if (hour != null && (hour.Value >= 22 || hour.Value <= 2)) return true;
+            }
             if (suns == null || suns.Length == 0)
             {
                 var l = new List<Light>();
