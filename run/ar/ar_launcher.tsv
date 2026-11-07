@@ -292,6 +292,20 @@ The save in use is marked Solo: pick a Coop save, or create one.	الحفظ ال
 Launch anyway	التشغيل رغم ذلك
 Don't launch	عدم التشغيل
 When the game loads, it returns to its spot at no new cost, or in front of the garage if its spot isn't safe. Give back removes it for good. It is kept with the host's save: without a save, it does not carry over.	عند التحميل تعود إلى مكانها دون دفع جديد، أو إلى أمام المرآب إذا لم يكن مكانها آمنًا. يزيلها «إرجاع» نهائيًا. وتُحفظ مع حفظ المضيف: بدون حفظ لا تنتقل.
+3D model: camcorder	نموذج ثلاثي الأبعاد: كاميرا فيديو
+\"Nokaisho Calc&Misc: VHS Camcorder\", designed by Artiaaa Umrplex, on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«Nokaisho Calc&Misc: VHS Camcorder»، من تصميم Artiaaa Umrplex، على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، واتجاه، ومثلثات أقل، وخامات أصغر. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
+3D model: VCR	نموذج ثلاثي الأبعاد: جهاز فيديو
+\"Vintage VHS Player 1\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«Vintage VHS Player 1» على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، واتجاه، ومثلثات أقل، وخامات أصغر. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
+3D model: VHS tape	نموذج ثلاثي الأبعاد: شريط VHS
+\"VHS Tape\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«VHS Tape» على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، واتجاه، ومثلثات أقل، وخامات أصغر. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
+3D model: film reel	نموذج ثلاثي الأبعاد: بكرة فيلم
+\"Film Reel\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«Film Reel» على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، واتجاه، ومثلثات أقل، وخامات أصغر. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
+3D model: popcorn	نموذج ثلاثي الأبعاد: فشار
+\"Popcorn Bucket\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«Popcorn Bucket» على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، واتجاه، ومثلثات أقل، وخامات أصغر. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
+3D model: KARTTURI rally GPS	نموذج ثلاثي الأبعاد: جهاز GPS للرالي KARTTURI
+\"GPS Navigation Free\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«GPS Navigation Free» على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، واتجاه، ومثلثات أقل، وخامات أصغر. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
+3D model: television	نموذج ثلاثي الأبعاد: تلفاز
+\"PONY - 90's TV set.\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.	«PONY - 90's TV set.» على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، واتجاه، ومثلثات أقل، وخامات أصغر. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
 if private	إذا كانت خاصة
 Yes	نعم
 No	لا

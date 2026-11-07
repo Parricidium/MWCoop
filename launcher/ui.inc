@@ -1477,6 +1477,28 @@ enum { CRED_3D, CRED_IMG, CRED_THANKS, CRED_SUPPORT };
 struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    // (objets du mod, msc-1.15.97 / mwc-1.15.66, [Addons] 07/11 : Sketchfab, CC BY 4.0, liens complets dans MWCoop\CREDITS-objets.txt)
+    { CRED_3D, L"Nokaisho", L"Modèle 3D : caméscope", L"3D model: camcorder",
+      L"« Nokaisho Calc&Misc: VHS Camcorder », dessiné par Artiaaa Umrplex, sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"Nokaisho Calc&Misc: VHS Camcorder\", designed by Artiaaa Umrplex, on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
+    { CRED_3D, L"Tejay21", L"Modèle 3D : magnétoscope", L"3D model: VCR",
+      L"« Vintage VHS Player 1 » sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"Vintage VHS Player 1\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
+    { CRED_3D, L"Maggatron", L"Modèle 3D : cassette VHS", L"3D model: VHS tape",
+      L"« VHS Tape » sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"VHS Tape\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
+    { CRED_3D, L"fisherfx.pro", L"Modèle 3D : bobine de film", L"3D model: film reel",
+      L"« Film Reel » sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"Film Reel\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
+    { CRED_3D, L"beastybevan", L"Modèle 3D : popcorn", L"3D model: popcorn",
+      L"« Popcorn Bucket » sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"Popcorn Bucket\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
+    { CRED_3D, L"Cenk YENER", L"Modèle 3D : GPS de rallye KARTTURI", L"3D model: KARTTURI rally GPS",
+      L"« GPS Navigation Free » sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"GPS Navigation Free\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
+    { CRED_3D, L"HunkUmbrella", L"Modèle 3D : télévision", L"3D model: television",
+      L"« PONY - 90's TV set. » sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"PONY - 90's TV set.\" on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, orientation, fewer triangles, smaller textures. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
     // (quete de la boutique s21, msc-1.15.62 : mention exigee par la licence, mot pour mot ; ne jamais nommer la voiture, JD)
     { CRED_3D, L"nerdadantes", L"Modèle 3D", L"3D model",
       L"Un modèle 3D utilisé dans My Summer Car : 3D model copyright nerdadantes via RenderHub.",
