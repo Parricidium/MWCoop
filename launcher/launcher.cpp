@@ -8601,6 +8601,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
         else if (st == L"guide-recherche") { g_tab = TAB_WIKI; g_wikiSearch = L"mods"; g_wikiFocus = true; }   // (champ Chercher de l'en-tete)
         else if (st == L"guide-credits") g_tab = TAB_CREDITS;   // (pilule Credits du Guide)
+        else if (!wcsncmp(st.c_str(), L"guide-credits-", 14)) {   // (onglet Modeles 3D defile : guide-credits-<px>, guide-credits-bas ; hauteur du contenu posee d'avance, DrawCreditsPage borne le defilement des la 1re image)
+            g_tab = TAB_CREDITS; g_credTab = CRED_3D;
+            int n = 0, d = 100000; for (const Credit &k : kCredits) n += k.cat == CRED_3D;
+            swscanf_s(st.c_str() + 14, L"%d", &d);
+            g_credContentH = n * 116.0f; g_scroll[TAB_CREDITS] = (float)d;
+        }
         else if (st == L"palette" || !wcsncmp(st.c_str(), L"palette:", 8)) { void PalOpenForCapture(const wchar_t *); PalOpenForCapture(st.size() > 8 ? st.c_str() + 8 : L""); }   // (recherche de l'en-tete, nouvelle interface)
         else if (st == L"guide-recherche-vide") { g_tab = TAB_WIKI; g_wikiSearch.clear(); g_wikiFocus = true; }   // (champ Chercher du Guide, ouvert vide)
         else if (st == L"accueil-win7") { g_tab = TAB_HOME; g_steamNet = true; }   // (Windows 7 avec MWCOOP_WIN7=1 : la ligne sous STEAM et son lien vers le Guide)
