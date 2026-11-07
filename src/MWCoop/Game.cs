@@ -67,6 +67,7 @@ namespace MWCoop
 
         public static void SaveInPlace()
         {
+            if (SeatExport.Active) { Log.Info("sauvegarde en jeu ignoree : export des places en cours"); return; }   // (l'export ne sauve jamais, JD 07/11)
             if (restore != null) return;
             // Hors de la partie (menu) : rien a sauver, SAVEGAME n'y ecrirait qu'une sauvegarde vide.
             if (Application.loadedLevelName != "GAME") { Log.Warn("sauvegarde en jeu refusee : niveau " + Application.loadedLevelName); return; }

@@ -1913,13 +1913,15 @@ namespace MWCoop
                 if (perp < (i == KWheelHub ? 0.07f : bestPerp) && (hit < 0 || perp < bestPerp)) { bestPerp = Mathf.Min(bestPerp, perp); hit = i; }
             }
             // manivelles des vitres (les deux, du siege conducteur) : molette, comme les voitures du jeu
+            // (essais : qwAim, regard vers cette manivelle ; qwScroll, cran de molette -- QuestWindowTest)
+            Vector3 aimFwd = qwAim >= 0 && st.Crank[qwAim] != null ? (st.Crank[qwAim].position - cam.position).normalized : cam.forward;
             for (int w = 0; w < 2; w++)
             {
                 if (st.Crank[w] == null || !WinOn(b, st, w)) continue;
                 Vector3 v = st.Crank[w].position - cam.position;
-                float along = Vector3.Dot(v, cam.forward);
+                float along = Vector3.Dot(v, aimFwd);
                 if (along < 0.15f || along > 1.6f) continue;
-                float perp = (v - cam.forward * along).magnitude;
+                float perp = (v - aimFwd * along).magnitude;
                 if (perp < 0.05f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KCrank0 + w; }
             }
             // comodo des essuie-glaces : vise, clic = marche / arret
@@ -1983,7 +1985,8 @@ namespace MWCoop
                 hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", "WINDOW");
                 // (molette comme les voitures du jeu : vers soi = vitre baissee ; un cran = 1/8 de la course)
-                int w = hit - KCrank0; float sc = Input.GetAxis("Mouse ScrollWheel");
+                int w = hit - KCrank0; float sc = qwAim >= 0 ? qwScroll : Input.GetAxis("Mouse ScrollWheel");
+                qwScroll = 0f; qwHit = w;
                 if (sc != 0f) { st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] - Mathf.Sign(sc) * 0.125f); SendState(b, st); }
                 return;
             }
@@ -2847,6 +2850,7 @@ namespace MWCoop
         // a 0, 1/2, 1 puis 0 (comme la molette : WinPos, puis SendState) ; chacun note verre, sommets, maillage. Sans fichier de vitres :
         // tout reste a 0. Photos dehors et dedans (dumps\photo-vitres-*.png) a chaque position ; [Test] StandalonePluie=1 : sous la pluie.
         static float qwT0 = -1; static int qwStep; static bool qwAbsent;
+        static int qwAim = -1, qwHit = -1, qwWheel; static float qwScroll, qwWheelAt;
         static string WinState(VazCar.Built b, State st)
         {
             var sb = new System.Text.StringBuilder();
@@ -2887,6 +2891,16 @@ namespace MWCoop
                 if (cc != null) cc.enabled = true;
                 Enter(b, st); SendState(b, st);
                 Log.Info("autotest : quetevitres, au volant de " + b.Car.name);
+            }
+            // Apres la serie : le vrai chemin du joueur, regard sur chaque manivelle et crans de molette (vers soi : baisse ; 8 crans = la course).
+            if (first && qwStep >= 9 && qwWheel < 6 && d > 37f && now >= qwWheelAt)
+            {
+                qwWheelAt = now + 1.2f;
+                int cote = qwWheel / 3, etape = qwWheel % 3;
+                if (etape == 0) { qwAim = cote; qwHit = -1; qwScroll = -0.1f; }
+                else if (etape == 1) { Log.Info("autotest : quetevitres, regard manivelle " + (cote == 0 ? "g" : "d") + " : visee " + (qwHit == cote ? "oui" : qwHit < 0 ? "non" : "l'autre") + ", texte « " + HutongGames.PlayMaker.FsmVariables.GlobalVariables.GetFsmString("GUIinteraction").Value + " », cran vers soi : " + WinState(b, st)); qwScroll = 0.1f; }
+                else { Log.Info("autotest : quetevitres, cran inverse : " + WinState(b, st)); qwAim = -1; }
+                qwWheel++;
             }
             float[] when = { 12f, 18f, 24f, 30f }, val = { 0f, 0.5f, 1f, 0f };
             string[] nom = { "0", "demi", "bas", "remontee" };

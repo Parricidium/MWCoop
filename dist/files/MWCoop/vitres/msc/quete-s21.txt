@@ -1,0 +1,12 @@
+VITRES 1
+# outil des places (07/11/2026 00:48:26) -- poses et plan dans le repere du parent de la vitre
+jeu msc
+voiture quete-s21
+vitre VAZ/portiere_0/pieces/vitre_g
+haut 0 0 0 0 0 0 1
+bas -0.1214 -0.3963 0 0 0 0 1
+coupe -0.6215 0.8895 -0.0319 0 1 0
+vitre VAZ/portiere_1/pieces/vitre_d
+haut 0 0 0 0 0 0 1
+bas 0.1214 -0.3963 0 0 0 0 1
+coupe 0.6228 0.8895 -0.0319 0 1 0

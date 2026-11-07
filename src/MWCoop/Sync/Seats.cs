@@ -1354,9 +1354,9 @@ namespace MWCoop
         // plus en avant que la ceinture de Menor, elle restait dans le buste (essai du 31/10).
         // Msc : modele de My Summer Car (les autres : My Winter Car) ; Offset / Turn : pose du modele dans la voiture (Turn : demi-tour
         // autour de y), [Test] CeintureArrDecal=x,y,z et CeintureArrDemiTour=0|1 les remplacent (reglage en jeu).
-        class RearKind { public string Car, Key, NeedPart; public bool Middle, Msc, Turn; public float Bulge = 0.04f; public Vector3 Offset; public Mesh[] Meshes; public bool Tried; }
+        class RearKind { public string Car, Key, NeedPart; public bool Middle, Msc, Turn, FrontFastened; public float Bulge = 0.04f; public Vector3 Offset; public Mesh[] Meshes; public bool Tried; }
         static readonly RearKind[] RearKinds = {
-            new RearKind { Car = "SORBET", Key = "arr" },
+            new RearKind { Car = "SORBET", Key = "arr", FrontFastened = true },   // (bouclee : la 3D de la ceinture avant, JD 06/11)
             new RearKind { Car = "MACHTWAGEN", Key = "taxi2", Bulge = 0.06f },
             new RearKind { Car = "CORRIS", Key = "corris", Middle = true, Bulge = 0.12f },
             // SATSUMA de My Summer Car (Menor 31/10 ; JD : « My Summer Car ») : banquette « seat rear(Clone) » sous Interior/pivot_seat_rear,
@@ -1451,7 +1451,7 @@ namespace MWCoop
         static void UpdateRearModel(Transform car, Belt b, bool on, HashSet<int> belted)
         {
             RearModel m; rearModels.TryGetValue(car, out m);
-            if (on && !RearPartFitted(car)) on = false;   // (SATSUMA sans sa banquette : rien a montrer)
+            if (on && !SeatExport.Active && !RearPartFitted(car)) on = false;   // (SATSUMA sans sa banquette : rien a montrer ; a l'export, pour l'outil des places, si)
             if (!on) { if (m != null && m.Root != null && m.Root.activeSelf) m.Root.SetActive(false); return; }
             if (m != null && m.Root != null && m.Gen != SeatFiles.Generation) { Object.Destroy(m.Root); m = null; }   // (fichier des places relu : refaite)
             if (m == null || m.Root == null)
@@ -1574,10 +1574,14 @@ namespace MWCoop
                 m.Open[k] = part("Rangee" + sd, null, side);
                 part("Languette", ms[3 * k + 1], m.Open[k].transform);
                 m.Closed[k] = part("Bouclee" + sd, null, side);
-                Mesh fast = Object.Instantiate(ms[3 * k + 2]);
-                BulgeRear(fast, bulge, reach);   // (bombee devant la poitrine : l'avatar ne la traverse pas)
-                part("Ceinture", fast, m.Closed[k].transform);
                 RearPullPoints(m, k, ms[3 * k + 2]);
+                Mesh fast = kind.FrontFastened && Config.GetInt("Test", "CeintureArrFaconAvant", 1) != 0 ? RearFromFront(b, car, rt, m, k) : null;
+                if (fast == null)
+                {
+                    fast = Object.Instantiate(ms[3 * k + 2]);
+                    BulgeRear(fast, bulge, reach);   // (bombee devant la poitrine : l'avatar ne la traverse pas)
+                }
+                part("Ceinture", fast, m.Closed[k].transform);
                 // decalage du fichier : la place arriere de ce cote, ceinture « modele » ; rotation autour du centre des pieces
                 // (pas pendant l'export des places : l'outil applique lui-meme le fichier, sinon il le compte deux fois -- JD 06/11)
                 float sx = k == 0 ? -1f : 1f;
@@ -1588,7 +1592,7 @@ namespace MWCoop
                 {
                     Vector3 piv = ms[3 * k].bounds.center;
                     side.localPosition = fb.ModelPos + piv - fb.ModelRot * piv; side.localRotation = fb.ModelRot;
-                    diag.Append(" ; ").Append(sd).Append(" decale de ").Append(fb.ModelPos.ToString("F3")).Append(" tourne de ").Append(fb.ModelRot.eulerAngles.ToString("F1")).Append(" (place ").Append(s.Index).Append(")");
+                    diag.Append(" ; ").Append(sd).Append(" decale de ").Append(fb.ModelPos.ToString("F3")).Append(" tourne de ").Append(fb.ModelRot.eulerAngles.ToString("F1")).Append(" (place ").Append(s.Index).Append(", centre des pieces ").Append(car.InverseTransformPoint(side.TransformPoint(piv)).ToString("F3")).Append(")");
                 }
             }
             // boucles du milieu (SATSUMA : celles des deux places laterales, au milieu de la banquette) : toujours la
@@ -1599,6 +1603,17 @@ namespace MWCoop
                 m.Mid = part("Milieu", null, rt);
                 part("Ceinture", ms[6], m.Mid.transform);
                 m.MidBuckle = ms[6].bounds.center;
+                // (ligne « modele » de la place du milieu, comme les cotes)
+                Seat sm = null;
+                foreach (Seat q in seats) if (q.CarT == car && q.Index > 0 && Mathf.Abs(q.Head.x) < 0.15f) { sm = q; break; }
+                SeatFiles.Belt fm = sm != null ? SeatFiles.BeltFor(sm.Car, sm.Index) : null;
+                if (!SeatExport.Active && fm != null && fm.Kind == "modele" && fm.HasModel)
+                {
+                    Vector3 piv = ms[6].bounds.center;
+                    m.Mid.transform.localPosition = fm.ModelPos + piv - fm.ModelRot * piv; m.Mid.transform.localRotation = fm.ModelRot;
+                    m.MidBuckle = piv + fm.ModelPos;
+                    diag.Append(" ; milieu decale de ").Append(fm.ModelPos.ToString("F3")).Append(" tourne de ").Append(fm.ModelRot.eulerAngles.ToString("F1")).Append(" (place ").Append(sm.Index).Append(", centre ").Append(car.InverseTransformPoint(m.Mid.transform.TransformPoint(piv)).ToString("F3")).Append(")");
+                }
                 m.Mid.SetActive(false);
                 diag.Append(" ; ceinture du milieu");
             }
@@ -1606,6 +1621,45 @@ namespace MWCoop
             Log.Info("ceintures arriere : modele " + kind.Key + " pose sur " + car.name + " (systeme du conducteur : pieces, languette rangee, ceinture bouclee ; matiere "
                      + (strapMat != null ? strapMat.name : "?") + ", metal " + (atlas != strapMat && atlas != null ? atlas.name + " / " + atlas.shader.name : "matiere de la sangle (atlas introuvable)") + ")" + diag);
             return m;
+        }
+
+        // Ceinture arriere bouclee a la 3D de la ceinture avant (JD 06/11 : rangee et tiree, le modele de Menos reste ; bouclee, « les
+        // memes qu'a l'avant ») : le modele du jeu tel que le porte le passager avant (BulgedMesh), en miroir pour l'autre cote, ses trois
+        // attaches (haut, plancher, languette) posees sur celles du modele de Menos, l'epaisseur gardee. Modele illisible : null.
+        static Mesh RearFromFront(Belt b, Transform car, Transform rt, RearModel m, int k)
+        {
+            if (b == null || !b.Anchors || b.Fastened == null) return null;
+            Transform src = b.Fastened.transform;
+            Mesh sm = BulgedMesh(b, car, src);
+            if (sm == null || !sm.isReadable || sm.vertexCount == 0) return null;
+            // (repere de Root : celui du modele de Menos)
+            Matrix4x4 toRt = rt.worldToLocalMatrix * src.localToWorldMatrix, carToRt = rt.worldToLocalMatrix * car.localToWorldMatrix;
+            bool mirror = (k == 0) != (b.Top.x < 0f);
+            Matrix4x4 flip = Matrix4x4.Scale(new Vector3(mirror ? -1f : 1f, 1f, 1f));
+            System.Func<Vector3, Vector3> ancre = p => flip.MultiplyPoint3x4(carToRt.MultiplyPoint3x4(p));
+            Vector3 t0 = ancre(b.Top), l0 = ancre(b.Floor), b0 = ancre(b.MeshBuckle);
+            Vector3 u0 = t0 - b0, v0 = l0 - b0, n0 = Vector3.Cross(u0, v0), u1 = m.Top[k] - m.Buckle[k], v1 = m.Low[k] - m.Buckle[k], n1 = Vector3.Cross(u1, v1);
+            if (n0.sqrMagnitude < 1e-8f || n1.sqrMagnitude < 1e-8f) return null;
+            System.Func<Vector3, Vector3, Vector3, Matrix4x4> axes = (a, c, d) => { var x = Matrix4x4.identity; x.SetColumn(0, a); x.SetColumn(1, c); x.SetColumn(2, d.normalized); return x; };
+            Matrix4x4 lin = axes(u1, v1, n1) * axes(u0, v0, n0).inverse;
+            Matrix4x4 full = Matrix4x4.TRS(m.Buckle[k], Quaternion.identity, Vector3.one) * lin * Matrix4x4.TRS(-b0, Quaternion.identity, Vector3.one) * flip * toRt;
+            Matrix4x4 nm = full.inverse.transpose;
+            Mesh r = Object.Instantiate(sm);
+            r.name = sm.name + " arriere";
+            Vector3[] v = r.vertices, n = r.normals;
+            for (int i = 0; i < v.Length; i++) v[i] = full.MultiplyPoint3x4(v[i]);
+            for (int i = 0; i < n.Length; i++) n[i] = nm.MultiplyVector(n[i]).normalized;
+            r.vertices = v; if (n.Length == v.Length) r.normals = n;
+            if (mirror)   // (faces retournees : le miroir les mettrait a l'envers)
+                for (int s = 0; s < r.subMeshCount; s++)
+                {
+                    int[] t = r.GetTriangles(s);
+                    for (int i = 0; i + 2 < t.Length; i += 3) { int x = t[i]; t[i] = t[i + 1]; t[i + 1] = x; }
+                    r.SetTriangles(t, s);
+                }
+            r.RecalculateBounds();
+            Log.Info("ceintures arriere : cote " + (k == 0 ? "G" : "D") + " bouclee a la 3D de l'avant" + (mirror ? " (miroir)" : "") + ", sangle " + u0.magnitude.ToString("F2") + " -> " + u1.magnitude.ToString("F2") + " m, plancher " + v0.magnitude.ToString("F2") + " -> " + v1.magnitude.ToString("F2") + " m");
+            return r;
         }
 
         // Attaches de la ceinture bouclee de Menos (repere de Bouclee<G|D>, donc avec le decalage « modele ») : en haut l'ancrage de

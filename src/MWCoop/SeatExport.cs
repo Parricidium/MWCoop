@@ -93,6 +93,10 @@ namespace MWCoop
 
             // voitures du jeu : celles qui ont une zone de conducteur (Seats)
             State("voitures", "Voitures du jeu", false);
+            // (le taxi dort sous JOBS/TAXIJOB tant que son travail n'a pas commence : sans lui, ni places ni ceintures de Menor dans l'outil ;
+            // l'export joue sur une copie de la partie, fermee ensuite)
+            GameObject taxi = Game.Msc ? null : Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
+            if (taxi != null && !taxi.activeSelf) { taxi.SetActive(true); Log.Info("export des places : taxi active"); Wait(2f); yield return true; }
             Rescan();
             foreach (Transform car in GameCars())
             {
