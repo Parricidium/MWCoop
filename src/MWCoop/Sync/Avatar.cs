@@ -604,6 +604,7 @@ namespace MWCoop
         }
 
         Transform Bone(string n) { Transform t; return bones != null && bones.TryGetValue(n, out t) ? t : null; }
+        public Transform HandBone(bool right) { return Bone(right ? "hand_right" : "hand_left"); }   // (lampe du carnet du copilote dans la main droite)
         public Transform HandRight { get { return Bone("hand_right"); } }
         public bool InVehicle { get { return inCar; } }
         // Outil en main (HandTools) : prises du manche (monde), dosage ; main gauche aussi pour un outil long.

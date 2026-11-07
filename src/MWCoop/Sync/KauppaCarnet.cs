@@ -118,6 +118,11 @@ namespace MWCoop
             if (cnStage != 2 || cnEq == null || cnEq.Go == null) return;
             Transform eye = EyeT;
             if (eye == null) return;
+            // 3e personne (F5) : le vrai carnet, dans la main gauche de mon avatar ; la copie devant les yeux, que la camera
+            // reculee verrait de dos, est cachee
+            bool third = ThirdPerson.Active;
+            if (cnView != null && cnView.activeSelf == third) cnView.SetActive(!third);
+            foreach (Renderer r in cnHidden) if (r != null && r.enabled != third) r.enabled = third;
             float down = Mathf.Clamp01((Vector3.Angle(eye.forward, Vector3.down) < 90f ? 90f - Vector3.Angle(eye.forward, Vector3.down) : 0f) / 50f);
             cnLift = Mathf.Lerp(cnLift, down, 1f - Mathf.Exp(-10f * Time.deltaTime));
             if (cnView != null)
@@ -272,6 +277,14 @@ namespace MWCoop
                 if (cnEq != null && pages.TryGetValue(cnEq, out pg)) CarnetSivu.SavePng(pg, System.IO.Path.Combine(dir, "carnet2-page-invite.png"));
                 L("essai carnet2 : leve " + CarnetUp + ", carnet « " + (Carnet.Active != null ? Carnet.Active.Name : "auto") + " », lampe " + cnLampOn + ", empreinte " + cnMineHash);
             }
+            // (invite en 3e personne -- [Test] TroisiemePersonne=1 : son propre avatar tient le carnet et la lampe, pas de copie flottante)
+            if (guest && cn2 == 5 && t > 50f)
+            {
+                cn2 = 6;
+                Application.CaptureScreenshot(System.IO.Path.Combine(dir, "carnet2-invite-vue.png"));
+                GameObject lamp; bool hasLamp = cnEq != null && cnLamps.TryGetValue(cnEq, out lamp) && lamp != null;
+                L("essai carnet2 : vue de l'invite, 3e personne " + ThirdPerson.Active + ", copie " + (cnView != null && cnView.activeSelf) + ", lampe " + (hasLamp ? "accrochee a " + (cnLamps[cnEq].transform.parent != null ? cnLamps[cnEq].transform.parent.name : "rien") : "absente"));
+            }
             // (hote : son joueur pres de la voiture -- les pages ne se dessinent qu'a 15 m de ses yeux -- et une camera par-dessus
             // l'epaule du passager, vers son carnet : la page recue doit etre lisible ; essai du 07/11 : camera devant lui, dos du carnet)
             if (!guest && t > 44f)
@@ -294,8 +307,9 @@ namespace MWCoop
                     Esine ce = null;
                     foreach (KeyValuePair<string, CnSaid> kv in cnSaidBy) if (kv.Value.Who == av.Player.Id) ce = FindItem(kv.Key);
                     Vector3 target = ce != null && ce.Go != null ? ce.Go.transform.position : hb.position + fw * 0.33f - up * 0.27f;
-                    cn2Cam.transform.position = hb.position - fw * 0.12f + up * 0.1f + rt * 0.12f;
-                    cn2Cam.transform.LookAt(target, up);
+                    // (jusqu'a 62 s : de cote, par la vitre du passager -- la lampe dans sa main droite ; ensuite par-dessus l'epaule)
+                    if (t < 62f) { cn2Cam.transform.position = hb.position + rt * 0.95f + fw * 0.2f - up * 0.12f; cn2Cam.transform.LookAt(hb.position - up * 0.28f + fw * 0.22f, up); }
+                    else { cn2Cam.transform.position = hb.position - fw * 0.12f + up * 0.1f + rt * 0.12f; cn2Cam.transform.LookAt(target, up); }
                     break;
                 }
             if (!guest && cn2 >= 1 && cn2 < 4)
@@ -311,6 +325,7 @@ namespace MWCoop
                         L("essai carnet2 : page du carnet " + kv.Key.Id + " : carnet « " + (kv.Value.Book != null ? kv.Value.Book.Name : "auto") + " », annonce " + (has ? "#" + s.Who + " " + s.Hash + " lampe " + s.Lamp + " leve " + s.Up : "aucune") + ", lampe ici " + cnLamps.ContainsKey(kv.Key) + ", suivi " + (kv.Value.Stage >= 0 ? Kartturi.StageName(kv.Value.Stage) + " " + kv.Value.M.ToString("F0") + " m" : "aucun"));
                     }
                     bool lampOn = false, up = false; foreach (Avatar av in PlayerSync.Avatars) { up = CarnetRaisedBy(av.Player.Id, out lampOn); break; }
+                    foreach (KeyValuePair<Esine, GameObject> kv in cnLamps) if (kv.Value != null) L("essai carnet2 : lampe du carnet " + kv.Key.Id + " accrochee a " + (kv.Value.transform.parent != null ? kv.Value.transform.parent.name : "rien") + ", a " + (kv.Key.Go != null ? (kv.Value.transform.position - kv.Key.Go.transform.position).magnitude.ToString("F2") : "?") + " m du carnet");
                     L("essai carnet2 : avatar de l'invite, carnet leve " + up + ", lampe " + lampOn);
                 }
                 if (cn2 == 3 && t > 65f) { cn2 = 4; Application.CaptureScreenshot(System.IO.Path.Combine(dir, "carnet2-hote-65.png")); }

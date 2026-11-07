@@ -205,6 +205,7 @@ namespace MWCoop
         public static bool CarnetRaisedBy(int who, out bool lamp)
         {
             lamp = false;
+            if (Session.Me != null && who == Session.Me.Id && cnStage == 2) { lamp = cnLampOn; return true; }   // (mon avatar : 3e personne, camescope qui filme)
             foreach (CnSaid s in cnSaidBy.Values)
                 if (s.Who == who && s.Up && Time.realtimeSinceStartup - s.At < 12f) { lamp = s.Lamp; return true; }
             return false;
@@ -312,14 +313,47 @@ namespace MWCoop
                 if (on && !has) cnLamps[e] = lg = LampModel(e);
                 else if (!on && has) { UnityEngine.Object.Destroy(lg); cnLamps.Remove(e); continue; }
                 if (!on || lg == null) continue;
-                // pres du bord droit de la page, un peu au-dessus, vers son centre (repere du carnet : page vers -z) -- essai du 07/11 :
-                // a 20 cm a droite et 16 cm devant, la lampe flottait pres du pare-brise
-                Transform target = e == cnEq && cnView != null ? cnView.transform : e.Go.transform;
-                Vector3 c = target.position, aim = c - target.forward * 0.02f;
-                Vector3 at = c + target.right * 0.15f + target.up * 0.07f - target.forward * 0.11f;
-                lg.transform.position = at;
-                lg.transform.rotation = Quaternion.LookRotation(aim - at, target.up);
+                // Dans la main droite (JD 08/11 : « que le model du joueur tienne la lampe avec la main ») : accrochee a l'os de la main
+                // de l'avatar de celui qui tient le carnet (chez les autres ; chez moi en 3e personne, mon avatar), comme la montre au
+                // poignet gauche ; a la premiere personne, accrochee a la camera, en bas a droite de l'image (la main hors champ).
+                // Orientee a chaque image vers le centre de la page (la copie devant mes yeux, sinon le carnet) : le faisceau y tombe
+                // quel que soit l'angle du poignet. Sans avatar trouve : a cote de la page, comme avant.
+                Transform parent; Vector3 aim; bool eyeHeld = false;
+                if (e == cnEq)
+                {
+                    Avatar meA = ThirdPerson.Active ? ThirdPerson.Me : null;
+                    Transform hand = meA != null ? meA.HandBone(true) : null;
+                    eyeHeld = hand == null;
+                    parent = hand != null ? hand : EyeT;
+                    aim = hand == null && cnView != null ? cnView.transform.position : e.Go.transform.position;
+                }
+                else
+                {
+                    Avatar av = HolderAvatar(e);
+                    parent = av != null ? av.HandBone(true) : null;
+                    aim = e.Go.transform.position;
+                }
+                if (lg.transform.parent != parent)
+                {
+                    lg.transform.SetParent(parent, false);
+                    Vector3 ps = parent != null ? parent.lossyScale : Vector3.one;   // (os a l'echelle du modele : la lampe garde sa taille)
+                    lg.transform.localScale = new Vector3(1f / Mathf.Max(1e-4f, Mathf.Abs(ps.x)), 1f / Mathf.Max(1e-4f, Mathf.Abs(ps.y)), 1f / Mathf.Max(1e-4f, Mathf.Abs(ps.z)));
+                }
+                if (eyeHeld) lg.transform.localPosition = new Vector3(0.17f, -0.19f, 0.30f);
+                else if (parent != null) lg.transform.localPosition = Vector3.zero;
+                else { Transform tg = e.Go.transform; lg.transform.position = tg.position + tg.right * 0.15f + tg.up * 0.07f - tg.forward * 0.11f; }
+                Vector3 dir = aim - lg.transform.position;
+                if (dir.sqrMagnitude > 1e-4f) lg.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
             }
+        }
+
+        // avatar de celui qui a leve ce carnet (son annonce)
+        static Avatar HolderAvatar(Esine e)
+        {
+            CnSaid s;
+            if (e == null || !cnSaidBy.TryGetValue(e.Id, out s)) return null;
+            foreach (Avatar av in PlayerSync.Avatars) if (av != null && av.Player != null && av.Player.Id == s.Who) return av;
+            return null;
         }
 
         // petite lampe de poche (corps, tete, verre) et son faisceau ; construite en code, sans modele (JD 07/11)
@@ -327,14 +361,15 @@ namespace MWCoop
         {
             var g = new GameObject("carnet_lampe");
             Material body = Plain(new Color(0.12f, 0.12f, 0.13f)), head = Plain(new Color(0.55f, 0.55f, 0.57f)), glass = Plain(new Color(1f, 0.97f, 0.85f));
-            Piece(g, PrimitiveType.Cylinder, new Vector3(0f, 0f, -0.06f), new Vector3(90f, 0f, 0f), new Vector3(0.024f, 0.05f, 0.024f), body);
-            Piece(g, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.0f), new Vector3(90f, 0f, 0f), new Vector3(0.034f, 0.014f, 0.034f), head);
-            Piece(g, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.0145f), new Vector3(90f, 0f, 0f), new Vector3(0.028f, 0.0015f, 0.028f), glass);
+            // (origine : la prise, au milieu du corps ; la tete 6 cm devant, vers +z)
+            Piece(g, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0f), new Vector3(90f, 0f, 0f), new Vector3(0.024f, 0.05f, 0.024f), body);
+            Piece(g, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.06f), new Vector3(90f, 0f, 0f), new Vector3(0.034f, 0.014f, 0.034f), head);
+            Piece(g, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.0745f), new Vector3(90f, 0f, 0f), new Vector3(0.028f, 0.0015f, 0.028f), glass);
             var lo = new GameObject("faisceau");
             lo.transform.SetParent(g.transform, false);
-            lo.transform.localPosition = new Vector3(0f, 0f, 0.02f);
+            lo.transform.localPosition = new Vector3(0f, 0f, 0.08f);
             Light li = lo.AddComponent<Light>();
-            li.type = LightType.Spot; li.spotAngle = 52f; li.range = 2.2f; li.intensity = 1.6f; li.color = new Color(1f, 0.95f, 0.82f);
+            li.type = LightType.Spot; li.spotAngle = 65f; li.range = 2.2f; li.intensity = 1.6f; li.color = new Color(1f, 0.95f, 0.82f);   // (65 deg : toute la page depuis la main)
             li.shadows = LightShadows.None; li.renderMode = LightRenderMode.ForcePixel;
             int layer = e.Go.layer;
             foreach (Transform t in g.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = layer;
