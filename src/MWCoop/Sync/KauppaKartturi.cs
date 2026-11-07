@@ -150,7 +150,7 @@ namespace MWCoop
             Renderer sr = screen != null ? screen.GetComponent<Renderer>() : null;
             if (sr != null && gpsEq.Screen != null && gpsEq.Screen.GetComponent<Renderer>() != null) sr.sharedMaterial = gpsEq.Screen.GetComponent<Renderer>().sharedMaterial;
             else if (sr != null && gpsDev.TryGetValue(gpsEq, out d)) sr.material = new Material(Shader.Find("Unlit/Texture")) { mainTexture = d.Tex };
-            int layer = gpsEq.Go.layer;
+            int layer = ViewLayer(gpsEq.Go.layer, "copilote");   // (My Summer Car : calque 16 de la main du jeu, pas rendu par la camera)
             foreach (Transform c in gpsView.GetComponentsInChildren<Transform>(true)) c.gameObject.layer = layer;
             foreach (Renderer r in gpsEq.Go.GetComponentsInChildren<Renderer>()) if (r.enabled) { r.enabled = false; gpsHidden.Add(r); }
         }

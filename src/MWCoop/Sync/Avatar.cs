@@ -908,7 +908,10 @@ namespace MWCoop
                         // que KauppaCarnetRoue.TickCarnetLamp : a droite de la page, plus haut, vers les yeux) ; le jour, elle reste sur la cuisse
                         Vector3 upC = camRot * Vector3.up, toEye = (headBone.position - at).normalized;
                         ArmTo(false, at - sideH * 0.1f, 1f);
-                        if (cnLamp) ArmTo(true, at + sideH * 0.15f + upC * 0.07f + toEye * 0.11f, 1f);
+                        // (poignet a droite de la page, a peine plus haut : la lampe dans la paume vise la page -- essai du 08/11 : 7 cm plus haut et
+                        // 11 cm vers les yeux, le poing montait au menton)
+                        Vector3 toEyeH = Vector3.ProjectOnPlane(toEye, upC);
+                        if (cnLamp) ArmTo(true, at + sideH * 0.2f + upC * 0.03f + toEyeH * 0.04f, 1f);
                     }
                     else
                     {

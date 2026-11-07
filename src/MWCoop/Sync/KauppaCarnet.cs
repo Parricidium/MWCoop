@@ -154,12 +154,27 @@ namespace MWCoop
             Vector3 size; Transform page;
             cnView = Model(KCarnet, out size, out page);
             cnView.name = "carnet (nakyma)";
-            int layer = cnEq.Go.layer;
+            int layer = ViewLayer(cnEq.Go.layer, "carnet");
             foreach (Transform c in cnView.GetComponentsInChildren<Transform>(true)) c.gameObject.layer = layer;
             foreach (Renderer r in cnEq.Go.GetComponentsInChildren<Renderer>()) if (r.enabled) { r.enabled = false; cnHidden.Add(r); }
             cnViewPage = page != null ? page.GetComponent<Renderer>() : null;
         }
         static Renderer cnViewPage;
+
+        // Calque d'une copie montree devant les yeux (carnet, KARTTURI) : celui de l'objet tenu si la camera des yeux le rend, sinon
+        // le calque 0. [MSC] 08/11 : sur My Summer Car, la main du jeu met l'objet tenu sur le calque 16, que la camera FPS ne rend
+        // pas -- la copie du carnet etait invisible, assis (et celle du KARTTURI, jamais photographiee assise sur MSC).
+        static int ViewLayer(int held, string what)
+        {
+            Transform eye = EyeT;
+            Camera cam = eye != null ? eye.GetComponent<Camera>() : null;
+            int l = cam != null && (cam.cullingMask & (1 << held)) == 0 ? 0 : held;
+            Transform hc = eye != null ? eye.Find("HandCamera") : null;
+            Camera hcam = hc != null ? hc.GetComponent<Camera>() : null;
+            L(what + " : copie devant les yeux sur le calque " + l + " (objet tenu " + held + ", camera " + (cam != null ? cam.name + " masque " + cam.cullingMask.ToString("x") : "?")
+              + ", HandCamera " + (hcam != null ? (hcam.enabled ? "active" : "eteinte") + " masque " + hcam.cullingMask.ToString("x") : "absente") + ")");
+            return l;
+        }
 
         static void CarnetDown()
         {
@@ -311,7 +326,7 @@ namespace MWCoop
                     // ensuite au-dessus de sa tete, vers la page. Essai du 08/11 : par la vitre, la portiere cachait tout ; par-dessus
                     // l'epaule, la tete)
                     if (t < 62f) { cn2Cam.transform.position = hb.position - rt * 0.62f + fw * 0.08f - up * 0.06f; cn2Cam.transform.LookAt(hb.position - up * 0.3f + fw * 0.22f + rt * 0.04f, up); }
-                    else { cn2Cam.transform.position = hb.position + up * 0.24f - fw * 0.1f + rt * 0.03f; cn2Cam.transform.LookAt(target, up); }
+                    else { cn2Cam.transform.position = hb.position - fw * 0.5f + up * 0.02f + rt * 0.14f; cn2Cam.transform.LookAt(target, up); }   // (banquette arriere : au-dessus de la tete, la camera etait dans le pavillon)
                     break;
                 }
             if (!guest && cn2 >= 1 && cn2 < 4)
@@ -393,7 +408,9 @@ namespace MWCoop
                     if (e != null && pages.TryGetValue(e, out pg))
                     {
                         CarnetSivu.SavePng(pg, System.IO.Path.Combine(dir, "carnet-page-" + tag + ".png"));
-                        L("essai carnet : page " + tag + " a " + m.ToString("F0") + " m, suivi " + (pg.Stage >= 0 ? Kartturi.StageName(pg.Stage) + " " + pg.M.ToString("F0") + " m" : "aucun"));
+                        GameObject lp; bool lampHere = cnLamps.TryGetValue(e, out lp) && lp != null;
+                        L("essai carnet : page " + tag + " a " + m.ToString("F0") + " m, suivi " + (pg.Stage >= 0 ? Kartturi.StageName(pg.Stage) + " " + pg.M.ToString("F0") + " m" : "aucun")
+                          + ", lampe " + (lampHere ? "allumee (" + (lp.transform.parent != null ? lp.transform.parent.name : "-") + ")" : "eteinte") + ", copie " + (cnView != null && cnView.activeInHierarchy ? "calque " + cnView.layer : "absente"));
                     }
                     else L("essai carnet : pas de page (" + tag + ", leve " + CarnetUp + ")");
                     if (off == 0f) Application.CaptureScreenshot(System.IO.Path.Combine(dir, "carnet-vue-" + cnLegs[cnLeg].Key + ".png"));

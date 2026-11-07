@@ -340,7 +340,14 @@ namespace MWCoop
                     lg.transform.localScale = new Vector3(1f / Mathf.Max(1e-4f, Mathf.Abs(ps.x)), 1f / Mathf.Max(1e-4f, Mathf.Abs(ps.y)), 1f / Mathf.Max(1e-4f, Mathf.Abs(ps.z)));
                 }
                 if (eyeHeld) lg.transform.localPosition = new Vector3(0.17f, -0.19f, 0.30f);
-                else if (parent != null) lg.transform.localPosition = Vector3.zero;
+                else if (parent != null)
+                {
+                    // (l'os de la main est au poignet : la lampe dans la paume, 8 cm plus loin dans l'axe de l'avant-bras -- essai de jour
+                    // du 08/11 : seul le verre depassait de la manche)
+                    Transform fore = parent.parent;
+                    Vector3 axis = fore != null ? parent.position - fore.position : Vector3.zero;
+                    lg.transform.position = axis.sqrMagnitude > 1e-6f ? parent.position + axis.normalized * 0.08f : parent.position;
+                }
                 else { Transform tg = e.Go.transform; lg.transform.position = tg.position + tg.right * 0.15f + tg.up * 0.07f - tg.forward * 0.11f; }
                 Vector3 dir = aim - lg.transform.position;
                 if (dir.sqrMagnitude > 1e-4f) lg.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
