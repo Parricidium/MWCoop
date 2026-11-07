@@ -64,8 +64,11 @@ def main():
     gab = Image.new("RGB", (W, W), (176, 178, 182)); dr = ImageDraw.Draw(gab)
     U, I = coque[5], coque[6]
     for t in I: dr.polygon([(U[k, 0] * (W - 1), (1 - U[k, 1]) * (W - 1)) for k in t], fill=(250, 250, 248))
-    # (bords des iles : aretes d'un seul triangle)
-    e = np.sort(np.r_[I[:, [0, 1]], I[:, [1, 2]], I[:, [2, 0]]], 1)
+    # (bord de la coque : aretes d'un seul triangle, sommets soudes par position -- les coutures du modele d'origine ne sont plus des bords)
+    _, first, inv = np.unique(np.round(coque[3] / 1e-5).astype(np.int64), axis=0, return_index=True, return_inverse=True)
+    rep = first[inv.ravel()]
+    Iw = rep[I]
+    e = np.sort(np.r_[Iw[:, [0, 1]], Iw[:, [1, 2]], Iw[:, [2, 0]]], 1)
     ue, cnt = np.unique(e, axis=0, return_counts=True)
     key = lambda k: (round(U[k, 0] * 4096), round(U[k, 1] * 4096))
     for a, b2 in ue[cnt == 1]:
@@ -91,6 +94,8 @@ def main():
     gab.save(os.path.join(OUT, "gabarit-casque.png"), optimize=True)
     # --- apercus
     ctx = moderngl.create_standalone_context()
+    # (faces arriere coupees, comme dans le jeu : l'interieur de la coque et le dos du joint ne percent plus la coque -- taches et bande bruitee)
+    ctx.front_face = "cw"   # (triangles d'Unity, x retourne)
     prog = ctx.program(vertex_shader=VS, fragment_shader=FS)
     S = 400
     fbo = ctx.framebuffer(color_attachments=[ctx.texture((S, S), 4)], depth_attachment=ctx.depth_texture((S, S)))
@@ -110,7 +115,7 @@ def main():
         prog["mvp"].write(mvp.astype("f4").tobytes())
         layers = []
         for passe in (0, 1):
-            fbo.use(); ctx.enable(moderngl.DEPTH_TEST); ctx.disable(moderngl.BLEND); ctx.depth_mask = True; fbo.clear(0, 0, 0, 0)
+            fbo.use(); ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE); ctx.disable(moderngl.BLEND); ctx.depth_mask = True; fbo.clear(0, 0, 0, 0)
             for p, vao, tex in objs:
                 if p[7] & 2: continue
                 prog["mode"].value = (0 if p[0] == "coque" else 1) if passe == 0 else (2 if p[0] == "coque" else 3)

@@ -36,6 +36,7 @@ from reduire import reduire   # noqa: E402
 #        "enlever" (matieres retirees, apres lecture de leurs points), "unis" (matieres en couleur unie, moyenne de leur texture),
 #        "souder" (vrai : pieces unies soudees par position avant reduction -- coutures d'UV inutiles, la reduction va plus loin),
 #        "tourner" (matiere -> (degres, pivot) : piece tournee autour de l'axe x du repere final -- visiere rabattue),
+#        "gonfler" (matiere -> metres : sommets pousses le long de leurs normales -- visiere rabattue qui frolait la mentonniere),
 #        "couleur_verre" (couleur des pieces « verre »), "coque" (matiere peinte par les joueurs : triangles tournes vers l'exterieur
 #        -> piece « coque », texture = masque de la deco par defaut ; vers l'interieur -> couleur sombre unie)])
 OBJETS = {
@@ -55,7 +56,8 @@ OBJETS = {
     # (casque personnalise, JD 07/11 : « F1 Helmet », nv, CC BY 4.0 -- forme seule, sa deco et ses sponsors retires)
     "casque":       ("casque.glb",       (0, 90, 0),    0.30,                   0.003,  512, (), 0, {
         "unis": ("Helmet_Rubber", "Helmet_Plastic", "Helmet_Metal", "Helmet_Metal_Black", "Helmet_Inside", "Helmet_SoftFabric"), "souder": True, "grille": 0.005,
-        "verre": {"Helmet_Visors": 0.45}, "couleur_verre": (0.12, 0.14, 0.17), "tourner": {"Helmet_Visors": (-68, (0.0, -0.003, -0.001))}, "coque": "Helmet_Base"}),
+        "verre": {"Helmet_Visors": 0.45}, "couleur_verre": (0.12, 0.14, 0.17), "tourner": {"Helmet_Visors": (-68, (0.0, -0.003, -0.001))}, "gonfler": {"Helmet_Visors": 0.003},
+        "coque": "Helmet_Base"}),
     "gps":          ("gps.glb",          (-90, 180, 0), 0.165,                  0.0,    0,   (), 0, {"couleur": (0.24, 0.25, 0.27)}),   # (debout, ecran vers -z ; gris fonce, le modele n'a qu'un blanc)
 }
 
@@ -162,8 +164,13 @@ def build(name, spec, apercu):
             # (V du fichier, en haut a 0 : retourne ensuite comme les autres ; avant EN BAS de l'image, droite = droite vue de face :
             # un texte ecrit droit pres du bas se lit a l'endroit de face -- le haut des lettres vers le centre)
             U = np.c_[0.5 + r * np.sin(ph), 0.5 + r * np.cos(ph)]
+            # rebords replies (bas de la coque, bord de l'ouverture des yeux) : la projection les pose sur la meme partie de l'image que
+            # le dehors -- taches dans la deco, peinture du joueur en double. Ils passent dans la piece sombre (bordure non peinte).
+            keep = plis_coque(P, U, I, out, ctr)
+            print("  coque : %d triangles dehors, %d en bordure (rebords replies)" % (int(keep.sum()), int((out & ~keep).sum())))
+            out = keep
             Uf = U.copy(); Uf[:, 1] = 1.0 - Uf[:, 1]   # (V d'Unity, comme les autres pieces apres retournement)
-            mask = masque_casque(P, Uf, I[out])
+            mask = masque_casque(P, Uf, I[out], 2048).resize((512, 512), Image.LANCZOS)   # (bords adoucis : 4 x 4 points par texel)
             buf = io.BytesIO(); mask.save(buf, "PNG", optimize=True)
             ti = len(texlist); texlist.append((name + "_masque.png", buf.getvalue()))
             tris0 += len(I)
@@ -174,6 +181,8 @@ def build(name, spec, apercu):
             deg, piv = opt["tourner"][mat.name]
             a = np.radians(deg); Rx = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
             P = (P - np.array(piv)) @ Rx.T + np.array(piv); Nn = Nn @ Rx.T
+        if mat.name in opt.get("gonfler", {}):
+            P = P + Nn * opt["gonfler"][mat.name]   # (ecartee de la coque le long de ses normales : plus de melange avec elle)
         if mat.name in opt.get("decals", {}) and tname:
             # etiquette : l'atlas des etiquettes (alpha), garde tel quel, partage par toutes
             t = next(t for t in g.textures if t.name == tname)
@@ -316,6 +325,40 @@ def vues(name, pieces):
     img.save(os.path.join(os.path.dirname(os.path.abspath(__file__)), "apercu-" + name + ".png"))
 
 
+def plis_coque(P, U, I, out, ctr, size=2048):
+    """triangles « dehors » de la coque gardes peints : ni retournes dans l'image (pli de la projection), ni caches sous un autre
+    plus loin du centre de projection sur le meme point de l'image (vu du dehors, c'est le plus loin qui se voit)."""
+    import moderngl
+    a = U[I[:, 1]] - U[I[:, 0]]; b2 = U[I[:, 2]] - U[I[:, 0]]
+    sa = a[:, 0] * b2[:, 1] - a[:, 1] * b2[:, 0]
+    sens = np.sign(np.median(sa[out]))
+    ok = out & (np.sign(sa) == sens)
+    d = np.linalg.norm(P - ctr, axis=1); dmax = float(d.max()) * 1.01
+    ctx = moderngl.create_standalone_context()
+    prog = ctx.program(vertex_shader="""#version 330
+in vec2 uv; in float dist; out float vd; uniform float dmax;
+void main(){ gl_Position = vec4(uv * 2.0 - 1.0, 1.0 - 2.0 * dist / dmax, 1.0); vd = dist; }""",
+                       fragment_shader="""#version 330
+in float vd; out vec4 o; uniform int base;
+void main(){ o = vec4(float(gl_PrimitiveID + base), vd, 0.0, 1.0); }""")
+    prog["dmax"].value = dmax
+    fbo = ctx.framebuffer(color_attachments=[ctx.texture((size, size), 4, dtype="f4")], depth_attachment=ctx.depth_texture((size, size)))
+    fbo.use(); fbo.clear(-1.0, 0, 0, 0, depth=1.0); ctx.enable(moderngl.DEPTH_TEST)
+    idx = np.nonzero(ok)[0]
+    vbo = ctx.buffer(np.c_[U, d].astype("f4").tobytes()); ibo = ctx.buffer(np.asarray(I[idx], "i4").ravel().tobytes())
+    prog["base"].value = 0
+    ctx.vertex_array(prog, [(vbo, "2f 1f", "uv", "dist")], ibo).render()
+    img = np.frombuffer(fbo.read(components=4, dtype="f4"), "f4").reshape(size, size, 4)
+    win, wd = img[..., 0], img[..., 1]
+    # chaque triangle garde : son centre dans l'image, qui y gagne ? (perdu : un autre, plus loin du centre de 2 mm et plus)
+    cu = U[I[idx]].mean(1); cd = d[I[idx]].mean(1)
+    px = np.clip((cu[:, 0] * size).astype(int), 0, size - 1); py = np.clip((cu[:, 1] * size).astype(int), 0, size - 1)
+    w = win[py, px].astype(int); lost = (w >= 0) & (w != np.arange(len(idx))) & (wd[py, px] > cd + 0.002)
+    ok[idx[lost]] = False
+    ctx.release()
+    return ok
+
+
 def masque_casque(P, U, I, size=512):
     """deco par defaut du casque, en gris (0 : couleur de fond, 255 : couleur de bande) : bande sur le dessus, avant-arriere, et liseré bas.
     Chaque texel prend sa position 3D (rendu dans l'espace des UV, OpenGL) ; le mod colore le masque pour chaque casque du stand."""
@@ -337,7 +380,7 @@ in vec3 vp; out vec4 o; void main(){ o = vec4(vp, 1.0); }""")
     from PIL import ImageFilter
     img = Image.fromarray(np.flipud(m), "L")
     cov_img = Image.fromarray(np.flipud(np.where(cov, 255, 0).astype("uint8")), "L")
-    grown = img.filter(ImageFilter.MaxFilter(5))
+    grown = img.filter(ImageFilter.MaxFilter(5 if size <= 512 else 2 * (size // 512) + 3))
     img = Image.composite(img, grown, cov_img)
     return img.convert("RGB")
 
