@@ -33,7 +33,10 @@ from reduire import reduire   # noqa: E402
 #        "boutons" (matiere -> nom : piece a part « bouton_<nom> », ni reduite ni fondue dans la palette, pour l'enfoncer),
 #        "decals" (matiere -> nom de piece : etiquette a fond transparent, texture gardee avec son alpha, decoupee),
 #        "verre" (matiere -> opacite : piece transparente), "points" (cle -> matiere : sa boite, cle_min / cle_max),
-#        "enlever" (matieres retirees, apres lecture de leurs points)])
+#        "enlever" (matieres retirees, apres lecture de leurs points), "unis" (matieres en couleur unie, moyenne de leur texture),
+#        "souder" (vrai : pieces unies soudees par position avant reduction -- coutures d'UV inutiles, la reduction va plus loin),
+#        "tourner" (matiere -> (degres, pivot) : piece tournee autour de l'axe x du repere final -- visiere rabattue),
+#        "couleur_verre" (couleur des pieces « verre »)])
 OBJETS = {
     "popcorn":      ("popcorn.glb",      (0, 0, 0),     0.24,                   0.0,    256, (), 0),
     "camescope":    ("camescope.glb",    (0, 90, 0),    0.30,                   0.0,    512, (), 0),      # (objectif vers +z)
@@ -133,7 +136,16 @@ def build(name, spec, apercu):
         if mat.name in opt.get("boutons", {}):
             pname = "bouton_" + opt["boutons"][mat.name]; flags = 4
             if "couleur_boutons" in opt: col = list(opt["couleur_boutons"]) + [1.0]; tname = ""
-        if mat.name in opt.get("verre", {}): flags = 2 | 4; ti = -1; col = col[:3] + [opt["verre"][mat.name]]
+        if mat.name in opt.get("verre", {}):
+            flags = 2; ti = -1; col = list(opt.get("couleur_verre", col[:3]))[:3] + [opt["verre"][mat.name]]; tname = ""
+        if mat.name in opt.get("unis", ()) and tname:
+            t = next(t for t in g.textures if t.name == tname)
+            _, mean, _ = texture(raw[t.offset:t.offset + t.size], 0)
+            col = [col[0] * mean[0], col[1] * mean[1], col[2] * mean[2], col[3]]; tname = ""
+        if mat.name in opt.get("tourner", {}):
+            deg, piv = opt["tourner"][mat.name]
+            a = np.radians(deg); Rx = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
+            P = (P - np.array(piv)) @ Rx.T + np.array(piv); Nn = Nn @ Rx.T
         if mat.name in opt.get("decals", {}) and tname:
             # etiquette : l'atlas des etiquettes (alpha), garde tel quel, partage par toutes
             t = next(t for t in g.textures if t.name == tname)
@@ -179,6 +191,27 @@ def build(name, spec, apercu):
         if ti < 0 and "couleur" in opt: col = list(opt["couleur"]) + [1.0]
         tris0 += len(I)
         pieces.append([pname, ti, col, P, Nn, U, I, flags])
+    # soudure : les pieces unies (palette) n'ont pas besoin de leurs coutures d'UV
+    if opt.get("souder"):
+        for p in pieces:
+            if p[1] >= 0 or p[7] & ~2: continue   # (unies et vitres sans texture)
+            key = np.round(p[3] / 1e-5).astype(np.int64)
+            _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+            inv = inv.ravel()
+            Nn = np.zeros((len(first), 3)); np.add.at(Nn, inv, p[4]); Nn /= np.maximum(np.linalg.norm(Nn, axis=1, keepdims=True), 1e-9)
+            p[3], p[4], p[5], p[6] = p[3][first], Nn, p[5][first], inv[p[6]]
+            # (grille : sommets d'une meme case de h metres fondus -- petites vis rondes de 20 000 triangles, que la reduction ne prend pas)
+            h = opt.get("grille", 0)
+            if h > 0:
+                key = np.floor(p[3] / h).astype(np.int64)
+                _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True); inv = inv.ravel()
+                cnt = np.bincount(inv); P2 = np.zeros((len(first), 3)); np.add.at(P2, inv, p[3]); P2 /= cnt[:, None]
+                N2 = np.zeros((len(first), 3)); np.add.at(N2, inv, p[4]); N2 /= np.maximum(np.linalg.norm(N2, axis=1, keepdims=True), 1e-9)
+                I2 = inv[p[6]]
+                ok = (I2[:, 0] != I2[:, 1]) & (I2[:, 1] != I2[:, 2]) & (I2[:, 0] != I2[:, 2])
+                I2 = I2[ok]; I2 = np.unique(np.sort(I2, 1), axis=0, return_index=True)[1]
+                I2 = inv[p[6]][ok][np.sort(I2)]
+                p[3], p[4], p[5], p[6] = P2, N2, p[5][first], I2
     # reduction : seuil donne, double tant que l'objet depasse le nombre de triangles vise
     if err > 0:
         e = err
