@@ -330,6 +330,7 @@ A square image is best: it is brought to 1024 x 1024. Transparency is ignored: t
 Custom helmet	خوذة خاصة
 New Helmet tab on the Character page: paint your helmet on the template, then buy it in game at the CARDINAL shop.	تبويب «خوذة» جديد في صفحة الشخصية: ارسم خوذتك على القالب، ثم اشترِها في اللعبة من متجر CARDINAL.
 What the others see of you: outfit, face, helmet, car. Visible as soon as you enter a lobby.	ما يراه الآخرون منك: الملابس، الوجه، الخوذة، السيارة. يظهر فور دخولك إلى ردهة.
+A reel takes a video of any length. Films received from other players are deleted at the next game load, except those on a reel or tape kept in the game; yours (recorded, edited, imported) never are.	تتسع البكرة لفيديو بأي طول. تُحذف الأفلام المستلمة من لاعبين آخرين عند التحميل التالي للعبة، إلا ما كان منها على بكرة أو شريط محفوظ في اللعبة؛ أما أفلامك (المصوّرة أو المُركّبة أو المستوردة) فلا تُحذف أبدًا.
 if private	إذا كانت خاصة
 Yes	نعم
 No	لا
@@ -2050,7 +2051,7 @@ The CARDINAL parts shop	متجر قطع الغيار CARDINAL
 Mod parts, used parts for the Rivett	قطع المودات، قطع مستعملة لـ Rivett
 Look at an item: its name, condition and price show up. Left click takes it, right click puts it back.	انظر إلى سلعة: يظهر اسمها وحالتها وسعرها. النقر الأيسر يأخذها، والنقر الأيمن يعيدها.
 Look at the till on the counter: its screen shows the total. Click to pay, from your wallet. Your purchases appear on each wing's NOUTO pallet, in front of the counter.	انظر إلى الصندوق على المنضدة: تعرض شاشته المجموع. انقر للدفع من محفظتك. تظهر مشترياتك على منصة NOUTO لكل جناح، أمام المنضدة.
-Your (imported) film isn't on the others' games yet: when you load the reel, each of them gets a question with the film's size ([Y] yes, [U] no). The film goes to those who say yes, and the show starts by itself once everyone has it.	فيلمك (المستورد) ليس لدى الآخرين بعد: عند وضع البكرة، يتلقى كل منهم سؤالًا مع حجم الفيلم ([Y] نعم، [U] لا). يُرسل الفيلم لمن يقول نعم، ويبدأ العرض وحده عندما يصبح لدى الجميع.
+Your (imported) film isn't on the others' games yet: when you load the reel, each of them gets a question with the film's size ([Y] yes, [U] no); without enough disk space, they read it in the chat. The film goes to those who say yes, and the show starts as soon as everyone has received enough of it: the rest arrives during the screening.	فيلمك (المستورد) ليس لدى الآخرين بعد: عند وضع البكرة، يتلقى كل منهم سؤالًا مع حجم الفيلم ([Y] نعم، [U] لا)؛ وإن لم تكفِ المساحة على قرصه يقرأ ذلك في الدردشة. يُرسل الفيلم لمن يقول نعم، ويبدأ العرض حين يتلقى كل واحد ما يكفي منه: ويصل الباقي أثناء العرض.
 During the show, the room's lights go out; at the end they come back on and the emergency exit opens.	أثناء العرض تنطفئ أضواء القاعة؛ وفي النهاية تعود وتُفتح مخرج الطوارئ.
 All	الكل
 Others	أخرى
