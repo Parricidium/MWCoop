@@ -367,6 +367,7 @@ static void GoPage(int p)
     if (p == TAB_LOGS) { LogsScan(); CrashSeen(); }
     if (p == TAB_VHS) { g_vhsEdit = -1; g_mediaBob = false; VhsScan(); }   // (la barre ouvre VHS ; l'onglet Bobines remet g_mediaBob ensuite)
     if (p == TAB_ALBUM) AlbScan();
+    if (p == TAB_CARNET) CarnetEnter();
     if (p == TAB_SAVES) { g_saveEdit = -1; SavesScan(); }
     if (p == TAB_MODS || p == TAB_CONTENT) MscScan();
     if (p == TAB_SKIN) g_skinIdleT = GetTickCount();
@@ -396,12 +397,13 @@ static const NavItem kNav[] = {
     { TAB_GFX, IC_SLIDERS, L"Jeu", L"Game" }, { TAB_COOP, IC_GLOBE, L"Co-op", L"Co-op" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
     { TAB_ADDONS, IC_CAR, L"Addons", L"Add-ons" },   // (sous Mods : les voitures addons et la VAZ, chacune avec sa livree -- suggestion d'un joueur, 21/10)
     { TAB_RALLY, IC_HEART, L"RallyWorld", L"RallyWorld" },   // (sous Addons, coeur rouge : la communaute qui nous prete ses voitures -- JD, 03/11 ; rallyworld.inc)
+    { TAB_CARNET, IC_PENCIL, L"Carnet", L"Pace notes" },     // (sous RallyWorld : le carnet de notes du copilote -- JD, 07/11 ; carnet.inc)
     { TAB_VHS, IC_FILM, L"VHS", L"VHS" }, { TAB_ALBUM, IC_IMAGE, L"Album", L"Album" },   // (MEDIA : media.inc, demande de JD, 13/10)
     { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" },   // (guide des joueurs, wiki.inc)
     { TAB_SYNC, IC_LAYERS, L"Synchronisé", L"What's synced" },   // (sous Guide : son article « Ce qui est synchronise » -- suggestion de Markos, forum 01/11)
     { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 3, 3, 5, 5 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroupN[] = { 3, 3, 6, 5 };   // pages de chaque groupe, dans l'ordre de kNav
 static const int kNavGroups = 4;
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MOI", L"RÉGLAGES", L"MÉDIA & AIDE" }, *kNavGroupEn[] = { L"PLAY", L"ME", L"SETTINGS", L"MEDIA & HELP" };
 static Bitmap *g_logo;
@@ -727,6 +729,7 @@ static void DrawHeader(Graphics &g)
     case TAB_COOP: case TAB_GFX: title = T(L"Réglages", L"Settings"); sub = SetHeaderSub(); break;   // (gfx.inc : une page, des onglets)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_RALLY: title = L"RallyWorld"; sub = T(L"Rallye et tout-terrain pour Assetto Corsa · la communauté qui nous prête ses voitures", L"Rally and off-road for Assetto Corsa · the community that lends us its cars"); break;
+    case TAB_CARNET: title = T(L"Carnet du copilote", L"Co-driver's pace notes"); sub = T(L"Tes notes sur le tracé des spéciales du rallye : le copilote les lit en jeu, carnet en main.", L"Your notes on the rally stages' layout: the co-driver reads them in game, notebook in hand."); break;
     case TAB_TOOLS: title = T(L"Outils", L"Tools"); sub = T(L"Des programmes à part pour aller plus loin, à télécharger d'un clic.", L"Separate programs to go further, downloaded in one click."); break;
     case TAB_VHS: case TAB_ALBUM:
         if (g_tab == TAB_VHS && g_mediaBob) { title = T(L"Bobines de cinéma", L"Cinema reels"); sub = T(L"Les films de chaque partie : importer, renommer, exporter, faire de la place.", L"The films of each game: import, rename, export, free up space."); break; }
@@ -1478,6 +1481,10 @@ enum { CRED_3D, CRED_IMG, CRED_THANKS, CRED_SUPPORT };
 struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    // (carnet de notes du copilote, en main du copilote en jeu : spec de [Project & Fesability] 07/11 ; carnet.inc, mod de [MWC])
+    { CRED_3D, L"Sousinho", L"Modèle 3D : carnet du copilote", L"3D model: co-driver's notebook",
+      L"« Single spiral notepad » de Sousinho sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, page du dessus dessinée en jeu. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"Single spiral notepad\" by Sousinho on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, top page drawn in game. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
     // (casque perso du magasin CARDINAL, [Addons] 07/11 : forme seule ; le nom du pilote du modele d'origine n'apparait nulle part)
     { CRED_3D, L"nv", L"Modèle 3D : casque", L"3D model: helmet",
       L"« F1 Helmet - Gilles Villeneuve » de nv (@nielsvalckenaere) sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : forme seule, réduit, décoration d'origine retirée. Lien complet : MWCoop\\CREDITS-objets.txt.",
@@ -1626,6 +1633,9 @@ static void DrawCreditsPage(Graphics &g)
         y += 26;
         Text(g, T(L"Police Nunito · The Nunito Project Authors · licence SIL OFL 1.1", L"Nunito font · The Nunito Project Authors · SIL OFL 1.1 license"),
              RectF(area.X + 14, y, area.Width - 28, 22), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);   // (police du lanceur, launcher.rc 6)
+        y += 26;
+        Text(g, T(L"Police Caveat (carnet du copilote) · The Caveat Project Authors · licence SIL OFL 1.1", L"Caveat font (co-driver's notebook) · The Caveat Project Authors · SIL OFL 1.1 license"),
+             RectF(area.X + 14, y, area.Width - 28, 22), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);   // (texte libre du carnet, launcher.rc 63 ; carnet\Caveat-OFL.txt)
         y += 30;
     } else {
         for (const Credit &k : kCredits) {
@@ -1701,6 +1711,7 @@ static void DrawUI(Graphics &g)
     case TAB_API: DrawApiPage(g); break;
     case TAB_TOOLS: DrawToolsPage(g); break;
     case TAB_RALLY: DrawRallyPage(g); break;
+    case TAB_CARNET: DrawCarnetPage(g); break;
     case TAB_CREDITS: DrawCreditsPage(g); break;
     case TAB_WIKI: DrawWikiPage(g); break;
     case TAB_VHS: DrawVhs(g); break;
@@ -1876,6 +1887,7 @@ static bool UiClick(int id)
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
     if (id >= UI_TOOL_GET && id <= UI_TOOL_CV_DIR) { ToolsClick(id); return true; }
     if (id >= UI_RALLY_SITE && id <= UI_RALLY_DON2) return RallyClick(id);   // (rallyworld.inc)
+    if (id >= UI_CN_PREV && id < UI_CN_END) { CarnetClick(id); return true; }   // (carnet.inc)
     if (id == UI_PLACES_OPEN || id == UI_PLACES_EXPORT) { PlacesClick(id); return true; }   // (page Outils : placement des sieges, outils-places.inc)
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
     if (id >= UI_BOB_TAB && id < UI_BOB_END) { BobClick(id); return true; }   // (onglet Bobines : bobines.inc)

@@ -34,6 +34,10 @@
 // convertis en PNG) : page RallyWorld (rallyworld.inc)
 60 RCDATA "rallyworld\\gravel.png"
 61 RCDATA "rallyworld\\rallyworld.png"
+// Carnet du copilote : planche de symboles dessinee par JD, fond et reperes retires (carnet.inc)
+62 RCDATA "carnet\\symboles.png"
+// Carnet du copilote : police manuscrite Caveat (SIL OFL 1.1, licence carnet\\Caveat-OFL.txt), la meme que le mod
+63 RCDATA "carnet\\Caveat-Regular.ttf"
 
 1 VERSIONINFO
 FILEVERSION MWV_NUM

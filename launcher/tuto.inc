@@ -175,6 +175,9 @@ static const TutoStep kTuto[] = {
     // lanceur-1.16.29 (07/11) : onglet Bobines de la page VHS (72), avec le Guide du cinema
     { L"Bobines du cinéma", L"Nouvel onglet Bobines sur la page VHS : les films de chaque partie, avec leur durée et où ils servent. Importe une vidéo, renomme, exporte en .mp4 ou fais de la place.",
       L"Cinema reels", L"New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.", "1.16.29" },
+    // lanceur-1.16.30 : page Carnet du copilote (73), sous RallyWorld
+    { L"Carnet du copilote", L"Nouvelle page Carnet, sous RallyWorld : pose tes notes de rallye sur le tracé des spéciales. En jeu, le copilote les lit carnet en main.",
+      L"Co-driver's pace notes", L"New Pace notes page, under RallyWorld: place your rally notes on the stages' layout. In game, the co-driver reads them notebook in hand.", "1.16.30" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -277,6 +280,7 @@ static RectF TutoTarget(int i)
     case 59: return g_saveImportR;                           // Importer une sauvegarde (en-tete des Sauvegardes : ui.inc DrawHeader)
     case 60: return g_navR[TAB_ADDONS];                      // Addons : Voitures et Mods (barre ; modules.inc)
     // 1.16.7
+    case 73: return g_navR[TAB_CARNET];                      // Carnet dans la barre (sous RallyWorld : carnet.inc)
     case 72: return MediaTabRect(1);                         // Bobines (en-tete de la page VHS : media.inc, bobines.inc)
     case 71: return PersoTabRect(3);                         // Casque (en-tete de la page Personnage : tenue.inc, casque.inc)
     case 70: return g_btn[B_SOLOCOOP].r;                     // SOLO COOP (Accueil)

@@ -1999,7 +1999,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_RALLY, TAB_SYNC, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_SYNC : raccourci vers l'article « Ce qui est synchronise » du Guide, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_BUG, TAB_ADDONS, TAB_RALLY, TAB_SYNC, TAB_CARNET, TAB_COUNT };   // (TAB_ADDONS : raccourci de la barre vers l'onglet Addons de la page Voiture, jamais g_tab ; TAB_SYNC : raccourci vers l'article « Ce qui est synchronise » du Guide, jamais g_tab ; TAB_BUG : Signaler un bug dans le lanceur, signalement.inc, hors de la barre)
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_UPDLANCEUR, B_BUG, B_MAX, B_SOLOCOOP, B_COUNT };   // (B_MAX : Agrandir, nouvelle interface seulement -- fenetre.inc)   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
@@ -5009,6 +5009,7 @@ static std::wstring FitText(const std::wstring &s, float px, int style, float ma
 #include "outils-places.inc"   // (page Outils : bandeau Placement des sieges, [Addons et Tools])
 #include "signalement.inc"
 #include "signalnatif.inc"   // (refonte L5 : Signaler un bug natif -- API JSON du site, connexion par code, Mes dossiers, formulaire, envoi des zips)   // (Signaler un bug : le site de signalement dans le lanceur, moteur WebView2 ; sinon BugReport)
+#include "carnet.inc"   // (page Carnet : editeur du carnet de notes du copilote, 07/11 ; apres signalnatif.inc pour Jv)
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -7368,6 +7369,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         float x = ((short)LOWORD(lp) - g_offX) / g_scale - kM, y = ((short)HIWORD(lp) - g_offY) / g_scale - kM;   // (coordonnees de la carte ; g_offX/Y : nouvelle interface, fenetre.inc)
         if (g_carDrag) { CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         if (g_skinDrag) { SkinDragTo(x); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
+        if (g_cnDrag) { CarnetDragTo(x, y); SetCursor(LoadCursor(NULL, g_cnDrag == 1 ? IDC_HAND : IDC_SIZEALL)); return 0; }   // (carnet.inc : une note ou la vue)
         if (g_tuto >= 0) {   // (visite guidee : elle seule repond)
             g_hot = -1; g_uiHot = -1; g_optHot = -1; g_lobbyHot = -1;
             g_tutoHot = TutoHit(x, y);
@@ -7395,12 +7397,13 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_skinHot = skinTab && g_perso.state != 1 ? SkinCellAt(x, y) : -1;
         g_skinArrowHot = skinTab && g_perso.state != 1 ? SkinArrowAt(x, y) : 0;
         bool noteImg = free && !NoteImgAt(x, y).empty();
+        bool cnHot = free && idle && g_tab == TAB_CARNET && CarnetHover(x, y);
         TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, h, 0 };
         TrackMouseEvent(&tme);
         bool carView = free && idle && g_tab == TAB_CAR && g_car.state == 1 && kCarView.Contains(x, y) && g_carHot < 0;
         bool skinView = skinTab && !g_skinArrowHot && g_skinRowHot < 0 && kSkinView.Contains(x, y);
         bool hand = g_uiHot > UI_NONE || (g_hot >= 0 && g_btn[g_hot].enabled) || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot
-                    || g_skinRowHot >= 0 || g_mscHot >= 0 || g_contentHot >= 0 || g_srvHot >= 0 || noteImg;
+                    || g_skinRowHot >= 0 || g_mscHot >= 0 || g_contentHot >= 0 || g_srvHot >= 0 || noteImg || cnHot;
         SetCursor(LoadCursor(NULL, hand ? IDC_HAND : carView || skinView ? IDC_SIZEALL : free && HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
@@ -7417,6 +7420,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (g_guide && (wp == VK_ESCAPE || wp == VK_RETURN)) { SteamGuideClose(); return 0; }
         if (wp == VK_ESCAPE && g_lobbyOpts) { g_lobbyOpts = false; return 0; }
         if (wp == VK_ESCAPE && g_lateSync && g_sync == SY_ASK) { LateFail(T(L"Réception des mods de l'hôte annulée", L"Receiving the host's mods cancelled")); return 0; }
+        if (g_state == ST_IDLE && CarnetKey(wp)) return 0;   // (carnet.inc : Suppr retire la note choisie)
         if ((wp == VK_LEFT || wp == VK_RIGHT) && g_tab == TAB_SKIN && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
         break;
     case WM_MOUSEWHEEL:
@@ -7428,6 +7432,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             if (g_saveModal == SM_SOLOCOOP) { SoloCoopScroll(step > 0 ? 1 : -1); return 0; }
             if (g_saveModal == SM_PICK || g_saveModal == SM_RESTART) { SavePickScroll(step > 0 ? 1 : -1); return 0; }
             if (g_tab == TAB_SKIN && SkinWheel(x, y, (short)HIWORD(wp))) return 0;   // (apercu du personnage : zoom)
+            if (g_tab == TAB_CARNET && CarnetWheel(x, y, (short)HIWORD(wp))) return 0;   // (carnet.inc : zoom du trace, avancer sur la page)
             if (g_railScrollMax > 0 && g_railView.Contains(x, y)) { g_railScroll = min(max(g_railScroll + step * 0.6f, 0.0f), g_railScrollMax); return 0; }   // (barre de gauche, quand elle defile)
             if (SigZipPickWheel(step)) return 0;   // (signalnatif.inc : fenetre de choix des zips, par-dessus la page)
             if (g_tab == TAB_NOTES && kNotesList.Contains(x, y)) g_noteListScroll += step;
@@ -7458,6 +7463,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
             if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
             if (g_tab == TAB_SKIN && SkinMouseDown(x, y)) return 0;
+            if (g_tab == TAB_CARNET && CarnetMouseDown(x, y)) return 0;   // (carnet.inc : poser, choisir, glisser)
         }
         // hors des cartes (en-tete, bords, pied) : glisser la fenetre
         if (y < 84 || (g_outside && g_outside->IsVisible(x, y))) {
@@ -7469,10 +7475,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_CAPTURECHANGED:   // capture perdue en plein glisser (Alt+Tab...) : fin du glisser
         if (g_carDrag) { g_carDrag = false; g_carIdleT = GetTickCount(); }
         if (g_skinDrag) { g_skinDrag = false; g_skinIdleT = GetTickCount(); }
+        if (g_cnDrag) CarnetMouseUp();
         return 0;
     case WM_LBUTTONUP: {
         if (g_carDrag) { g_carDrag = false; g_carIdleT = GetTickCount(); }
         if (g_skinDrag) { g_skinDrag = false; g_skinIdleT = GetTickCount(); }
+        if (g_cnDrag) CarnetMouseUp();
         int p = g_pressed;
         g_pressed = -1;
         ReleaseCapture();
@@ -7486,6 +7494,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (OutfitChar((wchar_t)wp)) return 0;   // (tenue.inc : nom d'une tenue enregistree)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
+        if (CarnetChar((wchar_t)wp)) return 0;   // (carnet.inc : nom d'un carnet, texte d'une note)
         if (SetChar((wchar_t)wp)) return 0;   // (gfx.inc : champ Chercher des reglages)
         if (GuideChar((wchar_t)wp)) return 0;   // (wiki.inc : champ Chercher du guide)
         if (LobbyChatChar((wchar_t)wp)) return 0;   // (salon.inc : « Message au salon »)
@@ -8483,6 +8492,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return rc;
     }
+    // /testcarnet <journal> : page Carnet (speciales, regles du carnet, ecriture, import, carnet actif) ; dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testcarnet")) {
+        int rc = CarnetSelfTest(argv[2]) ? 0 : 1;
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /testcasque <journal> : casque perso (import, Retirer, interrupteur, apercu) ; dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testcasque")) {
         int rc = CasqueSelfTest(argv[2]);
@@ -8737,6 +8752,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
+        else if (st == L"carnet" || st == L"carnet-note") { g_tab = TAB_CARNET; CarnetEnter(); g_cnCapNote = st == L"carnet-note"; }   // (page Carnet : la speciale et le carnet laisses par /testcarnet)
         else if (st == L"bobines" || st == L"bobines1" || st == L"bobines-sup") {   // (onglet Bobines : la partie-1 de /testbobines si elle existe)
             g_tab = TAB_VHS; g_mediaBob = true; g_bobProfSet = true; g_bobProf = GetFileAttributesW((SaveProfRoot() + L"partie-1").c_str()) != INVALID_FILE_ATTRIBUTES ? L"partie-1" : L"";
             BobEnter();

@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES, WA_INTERFACE, WA_VILLE, WA_SYNCHRO };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS, WA_KINO, WA_OSAT, WA_VOYAGE, WA_PLACES, WA_INTERFACE, WA_VILLE, WA_SYNCHRO, WA_CARNET };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -1233,6 +1233,24 @@ static const WikiBlock kW_Places[] = {   // (outil des places reserve, cle d'acc
             L"The tool needs WebView2: Windows 10 and 11 have it with Edge." },
 };
 // ---- Ce qui est synchronise (Markos, forum 01/11 ; ligne de la barre, TAB_SYNC) : les fonctions, pas un etat en direct.
+// ---- Carnet de notes du copilote (JD 07/11 : page Carnet du lanceur, carnet.inc ; en jeu : mod de [MWC])
+static const WikiBlock kW_Carnet[] = {
+    { WB_P, L"Le carnet du copilote : tes notes de rallye, posées sur le tracé des spéciales. En jeu, le copilote le tient en main et lit la page : le tracé à gauche, les notes à droite, la note du virage actuel sur le trait orange.",
+            L"The co-driver's notebook: your rally pace notes, placed on the stages' layout. In game, the co-driver holds it and reads the page: the layout on the left, the notes on the right, the current corner's note on the orange line." },
+    { WB_H, L"Dans le lanceur", L"In the launcher", 0 },
+    { WB_S, L"Page Carnet (barre, sous RallyWorld) : choisis la spéciale avec les flèches.", L"Pace notes page (bar, under RallyWorld): pick the stage with the arrows." },
+    { WB_S, L"Clic sur le tracé : une note est posée (le lanceur devine le virage) et ses champs s'ouvrent : type, côté, cote (H = épingle, 1 très serré à 6 presque droit), modificateurs, texte libre.",
+            L"Click the layout: a note is added (the launcher guesses the corner) and its fields open: type, side, grade (H = hairpin, 1 very tight to 6 almost straight), modifiers, free text." },
+    { WB_S, L"Glisse une note pour la déplacer ; Suppr ou Retirer pour l'enlever. Molette sur le tracé : zoom ; sur la page de droite : avancer le long de la spéciale.",
+            L"Drag a note to move it; Del or Remove to take it away. Wheel on the layout: zoom; on the page on the right: move along the stage." },
+    { WB_B, L"Une spéciale que tu n'as pas touchée garde les notes automatiques. Réinitialiser : la spéciale y revient.", L"A stage you haven't touched keeps the automatic notes. Reset: the stage goes back to them." },
+    { WB_B, L"Utiliser en jeu : c'est le carnet actif, celui que le jeu lit. Nouveau, Importer, Exporter : un carnet par style, à partager entre amis (un petit fichier .json).",
+            L"Use in game: it's the active notebook, the one the game reads. New, Import, Export: one notebook per style, to share with friends (a small .json file)." },
+    { WB_B, L"Un carnet reçu d'un ami est vérifié avant d'être pris : un fichier hors format est refusé en entier.", L"A notebook received from a friend is checked before it's taken: a file out of format is refused as a whole." },
+    { WB_TIP, L"Le tracé arrive après une première partie avec le mod : il l'écrit pour le lanceur. Jeu ouvert, le lanceur ne modifie rien : le jeu se sert du carnet.",
+              L"The layout arrives after a first game with the mod: it writes it for the launcher. While the game is open, the launcher changes nothing: the game is using the notebook." },
+    { WB_GO, L"Ouvrir le Carnet", L"Open Pace notes", TAB_CARNET },
+};
 static const WikiBlock kW_Sync[] = {
     { WB_P, L"Tout ce que MWCoop partage entre les joueurs d'une même partie. Le monde est celui de l'hôte : sa sauvegarde part chez les invités au début de la partie.",
             L"Everything MWCoop shares between the players of the same game. The world is the host's: their save goes to the guests at the start of the game." },
@@ -1304,4 +1322,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(3, L"Ancienne ou nouvelle interface", L"Old or new interface", L"Changer à tout moment", L"Switch any time", kW_Interface),   // (refonte Soft UI : fenetre.inc)
     WARTG(WG_ALL, 1, L"Le village d'Ässäkylä", L"The village of Ässäkylä", L"Où il est, quand il apparaît", L"Where it is, when it appears", kW_Ville),   // (WA_VILLE)
     WART(1, L"Ce qui est synchronisé", L"What is synced", L"Partagé entre les joueurs, ou gardé par chacun", L"Shared between players, or kept by each", kW_Sync),   // (WA_SYNCHRO ; ligne de la barre : TAB_SYNC)
+    WARTG(WG_ALL, 1, L"Le carnet du copilote", L"The co-driver's notebook", L"Tes notes sur le tracé des spéciales", L"Your notes on the stages' layout", kW_Carnet),   // (WA_CARNET ; page Carnet : TAB_CARNET)
 };

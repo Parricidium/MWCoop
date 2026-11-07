@@ -2777,3 +2777,81 @@ Cinema reels	Бобины кинотеатра
 The films of each game: import, rename, export, free up space.	Фильмы каждой игры: импорт, переименование, экспорт, освобождение места.
 In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	В лаунчере, страница VHS, вкладка «Бобины»: фильмы каждой игры, их длина, где они используются и откуда они. Импортируй видео для бобины, переименуй, экспортируй в .mp4 или удали (при закрытой игре); в игре, с бобиной в руке, R — «ГОТОВЫЕ ФИЛЬМЫ».
 New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.	Новая вкладка «Бобины» на странице VHS: фильмы каждой игры, их длина и где они используются. Импортируй видео, переименуй, экспортируй в .mp4 или освободи место.
+Saturday	суббота
+Sunday	воскресенье
+Close the game to change a notebook: the game is using it	Закрой игру, чтобы изменить блокнот: игра его использует
+Notebook too big (256 KB at most): remove some notes	Блокнот слишком большой (не больше 256 КБ): убери часть пометок
+Could not write the notebook	Не удалось записать блокнот
+Could not write the active notebook	Не удалось записать активный блокнот
+My notes	Мои пометки
+Notebook \"%s\" created	Блокнот «%s» создан
+Corner	Поворот
+Square	Прямой угол
+Crest	Трамплин
+Bridge	Мост
+Caution	Опасность
+Finish	Финиш
+Straight	Прямо
+Text	Текст
+Tightens	Закручивается
+Opens	Раскрывается
+Don't cut	Не резать
+Into	Сразу в
+Type	Тип
+Side and grade (H = hairpin)	Сторона и категория (H = шпилька)
+Side	Сторона
+Text (40 characters at most)	Текст (не больше 40 символов)
+Write your note	Напиши пометку
+Modifiers	Уточнения
+Note at %d m	Пометка на %d м
+OK	ОК
+%d.%d km · %d notes · 	%d,%d км · пометок: %d · 
+your notebook's notes	пометки твоего блокнота
+automatic notes (change them: they go into your notebook)	автоматические пометки (измени их — они перейдут в твой блокнот)
+The stages file can't be read: start a game again, the mod rewrites it. (	Файл спецучастков не читается: запусти игру ещё раз, мод перепишет его. (
+Start a game once with the mod: it writes the rally stages' layout here (speciales-	Запусти игру с модом один раз: он запишет сюда схему спецучастков ралли (speciales-
+Click the layout: add a note · drag it: move it · Del: remove it · wheel: zoom	Клик по схеме: добавить пометку · перетащи: сдвинуть · Del: убрать · колесо: масштаб
+Notebook name	Название блокнота
+No notebook	Нет блокнота
+Active notebook: the game reads this one	Активный блокнот: игра читает этот
+No active notebook: automatic notes in game	Нет активного блокнота: в игре автоматические пометки
+Not the active notebook	Не активный блокнот
+Stop using it in game	Больше не использовать в игре
+Use in game (active notebook)	Использовать в игре (активный блокнот)
+Export	Экспорт
+1000 notes at most on a stage	Не больше 1000 пометок на спецучастке
+file missing or over 256 KB	файла нет или он больше 256 КБ
+it's a notebook for the other game	это блокнот для другой игры
+could not write	не удалось записать
+Notebook \"%s\" imported	Блокнот «%s» импортирован
+Notebook refused: %s	Блокнот отклонён: %s
+Notebook exported: %s	Блокнот экспортирован: %s
+Export failed	Экспорт не удался
+Notebook %d	Блокнот %d
+Notebook \"%s\" created: the stages keep the automatic notes until you change them	Блокнот «%s» создан: на спецучастках остаются автоматические пометки, пока ты их не изменишь
+No active notebook: the game will show the automatic notes	Нет активного блокнота: игра покажет автоматические пометки
+Active notebook: the game will read \"%s\"	Активный блокнот: игра будет читать «%s»
+Click again: the notes of %s go back to the automatic notes	Нажми ещё раз: пометки %s вернутся к автоматическим
+Click Confirm again: \"%s\" goes to the Recycle Bin	Нажми «Подтвердить» ещё раз: «%s» уйдёт в корзину
+Could not delete	Не удалось удалить
+note	пометка
+Pace notes	Стенограмма
+Co-driver's pace notes	Стенограмма штурмана
+Your notes on the rally stages' layout: the co-driver reads them in game, notebook in hand.	Твои пометки на схеме спецучастков ралли: штурман читает их в игре, с блокнотом в руке.
+3D model: co-driver's notebook	3D-модель: блокнот штурмана
+Caveat font (co-driver's notebook) · The Caveat Project Authors · SIL OFL 1.1 license	Шрифт Caveat (блокнот штурмана) · The Caveat Project Authors · лицензия SIL OFL 1.1
+\"Single spiral notepad\" by Sousinho on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, top page drawn in game. Full link: MWCoop\\CREDITS-objets.txt.	«Single spiral notepad» от Sousinho на Sketchfab, лицензия CC BY 4.0. Изменено для игры: конвертация, масштаб, верхняя страница рисуется в игре. Полная ссылка: MWCoop\\CREDITS-objets.txt.
+New Pace notes page, under RallyWorld: place your rally notes on the stages' layout. In game, the co-driver reads them notebook in hand.	Новая страница «Стенограмма» под RallyWorld: расставь свои пометки на схеме спецучастков. В игре штурман читает их с блокнотом в руке.
+The co-driver's notebook: your rally pace notes, placed on the stages' layout. In game, the co-driver holds it and reads the page: the layout on the left, the notes on the right, the current corner's note on the orange line.	Блокнот штурмана: твоя стенограмма ралли, расставленная на схеме спецучастков. В игре штурман держит его и читает страницу: схема слева, пометки справа, пометка текущего поворота на оранжевой черте.
+In the launcher	В лаунчере
+Pace notes page (bar, under RallyWorld): pick the stage with the arrows.	Страница «Стенограмма» (панель, под RallyWorld): выбери спецучасток стрелками.
+Click the layout: a note is added (the launcher guesses the corner) and its fields open: type, side, grade (H = hairpin, 1 very tight to 6 almost straight), modifiers, free text.	Клик по схеме: пометка добавлена (лаунчер угадывает поворот), и открываются её поля: тип, сторона, категория (H = шпилька, от 1 — очень крутой до 6 — почти прямо), уточнения, свободный текст.
+Drag a note to move it; Del or Remove to take it away. Wheel on the layout: zoom; on the page on the right: move along the stage.	Перетащи пометку, чтобы сдвинуть её; Del или «Убрать», чтобы удалить. Колесо на схеме: масштаб; на странице справа: двигаться по спецучастку.
+A stage you haven't touched keeps the automatic notes. Reset: the stage goes back to them.	Спецучасток, который ты не трогал, сохраняет автоматические пометки. «Сбросить»: спецучасток возвращается к ним.
+Use in game: it's the active notebook, the one the game reads. New, Import, Export: one notebook per style, to share with friends (a small .json file).	Использовать в игре: это активный блокнот, тот, что читает игра. Новый, Импорт, Экспорт: по блокноту на каждый стиль, чтобы делиться с друзьями (маленький файл .json).
+A notebook received from a friend is checked before it's taken: a file out of format is refused as a whole.	Блокнот от друга проверяется перед тем, как его взять: файл не по формату отклоняется целиком.
+The layout arrives after a first game with the mod: it writes it for the launcher. While the game is open, the launcher changes nothing: the game is using the notebook.	Схема появляется после первой игры с модом: он записывает её для лаунчера. Пока игра открыта, лаунчер ничего не меняет: игра использует блокнот.
+Open Pace notes	Открыть «Стенограмму»
+The co-driver's notebook	Блокнот штурмана
+Your notes on the stages' layout	Твои пометки на схеме спецучастков
+Long corner	Длинный

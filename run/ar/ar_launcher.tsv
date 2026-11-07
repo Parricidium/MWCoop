@@ -396,6 +396,84 @@ Cinema reels	بكرات السينما
 The films of each game: import, rename, export, free up space.	أفلام كل لعبة: استيراد، إعادة تسمية، تصدير، إفراغ مساحة.
 In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	في المشغّل، صفحة VHS، تبويب «البكرات»: أفلام كل لعبة ومدتها وأين تُستخدم ومن أين أتت. استورد فيديو لبكرة، أو أعد التسمية، أو صدّر بصيغة .mp4، أو احذف (واللعبة مغلقة)؛ في اللعبة، والبكرة في يدك، R: READY FILMS (الأفلام الجاهزة).
 New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.	تبويب جديد «البكرات» في صفحة VHS: أفلام كل لعبة ومدتها وأين تُستخدم. استورد فيديو، أو أعد التسمية، أو صدّر بصيغة .mp4، أو أفرغ مساحة.
+Saturday	السبت
+Sunday	الأحد
+Close the game to change a notebook: the game is using it	أغلق اللعبة لتعديل دفتر: اللعبة تستخدمه
+Notebook too big (256 KB at most): remove some notes	الدفتر كبير جدًا (256 كيلوبايت على الأكثر): احذف بعض الملاحظات
+Could not write the notebook	تعذّرت كتابة الدفتر
+Could not write the active notebook	تعذّرت كتابة الدفتر النشط
+My notes	ملاحظاتي
+Notebook \"%s\" created	أُنشئ الدفتر «%s»
+Corner	منعطف
+Square	زاوية قائمة
+Crest	مطب
+Bridge	جسر
+Caution	خطر
+Finish	خط النهاية
+Straight	مستقيم
+Text	نص
+Tightens	يضيق
+Opens	ينفتح
+Don't cut	لا تقطع
+Into	متصل
+Type	النوع
+Side and grade (H = hairpin)	الجهة والدرجة (H = منعطف دبوسي)
+Side	الجهة
+Text (40 characters at most)	نص (40 حرفًا على الأكثر)
+Write your note	اكتب ملاحظتك
+Modifiers	المعدِّلات
+Note at %d m	ملاحظة عند %d م
+OK	موافق
+%d.%d km · %d notes · 	%d.%d كم · %d ملاحظة · 
+your notebook's notes	ملاحظات دفترك
+automatic notes (change them: they go into your notebook)	ملاحظات تلقائية (عدّلها: تنتقل إلى دفترك)
+The stages file can't be read: start a game again, the mod rewrites it. (	تعذّرت قراءة ملف المراحل: ابدأ لعبة من جديد، وسيعيد المود كتابته. (
+Start a game once with the mod: it writes the rally stages' layout here (speciales-	ابدأ لعبة مرة واحدة مع المود: سيكتب هنا مسار مراحل الرالي (speciales-
+Click the layout: add a note · drag it: move it · Del: remove it · wheel: zoom	انقر على المسار: إضافة ملاحظة · اسحبها: نقلها · Del: حذفها · العجلة: تكبير
+Notebook name	اسم الدفتر
+No notebook	لا يوجد دفتر
+Active notebook: the game reads this one	الدفتر النشط: هذا ما تقرؤه اللعبة
+No active notebook: automatic notes in game	لا يوجد دفتر نشط: ملاحظات تلقائية في اللعبة
+Not the active notebook	ليس الدفتر النشط
+Stop using it in game	إيقاف استخدامه في اللعبة
+Use in game (active notebook)	استخدامه في اللعبة (الدفتر النشط)
+Export	تصدير
+1000 notes at most on a stage	1000 ملاحظة على الأكثر في المرحلة
+file missing or over 256 KB	الملف غير موجود أو أكبر من 256 كيلوبايت
+it's a notebook for the other game	هذا دفتر للعبة الأخرى
+could not write	تعذّرت الكتابة
+Notebook \"%s\" imported	استُورد الدفتر «%s»
+Notebook refused: %s	رُفض الدفتر: %s
+Notebook exported: %s	صُدّر الدفتر: %s
+Export failed	فشل التصدير
+Notebook %d	دفتر %d
+Notebook \"%s\" created: the stages keep the automatic notes until you change them	أُنشئ الدفتر «%s»: تحتفظ المراحل بالملاحظات التلقائية حتى تعدّلها
+No active notebook: the game will show the automatic notes	لا يوجد دفتر نشط: ستعرض اللعبة الملاحظات التلقائية
+Active notebook: the game will read \"%s\"	الدفتر النشط: ستقرأ اللعبة «%s»
+Click again: the notes of %s go back to the automatic notes	انقر مرة أخرى: تعود ملاحظات %s إلى الملاحظات التلقائية
+Click Confirm again: \"%s\" goes to the Recycle Bin	انقر «تأكيد» مرة أخرى: سيذهب «%s» إلى سلة المحذوفات
+Could not delete	تعذّر الحذف
+note	ملاحظة
+Pace notes	دفتر الملاحظات
+Co-driver's pace notes	دفتر ملاحظات الملاح
+Your notes on the rally stages' layout: the co-driver reads them in game, notebook in hand.	ملاحظاتك على مسار مراحل الرالي: يقرؤها الملاح في اللعبة والدفتر في يده.
+3D model: co-driver's notebook	نموذج ثلاثي الأبعاد: دفتر الملاح
+Caveat font (co-driver's notebook) · The Caveat Project Authors · SIL OFL 1.1 license	خط Caveat (دفتر الملاح) · The Caveat Project Authors · رخصة SIL OFL 1.1
+\"Single spiral notepad\" by Sousinho on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, top page drawn in game. Full link: MWCoop\\CREDITS-objets.txt.	«Single spiral notepad» من Sousinho على Sketchfab، برخصة CC BY 4.0. عُدّل للعبة: تحويل، وحجم، وصفحة علوية تُرسم في اللعبة. الرابط الكامل: MWCoop\\CREDITS-objets.txt.
+New Pace notes page, under RallyWorld: place your rally notes on the stages' layout. In game, the co-driver reads them notebook in hand.	صفحة جديدة «دفتر الملاحظات» تحت RallyWorld: ضع ملاحظات الرالي على مسار المراحل. في اللعبة يقرؤها الملاح والدفتر في يده.
+The co-driver's notebook: your rally pace notes, placed on the stages' layout. In game, the co-driver holds it and reads the page: the layout on the left, the notes on the right, the current corner's note on the orange line.	دفتر الملاح: ملاحظات الرالي الخاصة بك، موضوعة على مسار المراحل. في اللعبة يحمله الملاح ويقرأ الصفحة: المسار على اليسار، والملاحظات على اليمين، وملاحظة المنعطف الحالي على الخط البرتقالي.
+In the launcher	في المشغّل
+Pace notes page (bar, under RallyWorld): pick the stage with the arrows.	صفحة «دفتر الملاحظات» (الشريط، تحت RallyWorld): اختر المرحلة بالأسهم.
+Click the layout: a note is added (the launcher guesses the corner) and its fields open: type, side, grade (H = hairpin, 1 very tight to 6 almost straight), modifiers, free text.	انقر على المسار: تُضاف ملاحظة (يخمّن المشغّل المنعطف) وتنفتح حقولها: النوع، والجهة، والدرجة (H = منعطف دبوسي، من 1 حاد جدًا إلى 6 شبه مستقيم)، والمعدِّلات، ونص حر.
+Drag a note to move it; Del or Remove to take it away. Wheel on the layout: zoom; on the page on the right: move along the stage.	اسحب ملاحظة لنقلها؛ Del أو «إزالة» لحذفها. العجلة على المسار: تكبير؛ على الصفحة اليمنى: التقدم على طول المرحلة.
+A stage you haven't touched keeps the automatic notes. Reset: the stage goes back to them.	المرحلة التي لم تلمسها تحتفظ بالملاحظات التلقائية. «إعادة تعيين»: تعود المرحلة إليها.
+Use in game: it's the active notebook, the one the game reads. New, Import, Export: one notebook per style, to share with friends (a small .json file).	الاستخدام في اللعبة: هو الدفتر النشط الذي تقرؤه اللعبة. جديد، استيراد، تصدير: دفتر لكل أسلوب، لمشاركته مع الأصدقاء (ملف .json صغير).
+A notebook received from a friend is checked before it's taken: a file out of format is refused as a whole.	يُفحص الدفتر المستلم من صديق قبل أخذه: الملف الخارج عن الصيغة يُرفض كاملًا.
+The layout arrives after a first game with the mod: it writes it for the launcher. While the game is open, the launcher changes nothing: the game is using the notebook.	يصل المسار بعد أول لعبة مع المود: يكتبه للمشغّل. ما دامت اللعبة مفتوحة لا يغيّر المشغّل شيئًا: اللعبة تستخدم الدفتر.
+Open Pace notes	فتح «دفتر الملاحظات»
+The co-driver's notebook	دفتر الملاح
+Your notes on the stages' layout	ملاحظاتك على مسار المراحل
+Long corner	طويل
 if private	إذا كانت خاصة
 Yes	نعم
 No	لا

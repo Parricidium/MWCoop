@@ -1,0 +1,78 @@
+L108-1	Saturday
+L108-2	Sunday
+L108-3	Close the game to change a notebook: the game is using it
+L108-4	Notebook too big (256 KB at most): remove some notes
+L108-5	Could not write the notebook
+L108-6	Could not write the active notebook
+L108-7	My notes
+L108-8	Notebook \"%s\" created
+L108-9	Corner
+L108-10	Square
+L108-11	Crest
+L108-12	Bridge
+L108-13	Caution
+L108-14	Finish
+L108-15	Straight
+L108-16	Text
+L108-17	Tightens
+L108-18	Opens
+L108-19	Don't cut
+L108-20	Into
+L108-21	Type
+L108-22	Side and grade (H = hairpin)
+L108-23	Side
+L108-24	Text (40 characters at most)
+L108-25	Write your note
+L108-26	Modifiers
+L108-27	Note at %d m
+L108-28	OK
+L108-29	%d.%d km · %d notes · 
+L108-30	your notebook's notes
+L108-31	automatic notes (change them: they go into your notebook)
+L108-32	The stages file can't be read: start a game again, the mod rewrites it. (
+L108-33	Start a game once with the mod: it writes the rally stages' layout here (speciales-
+L108-34	Click the layout: add a note · drag it: move it · Del: remove it · wheel: zoom
+L108-35	Notebook name
+L108-36	No notebook
+L108-37	Active notebook: the game reads this one
+L108-38	No active notebook: automatic notes in game
+L108-39	Not the active notebook
+L108-40	Stop using it in game
+L108-41	Use in game (active notebook)
+L108-42	Export
+L108-43	1000 notes at most on a stage
+L108-44	file missing or over 256 KB
+L108-45	it's a notebook for the other game
+L108-46	could not write
+L108-47	Notebook \"%s\" imported
+L108-48	Notebook refused: %s
+L108-49	Notebook exported: %s
+L108-50	Export failed
+L108-51	Notebook %d
+L108-52	Notebook \"%s\" created: the stages keep the automatic notes until you change them
+L108-53	No active notebook: the game will show the automatic notes
+L108-54	Active notebook: the game will read \"%s\"
+L108-55	Click again: the notes of %s go back to the automatic notes
+L108-56	Click Confirm again: \"%s\" goes to the Recycle Bin
+L108-57	Could not delete
+L108-58	note
+L108-59	Pace notes
+L108-60	Co-driver's pace notes
+L108-61	Your notes on the rally stages' layout: the co-driver reads them in game, notebook in hand.
+L108-62	3D model: co-driver's notebook
+L108-63	Caveat font (co-driver's notebook) · The Caveat Project Authors · SIL OFL 1.1 license
+L108-64	\"Single spiral notepad\" by Sousinho on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, top page drawn in game. Full link: MWCoop\\CREDITS-objets.txt.
+L108-65	New Pace notes page, under RallyWorld: place your rally notes on the stages' layout. In game, the co-driver reads them notebook in hand.
+L108-66	The co-driver's notebook: your rally pace notes, placed on the stages' layout. In game, the co-driver holds it and reads the page: the layout on the left, the notes on the right, the current corner's note on the orange line.
+L108-67	In the launcher
+L108-68	Pace notes page (bar, under RallyWorld): pick the stage with the arrows.
+L108-69	Click the layout: a note is added (the launcher guesses the corner) and its fields open: type, side, grade (H = hairpin, 1 very tight to 6 almost straight), modifiers, free text.
+L108-70	Drag a note to move it; Del or Remove to take it away. Wheel on the layout: zoom; on the page on the right: move along the stage.
+L108-71	A stage you haven't touched keeps the automatic notes. Reset: the stage goes back to them.
+L108-72	Use in game: it's the active notebook, the one the game reads. New, Import, Export: one notebook per style, to share with friends (a small .json file).
+L108-73	A notebook received from a friend is checked before it's taken: a file out of format is refused as a whole.
+L108-74	The layout arrives after a first game with the mod: it writes it for the launcher. While the game is open, the launcher changes nothing: the game is using the notebook.
+L108-75	Open Pace notes
+L108-76	The co-driver's notebook
+L108-77	Your notes on the stages' layout
+L108-78	Long corner
