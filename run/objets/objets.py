@@ -36,7 +36,8 @@ from reduire import reduire   # noqa: E402
 #        "enlever" (matieres retirees, apres lecture de leurs points), "unis" (matieres en couleur unie, moyenne de leur texture),
 #        "souder" (vrai : pieces unies soudees par position avant reduction -- coutures d'UV inutiles, la reduction va plus loin),
 #        "tourner" (matiere -> (degres, pivot) : piece tournee autour de l'axe x du repere final -- visiere rabattue),
-#        "couleur_verre" (couleur des pieces « verre »)])
+#        "couleur_verre" (couleur des pieces « verre »), "coque" (matiere peinte par les joueurs : triangles tournes vers l'exterieur
+#        -> piece « coque », texture = masque de la deco par defaut ; vers l'interieur -> couleur sombre unie)])
 OBJETS = {
     "popcorn":      ("popcorn.glb",      (0, 0, 0),     0.24,                   0.0,    256, (), 0),
     "camescope":    ("camescope.glb",    (0, 90, 0),    0.30,                   0.0,    512, (), 0),      # (objectif vers +z)
@@ -51,6 +52,10 @@ OBJETS = {
                    "Decal.007_Baked": "bouton_stop_etiquette", "Decal.008_Baked": "bouton_setup_etiquette", "Decal_Baked": "etiquette_facade"},
         "couleur_boutons": (0.36, 0.35, 0.31), "couleur_etiquettes": (0.88, 0.88, 0.85), "couleur_facade": (0.72, 0.72, 0.69),   # (textures presque noires : gris de la capture de JD)
         "points": {"afficheur": "LED_Cover_Baked", "fente": "CassetteCover_Baked"}, "enlever": ("LED_Cover_Baked", "Decal.LED_Baked")}),
+    # (casque personnalise, JD 07/11 : « F1 Helmet », nv, CC BY 4.0 -- forme seule, sa deco et ses sponsors retires)
+    "casque":       ("casque.glb",       (0, 90, 0),    0.30,                   0.003,  512, (), 0, {
+        "unis": ("Helmet_Rubber", "Helmet_Plastic", "Helmet_Metal", "Helmet_Metal_Black", "Helmet_Inside", "Helmet_SoftFabric"), "souder": True, "grille": 0.005,
+        "verre": {"Helmet_Visors": 0.45}, "couleur_verre": (0.12, 0.14, 0.17), "tourner": {"Helmet_Visors": (-68, (0.0, -0.003, -0.001))}, "coque": "Helmet_Base"}),
     "gps":          ("gps.glb",          (-90, 180, 0), 0.165,                  0.0,    0,   (), 0, {"couleur": (0.24, 0.25, 0.27)}),   # (debout, ecran vers -z ; gris fonce, le modele n'a qu'un blanc)
 }
 
@@ -142,6 +147,29 @@ def build(name, spec, apercu):
             t = next(t for t in g.textures if t.name == tname)
             _, mean, _ = texture(raw[t.offset:t.offset + t.size], 0)
             col = [col[0] * mean[0], col[1] * mean[1], col[2] * mean[2], col[3]]; tname = ""
+        if mat.name == opt.get("coque"):
+            # coque : dehors (peint), dedans (sombre)
+            cen = (P.min(0) + P.max(0)) / 2
+            fn = np.cross(P[I[:, 1]] - P[I[:, 0]], P[I[:, 2]] - P[I[:, 0]])
+            out = (fn * (P[I].mean(1) - cen)).sum(1) > 0
+            # (UV refaites : la coque en un disque qui remplit l'image -- projection azimutale autour de l'axe vertical, centre = sommet ;
+            # celles du fichier n'en occupaient qu'un coin, 350 pixels sur 1024)
+            ctr = np.array([cen[0], P[:, 1].min() + 0.55 * (P[:, 1].max() - P[:, 1].min()), cen[2]])
+            dv = P - ctr; dv /= np.maximum(np.linalg.norm(dv, axis=1, keepdims=True), 1e-9)
+            th = np.arccos(np.clip(dv[:, 1], -1, 1)); ph = np.arctan2(dv[:, 0], -dv[:, 2])
+            tmax = float(th[np.unique(I[out])].max())
+            r = 0.485 * th / tmax
+            # (V du fichier, en haut a 0 : retourne ensuite comme les autres ; avant EN BAS de l'image, droite = droite vue de face :
+            # un texte ecrit droit pres du bas se lit a l'endroit de face -- le haut des lettres vers le centre)
+            U = np.c_[0.5 + r * np.sin(ph), 0.5 + r * np.cos(ph)]
+            Uf = U.copy(); Uf[:, 1] = 1.0 - Uf[:, 1]   # (V d'Unity, comme les autres pieces apres retournement)
+            mask = masque_casque(P, Uf, I[out])
+            buf = io.BytesIO(); mask.save(buf, "PNG", optimize=True)
+            ti = len(texlist); texlist.append((name + "_masque.png", buf.getvalue()))
+            tris0 += len(I)
+            pieces.append(["coque", ti, [1, 1, 1, 1], P, Nn, U, I[out], 0])
+            pieces.append(["coque_interieur", -1, [0.07, 0.07, 0.08, 1.0], P, Nn, U, I[~out], 0])
+            continue
         if mat.name in opt.get("tourner", {}):
             deg, piv = opt["tourner"][mat.name]
             a = np.radians(deg); Rx = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
@@ -286,6 +314,32 @@ def vues(name, pieces):
                         cc = (0.75, 0.75, 0.75) if p[1] >= 0 else col
                         px[k * W + xx, yy] = tuple(int(255 * min(1, v * lit)) for v in cc[:3])
     img.save(os.path.join(os.path.dirname(os.path.abspath(__file__)), "apercu-" + name + ".png"))
+
+
+def masque_casque(P, U, I, size=512):
+    """deco par defaut du casque, en gris (0 : couleur de fond, 255 : couleur de bande) : bande sur le dessus, avant-arriere, et liseré bas.
+    Chaque texel prend sa position 3D (rendu dans l'espace des UV, OpenGL) ; le mod colore le masque pour chaque casque du stand."""
+    import moderngl
+    ctx = moderngl.create_standalone_context()
+    prog = ctx.program(vertex_shader="""#version 330
+in vec2 uv; in vec3 p; out vec3 vp; void main(){ gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0); vp = p; }""",
+                       fragment_shader="""#version 330
+in vec3 vp; out vec4 o; void main(){ o = vec4(vp, 1.0); }""")
+    fbo = ctx.framebuffer(color_attachments=[ctx.texture((size, size), 4, dtype="f4")]); fbo.use(); fbo.clear(0, 0, 0, 0)
+    vbo = ctx.buffer(np.c_[U, P].astype("f4").tobytes()); ibo = ctx.buffer(np.asarray(I, "i4").ravel().tobytes())
+    ctx.vertex_array(prog, [(vbo, "2f 3f", "uv", "p")], ibo).render()
+    a = np.frombuffer(fbo.read(components=4, dtype="f4"), "f4").reshape(size, size, 4)
+    pos, cov = a[..., :3], a[..., 3] > 0
+    band = (np.abs(pos[..., 0]) < 0.028) & (pos[..., 1] > -0.02)
+    low = pos[..., 1] < -0.075
+    m = np.where(cov & (band | low), 255, 0).astype("uint8")
+    # (debord de 2 texels hors des iles : pas de liseré de fond aux coutures)
+    from PIL import ImageFilter
+    img = Image.fromarray(np.flipud(m), "L")
+    cov_img = Image.fromarray(np.flipud(np.where(cov, 255, 0).astype("uint8")), "L")
+    grown = img.filter(ImageFilter.MaxFilter(5))
+    img = Image.composite(img, grown, cov_img)
+    return img.convert("RGB")
 
 
 def ecrit_chaine(f, s):

@@ -579,6 +579,7 @@ namespace MWCoop
                         case "appui": { Esine v = esineet.Find(e => e.Kind == KNauhuri); if (v != null) Look(v).Pressed[a[2]] = Time.realtimeSinceStartup + F(a[3]); break; }
                         case "insere": { Esine v = esineet.Find(e => e.Kind == KNauhuri), tp = esineet.FindLast(e => e.Kind == KVhs); if (v != null && tp != null) { pendingTape = tp; pendingVcr = v; pendingFrame = Time.frameCount; } L("essai : insertion " + (v != null && tp != null)); break; }
                         case "ejecte": { Esine v = esineet.Find(e => e.Kind == KNauhuri); if (v != null) Eject(v); break; }
+                        case "sauve": L("essai : sauvegarde du jeu"); Game.SaveInPlace(); break;
                         case "afficheur": { Esine v = esineet.Find(e => e.Kind == KNauhuri); if (v != null) L("essai : magnetoscope " + v.Data + ", position " + VcrPos(v, now).ToString("F1") + " s, afficheur « " + Look(v).Shown + " »"); break; }
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
                         case "filmi": TestFilm(); break;
