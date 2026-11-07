@@ -573,28 +573,50 @@ static void DrawCnPage(Graphics &g, RectF p)
     float u = p.Width / 1024;
     const std::vector<CnNote> &ns = CnNotesShown();
     float pos = min(max(g_cnPos, 0.0f), (float)s->len);
-    // radar : colonne x 154 a 502, rond vert fixe en (317, 695), 0,5 m par pixel ; trace tourne pour monter, tremble lie a l'index
+    // radar (cotes finales de [MWC], 07/11) : colonne x 154 a 502, rond vert (case 23 a 150 px) centre en (317, 695),
+    // 0,8 m par pixel ; sens de la route au point de la voiture de i - 2 a i + 4, vers le haut ; tremble en travers lie a
+    // l'index du point (ne nage pas) ; stylo (68, 77, 205) a 0,92, demi-largeur 4,6 + 0,8 sin(0,13 i + 0,7), bord doux sur
+    // 35 % ; fondu de 40 px a gauche et a droite, de 80 px en haut et en bas a partir de 24 px du bord.
     {
-        RectF rad(p.X + 154 * u, p.Y, 348 * u, p.Height);
-        float cx = p.X + 317 * u, cy = p.Y + 695 * u, sc = 2 * u;
-        GraphicsState st = g.Save(); g.SetClip(rad, CombineModeIntersect);
+        float cx = p.X + 317 * u, cy = p.Y + 695 * u, sc = u / 0.8f;
         int n = (int)s->p.size(), i0 = min(n - 1, max(0, (int)(pos / s->step + 0.5f)));
-        int a = max(0, i0 - (int)(6 / s->step)), b = min(n - 1, i0 + max(1, (int)(14 / s->step)));
+        int a = max(0, i0 - 2), b = min(n - 1, i0 + 4);
         float dx = s->p[b].X - s->p[a].X, dz = s->p[b].Y - s->p[a].Y, dl = sqrtf(dx * dx + dz * dz);
         if (dl < 1e-3f) { dx = 0; dz = 1; dl = 1; }
-        float ux = dx / dl, uz = dz / dl;   // (le sens de la route : vers le haut de la page)
-        std::vector<PointF> pts;
-        int lo = max(0, i0 - (int)(390 / s->step)), hi = min(n - 1, i0 + (int)(360 / s->step));
+        float ux = dx / dl, uz = dz / dl;
+        int lo = max(0, i0 - (int)(620 / s->step)), hi = min(n - 1, i0 + (int)(580 / s->step));
+        std::vector<PointF> pts; std::vector<int> idx;
         for (int i = lo; i <= hi; i++) {
             float rx = s->p[i].X - s->p[i0].X, rz = s->p[i].Y - s->p[i0].Y;
             float fw = rx * ux + rz * uz, sd = rx * uz - rz * ux;   // (en avant, a droite)
-            float wob = (sinf(i * 0.83f) * 1.1f + sinf(i * 0.29f + 1.7f) * 1.7f) * u;   // (ne nage pas d'une image a l'autre)
-            pts.push_back(PointF(cx + sd * sc + wob, cy - fw * sc));
+            float wob = 1.6f * sinf(0.61f * i + 1.3f) + 1.2f * sinf(0.23f * i + 4.1f) + 0.5f * sinf(1.7f * i);
+            pts.push_back(PointF(cx + (sd * (1 / 0.8f) + wob) * u, cy - fw * sc));
+            idx.push_back(i);
         }
-        if (pts.size() > 1) { Pen rp(kCnPen, max(1.4f, 5 * u)); rp.SetLineJoin(LineJoinRound); rp.SetStartCap(LineCapRound); rp.SetEndCap(LineCapRound); g.DrawLines(&rp, pts.data(), (INT)pts.size()); }
+        auto fade = [&](PointF q) {
+            float x = (q.X - p.X) / u, y = (q.Y - p.Y) / u;
+            float fx = min((x - 154) / 40, (502 - x) / 40), fy = min((y - 24) / 80, (1448 - 24 - y) / 80);
+            return min(1.0f, max(0.0f, min(fx, fy)));
+        };
+        GraphicsState st = g.Save(); g.SetClip(RectF(p.X + 154 * u, p.Y, 348 * u, p.Height), CombineModeIntersect);
+        SmoothingMode sm = g.GetSmoothingMode(); g.SetSmoothingMode(SmoothingModeAntiAlias);
+        for (int pass = 0; pass < 2; pass++)   // (bord doux : trait entier pale, puis le coeur a 65 %)
+            for (size_t j = 1; j < pts.size(); j++) {
+                PointF m((pts[j - 1].X + pts[j].X) / 2, (pts[j - 1].Y + pts[j].Y) / 2);
+                float al = fade(m) * 0.92f;
+                if (al <= 0.01f) continue;
+                float hw = (4.6f + 0.8f * sinf(0.13f * idx[j] + 0.7f)) * u;
+                Pen pen(Color((BYTE)(255 * al * (pass ? 1.0f : 0.45f)), 68, 77, 205), max(0.8f, 2 * hw * (pass ? 0.65f : 1.0f)));
+                pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+                g.DrawLine(&pen, pts[j - 1], pts[j]);
+            }
+        g.SetSmoothingMode(sm);
         g.Restore(st);
-        const Rect &cb = g_cnBox[23]; float k = 190 * u / 128;
-        DrawCnCell(g, 23, RectF(cx - cb.Width * k / 2, cy - cb.Height * k / 2, cb.Width * k, cb.Height * k));
+        if (Bitmap *sym = CnSym()) {   // (la case 23 entiere, 150 px, centree sur la voiture)
+            InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+            g.DrawImage(sym, RectF(cx - 75 * u, cy - 75 * u, 150 * u, 150 * u), (REAL)(23 % 8 * 128), (REAL)(23 / 8 * 128), 128.0f, 128.0f, UnitPixel);
+            g.SetInterpolationMode(im);
+        }
     }
     // notes : la note actuelle sur le 13e trait (908), une note tous les 2 traits (133,2), interpolees selon les metres ;
     // trait orange 10 px sous la note, de x 497 a 998 ; colonne des notes x 517 a 998
