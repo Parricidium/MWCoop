@@ -54,6 +54,7 @@ namespace MWCoop.Net
             if (!ulong.TryParse(Config.Get("Coop", "HoteSteam", ""), out hostSteam)) hostSteam = 0;
             SteamNet.DirectHost = hostSteam;
             port = Config.GetInt("Coop", "Port", 7870);
+            UdpLink.RecvBufferKo = Config.GetInt("Test", "TamponUdpKo", 4096);   // (tampon de reception UDP ; 0 : celui du systeme -- essais)
             Me = new PlayerInfo { Local = true, Name = Config.Get("Coop", "Pseudo", Environment.UserName),
                                   Skin = Looks.FromConfig() };
             // Essais : [Test] HoteRetard=s -- l'hote n'ecoute qu'apres s secondes (invite arrive avant lui).
@@ -107,7 +108,7 @@ namespace MWCoop.Net
                 LocalId = Me.Id = 0;
                 Players[0] = Me;
                 Status = Steam ? "hote Steam" : "hote, port " + port;
-                Log.Info(Steam ? "hote par Steam (salon et pair-a-pair)" : "hote sur le port UDP " + port);
+                Log.Info(Steam ? "hote par Steam (salon et pair-a-pair)" : "hote sur le port UDP " + port + " (tampon de reception " + (T.Link is UdpLink ? ((UdpLink)T.Link).RecvBuffer / 1024 : -1) + " Ko)");
             }
             catch (Exception e) { Status = "erreur : " + e.Message; Log.Error("hote : " + e); }
         }
@@ -149,7 +150,7 @@ namespace MWCoop.Net
                 Active = true;
                 IsHost = false;
                 Status = "connexion a " + address + ":" + port + "...";
-                Log.Info("connexion a " + address + ":" + port);
+                Log.Info("connexion a " + address + ":" + port + " (tampon de reception " + (T.Link is UdpLink ? ((UdpLink)T.Link).RecvBuffer / 1024 : -1) + " Ko)");
             }
             catch (Exception e) { Status = "erreur : " + e.Message; Log.Error("invite : " + e); retryAt = Time.realtimeSinceStartup + 5f; }
         }

@@ -101,7 +101,7 @@ namespace MWCoop
                 nextBeat = Time.realtimeSinceStartup + 10f;
                 Log.Info("images " + Time.frameCount + ", temps " + Time.time.ToString("F1")
                          + ", niveau " + Game.LevelName + ", " + Session.Status
-                         + (Session.T != null ? ", recu " + Session.T.BytesIn / 1024 + " Ko, envoye " + Session.T.BytesOut / 1024 + " Ko" : "")
+                         + (Session.T != null ? ", recu " + Session.T.BytesIn / 1024 + " Ko, envoye " + Session.T.BytesOut / 1024 + " Ko" + (Session.T.RelResent > 0 ? ", fiables " + Session.T.RelSent + " dont " + Session.T.RelResent + " renvois" : "") : "")
                          // Besoins du joueur (une mort de soif ou de faim se relit dans le journal) :
                          + (PlayerSync.InGame ? ", soif " + Game.GlobalFloat("PlayerThirst").ToString("F0") + " faim " + Game.GlobalFloat("PlayerHunger").ToString("F0")
                             + " fatigue " + Game.GlobalFloat("PlayerFatigue").ToString("F0") + " vessie " + Game.GlobalFloat("PlayerUrine").ToString("F0") : ""));

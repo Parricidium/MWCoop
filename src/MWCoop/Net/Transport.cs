@@ -104,6 +104,7 @@ namespace MWCoop.Net
 
         public float Now;
         public long BytesIn, BytesOut;
+        public long RelSent, RelResent;   // messages fiables envoyes, et renvois (perdus, ou leur accuse perdu) : journal de Core
         // Jeton de session (relecture du 15/10, #2) : un invite qui recree son transport (hote fige > 15 s, Steam) garde
         // la meme adresse, donc la meme cle ; sans jeton l'hote le prenait pour le pair existant (deja Accepted, numeros
         // gardes) et jetait son Hello (seq 0) comme « deja recu » -- invite connecte mais muet pour toujours. Tire au
@@ -312,6 +313,7 @@ namespace MWCoop.Net
             packet[3] = (byte)seq; packet[4] = (byte)(seq >> 8);
             Buffer.BlockCopy(msg, 0, packet, 5, msg.Length);
             p.unacked[seq] = new Peer.Pending { Packet = packet, SentAt = Now };
+            RelSent++;
             SendRaw(p, packet);
         }
 
@@ -334,7 +336,7 @@ namespace MWCoop.Net
                 }
                 float resend = Math.Max(0.2f, p.Rtt * 1.5f);
                 foreach (Peer.Pending pd in p.unacked.Values)
-                    if (Now - pd.SentAt > resend) { pd.SentAt = Now; pd.Tries++; SendRaw(p, pd.Packet); }
+                    if (Now - pd.SentAt > resend) { pd.SentAt = Now; pd.Tries++; RelResent++; SendRaw(p, pd.Packet); }
                 while (p.waiting.Count > 0 && p.unacked.Count < Window && (ushort)(p.sendSeq - p.sendBase) < MaxSpan) SendReliableNow(p, p.waiting.Dequeue());
             }
         }
@@ -488,12 +490,21 @@ namespace MWCoop.Net
     {
         Socket sock;
 
+        // Tampon de reception du socket, en Ko (0 : celui du systeme). Les datagrammes ne sont lus qu'une fois par image
+        // (Transport.Receive) : un film envoye a 3,3 Mo/s arrive par rafales entre deux images et ce qui ne tenait pas dans le
+        // tampon par defaut etait perdu, meme en local (~10 %, renvoye ensuite ; essai de [Addons] 07/11). Session le regle
+        // ([Test] TamponUdpKo) ; RecvBuffer : la taille obtenue.
+        public static int RecvBufferKo = 4096;
+        public int RecvBuffer;
+
         public UdpLink(int port)
         {
             sock = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             sock.Blocking = false;
             // Sans cela, un ICMP « port injoignable » ferme la reception sous Windows (WSAECONNRESET).
             try { sock.IOControl(-1744830452, new byte[] { 0 }, null); } catch { }
+            if (RecvBufferKo > 0) try { sock.ReceiveBufferSize = RecvBufferKo * 1024; } catch { }
+            try { RecvBuffer = sock.ReceiveBufferSize; } catch { }
             sock.Bind(new IPEndPoint(IPAddress.Any, port));
         }
 
