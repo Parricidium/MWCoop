@@ -1021,6 +1021,16 @@ namespace MWCoop
             { "This reel's film isn't on this PC: the show can't be shared.", "Фильма этой бобины нет на этом ПК: сеанс нельзя показать другим." },
             { "not enough disk space ({0} needed, {1} left)", "недостаточно места на диске (нужно {0}, осталось {1})" },
             { "Film \"{0}\" offered by {1}: {2}. Free up some space to watch it.", "Фильм «{0}» от {1}: {2}. Освободите место, чтобы его посмотреть." },
+            { "READY FILMS ({0})", "ГОТОВЫЕ ФИЛЬМЫ ({0})" },
+            { "Click a film to put it on the reel.", "Нажми на фильм, чтобы поставить его на бобину." },
+            { "Click a film to add it to the tape.", "Нажми на фильм, чтобы добавить его на кассету." },
+            { "No film ready: import a video from the launcher (Reels tab) or with IMPORT A VIDEO…", "Готовых фильмов нет: импортируй видео в лаунчере (вкладка «Бобины») или кнопкой ИМПОРТ ВИДЕО…" },
+            { "IMPORT A VIDEO…", "ИМПОРТ ВИДЕО…" },
+            { "CONVERTING… ", "КОНВЕРТАЦИЯ… " },
+            { "untitled", "без названия" },
+            { "BACK", "НАЗАД" },
+            { "Film put on the reel: \"{0}\".", "Фильм поставлен на бобину: «{0}»." },
+            { "Film added to the tape: \"{0}\".", "Фильм добавлен на кассету: «{0}»." },
         };
     }
 }

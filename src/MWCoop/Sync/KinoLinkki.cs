@@ -167,7 +167,9 @@ namespace MWCoop
             float bh = Style.Px(36), gap = Style.Px(8);
             bool busy = import != null || picking;
             string lbl = import != null ? Lang.T("CONVERSION… ", "CONVERTING… ") + Mathf.Max(0, import.LastPct) + " %" : picking ? "…" : Lang.T("IMPORTER UNE VIDÉO…", "IMPORT A VIDEO…");
-            if (MButton(new Rect(x, y, w, bh), lbl, true, e, !busy))
+            float half = (w - gap) / 2;
+            DrawReadyButton(new Rect(x + half + gap, y, half, bh), e);   // (films prets : KinoValmiit)
+            if (MButton(new Rect(x, y, half, bh), lbl, true, e, !busy, false, 13))   // (demi-bouton : texte plus petit, sinon coupe)
             {
                 if (!BindExport() || !BindStream() || vPickFile == null) Note(Lang.T("Choix du fichier indisponible (MWCoopRT.dll).", "File picker unavailable (MWCoopRT.dll)."), true);
                 else { EnsureImportDir(); if (vPickFile(ImportDir) == 0) { picking = true; pickReel = mTape; } }

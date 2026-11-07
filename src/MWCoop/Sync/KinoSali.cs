@@ -616,6 +616,15 @@ namespace MWCoop
                     break;
                 }
                 case "kelamontage": { Esine k = esineet.FindLast(e => e.Kind == KKela); if (k != null) OpenMontage(k); L("essai : montage de la bobine " + (k != null ? k.Data : "-")); break; }
+                case "valmiit":   // (films prets du montage ouvert : liste dans le journal)
+                {
+                    if (!MontageOpen) { L("essai : montage pas ouvert"); break; }
+                    OpenReady();
+                    foreach (ReadyFilm f in readyList) L("essai : film pret " + f.Id + " « " + f.Title + " » " + f.Bytes / 1024 + " Ko, " + f.Ms + " ms, " + f.When.ToString("dd/MM HH:mm"));
+                    L("essai : " + readyList.Count + " film(s) pret(s)");
+                    break;
+                }
+                case "valmis": { int n = int.Parse(a[2]); if (MontageOpen && readyList != null && n < readyList.Count) PutReady(readyList[n]); L("essai : apres le film pret " + n + " : " + (mTape != null ? mTape.Data : "-") + ", " + mTotal.ToString("F1") + " s"); break; }
                 case "linkki": SetProjector(projectors[int.Parse(a[2])], "url:" + a[3] + "~" + LinkTitle(a[3]), true, a.Length > 4 ? int.Parse(a[4]) : 0, true); break;   // linkki <sali> <adresse> [ms]
                 case "tuokela":
                 {

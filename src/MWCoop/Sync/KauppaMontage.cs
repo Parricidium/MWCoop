@@ -82,7 +82,7 @@ namespace MWCoop
         static void OpenMontage(Esine tape)
         {
             mTape = tape; MontageOpen = true; mOpenedAt = Time.realtimeSinceStartup; mUnfocus = true;
-            mTitle = TapeTitle(tape.Data); mNote = null; mConfirm = 0; mDrag = false;
+            mTitle = TapeTitle(tape.Data); mNote = null; mConfirm = 0; mDrag = false; mReady = false; readyList = null;
             WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false;
             LoadMontage();
             mA = 0f; mB = mTotal; mT = 0f; mPlaying = false; mClip = -1; mFrame = -1;
@@ -102,7 +102,7 @@ namespace MWCoop
 
         static void CloseMontage()
         {
-            MontageOpen = false; mPlaying = false; mTape = null;
+            MontageOpen = false; mPlaying = false; mTape = null; mReady = false; readyList = null;
             if (mAudio != null) mAudio.Stop();
             GUIUtility.keyboardControl = 0; mUnfocus = true;
         }
@@ -380,7 +380,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- dessin (Core.OnGUI)
-        static bool MButton(Rect r, string label, bool accent, Event e, bool enabled = true, bool danger = false)
+        static bool MButton(Rect r, string label, bool accent, Event e, bool enabled = true, bool danger = false, int size = 15)
         {
             bool hover = enabled && r.Contains(e.mousePosition);
             Color bg = !enabled ? new Color(1f, 1f, 1f, 0.04f)
@@ -389,7 +389,7 @@ namespace MWCoop
             if (e.type == EventType.Repaint)
             {
                 Style.Round(r, r.height / 2, bg);
-                Style.Text(r, label, 15, TextAnchor.MiddleCenter, !enabled ? Style.Dim : accent && !danger ? Style.OnAccent : Style.White);
+                Style.Text(r, label, size, TextAnchor.MiddleCenter, !enabled ? Style.Dim : accent && !danger ? Style.OnAccent : Style.White);
             }
             if (enabled && e.type == EventType.MouseDown && e.button == 0 && hover) { e.Use(); return true; }
             return false;
@@ -434,7 +434,8 @@ namespace MWCoop
             // ecran
             float pw = Mathf.Min(Style.Px(560), W * 0.6f), ph = Mathf.Round(pw * 0.75f);
             var pr = new Rect(x + pad, cy, pw, ph);
-            if (e.type == EventType.Repaint)
+            if (mReady) DrawReadyList(pr, e);   // (films prets a la place de l'ecran -- KinoValmiit)
+            else if (e.type == EventType.Repaint)
             {
                 Style.Fill(pr, Color.black);
                 if (mClips.Count > 0 && mTex != null && mFrame >= 0) GUI.DrawTexture(pr, mTex, ScaleMode.ScaleToFit, false);
@@ -461,7 +462,8 @@ namespace MWCoop
             ry += bh + gap;
             if (MButton(new Rect(rx, ry, hw, bh), Lang.T("TOUT", "ALL"), false, e, have)) { mA = 0f; mB = mTotal; }
             if (MButton(new Rect(rx + hw + gap, ry, hw, bh), Lang.T("ALLER AU DÉBUT", "GO TO START"), false, e, have)) Seek(mA);
-            if (reel) DrawReelExtras(rx, ry + bh + gap * 3, rw, e);   // (importer une video, lien : KinoLinkki)
+            if (reel) DrawReelExtras(rx, ry + bh + gap * 3, rw, e);   // (importer une video, films prets, lien : KinoLinkki)
+            else DrawReadyButton(new Rect(rx, ry + bh + gap * 3, rw, bh), e);   // (films prets : KinoValmiit)
             // barre de temps
             float ty = cy + ph + Style.Px(16);
             var bar = new Rect(x + pad, ty, W - 2 * pad, Style.Px(30));
@@ -504,7 +506,8 @@ namespace MWCoop
                 Export();
             // dossier
             float fy = ay + Style.Px(56);
-            Style.Text(new Rect(x + pad, fy, W - 2 * pad - Style.Px(300), Style.Px(34)), Lang.T("Dossier : ", "Folder: ") + VideoFolder, 15, TextAnchor.MiddleLeft, Style.Dim, false);
+            bool noting = mNote != null && now < mNoteUntil;   // (la note du bas prend la place de la ligne du dossier : elles se chevauchaient en 720p)
+            if (!noting) Style.Text(new Rect(x + pad, fy, W - 2 * pad - Style.Px(300), Style.Px(34)), Lang.T("Dossier : ", "Folder: ") + VideoFolder, 15, TextAnchor.MiddleLeft, Style.Dim, false);
             if (MButton(new Rect(x + W - pad - Style.Px(290), fy, Style.Px(140), Style.Px(34)), picking ? "…" : Lang.T("CHANGER", "CHANGE"), false, e, !picking)) PickFolder();
             if (MButton(new Rect(x + W - pad - Style.Px(140), fy, Style.Px(140), Style.Px(34)), Lang.T("OUVRIR", "OPEN"), false, e)) OpenFolder();
             // note
