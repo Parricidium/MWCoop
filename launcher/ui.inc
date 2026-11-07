@@ -1479,8 +1479,8 @@ static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
     // (casque perso du magasin CARDINAL, [Addons] 07/11 : forme seule ; le nom du pilote du modele d'origine n'apparait nulle part)
     { CRED_3D, L"nv", L"Modèle 3D : casque", L"3D model: helmet",
-      L"« F1 Helmet » de nv (@nielsvalckenaere) sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : forme seule, réduit, décoration d'origine retirée.",
-      L"\"F1 Helmet\" by nv (@nielsvalckenaere) on Sketchfab, CC BY 4.0 license. Modified for the game: shape only, reduced, original decoration removed.", L"07/11/2026", 0 },
+      L"« F1 Helmet - Gilles Villeneuve » de nv (@nielsvalckenaere) sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : forme seule, réduit, décoration d'origine retirée. Lien complet : MWCoop\\CREDITS-objets.txt.",
+      L"\"F1 Helmet - Gilles Villeneuve\" by nv (@nielsvalckenaere) on Sketchfab, CC BY 4.0 license. Modified for the game: shape only, reduced, original decoration removed. Full link: MWCoop\\CREDITS-objets.txt.", L"07/11/2026", 0 },
     // (objets du mod, msc-1.15.97 / mwc-1.15.66, [Addons] 07/11 : Sketchfab, CC BY 4.0, liens complets dans MWCoop\CREDITS-objets.txt)
     { CRED_3D, L"Nokaisho", L"Modèle 3D : caméscope", L"3D model: camcorder",
       L"« Nokaisho Calc&Misc: VHS Camcorder », dessiné par Artiaaa Umrplex, sur Sketchfab, licence CC BY 4.0. Modifié pour le jeu : conversion, échelle, orientation, triangles et textures réduits. Lien complet : MWCoop\\CREDITS-objets.txt.",
