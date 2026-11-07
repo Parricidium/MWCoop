@@ -121,8 +121,8 @@ namespace MWCoop
         // autant de morceaux par image que le canal fiable en accepte (Peer.InFlight sous FilmiFile), au plus [Boutique] FilmiKoS
         // Ko/s (1500) ; reception ecrite directement dans le fichier a sa place (morceaux de FilmChunk octets), avancement
         // connu (FilmProgress : KinoJako l'affiche et le dit au partageur).
-        class FilmOut { public string Film; public FileStream Fs; public long Length; public int Next, Count; public bool Again; public List<int> To; }   // (To : destinataires, null = tous)
-        class FilmIn { public FileStream Fs; public System.Collections.BitArray Have; public int Got, Count, Prefix; public float Last; }   // (Have : 1 bit par morceau -- films de plusieurs Go)   // (Prefix : morceaux 0..Prefix-1 tous arrives -- lecture pendant la reception)
+        class FilmOut { public string Film; public FileStream Fs; public long Length; public int Next, Count; public bool Again; public List<int> To; public List<int> RStart, RCount; public int RPos, ROff; }   // (To : destinataires, null = tous ; RStart/RCount : reprise, seulement ces plages)
+        class FilmIn { public FileStream Fs; public System.Collections.BitArray Have; public int Got, Count, Prefix; public float Last, NextAsk; public int From = -1; }   // (From : qui l'envoie -- reprise)   // (Have : 1 bit par morceau -- films de plusieurs Go)   // (Prefix : morceaux 0..Prefix-1 tous arrives -- lecture pendant la reception)
         static readonly List<FilmOut> filmOut = new List<FilmOut>();
         static readonly Dictionary<string, FilmIn> filmIn = new Dictionary<string, FilmIn>();
         static readonly Dictionary<string, float> filmAsked = new Dictionary<string, float>();
@@ -134,7 +134,7 @@ namespace MWCoop
         static void SendFilm(string film, int to = -1)
         {
             if (!Session.Active || Session.RemoteCount <= 0 || !HaveFilm(film)) return;
-            FilmOut o = filmOut.Find(x => x.Film == film);
+            FilmOut o = filmOut.Find(x => x.Film == film && x.RStart == null);
             if (o != null)
             {
                 if (to < 0) o.To = null; else if (o.To != null && !o.To.Contains(to)) o.To.Add(to);
@@ -183,6 +183,7 @@ namespace MWCoop
         {
             TickPlayStarts();
             TickImport(now);
+            TickFilmResume(now);
             if (filmOut.Count == 0) return;
             if (!Session.Active) { foreach (FilmOut x in filmOut) if (x.Fs != null) x.Fs.Close(); filmOut.Clear(); return; }
             // debit : FilmiKoS Ko/s au plus, et rien de plus tant que le canal fiable est plein
@@ -201,28 +202,110 @@ namespace MWCoop
             if (filmBuf == null) filmBuf = new byte[FilmChunk];
             try
             {
-                for (; room > 0 && filmSendBudget >= 1f && o.Next < o.Count; room--, filmSendBudget -= 1f, o.Next++)
+                for (; room > 0 && filmSendBudget >= 1f && FilmOutMore(o); room--, filmSendBudget -= 1f)
                 {
-                    long off = (long)o.Next * FilmChunk;
+                    int idx = FilmOutTake(o);
+                    long off = (long)idx * FilmChunk;
                     int n = (int)Math.Min(FilmChunk, o.Length - off);
                     o.Fs.Position = off;
                     int got = 0;
                     while (got < n) { int k = o.Fs.Read(filmBuf, got, n - got); if (k <= 0) break; got += k; }
-                    if (o.To == null) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmi").Str(o.Film).I32(o.Next).I32(o.Count).Bytes(filmBuf, 0, got), true);
+                    if (o.To == null) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmi").Str(o.Film).I32(idx).I32(o.Count).Bytes(filmBuf, 0, got), true);
                     else
                     {
                         var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmia").U8(o.To.Count);
                         foreach (int id in o.To) w.U8(id);
-                        Session.SendTo(o.To, w.Str(o.Film).I32(o.Next).I32(o.Count).Bytes(filmBuf, 0, got), true);
+                        Session.SendTo(o.To, w.Str(o.Film).I32(idx).I32(o.Count).Bytes(filmBuf, 0, got), true);
                     }
                 }
             }
-            catch (Exception e) { L("video : envoi de " + o.Film + " interrompu : " + e.Message); o.Next = o.Count; o.Again = false; }
-            if (o.Next >= o.Count)
+            catch (Exception e) { L("video : envoi de " + o.Film + " interrompu : " + e.Message); o.Next = o.Count; o.Again = false; if (o.RStart != null) o.RPos = o.RStart.Count; }
+            if (!FilmOutMore(o))
             {
                 if (o.Again) { o.Again = false; o.Next = 0; }
-                else { if (o.Fs != null) o.Fs.Close(); filmOut.RemoveAt(0); L("video : film " + o.Film + " envoye (" + o.Count + " morceaux)"); }
+                else { if (o.Fs != null) o.Fs.Close(); filmOut.RemoveAt(0); L("video : film " + o.Film + (o.RStart != null ? " : morceaux manquants renvoyes" : " envoye (" + o.Count + " morceaux)")); }
             }
+        }
+
+        // morceau suivant a envoyer : a la suite, ou dans les plages d'une reprise
+        static bool FilmOutMore(FilmOut o) { return o.RStart != null ? o.RPos < o.RStart.Count : o.Next < o.Count; }
+        static int FilmOutTake(FilmOut o)
+        {
+            if (o.RStart == null) return o.Next++;
+            int i = o.RStart[o.RPos] + o.ROff;
+            if (++o.ROff >= o.RCount[o.RPos]) { o.RPos++; o.ROff = 0; }
+            return i;
+        }
+
+        // Reprise (07/11) : des morceaux d'un film en reception manquent (perdus en route : un film de 4,75 Go arrivait a 99 % et
+        // y restait -- 65 364 morceaux jamais livres par le canal fiable ; envoi coupe) et rien n'arrive depuis 6 s : ces plages
+        // seulement sont redemandees a celui qui l'envoyait (@filmir, par l'hote s'il faut), toutes les 8 s tant qu'il en manque.
+        static void TickFilmResume(float now)
+        {
+            if (!Session.Active || filmIn.Count == 0) return;
+            foreach (KeyValuePair<string, FilmIn> kv in filmIn)
+            {
+                FilmIn fi = kv.Value;
+                if (fi.Got >= fi.Count || fi.From < 0 || fi.From == Session.LocalId || now - fi.Last < 6f || now < fi.NextAsk) continue;
+                fi.NextAsk = now + 8f;
+                if (!Session.Players.ContainsKey(fi.From)) continue;   // (parti : AskFilm redemande le film a l'hote)
+                var st = new List<int>(); var ct = new List<int>(); int missing = 0;
+                for (int i = fi.Prefix; i < fi.Count; i++)
+                {
+                    if (fi.Have[i]) continue;
+                    missing++;
+                    if (st.Count > 0 && st[st.Count - 1] + ct[ct.Count - 1] == i) ct[ct.Count - 1]++;
+                    else if (st.Count < 100) { st.Add(i); ct.Add(1); }
+                }
+                if (st.Count == 0) continue;
+                var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmir").U8(fi.From).Str(kv.Key).I32(fi.Count).U8(st.Count);
+                for (int k = 0; k < st.Count; k++) w.I32(st[k]).I32(ct[k]);
+                Session.SendTo(new List<int> { fi.From }, w, true);
+                L("video : film " + kv.Key + " : " + missing + " morceau(x) manquant(s), " + st.Count + " plage(s) redemandee(s) a #" + fi.From);
+            }
+        }
+
+        // [Test] FilmPerte=p : la premiere fois, un morceau sur p (i % p == 3) et les morceaux 5000..5999 sont jetes a l'arrivee
+        static readonly HashSet<string> filmLostTest = new HashSet<string>();
+        static bool FilmLostTest(string film, int i)
+        {
+            int p = Config.GetInt("Test", "FilmPerte", 0);
+            if (p <= 0 || !(i % p == 3 || (i >= 5000 && i < 6000))) return false;
+            return filmLostTest.Add(film + "#" + i);
+        }
+
+        // plages manquantes chez who : renvoyees a lui seul (l'hote relaie si le film vient d'un autre invite)
+        public static void OnFilmResume(int who, NetReader r)
+        {
+            int to = r.U8();
+            if (to != Session.LocalId)
+            {
+                if (Session.IsHost && to != who && Session.Players.ContainsKey(to)) Session.SendTo(new List<int> { to }, new NetWriter(Msg.Job).U8(who).Str("@filmir").U8(to).Raw(r.Rest()), true);
+                return;
+            }
+            string film = Session.Clean(r.Str(), 64); int count = r.I32(), nr = r.U8();
+            if (film.Length == 0 || film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || count <= 0 || nr <= 0 || !HaveFilm(film) || KinoRefusedBy(film, who)) return;
+            var st = new List<int>(); var ct = new List<int>(); long total = 0;
+            for (int k = 0; k < nr && r.More; k++)
+            {
+                int a = r.I32(), c = r.I32();
+                if (a < 0 || c <= 0 || a >= count || c > count - a) return;
+                st.Add(a); ct.Add(c); total += c;
+            }
+            if (st.Count == 0) return;
+            FilmOut o = filmOut.Find(x => x.Film == film && x.RStart != null && x.To != null && x.To.Count == 1 && x.To[0] == who);
+            if (o == null)
+            {
+                FileStream fs;
+                try { fs = new FileStream(FilmPath(film), FileMode.Open, FileAccess.Read, FileShare.ReadWrite); }
+                catch (Exception e) { L("video : reprise de " + film + " : " + e.Message); return; }
+                long parts = (fs.Length + FilmChunk - 1) / FilmChunk;
+                if (parts != count) { fs.Close(); return; }   // (pas le meme fichier)
+                o = new FilmOut { Film = film, Fs = fs, Length = fs.Length, Count = count, To = new List<int> { who } };
+                filmOut.Add(o);
+            }
+            o.RStart = st; o.RCount = ct; o.RPos = 0; o.ROff = 0;
+            L("video : film " + film + " : " + total + " morceau(x) manquant(s) chez #" + who + ", renvoye(s) (" + st.Count + " plage(s))");
         }
 
         // morceau adresse (@filmia) : l'hote le relaie aux destinataires de la liste, chacun le prend s'il y est
@@ -248,8 +331,7 @@ namespace MWCoop
         // stop : ce joueur ne veut plus du film (refus, disque plein)
         static void FilmStopFor(string film, int who)
         {
-            FilmOut o = filmOut.Find(x => x.Film == film);
-            if (o != null && o.To != null) o.To.Remove(who);
+            foreach (FilmOut o in filmOut) if (o.Film == film && o.To != null) o.To.Remove(who);
         }
 
         public static void OnFilmPart(int who, NetReader r)
@@ -269,9 +351,10 @@ namespace MWCoop
                     fi = new FilmIn { Fs = new FileStream(FilmPath(film) + ".osa", FileMode.Create, FileAccess.ReadWrite, FileShare.Read), Have = new System.Collections.BitArray(n), Count = n };
                     filmIn[film] = fi;
                 }
-                fi.Last = Time.realtimeSinceStartup;
+                fi.Last = Time.realtimeSinceStartup; fi.From = who;
                 if (fi.Have[i]) return;
                 if (Config.Testing && i > 2000 && Config.GetInt("Test", "FilmDisquePlein", 0) != 0) throw new IOException("essai : disque plein");   // (essai du message)
+                if (Config.Testing && FilmLostTest(film, i)) return;   // ([Test] FilmPerte : morceaux perdus en route, essai de la reprise)
                 fi.Fs.Position = (long)i * FilmChunk;
                 fi.Fs.Write(b, 0, b.Length);
                 fi.Have[i] = true; fi.Got++;

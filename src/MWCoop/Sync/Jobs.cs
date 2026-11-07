@@ -2266,7 +2266,7 @@ namespace MWCoop
         {
             // (relais : par le canal ou il est arrive -- avant, choisi par une liste de noms : fin de @drone, envoyee fiable,
             // relayee non fiable ; flux @ram / @tow / @poste / @300d relayes fiables, en file derriere le reste a 3 joueurs et plus)
-            if (Session.IsHost && kind != "@filmia") Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), Session.InReliable, who);   // (@filmia : relaye aux destinataires seulement)
+            if (Session.IsHost && kind != "@filmia" && kind != "@filmir") Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), Session.InReliable, who);   // (@filmia : relaye aux destinataires seulement)
             switch (kind)
             {
                 case "@cree":
@@ -2370,7 +2370,8 @@ namespace MWCoop
                 case "@esine": Kauppa.OnItem(who, r); break;
                 case "@esineosto": Kauppa.OnSpawnRequest(who, r); break;
                 case "@filmi": Kauppa.OnFilmPart(who, r); break;
-                case "@filmia": Kauppa.OnFilmPartTo(who, r); break;   // (morceau de film adresse : cinema, a ceux qui l'ont accepte)
+                case "@filmia": Kauppa.OnFilmPartTo(who, r); break;
+                case "@filmir": Kauppa.OnFilmResume(who, r); break;   // (morceaux manquants redemandes a celui qui envoie le film)   // (morceau de film adresse : cinema, a ceux qui l'ont accepte)
                 case "@filmi?": Kauppa.OnFilmAsk(who, r); break;
                 case "@vet": Wear.OnList(r); break;
                 case "@vetosto": Wear.OnOstoList(r); break;   // (casques achetes a l'Osuuskauppa)
