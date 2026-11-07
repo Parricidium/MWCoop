@@ -2712,3 +2712,68 @@ A square image is best: it is brought to 1024 x 1024. Transparency is ignored: t
 Custom helmet	Свой шлем
 New Helmet tab on the Character page: paint your helmet on the template, then buy it in game at the CARDINAL shop.	Новая вкладка «Шлем» на странице «Персонаж»: нарисуй свой шлем на шаблоне, затем купи его в игре в магазине CARDINAL.
 What the others see of you: outfit, face, helmet, car. Visible as soon as you enter a lobby.	Что видят другие: одежда, лицо, шлем, машина. Видно, как только ты входишь в лобби.
+%.1f GB	%.1f ГБ
+reel, room 	бобина, зал 
+reel (item)	бобина (предмет)
+tape	кассета
+in the VCR	в видеомагнитофоне
+in the camcorder	в видеокамере
+on no reel	ни на одной бобине
+unfinished download (deleted at the next game load)	загрузка не завершена (удаляется при следующей загрузке игры)
+received, kept (reel of the game)	получен, сохранён (бобина игры)
+received, deleted at the next game load	получен, удаляется при следующей загрузке игры
+made on this PC (recorded, edited or imported)	сделан на этом ПК (снят, смонтирован или импортирован)
+no title	без названия
+Guest game	Гостевая игра
+The reel \"%s\" (room %s) will become blank.	Бобина «%s» (зал %s) станет пустой.
+The reel \"%s\" will become blank.	Бобина «%s» станет пустой.
+The tape \"%s\" will lose this film.	Кассета «%s» потеряет этот фильм.
+Close the game first: it reads and deletes these films while playing	Сначала закрой игру: во время игры она читает и удаляет эти фильмы
+Delete \"%s\" (%s)? Click Confirm again. %s	Удалить «%s» (%s)? Нажми ещё раз, чтобы подтвердить. %s
+Delete %d films (%s)? Click Confirm again. %s	Удалить фильмы (%d, %s)? Нажми ещё раз, чтобы подтвердить. %s
+Films not deleted	Фильмы не удалены
+%d film(s) moved to the Recycle Bin	Фильмов перемещено в корзину: %d
+Close the game to import a video (it writes in the films folder)	Закрой игру, чтобы импортировать видео (она пишет в папку фильмов)
+Less than 1 GB free on the disk (%s): click again to import anyway	На диске свободно меньше 1 ГБ (%s): нажми ещё раз, чтобы всё равно импортировать
+Choose the video for a VHS tape	Выбери видео для кассеты VHS
+Choose the video for a cinema reel	Выбери видео для бобины кинотеатра
+Conversion cancelled	Конвертация отменена
+Video imported: \"%s\" (%s). In game, reel in hand, R: READY FILMS.	Видео импортировано: «%s» (%s). В игре: бобина в руке, R — готовые фильмы.
+Close the game to rename a film	Закрой игру, чтобы переименовать фильм
+Film renamed	Фильм переименован
+Title not written	Название не записано
+Unfinished download	Загрузка не завершена
+Reading…	Чтение…
+Unreadable file	Файл не читается
+%d × %d, %d frames/s	%d × %d, %d кадр/с
+Reel films	Фильмы для бобин
+Import a video…	Импортировать видео…
+Cinema reel	Бобина кинотеатра
+VHS tape	Кассета VHS
+\"At the host's\" game: its reels point to films of the guest game.	Игра «у хоста»: её бобины ссылаются на фильмы гостевой игры.
+\"Import\": for a VHS tape (4:3 picture, VHS effect).	«Импорт»: для кассеты VHS (кадр 4:3, эффект VHS).
+\"Import\": for a cinema reel, no length limit.	«Импорт»: для бобины кинотеатра, без ограничения длины.
+No film in this game. Record with the camcorder, import a video here or in game (reel in hand, R), or receive some from another player.	В этой игре нет фильмов. Сними на видеокамеру, импортируй видео здесь или в игре (бобина в руке, R) или получи от другого игрока.
+Unfinished	Не завершён
+Received, kept	Получен, сохранён
+Received, will go	Получен, будет удалён
+Yours	Твой
+Films of the game: 	Фильмы игры: 
+ · free on the disk: 	 · свободно на диске: 
+Tick films (or pick one) to delete them. Yours don't come back.	Отметь фильмы (или выбери один), чтобы удалить их. Твои не вернутся.
+Selected film: 	Выбранный фильм: 
+ film(s) ticked (	 — отмечено фильмов (
+Close the game to delete.	Закрой игру, чтобы удалить.
+Click Confirm again: to the Recycle Bin. 	Нажми ещё раз, чтобы подтвердить: в корзину. 
+If you delete it: 	Если удалить: 
+Delete: on no reel or tape of the game.	Удаление: фильм не на бобине и не на кассете игры.
+Click a film to see it here: title, length, where it's used, where it comes from. Then rename it or export it as .mp4.	Нажми на фильм, чтобы увидеть его здесь: название, длина, где он используется, откуда он. Потом переименуй его или экспортируй в .mp4.
+Film title	Название фильма
+Where: 	Где: 
+Origin: 	Происхождение: 
+On a reel or tape: its title is in the save, rename it in game (/titre).	На бобине или кассете: его название в сохранении, переименуй его в игре (/titre).
+Reels	Бобины
+Cinema reels	Бобины кинотеатра
+The films of each game: import, rename, export, free up space.	Фильмы каждой игры: импорт, переименование, экспорт, освобождение места.
+In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	В лаунчере, страница VHS, вкладка «Бобины»: фильмы каждой игры, их длина, где они используются и откуда они. Импортируй видео для бобины, переименуй, экспортируй в .mp4 или удали (при закрытой игре); в игре, с бобиной в руке, R — готовые фильмы.
+New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.	Новая вкладка «Бобины» на странице VHS: фильмы каждой игры, их длина и где они используются. Импортируй видео, переименуй, экспортируй в .mp4 или освободи место.

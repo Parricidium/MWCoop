@@ -13,6 +13,11 @@
 enum { UI_VHS_OPEN = 2990, UI_VHS_REFRESH = 2991, UI_VHS_EXPORT = 2992, UI_VHS_PLAY = 2993, UI_VHS_VIDDIR = 2994, UI_VHS_TAB = 2995, UI_VHS_IMPORT = 2997, UI_VHS = 3000,
        UI_ALB_OPEN = 3490, UI_ALB_DIR, UI_ALB_DEL, UI_ALB_FOLDER, UI_ALB_VIEW = 3494 /* + 0 recentes, 1 par partie, 2 favoris */, UI_ALB_SLIDE = 3497, UI_ALB_FAV = 3498, UI_ALB = 3500 };
 enum { VP_RENAME, VP_IMPORT, VP_ERASE, VP_OK, VP_CANCEL, VP_SELECT, VP_SEND };
+enum { UI_BOB_TAB = 16000, UI_BOB_PREV, UI_BOB_NEXT, UI_BOB_REFRESH, UI_BOB_DIR, UI_BOB_VIDDIR, UI_BOB_IMPORT, UI_BOB_CANCEL,
+       UI_BOB_KIND = 16010 /* + 0 bobine, 1 cassette */, UI_BOB_RENAME = 16020, UI_BOB_REN_OK, UI_BOB_REN_CANCEL, UI_BOB_EXPORT, UI_BOB_DEL,
+       UI_BOB_ROW = 16100 /* + ligne * 2 : 0 choisir, 1 cocher */, UI_BOB_END = 17000 };   // (onglet Bobines : bobines.inc)
+static bool g_mediaBob;   // page MEDIA : onglet Bobines a la place de VHS (meme page TAB_VHS : bobines.inc, inclus apres saves.inc)
+static float BobMaxScroll(); static void DrawBob(Graphics &g); static bool BobChar(wchar_t c); static bool BobTick(); static void BobEnter();
 
 // ---- donnees
 struct VhsTape {
@@ -264,6 +269,7 @@ static void VhsImport(int i, const wchar_t *given = NULL)   // (given : essais /
 static bool VhsExportTick();
 static void VhsTick()   // (Tick, chaque image)
 {
+    if (BobTick()) return;   // (onglet Bobines : son import ou son export)
     if (VhsExportTick()) return;
     if (g_vhsImpFilm.empty() || !g_vidPoll) return;
     float p = 0; wchar_t msg[512] = L"";
@@ -293,6 +299,7 @@ static bool g_albSlide;   // (Album : diaporama en cours -- Echap l'arrete)
 static bool VhsChar(wchar_t c)
 {
     if (g_tab == TAB_ALBUM) { if (c == 27 && g_albSlide) { g_albSlide = false; return true; } return false; }
+    if (g_tab == TAB_VHS && g_mediaBob) return BobChar(c);
     if (g_tab != TAB_VHS || g_vhsEdit < 0) return false;
     if (c == 8) { if (!g_vhsEditText.empty()) g_vhsEditText.pop_back(); }
     else if (c == 127) g_vhsEditText.clear();
@@ -317,7 +324,7 @@ static RectF kVhsList(282, 170, 588, 488);
 static void MediaLayout();   // (plus bas, avec kAlbGrid)   // (marges de 18 ; sous le titre et la ligne d'aide, au-dessus de la bande de la cassette choisie)
 static float g_mediaTabRight = 1264;               // bord droit des onglets (ui.inc DrawHeader)
 static const float kVhsRowH = 66;                  // (ligne de 60 : cassette de 40 et 10 de marge, puis 6 d'ecart)
-static float VhsMaxScroll() { return max(0.0f, (float)g_vhs.size() * kVhsRowH - kVhsList.Height); }
+static float VhsMaxScroll() { if (g_mediaBob) return BobMaxScroll(); return max(0.0f, (float)g_vhs.size() * kVhsRowH - kVhsList.Height); }
 
 static std::wstring VhsClock(float s) { int t = (int)(s + 0.5f); wchar_t b[32]; if (t >= 3600) swprintf_s(b, L"%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60); else swprintf_s(b, L"%d:%02d", t / 60, t % 60); return b; }
 
@@ -496,21 +503,30 @@ static bool VhsExportTick()
     return true;
 }
 
-// Onglets de la page MEDIA (VHS / Album), dessines par l'en-tete : zones UI_VHS_TAB + k, suivies par VhsClick.
-static float MediaTabsW() { return PillW(L"VHS", 13) + 16 + 6 + PillW(T(L"Album", L"Album"), 13) + 16; }
+// Onglets de la page MEDIA (VHS / Bobines / Album), dessines par l'en-tete : zones UI_VHS_TAB (VHS), UI_BOB_TAB (Bobines,
+// bobines.inc) et UI_VHS_TAB + 1 (Album).
+static float MediaTabsW() { return PillW(L"VHS", 13) + 16 + 6 + PillW(T(L"Bobines", L"Reels"), 13) + 16 + 6 + PillW(T(L"Album", L"Album"), 13) + 16; }
+static RectF MediaTabRect(int k)   // (bulle du tuto : onglet k)
+{
+    const std::wstring lab[3] = { L"VHS", T(L"Bobines", L"Reels"), T(L"Album", L"Album") };
+    float x = g_mediaTabRight - MediaTabsW();
+    for (int i = 0; i < k; i++) x += PillW(lab[i], 13) + 16 + 6;
+    return RectF(x, 26, PillW(lab[k], 13) + 16, 36);
+}
 static void MediaTabsDraw(Graphics &g)
 {
-    const std::wstring labS[2] = { L"VHS", T(L"Album", L"Album") }; const wchar_t *lab[2] = { labS[0].c_str(), labS[1].c_str() };
+    const std::wstring labS[3] = { L"VHS", T(L"Bobines", L"Reels"), T(L"Album", L"Album") }; const wchar_t *lab[3] = { labS[0].c_str(), labS[1].c_str(), labS[2].c_str() };
+    const int ids[3] = { UI_VHS_TAB, UI_BOB_TAB, UI_VHS_TAB + 1 };
     float x = g_mediaTabRight - MediaTabsW();
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < 3; k++) {
         float w = PillW(lab[k], 13) + 16;
         RectF r(x, 26, w, 36);
-        bool on = (g_tab == TAB_ALBUM) == (k == 1), hot = g_uiHot == UI_VHS_TAB + k;
+        bool on = k == 2 ? g_tab == TAB_ALBUM : g_tab == TAB_VHS && g_mediaBob == (k == 1), hot = g_uiHot == ids[k];
         GraphicsPath p; RoundRect(p, r, r.Height / 2);
         SolidBrush b(on ? kAcc : hot ? TH(cardSel) : TH(btn2)); g.FillPath(&b, &p);
         if (!on) { Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); }
         Text(g, lab[k], r, 13, FontStyleBold, on ? kOnAcc : kInk);
-        HotZone(r, UI_VHS_TAB + k);
+        HotZone(r, ids[k]);
         x += w + 6;
     }
 }
@@ -544,6 +560,7 @@ static bool VhsIsPerso(const VhsTape &t) { for (auto &f : t.films) if (!f.compar
 // Onglet VHS : a gauche « Mes cassettes · N » (liste, Importer une video, bande de la cassette choisie) ; a droite l'apercu.
 static void DrawVhs(Graphics &g)
 {
+    if (g_mediaBob) { DrawBob(g); return; }   // (onglet Bobines : bobines.inc)
     MediaLayout();   // (refonte L4 : cartes a la largeur de la colonne de page, g_pageR)
     if (GetTickCount() - g_vhsScanT > 2000) VhsScan();
     RectF c = kMediaCard, v = kMediaView;
@@ -693,7 +710,7 @@ static void DrawVhs(Graphics &g)
 
 static void VhsClick(int id)
 {
-    if (id == UI_VHS_TAB) { GoPage(TAB_VHS); return; }
+    if (id == UI_VHS_TAB) { GoPage(TAB_VHS); if (g_mediaBob) { g_mediaBob = false; g_scroll[TAB_VHS] = 0; VhsScan(); } return; }
     if (id == UI_VHS_TAB + 1) { GoPage(TAB_ALBUM); return; }
     if (id == UI_VHS_IMPORT) {   // sur la cassette choisie, sinon la premiere vierge (sinon la premiere)
         int i = g_vhsSel;

@@ -331,6 +331,71 @@ Custom helmet	خوذة خاصة
 New Helmet tab on the Character page: paint your helmet on the template, then buy it in game at the CARDINAL shop.	تبويب «خوذة» جديد في صفحة الشخصية: ارسم خوذتك على القالب، ثم اشترِها في اللعبة من متجر CARDINAL.
 What the others see of you: outfit, face, helmet, car. Visible as soon as you enter a lobby.	ما يراه الآخرون منك: الملابس، الوجه، الخوذة، السيارة. يظهر فور دخولك إلى ردهة.
 A reel takes a video of any length. Films received from other players are deleted at the next game load, except those on a reel or tape kept in the game; yours (recorded, edited, imported) never are.	تتسع البكرة لفيديو بأي طول. تُحذف الأفلام المستلمة من لاعبين آخرين عند التحميل التالي للعبة، إلا ما كان منها على بكرة أو شريط محفوظ في اللعبة؛ أما أفلامك (المصوّرة أو المُركّبة أو المستوردة) فلا تُحذف أبدًا.
+%.1f GB	%.1f غيغابايت
+reel, room 	بكرة، القاعة 
+reel (item)	بكرة (غرض)
+tape	شريط
+in the VCR	في جهاز الفيديو
+in the camcorder	في كاميرا الفيديو
+on no reel	ليس على أي بكرة
+unfinished download (deleted at the next game load)	تنزيل غير مكتمل (يُحذف عند التحميل التالي للعبة)
+received, kept (reel of the game)	مستلَم، محفوظ (بكرة في اللعبة)
+received, deleted at the next game load	مستلَم، يُحذف عند التحميل التالي للعبة
+made on this PC (recorded, edited or imported)	صُنع على هذا الحاسوب (مصوَّر أو مُركَّب أو مستورد)
+no title	بلا عنوان
+Guest game	لعبة الضيف
+The reel \"%s\" (room %s) will become blank.	ستصبح البكرة «%s» (القاعة %s) فارغة.
+The reel \"%s\" will become blank.	ستصبح البكرة «%s» فارغة.
+The tape \"%s\" will lose this film.	سيفقد الشريط «%s» هذا الفيلم.
+Close the game first: it reads and deletes these films while playing	أغلق اللعبة أولًا: فهي تقرأ هذه الأفلام وتحذفها أثناء اللعب
+Delete \"%s\" (%s)? Click Confirm again. %s	حذف «%s» (%s)؟ انقر مرة أخرى للتأكيد. %s
+Delete %d films (%s)? Click Confirm again. %s	حذف %d أفلام (%s)؟ انقر مرة أخرى للتأكيد. %s
+Films not deleted	لم تُحذف الأفلام
+%d film(s) moved to the Recycle Bin	نُقل %d فيلم إلى سلة المحذوفات
+Close the game to import a video (it writes in the films folder)	أغلق اللعبة لاستيراد فيديو (فهي تكتب في مجلد الأفلام)
+Less than 1 GB free on the disk (%s): click again to import anyway	المساحة المتاحة على القرص أقل من 1 غيغابايت (%s): انقر مرة أخرى للاستيراد على أي حال
+Choose the video for a VHS tape	اختر الفيديو لشريط VHS
+Choose the video for a cinema reel	اختر الفيديو لبكرة السينما
+Conversion cancelled	أُلغي التحويل
+Video imported: \"%s\" (%s). In game, reel in hand, R: READY FILMS.	استُورد الفيديو: «%s» (%s). في اللعبة، والبكرة في يدك، R: الأفلام الجاهزة.
+Close the game to rename a film	أغلق اللعبة لإعادة تسمية فيلم
+Film renamed	أُعيدت تسمية الفيلم
+Title not written	لم يُكتب العنوان
+Unfinished download	تنزيل غير مكتمل
+Reading…	جارٍ القراءة…
+Unreadable file	ملف غير مقروء
+%d × %d, %d frames/s	%d × %d، %d صورة/ث
+Reel films	أفلام البكرات
+Import a video…	استيراد فيديو…
+Cinema reel	بكرة سينما
+VHS tape	شريط VHS
+\"At the host's\" game: its reels point to films of the guest game.	لعبة «عند المضيف»: تشير بكراتها إلى أفلام لعبة الضيف.
+\"Import\": for a VHS tape (4:3 picture, VHS effect).	«استيراد»: لشريط VHS (صورة 4:3، تأثير VHS).
+\"Import\": for a cinema reel, no length limit.	«استيراد»: لبكرة سينما، بلا حد للمدة.
+No film in this game. Record with the camcorder, import a video here or in game (reel in hand, R), or receive some from another player.	لا يوجد فيلم في هذه اللعبة. صوّر بكاميرا الفيديو، أو استورد فيديو هنا أو في اللعبة (البكرة في يدك، R)، أو استلم أفلامًا من لاعب آخر.
+Unfinished	غير مكتمل
+Received, kept	مستلَم، محفوظ
+Received, will go	مستلَم، سيُحذف
+Yours	لك
+Films of the game: 	أفلام اللعبة: 
+ · free on the disk: 	 · المتاح على القرص: 
+Tick films (or pick one) to delete them. Yours don't come back.	حدّد أفلامًا (أو اختر واحدًا) لحذفها. أفلامك لا تعود.
+Selected film: 	الفيلم المختار: 
+ film(s) ticked (	 فيلم محدَّد (
+Close the game to delete.	أغلق اللعبة للحذف.
+Click Confirm again: to the Recycle Bin. 	انقر مرة أخرى للتأكيد: إلى سلة المحذوفات. 
+If you delete it: 	إن حذفته: 
+Delete: on no reel or tape of the game.	الحذف: ليس على أي بكرة أو شريط في اللعبة.
+Click a film to see it here: title, length, where it's used, where it comes from. Then rename it or export it as .mp4.	انقر على فيلم لتراه هنا: العنوان والمدة وأين يُستخدم ومن أين أتى. ثم أعد تسميته أو صدّره بصيغة .mp4.
+Film title	عنوان الفيلم
+Where: 	أين: 
+Origin: 	المصدر: 
+On a reel or tape: its title is in the save, rename it in game (/titre).	على بكرة أو شريط: عنوانه في الحفظ، أعد تسميته في اللعبة (/titre).
+Reels	البكرات
+Cinema reels	بكرات السينما
+The films of each game: import, rename, export, free up space.	أفلام كل لعبة: استيراد، إعادة تسمية، تصدير، إفراغ مساحة.
+In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.	في المشغّل، صفحة VHS، تبويب «البكرات»: أفلام كل لعبة ومدتها وأين تُستخدم ومن أين أتت. استورد فيديو لبكرة، أو أعد التسمية، أو صدّر بصيغة .mp4، أو احذف (واللعبة مغلقة)؛ في اللعبة، والبكرة في يدك، R: الأفلام الجاهزة.
+New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.	تبويب جديد «البكرات» في صفحة VHS: أفلام كل لعبة ومدتها وأين تُستخدم. استورد فيديو، أو أعد التسمية، أو صدّر بصيغة .mp4، أو أفرغ مساحة.
 if private	إذا كانت خاصة
 Yes	نعم
 No	لا

@@ -1,0 +1,65 @@
+L107-1	%.1f GB
+L107-2	reel, room 
+L107-3	reel (item)
+L107-4	tape
+L107-5	in the VCR
+L107-6	in the camcorder
+L107-7	on no reel
+L107-8	unfinished download (deleted at the next game load)
+L107-9	received, kept (reel of the game)
+L107-10	received, deleted at the next game load
+L107-11	made on this PC (recorded, edited or imported)
+L107-12	no title
+L107-13	Guest game
+L107-14	The reel \"%s\" (room %s) will become blank.
+L107-15	The reel \"%s\" will become blank.
+L107-16	The tape \"%s\" will lose this film.
+L107-17	Close the game first: it reads and deletes these films while playing
+L107-18	Delete \"%s\" (%s)? Click Confirm again. %s
+L107-19	Delete %d films (%s)? Click Confirm again. %s
+L107-20	Films not deleted
+L107-21	%d film(s) moved to the Recycle Bin
+L107-22	Close the game to import a video (it writes in the films folder)
+L107-23	Less than 1 GB free on the disk (%s): click again to import anyway
+L107-24	Choose the video for a VHS tape
+L107-25	Choose the video for a cinema reel
+L107-26	Conversion cancelled
+L107-27	Video imported: \"%s\" (%s). In game, reel in hand, R: READY FILMS.
+L107-28	Close the game to rename a film
+L107-29	Film renamed
+L107-30	Title not written
+L107-31	Unfinished download
+L107-32	Reading…
+L107-33	Unreadable file
+L107-34	%d × %d, %d frames/s
+L107-35	Reel films
+L107-36	Import a video…
+L107-37	Cinema reel
+L107-38	VHS tape
+L107-39	\"At the host's\" game: its reels point to films of the guest game.
+L107-40	\"Import\": for a VHS tape (4:3 picture, VHS effect).
+L107-41	\"Import\": for a cinema reel, no length limit.
+L107-42	No film in this game. Record with the camcorder, import a video here or in game (reel in hand, R), or receive some from another player.
+L107-43	Unfinished
+L107-44	Received, kept
+L107-45	Received, will go
+L107-46	Yours
+L107-47	Films of the game: 
+L107-48	 · free on the disk: 
+L107-49	Tick films (or pick one) to delete them. Yours don't come back.
+L107-50	Selected film: 
+L107-51	 film(s) ticked (
+L107-52	Close the game to delete.
+L107-53	Click Confirm again: to the Recycle Bin. 
+L107-54	If you delete it: 
+L107-55	Delete: on no reel or tape of the game.
+L107-56	Click a film to see it here: title, length, where it's used, where it comes from. Then rename it or export it as .mp4.
+L107-57	Film title
+L107-58	Where: 
+L107-59	Origin: 
+L107-60	On a reel or tape: its title is in the save, rename it in game (/titre).
+L107-61	Reels
+L107-62	Cinema reels
+L107-63	The films of each game: import, rename, export, free up space.
+L107-64	In the launcher, VHS page, Reels tab: the films of each game, their length, where they are used and where they come from. Import a video for a reel, rename, export as .mp4 or delete (game closed); in game, reel in hand, R: READY FILMS.
+L107-65	New Reels tab on the VHS page: the films of each game, with their length and where they are used. Import a video, rename, export as .mp4 or free up space.

@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------- lanceur 2026 : scene, navigation, pages - inclus par launcher.cpp
+// ---------------------------------------------------------------- lanceur 2026 : scene, navigation, pages - inclus par launcher.cpp
 // (elements communs, zones, icones, verre : uikit.inc)
 static float Rnd01(int i, int k);
 static void SceneSpruce(Graphics &g, float x, float base, float h, Brush *ink, Brush *snow)
@@ -365,7 +365,7 @@ static void GoPage(int p)
     g_focus = -1; g_optHot = -1; g_lobbyOpts = false;
     if (p == TAB_NOTES) NotesMarkSeen();
     if (p == TAB_LOGS) { LogsScan(); CrashSeen(); }
-    if (p == TAB_VHS) { g_vhsEdit = -1; VhsScan(); }
+    if (p == TAB_VHS) { g_vhsEdit = -1; g_mediaBob = false; VhsScan(); }   // (la barre ouvre VHS ; l'onglet Bobines remet g_mediaBob ensuite)
     if (p == TAB_ALBUM) AlbScan();
     if (p == TAB_SAVES) { g_saveEdit = -1; SavesScan(); }
     if (p == TAB_MODS || p == TAB_CONTENT) MscScan();
@@ -729,6 +729,7 @@ static void DrawHeader(Graphics &g)
     case TAB_RALLY: title = L"RallyWorld"; sub = T(L"Rallye et tout-terrain pour Assetto Corsa · la communauté qui nous prête ses voitures", L"Rally and off-road for Assetto Corsa · the community that lends us its cars"); break;
     case TAB_TOOLS: title = T(L"Outils", L"Tools"); sub = T(L"Des programmes à part pour aller plus loin, à télécharger d'un clic.", L"Separate programs to go further, downloaded in one click."); break;
     case TAB_VHS: case TAB_ALBUM:
+        if (g_tab == TAB_VHS && g_mediaBob) { title = T(L"Bobines de cinéma", L"Cinema reels"); sub = T(L"Les films de chaque partie : importer, renommer, exporter, faire de la place.", L"The films of each game: import, rename, export, free up space."); break; }
         if (g_game == GAME_MSC) { title = T(L"Album", L"Album"); sub = T(L"Les photos prises au drone.", L"The photos taken with the drone."); break; }   // (pas de VHS sur MSC)
         title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
     case TAB_BUG: title = T(L"Signaler un bug", L"Report a bug"); sub = SigActive() || g_sigCapture ? T(L"Tes dossiers et le formulaire, ici dans le lanceur · les journaux des parties se cochent sur place", L"Your reports and the form, right here in the launcher · the game sessions' logs are ticked right there") : T(L"Le formulaire du site, dans le lanceur · tes journaux en un clic", L"The site's form, inside the launcher · your logs in one click"); break;   // (signalement.inc)
@@ -1877,6 +1878,7 @@ static bool UiClick(int id)
     if (id >= UI_RALLY_SITE && id <= UI_RALLY_DON2) return RallyClick(id);   // (rallyworld.inc)
     if (id == UI_PLACES_OPEN || id == UI_PLACES_EXPORT) { PlacesClick(id); return true; }   // (page Outils : placement des sieges, outils-places.inc)
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
+    if (id >= UI_BOB_TAB && id < UI_BOB_END) { BobClick(id); return true; }   // (onglet Bobines : bobines.inc)
     if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)
     if (id >= UI_ALB_OPEN && id < UI_ALB + 4000) { AlbClick(id); return true; }
     if (id == UI_LOG_CLEAR) {   // second clic dans les 4 s : les parties rangees a la corbeille

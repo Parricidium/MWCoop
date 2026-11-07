@@ -5003,6 +5003,7 @@ static void NetTest()
 #include "media.inc"
 static std::wstring FitText(const std::wstring &s, float px, int style, float maxW);   // (plus bas ; Nouveautes, ui.inc, saves.inc)
 #include "saves.inc"
+#include "bobines.inc"   // (page MEDIA, onglet Bobines : films du cinema de chaque partie, 07/11)
 #include "es2.inc"   // (lecture et reecriture des sauvegardes du jeu : Verifier la sauvegarde)
 #include "places.inc"   // (outil des places reserve : ID MWCoop, cle d'acces signee par JD, cles retirees)
 #include "outils-places.inc"   // (page Outils : bandeau Placement des sieges, [Addons et Tools])
@@ -8476,6 +8477,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return rc;
     }
+    // /testbobines <journal> : onglet Bobines (releve, titres, usage, durees, suppression) ; dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testbobines")) {
+        int rc = BobSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /testcasque <journal> : casque perso (import, Retirer, interrupteur, apercu) ; dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testcasque")) {
         int rc = CasqueSelfTest(argv[2]);
@@ -8730,6 +8737,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
+        else if (st == L"bobines" || st == L"bobines1" || st == L"bobines-sup") {   // (onglet Bobines : la partie-1 de /testbobines si elle existe)
+            g_tab = TAB_VHS; g_mediaBob = true; g_bobProfSet = true; g_bobProf = GetFileAttributesW((SaveProfRoot() + L"partie-1").c_str()) != INVALID_FILE_ATTRIBUTES ? L"partie-1" : L"";
+            BobEnter();
+            for (int k = 0; k < 100; k++) { BobLock(); bool run = g_bobRun; BobUnlock(); if (!run) break; Sleep(50); }
+            if (st != L"bobines" && !g_bob.empty()) g_bobSelId = g_bob[0].id;
+            if (st == L"bobines-sup") { for (auto &f : g_bob) if (f.use != BU_NONE || f.recu) g_bobChk.insert(f.id); g_bobDelT = GetTickCount(); }
+        }
         else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesFake(); }
         else if (st == L"sauvegardes-verif") {   // (Verifier la sauvegarde : fichiers du dossier MWCOOP_VERIF -- essais)
             g_tab = TAB_SAVES; SavesFake(); wchar_t vd[MAX_PATH] = L""; GetEnvironmentVariableW(L"MWCOOP_VERIF", vd, MAX_PATH);
