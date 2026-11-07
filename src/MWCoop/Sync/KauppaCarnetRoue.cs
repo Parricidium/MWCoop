@@ -239,7 +239,11 @@ namespace MWCoop
         {
             if (string.IsNullOrEmpty(hash) || cnBooks.ContainsKey(hash) || data == null || n <= 0 || n > (CnMaxBytes + CnChunk - 1) / CnChunk || i < 0 || i >= n || data.Length > CnChunk) return;
             byte[][] parts;
-            if (!cnIn.TryGetValue(hash, out parts) || parts.Length != n) cnIn[hash] = parts = new byte[n][];
+            if (!cnIn.TryGetValue(hash, out parts) || parts.Length != n)
+            {
+                if (cnIn.Count >= 8) cnIn.Clear();   // (au plus 8 carnets en cours de reception : un pair ne remplit pas la memoire)
+                cnIn[hash] = parts = new byte[n][];
+            }
             if (parts[i] != null) return;
             parts[i] = data;
             int len = 0;
