@@ -404,30 +404,37 @@ namespace
 
     int RunExport(Job &j)
     {
-        std::vector<BYTE> all;
-        {
-            FILE *fi = nullptr;
-            if (_wfopen_s(&fi, j.src.c_str(), L"rb") != 0 || !fi) { Msg(L"film introuvable"); return -1; }
-            fseek(fi, 0, SEEK_END); long n = ftell(fi); fseek(fi, 0, SEEK_SET);
-            all.resize(n > 0 ? n : 0);
-            if (n > 0) fread(all.data(), 1, n, fi);
-            fclose(fi);
-        }
-        if (all.size() < 11 || memcmp(all.data(), "MWV1", 4) != 0) { Msg(L"film illisible"); return -1; }
-        int fps = all[8] > 0 ? all[8] : 10, rate = all[9] | all[10] << 8;
+        // (film lu au fil de l'export, plus en entier en memoire : films de plusieurs Go depuis le 07/11 -- taille et positions sur
+        // 64 bits ; avant, ftell sur 32 bits ne lisait pas un film de plus de 2 Go)
+        FILE *ff = nullptr;
+        if (_wfopen_s(&ff, j.src.c_str(), L"rb") != 0 || !ff) { Msg(L"film introuvable"); return -1; }
+        struct Closer { FILE *f; ~Closer() { if (f) fclose(f); } } closer{ ff };
+        _fseeki64(ff, 0, SEEK_END); long long size = _ftelli64(ff); _fseeki64(ff, 0, SEEK_SET);
+        BYTE head[11];
+        if (size < 11 || fread(head, 1, 11, ff) != 11 || memcmp(head, "MWV1", 4) != 0) { Msg(L"film illisible"); return -1; }
+        int fps = head[8] > 0 ? head[8] : 10, rate = head[9] | head[10] << 8;
         if (rate <= 0) rate = 11025;
-        struct Fr { size_t off; int len; unsigned ms; };
+        struct Fr { long long off; int len; unsigned ms; };
         std::vector<Fr> frames; std::vector<BYTE> mu;
-        for (size_t p = 11; p + 9 <= all.size();)
+        for (long long p = 11; p + 9 <= size;)
         {
-            int kind = all[p]; unsigned ms; int n;
-            memcpy(&ms, &all[p + 1], 4); memcpy(&n, &all[p + 5], 4);
+            BYTE bh[9];
+            if (_fseeki64(ff, p, SEEK_SET) != 0 || fread(bh, 1, 9, ff) != 9) break;
+            int kind = bh[0]; unsigned ms; int n;
+            memcpy(&ms, bh + 1, 4); memcpy(&n, bh + 5, 4);
             p += 9;
-            if (n < 0 || p + n > all.size()) break;
+            if (n < 0 || p + n > size) break;
             if (kind == 1) frames.push_back({ p, n, ms });
-            else if (kind == 2) mu.insert(mu.end(), all.begin() + p, all.begin() + p + n);
+            else if (kind == 2 && n > 0) { size_t at = mu.size(); mu.resize(at + (size_t)n); if (fread(mu.data() + at, 1, (size_t)n, ff) != (size_t)n) { mu.resize(at); break; } }
             p += n;
         }
+        std::vector<BYTE> jbuf;
+        auto frameData = [&](size_t k) -> const BYTE * {
+            const Fr &f = frames[k];
+            jbuf.resize(f.len > 0 ? (size_t)f.len : 1);
+            if (_fseeki64(ff, f.off, SEEK_SET) != 0 || fread(jbuf.data(), 1, (size_t)f.len, ff) != (size_t)f.len) return nullptr;
+            return jbuf.data();
+        };
         if (frames.empty()) { Msg(L"aucune image dans ce film"); return -1; }
         IWICImagingFactory *wic = nullptr; IMFSinkWriter *sw = nullptr; IMFMediaType *t = nullptr;
         int ret = -1;
@@ -437,7 +444,8 @@ namespace
         {
             if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic)))) { Msg(L"WIC indisponible"); break; }
             std::vector<BYTE> img; int sw0 = 0, sh0 = 0;
-            if (!DecodeJpeg(wic, &all[frames[0].off], frames[0].len, img, sw0, sh0)) { Msg(L"premiere image illisible"); break; }
+            const BYTE *f0 = frameData(0);
+            if (!f0 || !DecodeJpeg(wic, f0, frames[0].len, img, sw0, sh0)) { Msg(L"premiere image illisible"); break; }
             int ow = (sw0 * j.scale) & ~1, oh = (sh0 * j.scale) & ~1;
             Logo logo;
             if (!j.logo.empty())
@@ -524,7 +532,8 @@ namespace
                 if (fi != shown)
                 {
                     int w2, h2;
-                    if (DecodeJpeg(wic, &all[frames[fi].off], frames[fi].len, img, w2, h2)) { sw0 = w2; sh0 = h2; ToNv12(img, sw0, sh0, nv12, ow, oh, &logo); }
+                    const BYTE *fd = frameData(fi);
+                    if (fd && DecodeJpeg(wic, fd, frames[fi].len, img, w2, h2)) { sw0 = w2; sh0 = h2; ToNv12(img, sw0, sh0, nv12, ow, oh, &logo); }
                     else if (nv12.empty()) nv12.assign((size_t)ow * oh * 3 / 2, 128);
                     shown = fi;
                 }
@@ -616,7 +625,7 @@ namespace
     int SafeRun(Job *j)
     {
         __try { return j->kind == 1 ? RunExport(*j) : Run(*j); }
-        __except (EXCEPTION_EXECUTE_HANDLER) { Msg(L"Media Foundation absente de ce Windows (editions N : installer le Media Feature Pack)"); return -1; }
+        __except (EXCEPTION_EXECUTE_HANDLER) { Msg(GetExceptionCode() == 0xE06D7363 ? L"memoire insuffisante pour ce film" : L"Media Foundation absente de ce Windows (editions N : installer le Media Feature Pack)"); return -1; }
     }
 
     DWORD WINAPI Thread(LPVOID p)

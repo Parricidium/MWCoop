@@ -1023,3 +1023,5 @@ Film \"{0}\": the rest is on its way ({1} %)	Фильм «{0}»: продолж�
 Film \"{0}\": {1} % received during the show	Фильм «{0}»: {1} % получено во время сеанса
 Film not saved (disk full?): 	Фильм не сохранён (диск заполнен?): 
 This reel's film isn't on this PC: the show can't be shared.	Фильма этой бобины нет на этом ПК: сеанс нельзя показать другим.
+not enough disk space ({0} needed, {1} left)	недостаточно места на диске (нужно {0}, осталось {1})
+Film \"{0}\" offered by {1}: {2}. Free up some space to watch it.	Фильм «{0}» от {1}: {2}. Освободите место, чтобы его посмотреть.

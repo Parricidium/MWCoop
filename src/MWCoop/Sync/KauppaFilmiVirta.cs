@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace MWCoop
@@ -17,7 +18,40 @@ namespace MWCoop
     public static partial class Kauppa
     {
         const long FilmMemMax = 32L << 20;
-        const int FilmStreamSamples = 4 * 3600 * RecRate;   // (AudioClip en flux : 4 h, silence au-dela du son)
+        // AudioClip en flux : sa longueur est fixee a la creation. 4 h au moins (comme avant), la duree connue + 10 min, sinon 24 h
+        // (films sans limite de duree depuis le 07/11 : le son s'arretait a 4 h). 24 h au plus : FMOD compte la longueur d'un son
+        // cree en octets sur 32 bits (4 octets par echantillon flottant) -- au-dela, image sans son.
+        static int StreamSamples(Film f)
+        {
+            uint known = f.Done ? f.LengthMs : f.ExpectMs;
+            double s = known > 0 ? Math.Max(4.0 * 3600.0, known / 1000.0 + 600.0) : 24.0 * 3600.0;
+            return (int)(Math.Min(s, 24.0 * 3600.0) * RecRate);
+        }
+
+        // place libre sur le disque des films (octets) ; -1 si inconnue ([Test] PlaceLibreMo : place simulee)
+        [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool GetDiskFreeSpaceExW(string dir, out ulong freeToCaller, out ulong total, out ulong totalFree);
+        static long FreeBytes(string dir)
+        {
+            int test = Config.Testing ? Config.GetInt("Test", "PlaceLibreMo", -1) : -1;
+            if (test >= 0) return (long)test << 20;
+            try
+            {
+                string d = dir;
+                while (!string.IsNullOrEmpty(d) && !Directory.Exists(d)) d = Path.GetDirectoryName(d);
+                ulong a, t, fr;
+                if (!string.IsNullOrEmpty(d) && GetDiskFreeSpaceExW(d, out a, out t, out fr)) return (long)Math.Min(a, (ulong)long.MaxValue);
+            }
+            catch (Exception) { }
+            return -1;
+        }
+
+        // assez de place pour need octets (et 512 Mo de marge) : null ; sinon la phrase pour le joueur (place inconnue : on essaie)
+        static string FilmRoom(long need)
+        {
+            long free = FreeBytes(FilmDir), want = need + (512L << 20);
+            if (free < 0 || free >= want) return null;
+            return string.Format(Lang.T("pas assez de place sur le disque (il faut {0}, il reste {1})", "not enough disk space ({0} needed, {1} left)"), SizeText(want / 1024), SizeText(free / 1024));
+        }
         static readonly Dictionary<string, uint> filmExpect = new Dictionary<string, uint>();   // film -> duree annoncee (ms)
         static readonly HashSet<string> filmFailed = new HashSet<string>();                     // (reception impossible ici : disque plein...)
         static readonly HashSet<string> filmReadLogged = new HashSet<string>();
@@ -57,6 +91,19 @@ namespace MWCoop
                 }
             }
             public void PcmSetPos(int p) { lock (mu) readPos = p; }
+            // n echantillons mu-law a partir de k (silence la ou il n'y en a pas) -- montage, sous un seul verrou
+            public void MuCopy(long k, byte[] dst, int n)
+            {
+                lock (mu)
+                {
+                    int s = Seg(k);
+                    for (int i = 0; i < n; i++, k++)
+                    {
+                        while (s + 1 < mu.Count && k >= muAt[s + 1]) s++;
+                        dst[i] = s >= 0 && k - muAt[s] < mu[s].Length ? mu[s][k - muAt[s]] : (byte)0xFF;
+                    }
+                }
+            }
             public float[] AllSound() { lock (mu) { var r = new float[muCount]; for (int s = 0; s < mu.Count; s++) for (int i = 0; i < mu[s].Length; i++) r[muAt[s] + i] = MuLawDecode(mu[s][i]); return r; } }
         }
 
@@ -187,7 +234,7 @@ namespace MWCoop
                         f.Clip.SetData(snd, 0);
                     }
                 }
-                else f.Clip = AudioClip.Create("kauppa_" + id, FilmStreamSamples, 1, RecRate, true, f.PcmRead, f.PcmSetPos);
+                else f.Clip = AudioClip.Create("kauppa_" + id, StreamSamples(f), 1, RecRate, true, f.PcmRead, f.PcmSetPos);
                 // (garde les films en cours de lecture, et quelques autres)
                 while (filmCache.Count >= 6)
                 {

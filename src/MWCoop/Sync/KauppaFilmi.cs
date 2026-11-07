@@ -122,11 +122,11 @@ namespace MWCoop
         // Ko/s (1500) ; reception ecrite directement dans le fichier a sa place (morceaux de FilmChunk octets), avancement
         // connu (FilmProgress : KinoJako l'affiche et le dit au partageur).
         class FilmOut { public string Film; public FileStream Fs; public long Length; public int Next, Count; public bool Again; public List<int> To; }   // (To : destinataires, null = tous)
-        class FilmIn { public FileStream Fs; public bool[] Have; public int Got, Count, Prefix; public float Last; }   // (Prefix : morceaux 0..Prefix-1 tous arrives -- lecture pendant la reception)
+        class FilmIn { public FileStream Fs; public System.Collections.BitArray Have; public int Got, Count, Prefix; public float Last; }   // (Have : 1 bit par morceau -- films de plusieurs Go)   // (Prefix : morceaux 0..Prefix-1 tous arrives -- lecture pendant la reception)
         static readonly List<FilmOut> filmOut = new List<FilmOut>();
         static readonly Dictionary<string, FilmIn> filmIn = new Dictionary<string, FilmIn>();
         static readonly Dictionary<string, float> filmAsked = new Dictionary<string, float>();
-        const int FilmChunk = 1000, FilmMaxParts = 10000000;   // (10 Go au plus : bobines de 3 h, 07/11 -- 4 Go avant)
+        const int FilmChunk = 1000;   // (plus de taille maximale depuis le 07/11, JD « ont peux enlever la limite » -- 10 Go puis 4 Go avant : la place libre ici decide, FilmRoom)
         static float filmSendBudget, filmSendT;
         static byte[] filmBuf;
 
@@ -144,6 +144,7 @@ namespace MWCoop
             try
             {
                 var fs = new FileStream(FilmPath(film), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                if ((fs.Length + FilmChunk - 1) / FilmChunk > int.MaxValue) { fs.Close(); L("video : film " + film + " trop gros pour l'envoi (" + fs.Length / 1048576 + " Mo)"); return; }   // (plus de 2 To : numeros de morceaux sur 32 bits)
                 filmOut.Add(new FilmOut { Film = film, Fs = fs, Length = fs.Length, Count = (int)((fs.Length + FilmChunk - 1) / FilmChunk), To = to < 0 ? null : new List<int> { to } });
                 L("video : envoi du film " + film + " (" + fs.Length / 1024 + " Ko" + (to < 0 ? ", a tous)" : ", a #" + to + ")"));
             }
@@ -254,7 +255,7 @@ namespace MWCoop
         public static void OnFilmPart(int who, NetReader r)
         {
             string film = Session.Clean(r.Str(), 64); int i = r.I32(), n = r.I32(); byte[] b = r.Bytes();
-            if (film.Length == 0 || film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || n <= 0 || n > FilmMaxParts || i < 0 || i >= n || b.Length > FilmChunk) return;
+            if (film.Length == 0 || film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || n <= 0 || i < 0 || i >= n || b.Length > FilmChunk) return;
             if (HaveFilm(film) || KinoFilmRefused(film) || filmFailed.Contains(film)) return;
             FilmIn fi;
             try
@@ -263,7 +264,9 @@ namespace MWCoop
                 {
                     if (fi != null && fi.Fs != null) fi.Fs.Close();
                     Directory.CreateDirectory(FilmDir);
-                    fi = new FilmIn { Fs = new FileStream(FilmPath(film) + ".osa", FileMode.Create, FileAccess.ReadWrite, FileShare.Read), Have = new bool[n], Count = n };
+                    string roomMsg = FilmRoom((long)n * FilmChunk);   // (pas assez de place : dit au joueur, plus redemande -- catch plus bas)
+                    if (roomMsg != null) throw new IOException(roomMsg);
+                    fi = new FilmIn { Fs = new FileStream(FilmPath(film) + ".osa", FileMode.Create, FileAccess.ReadWrite, FileShare.Read), Have = new System.Collections.BitArray(n), Count = n };
                     filmIn[film] = fi;
                 }
                 fi.Last = Time.realtimeSinceStartup;
@@ -277,6 +280,7 @@ namespace MWCoop
                 filmIn.Remove(film);
                 fi.Fs.Close();
                 File.Move(FilmPath(film) + ".osa", FilmPath(film));
+                NoteRecu(film);   // (efface au prochain chargement s'il ne sert a rien de la sauvegarde -- CleanRecus)
                 L("video : film " + film + " recu de #" + who + " (" + n + " morceaux)");
                 KinoFilmArrived(film);
             }
@@ -296,6 +300,7 @@ namespace MWCoop
             string film = Session.Clean(r.Str(), 64);
             if (film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || !HaveFilm(film)) return;
             // l'hote repond ; un invite seulement pour un film qu'il a filme lui-meme pendant cette partie
+            if (KinoRefusedBy(film, who)) { L("video : film " + film + " redemande par #" + who + ", qui l'a refuse : pas envoye"); return; }
             if (Session.IsHost || film.StartsWith("f" + Session.LocalId + "-")) SendFilm(film, who);   // (a lui seul : les autres l'ont deja)
         }
 
@@ -377,6 +382,71 @@ namespace MWCoop
             foreach (FilmOut o in filmOut) if (o.Fs != null) o.Fs.Close();
             foreach (FilmIn fi in filmIn.Values) if (fi.Fs != null) fi.Fs.Close();
             filmCache.Clear(); playStart.Clear(); filmOut.Clear(); filmIn.Clear(); filmAsked.Clear();
+            // (tout est ferme : jamais pendant une seance ; au chargement de la partie seulement -- au menu, les fichiers du monde
+            // d'un invite sont encore ceux de l'hote d'avant, la sauvegarde du nouvel hote arrive juste avant la partie)
+            if (Game.LevelName == "GAME") CleanRecus();
+        }
+
+        // ---------------------------------------------------------------- films recus : nettoyes (JD 07/11)
+        // « toujours nettoyer les films recus ! » : un film arrive par le reseau est note dans videot\recus.txt ; a chaque
+        // chargement de la partie, ceux de la liste sont effaces, sauf ceux d'une cassette, d'un magnetoscope, d'un camescope ou d'une
+        // bobine de la sauvegarde chargee (MWCoop-esineet.txt, MWCoop-kino.txt ; chez l'invite, celle de l'hote, recue en
+        // entrant) -- sinon elle resterait vide, plus personne pour le renvoyer. Jamais un film filme, monte ou importe ici
+        // (pas dans la liste), ni un film recu avant cette version (pas note). Morceaux .osa restes d'une reception coupee :
+        // effaces aussi (toujours des films recus, inutilisables). [Test] NettoyerRecus=0 : rien.
+        static string RecusFile { get { return Path.Combine(FilmDir, "recus.txt"); } }
+
+        static void NoteRecu(string film)
+        {
+            try { File.AppendAllText(RecusFile, film + "\r\n"); } catch (Exception e) { L("video : recus.txt : " + e.Message); }
+        }
+
+        // films des cassettes et bobines de la sauvegarde chargee (en trop si un titre ressemble a un film : garde de trop, jamais l'inverse)
+        static HashSet<string> SavedFilms()
+        {
+            var s = new HashSet<string>();
+            foreach (string name in new[] { "MWCoop-esineet.txt", "MWCoop-kino.txt" })
+            {
+                string p = WorldFiles.PathOf(name);
+                if (!File.Exists(p)) continue;
+                bool kinoFile = name == "MWCoop-kino.txt";
+                foreach (string l in File.ReadAllLines(p))
+                {
+                    string[] c = l.Split(';');
+                    string data = kinoFile ? (c.Length >= 2 ? c[1] : "") : (c.Length >= 3 ? c[2] : "");
+                    foreach (string part in data.Split('|')) foreach (string f in Clips(part)) s.Add(f);
+                }
+            }
+            return s;
+        }
+
+        static void CleanRecus()
+        {
+            if (Config.Testing && Config.GetInt("Test", "NettoyerRecus", 1) == 0) return;
+            try
+            {
+                if (!Directory.Exists(FilmDir)) return;
+                int osa = 0;
+                foreach (string p in Directory.GetFiles(FilmDir, "*.mwv.osa")) { try { File.Delete(p); osa++; } catch { } }
+                if (!File.Exists(RecusFile)) { if (osa > 0) L("video : " + osa + " morceau(x) de film recu (.osa) efface(s)"); return; }
+                HashSet<string> keep = SavedFilms();   // (illisible : exception, rien n'est efface)
+                var stay = new List<string>(); var seen = new HashSet<string>();
+                int gone = 0; long bytes = 0;
+                foreach (string l in File.ReadAllLines(RecusFile))
+                {
+                    string f = l.Trim();
+                    if (f.Length == 0 || f.Length > 64 || f.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || !seen.Add(f)) continue;
+                    string p = FilmPath(f);
+                    if (!File.Exists(p)) continue;
+                    if (keep.Contains(f)) { stay.Add(f); continue; }
+                    try { long n = new FileInfo(p).Length; File.Delete(p); gone++; bytes += n; }
+                    catch (Exception e) { stay.Add(f); L("video : film recu " + f + " pas efface : " + e.Message); }
+                }
+                if (stay.Count > 0) File.WriteAllLines(RecusFile, stay.ToArray()); else File.Delete(RecusFile);
+                if (gone + osa + stay.Count > 0)
+                    L("video : films recus : " + gone + " efface(s) (" + bytes / 1048576 + " Mo)" + (osa > 0 ? ", " + osa + " morceau(x) .osa" : "") + ", " + stay.Count + " garde(s) (cassette ou bobine de la sauvegarde" + (stay.Count > 0 ? " : " + string.Join(", ", stay.ToArray()) : "") + ")");
+            }
+            catch (Exception e) { L("video : nettoyage des films recus : " + e.Message); }
         }
     }
 }

@@ -26,7 +26,7 @@ namespace MWCoop
         class Projector
         {
             public int Sali; public float S; public Collider Col; public Transform[] Reels; public string Content = ""; public bool Playing; public float Start;
-            public Renderer Screen; public Material Idle, Mat; public Texture2D Tex; public AudioSource Audio; public Film Film; public int Frame = -1; public bool Behind;
+            public Renderer Screen; public Material Idle, Mat; public Texture2D Tex; public AudioSource Audio; public Film Film; public int Frame = -1; public bool Behind; public float AudioFix;
             public GameObject Beam; public float FDown = -1f;
             public LinkPlay Link; public bool LinkFailTold;   // (bobine « lien » : KinoLinkki)
         }
@@ -472,6 +472,14 @@ namespace MWCoop
                 if (f.Clip != null && tc < f.Clip.length - 0.05f) { p.Audio.time = Mathf.Max(0f, tc); p.Audio.Play(); }
                 L("cinema : salle " + p.Sali + " projette " + f.Id + " depuis " + tc.ToString("F1") + " s");
             }
+            else if (f.Clip != null && tc < f.Clip.length - 0.05f && now >= p.AudioFix && (!p.Audio.isPlaying || Mathf.Abs(p.Audio.time - tc) > 1f))
+            {
+                // (l'instant de la seance a saute -- horloge recalee par l'hote, image figee un moment, essai : le son suit, comme au
+                // magnetoscope ; avant, il restait ou il en etait jusqu'a la prise suivante -- vu le 07/11, films longs)
+                p.AudioFix = now + 2f;
+                p.Audio.time = Mathf.Max(0f, tc);
+                if (!p.Audio.isPlaying) p.Audio.Play();
+            }
             if (p.Screen.sharedMaterial != p.Mat) p.Screen.sharedMaterial = p.Mat;
             // (en avance sur la reception : la derniere image arrivee, le son en silence -- la suite reprend a l'instant commun)
             p.Behind = FilmBehind(f, tc);
@@ -628,11 +636,11 @@ namespace MWCoop
                 case "kela":
                 {
                     // kela <sali> [<contenu>] : bobine posee sur le projecteur (contenu : celui de la derniere cassette ou bobine
-                    // qui porte un film, sinon vierge) puis projection
+                    // qui porte un film, sinon vierge) puis projection ; kela <sali> <contenu> <ms> : projection deja a ms
                     int s = int.Parse(a[2]);
                     string content = a.Length > 3 ? a[3] : null;
                     if (content == null) { Esine src = esineet.FindLast(e => (e.Kind == KVhs || e.Kind == KKela) && TapeFilm(e.Data).Length > 0); content = src != null ? src.Data : "tyhja"; }
-                    SetProjector(projectors[s], content, true, 0, true);
+                    SetProjector(projectors[s], content, true, a.Length > 4 ? int.Parse(a[4]) : 0, true);
                     break;
                 }
                 case "kelaa":
@@ -661,6 +669,22 @@ namespace MWCoop
                     Film f; filmCache.TryGetValue(a[2], out f);
                     L("essai : film " + a[2] + " : " + (HaveFilm(a[2]) ? "complet" : "reception " + (FilmProgress(a[2]) * 100f).ToString("F0") + " %") + (f != null ? ", index " + f.Ms.Count + " images, " + (f.LengthMs / 1000f).ToString("F1") + " s" + (f.Done ? " (fin)" : "") : ", pas lu") + " ; salle 1 " + (projectors[1] != null ? (projectors[1].Playing ? "projette a " + (now - projectors[1].Start).ToString("F1") + " s" : "arretee") + (projectors[1].Behind ? " EN RETARD" : "") + ", image " + projectors[1].Frame + (projectors[1].Audio != null ? ", son " + (projectors[1].Audio.isPlaying ? "a " + projectors[1].Audio.time.ToString("F1") + " s" : "coupe") : "") : "-")
                       + " ; memoire " + (GC.GetTotalMemory(false) >> 20) + " Mo geree, " + (System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 >> 20) + " Mo en tout");
+                    if (a.Length > 3)
+                    {
+                        // filmitila <film> <t> : film lu jusqu'au bout, image et son de l'instant t (films de plus de 4 Go : positions 64 bits)
+                        Film g = LoadFilmAll(a[2]);
+                        if (g == null) { L("essai : film " + a[2] + " illisible ici"); break; }
+                        float t = F(a[3]);
+                        int idx = FrameAt(g, (uint)(t * 1000f));
+                        byte[] jpg = FrameJpeg(g, idx);
+                        var tex = new Texture2D(2, 2);
+                        bool ok = jpg != null && tex.LoadImage(jpg);
+                        long k = (long)(t * RecRate); int beep = 0;
+                        for (int i = 0; i < RecRate / 5; i++) if (MuLawDecode(g.MuAt(k + i)) > 0.1f) beep++;
+                        L("essai : film " + a[2] + " a " + t.ToString("F1") + " s : image " + idx + "/" + g.Ms.Count + (idx >= 0 ? " (a " + g.Ms[idx] + " ms, octet " + g.Off[idx] + ", " + g.Len[idx] + " o)" : "") + (ok ? ", jpeg " + tex.width + "x" + tex.height : ", jpeg ILLISIBLE")
+                          + " ; son " + g.MuCount + " ech. (" + (g.MuCount / (float)RecRate).ToString("F1") + " s), bip ici " + beep + " ech. ; duree " + (g.LengthMs / 1000f).ToString("F1") + " s" + (g.Done ? " (fin)" : "") + (g.Clip != null ? ", clip " + (g.Clip.length / 3600f).ToString("F2") + " h" : ""));
+                        UnityEngine.Object.Destroy(tex);
+                    }
                     break;
                 }
                 case "istu":

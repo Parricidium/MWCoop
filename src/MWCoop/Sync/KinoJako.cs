@@ -48,6 +48,8 @@ namespace MWCoop
         const float KinoAskTimeout = 60f;
 
         static bool KinoFilmRefused(string film) { return kinoRefused.Contains(film); }
+        // ce joueur a dit non au film partage en ce moment (ou n'a pas la place) : pas d'envoi s'il le redemande quand meme
+        static bool KinoRefusedBy(string film, int who) { int st; return kinoShare != null && kinoShare.Films.Contains(film) && kinoShare.State.TryGetValue(who, out st) && st == 0; }
         static bool KinoWaiting(int sali) { return sali >= 1 && sali <= 2 && kinoWait[sali].Length > 0; }
 
         static void ResetKinoJako()
@@ -241,10 +243,24 @@ namespace MWCoop
                 for (int i = 0; i < n && r.More; i++)
                 {
                     uint d = (uint)Math.Max(0, r.I32());
-                    if (d > 0 && d < 24u * 3600000u && names[i].Length > 0 && films.Contains(names[i])) { filmExpect[names[i]] = d; total += d; }
+                    if (d > 0 && names[i].Length > 0 && films.Contains(names[i])) { filmExpect[names[i]] = d; total += d; }   // (plus de plafond de 24 h : films sans limite, 07/11)
                 }
                 if (films.Count == 0) return;
                 if (films.TrueForAll(HaveFilm)) { KinoReply(2, 1f); return; }
+                // place libre ici avant de demander (films sans limite depuis le 07/11) : pas assez -> dit au joueur, non pour le partageur
+                long haveBytes = 0;
+                foreach (string f in films) if (HaveFilm(f)) try { haveBytes += new FileInfo(FilmPath(f)).Length; } catch { }
+                string roomMsg = FilmRoom(Math.Max(0L, kb * 1024L - haveBytes));
+                if (roomMsg != null)
+                {
+                    Chat.System(string.Format(Lang.T("Film « {0} » proposé par {1} : {2}. Libère de la place pour le voir.", "Film \"{0}\" offered by {1}: {2}. Free up some space to watch it."), title.Length > 0 ? title : "?", Name(who), roomMsg));
+                    L("cinema : film « " + title + " » de #" + who + " pas telecharge : " + roomMsg);
+                    // (comme un non : le projecteur ne le redemande pas -- sinon l'hote l'envoyait quand meme en entier ; repropose
+                    // plus tard, la place est revue)
+                    foreach (string f in films) { kinoRefused.Add(f); kinoAccepted.Remove(f); }
+                    KinoReply(0, 0f);
+                    return;
+                }
                 if (films.TrueForAll(f => kinoAccepted.Contains(f))) { kinoAsk = new KinoAsk { Films = films, Title = title, Size = kb, From = who, Sali = sali, TotalMs = total }; KinoAnswer(true); return; }
                 kinoAsk = new KinoAsk { Films = films, Title = title, Size = kb, From = who, Sali = sali, At = Time.realtimeSinceStartup, TotalMs = total };
                 L("cinema : #" + who + " propose le film « " + title + " » (" + SizeText(kb) + ") pour la salle " + sali);

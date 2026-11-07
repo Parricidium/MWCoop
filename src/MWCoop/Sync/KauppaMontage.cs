@@ -201,14 +201,15 @@ namespace MWCoop
                             wr.Write((byte)1); wr.Write((uint)(tg * 1000f)); wr.Write(jpg.Length); wr.Write(jpg);
                             frames++;
                         }
-                        // son de la plage (silence s'il en manque)
-                        int s0 = Mathf.RoundToInt(ca * RecRate), s1 = Mathf.RoundToInt(cb * RecRate);
-                        if (s1 > s0)
+                        // son de la plage (silence s'il en manque, 0xFF en mu-law), par blocs d'une minute au plus : en un seul bloc, plus de
+                        // 1 h 40 de son depassait 64 Mo et la lecture le refusait (bloc illisible) -- films sans limite de duree, 07/11
+                        long s0 = (long)Math.Round(ca * (double)RecRate), s1 = (long)Math.Round(cb * (double)RecRate);
+                        var mu = new byte[(int)Math.Min(60L * RecRate, Math.Max(0L, s1 - s0))];
+                        for (long k0 = s0; k0 < s1; k0 += mu.Length)
                         {
-                            var mu = new byte[s1 - s0];
-                            long nmu = f.MuCount;
-                            for (int i = 0; i < mu.Length; i++) { long k = s0 + i; mu[i] = k < nmu ? f.MuAt(k) : (byte)0xFF; }   // (0xFF : silence en mu-law)
-                            wr.Write((byte)2); wr.Write((uint)(Mathf.Max(0f, off + ca - a) * 1000f)); wr.Write(mu.Length); wr.Write(mu);
+                            int n = (int)Math.Min(mu.Length, s1 - k0);
+                            f.MuCopy(k0, mu, n);
+                            wr.Write((byte)2); wr.Write((uint)Math.Max(0.0, (off + ca - a + (k0 - s0) / (double)RecRate) * 1000.0)); wr.Write(n); wr.Write(mu, 0, n);
                         }
                     }
                     off += len;

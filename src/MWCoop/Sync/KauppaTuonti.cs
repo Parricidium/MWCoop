@@ -99,15 +99,17 @@ namespace MWCoop
                 // bobine de cinema : image plus grande et plus fluide pour le grand ecran ([Kino] ImportLargeur...)
                 w = Mathf.Clamp(Config.GetInt("Kino", "ImportLargeur", 480), 64, 960); h = Mathf.Clamp(Config.GetInt("Kino", "ImportHauteur", 270), 48, 540);
                 fps = Mathf.Clamp(Config.GetInt("Kino", "ImportImages", 18), 1, 30);
-                // (films longs : lus sur le disque et partages en flux depuis le 07/11 -- 3 h par defaut, 30 min avant)
-                maxSec = Mathf.RoundToInt(Mathf.Clamp(Config.GetFloat("Kino", "ImportMinutes", 180f), 0.2f, 240f) * 60f);
+                // (films longs : lus sur le disque et partages en flux depuis le 07/11 -- sans limite de duree, JD 07/11 « ont peux
+                // enlever la limite » ; 3 h puis 30 min avant. [Kino] ImportMinutes > 0 : une limite choisie par le joueur)
+                float kmin = Config.GetFloat("Kino", "ImportMinutes", 0f);
+                maxSec = kmin > 0f ? Mathf.RoundToInt(Mathf.Clamp(kmin, 0.2f, 30000000f) * 60f) : int.MaxValue;
                 q = Mathf.Clamp(Config.GetInt("Kino", "ImportQualite", 60), 10, 95) + 1000;   // (+1000 : sans l'effet VHS)
             }
             int r = vStart(src, FilmPath(film), w, h, fps, maxSec, q);
             if (r != 0) { Chat.System(Lang.T("Import pas lancé (", "Import not started (") + r + ")"); return; }
             import = new Import { TapeId = tape.Id, Film = film, Name = Path.GetFileName(src) };
             Chat.System(Lang.T("Conversion de ", "Converting ") + import.Name + (tape.Kind == KKela ? Lang.T(" pour la bobine… (tu peux continuer à jouer)", " for the reel... (you can keep playing)") : Lang.T(" pour la cassette… (tu peux continuer à jouer)", " for the tape... (you can keep playing)")));
-            L("video : import de " + src + " -> " + film + " (" + w + "x" + h + ", " + fps + " i/s, " + maxSec + " s au plus)");
+            L("video : import de " + src + " -> " + film + " (" + w + "x" + h + ", " + fps + " i/s, " + (maxSec == int.MaxValue ? "sans limite de duree" : maxSec + " s au plus") + ")");
         }
 
         static void TickImport(float now)
