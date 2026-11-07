@@ -54,6 +54,7 @@ namespace MWCoop
             public int LastWearer = -1;                                           // dernier porteur vu
             public float YieldAt = -100, HeldLog = -100, SentAt;
             public Vector3 FreePos, FreeEul;                                      // (casque achete : derniere pose libre, sauvegardee)
+            public string Style = "";                                             // (casque achete : dessin du casque personnalise, Kauppa.KyparaDress ; "" celui du jeu)
         }
 
         // 0 veste, 1 combinaison, 2 casque, 3 tasse, puis par joueur k >= 2 : veste k, combinaison k, casque k, tasse k.
@@ -293,6 +294,9 @@ namespace MWCoop
         // Copies du casque du jeu vendues a l'Osuuskauppa, en plus des paires (une par joueur) : creees chez l'hote (ou en
         // solo), liste et poses envoyees a tous (@vetosto, redite avec celle des paires), gardees a cote de la sauvegarde de
         // l'hote (MWCoop-kyparat.txt). Messages de port : numero 128 + j (hors des paires, dont l'ordre peut differer).
+        // Casques personnalises (magasin CARDINAL, JD 07/11) : les memes copies, avec un style (Kauppa.KyparaDress : notre modele a la
+        // place du dessin du jeu) -- mis, enleves et portes comme le casque du jeu (son automate Use, la logique du joueur, son bord a
+        // l'ecran). Style en 7e champ du fichier (absent : casque du jeu) et dans @vetosto / @vetostoa.
         const int OstoBase = 128;
         static readonly List<Item> osto = new List<Item>();
         static readonly List<Vector3[]> ostoFile = new List<Vector3[]>();
@@ -306,14 +310,31 @@ namespace MWCoop
             foreach (Item it in osto) yield return it;
         }
 
-        public static void BuyHelmet(Vector3 pos, Quaternion rot)
+        public static void BuyHelmet(Vector3 pos, Quaternion rot, string style = "")
         {
-            if (Authority) { AddOsto(pos, rot, true, Session.Active ? Session.LocalId : 0); return; }
-            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@vetostoa").Vec(pos).Quat(rot), true);
-            Log.Info("vetements : casque achete, demande envoyee a l'hote");
+            style = Kauppa.KyparaClean(style);
+            if (Authority) { AddOsto(pos, rot, true, Session.Active ? Session.LocalId : 0, style); return; }
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@vetostoa").Vec(pos).Quat(rot).Str(style), true);
+            Log.Info("vetements : casque achete" + (style.Length > 0 ? " (" + style + ")" : "") + ", demande envoyee a l'hote");
         }
 
-        public static void OnBuyRequest(int who, Vector3 pos, Quaternion rot) { if (Session.IsHost) AddOsto(pos, rot, true, who); }
+        public static void OnBuyRequest(int who, Vector3 pos, Quaternion rot, string style) { if (Session.IsHost) AddOsto(pos, rot, true, who, Kauppa.KyparaClean(style)); }
+
+        // Casque du jeu trouve ici (les casques achetes en sont des copies ; My Summer Car : ITEMS/helmet(itemx))
+        public static bool HelmetAvailable { get { return items.Count > 2 && items[2].Go != null; } }
+
+        // Objet du casque que porte ce joueur, pour son avatar : un casque personnalise porte (le sien, ou celui qu'un autre a mis), sinon
+        // le casque du jeu (dessin d'avant).
+        public static GameObject HelmetSource(int id, bool local)
+        {
+            float now = Time.realtimeSinceStartup;
+            foreach (Item it in osto)
+            {
+                if (it.Go == null || it.Style.Length == 0) continue;
+                if (local ? it.LocalWorn : Session.Active && RemoteWearer(it, now) == id) return it.Go;
+            }
+            return ItemObject(2);
+        }
 
         // essai (boutique, action « kyparapaalle ») : le dernier casque achete mis par son automate Use, comme un clic
         public static string TestOsto()
@@ -325,23 +346,38 @@ namespace MWCoop
             Game.SetState(use, "State 1");
             return it.Name + " : mis par son automate (" + use.ActiveStateName + ")";
         }
+        // essai (« kyparapois ») : le casque porte enleve par la logique du joueur, comme en regardant en bas
+        public static string TestOstoOff()
+        {
+            if (helmetLogic == null) return "logique du casque absente";
+            string before = helmetLogic.ActiveStateName;
+            Game.SetState(helmetLogic, "Anim off1");
+            return "casque enleve : " + before + " -> " + helmetLogic.ActiveStateName;
+        }
         public static string OstoState() { return osto.Count + " casque(s) achete(s)" + (osto.Count > 0 ? ", dernier : " + State2(osto[osto.Count - 1]) : ""); }
         static string State2(Item it) { return it.Name + (it.Go == null ? " absent" : (it.Go.activeSelf ? " visible en " + it.Go.transform.position.ToString("F2") : " inactif") + ", porte ici " + it.LocalWorn + ", PlayerHelmet " + Game.GlobalBool("PlayerHelmet")); }
 
-        static Item AddOsto(Vector3 pos, Quaternion rot, bool bought, int who)
+        static Item AddOsto(Vector3 pos, Quaternion rot, bool bought, int who, string style)
         {
             GameObject src = items[2].Go;
             if (src == null) { Log.Info("vetements : casque du jeu introuvable, casque achete pas cree"); return null; }
             int j = osto.Count + 1;
-            Item it = NewCopy(2, j, src, "helmet osto " + j + "(itemx)", "casque achete " + j, "w:vetement:casqueosto" + j, pos, rot);
+            Item it = NewCopy(2, j, src, "helmet osto " + j + "(itemx)", (style.Length > 0 ? "casque perso " : "casque achete ") + j, "w:vetement:casqueosto" + j, pos, rot);
             osto.Add(it);
+            Restyle(it, style);
             HookHelmets();
             if (bought)
             {
-                Log.Info("vetements : casque achete " + j + " par #" + who + ", pose en " + pos.ToString("F1"));
+                Log.Info("vetements : casque achete " + j + (style.Length > 0 ? " (" + style + ")" : "") + " par #" + who + ", pose en " + pos.ToString("F1"));
                 SaveOsto(); SendOsto();
             }
             return it;
+        }
+
+        static void Restyle(Item it, string style)
+        {
+            it.Style = style ?? "";
+            if (it.Style.Length > 0 && it.Go != null && !Kauppa.KyparaDress(it.Go, it.Style)) Log.Info("vetements : " + it.Name + " : dessin " + it.Style + " impossible, casque du jeu");
         }
 
         static void LoadOsto()
@@ -356,7 +392,7 @@ namespace MWCoop
                         string[] c = l.Split(';');
                         if (c.Length < 6) continue;
                         Vector3 p = new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci)), e = new Vector3(float.Parse(c[3], ci), float.Parse(c[4], ci), float.Parse(c[5], ci));
-                        AddOsto(p, Quaternion.Euler(e), false, 0);
+                        AddOsto(p, Quaternion.Euler(e), false, 0, c.Length >= 7 ? Kauppa.KyparaClean(c[6].Trim()) : "");
                     }
             }
             catch (System.Exception ex) { Log.Warn("vetements : lecture des casques achetes " + ex.Message); }
@@ -371,7 +407,8 @@ namespace MWCoop
             foreach (Item it in osto)
             {
                 foreach (float f in new[] { it.FreePos.x, it.FreePos.y, it.FreePos.z, it.FreeEul.x, it.FreeEul.y, it.FreeEul.z }) sb.Append(f.ToString("R", ci)).Append(';');
-                sb.Length--; sb.Append('\n');
+                if (it.Style.Length > 0) sb.Append(it.Style); else sb.Length--;   // (7e champ : style ; mod d'avant : lu sans)
+                sb.Append('\n');
             }
             try { File.WriteAllText(OstoPath, sb.ToString()); } catch (System.Exception ex) { Log.Warn("vetements : ecriture des casques achetes " + ex.Message); }
         }
@@ -380,7 +417,7 @@ namespace MWCoop
         {
             if (!Session.Active || !Session.IsHost || osto.Count == 0 || Session.RemoteCount == 0) return;
             var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@vetosto").U8(osto.Count);
-            foreach (Item it in osto) w.Vec(it.FreePos).Vec(it.FreeEul);
+            foreach (Item it in osto) w.Vec(it.FreePos).Vec(it.FreeEul).Str(it.Style);
             Session.SendAll(w, true);
         }
 
@@ -389,9 +426,11 @@ namespace MWCoop
         {
             int n = r.U8();
             var ps = new List<Vector3[]>();
-            for (int j = 0; j < n; j++) ps.Add(new[] { r.Vec(), r.Vec() });
+            var st = new List<string>();
+            for (int j = 0; j < n; j++) { ps.Add(new[] { r.Vec(), r.Vec() }); st.Add(Kauppa.KyparaClean(r.Str())); }
             if (Session.IsHost || items[2].Go == null) return;
-            for (int j = osto.Count; j < n; j++) AddOsto(ps[j][0], Quaternion.Euler(ps[j][1]), false, 0);
+            for (int j = 0; j < osto.Count && j < n; j++) if (osto[j].Style != st[j]) Restyle(osto[j], st[j]);
+            for (int j = osto.Count; j < n; j++) AddOsto(ps[j][0], Quaternion.Euler(ps[j][1]), false, 0, st[j]);
         }
 
         // Paires jusqu'a n (poses : veste, rotation, combinaison, rotation par paire k >= 2, sinon point de la maison).

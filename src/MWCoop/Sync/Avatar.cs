@@ -2536,8 +2536,8 @@ namespace MWCoop
         // ApparenceVeste / ApparenceCombinaison en nomme une. Casque : copie de ses maillages, sur la tete.
         int clothFlags;
         Material baseMat, clothMat;
-        GameObject helmet;
-        float nextHelmetTry;
+        GameObject helmet, helmetSrc;
+        float nextHelmetTry, nextHelmetSrc;
 
         void ApplyMaterial()
         {
@@ -2751,6 +2751,12 @@ namespace MWCoop
         // une fois (droit, devant comme l'avatar), puis suit la tete.
         void Helmet(bool on)
         {
+            // (casque personnalise mis ou enleve, ou un autre : le dessin suit l'objet porte -- Wear.HelmetSource)
+            if (on && helmet != null && Time.realtimeSinceStartup >= nextHelmetSrc)
+            {
+                nextHelmetSrc = Time.realtimeSinceStartup + 0.5f;
+                if (Wear.HelmetSource(Player.Id, Player == Session.Me) != helmetSrc) { Object.Destroy(helmet); helmet = null; nextHelmetTry = 0f; }
+            }
             if (on && helmet == null && Time.realtimeSinceStartup >= nextHelmetTry) BuildHelmet();
             if (helmet != null && helmet.activeSelf != on) helmet.SetActive(on);
             if (acc[0] != null && acc[0].activeSelf == (helmet != null && helmet.activeSelf)) acc[0].SetActive(!(helmet != null && helmet.activeSelf));   // (chapeau sous le casque : cache)
@@ -2759,14 +2765,17 @@ namespace MWCoop
         void BuildHelmet()
         {
             nextHelmetTry = Time.realtimeSinceStartup + 10f;
-            GameObject src = Wear.ItemObject(2);
+            GameObject src = Wear.HelmetSource(Player.Id, Player == Session.Me);
             Transform hp = Bone("HeadPivot") ?? headBone;
             if (src == null || hp == null || headBone == null) return;
+            helmetSrc = src;
             Transform st = src.transform;
             helmet = new GameObject("MWCoop-Casque");
             Transform ht = helmet.transform;
-            // Maillages seulement (pas l'objet du jeu : ses automates et sa physique), poses comme dans l'objet.
-            foreach (MeshFilter mf in src.GetComponentsInChildren<MeshFilter>(true))
+            // Maillages seulement (pas l'objet du jeu : ses automates et sa physique), poses comme dans l'objet. Casque personnalise :
+            // seulement notre dessin (Kauppa.KyparaVis), dans le repere de l'objet comme celui du jeu.
+            Transform sty = st.Find(Kauppa.KyparaVis);
+            foreach (MeshFilter mf in (sty != null ? sty.gameObject : src).GetComponentsInChildren<MeshFilter>(true))
             {
                 MeshRenderer mr = mf.GetComponent<MeshRenderer>();
                 if (mr == null || mf.sharedMesh == null) continue;
@@ -2837,7 +2846,7 @@ namespace MWCoop
         {
             return Player.Name + " : " + ((clothFlags & PlayerSync.F_Coverall) != 0 ? "combinaison" : (clothFlags & PlayerSync.F_Jacket) != 0 ? "veste" : "sans veste")
                    + (clothMat != null ? " (teinte " + clothMat.color + ")" : "")
-                   + (helmet != null && helmet.activeSelf ? ", casque" : ", sans casque");
+                   + (helmet != null && helmet.activeSelf ? ", casque" + (helmetSrc != null && helmetSrc.transform.Find(Kauppa.KyparaVis) != null ? " perso (" + helmetSrc.name + ")" : "") : ", sans casque");
         }
 
         // ---------------------------------------------------------------- mort : pantin (demande de JD, 10/10)

@@ -52,7 +52,7 @@ namespace MWCoop
         static bool osatLoaded, osatAsked, osatDirty;
 
         // une offre en rayon (objet de mod ou piece d'occasion)
-        class OsatOffer { public int Wing; public string Name; public int Price; public OsatModItem Mod; public OsatUsed Used; public int UsedIndex; public GameObject Display, Tag; public BoxCollider Col; public OsatSlot Slot; }
+        class OsatOffer { public int Wing; public string Name; public int Price; public OsatModItem Mod; public OsatUsed Used; public int UsedIndex; public GameObject Display, Tag; public BoxCollider Col; public OsatSlot Slot; public string Kypara; }
         static readonly List<OsatOffer> osatOffers = new List<OsatOffer>();
         // panier (comme a l'Osuuskauppa : on prend en rayon, on paie a la caisse, puis tout sort sur la palette NOUTO -- JD, 23/10) :
         // cles d'offres ("m:<id>" objet de mod, plusieurs fois possible ; "u:<n>" piece d'occasion n du stock)
@@ -148,6 +148,7 @@ namespace MWCoop
                 Session.SendToHost(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@osat").U8(4), true);
             }
             if (osatDirty) { osatDirty = false; OsatDisplays(); }
+            else OsatKyparat(false);   // (presentoir des casques : joueurs, images, jours)
             TickOsatWear(now);
             // visee et achat
             OsatOffer hit = null;
@@ -210,6 +211,7 @@ namespace MWCoop
                     OsatPlace(new OsatOffer { Wing = 1, Name = u.Name, Price = u.Price, Used = u, UsedIndex = i }, Template(u.Vin));
                 }
             L("magasin de pieces : " + osatOffers.Count + " article(s) en rayon (" + osatModItems.Count + " de mods, " + (osatStock != null ? osatStock.FindAll(x => !x.Sold).Count : 0) + " d'occasion)");
+            try { OsatKyparat(true); } catch (Exception e) { L("magasin de pieces : casques " + e); }
         }
 
         // pose l'offre dans une case libre de son aile (les gros objets sur une estrade, sinon reduits) et sa copie visible
@@ -329,7 +331,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- panier, caisse, achat
-        static string OfferKey(OsatOffer o) { return o.Mod != null ? "m:" + o.Mod.Id : "u:" + o.UsedIndex; }
+        static string OfferKey(OsatOffer o) { return o.Mod != null ? "m:" + o.Mod.Id : o.Kypara != null ? "k:" + o.Kypara : "u:" + o.UsedIndex; }
 
         static OsatOffer OfferOf(string key)
         {
@@ -400,6 +402,14 @@ namespace MWCoop
                 L("magasin de pieces : achat de '" + o.Mod.Id + "' " + o.Price + " mk");
                 InvokeMod(o.Mod, Session.LocalId, true, pos, rot);
                 if (Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@osat").U8(2).Str(o.Mod.Id).Vec(pos).Quat(rot), true);
+                return true;
+            }
+            if (o.Kypara != null)
+            {
+                // casque personnalise : une copie du casque du jeu a ce style (Wear : creee par l'hote, sauvee, envoyee a tous)
+                if (!Wear.HelmetAvailable) { Say("Myyjä : plus de casque en réserve, désolé (pas payé).", "Vendor: out of helmets, sorry (not charged)."); L("magasin de pieces : casque du jeu introuvable, casque pas vendu"); return false; }
+                L("magasin de pieces : achat du casque " + o.Kypara + " (" + o.Name + ") " + o.Price + " mk");
+                Wear.BuyHelmet(pos, rot, o.Kypara);
                 return true;
             }
             OsatUsed u = o.Used;

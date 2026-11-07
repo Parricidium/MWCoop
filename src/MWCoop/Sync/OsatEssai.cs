@@ -85,6 +85,18 @@ namespace MWCoop
                     break;
                 }
                 case "osattesti": OsatTestItems(); break;
+                case "osatkypara":   // (casque n du presentoir dans le panier, argent donne ; puis osatmaksa)
+                {
+                    List<OsatOffer> ks = osatOffers.FindAll(x => x.Kypara != null);
+                    int i = int.Parse(a[2]);
+                    if (i >= ks.Count) { L("essai : pas de casque " + i + " (" + ks.Count + " au presentoir)"); break; }
+                    KinoGui();
+                    if (money != null) money.Value += 1000f;
+                    OsatTake(ks[i], true);
+                    L("essai : casque " + i + " (" + ks[i].Kypara + ", " + ks[i].Name + ") dans le panier");
+                    break;
+                }
+                case "kyparaverif": L("essai : " + KyparaVerif()); break;   // (controles des images recues)
                 case "osattormays":
                 {
                     // ce qui touche le magasin (+ parvis) et le parking : collisions (OverlapBox) et maillages dessines (boite

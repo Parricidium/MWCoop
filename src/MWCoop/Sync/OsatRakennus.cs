@@ -274,6 +274,7 @@ namespace MWCoop
             OsatBelts(new Vector3(-1.75f, 0f, 0.55f));
             OsatOils(new Vector3(1.75f, 0f, 0.55f));
             OsatBatteries(new Vector3(-0.9f, 0f, -1.35f));
+            OsatKyparaTorni();   // (presentoir des casques personnalises, aile CARDINAL -- JD 07/11)
             // boites de pieces du jeu sur le dessus des etageres murales (decor)
             foreach (float s in new[] { -1f, 1f })
                 for (int k = 0; k < 5; k++)

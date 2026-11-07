@@ -51,6 +51,7 @@ namespace MWCoop
             ResetMuseo();
             ResetKino();
             ResetOsat();
+            ResetKypara();
             ResetVuokra();
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
@@ -65,6 +66,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            TickKypara();   // (casques personnalises : mon image, celles qui arrivent -- meme sans magasin)
             if (buildAt < 0f) return;
             float now = Time.realtimeSinceStartup;
             if (!built)
@@ -707,6 +709,8 @@ namespace MWCoop
                         }
                         case "kyparapaalle": L("essai : " + Wear.TestOsto()); break;
                         case "kypara": L("essai : " + Wear.OstoState()); break;
+                        case "kyparat": L("essai : " + KyparaState() + " | " + Wear.OstoState()); break;
+                        case "kyparapois": L("essai : " + Wear.TestOstoOff()); break;
                         case "vitriini": { Vitriini v = vitriinit.Find(x => x.Name == a[2]); if (v != null) { v.OpenHalf = int.Parse(a[3]); L("essai : vitrine " + a[2] + " moitie " + a[3]); } break; }
                         case "fin": if (testCam != null) { UnityEngine.Object.Destroy(testCam.gameObject); testCam = null; } break;
                         default: KinoEssai(a, now); break;   // (actions du cinema : KinoRakennus.cs)
