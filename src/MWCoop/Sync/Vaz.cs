@@ -332,6 +332,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             QueteGolf.OnLevelLoaded();
+            VazCar.OnLevelLoadedSnow();
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
             rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; assisStep = 0; openDone = false; rouleStarter = null; rouleLog = 0f; appLog = 0f; gearStep = 0; gearLog = 0f; stageStep = stageIdx = 0; stageLog = stageEnd = 0f;
             if (!hooked)

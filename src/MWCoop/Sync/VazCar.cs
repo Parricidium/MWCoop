@@ -663,6 +663,82 @@ namespace MWCoop
             }
         }
 
+        // Pneus neige sur My Winter Car (JD 07/11 : « mettre les pneus neige du jeu a la place des roue d'origine, pour que ce soit lore friendly ») : a l'execution, le pneu clouté
+        // de rallye du jeu prend la place du pneu du modele ; la jante du modele reste, le rayon et la largeur physiques ne changent pas, aucun fichier du modele n'est touche.
+        // Pneu du jeu absent : la roue du modele telle quelle. Pieces de roue.p205 : bande et flanc a part sur les modeles Rallyworld ; d'un seul tenant sur la Rihno (coupee ici par le rayon).
+        static Mesh snowMesh; static Material snowMat; static bool snowLooked;
+        static readonly Dictionary<Mesh, Mesh> rimOnly = new Dictionary<Mesh, Mesh>();
+        static readonly HashSet<string> snowLogged = new HashSet<string>();
+        public static void OnLevelLoadedSnow() { snowLooked = false; snowMesh = null; snowMat = null; }
+        static bool SnowTire()
+        {
+            if (snowLooked) return snowMesh != null && snowMat != null;
+            snowLooked = true;
+            string rally3 = "absent";
+            foreach (MeshFilter f in Resources.FindObjectsOfTypeAll<MeshFilter>())
+            {
+                if (f == null || f.sharedMesh == null) continue;
+                Renderer r = f.GetComponent<Renderer>();
+                if (r == null || r.sharedMaterial == null || r.isPartOfStaticBatch) continue;
+                if (f.name == "Tire" && f.transform.parent != null && f.transform.parent.parent != null && f.transform.parent.parent.parent != null && f.transform.parent.parent.parent.name == "RALLYCAR3") rally3 = f.sharedMesh.name + " / " + r.sharedMaterial.name;
+                if (snowMesh == null && f.sharedMesh.name == "npc_icetire_165-70-16" && r.sharedMaterial.name.StartsWith("tires_studded_rally")) { snowMesh = f.sharedMesh; snowMat = r.sharedMaterial; }
+            }
+            Log.Info("pneus neige : " + (snowMesh != null ? snowMesh.name + " / " + snowMat.name : "pneu du jeu absent, roues des modeles") + " ; RALLYCAR3 porte " + rally3);
+            return snowMesh != null && snowMat != null;
+        }
+        public static void SnowTires(Transform rw, Model m)
+        {
+            if (Game.Msc || m == null || m.QuestOnly || rw == null || !SnowTire()) return;
+            try
+            {
+                MeshFilter[] parts = rw.GetComponentsInChildren<MeshFilter>(true);
+                if (parts.Length == 0) return;
+                Bounds all = parts[0].sharedMesh.bounds;
+                foreach (MeshFilter f in parts) all.Encapsulate(f.sharedMesh.bounds);
+                float cy = all.center.y, cz = all.center.z, R = 0f;
+                foreach (MeshFilter f in parts) foreach (Vector3 v in f.sharedMesh.vertices) R = Mathf.Max(R, Mathf.Sqrt((v.y - cy) * (v.y - cy) + (v.z - cz) * (v.z - cz)));
+                if (R < 0.1f) return;
+                float x0 = float.MaxValue, x1 = float.MinValue; int off = 0, cut = 0;
+                foreach (MeshFilter f in parts)
+                {
+                    float lo = float.MaxValue, hi = 0f;
+                    Vector3[] vs = f.sharedMesh.vertices;
+                    foreach (Vector3 v in vs) { float d = Mathf.Sqrt((v.y - cy) * (v.y - cy) + (v.z - cz) * (v.z - cz)); lo = Mathf.Min(lo, d); hi = Mathf.Max(hi, d); }
+                    if (hi < R * 0.93f) continue;   // (jante, disque)
+                    foreach (Vector3 v in vs) { float d = Mathf.Sqrt((v.y - cy) * (v.y - cy) + (v.z - cz) * (v.z - cz)); if (d > R * 0.6f) { x0 = Mathf.Min(x0, v.x); x1 = Mathf.Max(x1, v.x); } }
+                    if (lo >= R * 0.55f) { f.gameObject.SetActive(false); off++; continue; }   // (bande, flanc)
+                    // (jante et pneu d'un seul tenant : on garde les triangles de la jante)
+                    Mesh rim;
+                    if (!rimOnly.TryGetValue(f.sharedMesh, out rim))
+                    {
+                        rim = UnityEngine.Object.Instantiate(f.sharedMesh); rim.name = f.sharedMesh.name + "_jante";
+                        var keep = new List<int>(); int[] tr = f.sharedMesh.triangles;
+                        float lim = R * 0.68f;
+                        for (int i = 0; i + 2 < tr.Length; i += 3)
+                        {
+                            bool inside = true;
+                            for (int k = 0; k < 3; k++) { Vector3 v = vs[tr[i + k]]; if (Mathf.Sqrt((v.y - cy) * (v.y - cy) + (v.z - cz) * (v.z - cz)) > lim) { inside = false; break; } }
+                            if (inside) { keep.Add(tr[i]); keep.Add(tr[i + 1]); keep.Add(tr[i + 2]); }
+                        }
+                        rim.triangles = keep.ToArray();
+                        rimOnly[f.sharedMesh] = rim;
+                    }
+                    f.sharedMesh = rim; cut++;
+                }
+                if (off + cut == 0 || x1 <= x0) return;
+                Bounds sb = snowMesh.bounds;
+                Vector3 s = new Vector3((x1 - x0) / Mathf.Max(0.01f, sb.size.x), 2f * R / Mathf.Max(0.01f, sb.size.y), 2f * R / Mathf.Max(0.01f, sb.size.z));
+                var t = new GameObject("pneu_neige");
+                t.transform.SetParent(rw, false);
+                t.transform.localScale = s;
+                t.transform.localPosition = new Vector3((x0 + x1) / 2f, cy, cz) - Vector3.Scale(sb.center, s);
+                t.AddComponent<MeshFilter>().sharedMesh = snowMesh;
+                t.AddComponent<MeshRenderer>().sharedMaterial = snowMat;
+                if (snowLogged.Add(m.Folder)) Log.Info("pneus neige : " + m.Name + ", rayon " + R.ToString("F3") + ", largeur " + (x1 - x0).ToString("F3") + ", " + off + " pieces retirees, " + cut + " coupee(s)");
+            }
+            catch (System.Exception e) { Log.Warn("pneus neige : " + e.Message); }
+        }
+
         // Pilote « addon standalone » (spec du 28/10, StandaloneCar) : la voiture construite par notre code reprend le modele, ses
         // matieres et la peinture du joueur d'ici (Ruscko/SORBET de la scene : matiere de base de la peinture, valeurs UnityCar).
         public static GameObject Template() { return FindSorbet(); }
@@ -1797,8 +1873,10 @@ namespace MWCoop
             foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205", "bavette_ag.p205", "bavette_ad.p205", "bavette_vg.p205", "bavette_vd.p205", "antenne_1.p205", "antenne_2.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
             Dictionary<string, Vector3> inf = Info();
             // (My Summer Car : roue.p205 du modele, sinon les roues de la Ruscko -- pas de RALLYCAR3)
-            List<Part> rp = Msc ? Load("roue.p205") : new List<Part>();
-            GameObject rc = Msc ? (rp.Count > 0 ? null : sorbet) : RallyCar();
+            // (My Winter Car, voitures exposees : les memes roues que sur la route, modele et pneu neige -- JD 07/11)
+            bool ownWheels = Msc || cur.Standalone || StandaloneCar.OnMwc(cur.Id);
+            List<Part> rp = ownWheels ? Load("roue.p205") : new List<Part>();
+            GameObject rc = Msc ? (rp.Count > 0 ? null : sorbet) : rp.Count > 0 ? null : RallyCar();
             if (rp.Count > 0)
             {
                 Bounds wb = rp[0].Mesh.bounds;
@@ -1812,6 +1890,7 @@ namespace MWCoop
                     rw.SetParent(root.transform, false);
                     rw.localRotation = q; rw.localPosition = c - q * wb.center;
                     AddParts(b, rw, "roue.p205", basePaint, paint, number);
+                    SnowTires(rw, cur);
                 }
             }
             if (rc != null)

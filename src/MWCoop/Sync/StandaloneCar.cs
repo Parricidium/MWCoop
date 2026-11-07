@@ -161,7 +161,7 @@ namespace MWCoop
                 rw.localRotation = q; rw.localPosition = -(q * wb.center);
                 Vector3 rlg; wheelWide = inf.TryGetValue("roues_largeur", out rlg) && rlg.x > 0.5f ? rlg : new Vector3(1f, 0f, 0f);
                 Vector3 sht; shockTopMax = inf.TryGetValue("amortisseur_haut", out sht) ? sht.x : 0f;
-                if (!inf.ContainsKey("roues_jeu") || !GameWheel(b, model.transform, left, fr, radius)) VazCar.AddModel(b, rw, "roue.p205");
+                if (!inf.ContainsKey("roues_jeu") || !GameWheel(b, model.transform, left, fr, radius)) { VazCar.AddModel(b, rw, "roue.p205"); VazCar.SnowTires(rw, b.M); }
                 else UnityEngine.Object.Destroy(rw.gameObject);
                 w.model = model; w.caliperModel = null;
                 if (fr) { if (left) front.leftWheel = w; else front.rightWheel = w; }
