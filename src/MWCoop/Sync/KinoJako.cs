@@ -257,8 +257,8 @@ namespace MWCoop
                 if (sh == null || !sh.State.ContainsKey(who)) return;
                 int was = sh.State[who];
                 sh.State[who] = st; sh.Pct[who] = pct;
-                if (st == 1 && was != 1) { foreach (string f in sh.Films) SendFilm(f); L("cinema : " + Name(who) + " telecharge le film"); }
-                if (st == 0 && was != 0) L("cinema : " + Name(who) + " refuse le film");
+                if (st == 1 && was != 1) { foreach (string f in sh.Films) SendFilm(f, who); L("cinema : " + Name(who) + " telecharge le film"); }   // (a lui seulement)
+                if (st == 0 && was != 0) { foreach (string f in sh.Films) FilmStopFor(f, who); L("cinema : " + Name(who) + " refuse le film"); }
                 if (st == 2 && was != 2) L("cinema : " + Name(who) + " a le film");
                 return;
             }

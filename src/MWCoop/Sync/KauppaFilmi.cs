@@ -121,7 +121,7 @@ namespace MWCoop
         // autant de morceaux par image que le canal fiable en accepte (Peer.InFlight sous FilmiFile), au plus [Boutique] FilmiKoS
         // Ko/s (1500) ; reception ecrite directement dans le fichier a sa place (morceaux de FilmChunk octets), avancement
         // connu (FilmProgress : KinoJako l'affiche et le dit au partageur).
-        class FilmOut { public string Film; public FileStream Fs; public long Length; public int Next, Count; public bool Again; }
+        class FilmOut { public string Film; public FileStream Fs; public long Length; public int Next, Count; public bool Again; public List<int> To; }   // (To : destinataires, null = tous)
         class FilmIn { public FileStream Fs; public bool[] Have; public int Got, Count, Prefix; public float Last; }   // (Prefix : morceaux 0..Prefix-1 tous arrives -- lecture pendant la reception)
         static readonly List<FilmOut> filmOut = new List<FilmOut>();
         static readonly Dictionary<string, FilmIn> filmIn = new Dictionary<string, FilmIn>();
@@ -130,16 +130,22 @@ namespace MWCoop
         static float filmSendBudget, filmSendT;
         static byte[] filmBuf;
 
-        static void SendFilm(string film)
+        // to : un joueur (film du cinema accepte, film demande) ; -1 : tous (prise du camescope, cassette)
+        static void SendFilm(string film, int to = -1)
         {
             if (!Session.Active || Session.RemoteCount <= 0 || !HaveFilm(film)) return;
             FilmOut o = filmOut.Find(x => x.Film == film);
-            if (o != null) { if (o.Next > 0) o.Again = true; return; }
+            if (o != null)
+            {
+                if (to < 0) o.To = null; else if (o.To != null && !o.To.Contains(to)) o.To.Add(to);
+                if (o.Next > 0) o.Again = true;
+                return;
+            }
             try
             {
                 var fs = new FileStream(FilmPath(film), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                filmOut.Add(new FilmOut { Film = film, Fs = fs, Length = fs.Length, Count = (int)((fs.Length + FilmChunk - 1) / FilmChunk) });
-                L("video : envoi du film " + film + " (" + fs.Length / 1024 + " Ko)");
+                filmOut.Add(new FilmOut { Film = film, Fs = fs, Length = fs.Length, Count = (int)((fs.Length + FilmChunk - 1) / FilmChunk), To = to < 0 ? null : new List<int> { to } });
+                L("video : envoi du film " + film + " (" + fs.Length / 1024 + " Ko" + (to < 0 ? ", a tous)" : ", a #" + to + ")"));
             }
             catch (Exception e) { L("video : envoi de " + film + " : " + e.Message); }
         }
@@ -185,6 +191,12 @@ namespace MWCoop
             filmSendBudget = Mathf.Min(filmSendBudget + dt * kos * 1024f / FilmChunk, 400f);
             int room = Config.GetInt("Boutique", "FilmiFile", 160) - MaxInFlight();
             FilmOut o = filmOut[0];
+            if (o.To != null)
+            {
+                // (destinataires partis, ou qui ne veulent plus du film : plus rien a envoyer s'il n'en reste aucun)
+                o.To.RemoveAll(id => !Session.Players.ContainsKey(id) || id == Session.LocalId);
+                if (o.To.Count == 0) { if (o.Fs != null) o.Fs.Close(); filmOut.RemoveAt(0); L("video : envoi de " + o.Film + " arrete (plus personne ne l'attend)"); return; }
+            }
             if (filmBuf == null) filmBuf = new byte[FilmChunk];
             try
             {
@@ -195,7 +207,13 @@ namespace MWCoop
                     o.Fs.Position = off;
                     int got = 0;
                     while (got < n) { int k = o.Fs.Read(filmBuf, got, n - got); if (k <= 0) break; got += k; }
-                    Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmi").Str(o.Film).I32(o.Next).I32(o.Count).Bytes(filmBuf, 0, got), true);
+                    if (o.To == null) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmi").Str(o.Film).I32(o.Next).I32(o.Count).Bytes(filmBuf, 0, got), true);
+                    else
+                    {
+                        var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@filmia").U8(o.To.Count);
+                        foreach (int id in o.To) w.U8(id);
+                        Session.SendTo(o.To, w.Str(o.Film).I32(o.Next).I32(o.Count).Bytes(filmBuf, 0, got), true);
+                    }
                 }
             }
             catch (Exception e) { L("video : envoi de " + o.Film + " interrompu : " + e.Message); o.Next = o.Count; o.Again = false; }
@@ -204,6 +222,33 @@ namespace MWCoop
                 if (o.Again) { o.Again = false; o.Next = 0; }
                 else { if (o.Fs != null) o.Fs.Close(); filmOut.RemoveAt(0); L("video : film " + o.Film + " envoye (" + o.Count + " morceaux)"); }
             }
+        }
+
+        // morceau adresse (@filmia) : l'hote le relaie aux destinataires de la liste, chacun le prend s'il y est
+        public static void OnFilmPartTo(int who, NetReader r)
+        {
+            int n = r.U8();
+            if (n <= 0 || n > 16) return;
+            var ids = new List<int>();
+            for (int i = 0; i < n; i++) ids.Add(r.U8());
+            if (Session.IsHost)
+            {
+                List<int> relay = ids.FindAll(id => id != Session.LocalId && id != who);
+                if (relay.Count > 0)
+                {
+                    var w = new NetWriter(Msg.Job).U8(who).Str("@filmia").U8(ids.Count);
+                    foreach (int id in ids) w.U8(id);
+                    Session.SendTo(relay, w.Raw(r.Rest()), true);
+                }
+            }
+            if (ids.Contains(Session.LocalId)) OnFilmPart(who, r);
+        }
+
+        // stop : ce joueur ne veut plus du film (refus, disque plein)
+        static void FilmStopFor(string film, int who)
+        {
+            FilmOut o = filmOut.Find(x => x.Film == film);
+            if (o != null && o.To != null) o.To.Remove(who);
         }
 
         public static void OnFilmPart(int who, NetReader r)
@@ -249,7 +294,7 @@ namespace MWCoop
             string film = Session.Clean(r.Str(), 64);
             if (film.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || !HaveFilm(film)) return;
             // l'hote repond ; un invite seulement pour un film qu'il a filme lui-meme pendant cette partie
-            if (Session.IsHost || film.StartsWith("f" + Session.LocalId + "-")) SendFilm(film);
+            if (Session.IsHost || film.StartsWith("f" + Session.LocalId + "-")) SendFilm(film, who);   // (a lui seul : les autres l'ont deja)
         }
 
         // ---------------------------------------------------------------- titre sur la tranche

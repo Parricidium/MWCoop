@@ -218,6 +218,20 @@ namespace MWCoop.Net
             }
         }
 
+        // Hote : a ces joueurs seulement ; invite : a l'hote, qui relaie a ceux de la liste du message (@filmia : film du cinema
+        // envoye seulement a ceux qui l'ont accepte -- 07/11).
+        public static void SendTo(List<int> ids, NetWriter w, bool reliable)
+        {
+            if (!IsHost) { SendToHost(w, reliable); return; }
+            if (T == null || ids == null) return;
+            byte[] b = w.ToArray();
+            foreach (Peer p in T.Peers)
+            {
+                if (!p.Accepted || !ids.Contains(p.Id)) continue;
+                if (reliable) T.SendReliable(p, b); else T.SendUnreliable(p, b);
+            }
+        }
+
         // Hote : diffuse ; invite : envoie a l'hote qui relaiera.
         public static void SendAll(NetWriter w, bool reliable)
         {
