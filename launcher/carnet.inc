@@ -424,11 +424,6 @@ static Bitmap *CnSym()
         }
         if (x1 >= 0) g_cnBox[c] = Rect(cx + x0, cy + y0, x1 - x0 + 1, y1 - y0 + 1);
     }
-    {   // (trait orange : une image sur les cases 24 a 27, une seule boite)
-        int x0 = 4096, y0 = 4096, x1 = -1, y1 = -1;
-        for (int c = 24; c <= 27; c++) { const Rect &r = g_cnBox[c]; if (r.Width == 64 && r.Height == 64 && r.X == (c % 8) * 128 + 32) continue; x0 = min(x0, r.X); y0 = min(y0, r.Y); x1 = max(x1, r.X + r.Width); y1 = max(y1, r.Y + r.Height); }
-        if (x1 > x0) g_cnBox[24] = Rect(x0, y0, x1 - x0, y1 - y0);
-    }
     g_cnSym->UnlockBits(&bd);
     return g_cnSym;
 }
@@ -505,7 +500,7 @@ static float CnHandW(const std::wstring &s, float px)
     p.AddString(s.c_str(), -1, f, FontStyleRegular, px, PointF(0, 0), &sf);
     RectF b; p.GetBounds(&b); return b.Width;
 }
-static float DrawCnLineB(Graphics &g, const CnNote &n, float x, float baseY, float cellH, float maxX)
+static float DrawCnLineB(Graphics &g, const CnNote &n, float x, float baseY, float cellH, float maxX, float alpha = 1.0f)
 {
     Bitmap *sym = CnSym();
     std::vector<int> cells; CnCells(n, cells);
@@ -526,18 +521,20 @@ static float DrawCnLineB(Graphics &g, const CnNote &n, float x, float baseY, flo
             RectF bb; gp.GetBounds(&bb);
             Matrix mt; mt.Translate(x - bb.X, baseY - asc); gp.Transform(&mt);
             SmoothingMode sm = g.GetSmoothingMode(); g.SetSmoothingMode(SmoothingModeAntiAlias);
-            SolidBrush br(kCnPen); g.FillPath(&br, &gp); g.SetSmoothingMode(sm);
+            SolidBrush br(WithA(kCnPen, alpha)); g.FillPath(&br, &gp); g.SetSmoothingMode(sm);
             x += bb.Width;
-        } else x += CnHandText(g, n.text, x, baseY - px * 0.35f, px, maxX - x, kCnPen);
+        } else x += CnHandText(g, n.text, x, baseY - px * 0.35f, px, maxX - x, WithA(kCnPen, alpha));
     }
     if (!sym) { if (n.type != CT_TEXTE) Text(g, Widen(kCnType[n.type]), RectF(x, baseY - cellH * 0.6f, maxX - x, cellH * 0.6f), cellH * 0.25f, FontStyleBold, kCnPen, StringAlignmentNear); return maxX - x0; }
     InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
     float top = baseY - 0.70f * 128 * k;
+    ImageAttributes ia; ColorMatrix cm = { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, alpha, 0, 0, 0, 0, 0, 1 };
+    if (alpha < 0.999f) ia.SetColorMatrix(&cm);
     for (size_t i = 0; i < cells.size(); i++) {
         const Rect &bx = g_cnBox[cells[i]];
         if (i || x > x0) x += gap;
         int cellY = (cells[i] / 8) * 128;
-        g.DrawImage(sym, RectF(x, top + (bx.Y - cellY) * k, bx.Width * k, bx.Height * k), (REAL)bx.X, (REAL)bx.Y, (REAL)bx.Width, (REAL)bx.Height, UnitPixel);
+        g.DrawImage(sym, RectF(x, top + (bx.Y - cellY) * k, bx.Width * k, bx.Height * k), (REAL)bx.X, (REAL)bx.Y, (REAL)bx.Width, (REAL)bx.Height, UnitPixel, alpha < 0.999f ? &ia : NULL);
         x += bx.Width * k;
     }
     g.SetInterpolationMode(im);
@@ -610,13 +607,15 @@ static void DrawCnPage(Graphics &g, RectF p)
     RectF col(p.X + 497 * u, p.Y, p.Width - 497 * u, p.Height);
     GraphicsState st = g.Save(); g.SetClip(col, CombineModeIntersect);
     {
-        const Rect &ob = g_cnBox[24]; float oh = max(2.0f, ob.Height * 190 * u / 128);
-        if (Bitmap *sym = CnSym()) { InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeHighQualityBicubic); g.DrawImage(sym, RectF(p.X + 497 * u, base + 10 * u - oh / 2, 501 * u, oh), (REAL)ob.X, (REAL)ob.Y, (REAL)ob.Width, (REAL)ob.Height, UnitPixel); g.SetInterpolationMode(im); }
+        // (les 4 cases entieres, ligne 3 de la planche, comme le mod ; milieu 10 px sous la note)
+        float oh = 190 * u;
+        if (Bitmap *sym = CnSym()) { InterpolationMode im = g.GetInterpolationMode(); g.SetInterpolationMode(InterpolationModeHighQualityBicubic); g.DrawImage(sym, RectF(p.X + 497 * u, base + 10 * u - oh / 2, 501 * u, oh), 0.0f, 384.0f, 512.0f, 128.0f, UnitPixel); g.SetInterpolationMode(im); }
     }
     for (int i = 0; i < (int)v.size(); i++) {
         float y = base - (i - k - f) * pitch;
         if (y < p.Y - pitch || y > p.Y + p.Height + pitch) continue;
-        float w = DrawCnLineB(g, *v[i], p.X + 517 * u, y, cellH, p.X + 998 * u);
+        float edge = min(y - p.Y, p.Y + p.Height - y), al = min(1.0f, max(0.15f, edge / (1.2f * pitch)));   // (estompee pres des bords de la page)
+        float w = DrawCnLineB(g, *v[i], p.X + 517 * u, y, cellH, p.X + 998 * u, al);
         if (v[i]->uid == g_cnSelUid) { Pen sp(WithA(kAcc, 0.8f), 1.4f); sp.SetDashStyle(DashStyleDash); g.DrawRectangle(&sp, p.X + 509 * u, y - 0.62f * cellH, max(40 * u, w) + 16 * u, 0.74f * cellH); }
     }
     g.Restore(st);
@@ -799,7 +798,7 @@ static void DrawCnPop(Graphics &g, RectF card)
     PointF q = CnNoteScr(*s, n->m);
     float x = q.X + 22 + W <= card.X + card.Width - 8 ? q.X + 22 : q.X - 22 - W;
     x = min(max(x, card.X + 8), card.X + card.Width - 8 - W);
-    float y = min(max(q.Y - 60, card.Y + 60), card.Y + card.Height - 8 - H);
+    float y = min(max(q.Y - 60, card.Y + 84), card.Y + card.Height - 8 - H);   // (sous la ligne d'infos de la speciale)
     RectF r(x, y, W, H);
     { GraphicsPath sp; RoundRect(sp, RectF(r.X + 2, r.Y + 5, r.Width, r.Height), 16); SolidBrush sb(Color(70, 0, 0, 0)); g.FillPath(&sb, &sp); }
     { GraphicsPath pp; RoundRect(pp, r, 16); SolidBrush pb(g_dark ? Color(255, 34, 38, 48) : Color(255, 255, 255, 255)); g.FillPath(&pb, &pp); Pen pe(WithA(kAcc, 0.5f), 1.2f); g.DrawPath(&pe, &pp); }
