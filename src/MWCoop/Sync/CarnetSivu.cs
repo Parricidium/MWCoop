@@ -178,7 +178,8 @@ namespace MWCoop
         {
             if (!Load()) return null;
             var p = new Page();
-            p.Rt = new RenderTexture(W, H, 0, RenderTextureFormat.ARGB32) { name = "carnet_page", useMipMap = true, generateMips = true, anisoLevel = 4, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+            // (sans mipmaps : rien ne dit qu'Unity 5 les refait apres un dessin GL, sans camera ; une page lointaine scintille un peu)
+            p.Rt = new RenderTexture(W, H, 0, RenderTextureFormat.ARGB32) { name = "carnet_page", useMipMap = false, anisoLevel = 4, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             p.Rt.Create();
             p.Mat = new Material(lit != null ? lit : Shader.Find("Legacy Shaders/Diffuse")) { name = "carnet_page", mainTexture = p.Rt, color = Color.white };
             Blank(p);

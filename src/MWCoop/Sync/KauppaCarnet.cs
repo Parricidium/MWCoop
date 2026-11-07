@@ -177,6 +177,7 @@ namespace MWCoop
             if (eye == null) return;
             bool look = now >= pagesLook;
             if (look) pagesLook = now + 0.5f;
+            Esine inHand = HeldCarnet();
             foreach (Esine e in esineet)
             {
                 if (e.Kind != KCarnet || e.Go == null || e.Screen == null) continue;
@@ -201,7 +202,7 @@ namespace MWCoop
                     Renderer r = e.Screen.GetComponent<Renderer>(); if (r != null) r.sharedMaterial = p.Mat;
                 }
                 if (mine && cnViewPage != null && cnViewPage.sharedMaterial != p.Mat) cnViewPage.sharedMaterial = p.Mat;
-                p.Book = mine ? Carnet.Active : RemoteBook(e);
+                p.Book = mine || e == inHand ? Carnet.Active : RemoteBook(e);   // (le mien, meme baisse : mon carnet actif)
                 // vitesse : celle de la voiture ou on est assis (carnet tenu ici), sinon celle de l'objet
                 Vector3 v = Vector3.zero;
                 if (mine || Game.UnderPlayer(e.Go.transform)) { Transform car = Seats.SeatedCar; Rigidbody cr = car != null ? car.GetComponent<Rigidbody>() : null; if (cr != null) v = cr.velocity; }
