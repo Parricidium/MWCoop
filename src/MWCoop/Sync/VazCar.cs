@@ -690,6 +690,29 @@ namespace MWCoop
             }
             finally { cur = was; }
         }
+        // Toit d'un modele, lu sur sa peinture : son haut au-dessus de l'habitacle (z0..z1, plus haut que above) et sa longueur autour de lui (coque pour les objets).
+        public static bool RoofSpan(Model m, float z0, float z1, float above, out float top, out float zLo, out float zHi)
+        {
+            Model was = cur; cur = m; top = float.MinValue; zLo = zHi = 0f;
+            try
+            {
+                var paint = new List<Vector3[]>();
+                foreach (Part q in Load("carrosserie.p205")) if (KindOf(m, q.Mat) == "paint") paint.Add(q.Mesh.vertices);
+                foreach (Vector3[] vs in paint) foreach (Vector3 v in vs) if (Mathf.Abs(v.x) < 0.3f && v.z > z0 + 0.1f && v.z < z1 - 0.15f && v.y > above && v.y > top) top = v.y;
+                if (top == float.MinValue) return false;
+                var zs = new List<float>();
+                foreach (Vector3[] vs in paint) foreach (Vector3 v in vs) if (Mathf.Abs(v.x) < 0.3f && v.y >= top - 0.06f) zs.Add(v.z);
+                zs.Sort();
+                float c = (z0 + z1) * 0.5f; int at = 0;
+                for (int i = 1; i < zs.Count; i++) if (Mathf.Abs(zs[i] - c) < Mathf.Abs(zs[at] - c)) at = i;
+                int a = at, e = at;   // (d'un sommet a l'autre autour du milieu de l'habitacle, sans trou de plus de 30 cm : pas l'aileron au loin)
+                while (a > 0 && zs[a] - zs[a - 1] <= 0.3f) a--;
+                while (e < zs.Count - 1 && zs[e + 1] - zs[e] <= 0.3f) e++;
+                zLo = zs[a]; zHi = zs[e];
+                return zHi - zLo > 0.3f;
+            }
+            finally { cur = was; }
+        }
         public static Dictionary<string, Vector3> ModelInfo(Model m) { Model was = cur; cur = m; try { return Info(); } finally { cur = was; } }
 
         static Material FindMat(GameObject root, string part)
