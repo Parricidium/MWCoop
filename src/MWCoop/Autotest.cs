@@ -4137,6 +4137,7 @@ namespace MWCoop
             if (mode == "tremble" && !Game.Msc) Tremble();   // (voiture qui tremble chez l'autre, dossier #38 : My Winter Car aussi)
             if (mode == "queteportiere") StandaloneCar.QuestDoorTest(t);   // (portiere passager de la voiture de la quete sur une copie)
             if (mode == "quetevitres") StandaloneCar.QuestWindowTest(t);   // (vitres de la voiture de la quete, fichier de l'outil des places)
+            if (mode == "vitresgaree") StandaloneCar.ParkedWindowTest(t);   // (vitres d'une voiture autonome garee, invite arrive en retard)
             if (mode == "kekremorque") Jobs.TestTrailer();   // (attelage du KEKMET, comme Autotest=remorque sur MSC ; [Test] RemorqueActeur=invite -- Донской 01/11)
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t); Gestures.TestPena(mode, t);

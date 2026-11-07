@@ -88,7 +88,7 @@ namespace MWCoop
             public bool[] Folded = new bool[2]; public float[] FoldAngle = new float[2]; public Collider[] SeatBackCol = new Collider[2];
             public float CabinRear; public Vector3 RearOffset; public bool HasRear;
             public Vector3[] SeatRef = new Vector3[4]; public bool[] HasSeatRef = new bool[4];   // (siege_<k> : milieu x, dessus de l'assise, avant du dossier)   // (pluie sur les vitres : composant windshield du jeu a nous, celui de la Satsuma -- StandaloneDrive)
-            public Transform[] Glass = new Transform[2], Crank = new Transform[2]; public Vector3[] GlassDown = new Vector3[2], CrankAxis = new Vector3[2]; public float[] WinPos = new float[2];   // (vitres de portiere a manivelle, StandaloneDrive)
+            public Transform[] Glass = new Transform[2], Crank = new Transform[2]; public Vector3[] GlassDown = new Vector3[2], CrankAxis = new Vector3[2]; public float[] WinPos = new float[2], WinLocalT = { -9f, -9f };   // (vitres de portiere a manivelle, StandaloneDrive ; tournee ici a cet instant)
             public VitreFiles.Glass[] WinV = new VitreFiles.Glass[2]; public WindowCranks.Cut[][] WinCuts = new WindowCranks.Cut[2][]; public float[] WinShown = { -1f, -1f }; public int WinGen = -1;   // (reglees dans l'outil des places : WindowAnim)
             public Vector3 LastPos; public float LastPosT, RemoteKmh, NextState;   // (co-op : compteur d'une voiture menee ailleurs, etat renvoye)   // (habitacle creux : StandaloneDrive.Shell)
         }

@@ -816,6 +816,9 @@ namespace MWCoop
             FuelTick(b, st);
             RadioTick(b, st);
             HeaterTick(b, st);
+            // (voiture que personne ne mene : l'hote renvoie son etat toutes les 3 s, comme le conducteur -- un joueur arrive en cours voyait
+            // ses vitres et portieres fermees, ses phares eteints, jusqu'au prochain changement)
+            if (driving != b && Net.Session.Active && Net.Session.IsHost && Time.realtimeSinceStartup >= st.NextState && !VehicleSync.RemotelySeated(b.Car.transform)) SendState(b, st);
             GameObject pl = Game.PlayerGo;
             if (pl == null || !PlayerSync.InGame) return;
             WheelMask(b, st);
@@ -1895,7 +1898,10 @@ namespace MWCoop
                 if (extra.Length > 4) { st.HighBeam = (extra[4] & 1) != 0; st.Turn = (extra[4] & 2) != 0 ? 1 : (extra[4] & 4) != 0 ? 2 : 0; st.RadioCh = (extra[4] >> 3) & 3; }
                 if (extra.Length > 6 && st.HasFuel) { st.Fuel = extra[5] / 255f; if (extra[6] != 255) st.EngineTemp = extra[6] - 40f; }
                 int wa = st.HasFuel ? 7 : 5;
-                if (extra.Length > wa + 1 && driving != b && (st.Glass[0] != null || st.Glass[1] != null)) { st.WinPos[0] = extra[wa] / 255f; st.WinPos[1] = extra[wa + 1] / 255f; }
+                // (vitres : chez tous, conducteur compris -- il ignorait celles des autres, et son renvoi des 3 s refermait chez tous la vitre
+                // baissee par un passager, JD 07/11 ; sauf celle tournee ici il y a moins d'1 s, l'etat d'un autre parti avant ne la remet pas)
+                if (extra.Length > wa + 1 && (st.Glass[0] != null || st.Glass[1] != null))
+                    for (int k = 0; k < 2; k++) if (Time.realtimeSinceStartup - st.WinLocalT[k] >= 1f) st.WinPos[k] = extra[wa + k] / 255f;
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
@@ -2004,7 +2010,7 @@ namespace MWCoop
                 // (molette comme les voitures du jeu : vers soi = vitre baissee ; un cran = 1/8 de la course)
                 int w = hit - KCrank0; float sc = qwAim >= 0 ? qwScroll : Input.GetAxis("Mouse ScrollWheel");
                 qwScroll = 0f; qwHit = w;
-                if (sc != 0f) { st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] - Mathf.Sign(sc) * 0.125f); SendState(b, st); }
+                if (sc != 0f) { st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] - Mathf.Sign(sc) * 0.125f); st.WinLocalT[w] = Time.realtimeSinceStartup; SendState(b, st); }
                 return;
             }
             if (hit < 0) { ClearHover(); CrankStop(b, st); SetHorn(b, st, false, true); return; }
@@ -2889,6 +2895,20 @@ namespace MWCoop
             Photo(b, "vitres-" + pos + "-dedans-g", head, new Vector3(-0.8f, 0.85f, 0.1f), 70f);
             Photo(b, "vitres-" + pos + "-dedans-d", head, new Vector3(0.8f, 0.85f, 0.1f), 70f);
         }
+        // [Test] Autotest=vitresgaree (2 joueurs, l'invite en retard : -Delai) : a 25 s l'hote baisse les deux vitres de la voiture de la
+        // quete garee, sans la mener ; l'invite note leur etat a 30 et 45 s de sa partie (attendu : baissees, comme chez l'hote).
+        static int pwStep;
+        public static void ParkedWindowTest(float t)
+        {
+            VazCar.Built b = null; State st = null;
+            foreach (VazCar.Built x in cars) if (QueteGolf.IsQuestCar(x) && x.Car != null) { b = x; states.TryGetValue(x, out st); }
+            if (b == null || st == null) return;
+            bool host = !Net.Session.Active || Net.Session.IsHost;
+            if (host && pwStep == 0 && t > 25f) { pwStep = 1; st.WinPos[0] = st.WinPos[1] = 1f; SendState(b, st); Log.Info("autotest : vitresgaree, hote : " + WinState(b, st)); }
+            if (host && pwStep == 1 && t > 90f) { pwStep = 2; Log.Info("autotest : vitresgaree, hote t=90 : " + WinState(b, st)); }
+            if (!host && ((pwStep == 0 && t > 30f) || (pwStep == 1 && t > 45f))) { pwStep++; Log.Info("autotest : vitresgaree, invite t=" + t.ToString("F0") + " : " + WinState(b, st)); }
+        }
+
         public static void QuestWindowTest(float t)
         {
             float now = Time.realtimeSinceStartup;
@@ -2926,7 +2946,8 @@ namespace MWCoop
                 if (qwStep == 1 + 2 * i && d > when[i])
                 {
                     qwStep++;
-                    if (first) { st.WinPos[0] = st.WinPos[1] = val[i]; SendState(b, st); }
+                    // ([Test] QueteVitresInvite=1 : l'invite les tourne, l'hote reste au volant -- vitres changees par un autre que le conducteur)
+                    if (Config.GetInt("Test", "QueteVitresInvite", 0) != 0 ? coop && !first : first) { st.WinPos[0] = st.WinPos[1] = val[i]; st.WinLocalT[0] = st.WinLocalT[1] = now; SendState(b, st); }
                 }
                 else if (qwStep == 2 + 2 * i && d > when[i] + 3f)
                 {
