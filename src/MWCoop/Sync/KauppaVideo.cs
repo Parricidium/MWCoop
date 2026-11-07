@@ -85,7 +85,7 @@ namespace MWCoop
                 Piece(g, PrimitiveType.Quad, new Vector3(0, size.y / 2 + 0.0008f, 0), new Vector3(90, 0, 0), new Vector3(size.x * 0.96f, size.z * 0.94f, 1), TexMat("vhs-kansi.png"));
                 Piece(g, PrimitiveType.Quad, new Vector3(0, 0, -size.z / 2 - 0.0008f), Vector3.zero, new Vector3(size.x * 0.97f, size.y * 0.86f, 1), TexMat("vhs-selka.png"));
             }
-            else if (kind == KNauhuri && ModelFile("magnetoscope", g, out size)) { }
+            else if (kind == KNauhuri && ModelFile("magnetoscope", g, out size)) VcrDress(g);
             else if (kind == KNauhuri)
             {
                 size = new Vector3(0.36f, 0.09f, 0.28f);
@@ -280,6 +280,7 @@ namespace MWCoop
             }
             TickInsert();
             TickScreens(now);
+            TickVcrs(now);
             TickKamera(now);
             TickKartturi(now);
             TickFilms(now);
@@ -292,7 +293,7 @@ namespace MWCoop
         static bool Held(Esine e) { return e.Go != null && e.Go.transform.parent != null; }   // (dans la main du jeu)
 
         static string Tape(Esine vcr) { int i = vcr.Data.IndexOf('|'); return i < 0 ? vcr.Data : vcr.Data.Substring(0, i); }
-        static bool Playing(Esine vcr) { return vcr.Data.EndsWith("|1"); }
+        static bool Playing(Esine vcr) { int m = VcrMode(vcr); return m >= VPlay && m <= VRew; }   // (lecture, pause, avance, retour : l'ecran montre la bande)
 
         static Esine pendingTape, pendingVcr;
         static int pendingFrame;
@@ -307,8 +308,10 @@ namespace MWCoop
             Esine t = pendingTape, v = pendingVcr;
             pendingTape = null;
             string content = string.IsNullOrEmpty(t.Data) ? "tyhja" : t.Data;
+            Vector3 from = t.Go.transform.position;
             RemoveItem(t, true);
-            SetData(v, content + "|0");
+            if (v.Kind == KNauhuri && TapeInAnim(v, from)) localInsert.Add(v.Id);
+            SetData(v, content + "|0|0|");
             try { MasterAudio.PlaySound3DAtVector3AndForget("HouseFoley", v.Go.transform.position, 0.6f, null, 0f, "mailbox_open"); } catch { }
             L("video : cassette inseree dans " + v.Id);
         }
@@ -319,6 +322,12 @@ namespace MWCoop
             string tape = Tape(vcr);
             if (tape.Length == 0) return;
             Transform t = vcr.Go.transform;
+            // (magnetoscope : la cassette sort par la fente, la vraie est posee a la fin -- JD 07/11)
+            if (vcr.Kind == KNauhuri)
+            {
+                Vector3 lp = t.position; Quaternion lr = t.rotation;
+                if (TapeOutAnim(vcr, () => EjectSpawn(vcr, tape, lp, lr))) { localEject.Add(vcr.Id); SetData(vcr, "|0|0|eject." + (++vcrPressSeq % 1000)); return; }
+            }
             SetData(vcr, "|0");
             // sur le dessus de l'appareil : toujours libre (devant, elle naissait parfois dans un mur, une table ou le sol
             // et passait au travers ; JD, 12/10)
@@ -486,6 +495,13 @@ namespace MWCoop
                 }
                 return true;
             }
+            string vb = hit.Kind == KNauhuri ? VcrAimedButton(hit, ray, 1.6f) : null;
+            if (vb != null)
+            {
+                guiText.Value = "F : " + vb.ToUpperInvariant() + (tape.Length == 0 && vb != "power" && vb != "setup" ? Lang.TG(" (PAS DE CASSETTE)", " (NO TAPE)") : "");
+                if (Input.GetKeyDown(KeyCode.F)) { vcrFDown = -1f; VcrPress(hit, vb, now); }
+                return true;
+            }
             bool tv = ScreenNear(hit.Go.transform.position) != null;
             string title = TapeTitle(tape);
             if (tape.Length == 0) guiText.Value = Lang.TG("MAGNÉTOSCOPE (VIDE)", "VCR (EMPTY)");
@@ -496,7 +512,7 @@ namespace MWCoop
             if (vcrFDown >= 0f)
             {
                 if (now - vcrFDown >= 0.8f) { vcrFDown = -1f; Eject(hit); }
-                else if (Input.GetKeyUp(KeyCode.F)) { vcrFDown = -1f; SetData(hit, tape + (Playing(hit) ? "|0" : "|1")); }
+                else if (Input.GetKeyUp(KeyCode.F)) { vcrFDown = -1f; VcrPress(hit, Playing(hit) ? "stop" : "play", now); }
             }
             return true;
         }
@@ -559,6 +575,7 @@ namespace MWCoop
         public static void OnLevelLoadedVideo()
         {
             OnLevelLoadedKamera();
+            OnLevelLoadedVcr();
             OnLevelLoadedKartturi();
             OnLevelLoadedFilms();
             OnLevelLoadedMontage();

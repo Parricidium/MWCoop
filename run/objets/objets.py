@@ -9,8 +9,9 @@ direct -> Unity), triangles retournes. Par objet : rotation, taille visee (le pl
 (metres, outils/glb/reduire.py), texture de base seule (couleur), reduite. Une texture presque unie devient une couleur.
 
 Format (BinaryWriter de C#, petit-boutiste, chaines prefixees 7 bits) :
-  "MWOB" int32 1, int32 n ; par objet : chaine nom, 3 float taille, int32 nTex, (chaine nom, int32 n, octets jpg/png)*,
-  int32 nPieces, par piece : chaine nom, int32 tex (-1 : aucune), 4 float couleur, int32 nv, 3nv float pos, 3nv float normales,
+  "MWOB" int32 2, int32 n ; par objet : chaine nom, 3 float taille, int32 nTex, (chaine nom, int32 n, octets jpg/png)*,
+  int32 nPieces, par piece : chaine nom, int32 tex (-1 : aucune), 4 float couleur, int32 drapeaux (1 decoupe, 2 transparent,
+  4 piece a part), int32 nv, 3nv float pos, 3nv float normales,
   2nv float uv, int32 ni, ni int32 ; int32 nPoints, (chaine nom, 3 float)* -- points remarquables (objectif, ecran...).
 """
 import io, json, os, struct, sys
@@ -28,14 +29,25 @@ from reduire import reduire   # noqa: E402
 #        cote, echelle uniforme ; trois : la boite exacte, celle de l'ancien modele), seuil de reduction, cote des textures,
 #        pieces ignorees (nom contient), triangles vises au plus[, options : "ecran" (matiere dont la piece devient l'ecran
 #        « TVScreen » : sa texture recoupee a ses UV, UV ramenees a 0..1 pour la video), "couleur" (pieces sans texture),
-#        "double" (matieres dessinees des deux cotes : faces doublees, retournees -- coques de la tele, vues de l'interieur sinon)])
+#        "double" (matieres dessinees des deux cotes : faces doublees, retournees -- coques de la tele, vues de l'interieur sinon),
+#        "boutons" (matiere -> nom : piece a part « bouton_<nom> », ni reduite ni fondue dans la palette, pour l'enfoncer),
+#        "decals" (matiere -> nom de piece : etiquette a fond transparent, texture gardee avec son alpha, decoupee),
+#        "verre" (matiere -> opacite : piece transparente), "points" (cle -> matiere : sa boite, cle_min / cle_max),
+#        "enlever" (matieres retirees, apres lecture de leurs points)])
 OBJETS = {
     "popcorn":      ("popcorn.glb",      (0, 0, 0),     0.24,                   0.0,    256, (), 0),
     "camescope":    ("camescope.glb",    (0, 90, 0),    0.30,                   0.0,    512, (), 0),      # (objectif vers +z)
     "tele":         ("tele.glb",         (0, 180, 0),   0.55,                   0.0,    512, (), 0, {"ecran": "monitor_screen", "double": ("monitor_right", "profeel_monitor_left")}),   # (ecran vers -z)
-    "cassette":     ("cassette.glb",     (0, 180, 0),   (0.188, 0.025, 0.103),  0.0,    0,   (), 0),      # (etiquette de tranche vers -z)
+    "cassette":     ("cassette.glb",     (0, 180, 0),   (0.188, 0.025, 0.103),  0.0,    0,   (), 0, {"verre": {"plastic_window": 0.18}}),   # (etiquette de tranche vers -z ; fenetres transparentes, JD 07/11)
     "bobine":       ("bobine.glb",       (0, 0, 0),     0.36,                   0.0006, 256, (), 9000),
-    "magnetoscope": ("magnetoscope.glb", (0, 180, 0),   0.36,                   0.0006, 512, (), 9000),   # (facade vers -z)
+    "magnetoscope": ("magnetoscope.glb", (0, 180, 0),   0.36,                   0.0006, 512, (), 9000, {   # (facade vers -z ; boutons et afficheur, JD 07/11)
+        "boutons": {"Button_Power_Baked": "power", "Button_Power.007_Baked": "eject", "Button_Power.001_Baked": "rew", "Button_Power.002_Baked": "play",
+                    "Button_Power.003_Baked": "fwd", "Button_Power.004_Baked": "setup", "Button_Power.005_Baked": "stop", "Button_Power.006_Baked": "pause"},
+        "decals": {"Decal.001_Baked": "bouton_power_etiquette", "Decal.002_Baked": "bouton_eject_etiquette", "Decal.003_Baked": "bouton_rew_etiquette",
+                   "Decal.004_Baked": "bouton_play_etiquette", "Decal.005_Baked": "bouton_fwd_etiquette", "Decal.006_Baked": "bouton_pause_etiquette",
+                   "Decal.007_Baked": "bouton_stop_etiquette", "Decal.008_Baked": "bouton_setup_etiquette", "Decal_Baked": "etiquette_facade"},
+        "couleur_boutons": (0.36, 0.35, 0.31), "couleur_etiquettes": (0.88, 0.88, 0.85), "couleur_facade": (0.72, 0.72, 0.69),   # (textures presque noires : gris de la capture de JD)
+        "points": {"afficheur": "LED_Cover_Baked", "fente": "CassetteCover_Baked"}, "enlever": ("LED_Cover_Baked", "Decal.LED_Baked")}),
     "gps":          ("gps.glb",          (-90, 180, 0), 0.165,                  0.0,    0,   (), 0, {"couleur": (0.24, 0.25, 0.27)}),   # (debout, ecran vers -z ; gris fonce, le modele n'a qu'un blanc)
 }
 
@@ -73,6 +85,9 @@ def build(name, spec, apercu):
     path = os.path.join(SRC, fn)
     g = glbmod.load(path)
     raw = open(path, "rb").read()
+    jl = struct.unpack_from("<I", raw, 12)[0]
+    alpha_mode = {m.get("name"): m.get("alphaMode", "OPAQUE") for m in json.loads(raw[20:20 + jl]).get("materials", [])}
+    points = {}
     R = rot(deg)
     # pieces -> repere du mod (x inverse), regroupees par matiere
     groups = {}
@@ -111,6 +126,29 @@ def build(name, spec, apercu):
         ti = -1
         tname = mat.maps.get("txDiffuse", "")
         pname = mat.name
+        flags = 0   # (1 decoupe, 2 transparent, 4 ni reduite ni fondue dans la palette)
+        for key, mn in opt.get("points", {}).items():
+            if mn == mat.name: points[key + "_min"] = P.min(0); points[key + "_max"] = P.max(0)
+        if mat.name in opt.get("enlever", ()): continue
+        if mat.name in opt.get("boutons", {}):
+            pname = "bouton_" + opt["boutons"][mat.name]; flags = 4
+            if "couleur_boutons" in opt: col = list(opt["couleur_boutons"]) + [1.0]; tname = ""
+        if mat.name in opt.get("verre", {}): flags = 2 | 4; ti = -1; col = col[:3] + [opt["verre"][mat.name]]
+        if mat.name in opt.get("decals", {}) and tname:
+            # etiquette : l'atlas des etiquettes (alpha), garde tel quel, partage par toutes
+            t = next(t for t in g.textures if t.name == tname)
+            if ("decal", tname) not in texmap:
+                im = Image.open(io.BytesIO(raw[t.offset:t.offset + t.size])).convert("RGBA")
+                if alpha_mode.get(mat.name) == "MASK": im.putalpha(im.getchannel("A").point(lambda a: 255 if a >= 128 else 0))
+                buf = io.BytesIO(); im.save(buf, "PNG", optimize=True)
+                texmap[("decal", tname)] = (len(texlist), None); texlist.append((name + "_etiquettes.png", buf.getvalue()))
+            ti = texmap[("decal", tname)][0]
+            dn = opt["decals"][mat.name]
+            cc = opt.get("couleur_etiquettes") if dn.startswith("bouton_") else opt.get("couleur_facade")
+            if cc: col = list(cc) + [1.0]
+            tris0 += len(I)
+            pieces.append([opt["decals"][mat.name], ti, col, P, Nn, U, I, 1 | 4])
+            continue
         if "ecran" in opt and opt["ecran"] in mat.name and tname:
             # ecran : la partie de l'atlas qu'il couvre devient sa texture, UV de 0 a 1 (la video du mod la remplace)
             t = next(t for t in g.textures if t.name == tname)
@@ -124,9 +162,9 @@ def build(name, spec, apercu):
             U = np.c_[(P[:, 0] - lo2[0]) / (hi2[0] - lo2[0]), (P[:, 1] - lo2[1]) / (hi2[1] - lo2[1])]
             pname = "TVScreen"
             tris0 += len(I)
-            pieces.append([pname, ti, col, P, Nn, U, I])
+            pieces.append([pname, ti, col, P, Nn, U, I, 4])
             continue
-        if tname and side:
+        if tname and side and not flags & 2:
             t = next(t for t in g.textures if t.name == tname)
             if tname not in texmap:
                 data, mean, flat = texture(raw[t.offset:t.offset + t.size], side)
@@ -134,18 +172,18 @@ def build(name, spec, apercu):
                 if not flat: texlist.append((name + "_" + str(len(texlist)) + (".png" if data[:4] == b"\x89PNG" else ".jpg"), data))
             ti, mean = texmap[tname]
             if ti < 0: col = [col[0] * mean[0], col[1] * mean[1], col[2] * mean[2], col[3]]
-        elif tname:
+        elif tname and not flags & 2:
             t = next(t for t in g.textures if t.name == tname)
             _, mean, _ = texture(raw[t.offset:t.offset + t.size], 0)
             col = [col[0] * mean[0], col[1] * mean[1], col[2] * mean[2], col[3]]
         if ti < 0 and "couleur" in opt: col = list(opt["couleur"]) + [1.0]
         tris0 += len(I)
-        pieces.append([pname, ti, col, P, Nn, U, I])
+        pieces.append([pname, ti, col, P, Nn, U, I, flags])
     # reduction : seuil donne, double tant que l'objet depasse le nombre de triangles vise
     if err > 0:
         e = err
         for _ in range(3):   # (au plus 2,25 fois le seuil : au-dela, les bords ronds deviennent des polygones)
-            red = [reduire(p[3], p[4], p[5], p[6], e) for p in pieces]
+            red = [p[6] if p[7] & 4 else reduire(p[3], p[4], p[5], p[6], e) for p in pieces]
             n = sum(len(r) for r in red)
             if not maxtri or n <= maxtri: break
             e *= 1.5
@@ -156,7 +194,7 @@ def build(name, spec, apercu):
         p[3], p[4], p[5], p[6] = p[3][used], p[4][used], p[5][used], remap[p[6]]
         tris1 += len(p[6])
     pieces = [p for p in pieces if len(p[6])]
-    flat = [p for p in pieces if p[1] < 0]
+    flat = [p for p in pieces if p[1] < 0 and not p[7]]
     if len(flat) > 1 or (flat and len(pieces) > 1):
         cols = [p[2] for p in flat]
         B = 4   # (4 x 4 pixels par couleur : pas de debord au filtrage)
@@ -167,7 +205,7 @@ def build(name, spec, apercu):
         P = []; Nn = []; U = []; I = []; base = 0
         for k, p in enumerate(flat):
             P.append(p[3]); Nn.append(p[4]); U.append(np.tile([(k * B + B / 2) / (B * len(cols)), 0.5], (len(p[3]), 1))); I.append(p[6] + base); base += len(p[3])
-        pieces = [p for p in pieces if p[1] >= 0] + [["palette", ti, [1, 1, 1, 1], np.concatenate(P), np.concatenate(Nn), np.concatenate(U), np.concatenate(I)]]
+        pieces = [p for p in pieces if p[1] >= 0 or p[7]] + [["palette", ti, [1, 1, 1, 1], np.concatenate(P), np.concatenate(Nn), np.concatenate(U), np.concatenate(I), 0]]
     for p in pieces:
         if p[0] not in ("palette", "TVScreen"): p[5] = np.c_[p[5][:, 0], 1.0 - p[5][:, 1]]
         assert len(p[3]) < 65000, (name, p[0], len(p[3]))   # (Unity 5 : 65 535 sommets par maillage)
@@ -176,7 +214,7 @@ def build(name, spec, apercu):
     print("%-13s %6d -> %5d triangles, %d pieces, %d textures (%d Ko), taille %.3f x %.3f x %.3f" % (
         name, tris0, tris1, len(pieces), len(texlist), sum(len(d) for _, d in texlist) // 1024, *size))
     if apercu: vues(name, pieces)
-    return name, size, texlist, pieces
+    return name, size, texlist, pieces, points
 
 
 def vues(name, pieces):
@@ -233,18 +271,19 @@ def main():
     if only: return
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "wb") as f:
-        f.write(b"MWOB"); f.write(struct.pack("<ii", 1, len(objs)))
-        for name, size, texlist, pieces in objs:
+        f.write(b"MWOB"); f.write(struct.pack("<ii", 2, len(objs)))
+        for name, size, texlist, pieces, points in objs:
             ecrit_chaine(f, name); f.write(struct.pack("<3f", *size))
             f.write(struct.pack("<i", len(texlist)))
             for tn, data in texlist: ecrit_chaine(f, tn); f.write(struct.pack("<i", len(data))); f.write(data)
             f.write(struct.pack("<i", len(pieces)))
-            for pn, ti, col, P, Nn, U, I in pieces:
-                ecrit_chaine(f, pn); f.write(struct.pack("<i4f", ti, *col[:4]))
+            for pn, ti, col, P, Nn, U, I, flags in pieces:
+                ecrit_chaine(f, pn); f.write(struct.pack("<i4fi", ti, *col[:4], flags))
                 f.write(struct.pack("<i", len(P))); f.write(P.astype("<f4").tobytes()); f.write(Nn.astype("<f4").tobytes())
                 Uf = U.copy(); f.write(Uf.astype("<f4").tobytes())
                 f.write(struct.pack("<i", I.size)); f.write(I.astype("<i4").ravel().tobytes())
-            f.write(struct.pack("<i", 0))
+            f.write(struct.pack("<i", len(points)))
+            for k, v in points.items(): ecrit_chaine(f, k); f.write(struct.pack("<3f", *[float(x) for x in v]))
     print("ecrit", OUT, os.path.getsize(OUT) // 1024, "Ko")
 
 

@@ -12,7 +12,17 @@ namespace MWCoop
     // illisible : l'ancien modele. [Test] ObjetsAnciens=1 : les anciens modeles (photos avant / apres).
     public static partial class Kauppa
     {
-        class ObjModel { public Vector3 Size; public readonly List<KeyValuePair<string, KeyValuePair<Mesh, Material>>> Parts = new List<KeyValuePair<string, KeyValuePair<Mesh, Material>>>(); }
+        class ObjModel { public Vector3 Size; public readonly List<KeyValuePair<string, KeyValuePair<Mesh, Material>>> Parts = new List<KeyValuePair<string, KeyValuePair<Mesh, Material>>>(); public readonly Dictionary<string, Vector3> Points = new Dictionary<string, Vector3>(); }
+
+        // Point remarquable d'un modele, dans son repere (convertisseur : boite d'une piece, « <cle>_min » / « <cle>_max »).
+        static bool ModelPoint(string model, string key, out Vector3 p)
+        {
+            p = Vector3.zero;
+            LoadObjModels();
+            ObjModel m;
+            return objModels != null && objModels.TryGetValue(model, out m) && m.Points.TryGetValue(key, out p);
+        }
+        static Vector3 ModelSize(string model, Vector3 fallback) { LoadObjModels(); ObjModel m; return objModels != null && objModels.TryGetValue(model, out m) ? m.Size : fallback; }
         static Dictionary<string, ObjModel> objModels;
         static bool objTried;
 
@@ -45,9 +55,14 @@ namespace MWCoop
                 {
                     if (s == null) { L("objets : objets.pak absent de la DLL, anciens modeles"); return; }
                     var r = new BinaryReader(s);
-                    if (new string(r.ReadChars(4)) != "MWOB" || r.ReadInt32() != 1) { L("objets : objets.pak illisible"); return; }
+                    string magic = new string(r.ReadChars(4)); int ver = r.ReadInt32();
+                    if (magic != "MWOB" || ver < 1 || ver > 2) { L("objets : objets.pak illisible"); return; }
                     Material tpl = GameMat("wood_panel7");
                     Shader sh = tpl != null ? tpl.shader : Shader.Find("Legacy Shaders/Diffuse");
+                    // (etiquettes a fond transparent : decoupe ; vitres : transparent)
+                    Shader cut = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse") ?? Shader.Find("Transparent/Cutout/Diffuse");
+                    Shader glass = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Transparent/Diffuse");
+                    if (cut == null || glass == null) L("objets : shader " + (cut == null ? "decoupe" : "transparent") + " absent, pieces opaques");
                     var all = new Dictionary<string, ObjModel>();
                     int n = r.ReadInt32(), tris = 0;
                     for (int i = 0; i < n; i++)
@@ -73,6 +88,7 @@ namespace MWCoop
                             string pn = r.ReadString();
                             int ti = r.ReadInt32();
                             var col = new Color(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                            int flags = ver >= 2 ? r.ReadInt32() : 0;
                             int nv = r.ReadInt32();
                             var v = new Vector3[nv]; var nn = new Vector3[nv]; var uv = new Vector2[nv];
                             for (int j = 0; j < nv; j++) v[j] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
@@ -83,13 +99,14 @@ namespace MWCoop
                             for (int j = 0; j < ni; j++) idx[j] = r.ReadInt32();
                             var mesh = new Mesh { name = "objet_" + name + "_" + pn, vertices = v, normals = nn, uv = uv, triangles = idx };
                             mesh.RecalculateBounds();
-                            var mat = new Material(sh) { name = "objet_" + name + "_" + pn, color = ti >= 0 ? Color.white : col };
+                            Shader psh = (flags & 1) != 0 && cut != null ? cut : (flags & 2) != 0 && glass != null ? glass : sh;
+                            var mat = new Material(psh) { name = "objet_" + name + "_" + pn, color = ti >= 0 && (flags & 3) == 0 ? Color.white : col };
                             if (ti >= 0 && ti < tex.Count) mat.mainTexture = tex[ti];
                             m.Parts.Add(new KeyValuePair<string, KeyValuePair<Mesh, Material>>(pn, new KeyValuePair<Mesh, Material>(mesh, mat)));
                             tris += ni / 3;
                         }
                         int npt = r.ReadInt32();
-                        for (int k = 0; k < npt; k++) { r.ReadString(); r.ReadSingle(); r.ReadSingle(); r.ReadSingle(); }
+                        for (int k = 0; k < npt; k++) { string key = r.ReadString(); m.Points[key] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()); }
                         all[name] = m;
                     }
                     objModels = all;

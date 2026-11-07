@@ -426,6 +426,24 @@ namespace MWCoop
         }
 
         static int TextW(string s, int scale) { return s.Length * 4 * scale - scale; }
+        internal static int TextWidth(string s, int scale) { return TextW(s, scale); }
+        // (dans un tableau de pixels de w x h, origine en bas comme une texture ; yTop compte depuis le haut)
+        internal static void DrawText(Color32[] px, int w, int h, int x, int yTop, string s, Color32 c, int scale)
+        {
+            foreach (char ch0 in s)
+            {
+                int m;
+                if (font.TryGetValue(char.ToUpperInvariant(ch0), out m))
+                    for (int r = 0; r < 5; r++) for (int k = 0; k < 3; k++)
+                        if ((m >> (14 - (r * 3 + k)) & 1) != 0)
+                            for (int dy = 0; dy < scale; dy++) for (int dx = 0; dx < scale; dx++)
+                            {
+                                int xx = x + k * scale + dx, yy = h - 1 - (yTop + r * scale + dy);
+                                if (xx >= 0 && xx < w && yy >= 0 && yy < h) px[yy * w + xx] = c;
+                            }
+                x += 4 * scale;
+            }
+        }
         static void TextC(Device d, int y, string s, int c, int scale) { Text(d, (W - TextW(s, scale)) / 2, y, s, c, scale); }
         static void Text(Device d, int x, int y, string s, int c, int scale)
         {

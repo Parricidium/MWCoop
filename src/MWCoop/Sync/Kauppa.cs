@@ -574,6 +574,12 @@ namespace MWCoop
                         case "museo": forceMuseoDoor = a.Length > 2 && a[2] == "auki"; L("essai : portes du musee " + (forceMuseoDoor ? "ouvertes" : "libres")); break;
                         case "ota": { Offer o = a.Length > 2 ? offers.Find(x => x.Item == a[2]) : (offers.Count > 0 ? offers[0] : null); if (o != null) Take(o); break; }
                         case "nauhuri": TestVcr(); break;
+                        // (magnetoscope : bouton presse comme avec F ; appui tenu n s pour la photo ; cassette inseree ou ejectee par la fente)
+                        case "bouton": { Esine v = esineet.Find(e => e.Kind == KNauhuri); if (v != null) VcrPress(v, a[2], now); break; }
+                        case "appui": { Esine v = esineet.Find(e => e.Kind == KNauhuri); if (v != null) Look(v).Pressed[a[2]] = Time.realtimeSinceStartup + F(a[3]); break; }
+                        case "insere": { Esine v = esineet.Find(e => e.Kind == KNauhuri), tp = esineet.FindLast(e => e.Kind == KVhs); if (v != null && tp != null) { pendingTape = tp; pendingVcr = v; pendingFrame = Time.frameCount; } L("essai : insertion " + (v != null && tp != null)); break; }
+                        case "ejecte": { Esine v = esineet.Find(e => e.Kind == KNauhuri); if (v != null) Eject(v); break; }
+                        case "afficheur": { Esine v = esineet.Find(e => e.Kind == KNauhuri); if (v != null) L("essai : magnetoscope " + v.Data + ", position " + VcrPos(v, now).ToString("F1") + " s, afficheur « " + Look(v).Shown + " »"); break; }
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
                         case "filmi": TestFilm(); break;
                         case "tuo": { Esine tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null && EyeT != null) { tp.Rb.isKinematic = true; tp.Go.transform.SetParent(EyeT, true); } ChatCommand("/importer " + string.Join(" ", a, 2, a.Length - 2)); if (tp != null) { tp.Go.transform.SetParent(null, true); tp.Rb.isKinematic = false; } break; }

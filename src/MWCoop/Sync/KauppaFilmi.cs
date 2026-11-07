@@ -68,6 +68,16 @@ namespace MWCoop
             catch (Exception e) { L("video : film " + id + " : " + e.Message); return null; }
         }
 
+        // Longueur d'une cassette (s), ses prises toutes chargees ; -1 sinon
+        static float TapeLength(string tape)
+        {
+            float s = 0f;
+            List<string> clips = Clips(tape);
+            if (clips.Count == 0) return -1f;
+            foreach (string c in clips) { Film f; if (!filmCache.TryGetValue(c, out f) || f == null) return -1f; s += f.LengthMs / 1000f; }
+            return s;
+        }
+
         // Prises d'une cassette, dans l'ordre (chaque enregistrement s'ajoute a la suite : "f1+f2+f3~titre").
         public static List<string> Clips(string content)
         {
@@ -83,9 +93,9 @@ namespace MWCoop
         {
             Esine v = s.Vcr;
             string tape = Tape(v);
-            KeyValuePair<float, string> ps;
-            if (!playStart.TryGetValue(v.Id, out ps) || ps.Value != tape) { ps = new KeyValuePair<float, string>(now, tape); playStart[v.Id] = ps; }   // (autre cassette : depuis le debut)
-            float t = now - ps.Key;
+            // (position de la bande : lecture, pause, avance, retour -- KauppaNauhuri ; JD 07/11)
+            float t = VcrPos(v, now);
+            bool sound = VcrMode(v) == VPlay;
             // les prises bout a bout ; il en manque une : neige en attendant (puis reprise au bon endroit)
             List<string> clips = Clips(tape);
             Film f = null; float clipStart = 0f, at = 0f;
@@ -119,11 +129,18 @@ namespace MWCoop
                 {
                     s.Audio.Stop();
                     s.Audio.clip = f.Clip; s.Audio.loop = false; s.Audio.volume = 0.95f;
-                    if (f.Clip != null && tc < f.Clip.length - 0.05f) { s.Audio.time = Mathf.Max(0f, tc); s.Audio.Play(); }
+                    if (sound && f.Clip != null && tc < f.Clip.length - 0.05f) { s.Audio.time = Mathf.Max(0f, tc); s.Audio.Play(); }
                 }
                 L("video : " + v.Id + " lit la prise " + f.Id + " (" + (clips.IndexOf(f.Id) + 1) + "/" + clips.Count + ") depuis " + tc.ToString("F1") + " s");
             }
             if (r.sharedMaterial != s.Mat) r.sharedMaterial = s.Mat;
+            // son : seulement en lecture, cale sur la bande (pause, avance, retour : muet)
+            if (s.Audio != null && f.Clip != null && s.Audio.clip == f.Clip)
+            {
+                bool want = sound && tc < f.Clip.length - 0.05f;
+                if (!want) { if (s.Audio.isPlaying) s.Audio.Pause(); }
+                else if (!s.Audio.isPlaying || Mathf.Abs(s.Audio.time - tc) > 0.3f) { s.Audio.time = Mathf.Max(0f, tc); s.Audio.Play(); }
+            }
             // image de l'instant
             uint ms = (uint)Mathf.Max(0f, tc * 1000f);
             int lo = 0, hi = f.Ms.Count - 1, idx = -1;
