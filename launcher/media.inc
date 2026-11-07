@@ -43,7 +43,12 @@ static std::wstring VhsItemFile()
     (void)up; std::wstring d = SaveDirOf(SaveCurrentProf());   // (la sauvegarde utilisee : saves.inc)
     return d.empty() ? L"" : d + L"MWCoop-esineet.txt";
 }
-static std::wstring VhsFilmDir() { return g_modRoot + L"MWCoop\\videot\\"; }
+static std::wstring VhsFilmDir()   // (07/11, [Addons] : le mod prend <MWCOOP_DATA>\videot, celui de la partie lancee -- partie-N aussi ; avant : toujours la principale)
+{
+    std::wstring p = SaveCurrentProf(), r = SaveProfRoot();
+    if (!p.empty()) return r + p + L"\\videot\\";
+    return (r.size() > 8 ? r.substr(0, r.size() - 8) : g_modRoot + L"MWCoop\\") + L"videot\\";
+}
 static std::wstring VhsFilmPath(const std::wstring &f)
 {
     std::wstring p = VhsFilmDir() + f + L".mwv";

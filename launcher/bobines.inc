@@ -463,7 +463,9 @@ static void BobExport()
     if (!ex || !g_vidPoll) { VhsImportFree(); SetStatus(K_ERR, T(L"Export impossible : MWCoopRT.dll manque ou est trop ancienne (Windows 7 : pas d'export)", L"Can't export: MWCoopRT.dll missing or too old (no export on Windows 7)")); return; }
     std::wstring ini = ModIni();
     int scale = max(1, min(6, (int)GetPrivateProfileIntW(L"Boutique", L"ExportEchelle", 3, ini.c_str())));
-    std::wstring logo = GetPrivateProfileIntW(L"Boutique", L"ExportLogo", 1, ini.c_str()) != 0 && FileExists(VhsFilmDir() + L"logo-mwcoop.png") ? VhsFilmDir() + L"logo-mwcoop.png" : L"";
+    std::wstring lg = BobFilmDirOf(g_bobProf) + L"logo-mwcoop.png";   // (le mod l'ecrit dans le videot de la partie ; sinon celui de la partie utilisee)
+    if (!FileExists(lg)) lg = VhsFilmDir() + L"logo-mwcoop.png";
+    std::wstring logo = GetPrivateProfileIntW(L"Boutique", L"ExportLogo", 1, ini.c_str()) != 0 && FileExists(lg) ? lg : L"";
     if (ex(f.path.c_str(), dst.c_str(), scale, logo.c_str()) != 0) { VhsImportFree(); SetStatus(K_ERR, T(L"Export pas lancé", L"Export not started")); return; }
     g_bobExpDst = dst; g_bobExpName = BobTitleOf(f); g_bobExpP = 0; g_progress = 0;
     SetStatus(K_NORMAL, T(L"Export de « %s » en .mp4…", L"Exporting \"%s\" as .mp4…"), g_bobExpName.c_str());
