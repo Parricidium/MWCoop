@@ -307,9 +307,11 @@ namespace MWCoop
                     Esine ce = null;
                     foreach (KeyValuePair<string, CnSaid> kv in cnSaidBy) if (kv.Value.Who == av.Player.Id) ce = FindItem(kv.Key);
                     Vector3 target = ce != null && ce.Go != null ? ce.Go.transform.position : hb.position + fw * 0.33f - up * 0.27f;
-                    // (jusqu'a 62 s : de cote, par la vitre du passager -- la lampe dans sa main droite ; ensuite par-dessus l'epaule)
-                    if (t < 62f) { cn2Cam.transform.position = hb.position + rt * 0.95f + fw * 0.2f - up * 0.12f; cn2Cam.transform.LookAt(hb.position - up * 0.28f + fw * 0.22f, up); }
-                    else { cn2Cam.transform.position = hb.position - fw * 0.12f + up * 0.1f + rt * 0.12f; cn2Cam.transform.LookAt(target, up); }
+                    // (jusqu'a 62 s : depuis la place du conducteur, vers les mains du passager -- carnet a gauche, lampe a droite ;
+                    // ensuite au-dessus de sa tete, vers la page. Essai du 08/11 : par la vitre, la portiere cachait tout ; par-dessus
+                    // l'epaule, la tete)
+                    if (t < 62f) { cn2Cam.transform.position = hb.position - rt * 0.62f + fw * 0.08f - up * 0.06f; cn2Cam.transform.LookAt(hb.position - up * 0.3f + fw * 0.22f + rt * 0.04f, up); }
+                    else { cn2Cam.transform.position = hb.position + up * 0.24f - fw * 0.1f + rt * 0.03f; cn2Cam.transform.LookAt(target, up); }
                     break;
                 }
             if (!guest && cn2 >= 1 && cn2 < 4)
