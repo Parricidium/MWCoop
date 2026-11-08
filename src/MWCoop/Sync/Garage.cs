@@ -40,8 +40,10 @@ namespace MWCoop
     //    detruite et 'Assemble' du jeu (HasComponent) casse la vitre lui-meme. (La reparation : REPAIR, rejouee
     //    par Jobs.) Une copie conduite ailleurs ne casse jamais seule (VehicleSync.ProtectJoints) ;
     //  - tole (composants Deformable : sommets deplaces au choc) : chaque sommet qui a bouge ici depuis le dernier
-    //    releve (2 fois/s) part en millimetres par rapport au sommet d'origine, par lots ; ailleurs ils sont poses
-    //    puis UpdateMesh (maillage et collider). La reparation (Repair) part de meme ;
+    //    releve (2 fois/s) part par lots, sa position en millimetres (T_DENTPOS ; avant le 08/11, son decalage par
+    //    rapport au sommet d'origine, T_DENT) ; ailleurs la tole est d'abord remise sur le maillage de son MeshFilter
+    //    si besoin (Fresh), les sommets sont poses puis UpdateMesh (maillage et collider). La reparation (Repair) part
+    //    de meme ;
     //  - trains tordus (transforms *DamagePivot* : FL/FR/RL/RR de Calculations les tournent au hasard au choc) :
     //    rotation locale envoyee quand elle change.
     //  Chacun envoie ce qui change chez lui : la voiture conduite casse chez son conducteur, la voiture garee
@@ -59,7 +61,7 @@ namespace MWCoop
     {
         const string Module = "atelier";
         // Msg.Garage : joueur, type (bit 0x80 : fiable, l'hote relaie pareil), donnees.
-        const int T_LIFT = 1, T_FOLD = 2, T_CAR = 3, T_GLASS = 4, T_DENT = 5, T_BEND = 6, T_LOADER = 7, T_HOIST = 8;
+        const int T_LIFT = 1, T_FOLD = 2, T_CAR = 3, T_GLASS = 4, T_DENT = 5, T_BEND = 6, T_LOADER = 7, T_HOIST = 8, T_DENTPOS = 9;
         const int RELIABLE = 0x80;
 
         static float nextScan = -1, loadedAt, nextPoll, nextCar, nextDamage, nextWarn, nextLiftScan, nextResend;
@@ -71,6 +73,7 @@ namespace MWCoop
             lifts.Clear(); liftKnown.Clear(); owned.Clear(); loaders.Clear(); loaderKnown.Clear();
             dmg.Clear(); lifted.Clear(); corrected.Clear(); snapshots.Clear(); dmgSend.Clear();
             gen = -1; liftScans = 0; dmgIdx = 0; tStep = 0; tAt = 0; tLog = 0; testFsm = null; testOff.Clear();
+            tolesWarned.Clear(); probeAt = 0; probeSaved = false;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
             nextLiftScan = 0; nextResend = 0;
@@ -85,6 +88,7 @@ namespace MWCoop
         {
             if (nextScan < 0 || !Session.Active) return;
             float now = Time.realtimeSinceStartup;
+            if (Config.Testing) DentProbe(now - loadedAt);
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation))
             {
                 bool newGen = gen != VehicleSync.Generation;
@@ -111,7 +115,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- arrivants et renvoi (hote)
         // Instantane pour un arrivant : niveau et poses de chaque appareil, crics deplies ou non, chargeurs ; puis les
         // degats : vitres cassees et trains tordus tout de suite, toles par lots (SendDents). Les memes messages que la
-        // manoeuvre ou le choc (T_LIFT final, T_FOLD, T_LOADER, T_GLASS, T_BEND, T_DENT) : rien de neuf a recevoir.
+        // manoeuvre ou le choc (T_LIFT final, T_FOLD, T_LOADER, T_GLASS, T_BEND, T_DENTPOS) : rien de neuf a recevoir.
         static void SendSnapshots(float now)
         {
             for (int i = snapshots.Count - 1; i >= 0; i--)
@@ -653,7 +657,7 @@ namespace MWCoop
         static readonly FieldInfo fVerts = typeof(Deformable).GetField("vertices", Priv), fBase = typeof(Deformable).GetField("baseVertices", Priv),
                                   fColors = typeof(Deformable).GetField("colors", Priv), fBaseColors = typeof(Deformable).GetField("baseColors", Priv),
                                   fMesh = typeof(Deformable).GetField("mesh", Priv);
-        static readonly MethodInfo mUpdateMesh = typeof(Deformable).GetMethod("UpdateMesh", Priv);
+        static readonly MethodInfo mUpdateMesh = typeof(Deformable).GetMethod("UpdateMesh", Priv), mLoadMesh = typeof(Deformable).GetMethod("LoadMesh", Priv);
 
         static string Rank(Dictionary<string, int> seen, string k)
         {
@@ -777,6 +781,7 @@ namespace MWCoop
         static int UndoDent(CarDmg c, Dent d)
         {
             if (d.D == null || fVerts == null || fBase == null) return 0;
+            Fresh(c.Car, d);
             var v = fVerts.GetValue(d.D) as Vector3[];
             var bs = fBase.GetValue(d.D) as Vector3[];
             if (v == null || bs == null || bs.Length != v.Length) return 0;
@@ -794,7 +799,8 @@ namespace MWCoop
             }
             if (n == 0) return 0;
             ColorsGuard(d.D);
-            try { if (mUpdateMesh != null) mUpdateMesh.Invoke(d.D, null); } catch (System.Exception) { }
+            try { if (mUpdateMesh != null) mUpdateMesh.Invoke(d.D, null); }
+            catch (System.Exception e) { WarnTole(c.Car + d.Key, "tole " + c.Car + d.Key + " : remise comme chez le conducteur, maillage pas mis a jour (" + (e.InnerException ?? e).GetType().Name + ")"); }
             if (undoLogs++ < 10) Log.Info("atelier : tole " + c.Car + d.Key + " cabossee sur la copie (" + n + " sommets) : remise comme chez le conducteur");
             return 0;
         }
@@ -826,16 +832,23 @@ namespace MWCoop
             return budget;
         }
 
-        // Un lot de sommets (indices idx[k..k+n[) d'une tole : decalage par rapport a l'origine, en millimetres.
+        // Un lot de sommets (indices idx[k..k+n[) d'une tole, en millimetres : leur position (T_DENTPOS), ou leur decalage par rapport
+        // a l'origine (T_DENT, avant le 08/11). L'origine est le maillage de la tole a son dernier chargement, propre a chaque joueur :
+        // l'hote garde celle du debut de sa partie, un arrivant en cours de partie part de la sauvegarde que l'hote vient de faire
+        // (bosses deja dedans) -- en decalages, ces bosses-la etaient posees deux fois chez lui, et une reparation ne les otait pas.
+        // En positions, le maillage final est le meme chez tous. Position hors de +-32 m (16 bits) : decalage, comme avant.
+        // [Test] TolesPositions=0 : decalages, comme avant.
         static int DentHead(CarDmg c, Dent d) { return 16 + System.Text.Encoding.UTF8.GetByteCount(c.Car) + System.Text.Encoding.UTF8.GetByteCount(d.Key); }
         static NetWriter DentWriter(CarDmg c, Dent d, Vector3[] v, Vector3[] bs, List<int> idx, int k, int n)
         {
-            var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_DENT | RELIABLE).Str(c.Car).Str(d.Key).U16(v.Length).U8(n);
+            bool pos = Config.GetInt("Test", "TolesPositions", 1) != 0;
+            for (int j = 0; j < n && pos; j++) { Vector3 p = v[idx[k + j]]; if (Mathf.Abs(p.x) > 32f || Mathf.Abs(p.y) > 32f || Mathf.Abs(p.z) > 32f) pos = false; }
+            var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8((pos ? T_DENTPOS : T_DENT) | RELIABLE).Str(c.Car).Str(d.Key).U16(v.Length).U8(n);
             for (int j = 0; j < n; j++)
             {
                 int i = idx[k + j];
-                Vector3 off = v[i] - bs[i];
-                w.U16(i).U16(Mm(off.x)).U16(Mm(off.y)).U16(Mm(off.z));
+                Vector3 x = pos ? v[i] : v[i] - bs[i];
+                w.U16(i).U16(Mm(x.x)).U16(Mm(x.y)).U16(Mm(x.z));
             }
             return w;
         }
@@ -876,7 +889,7 @@ namespace MWCoop
             Log.Info("atelier : train " + car + key + " tordu par #" + who + " (" + q.eulerAngles.ToString("F1") + ")");
         }
 
-        static void OnDent(int who, NetReader r)
+        static void OnDent(int who, NetReader r, bool pos)
         {
             string car = r.Str(), key = r.Str();
             int count = r.U16(), n = r.U8();
@@ -890,10 +903,16 @@ namespace MWCoop
             Dent d = null;
             if (c != null) foreach (Dent x in c.Dents) if (x.Key == key) { d = x; break; }
             if (d == null || d.D == null || fVerts == null || fBase == null) { Warn("tole " + car + key + " introuvable ici"); return; }
+            Fresh(car, d);
             var v = fVerts.GetValue(d.D) as Vector3[];
             var bs = fBase.GetValue(d.D) as Vector3[];
-            if (v == null || bs == null || v.Length != count || bs.Length != count || fMesh == null || fMesh.GetValue(d.D) == null)
-            { Warn("tole " + car + key + " : maillage different ici (" + (v != null ? v.Length : -1) + " sommets, recu " + count + ")"); return; }
+            Mesh dm = fMesh != null ? fMesh.GetValue(d.D) as Mesh : null;   // (== d'Unity : un maillage detruit vaut null -- en object, non)
+            if (v == null || bs == null || v.Length != count || bs.Length != count || dm == null)
+            {
+                WarnTole(car + key, "tole " + car + key + (!ReferenceEquals(dm, null) && dm == null ? " : maillage detruit ici"
+                                                                : " : maillage different ici (" + (v != null ? v.Length : -1) + " sommets, recu " + count + ")"));
+                return;
+            }
             if (d.Snap == null || !ReferenceEquals(d.Arr, v) || d.Snap.Length != v.Length) { d.Arr = v; d.Snap = (Vector3[])v.Clone(); }
             var cols = fColors != null ? fColors.GetValue(d.D) as Color32[] : null;
             var bcols = fBaseColors != null ? fBaseColors.GetValue(d.D) as Color32[] : null;
@@ -902,17 +921,54 @@ namespace MWCoop
             {
                 int i = idx[j];
                 if (i < 0 || i >= count) continue;
-                v[i] = bs[i] + off[j];
+                v[i] = pos ? off[j] : bs[i] + off[j];
                 d.Snap[i] = v[i];
-                if (tint) cols[i] = Color.Lerp(bcols[i], d.D.DeformedVertexColor, off[j].magnitude / d.D.MaxVertexMov);
+                if (tint) cols[i] = Color.Lerp(bcols[i], d.D.DeformedVertexColor, (v[i] - bs[i]).magnitude / d.D.MaxVertexMov);
             }
             ColorsGuard(d.D);
+            bool ok = true;
             try { if (mUpdateMesh != null) mUpdateMesh.Invoke(d.D, null); }
-            catch (System.Exception e) { Warn("tole " + car + key + " : maillage pas mis a jour (" + e.GetType().Name + ")"); }
+            catch (System.Exception e)
+            {
+                ok = false;
+                WarnTole(car + key, "tole " + car + key + " : maillage pas mis a jour (" + e.GetType().Name + (e.InnerException != null ? " : " + e.InnerException.GetType().Name : "") + ")");
+            }
             dentsIn += n;
-            if (++dentMsgs <= 10 || dentMsgs % 50 == 0) Log.Info("atelier : tole " + car + key + " deformee par #" + who + " (" + n + " sommets, " + dentsIn + " recus en tout)");
+            if (ok && (++dentMsgs <= 10 || dentMsgs % 50 == 0)) Log.Info("atelier : tole " + car + key + " deformee par #" + who + " (" + n + " sommets, " + dentsIn + " recus en tout)");
         }
         static int dentsIn, dentMsgs;
+
+        // Tole remise sur le maillage de son MeshFilter avant qu'on y ecrive, comme le fait Deformable.FixedUpdate du jeu
+        // (mesh != meshFilter.mesh : LoadMesh). Le jeu ne le fait que tole allumee, et SATSUMA/DeformLogic (CORRIS/DeformLogic sur
+        // My Winter Car) les coupe toutes tant que GetSpeed de la voiture reste sous 0,1 : la copie cinematique d'une voiture conduite
+        // ailleurs reste a ~0. Or au chargement, ES2Auto de la tole (loadOnStart, meshsave.txt) detruit le maillage pris par
+        // Deformable.Awake et pose celui de la sauvegarde : la tole de la copie gardait un maillage detruit, UpdateMesh tombait sur
+        // Mesh.set_vertices (NullReferenceException) et la bosse de l'autre n'etait jamais posee (« maillage pas mis a jour », journaux
+        // de joueurs depuis MSC 1.15.14 ; audit du 08/11). Sommets et base repartent du maillage de la sauvegarde, comme chez le
+        // conducteur dont la tole a ete rechargee en roulant. [Test] TolesRecharge=0 : comme avant.
+        static void Fresh(string car, Dent d)
+        {
+            if (d.D == null || fMesh == null || mLoadMesh == null || Config.GetInt("Test", "TolesRecharge", 1) == 0) return;
+            MeshFilter mf = d.D.meshFilter;
+            Mesh cur = mf != null ? mf.sharedMesh : null;   // (sharedMesh : lire .mesh creerait une copie)
+            Mesh m = fMesh.GetValue(d.D) as Mesh;
+            if (cur == null || (m != null && m == cur)) return;
+            string why = ReferenceEquals(m, null) ? "aucun maillage" : m == null ? "maillage detruit" : "autre maillage";
+            try { mLoadMesh.Invoke(d.D, null); }
+            catch (System.Exception e)
+            {
+                WarnTole(car + d.Key, "tole " + car + d.Key + " : rechargement impossible (" + (e.InnerException ?? e).GetType().Name + ")");
+                return;
+            }
+            if (freshLogs++ < 30) Log.Info("atelier : tole " + car + d.Key + " remise sur le maillage de son MeshFilter (" + why + ")");
+        }
+        static int freshLogs;
+
+        // Premier echec de chaque tole toujours ecrit (Warn n'ecrit qu'un message toutes les 5 s : les autres toles d'un meme choc
+        // echouaient sans trace -- audit du 08/11), les suivants comme Warn.
+        static readonly HashSet<string> tolesWarned = new HashSet<string>();
+        static void WarnTole(string key, string s) { if (tolesWarned.Add(key)) Log.Warn("atelier : " + s); else Warn(s); }
+
         // Deformable.UpdateMesh du jeu lit colors.Length : tableau jamais cree sur une tole dont Start n'a pas tourne (la tole d#0 de la
         // SATSUMA chez l'hote, audit MSC 02/11). L'exception tombait apres les sommets : bornes et collider jamais recalcules -- bosse
         // de l'autre affichee mais coupee au rendu, sans collision. Tableau vide : le jeu saute la couleur. [Test] TolesCouleursVides=0 :
@@ -944,7 +1000,8 @@ namespace MWCoop
                 case T_FOLD: OnFold(who, r); break;
                 case T_CAR: OnCar(who, r); break;
                 case T_GLASS: OnGlass(who, r); break;
-                case T_DENT: OnDent(who, r); break;
+                case T_DENT: OnDent(who, r, false); break;
+                case T_DENTPOS: OnDent(who, r, true); break;
                 case T_BEND: OnBend(who, r); break;
                 case T_LOADER: OnLoader(who, r); break;
                 case T_HOIST: OnHoist(who, r); break;
@@ -980,6 +1037,56 @@ namespace MWCoop
         static string testState, testBack;
         static float testUntil, testStop = float.NaN;
         static int testCount;
+
+        // Releve des toles, en essai (cles [Test], appele par Update : sur My Summer Car, Garage.Test ne tourne pas ; t = secondes
+        // depuis le chargement de la partie, a peu pres le t des Autotest) :
+        // [Test] TolesEmpreinte=<s> : toutes les <s> secondes, chaque tole des voitures dont le nom commence par [Test] TolesVoiture
+        //   (SATSUMA par defaut) : empreinte du maillage rendu (sommes des x, y, z des sommets du maillage du MeshFilter : a comparer
+        //   entre l'hote et l'invite, et avant / apres un rechargement de la partie), enfoncement (somme des ecarts a la base, en mm),
+        //   tole allumee ou coupee, maillage de la tole (celui du filtre, autre, DETRUIT) ; par voiture : etat de DeformLogic et
+        //   vitesse lue du corps (celle que GetSpeed du jeu lit pour allumer les toles).
+        // [Test] TolesSauveA=<s> (hote) : sauvegarde en jeu a cet instant de l'essai (la bosse doit rester apres rechargement).
+        static float probeAt;
+        static bool probeSaved;
+        static void DentProbe(float t)
+        {
+            float sa = Config.GetFloat("Test", "TolesSauveA", 0f);
+            if (sa > 0f && !probeSaved && Session.IsHost && t > sa) { probeSaved = true; Game.SaveInPlace(); Log.Info("autotest : toles, sauvegarde en jeu faite ici"); }
+            float every = Config.GetFloat("Test", "TolesEmpreinte", 0f);
+            float now = Time.realtimeSinceStartup;
+            if (every <= 0f || now < probeAt) return;
+            probeAt = now + every;
+            string want = Config.Get("Test", "TolesVoiture", "SATSUMA");
+            foreach (CarDmg c in dmg.Values)
+            {
+                if (c.Root == null || !c.Car.StartsWith(want)) continue;
+                Rigidbody rb = c.Root.GetComponent<Rigidbody>();
+                Transform dl = c.Root.Find("DeformLogic");
+                PlayMakerFSM lf = dl != null ? dl.GetComponent<PlayMakerFSM>() : null;
+                Log.Info("autotest : toles " + c.Car + " (" + (Session.IsHost ? "hote" : "invite") + ") : DeformLogic " + (lf != null ? lf.ActiveStateName : "?")
+                         + ", vitesse lue " + (rb != null ? rb.velocity.magnitude.ToString("F2") + (rb.isKinematic ? " (cinematique)" : "") : "?")
+                         + (VehicleSync.RemotelyDriven(c.Root) ? ", copie conduite ailleurs" : "") + ", " + c.Dents.Count + " toles");
+                foreach (Dent d in c.Dents)
+                {
+                    if (d.D == null) continue;
+                    MeshFilter mf = d.D.meshFilter;
+                    Mesh shown = mf != null ? mf.sharedMesh : null;
+                    double sx = 0, sy = 0, sz = 0;
+                    int n = 0;
+                    if (shown != null) { Vector3[] rv = shown.vertices; n = rv.Length; for (int i = 0; i < n; i++) { sx += rv[i].x; sy += rv[i].y; sz += rv[i].z; } }
+                    var v = fVerts != null ? fVerts.GetValue(d.D) as Vector3[] : null;
+                    var bs = fBase != null ? fBase.GetValue(d.D) as Vector3[] : null;
+                    double mm = 0;
+                    int moved = 0;
+                    if (v != null && bs != null && v.Length == bs.Length)
+                        for (int i = 0; i < v.Length; i++) { float e = (v[i] - bs[i]).magnitude; if (e > 1e-4f) { mm += e * 1000.0; moved++; } }
+                    Mesh dm = fMesh != null ? fMesh.GetValue(d.D) as Mesh : null;
+                    string st = ReferenceEquals(dm, null) ? "aucun" : dm == null ? "DETRUIT" : dm == shown ? "celui du filtre" : "autre";
+                    Log.Info("autotest : toles " + c.Car + d.Key + " : rendu " + n + " sommets (" + sx.ToString("F3") + ", " + sy.ToString("F3") + ", " + sz.ToString("F3")
+                             + "), enfoncement " + mm.ToString("F0") + " mm sur " + moved + " sommets, " + (d.D.enabled ? "allumee" : "coupee") + ", maillage " + st);
+                }
+            }
+        }
 
         public static void Test(string mode, float t)
         {
@@ -1160,6 +1267,7 @@ namespace MWCoop
                 if (c != null && fVerts != null && fMesh != null && mUpdateMesh != null)
                     foreach (Dent x in c.Dents) if (x.D != null && fVerts.GetValue(x.D) is Vector3[] && fMesh.GetValue(x.D) != null) { d = x; break; }
                 if (d == null) { Log.Info("autotest : degats, pas de tole deformable"); return; }
+                Fresh(c.Car, d);   // (tole d'une voiture pas encore roulee depuis le chargement : maillage detruit par ES2Auto)
                 var v = (Vector3[])fVerts.GetValue(d.D);
                 Vector3 at = v[v.Length / 2];
                 int n = 0;
