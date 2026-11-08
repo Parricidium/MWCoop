@@ -303,13 +303,18 @@ namespace MWCoop
         static int bordOn = -1;
         static bool Bord { get { if (bordOn < 0) bordOn = Config.GetInt("Test", "TuyauBord", 1); return bordOn != 0; } }
         static bool rimOn, pitLast; static float rimNext, pitAt; static int rimLogs, giveLogs;
+        static readonly Vector3[] pitAround = { new Vector3(1.2f, 0f, 0f), new Vector3(-1.2f, 0f, 0f), new Vector3(0f, 0f, 1.2f), new Vector3(0f, 0f, -1.2f) };
         static bool EndInPit()
         {
             float now = Time.realtimeSinceStartup;
             if (now < pitAt) return pitLast;
             pitAt = now + 0.5f;
-            float g = GroundUnder(end.transform.position + Vector3.up * 3f);
-            pitLast = g > float.MinValue && end.transform.position.y < g - 0.3f;
+            // Sol autour du bout, pas seulement au-dessus : sous l'ouverture d'une fosse, le rayon vertical passe par le trou et trouve le fond
+            // (le bout aurait semble au sol). Le plus haut de cinq releves (au-dessus, et a 1,2 m de chaque cote).
+            Vector3 e = end.transform.position;
+            float g = GroundUnder(e + Vector3.up * 3f);
+            foreach (Vector3 o in pitAround) { float gi = GroundUnder(e + o + Vector3.up * 3f); if (gi > g) g = gi; }
+            pitLast = g > float.MinValue && e.y < g - 0.3f;
             return pitLast;
         }
         static void RimLinks(bool laid)
@@ -1146,6 +1151,14 @@ namespace MWCoop
                     {
                         PlayMakerFSM lf = Game.FsmOn(wellGo, "Level"); FsmFloat lvl = lf != null ? lf.FsmVariables.FindFsmFloat("ShitLevel") : null;
                         if (lvl != null) { lvl.Value = 4.9f; lf.SendEvent("ORDERTAKEN"); Log.Info("autotest : tuyau, vidange : fosse pleine, commande passee -> " + lf.ActiveStateName); }
+                    }
+                    // ([Test] TuyauNiveau=<n>, dossier #55 : fosse videe -- niveau pose chez les deux -- comme apres la vidange de Markos : le declencheur
+                    // descend avec le niveau, le bout pose dans la fosse va au fond)
+                    string niv = Config.Get("Test", "TuyauNiveau", "");
+                    if (niv.Length > 0)
+                    {
+                        PlayMakerFSM lf = Game.FsmOn(wellGo, "Level"); FsmFloat lvl = lf != null ? lf.FsmVariables.FindFsmFloat("ShitLevel") : null;
+                        if (lvl != null) { lvl.Value = float.Parse(niv, System.Globalization.CultureInfo.InvariantCulture); Log.Info("autotest : tuyau, vidange : niveau de la fosse pose a " + lvl.Value.ToString("F2") + " -> " + lf.ActiveStateName); }
                     }
                     // ([Test] TuyauVidangeRecul : part de ces 5 m gardee -- a 1, le raccord est a ~8 m de la fosse, hors de portee de la chaine
                     // posee a la main, dossier #55)
