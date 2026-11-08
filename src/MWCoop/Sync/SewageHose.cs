@@ -912,12 +912,28 @@ namespace MWCoop
             GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
             if (cc == null) return;
             Vector3 w = wellGo != null ? wellGo.transform.position : end.transform.position;
-            Transform gq = Gifu(); Vector3 toward = gq != null ? gq.position - w : Vector3.right; toward.y = 0f; toward = toward.sqrMagnitude > 0.01f ? toward.normalized : Vector3.right;
-            Vector3 q = w + toward * Config.GetFloat("Test", "TuyauBordDist", 0.8f); q.y = GroundY(q + Vector3.up * 3f) + 1f;
+            // (y3/y4 du 08/11 : pris du cote du camion, le bord tombait sur la GIFU garee pres de la fosse -- camera a 3,47 m du sol.) Bord
+            // pris depuis la fosse : a cote du maillon qui passe le bord (a hauteur du sol, le plus proche du centre), sur le cote,
+            // perpendiculaire a la chaine, a TuyauBordDist m de ce maillon -- la ou un joueur s'accroupit pour attraper le tuyau.
+            float gw = GroundY(w + Vector3.up * 3f);
+            Vector3 rim = w; float best = float.MaxValue;
+            if (segs != null) foreach (var s in segs)
+            {
+                if (s == null) continue;
+                Vector3 sp = s.transform.position, dh = sp - w; dh.y = 0f;
+                if (Mathf.Abs(sp.y - gw) > 0.5f) continue;
+                if (dh.magnitude < best) { best = dh.magnitude; rim = sp; }
+            }
+            Vector3 dir = rim - w; dir.y = 0f; dir = dir.sqrMagnitude > 0.01f ? dir.normalized : Vector3.right;
+            Vector3 q = rim + Vector3.Cross(Vector3.up, dir) * Config.GetFloat("Test", "TuyauBordDist", 0.6f);
+            Vector3 dq = q - w; dq.y = 0f;   // (jamais au-dessus de l'ouverture : au moins 0,9 m du centre de la fosse)
+            if (dq.magnitude < 0.9f) { q = w + (dq.sqrMagnitude > 0.01f ? dq.normalized : Vector3.Cross(Vector3.up, dir)) * 0.9f; }
+            q.y = GroundY(q + Vector3.up * 3f) + 1f;
             cc.enabled = false; pl.transform.position = q; cc.enabled = true;
             PlayMakerFSM cf = Game.FindFsm("PLAYER", "Crouch");
             if (cf != null) Game.SetState(cf, "Move down 2");
-            Log.Info("autotest : tuyau, BORD " + (Session.IsHost ? "hote" : "invite") + " : au bord de la fosse en " + q.ToString("F1") + ", accroupi -> " + (cf != null ? cf.ActiveStateName : "?"));
+            Log.Info("autotest : tuyau, BORD " + (Session.IsHost ? "hote" : "invite") + " : au bord de la fosse en " + q.ToString("F1") + " (maillon du bord a "
+                     + (best < float.MaxValue ? best.ToString("F2") + " m du centre" : "? : aucun maillon a hauteur du sol") + ", sol " + (q.y - 1f).ToString("F2") + "), accroupi -> " + (cf != null ? cf.ActiveStateName : "?"));
         }
         static void PriseCamera()
         {
@@ -978,6 +994,18 @@ namespace MWCoop
             Vector3 p = end.transform.position, from = p + new Vector3(0.35f, 0.5f, 0.2f);
             RaycastHit hit;
             bool ok = Physics.Raycast(from, (p - from).normalized, out hit, 1f, (1 << 19) | (1 << 15) | (1 << 9));
+            // (y3/y4 du 08/11 : rayon arrete par l'herbe -- MAP/MESH/TERRAIN_OBJ/Grass2 -- au seul angle essaye : comme un joueur, viser le bout
+            // sous d'autres angles, le premier qui le touche)
+            if (!ok || hit.collider.attachedRigidbody != end)
+            {
+                Vector3[] offs = { new Vector3(-0.35f, 0.5f, -0.2f), new Vector3(0f, 0.6f, 0f), new Vector3(0.6f, 0.25f, 0f), new Vector3(-0.6f, 0.25f, 0f), new Vector3(0f, 0.25f, 0.6f), new Vector3(0f, 0.25f, -0.6f) };
+                foreach (Vector3 o in offs)
+                {
+                    RaycastHit h2;
+                    if (Physics.Raycast(p + o, -o.normalized, out h2, o.magnitude + 0.3f, (1 << 19) | (1 << 15) | (1 << 9)) && h2.collider.attachedRigidbody == end)
+                    { hit = h2; ok = true; Log.Info("autotest : tuyau, PRISE : bout vise sous un autre angle " + o.ToString("F2")); break; }
+                }
+            }
             Log.Info("autotest : tuyau, PRISE " + (Session.IsHost ? "hote" : "invite") + " : avant " + PriseState());
             if (!ok)
             {
