@@ -887,6 +887,19 @@ namespace MWCoop
         {
             if (wellGo == null) { Log.Info("autotest : tuyau, FOSSE : pas de fosse (TuyauDansFosse=1 TuyauVidange=1)"); return; }
             Vector3 w = wellGo.transform.position;
+            // (couvercle de la fosse ote d'abord, comme les joueurs -- « well cover deplacee » chez Markos ; ferme, le bout se posait dessus)
+            Transform well = wellGo.transform;
+            while (well != null && !well.name.StartsWith("WasteWell")) well = well.parent;
+            Transform cover = null;
+            if (well != null) foreach (Transform t in well.GetComponentsInChildren<Transform>(true)) if (t.name.StartsWith("well cover")) { cover = t; break; }
+            if (cover != null)
+            {
+                Transform gq = Gifu(); Vector3 away = gq != null ? w - gq.position : Vector3.right; away.y = 0f; away = away.sqrMagnitude > 0.01f ? away.normalized : Vector3.right;
+                Vector3 cp = cover.position + away * 1.6f; cp.y = GroundY(cp + Vector3.up * 3f) + 0.15f;
+                Rigidbody cb = cover.GetComponent<Rigidbody>();
+                cover.position = cp; if (cb != null) { cb.position = cp; if (!cb.isKinematic) cb.velocity = Vector3.zero; }
+                Log.Info("autotest : tuyau, FOSSE : couvercle " + cover.name + " ote, pose en " + cp.ToString("F1"));
+            }
             end.transform.position = w;
             if (following && selfMode) { Ground(); dropPos = end.transform.position; dropRot = end.transform.rotation; dropSet = true; }
             else { end.position = w; if (!end.isKinematic) end.velocity = Vector3.zero; }
@@ -1106,7 +1119,9 @@ namespace MWCoop
                         PlayMakerFSM lf = Game.FsmOn(wellGo, "Level"); FsmFloat lvl = lf != null ? lf.FsmVariables.FindFsmFloat("ShitLevel") : null;
                         if (lvl != null) { lvl.Value = 4.9f; lf.SendEvent("ORDERTAKEN"); Log.Info("autotest : tuyau, vidange : fosse pleine, commande passee -> " + lf.ActiveStateName); }
                     }
-                    Vector3 park = wellAt + new Vector3(-5f, 0f, 2f); park.y = GroundY(park + Vector3.up * 3f) + 1.5f;
+                    // ([Test] TuyauVidangeRecul : part de ces 5 m gardee -- a 1, le raccord est a ~8 m de la fosse, hors de portee de la chaine
+                    // posee a la main, dossier #55)
+                    Vector3 park = wellAt + new Vector3(-5f, 0f, 2f) * Config.GetFloat("Test", "TuyauVidangeRecul", 1f); park.y = GroundY(park + Vector3.up * 3f) + 1.5f;
                     if (Session.IsHost && g != null) Log.Info("autotest : tuyau, vidange : " + VehicleSync.TestPlaceAt(TestCar, park, g.rotation));
                     GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                     if (cc != null) { cc.enabled = false; Vector3 me = wellAt + new Vector3(1.5f, 0f, Session.IsHost ? 1.5f : -1.5f); me.y = GroundY(me + Vector3.up * 3f) + 1f; pl.transform.position = me; cc.enabled = true; }
