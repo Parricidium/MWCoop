@@ -2024,6 +2024,7 @@ namespace MWCoop
             if (mode == "copilote" || mode == "copilote3" || mode == "copilote4") { Kartturi.Test(mode, t); Kauppa.TestKartturiDrive(mode, t); return; }
             if (mode == "carnet") { Kartturi.Test(mode, t); Kauppa.TestCarnet(mode, t); return; }
             if (mode == "carnet2") { Kauppa.TestCarnet2(mode, t); return; }
+            if (mode == "carnetroute") { Kauppa.TestCarnetRoute(mode, t); return; }   // (carnet leve a 140 km/h, [MWC] 08/11)
             if (mode == "sac") { SleepingBags.Test(mode, t); return; }   // (sacs de couchage : depliage et sommeil -- [Test] SacDormir)
             // ([Test] SondeBoite=1 : etat de la boite de TestVoiture chaque seconde, quel que soit l'essai)
             if (Config.GetInt("Test", "SondeBoite", 0) != 0 && mode != "mscreprise" && t > 20f && Time.realtimeSinceStartup >= repriseProbeAt)
@@ -3540,6 +3541,7 @@ namespace MWCoop
         public static void LateMeasure()
         {
             VazTenue.Late();   // (entrees « clavier » du banc de tenue de route, apres le controleur de conduite)
+            Kauppa.LateCarnetRoute();   // (carnet leve a 140 km/h : tel qu'affiche chez l'hote)
             Vector3 blt;
             // (camera d'essai aux yeux du joueur, meme reglage que la sienne : le jeu replace la camera du passager)
             if (BeltLookLate >= 0 && PlayerSync.LocalCamera != null && Seats.TestBeltTarget(BeltLookLate, out blt))
@@ -4144,7 +4146,7 @@ namespace MWCoop
             if (mode == "kekremorque") Jobs.TestTrailer();   // (attelage du KEKMET, comme Autotest=remorque sur MSC ; [Test] RemorqueActeur=invite -- Донской 01/11)
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t); Gestures.TestPena(mode, t);
-            VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); Usine.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); Pvp.Test(mode, t); ModRam1500.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); Kartturi.Test(mode, t); Net.ModServe.Test(mode, t); Kauppa.TestKartturi(mode, t); Kauppa.TestKartturiDrive(mode, t); Kauppa.TestCarnet(mode, t); Kauppa.TestCarnet2(mode, t); PushDoors.Test(mode, t); WoodCarriers.Test(mode, t); NewHud.Test(mode, t); ExitGuard.Test(mode, t); LightsGuard.Test(mode, t);
+            VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); Usine.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); Pvp.Test(mode, t); ModRam1500.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); Kartturi.Test(mode, t); Net.ModServe.Test(mode, t); Kauppa.TestKartturi(mode, t); Kauppa.TestKartturiDrive(mode, t); Kauppa.TestCarnet(mode, t); Kauppa.TestCarnet2(mode, t); Kauppa.TestCarnetRoute(mode, t); PushDoors.Test(mode, t); WoodCarriers.Test(mode, t); NewHud.Test(mode, t); ExitGuard.Test(mode, t); LightsGuard.Test(mode, t);
             if (mode == "mainsvue") ThirdPerson.TestHands(t);   // (My Winter Car aussi : bras de la 1re personne en 3e personne -- JD 01/11)
             Net.Session.TestSolo(mode, t);
             MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t); Vaz.Test(mode, t);

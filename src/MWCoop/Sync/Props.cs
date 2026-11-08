@@ -48,6 +48,8 @@ namespace MWCoop
             public Vector3 HeadPos; public Quaternion HeadRot;
             public bool Hidden;                   // range par un autre (inventaire d'un mod) : cache ici, corps garde
             public Vector3 RelPos; public Quaternion RelRot;
+            public Vector3 RelCur; public Quaternion RelCurRot;   // pose affichee dans la voiture RelCurCar, gardee d'une image a l'autre
+            public int RelCurCar = -1, RelCurFrame = -1;
             public Vector3 RideLocal, RideCur;    // pose recue dans la voiture, pose affichee (rattrape)
             public Quaternion RideLocalRot, RideCurRot;
             public int RideOut = -1, RidePass;    // envoye : voiture ou on le transporte (autorite ici)
@@ -818,6 +820,25 @@ namespace MWCoop
                 // Tenu dans une voiture : la cible suit cette voiture ici ; on rattrape le seul ecart dans la voiture.
                 Transform ct = rc.transform;
                 tp = ct.position + ct.rotation * p.RelPos; tr = ct.rotation * p.RelRot;
+                // Pose affichee gardee DANS la voiture d'une image a l'autre (RelCur). Recalculee depuis la pose du monde, elle
+                // comptait aussi le chemin fait par la voiture depuis l'image d'avant : le rattrapage (28 % par image a 60 images/s)
+                // laissait l'objet jusqu'a 2,5 images de route en arriere ; au-dela de 2 m d'ecart il revenait d'un coup (a 140 km/h :
+                // 0,5 a 1,4 m en arriere, recale toutes les 7 images) -- carnet du copilote qui part en arriere et revient, « mini
+                // rollbacks » sur l'autoroute (JD, 08/11). [Test] SuiviVoitureAncien=1 : comme avant.
+                if (Config.GetInt("Test", "SuiviVoitureAncien", 0) == 0)
+                {
+                    if (p.RelCurFrame != Time.frameCount - 1 || p.RelCurCar != p.RelCar)
+                    {
+                        Quaternion inv = Quaternion.Inverse(ct.rotation);
+                        p.RelCur = inv * (t.position - ct.position); p.RelCurRot = inv * t.rotation;
+                    }
+                    p.RelCurFrame = Time.frameCount; p.RelCurCar = p.RelCar;
+                    if ((p.RelCur - p.RelPos).sqrMagnitude > 4f) { p.RelCur = p.RelPos; p.RelCurRot = p.RelRot; }
+                    else { p.RelCur = Vector3.Lerp(p.RelCur, p.RelPos, k); p.RelCurRot = Quaternion.Slerp(p.RelCurRot, p.RelRot, k); }
+                    t.position = ct.position + ct.rotation * p.RelCur;
+                    t.rotation = ct.rotation * p.RelCurRot;
+                    return;
+                }
                 Vector3 cur = Quaternion.Inverse(ct.rotation) * (t.position - ct.position);
                 if ((cur - p.RelPos).sqrMagnitude > 4f) { t.position = tp; t.rotation = tr; return; }
                 t.position = ct.position + ct.rotation * Vector3.Lerp(cur, p.RelPos, k);
@@ -890,6 +911,15 @@ namespace MWCoop
             Transform ct = car.transform;
             Quaternion inv = Quaternion.Inverse(ct.rotation);
             w.U8(ci).Vec(inv * (p.Body.position - ct.position)).Quat(inv * p.Body.rotation);
+        }
+
+        // Essais : pose recue dans la voiture pour un corps suivi (voiture -1 : pas suivi dans une voiture).
+        public static bool TestRel(Rigidbody rb, out Vector3 relPos, out int relCar)
+        {
+            Prop p; relPos = Vector3.zero; relCar = -1;
+            if (rb == null || !byBody.TryGetValue(rb, out p)) return false;
+            relPos = p.RelPos; relCar = p.RemoteBy >= 0 ? p.RelCar : -1;
+            return true;
         }
 
         // Au repos dans une voiture : numero de la voiture, position et rotation dans son repere, a la suite.
