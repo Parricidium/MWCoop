@@ -815,8 +815,18 @@ namespace MWCoop
             var v = fVerts.GetValue(d.D) as Vector3[];
             var bs = fBase != null ? fBase.GetValue(d.D) as Vector3[] : null;
             if (v == null || bs == null || bs.Length != v.Length) return budget;
-            // Maillage recharge (autre tableau) ou premier passage : nouvelle reference, rien d'envoye.
-            if (d.Snap == null || !ReferenceEquals(d.Arr, v) || d.Snap.Length != v.Length) { d.Arr = v; d.Snap = (Vector3[])v.Clone(); return budget; }
+            // Maillage recharge (autre tableau) ou premier passage : reference prise sur la base (le maillage au rechargement), pas sur les
+            // sommets du moment. Le jeu recharge la tole au premier demarrage depuis le chargement de la partie (DeformLogic l'allume, son
+            // FixedUpdate fait LoadMesh) : un choc dans la seconde qui suit, avant ce passage, devenait la reference et n'etait jamais
+            // envoye -- 8 sommets partis sur 361 bouges chez l'hote (essais t0 et u1 du 08/11). Renvoyer un sommet deja recu ne change rien
+            // (positions, T_DENTPOS). [Test] TolesRefBase=0 : comme avant.
+            if (d.Snap == null || !ReferenceEquals(d.Arr, v) || d.Snap.Length != v.Length)
+            {
+                d.Arr = v;
+                bool fromBase = Config.GetInt("Test", "TolesRefBase", 1) != 0;
+                d.Snap = (Vector3[])(fromBase ? bs : v).Clone();
+                if (!fromBase) return budget;
+            }
             List<int> changed = null;
             for (int i = 0; i < v.Length; i++)
                 if ((v[i] - d.Snap[i]).sqrMagnitude > 1e-8f) { if (changed == null) changed = new List<int>(); changed.Add(i); }
