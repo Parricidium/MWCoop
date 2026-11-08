@@ -933,13 +933,46 @@ namespace MWCoop
             Vector3 q = rim + Vector3.Cross(Vector3.up, dir) * Config.GetFloat("Test", "TuyauBordDist", 0.6f);
             Vector3 dq = q - w; dq.y = 0f;   // (jamais au-dessus de l'ouverture : au moins 0,9 m du centre de la fosse)
             if (dq.magnitude < 0.9f) { q = w + (dq.sqrMagnitude > 0.01f ? dq.normalized : Vector3.Cross(Vector3.up, dir)) * 0.9f; }
-            q.y = GroundY(q + Vector3.up * 3f) + 1f;
+            // (y11/y12 : GIFU garee tout pres -- le cas de Markos -- la place tombait sur le camion, camera a 3,2 m du sol.) Place libre : autour de
+            // la fosse (0,9 a 1,3 m du centre, tous les 30 degres), sol au niveau du bord (a 0,4 m pres) et pas la GIFU ; la plus proche du maillon
+            // du bord, ou du bout.
+            Vector3 target = best < float.MaxValue ? rim : end.transform.position;
+            float bestQ = float.MaxValue; Vector3 freeQ = q; int free = 0;
+            foreach (float r in new[] { 0.9f, 1.1f, 1.3f })
+                for (int a = 0; a < 360; a += 30)
+                {
+                    Vector3 c = w + new Vector3(Mathf.Cos(a * Mathf.Deg2Rad), 0f, Mathf.Sin(a * Mathf.Deg2Rad)) * r;
+                    float fy;
+                    if (!FreeGround(c, gw, out fy)) continue;
+                    free++;
+                    Vector3 dt = c - target; dt.y = 0f;
+                    if (dt.magnitude < bestQ) { bestQ = dt.magnitude; freeQ = new Vector3(c.x, fy, c.z); }
+                }
+            if (free > 0) q = freeQ; else Log.Info("autotest : tuyau, BORD : aucune place libre autour de la fosse, place d'avant gardee");
+            q.y = (free > 0 ? q.y : GroundY(q + Vector3.up * 3f)) + 1f;
             cc.enabled = false; pl.transform.position = q; cc.enabled = true;
             PlayMakerFSM cf = Game.FindFsm("PLAYER", "Crouch");
             if (cf != null) Game.SetState(cf, "Move down 2");
             Log.Info("autotest : tuyau, BORD " + (Session.IsHost ? "hote" : "invite") + " : au bord de la fosse en " + q.ToString("F1") + " (maillon du bord a "
-                     + (best < float.MaxValue ? best.ToString("F2") + " m du centre" : "? : aucun maillon a hauteur du sol") + ", sol " + (q.y - 1f).ToString("F2") + "), accroupi -> " + (cf != null ? cf.ActiveStateName : "?"));
+                     + (best < float.MaxValue ? best.ToString("F2") + " m du centre" : "? : aucun maillon a hauteur du sol") + ", sol " + (q.y - 1f).ToString("F2") + ", bord " + gw.ToString("F2")
+                     + ", " + free + " place(s) libre(s) autour de la fosse), accroupi -> " + (cf != null ? cf.ActiveStateName : "?"));
         }
+        // Sol libre sous 'c' (essai, place au bord) : le premier collisionneur sous lui n'est ni un declencheur, ni le tuyau, ni le joueur, ni la GIFU,
+        // et il est a 0,4 m pres a la hauteur du bord 'gw'.
+        static bool FreeGround(Vector3 c, float gw, out float y)
+        {
+            y = 0f; float bd = float.MaxValue; Collider hitC = null;
+            foreach (RaycastHit h in Physics.RaycastAll(c + Vector3.up * 3f, Vector3.down, 8f, ~0))
+            {
+                if (h.collider == null || h.collider.isTrigger || (root != null && h.collider.transform.IsChildOf(root.transform)) || Game.UnderPlayer(h.collider.transform)) continue;
+                if (h.distance < bd) { bd = h.distance; y = h.point.y; hitC = h.collider; }
+            }
+            if (hitC == null) return false;
+            Transform g = Gifu();
+            if (g != null && hitC.transform.IsChildOf(g)) return false;
+            return Mathf.Abs(y - gw) < 0.4f;
+        }
+
         static void PriseCamera()
         {
             PlayMakerFSM hf = HandFsm(); Transform cam = PlayerSync.LocalCamera;
