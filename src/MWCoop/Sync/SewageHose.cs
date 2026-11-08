@@ -119,6 +119,8 @@ namespace MWCoop
                 return;
             }
             wasOut = true;
+            // (dossier #55 : chaine posee sans physique ici -- la chaine physique, elle, se tire par un maillon comme dans le jeu)
+            if (Bord && following) { GameObject ph = FireTools.Held(); if (ph != null && ph != end.gameObject && ph.transform.IsChildOf(root.transform)) GiveEnd(ph); }
             bool held = FireTools.Held() == end.gameObject || testHeld;
             if ((mine || held || leading) && Forme) chainIn = null;   // (la forme d'un autre, d'avant : pas pour la prochaine fois qu'on suivra)
             if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) Release(); } Jobs.HoseTakeover(end.transform); }
@@ -217,7 +219,7 @@ namespace MWCoop
                 chainLen = restLen > 1f ? restLen : segs.Length * 0.38f;
                 foreach (Rigidbody r in segs) { if (!r.isKinematic) { r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; } r.isKinematic = true; }   // (le bout aussi : tenu, il suit la main -- son parent -- ; lache, il reste ou il est pose)
                 foreach (Collider c in cols) if (c != null && !(self && c.attachedRigidbody == end)) c.enabled = false;
-                endGrab = false;
+                endGrab = false; rimOn = false; pitAt = 0f;   // (maillons du bord : revus au premier passage, RimLinks)
             }
             // Bout pose par l'autre (pas en main chez lui) : son collisionneur reste allume ici, cinematique, pour que la main du jeu puisse
             // le reprendre. Tout eteint, personne d'autre ne pouvait plus le saisir tant que celui qui mene la GIFU l'envoyait : le
@@ -288,6 +290,62 @@ namespace MWCoop
             }
             if (self) { end.transform.position = ep; end.transform.rotation = eq; }
             IgnoreWells(!self && Jobs.HoseReprise);
+            RimLinks(self ? !held : !remoteHeld);
+        }
+
+        // Dossier #55 (Markos, 08/11 : « le tuyau repose de travers au fond, on n'arrive pas a le saisir »). La main du jeu ne saisit qu'a 1 m
+        // de la camera (PickUp : MousePick rayDistance 1, calques 19/15/9). Bout pose dans une fosse, chez qui le camion n'est qu'une copie
+        // (celui qui l'a lache comme les autres) : il reste cinematique au fond de la cuve, et seuls ses collisionneurs etaient allumes --
+        // ceux des maillons, eteints pendant le suivi. Personne ne pouvait plus reprendre le tuyau ; dans le jeu on saisit un maillon au
+        // bord. Ici : maillons a moins de 2 m du bout saisissables tant que personne ne tient le tuyau et que le bout est sous le sol, et le
+        // maillon que la main prend lui donne le bout (GiveEnd) -- le bout sort de la fosse, comme tire. Le bout n'est pas remonte dans la
+        // cuve : le declencheur de la fosse descend avec le niveau, un bout plus haut arreterait la vidange. [Test] TuyauBord=0 : comme avant.
+        static int bordOn = -1;
+        static bool Bord { get { if (bordOn < 0) bordOn = Config.GetInt("Test", "TuyauBord", 1); return bordOn != 0; } }
+        static bool rimOn, pitLast; static float rimNext, pitAt; static int rimLogs, giveLogs;
+        static bool EndInPit()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < pitAt) return pitLast;
+            pitAt = now + 0.5f;
+            float g = GroundUnder(end.transform.position + Vector3.up * 3f);
+            pitLast = g > float.MinValue && end.transform.position.y < g - 0.3f;
+            return pitLast;
+        }
+        static void RimLinks(bool laid)
+        {
+            bool rim = Bord && laid && cols != null && EndInPit();
+            float now = Time.realtimeSinceStartup;
+            if (rim == rimOn && (!rim || now < rimNext)) return;
+            rimOn = rim; rimNext = now + 0.5f;
+            Vector3 e = end.transform.position;
+            int n = 0;
+            foreach (Collider c in cols)
+            {
+                if (c == null) continue;
+                Rigidbody rb = c.GetComponentInParent<Rigidbody>();
+                if (rb == null || rb == end) continue;
+                Vector3 d = rb.position - e; d.y = 0f;
+                bool on = rim && d.sqrMagnitude < 4f;
+                if (c.enabled != on) c.enabled = on;
+                if (on) n++;
+            }
+            if (rim && rimLogs++ < 6) Log.Info("tuyau de la GIFU : bout dans une fosse, " + n + " collisionneur(s) de maillon du bord saisissables");
+        }
+        // Maillon pris par la main du jeu (« Ragdoll picked » : joint de la main relie a son corps) : elle tient le bout a sa place -- bout amene
+        // la ou etait le maillon, joint relie au bout, PickedObject = le bout ; la suite (tenu ici, HandFollow, reprise) est celle du bout.
+        static void GiveEnd(GameObject link)
+        {
+            PlayMakerFSM hf = HandFsm();
+            FsmGameObject po = hf != null ? hf.FsmVariables.FindFsmGameObject("PickedObject") : null;
+            if (po == null || po.Value != link) return;
+            Vector3 p = link.transform.position;
+            end.transform.position = p; end.position = p;
+            if (!end.isKinematic) { end.velocity = Vector3.zero; end.angularVelocity = Vector3.zero; }
+            FixedJoint j = hf.GetComponent<FixedJoint>();
+            if (j != null) j.connectedBody = end;
+            po.Value = end.gameObject;
+            if (giveLogs++ < 10) Log.Info("tuyau de la GIFU : maillon " + link.name + " saisi, la main tient le bout");
         }
 
         // Bout tenu ici sur une copie du camion (dossier #50, 06/11 : « chez l'hote le tuyau ne se prend pas ») : les maillons portent le tag RAGDOLL, la main du jeu les
@@ -821,6 +879,66 @@ namespace MWCoop
         // clic n'est pas rejoue. TuyauPriseSuite : temps:h|g:p|d;... (p prend, d lache).
         static bool Prise { get { return Config.GetInt("Test", "TuyauPrise", 0) != 0; } }
         static bool pFoto, pHeure; static int pFotoN; static float pPose; static float walkUntil, walkLog, pActAt; static Transform walkT; static Vector3 walkP0, walkDir; static string pAct; static int priseStep, pIdx; static float pLog, pAfter; static string[] pSeq;
+        // (dossier #55, essai -- TuyauPriseSuite, avec TuyauDansFosse=1 TuyauVidange=1 : la vraie fosse) f : le bout pose ici est mis au fond de
+        // la cuve, comme lache au-dessus de l'ouverture ; b : ce joueur va au bord de la fosse (TuyauBordDist m, cote camion) et s'accroupit ;
+        // c : clic depuis SA camera avec la portee de la main du jeu (1 m) -- le collisionneur du tuyau le plus proche, s'il est a portee et
+        // que le rayon y arrive, est donne a la main comme par MousePick ; sinon « IMPOSSIBLE ».
+        static void PriseFosse()
+        {
+            if (wellGo == null) { Log.Info("autotest : tuyau, FOSSE : pas de fosse (TuyauDansFosse=1 TuyauVidange=1)"); return; }
+            Vector3 w = wellGo.transform.position;
+            end.transform.position = w;
+            if (following && selfMode) { Ground(); dropPos = end.transform.position; dropRot = end.transform.rotation; dropSet = true; }
+            else { end.position = w; if (!end.isKinematic) end.velocity = Vector3.zero; }
+            float g = GroundUnder(end.transform.position + Vector3.up * 3f);
+            Log.Info("autotest : tuyau, FOSSE " + (Session.IsHost ? "hote" : "invite") + " : bout mis dans " + Recon.Path(wellGo.transform) + ", a "
+                     + (g > float.MinValue ? (g - end.transform.position.y).ToString("F2") : "?") + " m sous le sol, " + Role);
+        }
+        static void PriseBord()
+        {
+            GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+            if (cc == null) return;
+            Vector3 w = wellGo != null ? wellGo.transform.position : end.transform.position;
+            Transform gq = Gifu(); Vector3 toward = gq != null ? gq.position - w : Vector3.right; toward.y = 0f; toward = toward.sqrMagnitude > 0.01f ? toward.normalized : Vector3.right;
+            Vector3 q = w + toward * Config.GetFloat("Test", "TuyauBordDist", 0.8f); q.y = GroundY(q + Vector3.up * 3f) + 1f;
+            cc.enabled = false; pl.transform.position = q; cc.enabled = true;
+            PlayMakerFSM cf = Game.FindFsm("PLAYER", "Crouch");
+            if (cf != null) Game.SetState(cf, "Move down 2");
+            Log.Info("autotest : tuyau, BORD " + (Session.IsHost ? "hote" : "invite") + " : au bord de la fosse en " + q.ToString("F1") + ", accroupi -> " + (cf != null ? cf.ActiveStateName : "?"));
+        }
+        static void PriseCamera()
+        {
+            PlayMakerFSM hf = HandFsm(); Transform cam = PlayerSync.LocalCamera;
+            if (hf == null || cam == null || cols == null) { Log.Info("autotest : tuyau, CLIC camera : pas de main ou de camera"); return; }
+            Vector3 eye = cam.position; Collider best = null; float bd = float.MaxValue;
+            int mask = (1 << 19) | (1 << 15) | (1 << 9);
+            foreach (Collider c in cols)
+            {
+                if (c == null || !c.enabled || !c.gameObject.activeInHierarchy || (mask & (1 << c.gameObject.layer)) == 0) continue;
+                float d = (c.ClosestPointOnBounds(eye) - eye).magnitude;
+                if (d < bd) { bd = d; best = c; }
+            }
+            float gy = GroundUnder(eye);
+            string where = "camera a " + (gy > float.MinValue ? (eye.y - gy).ToString("F2") : "?") + " m du sol";
+            string who = Session.IsHost ? "hote" : "invite";
+            if (best == null || bd > 1f)
+            {
+                Log.Info("autotest : tuyau, CLIC camera IMPOSSIBLE " + who + " : collisionneur du tuyau le plus proche a " + (best != null ? bd.ToString("F2") + " m" : "aucun") + " (portee 1 m), " + where + ", " + PriseState());
+                return;
+            }
+            RaycastHit hit;
+            Vector3 to = best.ClosestPointOnBounds(eye);
+            bool ok = Physics.Raycast(eye, (to - eye).normalized, out hit, 1.05f, mask);
+            if (!ok || hit.collider.attachedRigidbody == null || !hit.collider.transform.IsChildOf(root.transform))
+            {
+                Log.Info("autotest : tuyau, CLIC camera " + who + " : rayon arrete par " + (ok ? Recon.Path(hit.collider.transform) : "rien") + ", " + where);
+                return;
+            }
+            FsmGameObject rh = hf.FsmVariables.FindFsmGameObject("RaycastHitObject");
+            if (rh != null) { rh.Value = hit.collider.gameObject; Game.SetState(hf, "State 1"); }
+            Log.Info("autotest : tuyau, CLIC camera " + who + " -> " + hit.collider.name + (hit.collider.attachedRigidbody == end ? " (le bout)" : " (maillon)") + " a " + hit.distance.ToString("F2") + " m, " + where);
+            pAfter = Time.realtimeSinceStartup + 0.5f;
+        }
         static PlayMakerFSM HandFsm() { GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand"); return hg != null ? Game.FsmOn(hg, "PickUp") : null; }
         static string PriseState()
         {
@@ -885,6 +1003,9 @@ namespace MWCoop
                 if (e[2] == "a") { GameObject ap = Game.PlayerGo; if (ap != null) PriseGo(ap); continue; }
                 if (e[2] == "v") { Log.Info("autotest : tuyau, a cote du volant -> " + VehicleSync.TestEnter(TestCar, false)); pAct = "au volant"; pActAt = now + 2f; continue; }
                 if (e[2] == "x") { Log.Info("autotest : tuyau, sort du volant -> " + VehicleSync.TestExit(TestCar)); continue; }
+                if (e[2] == "f") { PriseFosse(); continue; }
+                if (e[2] == "b") { PriseBord(); continue; }
+                if (e[2] == "c") { PriseCamera(); continue; }
                 if (e[2] == "p") PriseClick();
                 else { PlayMakerFSM hf = HandFsm(); if (hf != null) hf.SendEvent("PROCEED Drop"); if (Config.GetInt("Test", "TuyauPhoto", 0) != 0) pPose = now + 2f; Log.Info("autotest : tuyau, LACHE " + (Session.IsHost ? "hote" : "invite") + " -> main " + (hf != null ? hf.ActiveStateName : "?")); pAfter = now + 0.5f; }
             }
