@@ -30,6 +30,7 @@ namespace MWCoop
         {
             public Transform K; public string Key;
             public Transform Speaker;                 // haut-parleur ou le jeu met les canaux de ce poste
+            public bool SpeakerGuess;                 // (trouve par son nom sous le poste, pas par un automate : revu au releve suivant)
             public bool On; public float OnAt = -10f, OffAt = -10f;
             public bool ByHost; public float HostSeen = -10f;   // allume chez l'hote (instantane @postes), pas ici
             public Snap Flags; public bool HasFlags;
@@ -93,9 +94,9 @@ namespace MWCoop
 
         // Automates qui pointent vers le jeu de canaux : etats « allume » (SetParent vers un haut-parleur de leur poste) et « eteint »
         // (OFF a son Fetch). Toutes les 10 s : voitures et pieces apparues, automates demarres depuis (etats pas encore charges).
-        static void ScanCtrls(float now)
+        static bool ScanCtrls(float now)
         {
-            if (now < nextCtrlScan || realT == null) return;
+            if (now < nextCtrlScan || realT == null) return false;
             nextCtrlScan = now + 10f;
             GameObject rc = realT.gameObject;
             int added = 0;
@@ -156,6 +157,7 @@ namespace MWCoop
                           .Append(", eteint ").Append(string.Join("/", c.OffStates.ToArray())).Append(')');
                 Log.Info(sb.ToString());
             }
+            return true;
         }
 
         static bool Hook(Ctrl c, string state, int kind)
@@ -188,7 +190,7 @@ namespace MWCoop
                 // (en tete de l'etat : le SetParent du jeu suit ; deux postes allumes dans la meme image ont chacun leur « allume »)
                 if (!p.On) { p.OnAt = now; if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " allume (" + c.F.FsmName + " « " + state + " »)"); }
                 p.On = true; p.ByHost = false;
-                if (p.Speaker == null) p.Speaker = SpeakerOf(k);
+                if (p.Speaker == null || p.SpeakerGuess) p.Speaker = SpeakerOf(k, out p.SpeakerGuess);
             }
             else if (kind == 1)
             {
@@ -216,11 +218,15 @@ namespace MWCoop
         static void MultiWatch(float now)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            ScanCtrls(now);
+            bool rescanned = ScanCtrls(now);
             StrayOff(now);
             KeepParent(now);
             Snap cur = Take();
             Poste holder = Off(cur) || !cur.On || cur.Parent == null ? null : PosteOf(KeyOf(cur.Parent), true);
+            // (radio portable sans piles allumee : le jeu y met quand meme le vrai jeu de canaux, volume a 0 -- tenue pour allumee puis
+            // eteinte toutes les 0,6 s, sans fin, chez tous les joueurs ; les 200 lignes du journal radio y passaient en une minute,
+            // essais de [MWC] 08/11. Elle n'est pas un poste allume.)
+            if (holder != null && holder.K.name == Boombox && !BoomboxAlive(cur.Parent)) holder = null;
             if (holder != null)
             {
                 if (!holder.On && now - holder.OffAt > 0.6f)
@@ -228,7 +234,7 @@ namespace MWCoop
                     holder.On = true; holder.OnAt = now;
                     if (postLogs++ < 200) Log.Info("radio : " + holder.K.name + " allume (le vrai jeu de canaux y joue)");
                 }
-                holder.Flags = cur; holder.HasFlags = true; holder.Speaker = cur.Parent; holder.ByHost = false;
+                holder.Flags = cur; holder.HasFlags = true; holder.Speaker = cur.Parent; holder.SpeakerGuess = false; holder.ByHost = false;
             }
             Camera cam = Game.MainCam;
             Vector3 ear = cam != null ? cam.transform.position : Game.PlayerT != null ? Game.PlayerT.position : Vector3.zero;
@@ -240,7 +246,14 @@ namespace MWCoop
                     p.On = false; p.OffAt = now;
                     if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " eteint (piles ou arret)");
                 }
-                if ((p.On || p.ByHost) && p.Speaker == null) p.Speaker = SpeakerOf(p.K);
+                // (haut-parleur cherche ici, apres le releve des automates -- pas a l'arrivee de @postes, avant le premier releve : il
+                // etait pris par son nom sous le poste ; revu tant qu'aucun automate ne l'a donne, et la copie suit)
+                if ((p.On || p.ByHost) && (p.Speaker == null || (p.SpeakerGuess && rescanned))) p.Speaker = SpeakerOf(p.K, out p.SpeakerGuess);
+                if (p.G != null && p.G.Go != null && p.Speaker != null && p.G.Go.transform.parent != p.Speaker)
+                {
+                    p.G.Go.transform.parent = p.Speaker; p.G.Go.transform.localPosition = Vector3.zero; p.G.Go.transform.localRotation = Quaternion.identity;
+                    if (postLogs++ < 200) Log.Info("radio : copie de " + p.K.name + " portee par " + Recon.Path(p.Speaker));
+                }
                 bool want = (p.On || p.ByHost) && p != holder && p.Speaker != null;
                 if (want && p.G == null) p.G = MakePostGhost(p);
                 else if (!want && p.G != null) KillPost(p, p == holder ? "reprend le vrai jeu de canaux" : "eteint");
@@ -351,8 +364,7 @@ namespace MWCoop
                 if (p.On || p.ByHost) continue;
                 p.ByHost = true;
                 if ((fl & 8) == 0) { p.Flags = new Snap { M1 = (fl & 1) != 0, MF = (fl & 2) != 0, St = (fl & 4) != 0, On = true }; p.HasFlags = true; }
-                if (p.Speaker == null) p.Speaker = SpeakerOf(k);
-                if (postLogs++ < 200) Log.Info("radio : " + k.name + " allume chez l'hote" + (p.Speaker != null ? "" : " (haut-parleur introuvable ici)"));
+                if (postLogs++ < 200) Log.Info("radio : " + k.name + " allume chez l'hote");   // (haut-parleur : MultiWatch, apres le releve des automates)
             }
         }
 
@@ -375,6 +387,9 @@ namespace MWCoop
             }
         }
 
+        // Poste d'une cle recue. Game.FindAny coupe le chemin au premier « / » : « GIFU(750/450psi) » (les deux jeux) n'etait jamais
+        // trouve -- la GIFU de l'hote jamais jouee chez un arrivant, et sa copie arretee 6 s apres (« eteint chez l'hote ») alors que
+        // l'hote l'entendait encore (essais de [MWC], 08/11). D'abord les postes deja connus, les automates releves et les voitures.
         static Transform PostKeyFromWire(string key)
         {
             if (key == Boombox)
@@ -382,15 +397,32 @@ namespace MWCoop
                 foreach (Ctrl c in ctrls.Values) if (c.F != null && c.F.name.Length > 0) { Transform b = BoomboxOf(c.F.transform); if (b != null) return b; }
                 return null;
             }
+            foreach (Poste p in postes.Values) if (p.K != null && p.Key == key) return p.K;
+            foreach (Ctrl c in ctrls.Values)
+            {
+                if (c.F == null) continue;
+                Transform k = KeyOf(c.F.transform);
+                if (k != null && SetKey(k) == key) return k;
+            }
+            for (int i = 0; i < VehicleSync.LocalCount; i++)
+            {
+                Rigidbody rb = VehicleSync.LocalBody(i);
+                Transform k = rb != null ? VehicleSync.CarRoot(rb.transform) : null;
+                if (k != null && SetKey(k) == key) return k;
+            }
             GameObject g = Game.FindAny(key);
             return g != null ? g.transform : null;
         }
 
-        static Transform SpeakerOf(Transform k)
+        // Haut-parleur d'un poste : celui ou ses automates mettent le jeu de canaux ; a defaut, le premier qui en porte le nom sous le
+        // poste (guess : revu au releve suivant des automates).
+        static Transform SpeakerOf(Transform k, out bool guess)
         {
+            guess = false;
             foreach (Ctrl c in ctrls.Values)
                 if (!c.Bad && c.F != null && KeyOf(c.F.transform) == k)
                     foreach (FsmGameObject v in c.Parents) if (v != null && v.Value != null) return v.Value.transform;
+            guess = true;
             Transform best = null;
             foreach (Transform t in k.GetComponentsInChildren<Transform>(true))
             {

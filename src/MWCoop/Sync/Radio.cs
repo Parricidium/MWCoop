@@ -412,8 +412,15 @@ namespace MWCoop
             if (fetch.enabled != s.On) fetch.enabled = s.On;
         }
 
-        // Poste d'un automate : la radio portable qui le porte, sinon sa voiture, sinon sa racine (chaine de la maison).
-        static Transform KeyOf(Transform t) { return BoomboxOf(t) ?? VehicleSync.CarRoot(t) ?? t.root; }
+        // Poste d'un automate : la radio portable qui le porte, sinon sa voiture, sinon la radio posee qui le porte (« radio(Clone) » :
+        // usine, prison), sinon sa racine (chaine de la maison). (Sans la radio posee, celle de l'usine de My Winter Car avait pour poste
+        // la racine JOBS, comme le taxi : chez un arrivant, sa copie jouait dans le haut-parleur du taxi -- essais de [MWC], 08/11.)
+        static Transform KeyOf(Transform t) { return BoomboxOf(t) ?? VehicleSync.CarRoot(t) ?? RadioUnitOf(t) ?? t.root; }
+        static Transform RadioUnitOf(Transform t)
+        {
+            for (Transform p = t; p != null; p = p.parent) if (p.name.StartsWith("radio(", System.StringComparison.Ordinal)) return p;
+            return null;
+        }
 
         const string Boombox = "radio(itemx)";
         static Transform BoomboxOf(Transform t)
