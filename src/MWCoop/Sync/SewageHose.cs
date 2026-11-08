@@ -955,9 +955,23 @@ namespace MWCoop
             float gy = GroundUnder(eye);
             string where = "camera a " + (gy > float.MinValue ? (eye.y - gy).ToString("F2") : "?") + " m du sol";
             string who = Session.IsHost ? "hote" : "invite";
+            // ([Test] TuyauClicConditions=1, consigne de [Directives] pour y11/y12 : clic seulement si le bout est vraiment au fond -- plus de 0,3 m
+            // sous le sol alentour, releve comme EndInPit -- et hors de portee de la main -- plus d'1 m de la camera ; sinon l'essai est abandonne)
+            Vector3 ep = end.transform.position;
+            float gAround = GroundUnder(ep + Vector3.up * 3f);
+            foreach (Vector3 o in pitAround) { float gi = GroundUnder(ep + o + Vector3.up * 3f); if (gi > gAround) gAround = gi; }
+            float depth = gAround > float.MinValue ? gAround - ep.y : float.NaN;
+            float endDist = float.MaxValue;
+            foreach (Collider ec in end.GetComponents<Collider>()) { float de = (ec.ClosestPointOnBounds(eye) - eye).magnitude; if (de < endDist) endDist = de; }
+            string cond = "bout a " + depth.ToString("F2") + " m sous le sol alentour (> 0,3 voulu), a " + endDist.ToString("F2") + " m de la camera (> 1 voulu)";
+            if (Config.GetInt("Test", "TuyauClicConditions", 0) != 0)
+            {
+                if (!(depth > 0.3f) || endDist <= 1f) { Log.Info("autotest : tuyau, CLIC camera ABANDON " + who + " : " + cond + ", " + where + ", " + PriseState()); return; }
+                Log.Info("autotest : tuyau, CLIC camera, conditions remplies " + who + " : " + cond);
+            }
             if (best == null || bd > 1f)
             {
-                Log.Info("autotest : tuyau, CLIC camera IMPOSSIBLE " + who + " : collisionneur du tuyau le plus proche a " + (best != null ? bd.ToString("F2") + " m" : "aucun") + " (portee 1 m), " + where + ", " + PriseState());
+                Log.Info("autotest : tuyau, CLIC camera IMPOSSIBLE " + who + " : collisionneur du tuyau le plus proche a " + (best != null ? bd.ToString("F2") + " m" : "aucun") + " (portee 1 m), " + where + ", " + cond + ", " + PriseState());
                 return;
             }
             RaycastHit hit;
