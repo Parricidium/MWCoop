@@ -742,16 +742,34 @@ namespace MWCoop
 
         static void Leave()
         {
+            Seat was = current;
             current = null;
             beltOn = false;
             BlockHandle(false);
             BeltHint(null);
             Drop(null);
             if (leanAnim != null) LeanPoseRest();
+            string where = "";
             if (player != null)
             {
                 player.parent = null;                   // sur place, dans l'habitacle
                 player.rotation = Quaternion.Euler(0f, player.eulerAngles.y, 0f);
+                // Dossier #54 (My Summer Car 1.15.102, 08/11 : « en sortant d'une place passager avec ENTREE, on se retrouve debout sur le
+                // toit », toujours) : dans la SATSUMA le toit est a 0,70 m au-dessus des pieds du passager ; « Get out » du jeu remonte la
+                // camera a 1,40 m, et accroupi elle reste a 0,85 m -- au-dessus du pavillon (le corps, 0,5 m, reste dans l'habitacle). Sous un
+                // toit plus bas que des yeux debout, on descend donc DEHORS, a cote de la portiere de sa place (cote libre, sinon l'autre),
+                // comme le conducteur ; sans place dehors, sur place comme avant. Voitures ouvertes, ridelles, cabines hautes : sur place.
+                // [Test] SortieDehors=0 : comme avant.
+                if (was != null && was.CarT != null && !was.Bed && Config.GetInt("Test", "SortieDehors", 1) != 0)
+                {
+                    float roof = RoofHeight();
+                    if (roof < StandEye)
+                    {
+                        Vector3 outPt; string side;
+                        if (ExitBeside(was.CarT, out outPt, out side)) { player.position = outPt; where = "dehors, cote " + side + " (toit a " + roof.ToString("F2") + " m)"; }
+                        else where = "toit a " + roof.ToString("F2") + " m, pas de place dehors : dans l'habitacle";
+                    }
+                }
             }
             InCar(false);
             if (controller != null) controller.enabled = true;
@@ -761,8 +779,94 @@ namespace MWCoop
             pivot = null;
             LeanRemove();
             crouchCheckAt = Time.realtimeSinceStartup + 0.6f;
-            Log.Info("passager : sorti");
+            Log.Info("passager : sorti" + (where.Length > 0 ? " (" + where + ")" : ""));
             SendSeat("", -1, Vector3.zero);
+        }
+
+        // Yeux d'un joueur debout au-dessus de ses pieds : 1,40 m mesures sur My Summer Car (« Get out » du jeu, essais du 08/11), 1,5 m avec la marge.
+        const float StandEye = 1.5f;
+
+        // Hauteur, au-dessus des pieds du joueur, du premier collisionneur de voiture (toit) ; tres grand s'il n'y en a pas a moins de 2,5 m.
+        static float RoofHeight()
+        {
+            float best = float.MaxValue;
+            foreach (RaycastHit h in Physics.RaycastAll(player.position, Vector3.up, 2.5f))
+                if (h.collider != null && !h.collider.isTrigger && h.collider.transform.root != player.root && VehicleSync.CarRoot(h.collider.transform) != null && h.distance < best) best = h.distance;
+            return best;
+        }
+
+        // Point a cote de la voiture, a hauteur de la place : du cote de la place d'abord, puis de l'autre ; sur le premier sol sous la place
+        // (rayon parti 1 m au-dessus d'elle, donc sous un plafond de garage), libre sur la hauteur d'un joueur debout.
+        // Essais du 08/11 : parti 2,5 m au-dessus de la voiture, le rayon posait le joueur SUR le toit du garage (CORRIS et SATSUMA garees
+        // dedans). Et le transform du joueur est au MILIEU de sa capsule (h 0,5 m, centre 0) : pose a sol + 0,05 m, la capsule etait a
+        // 0,20 m dans le sol, le controleur l'en sortait d'un coup, environ 20 m/s vers le haut -- joueur lance a 8-18 m.
+        static bool ExitBeside(Transform car, out Vector3 pt, out string side)
+        {
+            pt = Vector3.zero; side = "";
+            Vector3 local = car.InverseTransformPoint(player.position);
+            float half = CarHalfWidth(car);
+            float lift = controller != null ? Mathf.Max(controller.height * 0.5f - controller.center.y, 0f) : 0.25f;   // (transform -> bas de la capsule)
+            int first = local.x >= 0f ? 1 : -1;
+            foreach (int sd in new[] { first, -first })
+            {
+                Vector3 top = car.TransformPoint(new Vector3(sd * (half + 0.45f), local.y, local.z)) + Vector3.up;
+                float gy = float.MinValue;
+                foreach (RaycastHit h in Physics.RaycastAll(top, Vector3.down, 3f))
+                {
+                    if (h.collider == null || h.collider.isTrigger || h.collider.transform.root == player.root || h.collider.transform.IsChildOf(car)) continue;
+                    if (h.point.y > gy) gy = h.point.y;
+                }
+                if (gy == float.MinValue) continue;   // (pas de sol a moins de 2 m sous la place : fosse, bord de pont)
+                Vector3 ground = new Vector3(top.x, gy, top.z);
+                if (!Free(ground)) continue;
+                pt = ground + Vector3.up * (lift + 0.05f); side = sd > 0 ? "droit" : "gauche";
+                return true;
+            }
+            return false;
+        }
+
+        static float CarHalfWidth(Transform car)
+        {
+            float m = 0.6f;
+            foreach (Collider c in car.GetComponentsInChildren<Collider>())
+            {
+                if (c == null || c.isTrigger || !c.enabled) continue;
+                Bounds b = c.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 w = new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z);
+                    float x = Mathf.Abs(car.InverseTransformPoint(w).x);
+                    if (x > m) m = x;
+                }
+            }
+            return Mathf.Min(m, 2.5f);
+        }
+
+        // Rien de solide de 0,05 a 1,75 m au-dessus de ce sol (capsule et tete d'un joueur debout).
+        static bool Free(Vector3 ground)
+        {
+            foreach (float y in new[] { 0.35f, 0.9f, 1.45f })
+                foreach (Collider c in Physics.OverlapSphere(ground + Vector3.up * y, 0.3f))
+                    if (c != null && !c.isTrigger && c.transform.root != player.root) return false;
+            return true;
+        }
+
+        // Essais (dossier #54) : hauteur du premier collisionneur de voiture au-dessus des pieds (« - » : aucun a moins de 2,5 m) ; camera sous ce toit ou au-dessus.
+        static string RoofAbove()
+        {
+            float best = float.MaxValue;
+            foreach (RaycastHit h in Physics.RaycastAll(player.position, Vector3.up, 2.5f))
+                if (h.collider != null && !h.collider.isTrigger && h.collider.transform.root != player.root && VehicleSync.CarRoot(h.collider.transform) != null && h.distance < best) best = h.distance;
+            return best == float.MaxValue ? "-" : best.ToString("F2") + " m";
+        }
+        static string CamInside()
+        {
+            if (cam == null) return "?";
+            float best = float.MaxValue;
+            foreach (RaycastHit h in Physics.RaycastAll(player.position, Vector3.up, 2.5f))
+                if (h.collider != null && !h.collider.isTrigger && h.collider.transform.root != player.root && VehicleSync.CarRoot(h.collider.transform) != null && h.distance < best) best = h.distance;
+            if (best == float.MaxValue) return "sans toit";
+            return cam.position.y - player.position.y < best ? "sous le toit" : "AU-DESSUS DU TOIT";
         }
 
         static bool UnderRoof()
@@ -2078,6 +2182,16 @@ namespace MWCoop
         }
 
         public static string TestLeave() { if (current == null) return "pas assis"; Leave(); return "sorti"; }
+        // Essais (dossier #54, sortie sur le toit) : joueur dans le repere de la voiture, controleur, etat Crouch, toit au-dessus.
+        public static string TestProbe(Transform car)
+        {
+            if (!FindPlayer() || car == null) return "pas de joueur";
+            return "local " + car.InverseTransformPoint(player.position).ToString("F3") + ", parent " + (player.parent != null ? player.parent.name : "aucun")
+                   + ", cc " + (controller == null ? "-" : (controller.enabled ? "allume" : "coupe") + " h " + controller.height.ToString("F2") + " centre " + controller.center.ToString("F2")
+                   + (controller.enabled && controller.isGrounded ? " au sol" : ""))
+                   + ", Crouch " + (crouch != null ? crouch.ActiveStateName : "?") + ", sous le toit " + UnderRoof()
+                   + ", camera " + (cam != null ? (cam.position.y - player.position.y).ToString("F2") : "?") + " m au-dessus des pieds, toit a " + RoofAbove() + ", camera " + CamInside();
+        }
 
         // Essais : attache / detache la ceinture du passager (comme un clic sur la boucle).
         // Essais : ce que voit la ceinture du passager avant depuis la camera (repere de la voiture) : camera, ceinture rangee

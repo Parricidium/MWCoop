@@ -1964,6 +1964,7 @@ namespace MWCoop
             if (d > 25f && serLog == 0) { serLog = 1; Log.Info("autotest : serrage " + Fluids.TestScrew(sc)); }
         }
 
+        static float psProbeAt;
         // [Test] PassagerSortie=s : descendre a s secondes, penche ou pas (PassagerPenche), puis se rasseoir 6 s apres : a sa place, droit, jamais a travers la portiere.
         static void PassagerSortieTest(string mode, float t)
         {
@@ -1973,7 +1974,9 @@ namespace MWCoop
             Rigidbody b = VehicleSync.Body(car);
             Transform pl = Game.PlayerT;
             if (b == null || pl == null) return;
-            if (t > ps && step == 1) { step = 2; Log.Info("autotest : passager, avant de descendre " + b.transform.InverseTransformPoint(pl.position).ToString("F3") + " ; " + Seats.TestLeave()); }
+            if (t > ps && step == 1) { step = 2; Log.Info("autotest : passager, avant de descendre " + b.transform.InverseTransformPoint(pl.position).ToString("F3") + " ; " + Seats.TestProbe(b.transform) + " ; " + Seats.TestLeave()); psProbeAt = t; }
+            // (dossier #54 : toutes les 0,2 s pendant 5 s apres la sortie -- position, controleur, Crouch, toit)
+            if (step >= 2 && psProbeAt > 0f && t >= psProbeAt && t < ps + 5f) { psProbeAt = t + 0.2f; Log.Info("autotest : passager, sortie +" + (t - ps).ToString("F1") + " s : " + Seats.TestProbe(b.transform)); }
             if (t > ps + 1f && step == 2) { step = 3; Log.Info("autotest : passager, descendu " + b.transform.InverseTransformPoint(pl.position).ToString("F3") + ", parent " + (pl.parent != null ? pl.parent.name : "aucun") + ", haut " + pl.up.ToString("F2")); }
             if (t > ps + 6f && step == 3) { step = 4; Log.Info("autotest : passager, rassis : " + Seats.TestSit(car, Config.GetInt("Test", "TestPlace", 0))); }
         }
