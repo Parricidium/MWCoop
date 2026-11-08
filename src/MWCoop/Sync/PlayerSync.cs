@@ -62,6 +62,8 @@ namespace MWCoop
             return true;
         }
 
+        static readonly Dictionary<int, float> createRetry = new Dictionary<int, float>();   // avatar pas cree : prochain essai
+
         public static void Update()
         {
             if (!Session.Active) return;
@@ -73,6 +75,7 @@ namespace MWCoop
                 SendLocal();
             }
             if (!InGame) return;
+            Looks.WatchTick(now);
             foreach (PlayerInfo pi in Session.Players.Values)
             {
                 if (pi.Local) continue;
@@ -81,7 +84,22 @@ namespace MWCoop
                 if (!avatars.TryGetValue(pi.Id, out a))
                 {
                     if (!want) continue;
-                    a = Avatar.Create(pi);
+                    if (Avatar.RawBodies) a = Avatar.Create(pi);
+                    else
+                    {
+                        // Un avatar qui ne se construit pas ne bloque plus les joueurs suivants (l'exception sortait de la boucle :
+                        // plus aucun d'eux n'etait cree ni bouge ; rapport « 29.30 », 08/11) : nouvel essai dans 5 s.
+                        float retry;
+                        if (createRetry.TryGetValue(pi.Id, out retry) && now < retry) continue;
+                        try { a = Avatar.Create(pi); }
+                        catch (System.Exception e)
+                        {
+                            createRetry[pi.Id] = now + 5f;
+                            Log.Warn("avatar de " + pi.Name + " (#" + pi.Id + ") pas cree : " + e.GetType().Name + " (" + e.Message + ") ; nouvel essai dans 5 s");
+                            continue;
+                        }
+                        createRetry.Remove(pi.Id);
+                    }
                     if (a == null) continue;
                     avatars[pi.Id] = a;
                 }

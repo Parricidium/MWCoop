@@ -17,6 +17,7 @@ namespace MWCoop
         public static bool Active;
         static Avatar me;
         static string meSkin;
+        static bool meWarned;
         static Camera cam, handCam;
         static bool handCamWas; static int handMaskWas = -1;
         static Vector3 eye, eyeLocal; static Quaternion eyeLocalRot; static bool moved;
@@ -82,7 +83,13 @@ namespace MWCoop
             if (me != null && (me.Root == null || meSkin != pi.Skin && me.Body != Looks.Parse(pi.Skin).Body)) { me.Destroy(); me = null; }
             if (me == null)
             {
-                me = Avatar.Create(pi);
+                // (un avatar qui ne se construit pas : pas de vue a la troisieme personne cette fois, un avertissement -- relecture [MWC], 08/11)
+                if (Avatar.RawBodies) me = Avatar.Create(pi);
+                else
+                {
+                    try { me = Avatar.Create(pi); }
+                    catch (System.Exception e) { me = null; if (!meWarned) { meWarned = true; Log.Warn("vue (troisieme personne) : mon avatar n'a pas pu etre construit (" + e.GetType().Name + " : " + e.Message + ")"); } return; }
+                }
                 if (me == null) return;
                 meSkin = pi.Skin;
             }

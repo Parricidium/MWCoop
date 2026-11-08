@@ -151,6 +151,10 @@ namespace MWCoop
         // copie du PNJ, la grand-mere restait assise en l'air, le corps fin marchait sur place avec les clips de son PNJ),
         // avec le maillage de ce corps (os remis dans l'ordre de SON maillage, par leur nom) et ses longueurs d'os (prises
         // de ses poses de liaison, ramenees au repere des os de base) ; jambes plus courtes : modele descendu d'autant.
+        static readonly HashSet<string> bodyFailed = new HashSet<string>();   // corps qui n'ont pas pu etre construits (averti une fois)
+        static int rawBodies = -1;
+        public static bool RawBodies { get { if (rawBodies < 0) rawBodies = Config.GetInt("Test", "CorpsTriBrut", 0) != 0 ? 1 : 0; return rawBodies == 1; } }
+
         static GameObject TemplateFor(string key)
         {
             if (!BuildTemplate()) return null;
@@ -170,15 +174,24 @@ namespace MWCoop
                 // un PNJ de ce corps dont tous les os existent chez nous (essai sur une copie du rendu de base a chaque fois)
                 why = "aucun PNJ de ce corps compatible";
                 var tried = new List<SkinnedMeshRenderer>(b.All);
-                tried.Sort((x, y) => string.CompareOrdinal(Recon.Path(x.transform), Recon.Path(y.transform)));   // (meme choix chez tous)
-                foreach (SkinnedMeshRenderer cand in tried)
+                // PNJ detruits depuis le releve des corps (Looks.Scan, fait une fois) ecartes avant le tri : sa comparaison lit leur
+                // transform, qui levait (« Comparison threw an exception ») ; rien n'etait garde, ce corps ne se construisait plus
+                // jamais et le joueur qui l'avait choisi restait invisible chez les invites (rapport « 29.30 », 08/11 : corps
+                // 1712-48). [Test] CorpsTriBrut=1 : comme avant.
+                if (!RawBodies) { int dead = tried.RemoveAll(s => s == null); if (dead > 0) Log.Info("modele d'avatar " + key + " : " + dead + " PNJ de ce corps detruit(s) depuis le releve des corps, ecarte(s)"); }
+                try
                 {
-                    if (cand == null) continue;
-                    string w = Compatible(smr, cand);
-                    if (w != null) { why = w; continue; }
-                    why = Reshape(smr, cand, key);
-                    if (why == null) break;
+                    tried.Sort((x, y) => string.CompareOrdinal(Recon.Path(x.transform), Recon.Path(y.transform)));   // (meme choix chez tous)
+                    foreach (SkinnedMeshRenderer cand in tried)
+                    {
+                        if (cand == null) continue;
+                        string w = Compatible(smr, cand);
+                        if (w != null) { why = w; continue; }
+                        why = Reshape(smr, cand, key);
+                        if (why == null) break;
+                    }
                 }
+                catch { Object.Destroy(t); throw; }   // (la copie du modele ne reste pas : Build se replie sur le corps de base)
             }
             if (why != null)
             {
@@ -304,7 +317,8 @@ namespace MWCoop
         {
             if (!BuildTemplate()) return null;
             var a = new Avatar { Player = pi };
-            a.Build("MWCoop-Joueur-" + pi.Id, Looks.Parse(pi.Skin).Body);
+            try { a.Build("MWCoop-Joueur-" + pi.Id, Looks.Parse(pi.Skin).Body); }
+            catch { if (a.Root != null) Object.Destroy(a.Root); throw; }   // (rien ne reste a moitie construit : PlayerSync reessaie)
             Log.Info("avatar cree pour " + pi.Name + " (#" + pi.Id + ")");
             return a;
         }
@@ -320,7 +334,20 @@ namespace MWCoop
         {
             Body = bodyKey ?? "";
             Root = new GameObject(name);
-            GameObject ch = (GameObject)Object.Instantiate(TemplateFor(Body) ?? template);
+            // Un corps qui ne se construit pas ne rend plus le joueur invisible : corps de base, un avertissement par corps
+            // (rapport « 29.30 », 08/11 ; [Test] CorpsTriBrut=1 : l'exception sort, comme avant).
+            GameObject tpl = null;
+            if (RawBodies) tpl = TemplateFor(Body);
+            else
+            {
+                try { tpl = TemplateFor(Body); }
+                catch (System.Exception e)
+                {
+                    bodyTemplates[Body] = template;   // (repli fixe pour ce corps : ni nouvel essai a chaque avatar, ni copie perdue -- relecture [MWC])
+                    if (bodyFailed.Add(Body)) Log.Warn("modele d'avatar " + Body + " : " + e.GetType().Name + " (" + e.Message + ") ; corps de base");
+                }
+            }
+            GameObject ch = (GameObject)Object.Instantiate(tpl ?? template);
             ch.name = "Char";
             ch.transform.parent = Root.transform;
             ch.transform.localPosition = charOffset;

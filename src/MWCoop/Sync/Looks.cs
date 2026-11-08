@@ -68,7 +68,8 @@ namespace MWCoop
                 Shirt = CustomFace.Chosen(CustomFace.Shirt) ? CustomFace.MyKeyOf(CustomFace.Shirt) ?? DefaultShirt : Config.Get("Coop", "Apparence", DefaultShirt),
                 Pants = CustomFace.Chosen(CustomFace.Pants) ? CustomFace.MyKeyOf(CustomFace.Pants) ?? "" : Config.Get("Coop", "Pantalon", ""),
                 Face = CustomFace.Chosen(CustomFace.Face) ? CustomFace.MyKeyOf(CustomFace.Face) ?? "" : Config.Get("Coop", "Visage", ""),
-                Body = Config.Get("Coop", "Corps", ""), Hat = Config.Get("Coop", "Chapeau", ""), Glasses = Config.Get("Coop", "Lunettes", ""), Hair = Config.Get("Coop", "Cheveux", "")
+                Body = Config.Get("Test", "TestCorps", "").Length > 0 ? Config.Get("Test", "TestCorps", "") : Config.Get("Coop", "Corps", ""),   // ([Test] TestCorps : corps impose, essais)
+                Hat = Config.Get("Coop", "Chapeau", ""), Glasses = Config.Get("Coop", "Lunettes", ""), Hair = Config.Get("Coop", "Cheveux", "")
             };
             return Compose(l);
         }
@@ -289,6 +290,63 @@ namespace MWCoop
                 Material mm = Avatar.FindMaterial(mn);
                 Texture2D tx = mm != null ? mm.mainTexture as Texture2D : null;
                 if (mm != null) Log.Info("apparences : " + mn + " : shader " + mm.shader.name + ", texture " + (tx != null ? tx.width + "x" + tx.height + " " + tx.format : "?"));
+            }
+            ScanProbe();
+        }
+
+        // Essais (rapport « 29.30 », 08/11 : un PNJ d'un corps detruit apres ce releve, chez l'invite, cassait Avatar.TemplateFor) :
+        // [Test] CorpsSuivi=1 : les PNJ de chaque corps notes au releve (une ligne par corps), puis chacun de ceux detruits depuis
+        // dit au journal (WatchTick, toutes les 2 s) -- nomme le PNJ que le jeu ou le mod detruit.
+        // [Test] PnjCorpsDetruit=<corps> : juste apres le releve, le rendu d'un PNJ actif de ce corps (pas celui qui le represente)
+        // detruit sur-le-champ -- le cas du rapport, a coup sur.
+        static readonly List<SkinnedMeshRenderer> watchSmr = new List<SkinnedMeshRenderer>();
+        static readonly List<string> watchName = new List<string>();
+        static float watchAt, scanAt;
+        static void ScanProbe()
+        {
+            scanAt = Time.realtimeSinceStartup;
+            watchSmr.Clear(); watchName.Clear();
+            if (Config.GetInt("Test", "CorpsSuivi", 0) != 0)
+            {
+                foreach (BodyInfo b in bodies.Values)
+                {
+                    var ps = new List<string>();
+                    foreach (SkinnedMeshRenderer s in b.All)
+                    {
+                        if (s == null) continue;
+                        string p = Recon.Path(s.transform) + (s.gameObject.activeInHierarchy ? "" : " (inactif)");
+                        ps.Add(p);
+                        if (!watchSmr.Contains(s)) { watchSmr.Add(s); watchName.Add(b.Key + " " + p); }
+                    }
+                    Log.Info("apparences : corps " + b.Key + " : " + ps.Count + " PNJ : " + string.Join(" ; ", ps.ToArray()));
+                }
+            }
+            string kill = Config.Get("Test", "PnjCorpsDetruit", "");
+            BodyInfo kb;
+            if (kill.Length > 0 && bodies.TryGetValue(kill, out kb))
+            {
+                SkinnedMeshRenderer victim = null;
+                for (int i = kb.All.Count - 1; i >= 0 && victim == null; i--)
+                    if (kb.All[i] != null && kb.All[i] != kb.Smr && kb.All[i].gameObject.activeInHierarchy) victim = kb.All[i];
+                if (victim == null) Log.Info("autotest : corps " + kill + " : aucun PNJ actif de ce corps a part celui qui le represente (" + kb.All.Count + " releves)");
+                else
+                {
+                    string vp = Recon.Path(victim.transform);
+                    Object.DestroyImmediate(victim);
+                    Log.Info("autotest : corps " + kill + " : rendu du PNJ " + vp + " detruit juste apres le releve (" + kb.All.Count + " PNJ releves pour ce corps)");
+                }
+            }
+        }
+
+        public static void WatchTick(float now)
+        {
+            if (watchSmr.Count == 0 || now < watchAt) return;
+            watchAt = now + 2f;
+            for (int i = watchSmr.Count - 1; i >= 0; i--)
+            {
+                if (watchSmr[i] != null) continue;
+                Log.Info("apparences : PNJ detruit depuis le releve des corps : " + watchName[i] + " (" + (now - scanAt).ToString("F0") + " s apres)");
+                watchSmr.RemoveAt(i); watchName.RemoveAt(i);
             }
         }
 
