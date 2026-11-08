@@ -660,6 +660,69 @@ namespace MWCoop
             foreach (string f in System.IO.Directory.GetFiles(from)) System.IO.File.Copy(f, System.IO.Path.Combine(to, System.IO.Path.GetFileName(f)), true);
         }
 
+        // Maillages des toles (ES2Auto a saveMesh) dans la sauvegarde en jeu -- 08/11, [MSC], essai t2 de la tole : bosses jamais
+        // ecrites, perdues au rechargement chez tous les joueurs, depuis la remise des automates de Game.SaveInPlace (470104a6, 03/10).
+        // Les etats « Save » qui ecoutent SAVEGAME (SATSUMA : 'Paint' de la caisse, 'Save' de la masse et des pieces ; CORRIS :
+        // {ES2Body}, {ES2Masse}, capot) donnent a leur ES2Auto saveFile = meshsave.txt et l'allument : le jeu ecrit les maillages en
+        // quittant (OnApplicationQuit). Game.Update remet ces automates dans leur etat d'avant 2,5 s apres : « Idle » vide saveFile
+        // puis coupe ES2Auto, dont OnDisable tente d'ecrire avec un nom vide (ES2 leve, rien n'est ecrit -- comme au chargement dans
+        // le jeu d'origine). Ici, juste apres la diffusion : chaque ES2Auto allume, a maillage et a fichier, ecrit comme
+        // ES2Auto.SaveMesh (etiquette « <uniqueTag>mesh »), un seul ES2Writer par fichier ; le maillage lu par sharedMesh (.mesh en
+        // creerait une copie, et la tole garderait l'ancien). Rien du lot des actions (Begin / End) n'est touche.
+        // [Test] SauveMaillages=0 : comme avant.
+        static System.Type autoType;
+        static FieldInfo autoMesh, autoFile, autoTag;
+        static int meshLogs;
+        public static void SaveMeshes()
+        {
+            if (Config.GetInt("Test", "SauveMaillages", 1) == 0) return;
+            try
+            {
+                if (!Es2()) return;
+                if (autoType == null)
+                {
+                    autoType = writerType.Assembly.GetType("ES2Auto");
+                    if (autoType != null) { autoMesh = autoType.GetField("saveMesh"); autoFile = autoType.GetField("saveFile"); autoTag = autoType.GetField("uniqueTag"); }
+                    if (autoType == null || autoMesh == null || autoFile == null || autoTag == null)
+                    {
+                        autoType = null;
+                        Log.Warn("sauvegarde en jeu : ES2Auto introuvable ou different, maillages des toles pas ecrits");
+                        return;
+                    }
+                }
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var byFile = new Dictionary<string, List<Entry>>();
+                int n = 0;
+                foreach (Object o in Object.FindObjectsOfType(autoType))
+                {
+                    var b = o as Behaviour;
+                    if (b == null || !b.enabled || !(bool)autoMesh.GetValue(o)) continue;
+                    string file = autoFile.GetValue(o) as string;
+                    if (string.IsNullOrEmpty(file)) continue;
+                    string tag = autoTag.GetValue(o) as string;
+                    if (string.IsNullOrEmpty(tag)) tag = b.gameObject.name;   // (comme ES2Auto.GetFullFilename)
+                    MeshFilter mf = b.GetComponent<MeshFilter>();
+                    Mesh m = mf != null ? mf.sharedMesh : null;
+                    if (m == null) continue;
+                    List<Entry> l;
+                    if (!byFile.TryGetValue(file, out l)) byFile[file] = l = new List<Entry>();
+                    l.Add(new Entry { Tag = tag + "mesh", Value = m });
+                    n++;
+                }
+                int fallback = 0;
+                var sb = new System.Text.StringBuilder();
+                foreach (KeyValuePair<string, List<Entry>> kv in byFile)
+                {
+                    if (!WriteAll(kv.Key, kv.Value)) { fallback++; foreach (Entry e in kv.Value) WriteAll(kv.Key, new List<Entry> { e }); }
+                    sb.Append(kv.Key).Append(' ').Append(kv.Value.Count).Append(", ");
+                }
+                if (n > 0 || meshLogs++ < 3)
+                    Log.Info("sauvegarde en jeu : " + n + " maillage(s) de toles ecrit(s) en " + sw.ElapsedMilliseconds + " ms"
+                             + (sb.Length > 0 ? " : " + sb.ToString().TrimEnd(' ', ',') : "") + (fallback > 0 ? " ; " + fallback + " fichier(s) ecrit(s) un par un" : ""));
+            }
+            catch (System.Exception e) { Log.Warn("sauvegarde en jeu : maillages des toles : " + e.GetType().Name + " " + e.Message); }
+        }
+
         static bool WriteAll(string file, List<Entry> list)
         {
             object w = null;

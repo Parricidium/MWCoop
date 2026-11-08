@@ -138,6 +138,7 @@ namespace MWCoop
             finally
             {
                 if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); RestoreSetup(false);
+                SaveBatchMsc.SaveMeshes();   // (maillages des toles : ES2Auto ne les ecrit qu'en quittant, et la remise des automates l'en empeche)
                 if (colliderOffs != null) foreach (HutongGames.PlayMaker.FsmStateAction a in colliderOffs) a.Enabled = true;
                 // Fin de 'Fix Collider' comme dans le jeu (resetOnExit : collisionneurs allumes en sortant de l'etat), sans le passage par
                 // eteint : une voiture dont les collisionneurs etaient eteints avant la sauvegarde les retrouve comme en solo.
