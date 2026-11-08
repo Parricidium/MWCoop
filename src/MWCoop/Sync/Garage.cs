@@ -73,7 +73,8 @@ namespace MWCoop
             lifts.Clear(); liftKnown.Clear(); owned.Clear(); loaders.Clear(); loaderKnown.Clear();
             dmg.Clear(); lifted.Clear(); corrected.Clear(); snapshots.Clear(); dmgSend.Clear();
             gen = -1; liftScans = 0; dmgIdx = 0; tStep = 0; tAt = 0; tLog = 0; testFsm = null; testOff.Clear();
-            tolesWarned.Clear(); probeAt = 0; probeSaved = false;
+            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false;
+            dentOutMsgs = dentOutVerts = dentInMsgs = 0; dentOutBytes = 0; dentWinAt = 0; dentWinBytes = dentPeakBytes = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
             nextLiftScan = 0; nextResend = 0;
@@ -209,7 +210,9 @@ namespace MWCoop
                 while (k < moved.Count && budget > 0)
                 {
                     int n = Mathf.Min(per, moved.Count - k);
-                    Session.T.SendReliable(q.P, DentWriter(c, d, v, bs, moved, k, n).ToArray());
+                    NetWriter dw = DentWriter(c, d, v, bs, moved, k, n);
+                    CountDentOut(dw, n);
+                    Session.T.SendReliable(q.P, dw.ToArray());
                     k += n; budget--; q.Sent += n;
                 }
                 if (k >= moved.Count) { q.Dent++; q.At = 0; } else q.At = k;
@@ -824,7 +827,9 @@ namespace MWCoop
             while (k < changed.Count && budget > 0)
             {
                 int n = Mathf.Min(per, changed.Count - k);
-                Session.SendAll(DentWriter(c, d, v, bs, changed, k, n), true);
+                NetWriter dw = DentWriter(c, d, v, bs, changed, k, n);
+                CountDentOut(dw, n);
+                Session.SendAll(dw, true);
                 for (int j = 0; j < n; j++) d.Snap[changed[k + j]] = v[changed[k + j]];
                 k += n; sent += n; budget--;
             }
@@ -933,10 +938,24 @@ namespace MWCoop
                 ok = false;
                 WarnTole(car + key, "tole " + car + key + " : maillage pas mis a jour (" + e.GetType().Name + (e.InnerException != null ? " : " + e.InnerException.GetType().Name : "") + ")");
             }
-            dentsIn += n;
-            if (ok && (++dentMsgs <= 10 || dentMsgs % 50 == 0)) Log.Info("atelier : tole " + car + key + " deformee par #" + who + " (" + n + " sommets, " + dentsIn + " recus en tout)");
+            dentsIn += n; dentInMsgs++;
+            if (ok &&(++dentMsgs <= 10 || dentMsgs % 50 == 0)) Log.Info("atelier : tole " + car + key + " deformee par #" + who + " (" + n + " sommets, " + dentsIn + " recus en tout)");
         }
         static int dentsIn, dentMsgs;
+
+        // Debit des bosses envoyees d'ici (releve d'essai TolesEmpreinte) : cumul et pic sur une seconde.
+        static int dentOutMsgs, dentOutVerts, dentInMsgs, dentWinBytes, dentPeakBytes;
+        static long dentOutBytes;
+        static float dentWinAt;
+        static void CountDentOut(NetWriter w, int n)
+        {
+            int len = w.Length;
+            dentOutMsgs++; dentOutVerts += n; dentOutBytes += len;
+            float now = Time.realtimeSinceStartup;
+            if (now - dentWinAt >= 1f) { dentWinAt = now; dentWinBytes = 0; }
+            dentWinBytes += len;
+            if (dentWinBytes > dentPeakBytes) dentPeakBytes = dentWinBytes;
+        }
 
         // Tole remise sur le maillage de son MeshFilter avant qu'on y ecrive, comme le fait Deformable.FixedUpdate du jeu
         // (mesh != meshFilter.mesh : LoadMesh). Le jeu ne le fait que tole allumee, et SATSUMA/DeformLogic (CORRIS/DeformLogic sur
@@ -1045,18 +1064,45 @@ namespace MWCoop
         //   entre l'hote et l'invite, et avant / apres un rechargement de la partie), enfoncement (somme des ecarts a la base, en mm),
         //   tole allumee ou coupee, maillage de la tole (celui du filtre, autre, DETRUIT) ; par voiture : etat de DeformLogic et
         //   vitesse lue du corps (celle que GetSpeed du jeu lit pour allumer les toles).
+        //   Avec, a chaque releve : messages de bosses envoyes et recus ici depuis le debut (octets, sommets) et le plus gros debit
+        //   d'envoi sur une seconde depuis le releve precedent.
         // [Test] TolesSauveA=<s> (hote) : sauvegarde en jeu a cet instant de l'essai (la bosse doit rester apres rechargement).
+        // [Test] TolesChocTotal=<s> (conducteur) : a cet instant, tous les sommets de toutes les toles de la voiture enfonces de 2 cm
+        //   (pire choc possible : ce que le reseau doit porter).
         static float probeAt;
-        static bool probeSaved;
+        static bool probeSaved, probeShock;
         static void DentProbe(float t)
         {
             float sa = Config.GetFloat("Test", "TolesSauveA", 0f);
             if (sa > 0f && !probeSaved && Session.IsHost && t > sa) { probeSaved = true; Game.SaveInPlace(); Log.Info("autotest : toles, sauvegarde en jeu faite ici"); }
+            string want = Config.Get("Test", "TolesVoiture", "SATSUMA");
+            float shock = Config.GetFloat("Test", "TolesChocTotal", 0f);
+            if (shock > 0f && !probeShock && t > shock)
+                foreach (CarDmg c in dmg.Values)
+                {
+                    if (c.Root == null || !c.Car.StartsWith(want) || VehicleSync.RemotelyDriven(c.Root) || fVerts == null || mUpdateMesh == null) continue;
+                    probeShock = true;
+                    int nt = 0, nv = 0;
+                    foreach (Dent d in c.Dents)
+                    {
+                        if (d.D == null) continue;
+                        Fresh(c.Car, d);
+                        var v = fVerts.GetValue(d.D) as Vector3[];
+                        if (v == null) continue;
+                        for (int i = 0; i < v.Length; i++) v[i] -= (v[i].sqrMagnitude > 1e-6f ? v[i].normalized : Vector3.up) * 0.02f;
+                        ColorsGuard(d.D);
+                        try { mUpdateMesh.Invoke(d.D, null); } catch (System.Exception e) { Log.Info("autotest : toles, choc total, " + d.Key + " : " + (e.InnerException ?? e).GetType().Name); }
+                        nt++; nv += v.Length;
+                    }
+                    Log.Info("autotest : toles, choc total sur " + c.Car + " : " + nt + " toles, " + nv + " sommets enfonces de 2 cm");
+                }
             float every = Config.GetFloat("Test", "TolesEmpreinte", 0f);
             float now = Time.realtimeSinceStartup;
             if (every <= 0f || now < probeAt) return;
             probeAt = now + every;
-            string want = Config.Get("Test", "TolesVoiture", "SATSUMA");
+            Log.Info("autotest : toles, bosses envoyees ici : " + dentOutMsgs + " messages, " + dentOutVerts + " sommets, " + dentOutBytes + " octets (pic "
+                     + dentPeakBytes + " o/s, en " + (Config.GetInt("Test", "TolesPositions", 1) != 0 ? "positions" : "decalages") + ") ; recues : " + dentInMsgs + " messages, " + dentsIn + " sommets");
+            dentPeakBytes = 0;
             foreach (CarDmg c in dmg.Values)
             {
                 if (c.Root == null || !c.Car.StartsWith(want)) continue;
