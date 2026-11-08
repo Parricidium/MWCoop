@@ -3399,6 +3399,10 @@ namespace MWCoop
         static float trembleT0 = -1, trembleLog, trembleLogAt, tremblePath, trembleAng, trembleJerk; static int trembleN; static bool trembleHas, trembleHas2; static Vector3 trembleDp; static Vector3 tremblePrev; static Quaternion trembleRot;   // (Autotest=tremble)
         static float trembleSample, trembleAcc, trembleAccMax, trembleAngAcc; static int trembleAccN, trembleS; static Vector3 trembleP1, trembleP2; static Quaternion trembleR1, trembleR2; static bool trembleOut, trembleNamed;
 
+        static int ragdollSends; static float ragdollNext; static Vector3 ragdollHome;
+        static int ragdollSetup, ragdollGrabs, ragdollSave, ragdollNan; static float ragdollGrabAt; static string ragdollHeld;
+        static Rigidbody ragdollBody; static Vector3 ragdollFete; static float ragdollNanAt;
+        static Vector3 ragdollCentre(GameObject rg) { if (ragdollFete == Vector3.zero) ragdollFete = rg.transform.position; return ragdollFete; }
         // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
         // [Test] Autotest=texte, Texte=<mot> : chaque TextMesh (eteints compris) dont le texte contient le mot, avec son chemin et
         // les automates de ses parents (qui l'allume ?).
@@ -4614,6 +4618,151 @@ namespace MWCoop
                     sb.Append(' ').Append(Recon.Path(rb.transform)).Append(rb.gameObject.activeInHierarchy ? "" : "[off]").Append(rb.GetComponent<AxisCarController>() != null ? "(axis)" : "");
                 }
                 Log.Info(sb.ToString());
+            }
+            // [Test] Autotest=ragdoll (Донской, 04/11) : a 20 s, la fete chez Jokke allumee chez les deux. De 40 a 70 s, l'hote secoue l'invite ivre DrunkG2
+            // (ragdoll) et montre ses membres comme des objets deplaces -- ce qu'il envoie quand il le traine ; a 70 s, plus rien (silence de l'hote qui
+            // sauvegarde). Toutes les 2 s, chacun note les membres (suivis, loin, vitesse, non finis) et les corps non finis du monde.
+            if (mode == "ragdoll")
+            {
+                string lp = Game.Msc ? "STORE/RagDoll" : "JOBS/JOKKEHOME/HouseDrunkNew/LOD1/DrunkParty/DrunkG2";   // (RagdollNaNHote=1 : NaN chez l'hote plutot que l'invite)
+                GameObject rg = Game.FindAny(lp);
+                if (t > 20f && step == 0)
+                {
+                    step = 1;
+                    if (rg != null) for (Transform x = rg.transform; x != null; x = x.parent) x.gameObject.SetActive(true);
+                    Props.SoonScan();
+                    Log.Info("autotest : ragdoll, " + (rg != null ? "DrunkG2 allume en " + rg.transform.position.ToString("F1") : "DrunkG2 introuvable"));
+                }
+                // ([Test] RagdollPrises=1, crash de Donskoy 04/11 : les deux joueurs a cote de la fete ; de 30 a 150 s, l'hote prend les membres l'un apres l'autre
+                // (PickedObject de la main, pose devant sa camera), comme dans son journal ; a RagdollGelA (160 s) sauvegarde coop, gel [Test] SauveGelMs.
+                // RagdollVoitures=1 : NPC_CARS/EDM et Marinade allumees. RagdollNaN=1 : l'invite met les membres en NaN a 140 s. RagdollPres=1 : voitures garees posees autour.)
+                if (rg != null && Config.GetInt("Test", "RagdollPrises", 0) != 0)
+                {
+                    if (t > 21f && ragdollSetup == 0)
+                    {
+                        ragdollSetup = 1;
+                        if (Game.PlayerT != null) Game.PlayerT.position = rg.transform.position + new Vector3(Net.Session.IsHost ? 2f : -2f, 0.5f, -3f);
+                        if (Config.GetInt("Test", "RagdollVoitures", 0) != 0)
+                            foreach (string vn in new[] { "NPC_CARS/EDM", "NPC_CARS/Marinade" })
+                            {
+                                GameObject vg = Game.FindAny(vn);
+                                if (vg != null) { for (Transform x = vg.transform; x != null; x = x.parent) x.gameObject.SetActive(true); }
+                                Log.Info("autotest : ragdoll, " + vn + (vg != null ? " allumee en " + vg.transform.position.ToString("F1") : " introuvable"));
+                            }
+                    }
+                    if (t > 26f && ragdollSetup == 1)
+                    {
+                        ragdollSetup = 2;
+                        var sb = new System.Text.StringBuilder("autotest : ragdoll, voitures :");
+                        int nPres = 0;
+                        foreach (Rigidbody wb in Object.FindObjectsOfType<Rigidbody>())
+                        {
+                            if (wb.GetComponent("CarDynamics") == null) continue;
+                            if (Config.GetInt("Test", "RagdollPres", 0) != 0 && Net.Session.IsHost && !wb.name.StartsWith("EDM") && !wb.name.StartsWith("Marinade") && !wb.name.StartsWith("CORRIS") && nPres < 6)
+                            {
+                                wb.position = rg.transform.position + new Vector3(-9f + 4f * nPres, 2f, 6f); wb.transform.position = wb.position; wb.velocity = Vector3.zero; nPres++;
+                            }
+                            sb.Append(' ').Append(wb.name).Append(wb.isKinematic ? "(cin) " : " ").Append(wb.position.ToString("F0")).Append(" a ").Append((wb.position - rg.transform.position).magnitude.ToString("F0")).Append(" m;");
+                        }
+                        Log.Info(sb.ToString());
+                    }
+                    // (Prise : le joint de la vraie main du jeu (Hand) accroche au membre et PickedObject, comme l'etat de prise de PickUp ; l'hote tourne autour de la fete
+                    // pendant ce temps. Le clic du jeu n'est pas rejoue. Membres tenus 3 s, 1 s entre deux, dans l'ordre pelvis/cuisses/jambes de son journal.)
+                    if (Net.Session.IsHost && t > 30f && t < 150f && Config.GetInt("Test", "RagdollPrendre", 1) != 0)
+                    {
+                        if (Game.PlayerT != null) Game.PlayerT.position = rg.transform.root.position * 0f + ragdollCentre(rg) + new Vector3(Mathf.Cos(t * 0.5f) * 2.5f, 0.6f, Mathf.Sin(t * 0.5f) * 2.5f);
+                        if (t >= ragdollGrabAt)
+                        {
+                            GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                            PlayMakerFSM pk = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                            Joint hj = hg != null ? hg.GetComponent<Joint>() : null;
+                            if (pk == null || hj == null) { if (ragdollGrabs++ < 2) Log.Info("autotest : ragdoll, hote : main " + (hg != null) + ", PickUp " + (pk != null) + ", joint " + (hj != null)); ragdollGrabAt = t + 5f; }
+                            else if (ragdollBody != null)
+                            {
+                                hj.connectedBody = null; pk.FsmVariables.GetFsmGameObject("PickedObject").Value = null; ragdollBody = null; ragdollGrabAt = t + 1f;
+                            }
+                            else
+                            {
+                                var ls = new System.Collections.Generic.List<Rigidbody>();
+                                foreach (Rigidbody lb in rg.GetComponentsInChildren<Rigidbody>()) if (lb.name.StartsWith("shoulders") || lb.name.StartsWith("thigh") || lb.name.StartsWith("leg")) ls.Add(lb);
+                                if (ls.Count > 0)
+                                {
+                                    ragdollBody = ls[ragdollGrabs++ % ls.Count];
+                                    hj.connectedBody = ragdollBody; pk.FsmVariables.GetFsmGameObject("PickedObject").Value = ragdollBody.gameObject;
+                                    if (ragdollGrabs <= 3) Log.Info("autotest : ragdoll, hote : prend " + ragdollBody.name + " (joint " + hj.GetType().Name + ", main dans l'etat " + pk.ActiveStateName + ")");
+                                }
+                                ragdollGrabAt = t + 3f;
+                            }
+                        }
+                    }
+                    if (Net.Session.IsHost && t >= 150f && ragdollBody != null)
+                    {
+                        GameObject hg = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                        PlayMakerFSM pk = hg != null ? Game.FsmOn(hg, "PickUp") : null;
+                        Joint hj = hg != null ? hg.GetComponent<Joint>() : null;
+                        if (hj != null) hj.connectedBody = null;
+                        if (pk != null) pk.FsmVariables.GetFsmGameObject("PickedObject").Value = null;
+                        ragdollBody = null;
+                    }
+                    if (Net.Session.IsHost && t > Config.GetFloat("Test", "RagdollGelA", 160f) && ragdollSave == 0)
+                    {
+                        ragdollSave = 1;
+                        Net.SaveTransfer.TestCoop("essai");
+                    }
+                    // (NaN reapplique a chaque image jusqu'a ce qu'il prenne : sur un membre en mouvement, un seul coup est parfois sans effet)
+                    if ((Config.GetInt("Test", "RagdollNaNHote", 0) != 0) == Net.Session.IsHost && t > 140f && ragdollNan < 2 && Config.GetInt("Test", "RagdollNaN", 0) != 0)
+                    {
+                        Vector3 bad = new Vector3(float.NaN, float.NaN, float.NaN);
+                        int mo = Config.GetInt("Test", "RagdollNaN", 0), nn = 0, seen = 0;
+                        // ([Test] RagdollNaNObjet=1 : un seul objet libre, une bouteille de la fete, pas le pantin)
+                        Rigidbody[] cibles = rg.GetComponentsInChildren<Rigidbody>();
+                        if (Config.GetInt("Test", "RagdollNaNObjet", 0) != 0)
+                        {
+                            cibles = new Rigidbody[0];
+                            foreach (Rigidbody ob in rg.transform.parent.GetComponentsInChildren<Rigidbody>()) if (ob.name.StartsWith("beerbot")) { cibles = new[] { ob }; break; }
+                        }
+                        foreach (Rigidbody lb in cibles)
+                        {
+                            Vector3 lp1 = lb.position; if (float.IsNaN(lp1.x + lp1.y + lp1.z)) seen++;
+                            if (mo == 4) { lb.velocity = new Vector3(4000f, 3000f, -5000f); seen = lb.position.sqrMagnitude > 1e10f ? seen + 1 : seen; } else if (mo == 2) lb.velocity = bad; else { lb.position = bad; if (mo == 3) lb.transform.position = bad; }
+                            nn++;
+                        }
+                        if (ragdollNan == 0) { ragdollNan = 1; ragdollNanAt = t; Log.Info("autotest : ragdoll, ici : " + nn + " membres mis en NaN"); }
+                        if (seen > 0 || t > ragdollNanAt + (mo == 4 ? 40f : 10f) || !rg.activeInHierarchy) { ragdollNan = 2; Log.Info("autotest : ragdoll, ici : NaN " + (seen > 0 ? "pris (" + seen + " membres vus)" : "pas pris") + " apres " + (t - ragdollNanAt).ToString("F2") + " s"); }
+                    }
+                }
+                if (rg != null && t > 40f && t < 70f && Net.Session.IsHost)
+                {
+                    foreach (Rigidbody lb in rg.GetComponentsInChildren<Rigidbody>())
+                        if (lb.name.StartsWith("shoulders") && !lb.isKinematic) lb.velocity = new Vector3(Mathf.Sin(t * 2f) * 3f, 0.5f, Mathf.Cos(t * 2f) * 3f);
+                    // ([Test] RagdollMembres=mot,mot : seulement ces membres montres comme deplaces, les autres restent libres ici)
+                    int ns = 0;
+                    // ([Test] RagdollSaut=s : toutes les s secondes, la pose montree saute de 4 m et revient -- le corps de l'hote ne bouge pas)
+                    float saut = Config.GetFloat("Test", "RagdollSaut", 0f);
+                    Vector3 off = saut > 0f && ((int)(t / saut)) % 2 == 1 ? new Vector3(4f, 1f, 0f) : Vector3.zero;
+                    foreach (string mw in Config.Get("Test", "RagdollMembres", "DrunkG2").Split(',')) ns += saut > 0f ? Props.TestSendMovingAt(mw, off) : Props.TestSendMoving(mw);
+                    if (ragdollSends++ == 0) Log.Info("autotest : ragdoll, hote : " + ns + " membres montres comme deplaces");
+                }
+                if (rg != null && t > 22f && t >= ragdollNext)
+                {
+                    ragdollNext = t + 2f;
+                    Vector3 c0 = rg.transform.position; float far = 0f, fast = 0f; int total = 0, suivis = 0, kin = 0, nan = 0;
+                    foreach (Rigidbody lb in rg.GetComponentsInChildren<Rigidbody>())
+                    {
+                        total++; if (Props.TestKeyOf(lb) != null) suivis++; if (lb.isKinematic) kin++;
+                        Vector3 lp0 = lb.position;
+                        if (float.IsNaN(lp0.x + lp0.y + lp0.z) || float.IsInfinity(lp0.x + lp0.y + lp0.z)) { nan++; continue; }
+                        far = Mathf.Max(far, (lp0 - ragdollHome).magnitude); if (!lb.isKinematic) fast = Mathf.Max(fast, lb.velocity.magnitude);
+                    }
+                    if (ragdollHome == Vector3.zero) ragdollHome = c0;
+                    int worldNan = 0; string first = "";
+                    foreach (Rigidbody wb in Object.FindObjectsOfType<Rigidbody>())
+                    {
+                        Vector3 wp = wb.position;
+                        if (float.IsNaN(wp.x + wp.y + wp.z) || float.IsInfinity(wp.x + wp.y + wp.z)) { worldNan++; if (first.Length == 0) first = wb.name; }
+                    }
+                    Log.Info("autotest : ragdoll t=" + t.ToString("F0") + " : " + total + " membres, " + suivis + " suivis, " + kin + " cinematiques, loin " + far.ToString("F1") + " m, vite " + fast.ToString("F1") + " m/s, non finis " + nan + " ; monde : " + worldNan + " corps non finis" + (first.Length > 0 ? " (" + first + ")" : ""));
+                }
             }
             // [Test] Autotest=evenements : l'hote passe a un jour de match (GlobalDay 3) a 20 h (fete chez Jokke) a 20 s ;
             // a 45 s et 60 s, les deux notent l'evenement et la fete (a comparer).

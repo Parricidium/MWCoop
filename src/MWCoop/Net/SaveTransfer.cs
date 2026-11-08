@@ -632,6 +632,7 @@ namespace MWCoop.Net
         }
 
         // ------------------------------------------------------------ hote
+        public static void TestCoop(string by) { StartCoop(by, true); }
         static void StartCoop(string by, bool hostButton)
         {
             float now = Time.realtimeSinceStartup;
@@ -668,6 +669,7 @@ namespace MWCoop.Net
                     for (int i = 0; i < Audit.Desyncs.Count && i < 8; i++) Log.Info("  ecart audit : " + Audit.Desyncs[i]);
                 }
                 AnnouncePause(coopBy);
+                { int gel = Config.GetInt("Test", "SauveGelMs", 0); if (gel > 0) { Log.Info("autotest : ragdoll, hote : gel de " + gel + " ms"); System.Threading.Thread.Sleep(gel); } }   // (essai : gel de la sauvegarde d'un gros monde)
                 Game.SaveInPlace();
                 worldSavedAt = now;
                 Session.Broadcast(new NetWriter(CoopMsg).U8(K_NOW).U16(coopSeq).Bool(CompareOn), true);

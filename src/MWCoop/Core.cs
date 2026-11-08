@@ -28,6 +28,8 @@ namespace MWCoop
         {
             Perf.FixedStart();
             Perf.Begin();
+            try { NanGuard.Fixed(); }
+            catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("garde NaN : " + e.Message); }
             try { VehicleSync.RevLimiterFixed(); VehicleSync.FixedUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("voitures (physique) : " + e.Message); }
             Perf.End("(physique)");
@@ -352,6 +354,7 @@ namespace MWCoop
             Interactions.OnLevelLoaded();
             VehicleSync.OnLevelLoaded();
             Parts.OnLevelLoaded();
+            NanGuard.OnLevelLoaded();
             Props.OnLevelLoaded();
             Wallet.OnLevelLoaded();
             Sieges.OnLevelLoaded();

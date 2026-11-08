@@ -72,6 +72,7 @@ namespace MWCoop
             if (restore != null) return;
             // Hors de la partie (menu) : rien a sauver, SAVEGAME n'y ecrirait qu'une sauvegarde vide.
             if (Application.loadedLevelName != "GAME") { Log.Warn("sauvegarde en jeu refusee : niveau " + Application.loadedLevelName); return; }
+            NanGuard.BeforeSave();   // (pas de pose non finie dans la sauvegarde)
             restore = new List<KeyValuePair<PlayMakerFSM, string>>();
             PlayMakerFSM setup = null;
             foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())

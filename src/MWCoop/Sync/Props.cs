@@ -242,6 +242,11 @@ namespace MWCoop
             if (!listed && !LooseCandidate(rb, t, rootName)) return null;
             if (rb.GetComponent("CarDynamics") != null) return null;
             if (!plug && VehicleSync.CarRoot(t) != null) return null;   // piece d'une voiture rangee sous une racine du monde (taxi sous JOBS) : CarDoors, pas Props
+            if (!plug && PantinsMode == 1 && IsRagdollLimb(rb))
+            {
+                if (ragdollLogged.Add(rb.gameObject) && ragdollLogged.Count <= 40) Log.Info("objets : membre de pantin pas suivi ([Test] Pantins=exclus) : " + Recon.Path(t));
+                return null;
+            }
             string pk = plug ? CarDoors.PlugKey(Game.FsmOn(t.gameObject, "Data")) : null;
             if (plug) k = pk != null ? "w:" + pk : "w:prise:" + rootName + "/" + (t.parent != null ? t.parent.name : "");
             else
@@ -262,6 +267,29 @@ namespace MWCoop
             }
             worldKeys[rb.gameObject] = k;
             return k;
+        }
+
+        // Essais (Autotest=ragdoll, RagdollSaut) : comme TestSendMoving, la pose montree decalee de 'offset' (le corps ne bouge pas ici) -- chez
+        // l'autre, le membre tenu saute (au-dela de 3 m : pose posee d'un coup), comme dans le journal de l'invite de Donskoy (05/11).
+        public static int TestSendMovingAt(string word, Vector3 offset)
+        {
+            int n = 0;
+            foreach (Prop p in props.Values)
+            {
+                if (p.Body == null || !p.Id.Contains(word)) continue;
+                var w = new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(2).Vec(p.Body.position + offset).Quat(p.Body.rotation).Vec(p.Body.velocity);
+                Session.SendAll(w, false);
+                n++;
+            }
+            return n;
+        }
+
+        // Essais (Autotest=ragdoll) : montre aux autres les corps suivis dont la cle contient 'word', comme un objet qu'on deplace.
+        public static int TestSendMoving(string word)
+        {
+            int n = 0;
+            foreach (Prop p in props.Values) if (p.Body != null && p.Id.Contains(word)) { Send(p, 2); n++; }
+            return n;
         }
 
         // Essais : cle d'un corps suivi ici (null : pas suivi).
@@ -363,7 +391,9 @@ namespace MWCoop
             var noId = census ? new Dictionary<string, int>() : null;
             var byRoot = census ? new Dictionary<string, int[]>() : null;   // racine -> { avec ID, cle par chemin, refuses, dont cinematiques }
             var seen = new Dictionary<string, Rigidbody>();   // cle -> premier corps vivant de ce releve (double : voir Duplicate)
-            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+            Rigidbody[] allBodies = Object.FindObjectsOfType<Rigidbody>();
+            NanGuard.SetBodies(allBodies);
+            foreach (Rigidbody rb in allBodies)
             {
                 string rn = Game.RootName(rb.transform);
                 if (rn == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
@@ -614,6 +644,7 @@ namespace MWCoop
                         if ((bp - p.LastSentPos).sqrMagnitude < 0.04f) continue;
                         if (!p.Body.IsSleeping() && p.Body.velocity.sqrMagnitude > 0.01f) continue;   // (encore en mouvement)
                         if ((bp - me.position).sqrMagnitude > 16f && !TestAnyDistance) { p.LastSentPos = bp; continue; }
+                        if (!SanePos(bp)) { p.LastSentPos = bp; continue; }   // (membre de pantin projete, Donskoy 05/11 : « pose envoyee » ecrit pour une pose que Send refusait)
                         Send(p, 0, true);
                         if (n++ < 3 && pushLogs++ < 40) Log.Info("objet " + p.Id + " pousse ici : pose envoyee");
                     }
@@ -791,6 +822,76 @@ namespace MWCoop
         // teleporte a chaque image poussait la voiture contre laquelle l'autre l'amenait.
         const int HeldLayer = 16;
 
+        static int badRecvLogs;
+        static bool SanePos(Vector3 v) { float x = v.x + v.y + v.z; return x - x == 0f && Mathf.Abs(v.x) < 1e5f && Mathf.Abs(v.y) < 1e5f && Mathf.Abs(v.z) < 1e5f; }
+
+        // Pantins (membres relies par des CharacterJoint : ivrognes de la fete chez Jokke, STORE/RagDoll de MSC ; pas les os /skeleton/ des ivrognes du
+        // bar, animes). Crash de Donskoy (05/11, MWC 1.15.52, journal de l'invite) : l'hote prend DrunkG2 par les epaules ; chez l'invite ce SEUL membre
+        // devenait cinematique et suivait la pose recue (sauts au-dela de 3 m), les autres membres, dynamiques, lui restant articules : jambes a 1e14 m
+        // en 6 s, NaN, vague sur toutes les voitures, crash. JD (08/11) : « Garder partagee » -- pendant qu'un autre tient un membre, tout le pantin
+        // cinematique, les autres membres portes raides avec lui ; rendus a la physique au lacher (sans nouvelles 1,5 s, ou pose de repos recue).
+        // [Test] Pantins=avant : comme avant (membre tenu seul cinematique) ; exclus : membres plus suivis du tout (pour comparer).
+        static int pantinsMode = -1;
+        static int PantinsMode { get { if (pantinsMode < 0) { string m = Config.Get("Test", "Pantins", ""); pantinsMode = m == "avant" ? 0 : m == "exclus" ? 1 : 2; } return pantinsMode; } }
+        static bool IsRagdollLimb(Rigidbody rb) { return rb != null && (rb.GetComponent<CharacterJoint>() != null || rb.GetComponentInChildren<CharacterJoint>() != null) && !Recon.Path(rb.transform).Contains("/skeleton/"); }
+        static readonly HashSet<GameObject> ragdollLogged = new HashSet<GameObject>();
+        static Transform RagdollTop(Transform t) { Transform top = t; for (Transform x = t.parent; x != null; x = x.parent) if (x.GetComponent<Rigidbody>() != null) top = x; return top; }
+        class Carried { public Rigidbody Held; public Rigidbody[] Bodies; public Vector3[] RelPos; public Quaternion[] RelRot; public bool[] WasKin; }
+        static readonly Dictionary<Transform, Carried> carried = new Dictionary<Transform, Carried>();
+        static readonly Dictionary<Rigidbody, Carried> carriedBody = new Dictionary<Rigidbody, Carried>();
+        static int carryLogs;
+        static void CarryStart(Prop p)
+        {
+            Rigidbody h = p.Body;
+            if (h == null || carriedBody.ContainsKey(h) || !IsRagdollLimb(h)) return;
+            Transform top = RagdollTop(h.transform);
+            if (carried.ContainsKey(top)) return;
+            var c = new Carried { Held = h };
+            var l = new List<Rigidbody>();
+            foreach (Rigidbody b in top.GetComponentsInChildren<Rigidbody>()) if (b != h) l.Add(b);
+            c.Bodies = l.ToArray(); c.RelPos = new Vector3[c.Bodies.Length]; c.RelRot = new Quaternion[c.Bodies.Length]; c.WasKin = new bool[c.Bodies.Length];
+            Quaternion inv = Quaternion.Inverse(h.transform.rotation);
+            for (int i = 0; i < c.Bodies.Length; i++)
+            {
+                Rigidbody b = c.Bodies[i];
+                c.RelPos[i] = inv * (b.transform.position - h.transform.position); c.RelRot[i] = inv * b.transform.rotation;
+                c.WasKin[i] = b.isKinematic; b.isKinematic = true; carriedBody[b] = c;
+            }
+            carried[top] = c; carriedBody[h] = c;
+            if (carryLogs++ < 20) Log.Info("objet " + p.Id + " tenu par #" + p.RemoteBy + " : pantin " + Recon.Path(top) + " porte en bloc (" + c.Bodies.Length + " autres membres)");
+        }
+        static void CarryEnd(Prop p)
+        {
+            Carried c;
+            if (p.Body == null || !carriedBody.TryGetValue(p.Body, out c) || c.Held != p.Body) return;
+            for (int i = 0; i < c.Bodies.Length; i++)
+            {
+                Rigidbody b = c.Bodies[i];
+                carriedBody.Remove(b);
+                if (b == null) continue;
+                b.isKinematic = c.WasKin[i];
+                if (!b.isKinematic) { b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero; }
+            }
+            carriedBody.Remove(p.Body);
+            Transform key = null;
+            foreach (KeyValuePair<Transform, Carried> kv in carried) if (kv.Value == c) { key = kv.Key; break; }
+            if (key != null) carried.Remove(key);
+            if (carryLogs++ < 20) Log.Info("objet " + p.Id + " lache : pantin rendu a la physique");
+        }
+        static void Carry(Prop p)
+        {
+            Carried c;
+            if (p.Body == null || !carriedBody.TryGetValue(p.Body, out c) || c.Held != p.Body) return;
+            Transform h = p.Body.transform;
+            for (int i = 0; i < c.Bodies.Length; i++)
+            {
+                Rigidbody b = c.Bodies[i];
+                if (b == null) continue;
+                b.transform.position = h.position + h.rotation * c.RelPos[i];
+                b.transform.rotation = h.rotation * c.RelRot[i];
+            }
+        }
+
         static void HeldLook(Prop p, bool on)
         {
             if (p.Body == null) return;
@@ -801,6 +902,12 @@ namespace MWCoop
 
         static void SetKinematic(Prop p, bool on)
         {
+            if (PantinsMode == 2 && p.Body != null)
+            {
+                Carried c;
+                if (carriedBody.TryGetValue(p.Body, out c) && c.Held != p.Body) return;   // (porte avec le membre tenu)
+                if (on) CarryStart(p); else CarryEnd(p);
+            }
             if (!on) HeldLook(p, false);
             if (p.Body == null || p.Kinematic == on) return;
             p.Kinematic = on;
@@ -809,6 +916,19 @@ namespace MWCoop
         }
 
         static void Follow(Prop p)
+        {
+            if (PantinsMode == 2 && p.Body != null)
+            {
+                Carried c;
+                if (carriedBody.TryGetValue(p.Body, out c) && c.Held != p.Body) return;   // (porte avec le membre tenu : pas sa propre pose)
+                FollowBody(p);
+                Carry(p);
+                return;
+            }
+            FollowBody(p);
+        }
+
+        static void FollowBody(Prop p)
         {
             if (p.LayerWas < 0 && p.Body.gameObject.layer != HeldLayer) HeldLook(p, true);
             Transform t = p.Body.transform;
@@ -990,6 +1110,9 @@ namespace MWCoop
             if (at.y > -100f) p.RescueOff = false;   // ressorti (du sac...) : de nouveau surveille
             bool bad = float.IsNaN(at.x + at.y + at.z) || float.IsInfinity(at.x + at.y + at.z);
             // (en chute libre seulement : un objet range par le jeu loin sous la carte, immobile, reste ou il est)
+            // (non fini : NanGuard s'en occupe. Remis devant le joueur, puis laisse en NaN apres deux fois -- arret de bus devant le joueur, essais du 05/11 -- il
+            // continuait a infecter les corps autour. [Test] GardeNaN=0 : comme avant.)
+            if (bad && NanGuard.On) return false;
             if (!bad && (at.y > -150f || p.Body.velocity.y > -10f)) return false;
             if (p.RescueOff) return false;
             // Emplacement d'attente du jeu (My Summer Car, import d'une sauvegarde vanilla, 27/10) : un objet jamais apparu (cadeau de Noel
@@ -1231,6 +1354,13 @@ namespace MWCoop
             Vector3 lp = Vector3.zero;
             Quaternion lr = Quaternion.identity;
             if (inCar || rel) { car = r.U8(); lp = r.Vec(); lr = r.Quat(); }
+            // (pose recue aberrante -- au-dela de 1e5 m : membre projete chez l'autre, Donskoy 05/11 -- ni appliquee ni relayee ; les non finies,
+            // NetReader les refuse deja)
+            if (!SanePos(pos) || ((inCar || rel) && !SanePos(lp)))
+            {
+                if (badRecvLogs++ < 20) Log.Warn("objet " + id + " : pose aberrante recue de #" + who + " (" + pos.ToString("F0") + ") : ignoree");
+                return;
+            }
             if (Session.IsHost)
             {
                 var w = new NetWriter(Msg.Prop).U8(who).Str(id).U8(state).Vec(pos).Quat(rot).Vec(vel);

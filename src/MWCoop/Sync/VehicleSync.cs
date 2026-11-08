@@ -2929,6 +2929,13 @@ namespace MWCoop
         static bool TireField(string n) { return n == "pressure" || n == "optimalPressure" || n == "tireDampingRate" || n == "criticalDamping" || n.EndsWith("TireStiffness"); }
 
         static string nanClutch;
+        // NanGuard : corps de cette voiture trouve non fini et remis ; il ne le voit plus non fini ici, ses champs sont revus a la prochaine image plutot qu'au tour des 2 s
+        // (ils refaisaient du NaN a chaque pas et reinfectaient le monde pendant 25 s, essais du 05/11).
+        public static void SanitizeSoon(Transform root)
+        {
+            foreach (Car c in cars) if (c.T == root) { c.SanSlow = 0f; c.SanNext = 0f; return; }
+        }
+
         static void Sanitize()
         {
             // ([Test] NaNVoiture=<voiture> : de 40 a 41 s de jeu, sa vitesse mise a NaN a chaque image -- source qui revient)
