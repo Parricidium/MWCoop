@@ -299,10 +299,10 @@ static bool CnGuard()
     SetStatus(K_WARN, T(L"Ferme le jeu pour modifier un carnet : le jeu s'en sert", L"Close the game to change a notebook: the game is using it"));
     return false;
 }
-static std::wstring CnUniqueFile(const std::wstring &name)
+static std::wstring CnUniqueFile(const std::wstring &name, const wchar_t *base = NULL)   // (base : nom de fichier impose, sans .json)
 {
-    std::wstring b;
-    for (wchar_t c : name) {
+    std::wstring b = base ? base : L"";
+    if (!base) for (wchar_t c : name) {
         wchar_t l = towlower(c);
         if (l < 128 && iswalnum(l)) b += l;
         else if (!b.empty() && b.back() != L'-') b += L'-';
@@ -332,9 +332,9 @@ static bool CnSetActive(const std::wstring &file)
     g_cnActive = file; g_cnSig = CnDirSig();
     return true;
 }
-static CnBook *CnNewBook(const std::wstring &name)
+static CnBook *CnNewBook(const std::wstring &name, const wchar_t *base = NULL)
 {
-    CnBook b; b.game = CnGame(); b.name = name; b.file = CnUniqueFile(name);
+    CnBook b; b.game = CnGame(); b.name = name; b.file = CnUniqueFile(name, base);
     if (b.file.empty() || !CnSaveBook(b)) return NULL;
     g_cnBooks.push_back(b); g_cnBookFile = b.file;
     if (g_cnActive.empty()) CnSetActive(b.file);   // (premier carnet : actif tout de suite)
@@ -347,7 +347,8 @@ static std::vector<CnNote> *CnEditable()
     CnStage *s = CnStageCur();
     if (!s || !CnGuard()) return NULL;
     CnBook *b = CnBookCur();
-    if (!b) { b = CnNewBook(T(L"Mes notes", L"My notes")); if (!b) return NULL; SetStatus(K_OK, T(L"Carnet « %s » créé", L"Notebook \"%s\" created"), b->name.c_str()); }
+    // (meme fichier que celui que le mod cree en reconnaissance : carnets\carnet-<jeu>.json, puis -2... -- [MWC] 08/11)
+    if (!b) { b = CnNewBook(T(L"Mes notes", L"My notes"), (L"carnet-" + CnGame()).c_str()); if (!b) return NULL; SetStatus(K_OK, T(L"Carnet « %s » créé", L"Notebook \"%s\" created"), b->name.c_str()); }
     if (!b->st.count(s->id)) b->st[s->id] = s->autoN;
     return &b->st[s->id];
 }
@@ -1267,12 +1268,13 @@ static bool CarnetSelfTest(const std::wstring &logPath)
     say("v2 : meme choix pour la meme note, cases independantes", CnV2(312, 0) == CnV2(312, 0) && (CnV2(312, 0) != CnV2(312, 1) || CnV2(540, 0) != CnV2(540, 1) || CnV2(610, 0) != CnV2(610, 2)));
     // premiere modification : un carnet cree, la speciale y recoit d'abord les notes auto
     g_cnSt = 0; g_cnBookFile.clear();
-    for (auto &f : { L"mes-notes.json", L"my-notes.json" }) DeleteFileW((CnLibDir() + f).c_str());
+    DeleteFileW((CnLibDir() + L"carnet-" + game + L".json").c_str());
     DeleteFileW(CnActivePath().c_str());
     CnLoad(true);
     size_t nAuto = g_cnStages[0].autoN.size();
     std::vector<CnNote> *v = CnEditable();
     say("premiere modification : carnet cree et actif", v && CnBookCur() && g_cnActive == CnBookCur()->file && CnReadActive() == g_cnActive);
+    say("premiere modification : carnets\\carnet-<jeu>.json, comme le mod", CnBookCur() && CnBookCur()->file == L"carnet-" + game + L".json");
     say("premiere modification : notes auto copiees d'abord", v && v->size() == nAuto);
     if (v) { CnNote n = CnGuess(g_cnStages[0], 600); v->push_back(n); CnCommit(); }
     CnLoad(true);

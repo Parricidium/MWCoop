@@ -2780,10 +2780,10 @@ New Reels tab on the VHS page: the films of each game, with their length and whe
 Saturday	суббота
 Sunday	воскресенье
 Close the game to change a notebook: the game is using it	Закрой игру, чтобы изменить блокнот: игра его использует
-Notebook too big (256 KB at most): remove some notes	Блокнот слишком большой (не больше 256 КБ): убери часть пометок
+Notebook too big (256 KB at most): remove some notes	Блокнот слишком большой (не больше 256 КБ): убери часть заметок
 Could not write the notebook	Не удалось записать блокнот
 Could not write the active notebook	Не удалось записать активный блокнот
-My notes	Мои пометки
+My notes	Мои заметки
 Notebook \"%s\" created	Блокнот «%s» создан
 Corner	Поворот
 Square	Прямой угол
@@ -2801,25 +2801,25 @@ Type	Тип
 Side and grade (H = hairpin)	Сторона и категория (H = шпилька)
 Side	Сторона
 Text (40 characters at most)	Текст (не больше 40 символов)
-Write your note	Напиши пометку
+Write your note	Напиши заметку
 Modifiers	Уточнения
 Note at %d m	Пометка на %d м
 OK	ОК
-%d.%d km · %d notes · 	%d,%d км · пометок: %d · 
-your notebook's notes	пометки твоего блокнота
-automatic notes (change them: they go into your notebook)	автоматические пометки (измени их — они перейдут в твой блокнот)
+%d.%d km · %d notes · 	%d,%d км · заметок: %d · 
+your notebook's notes	заметки твоего блокнота
+automatic notes (change them: they go into your notebook)	автоматические заметки (измени их — они перейдут в твой блокнот)
 The stages file can't be read: start a game again, the mod rewrites it. (	Файл спецучастков не читается: запусти игру ещё раз, мод перепишет его. (
 Start a game once with the mod: it writes the rally stages' layout here (speciales-	Запусти игру с модом один раз: он запишет сюда схему спецучастков ралли (speciales-
-Click the layout: add a note · drag it: move it · Del: remove it · wheel: zoom	Клик по схеме: добавить пометку · перетащи: сдвинуть · Del: убрать · колесо: масштаб
+Click the layout: add a note · drag it: move it · Del: remove it · wheel: zoom	Клик по схеме: добавить заметку · перетащи: сдвинуть · Del: убрать · колесо: масштаб
 Notebook name	Название блокнота
 No notebook	Нет блокнота
 Active notebook: the game reads this one	Активный блокнот: игра читает этот
-No active notebook: automatic notes in game	Нет активного блокнота: в игре автоматические пометки
+No active notebook: automatic notes in game	Нет активного блокнота: в игре автоматические заметки
 Not the active notebook	Не активный блокнот
 Stop using it in game	Больше не использовать в игре
 Use in game (active notebook)	Использовать в игре (активный блокнот)
 Export	Экспорт
-1000 notes at most on a stage	Не больше 1000 пометок на спецучастке
+1000 notes at most on a stage	Не больше 1000 заметок на спецучастке
 file missing or over 256 KB	файла нет или он больше 256 КБ
 it's a notebook for the other game	это блокнот для другой игры
 could not write	не удалось записать
@@ -2828,50 +2828,52 @@ Notebook refused: %s	Блокнот отклонён: %s
 Notebook exported: %s	Блокнот экспортирован: %s
 Export failed	Экспорт не удался
 Notebook %d	Блокнот %d
-Notebook \"%s\" created: the stages keep the automatic notes until you change them	Блокнот «%s» создан: на спецучастках остаются автоматические пометки, пока ты их не изменишь
-No active notebook: the game will show the automatic notes	Нет активного блокнота: игра покажет автоматические пометки
+Notebook \"%s\" created: the stages keep the automatic notes until you change them	Блокнот «%s» создан: на спецучастках остаются автоматические заметки, пока ты их не изменишь
+No active notebook: the game will show the automatic notes	Нет активного блокнота: игра покажет автоматические заметки
 Active notebook: the game will read \"%s\"	Активный блокнот: игра будет читать «%s»
-Click again: the notes of %s go back to the automatic notes	Нажми ещё раз: пометки %s вернутся к автоматическим
+Click again: the notes of %s go back to the automatic notes	Нажми ещё раз: заметки %s вернутся к автоматическим
 Click Confirm again: \"%s\" goes to the Recycle Bin	Нажми «Подтвердить» ещё раз: «%s» уйдёт в корзину
 Could not delete	Не удалось удалить
-note	пометка
+note	заметка
 Pace notes	Стенограмма
 Co-driver's pace notes	Стенограмма штурмана
-Your notes on the rally stages' layout: the co-driver reads them in game, notebook in hand.	Твои пометки на схеме спецучастков ралли: штурман читает их в игре, с блокнотом в руке.
+Your notes on the rally stages' layout: the co-driver reads them in game, notebook in hand.	Твои заметки на схеме спецучастков ралли: штурман читает их в игре, с блокнотом в руке.
 3D model: co-driver's notebook	3D-модель: блокнот штурмана
 Caveat font (co-driver's notebook) · The Caveat Project Authors · SIL OFL 1.1 license	Шрифт Caveat (блокнот штурмана) · The Caveat Project Authors · лицензия SIL OFL 1.1
 \"Single spiral notepad\" by Sousinho on Sketchfab, CC BY 4.0 license. Modified for the game: conversion, scale, top page drawn in game. Full link: MWCoop\\CREDITS-objets.txt.	«Single spiral notepad» от Sousinho на Sketchfab, лицензия CC BY 4.0. Изменено для игры: конвертация, масштаб, верхняя страница рисуется в игре. Полная ссылка: MWCoop\\CREDITS-objets.txt.
-New Pace notes page, under RallyWorld: place your rally notes on the stages' layout. In game, the co-driver reads them notebook in hand.	Новая страница «Стенограмма» под RallyWorld: расставь свои пометки на схеме спецучастков. В игре штурман читает их с блокнотом в руке.
-The co-driver's notebook: your rally pace notes, placed on the stages' layout. In game, the co-driver holds it and reads the page: the layout on the left, the notes on the right, the current corner's note on the orange line.	Блокнот штурмана: твоя стенограмма ралли, расставленная на схеме спецучастков. В игре штурман держит его и читает страницу: схема слева, пометки справа, пометка текущего поворота на оранжевой черте.
+New Pace notes page, under RallyWorld: place your rally notes on the stages' layout. In game, the co-driver reads them notebook in hand.	Новая страница «Стенограмма» под RallyWorld: расставь свои заметки на схеме спецучастков. В игре штурман читает их с блокнотом в руке.
+The co-driver's notebook: your rally pace notes, placed on the stages' layout. In game, the co-driver holds it and reads the page: the layout on the left, the notes on the right, the current corner's note on the orange line.	Блокнот штурмана: твоя стенограмма ралли, расставленная на схеме спецучастков. В игре штурман держит его и читает страницу: схема слева, заметки справа, заметка текущего поворота на оранжевой черте.
 In the launcher	В лаунчере
 Pace notes page (bar, under RallyWorld): pick the stage with the arrows.	Страница «Стенограмма» (панель, под RallyWorld): выбери спецучасток стрелками.
-Click the layout: a note is added (the launcher guesses the corner) and its fields open: type, side, grade (H = hairpin, 1 very tight to 6 almost straight), modifiers, free text.	Клик по схеме: пометка добавлена (лаунчер угадывает поворот), и открываются её поля: тип, сторона, категория (H = шпилька, от 1 — очень крутой до 6 — почти прямо), уточнения, свободный текст.
-Drag a note to move it; Del or Remove to take it away. Wheel on the layout: zoom; on the page on the right: move along the stage.	Перетащи пометку, чтобы сдвинуть её; Del или «Убрать», чтобы удалить. Колесо на схеме: масштаб; на странице справа: двигаться по спецучастку.
-A stage you haven't touched keeps the automatic notes. Reset: the stage goes back to them.	Спецучасток, который ты не трогал, сохраняет автоматические пометки. «Сбросить»: спецучасток возвращается к ним.
+Click the layout: a note is added (the launcher guesses the corner) and its fields open: type, side, grade (H = hairpin, 1 very tight to 6 almost straight), modifiers, free text.	Клик по схеме: заметка добавлена (лаунчер угадывает поворот), и открываются её поля: тип, сторона, категория (H = шпилька, от 1 — очень крутой до 6 — почти прямо), уточнения, свободный текст.
+Drag a note to move it; Del or Remove to take it away. Wheel on the layout: zoom; on the page on the right: move along the stage.	Перетащи заметку, чтобы сдвинуть её; Del или «Убрать», чтобы удалить. Колесо на схеме: масштаб; на странице справа: двигаться по спецучастку.
+A stage you haven't touched keeps the automatic notes. Reset: the stage goes back to them.	Спецучасток, который ты не трогал, сохраняет автоматические заметки. «Сбросить»: спецучасток возвращается к ним.
 Use in game: it's the active notebook, the one the game reads. New, Import, Export: one notebook per style, to share with friends (a small .json file).	Использовать в игре: это активный блокнот, тот, что читает игра. Новый, Импорт, Экспорт: по блокноту на каждый стиль, чтобы делиться с друзьями (маленький файл .json).
 A notebook received from a friend is checked before it's taken: a file out of format is refused as a whole.	Блокнот от друга проверяется перед тем, как его взять: файл не по формату отклоняется целиком.
 The layout arrives after a first game with the mod: it writes it for the launcher. While the game is open, the launcher changes nothing: the game is using the notebook.	Схема появляется после первой игры с модом: он записывает её для лаунчера. Пока игра открыта, лаунчер ничего не меняет: игра использует блокнот.
 Open Pace notes	Открыть «Стенограмму»
 The co-driver's notebook	Блокнот штурмана
-Your notes on the stages' layout	Твои пометки на схеме спецучастков
+Your notes on the stages' layout	Твои заметки на схеме спецучастков
 Long corner	Длинный
 Buy the notebook (59 mk, lamp included) at the OSUUSKAUPPA s21 shop, on the shelf under the KARTTURI.	Купи блокнот (59 mk, с фонариком) в магазине OSUUSKAUPPA s21, на полке под KARTTURI.
 Also at the CARDINAL shop, in the slot under the KARTTURI.	Также в магазине CARDINAL, в ячейке под KARTTURI.
 Seated as a passenger, F raises the notebook; F or right click lowers it.	Сидя пассажиром, F поднимает блокнот; F или правый клик опускает его.
-Hold R: the symbol wheel. Aim at a symbol with the mouse, click to add it (grade, arrow, modifiers), right click to remove the last one. Release R: the note is placed where the car was when the wheel opened.	Держи R: колесо символов. Наведи мышь на символ, клик — добавить (категория, стрелка, уточнения), правый клик — убрать последний. Отпусти R: пометка ставится там, где была машина, когда открылось колесо.
-Backspace: remove the nearest note (80 m away at most). L: the lamp, which lights up by itself at night. Keys can be changed: Settings > Keys.	Backspace: убрать ближайшую пометку (не дальше 80 м). L: фонарик, который ночью включается сам. Клавиши меняются: Настройки > Клавиши.
-Your notes go straight into the active notebook; without one, \"My notes\" is created and becomes active.	Твои пометки сразу идут в активный блокнот; если его нет, создаётся «Мои пометки» и становится активным.
+Hold R: the symbol wheel. Aim at a symbol with the mouse, click to add it (grade, arrow, modifiers), right click to remove the last one. Release R: the note is placed where the car was when the wheel opened.	Держи R: колесо символов. Наведи мышь на символ, клик — добавить (категория, стрелка, уточнения), правый клик — убрать последний. Отпусти R: заметка ставится там, где была машина, когда открылось колесо.
+Backspace: remove the nearest note (80 m away at most). L: the lamp, which lights up by itself at night. Keys can be changed: Settings > Keys.	Backspace: убрать ближайшую заметку (не дальше 80 м). L: фонарик, который ночью включается сам. Клавиши меняются: Настройки > Клавиши.
+Your notes go straight into the active notebook; without one, \"My notes\" is created and becomes active.	Твои заметки сразу идут в активный блокнот; если его нет, создаётся «Мои заметки» и становится активным.
 The other players see the real page (your notebook is sent to them) and the lamp's beam.	Другие игроки видят настоящую страницу (твой блокнот им отправляется) и луч фонарика.
 Notebook: wheel	Блокнот: колесо
 Notebook: remove	Блокнот: убрать
 Notebook: lamp	Блокнот: фонарик
 Co-driver's notebook: symbol wheel (hold the key)	Блокнот штурмана: колесо символов (держать клавишу)
-Co-driver's notebook: remove the nearest note	Блокнот штурмана: убрать ближайшую пометку
+Co-driver's notebook: remove the nearest note	Блокнот штурмана: убрать ближайшую заметку
 Co-driver's notebook: lamp	Блокнот штурмана: фонарик
 Co-driver's notebook	Блокнот штурмана
 Symbol wheel	Колесо символов
 Hold the key: aim at a symbol, click to add it	Держи клавишу: наведи на символ, клик — добавить
-Remove a note	Убрать пометку
+Remove a note	Убрать заметку
 The nearest one, 80 m away at most	Ближайшую, не дальше 80 м
 Lamp	Фонарик
 It lights up by itself at night	Ночью включается сам
+Backspace: remove the nearest note (80 m away at most). L: the lamp, which lights up by itself in the dark. Keys can be changed: Settings > Keys.	Backspace: убрать ближайшую заметку (не дальше 80 м). L: фонарик, который сам включается в темноте. Клавиши меняются: Настройки > Клавиши.
+At night, you hold the lamp in your right hand, pointed at the page. The other players see the real page (your notebook is sent to them), the lamp and its beam.	Ночью ты держишь фонарик в правой руке, направленным на страницу. Другие игроки видят настоящую страницу (твой блокнот им отправляется), фонарик и его луч.
