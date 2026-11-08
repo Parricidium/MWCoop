@@ -720,7 +720,7 @@ namespace MWCoop
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var groups = new Dictionary<string, MeshGroup>();
                 var parts = new System.Text.StringBuilder();
-                int n = 0, enc = 0, bad = 0;
+                int n = 0, enc = 0, bad = 0, nos = 0;
                 foreach (Object o in Object.FindObjectsOfType(autoType))
                 {
                     try
@@ -735,7 +735,10 @@ namespace MWCoop
                         MeshFilter mf = b.GetComponent<MeshFilter>();
                         Mesh m = mf != null ? mf.sharedMesh : null;   // (== d'Unity : un maillage detruit vaut null)
                         if (m == null) { bad++; continue; }
+                        // (settings nul : InitializeSettings pas encore passe -- reglages par defaut, groupe « - » a part. Create(fichier,
+                        // settings) clone les reglages de l'ES2Auto, ceux-ci ne bougent pas : ES2Settings.Clone(string), ES2.dll)
                         object st = autoSettings != null ? autoSettings.GetValue(o) : null;
+                        if (st == null) nos++;
                         string key = file + "#" + Signature(st);
                         MeshGroup g;
                         if (!groups.TryGetValue(key, out g)) groups[key] = g = new MeshGroup { File = file, Settings = st };
@@ -762,7 +765,8 @@ namespace MWCoop
                 if (n > 0 || meshLogs++ < 3)
                     Log.Info("sauvegarde en jeu : " + n + " maillage(s) de toles ecrit(s) en " + ms + " ms (" + groups.Count + " ecriture(s))"
                              + (sb.Length > 0 ? " : " + sb.ToString().TrimEnd(' ', ',') : "") + (fallback > 0 ? " ; " + fallback + " ecriture(s) refaite(s) une par une" : "")
-                             + (enc > 0 ? " ; " + enc + " chiffre(s) laisse(s)" : "") + (bad > 0 ? " ; " + bad + " sans maillage" : ""));
+                             + (enc > 0 ? " ; " + enc + " chiffre(s) laisse(s)" : "") + (bad > 0 ? " ; " + bad + " sans maillage" : "")
+                             + (nos > 0 ? " ; " + nos + " sans reglages (defaut)" : ""));
                 if (!partsLogged && n > 0) { partsLogged = true; Log.Info("sauvegarde en jeu : ES2Auto a maillage" + parts); }
                 if (Config.Testing && Config.GetInt("Test", "SauveMaillagesRef", 0) != 0 && autoSave != null)
                     foreach (MeshGroup g in groups.Values)
