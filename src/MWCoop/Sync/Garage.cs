@@ -73,7 +73,7 @@ namespace MWCoop
             lifts.Clear(); liftKnown.Clear(); owned.Clear(); loaders.Clear(); loaderKnown.Clear();
             dmg.Clear(); lifted.Clear(); corrected.Clear(); snapshots.Clear(); dmgSend.Clear();
             gen = -1; liftScans = 0; dmgIdx = 0; tStep = 0; tAt = 0; tLog = 0; testFsm = null; testOff.Clear();
-            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false;
+            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false; probeReload = false;
             dentOutMsgs = dentOutVerts = dentInMsgs = 0; dentOutBytes = 0; dentWinAt = 0; dentWinBytes = dentPeakBytes = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
@@ -1080,12 +1080,36 @@ namespace MWCoop
         // [Test] TolesChocTotal=<s> (conducteur) : a cet instant, tous les sommets de toutes les toles de la voiture enfonces de 2 cm
         //   (pire choc possible : ce que le reseau doit porter).
         static float probeAt;
-        static bool probeSaved, probeShock;
+        static bool probeSaved, probeShock, probeReload;
         static void DentProbe(float t)
         {
             float sa = Config.GetFloat("Test", "TolesSauveA", 0f);
             if (sa > 0f && !probeSaved && Session.IsHost && t > sa) { probeSaved = true; Game.SaveInPlace(); Log.Info("autotest : toles, sauvegarde en jeu faite ici"); }
             string want = Config.Get("Test", "TolesVoiture", "SATSUMA");
+            // ([Test] TolesRechargeChoc=<s> (conducteur) : a cet instant, chaque tole de la voiture rechargee par le LoadMesh du jeu -- comme son
+            // FixedUpdate au premier demarrage depuis le chargement -- puis 40 sommets enfonces de 3 cm, dans la meme image, avant le passage
+            // suivant du releve : la « bosse de la premiere seconde ». Attendu : 40 sommets par tole envoyes ; TolesRefBase=0 (comme avant) : aucun.)
+            float rc = Config.GetFloat("Test", "TolesRechargeChoc", 0f);
+            if (rc > 0f && !probeReload && t > rc)
+                foreach (CarDmg c in dmg.Values)
+                {
+                    if (c.Root == null || !c.Car.StartsWith(want) || VehicleSync.RemotelyDriven(c.Root) || fVerts == null || mUpdateMesh == null || mLoadMesh == null) continue;
+                    probeReload = true;
+                    int nt = 0, nv = 0;
+                    foreach (Dent d in c.Dents)
+                    {
+                        if (d.D == null) continue;
+                        try { mLoadMesh.Invoke(d.D, null); } catch (System.Exception e) { Log.Info("autotest : toles, rechargement, " + d.Key + " : " + (e.InnerException ?? e).GetType().Name); continue; }
+                        var v = fVerts.GetValue(d.D) as Vector3[];
+                        if (v == null) continue;
+                        int n = Mathf.Min(40, v.Length);
+                        for (int i = 0; i < n; i++) v[i] -= (v[i].sqrMagnitude > 1e-6f ? v[i].normalized : Vector3.up) * 0.03f;
+                        ColorsGuard(d.D);
+                        try { mUpdateMesh.Invoke(d.D, null); } catch (System.Exception e) { Log.Info("autotest : toles, rechargement + choc, " + d.Key + " : " + (e.InnerException ?? e).GetType().Name); }
+                        nt++; nv += n;
+                    }
+                    Log.Info("autotest : toles, rechargement + choc sur " + c.Car + " : " + nt + " toles rechargees, " + nv + " sommets enfonces de 3 cm dans la meme image (envoyes avant : " + dentOutVerts + ")");
+                }
             float shock = Config.GetFloat("Test", "TolesChocTotal", 0f);
             if (shock > 0f && !probeShock && t > shock)
                 foreach (CarDmg c in dmg.Values)
