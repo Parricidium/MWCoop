@@ -54,7 +54,7 @@ namespace MWCoop
         class PostHook : ModHook
         {
             public override string Module { get { return "radio"; } }
-            public Ctrl C; public int Kind;   // 0 : allume (apres le SetParent du jeu) ; 1 : eteint (avant son OFF) ; 2 : eteint (apres)
+            public Ctrl C; public int Kind;   // 0 : allume (en tete, avant le SetParent du jeu) ; 1 : eteint (avant son OFF) ; 2 : eteint (apres)
             public override void OnEnter()
             {
                 try { PostEvent(C, Kind, State != null ? State.Name : "?"); }
@@ -167,7 +167,9 @@ namespace MWCoop
             try
             {
                 var h = new PostHook { C = c, Kind = kind };
-                if (kind == 1) FsmHooks.Prepend(s, h); else FsmHooks.Append(s, h);
+                // (« allume » en tete aussi : « Check tune » repart vers sa station pendant ses propres actions -- une accroche en fin
+                // n'etait jamais appelee, essais du 08/11 ; seul « eteint, apres » reste en fin)
+                if (kind == 2) FsmHooks.Append(s, h); else FsmHooks.Prepend(s, h);
                 hooked.Add(key);
                 return true;
             }
@@ -183,11 +185,10 @@ namespace MWCoop
             Poste p = PosteOf(k, true);
             if (kind == 0)
             {
-                Transform sp = realT.parent;
-                if (sp == null || KeyOf(sp) != k) return;   // (pas dans ce poste)
-                p.Speaker = sp;
+                // (en tete de l'etat : le SetParent du jeu suit ; deux postes allumes dans la meme image ont chacun leur « allume »)
                 if (!p.On) { p.OnAt = now; if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " allume (" + c.F.FsmName + " « " + state + " »)"); }
                 p.On = true; p.ByHost = false;
+                if (p.Speaker == null) p.Speaker = SpeakerOf(k);
             }
             else if (kind == 1)
             {
@@ -239,6 +240,7 @@ namespace MWCoop
                     p.On = false; p.OffAt = now;
                     if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " eteint (piles ou arret)");
                 }
+                if ((p.On || p.ByHost) && p.Speaker == null) p.Speaker = SpeakerOf(p.K);
                 bool want = (p.On || p.ByHost) && p != holder && p.Speaker != null;
                 if (want && p.G == null) p.G = MakePostGhost(p);
                 else if (!want && p.G != null) KillPost(p, p == holder ? "reprend le vrai jeu de canaux" : "eteint");
