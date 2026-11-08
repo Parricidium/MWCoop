@@ -213,7 +213,7 @@ namespace MWCoop
                     float v = r.F32(), t = r.F32(); bool on = r.Bool(), ch = r.Bool(), inn = r.Bool();
                     string dk = kind == 1 && r.More ? r.Str() : "";
                     if (kind == 1 && (Session.IsHost || now - u.Changed < 3f || now < u.Guard)) return;   // (instantane : un geste d'ici recent l'emporte)
-                    if (Differs(u, v, t, on, ch)) { Apply(u, v, t, on, ch); Log.Info("radio (MSC) : " + u.Car.name + " : " + (kind == 1 ? "recale sur l'hote" : "geste de #" + who) + ", " + Describe(u)); }
+                    if (Differs(u, v, t, on, ch)) { if (kind == 0) ApplyRemote(u, v, t, on, ch, who); else Apply(u, v, t, on, ch); Log.Info("radio (MSC) : " + u.Car.name + " : " + (kind == 1 ? "recale sur l'hote" : "geste de #" + who) + ", " + Describe(u)); }
                     if (kind == 1 && inn != u.In) { if (inn) Insert(u, dk, who); else Eject(u, who); }
                     break;
                 }
@@ -231,6 +231,19 @@ namespace MWCoop
         {
             if (f == null || !f.enabled || f.Fsm == null || f.Fsm.GetState(state) == null) return;
             try { Game.SetState(f, state); } catch (System.Exception e) { Log.Warn("radio (MSC) : " + Recon.Path(f.transform) + " -> " + state + " : " + e.Message); }
+        }
+
+        // Geste d'un autre (message 0) : pose sous Radio.BeforeRemote / AfterRemote, comme le rejeu des gestes par Jobs -- sinon le jeu
+        // deplacait l'unique jeu de canaux (RADIO/RadioChannels) dans ce poste et notre radio se taisait (08/11, [Directives] : l'invite
+        // allume la HAYOSIKO, la SATSUMA de l'hote se tait). Le poste de l'autre joue alors une copie dans son haut-parleur (Radio.cs),
+        // le meme morceau au meme moment. Instantane de l'hote (message 1, arrivant en cours de partie) : comme avant -- sa copie serait
+        // coupee par le battement @poste de l'hote. [Test] RadioMscSansCopie=1 : comme avant.
+        static void ApplyRemote(Unit u, float v, float t, bool on, bool ch, int who)
+        {
+            if (Config.GetInt("Test", "RadioMscSansCopie", 0) != 0) { Apply(u, v, t, on, ch); return; }
+            Radio.BeforeRemote();
+            try { Apply(u, v, t, on, ch); }
+            finally { Radio.AfterRemote(u.Vol.transform, who, v <= 0.001f ? "Off" : u.Vol.ActiveStateName); }
         }
 
         static void Apply(Unit u, float v, float t, bool on, bool ch)
