@@ -1210,7 +1210,21 @@ namespace MWCoop
                     // ([Test] TuyauVidangeRecul : part de ces 5 m gardee -- a 1, le raccord est a ~8 m de la fosse, hors de portee de la chaine
                     // posee a la main, dossier #55)
                     Vector3 park = wellAt + new Vector3(-5f, 0f, 2f) * Config.GetFloat("Test", "TuyauVidangeRecul", 1f); park.y = GroundY(park + Vector3.up * 3f) + 1.5f;
-                    if (Session.IsHost && g != null) Log.Info("autotest : tuyau, vidange : " + VehicleSync.TestPlaceAt(TestCar, park, g.rotation));
+                    // ([Test] TuyauArriereFosse=<m>, dossier #55, cas de Markos : GIFU garee l'ARRIERE vers la fosse, son raccord a <m> m du centre de la
+                    // fosse, la caisse a l'oppose -- y5 a y14 : garee dans son sens d'origine, raccord du cote oppose, tuyau tendu ou caisse sur la fosse)
+                    float back = Config.GetFloat("Test", "TuyauArriereFosse", 0f);
+                    if (back > 0f && g != null)
+                    {
+                        Vector3 d = park - wellAt; d.y = 0f; d = d.sqrMagnitude > 0.01f ? d.normalized : Vector3.left;
+                        Quaternion rot = Quaternion.LookRotation(d, Vector3.up);
+                        Transform cp = coupler != null ? coupler : ha;
+                        Vector3 hl = cp != null ? g.InverseTransformPoint(cp.position) : new Vector3(0f, 0f, -3.5f);
+                        Vector3 off = rot * hl; off.y = 0f;
+                        park = wellAt + d * back - off; park.y = GroundY(park + Vector3.up * 3f) + 1.5f;
+                        if (Session.IsHost) Log.Info("autotest : tuyau, vidange : GIFU l'arriere vers la fosse, raccord a " + back.ToString("F1") + " m du centre (raccord dans le repere du camion "
+                                                     + hl.ToString("F2") + (cp == coupler ? "" : ", bouton du tuyau") + ") -> " + VehicleSync.TestPlaceAt(TestCar, park, rot));
+                    }
+                    else if (Session.IsHost && g != null) Log.Info("autotest : tuyau, vidange : " + VehicleSync.TestPlaceAt(TestCar, park, g.rotation));
                     GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                     if (cc != null) { cc.enabled = false; Vector3 me = wellAt + new Vector3(1.5f, 0f, Session.IsHost ? 1.5f : -1.5f); me.y = GroundY(me + Vector3.up * 3f) + 1f; pl.transform.position = me; cc.enabled = true; }
                 }
