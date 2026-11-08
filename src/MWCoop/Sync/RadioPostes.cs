@@ -187,6 +187,13 @@ namespace MWCoop
             Poste p = PosteOf(k, true);
             if (kind == 0)
             {
+                // (dossier #56, Say my name 08/11 : « quand je change le volume, la radio repart sur un autre morceau ». Chaque cran de la molette de
+                // volume -- et de la station -- repasse par « Check tune » : SetParent du vrai jeu de canaux vers CE poste, Fetch relance. Poste
+                // deja allume qui joue en copie : il prenait le vrai jeu a celui qui l'avait, qui repartait sur une copie neuve. Le vrai est remis
+                // a son poste juste apres l'etat (KeepHolder) ; la copie de ce poste prend sa station, et son Fetch suit deja le volume de son
+                // haut-parleur. [Test] RadioMolettePrend=1 : comme avant.)
+                if (p.On && Off(Take()) == false && realT.parent != null && KeyOf(realT.parent) != k && Config.GetInt("Test", "RadioMolettePrend", 0) == 0)
+                { keepBase = Take(); keepPost = p; keepAt = now; }
                 // (en tete de l'etat : le SetParent du jeu suit ; deux postes allumes dans la meme image ont chacun leur « allume »)
                 if (!p.On) { p.OnAt = now; if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " allume (" + c.F.FsmName + " « " + state + " »)"); }
                 p.On = true; p.ByHost = false;
@@ -215,11 +222,32 @@ namespace MWCoop
             if (postLogs++ < 200) Log.Info("radio : « eteint » de " + was.K.name + " ne coupe plus " + h.K.name + " (vrai jeu de canaux remis)");
         }
 
+        // Molette (volume, station) d'un poste allume qui jouait en copie : le vrai jeu de canaux, parti dans ce poste, est remis a celui qui
+        // l'avait ; la station que l'etat vient de poser devient celle de la copie de ce poste.
+        static Snap keepBase; static Poste keepPost; static float keepAt = -10f;
+        static void KeepHolder(float now)
+        {
+            if (keepPost == null) return;
+            if (now - keepAt > 0.6f || realT == null || fetch == null) { keepPost = null; return; }
+            Snap cur = Take();
+            if (Off(cur) || cur.Parent == null || KeyOf(cur.Parent) != keepPost.K) return;   // (pas encore pris dans cette image)
+            Poste p = keepPost; keepPost = null;
+            Poste h = keepBase.Parent != null ? PosteOf(KeyOf(keepBase.Parent), false) : null;
+            if (h == null || h == p || !(h.On || h.ByHost)) return;   // (l'ancien n'est plus allume : ce poste garde le vrai jeu)
+            p.Flags = cur; p.HasFlags = true;
+            Restore(keepBase);
+            fetch.SendEvent("FETCH");
+            last = Take(); lastSet = true;
+            if (p.G != null) Flags(p.G, p.Flags);
+            if (postLogs++ < 200) Log.Info("radio : molette de " + p.K.name + " (" + Station(p.Flags, true) + ") : le vrai jeu de canaux reste a " + h.K.name);
+        }
+
         static void MultiWatch(float now)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool rescanned = ScanCtrls(now);
             StrayOff(now);
+            KeepHolder(now);
             KeepParent(now);
             Snap cur = Take();
             Poste holder = Off(cur) || !cur.On || cur.Parent == null ? null : PosteOf(KeyOf(cur.Parent), true);
