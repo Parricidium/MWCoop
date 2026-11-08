@@ -1998,6 +1998,7 @@ namespace MWCoop
                 foreach (Avatar a in PlayerSync.Avatars) Log.Info("autotest : mains " + a.HandsState() + " ; " + VehicleSync.GearState(Config.Get("Test", "TestVoiture", "SATSUMA")));
             }
             if (mode == "conduite") { Conduite(t); return; }
+            if (mode == "rapportjeu") { VehicleSync.TestRapportJeu(t); return; }   // (octet du rapport, voitures du jeu inchangees ? 08/11)
             Net.Session.TestSolo(mode, t);
             if (mode == "vaz" || mode == "vazcle") { Vaz.Test(mode, t); return; }   // (24/10 : voitures sur la Ruscko)
             if (mode == "vaztenue") { StandaloneCar.Test(t); VazTenue.Test(mode, t); return; }
@@ -4279,6 +4280,7 @@ namespace MWCoop
                 if (cf != null && t > 46f && step == 2) { step = 3; Game.SetState(cf, "Move up"); Log.Info("autotest : debout"); }
             }
             if (mode == "conduite") Conduite(t);
+            if (mode == "rapportjeu") VehicleSync.TestRapportJeu(t);   // (octet du rapport, voitures du jeu inchangees ? 08/11)
             if (mode == "mscfrigo") { MscTest(mode, t); return; }   // (prise d'un objet suivi : Props commun, essai de [MSC] rejoue sur MWC, 27/10)
             if (mode == "sauvecompare") { SaveBatchMsc.Compare(t); return; }   // (sauvegarde en jeu une par une puis groupee dans la meme image, 07/11)
             if (mode == "standalonecoop") { StandaloneCar.CoopTest(t); return; }   // (voiture de la quete s21 sur My Winter Car, [Test] QueteMwc=1 -- 01/11)

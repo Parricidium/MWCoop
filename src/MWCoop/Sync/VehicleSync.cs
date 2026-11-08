@@ -97,6 +97,7 @@ namespace MWCoop
             public float NextLog;
             public float KinLostLog; public int KinLost;
             public Drivetrain Dt;
+            public int RemoteGear = -1;         // rapport engage chez son conducteur (-1 : pas recu -- remorquage, ancienne version)
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
             public float NanSince = -1f; public int NanHits; public bool NanDumped;   // garde-fou : corrections rapprochees (releve complet une fois)
             public float BadAt = -10f; public int BadN;                                 // garde-fou : derniere remise, remises rapprochees
@@ -2716,6 +2717,13 @@ namespace MWCoop
             Car c = CarOf(t);
             return c != null && Remote(c, Time.realtimeSinceStartup);
         }
+        // Rapport engage chez le joueur qui mene la copie (-1 : personne, ou rien recu) -- planches des voitures addons (JD 08/11 :
+        // « syncronisé les rapport afficher sur les tableaux de bords des voitures addons »)
+        public static int RemoteGear(Transform t)
+        {
+            Car c = CarOf(t);
+            return c != null && Remote(c, Time.realtimeSinceStartup) ? c.RemoteGear : -1;
+        }
 
         // ... par un joueur assis au volant (pas un moteur laisse tournant, conducteur sorti).
         public static bool RemotelySeated(Transform t)
@@ -3238,6 +3246,54 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // [Test] Autotest=rapportjeu (2 joueurs, MSC et MWC -- octet du rapport ajoute au paquet des voitures, 08/11 : les voitures du jeu
+        // inchangees ?) : l'hote prend le volant de [Test] TestVoiture (SATSUMA sur MSC, CORRIS sur MWC) a 15/22 s, sons du moteur figes ;
+        // l'invite s'assoit en passager a 40 s. Des que l'hote le voit assis (70 s au plus), 8 pas de 3 s : regime, gaz, volant et rapport
+        // differents a chaque pas, notes chez l'hote ; l'invite note chaque seconde ce que sa copie recoit et joue.
+        static int rjStep, rjPas = -1, rjTries; static float rjAt, rjLog, rjTry; static bool rjSeat;
+        public static void TestRapportJeu(float t)
+        {
+            string name = Config.Get("Test", "TestVoiture", Game.Msc ? "SATSUMA" : "CORRIS");
+            Car c = Named(name);
+            if (c == null || c.Body == null || !Session.Active) return;
+            float now = Time.realtimeSinceStartup;
+            if (Session.IsHost)
+            {
+                if (t > 15f && rjStep == 0) { rjStep = 1; Log.Info("autotest : rapportjeu, hote " + TestEnter(name, false)); }
+                if (t > 22f && rjStep == 1) { rjStep = 2; rjTry = t; Log.Info("autotest : rapportjeu, hote volant -> " + TestEnter(name, true)); }
+                // (pas au volant -- declencheur pas encore pret, SATSUMA « Wait for player » : reposee a cote puis volant, toutes les 4 s, 6 fois)
+                if (rjStep == 2 && c.Index != LocalDriving && t > rjTry + 4f && rjTries < 6) { rjTries++; rjTry = t; rjSeat = true; Log.Info("autotest : rapportjeu, hote essai " + rjTries + " : " + TestEnter(name, false)); }
+                if (rjStep == 2 && rjSeat && t > rjTry + 2f) { rjSeat = false; Log.Info("autotest : rapportjeu, hote volant -> " + TestEnter(name, true)); }
+                if (t > 27f && rjStep == 2 && (c.Index == LocalDriving || rjTries >= 6 && t > rjTry + 3f)) { rjStep = 3; TestEngine(900f, 0f); Log.Info("autotest : rapportjeu, hote au volant " + (c.Index == LocalDriving) + ", " + TestSounds(name, true)); }
+                if (rjStep == 3 && t > 30f && now >= rjAt)
+                {
+                    bool seated = false;
+                    for (int id = 0; id < 16 && !seated; id++)
+                    {
+                        Transform tc; Vector3 hd; string cn;
+                        if (id != Session.LocalId && Seats.RemoteSeat(id, out tc, out hd, out cn) && tc != null && (tc == c.T || tc.IsChildOf(c.T))) seated = true;
+                    }
+                    if (!seated && t < 70f) return;
+                    if (rjPas < 0) Log.Info("autotest : rapportjeu, hote : " + (seated ? "invite assis" : "PAS D'INVITE ASSIS a 70 s"));
+                    rjPas++; rjAt = now + 3f;
+                    if (rjPas >= 8) { rjStep = 4; TestEngine(-1f, 0f); TestSteer(float.NaN); Log.Info("autotest : rapportjeu fini (hote)"); return; }
+                    float rpm = 1200f + 600f * rjPas, thr = 0.1f * rjPas, steer = rjPas % 2 == 0 ? 0.5f : -0.5f;
+                    int g = c.Dt != null && c.Dt.gearRatios != null ? rjPas % c.Dt.gearRatios.Length : 0;
+                    TestEngine(rpm, thr); TestSteer(steer); TestGear(name, g);
+                    Log.Info("autotest : rapportjeu, hote pas " + rjPas + " envoie regime " + rpm.ToString("F0") + ", gaz " + thr.ToString("F1") + ", volant " + steer.ToString("F1") + ", rapport " + g + " (boite " + (c.Dt != null ? c.Dt.gear.ToString() : "?") + ") | " + SoundDiag(c));
+                }
+                return;
+            }
+            if (t > 40f && rjStep == 0) { rjStep = 1; Log.Info("autotest : rapportjeu, invite passager -> " + Seats.TestSit(name.Split('(')[0], 0)); }
+            if (rjStep == 1 && t > 42f && now >= rjLog)
+            {
+                rjLog = now + 1f;
+                Log.Info("autotest : rapportjeu, invite recoit regime " + c.Rpm.ToString("F0") + ", gaz " + c.Throttle.ToString("F1") + ", volant " + c.Steer.ToString("F1") + ", rapport " + c.RemoteGear
+                         + ", en marche " + c.RemoteRunning + ", copie " + (c.Kinematic ? "oui" : "NON") + " (conducteur #" + c.RemoteDriver + "), Drivetrain " + (c.Dt != null ? c.Dt.rpm.ToString("F0") + " tr/min rapport " + c.Dt.gear : "?") + " | " + SoundDiag(c));
+                if (t > 125f) { rjStep = 2; Log.Info("autotest : rapportjeu fini (invite)"); }
+            }
+        }
+
         // Essais : champs simples du Drivetrain (nombres, booleens) de la voiture.
         public static string DtState(string name)
         {
@@ -3586,6 +3642,9 @@ namespace MWCoop
             // Heure de la mesure : la pose du corps est celle du dernier pas de physique (0 a 20 ms avant cette image, variable
             // d'un envoi a l'autre -- a 25 m/s, jusqu'a 50 cm d'ecart au hasard : la copie du passager avancait par saccades).
             w.F32(Time.realtimeSinceStartup - Mathf.Clamp(Time.time - Time.fixedTime, 0f, Time.fixedDeltaTime));
+            // (rapport engage, apres l'heure : afficheur et feux de recul des voitures addons chez les autres -- les anciennes versions
+            // s'arretent a l'heure ; 255 : pas de boite)
+            if (driven) w.U8(c.Dt != null ? Mathf.Clamp(c.Dt.gear, 0, 254) : 255);
             Session.SendAll(w, reliable);
         }
 
@@ -3778,6 +3837,7 @@ namespace MWCoop
             Vector3 dhead = mode == 1 && r.More ? r.Vec() : Vector3.zero;
             float ts = r.More ? r.F32() : -1f;
             if (!Finite(ts)) ts = -1f;
+            int gear = driven && r.More ? r.U8() : 255;   // (rapport engage ; absent : remorquage, ancienne version)
             // Valeurs non finies (NaN, infini) : jamais appliquees ni relayees -- un regime NaN recu faisait partir la
             // physique de la copie en valeurs infinies et figeait le jeu (retour d'un joueur, 10/10).
             // Valeurs finies mais folles aussi (a plus de 50 km, plus de 500 m/s : une remorque projetee chez l'autre, des
@@ -3795,7 +3855,9 @@ namespace MWCoop
                 // (chaleur absente = NaN ici, NoHeat sur le reseau : relayee en NaN, le message entier etait rejete par les autres
                 // invites -- le HAYOSIKO d'un invite restait a l'arret chez l'autre, son conducteur « roulait dans les airs », 20/10)
                 if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(float.IsNaN(heat) ? NoHeat : heat).U16(smask); foreach (float v in spitch) fw.F32(v); if (mode == 1) fw.Vec(dhead); }
-                if (ts >= 0f) fw.F32(ts);
+                // (rapport relaye apres l'heure : heure -1 si elle manquait, lue comme absente)
+                if (ts >= 0f || gear != 255) fw.F32(ts >= 0f ? ts : -1f);
+                if (gear != 255) fw.U8(gear);
                 Session.Broadcast(fw, false, who);
             }
             if (!scanned) return;
@@ -3834,6 +3896,7 @@ namespace MWCoop
                 c.Pos = pos; c.Rot = rot; c.Vel = vel; c.AngVel = ang;
                 skipPose:
                 c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask & 0x3FFF; c.RemoteHeat = heat;
+                c.RemoteGear = gear == 255 ? -1 : gear;
                 c.HornRemote = (smask & 0x4000) != 0;
                 c.RemoteRunning = (smask & 0x8000) != 0;
                 for (int i = 0, k = 0; i < c.SoundObjs.Length && i < 16; i++)

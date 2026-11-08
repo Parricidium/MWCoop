@@ -1032,6 +1032,7 @@ namespace MWCoop
             // commandes du chauffage a portee (passager avant -- StandaloneHeater)
             string heat = StandaloneCar.HeaterInputFor(current.CarT, view);
             if (heat != null) { BeltHint(heat); return; }
+            if (StandaloneCar.KnobAimed(current.CarT)) { BeltHint(null); return; }   // (bouton de la planche vise : le sien, JD 08/11)
             Vector3 bk;
             if (!StandaloneCar.SeatBuckle(current.CarT, current.Head, out bk)) return;
             Vector3 at = current.CarT.TransformPoint(bk), d = at - view.position;

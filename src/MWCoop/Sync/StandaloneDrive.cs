@@ -802,6 +802,13 @@ namespace MWCoop
         {
             var d = b.Axis as StandaloneDriver;
             if (d == null) return;
+            // (copie menee par un autre, Drivetrain coupe ici : rapport recu de son conducteur -- afficheur R/N/1-5, ecran LCD et feux de
+            // recul comme chez lui ; JD 08/11 : passagers et autres joueurs voyaient le rapport d'avant, fige)
+            if (b.Rb.isKinematic && b.Dt != null && b.Dt.gearRatios != null)
+            {
+                int rg = VehicleSync.RemoteGear(b.Car.transform);
+                if (rg >= 0 && rg < b.Dt.gearRatios.Length && rg != b.Dt.gear) b.Dt.gear = rg;
+            }
             Engine(b, st);
             if (b.Sound != null) b.Sound.Update();
             Lamps(b, st);
@@ -824,7 +831,13 @@ namespace MWCoop
             WheelMask(b, st);
             if (driving == null)
             {
-                Doors(b, st);
+                // (commandes de la planche hors volant, JD 08/11 : « comme pour la Satsuma ... meme si ont est pas assis en conducteur ou
+                // passager ... les passager, peuvent toucher a tout sauf le volant et les pedales » -- assis dans la voiture, camera dans
+                // l'habitacle, ou dehors du cote d'une portiere ouverte ou d'une vitre baissee ; une voiture a la fois)
+                if (hoverCar != null && (hoverCar.Car == null || !cars.Contains(hoverCar))) hoverCar = null;
+                if ((hoverCar == null || hoverCar == b) && Reach(b, st)) { Knobs(b, st); hoverCar = hovered >= 0 ? b : null; }
+                else if (hoverCar == b) { ClearHover(); CrankStop(b, st); HornOff(b, st); hoverCar = null; }
+                if (hoverCar != b) Doors(b, st);
                 CabinPresence(b, st, pl.transform);
                 // (texte du plein : efface en s'eloignant, seulement sur la voiture qui a un reservoir)
                 if (st.HasFuel)
@@ -837,7 +850,7 @@ namespace MWCoop
                 if (zone)
                 {
                     prompted = b;
-                    Game.SetGlobalBool("GUIdrive", true); Game.SetGlobal("GUIinteraction", "ENTER DRIVING MODE");
+                    Game.SetGlobalBool("GUIdrive", true); if (hoverCar != b) Game.SetGlobal("GUIinteraction", "ENTER DRIVING MODE");   // (bouton vise : son texte)
                     if (Time.realtimeSinceStartup > exitBlock && Down("DrivingMode")) Enter(b, st);
                 }
                 else if (prompted == b) { prompted = null; Game.SetGlobalBool("GUIdrive", false); if (!refilling) Game.SetGlobal("GUIinteraction", ""); }
@@ -986,10 +999,10 @@ namespace MWCoop
             if (!st.HasRadio) return false;
             Vector3 v = b.Car.transform.TransformPoint(st.RadioAt) - cam.position;
             float along = Vector3.Dot(v, cam.forward);
-            if (along < 0.1f || along > 1.3f || (v - cam.forward * along).magnitude > 0.07f) return false;
+            if (tKnob != KRadio && (along < 0.1f || along > 1.3f || (v - cam.forward * along).magnitude > 0.07f)) return false;
             Game.SetGlobalBool("GUIuse", true);
             Game.SetGlobal("GUIinteraction", st.RadioCh == 0 ? "RADIO" : st.RadioCh == 1 ? "RADIO 1  " + Mathf.RoundToInt(st.RadioVol * 100f) + " %" : "RADIO FOLK  " + Mathf.RoundToInt(st.RadioVol * 100f) + " %");
-            if (Input.GetMouseButtonDown(0)) { st.RadioCh = (st.RadioCh + 1) % 3; Foley(b, "dash_button", cam.position + v, 0.6f); SendState(b, st); Log.Info("standalone : radio " + st.RadioCh); }
+            if (MDown()) { st.RadioCh = (st.RadioCh + 1) % 3; Foley(b, "dash_button", cam.position + v, 0.6f); SendState(b, st); Log.Info("standalone : radio " + st.RadioCh); }
             float sc = Input.GetAxis("Mouse ScrollWheel");
             if (sc != 0f) st.RadioVol = Mathf.Clamp01(st.RadioVol + Mathf.Sign(sc) * 0.05f);
             return true;
@@ -1622,6 +1635,7 @@ namespace MWCoop
 
         static void Enter(VazCar.Built b, State st)
         {
+            if (hoverCar != null) { ClearHover(); hoverCar = null; }   // (bouton vise a pied : le conducteur repart de rien)
             GameObject pl = Game.PlayerGo;
             float gy;
             footHeight = Ground(pl.transform.position + Vector3.up * 0.3f, pl.transform, b.Car.transform, out gy) ? pl.transform.position.y - gy : 1.0f;
@@ -1849,6 +1863,9 @@ namespace MWCoop
             if (st.HasFuel) w.U8(Mathf.RoundToInt(Mathf.Clamp01(st.Fuel) * 255f)).U8(float.IsNaN(st.EngineTemp) ? 255 : Mathf.Clamp(Mathf.RoundToInt(st.EngineTemp + 40f), 0, 254));
             // (vitres de portiere : apres le reste, seulement les voitures qui en ont)
             if (st.Glass[0] != null || st.Glass[1] != null) w.U8(Mathf.RoundToInt(st.WinPos[0] * 255f)).U8(Mathf.RoundToInt(st.WinPos[1] * 255f));
+            // (puis une action : frein a main serre (3) ou desserre (1) ici sur une copie -- celui qui mene la voiture l'applique a son levier ;
+            // 0 : rien. JD 08/11, passagers et pietons aux commandes ; les anciennes versions s'arretent avant)
+            w.U8(st.HandAsk < 0 ? 0 : st.HandAsk > 0 ? 3 : 1); st.HandAsk = -1;
             Net.Session.SendAll(w, true);
         }
 
@@ -1860,10 +1877,13 @@ namespace MWCoop
             {
                 State st;
                 if (b.Number != n || !states.TryGetValue(b, out st)) continue;
+                // (commande reglee ici il y a moins d'1 s -- passager, pieton ou conducteur : l'etat d'un autre parti avant ne la defait pas)
+                bool mine = Time.realtimeSinceStartup - st.KnobLocalT < 1f;
                 bool eng = (f & 1) != 0;
+                if (mine) eng = st.EngineOn;
                 if (eng && !st.EngineOn && !b.Rb.isKinematic) b.Dt.StartEngine();
                 if (eng != st.EngineOn) Log.Info("standalone : n " + n + " moteur " + (eng ? "demarre" : "coupe") + " chez un autre joueur");
-                st.EngineOn = eng; st.LightsOn = (f & 2) != 0;
+                st.EngineOn = eng; if (!mine) st.LightsOn = (f & 2) != 0;
                 if (st.DoorOpen != null)
                     for (int k = 0; k < 2; k++)
                     {
@@ -1875,33 +1895,41 @@ namespace MWCoop
                         if (!b.Rb.isKinematic) { if (o && !st.DoorOpen[k]) st.DoorVel[k] = 260f; else if (!o && st.DoorOpen[k]) { st.DoorVel[k] = -420f; continue; } }
                         st.DoorOpen[k] = o;
                     }
-                SetHorn(b, st, (f & 16) != 0, false);
-                st.KeyIn = (f & 32) != 0; st.KeyPos = (f & 64) != 0 ? 1 : 0; st.HatchOpen = (f & 128) != 0;
+                if (!st.HornMine) SetHorn(b, st, (f & 16) != 0, false);
+                if (!mine) { st.KeyIn = (f & 32) != 0; st.KeyPos = (f & 64) != 0 ? 1 : 0; }
+                st.HatchOpen = (f & 128) != 0;
                 if (extra.Length > 0)
                 {
-                    st.Hazard = (extra[0] & 1) != 0; st.WipersOn = (extra[0] & 2) != 0;
+                    if (!mine) { st.Hazard = (extra[0] & 1) != 0; st.WipersOn = (extra[0] & 2) != 0; }
                     if (driving != b) st.DriverBelted = (extra[0] & 4) != 0;
                     st.Folded[0] = (extra[0] & 8) != 0; st.Folded[1] = (extra[0] & 16) != 0;
-                    if (b.Rb.isKinematic && driving != b)
+                    if (b.Rb.isKinematic && driving != b && !mine)
                     {
                         bool hb = (extra[0] & 32) != 0;
                         if (st.HandRemoteSet && hb != st.HandRemote) Foley(b, hb ? "handbrake_on" : "handbrake_off", b.BrakePivot != null ? b.BrakePivot.position : b.Car.transform.position, 1f);
                         st.HandRemote = hb; st.HandRemoteSet = true;
                     }
                 }
-                if (extra.Length > 3 && st.Heat != null)
+                if (extra.Length > 3 && st.Heat != null && !mine)
                 {
                     st.Heat.On = (extra[1] & 1) != 0; st.Heat.FanStep = Mathf.Clamp((extra[1] >> 1) & 3, 0, FanSteps);
                     st.Heat.TempPos = extra[2] / 255f; st.Heat.DirPos = extra[3] / 255f;
                     HeaterParts(st);
                 }
-                if (extra.Length > 4) { st.HighBeam = (extra[4] & 1) != 0; st.Turn = (extra[4] & 2) != 0 ? 1 : (extra[4] & 4) != 0 ? 2 : 0; st.RadioCh = (extra[4] >> 3) & 3; }
+                if (extra.Length > 4 && !mine) { st.HighBeam = (extra[4] & 1) != 0; st.Turn = (extra[4] & 2) != 0 ? 1 : (extra[4] & 4) != 0 ? 2 : 0; st.RadioCh = (extra[4] >> 3) & 3; }
                 if (extra.Length > 6 && st.HasFuel) { st.Fuel = extra[5] / 255f; if (extra[6] != 255) st.EngineTemp = extra[6] - 40f; }
                 int wa = st.HasFuel ? 7 : 5;
                 // (vitres : chez tous, conducteur compris -- il ignorait celles des autres, et son renvoi des 3 s refermait chez tous la vitre
                 // baissee par un passager, JD 07/11 ; sauf celle tournee ici il y a moins d'1 s, l'etat d'un autre parti avant ne la remet pas)
                 if (extra.Length > wa + 1 && (st.Glass[0] != null || st.Glass[1] != null))
                     for (int k = 0; k < 2; k++) if (Time.realtimeSinceStartup - st.WinLocalT[k] >= 1f) st.WinPos[k] = extra[wa + k] / 255f;
+                // (action d'un autre : frein a main tire ou desserre sur sa copie -- applique ici si la voiture est physique ici, chez celui qui la mene)
+                int aa = wa + (st.Glass[0] != null || st.Glass[1] != null ? 2 : 0);
+                if (extra.Length > aa && (extra[aa] & 1) != 0 && !b.Rb.isKinematic)
+                {
+                    var sd = b.Axis as StandaloneDriver;
+                    if (sd != null) { sd.HandLatch = (extra[aa] & 2) != 0 ? 1f : 0f; Log.Info("standalone : n " + n + " frein a main " + (sd.HandLatch > 0f ? "serre" : "desserre") + " par un autre joueur"); }
+                }
                 st.NextState = Time.realtimeSinceStartup + 3f;
             }
         }
@@ -1915,20 +1943,55 @@ namespace MWCoop
             if (st.Horn != null) { if (on) st.Horn.Play(); else st.Horn.Stop(); }
             if (send) SendState(b, st);
         }
+        // (klaxon : chacun ne coupe que celui qu'il a lance -- un passager ne coupe pas celui du conducteur a chaque image, ni l'inverse)
+        static void HornOff(VazCar.Built b, State st) { if (!st.HornMine) return; st.HornMine = false; SetHorn(b, st, false, true); }
+        // (a portee des commandes sans etre au volant, JD 08/11 : assis dans la voiture, camera dans l'habitacle, ou dehors a moins d'1 m du
+        // cote d'une portiere ouverte ou d'une vitre a moitie baissee (ou sans portiere) -- comme on se penche dans la Satsuma ; portiere
+        // fermee et vitre levee, ou devant, derriere, sur le toit : rien a travers la tole)
+        static VazCar.Built hoverCar;
+        // (passager : un bouton de la planche vise ici -- Seats ne prend alors pas le clic pour sa ceinture, la boucle est pres du frein a main)
+        public static bool KnobAimed(Transform car) { return hovered >= 0 && hoverCar != null && hoverCar.Car != null && car != null && hoverCar.Car == car.gameObject; }
+        static bool Reach(VazCar.Built b, State st)
+        {
+            if (Seats.SeatedCar == b.Car.transform) return true;
+            Transform cam = PlayerCam();
+            if (cam == null || !st.HasCabin) return false;
+            Vector3 p = b.Car.transform.InverseTransformPoint(cam.position);
+            Bounds cb = st.Cabin;
+            if (cb.Contains(p)) return true;
+            // (debout dehors : yeux au-dessus du toit, permis jusqu'a 80 cm ; de cote seulement, pas devant, derriere ni sur le toit)
+            if ((cb.ClosestPoint(p) - p).sqrMagnitude > 1f || p.z < cb.min.z || p.z > cb.max.z || p.y > cb.max.y + 0.8f || Mathf.Abs(p.x - cb.center.x) < cb.extents.x) return false;
+            int k = Mathf.Sign(p.x) == Mathf.Sign(b.M.Head.x) ? 0 : 1;   // (cote du conducteur : portiere 0)
+            if (st.Doors == null || st.Doors[k] == null) return true;
+            return st.DoorOpen[k] || st.DoorAngle[k] > 20f || (WinOn(b, st, k) && st.WinPos[k] >= 0.5f);
+        }
+        // (essais : bouton vise sans regarder, clic -- [Test] StandaloneCommandes)
+        static int tKnob = -1; static bool tDown, tRight;
+        static bool MDown() { return tDown || Input.GetMouseButtonDown(0); }
+        static bool MRight() { return tRight || Input.GetMouseButtonDown(1); }
         static void Knobs(VazCar.Built b, State st)
+        {
+            float sc0 = Input.GetAxis("Mouse ScrollWheel");
+            bool act = MDown() || MRight() || sc0 != 0f;
+            KnobsIn(b, st, driving == b);
+            if (act && hovered >= 0) st.KnobLocalT = Time.realtimeSinceStartup;   // (reglage d'ici : l'etat d'un autre parti avant ne le defait pas)
+            tKnob = -1; tDown = false; tRight = false;
+        }
+        static void KnobsIn(VazCar.Built b, State st, bool driver)
         {
             Transform cam = PlayerCam();
             VazCar.Knob[] ks = KnobsOf(b.M);
             if (cam == null || ks == null) return;
-            // chauffage (commandes de la console, visee serree : l'interrupteur est a 2,4 cm de celui des warnings)
-            string ht = HeaterInput(b, st, cam);
-            if (ht != null) { hovered = KHeater; CrankStop(b, st); SetHorn(b, st, false, true); Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", ht); return; }
-            if (RadioInput(b, st, cam)) { hovered = KRadio; CrankStop(b, st); SetHorn(b, st, false, true); return; }
+            // chauffage (commandes de la console, visee serree : l'interrupteur est a 2,4 cm de celui des warnings) ; assis hors volant :
+            // c'est Seats qui le regle (un seul clic compte)
+            string ht = !driver && Seats.SeatedCar == b.Car.transform ? null : HeaterInput(b, st, cam);
+            if (ht != null) { hovered = KHeater; CrankStop(b, st); HornOff(b, st); Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", ht); return; }
+            if (RadioInput(b, st, cam)) { hovered = KRadio; CrankStop(b, st); HornOff(b, st); return; }
             int hit = -1; float bestPerp = 0.035f;
             foreach (int i in new[] { KIgnition, KLights, KHorn, KWheelHub })
             {
                 if (i != KWheelHub && i >= ks.Length) continue;
-                if (i == KWheelHub && b.SteerPivot == null) continue;
+                if (i == KWheelHub && (b.SteerPivot == null || !driver)) continue;   // (le volant reste au conducteur)
                 Vector3 v = (i == KWheelHub ? b.SteerPivot.position : i == KIgnition && st.Key != null ? st.Key.position : b.Car.transform.TransformPoint(ks[i].At)) - cam.position;
                 float along = Vector3.Dot(v, cam.forward);
                 if (along < 0.15f || along > 1.3f) continue;
@@ -1960,15 +2023,17 @@ namespace MWCoop
                 float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
                 if (along > 0.15f && along < 1.3f && perp < 0.035f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KStalk; }
             }
+            if (tKnob >= 0 && tKnob < KHeater) hit = tKnob;   // (essais : bouton choisi sans viser ; radio : RadioInput)
+            if ((hit == KWheelHub || hit == KBelt) && !driver) hit = -1;   // (volant et ceinture du conducteur : a lui)
             if (hit == KStalk)
             {
-                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                hovered = hit; CrankStop(b, st); HornOff(b, st);
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", st.WipersOn ? "WIPERS OFF" : "WIPERS ON");
-                if (Input.GetMouseButtonDown(0)) { st.WipersOn = !st.WipersOn; SendState(b, st); Log.Info("standalone : essuie-glaces " + (st.WipersOn ? "en marche" : "arretes")); }
+                if (MDown()) { st.WipersOn = !st.WipersOn; SendState(b, st); Log.Info("standalone : essuie-glaces " + (st.WipersOn ? "en marche" : "arretes")); }
                 return;
             }
             // ceinture du conducteur : viser la boucle (a la hanche, cote interieur), clic = bouclee / detachee
-            if (st.BeltHang[0] != null)
+            if (driver && tKnob < 0 && st.BeltHang[0] != null)
             {
                 Vector3 v = b.Body.TransformPoint(BuckleAt(st, 0, st.T.Yeux)) - cam.position;
                 float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
@@ -1976,9 +2041,9 @@ namespace MWCoop
             }
             if (hit == KBelt)
             {
-                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                hovered = hit; CrankStop(b, st); HornOff(b, st);
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", st.DriverBelted ? "UNFASTEN SEATBELT" : "FASTEN SEATBELT");
-                if (Input.GetMouseButtonDown(0))
+                if (MDown())
                 {
                     st.DriverBelted = !st.DriverBelted; SendState(b, st);
                     Seats.PlayFoley(st.DriverBelted ? "seatbelt_fasten" : "seatbelt_unfasten", b.Body.TransformPoint(BuckleAt(st, 0, st.T.Yeux)));
@@ -1988,24 +2053,38 @@ namespace MWCoop
             }
             // levier du frein a main (frein.p205) : vise, molette (vers l'avant : serre) ou clic (serre / desserre), comme les voitures du jeu
             var sdh = b.Axis as StandaloneDriver;
-            if (b.BrakePivot != null && sdh != null)
+            if (tKnob < 0 && b.BrakePivot != null && sdh != null)
             {
                 Vector3 g = b.BrakePivot.TransformPoint(b.M.BrakeGrip - b.M.BrakePivot), v = g - cam.position;
                 float along = Vector3.Dot(v, cam.forward), perp = (v - cam.forward * along).magnitude;
                 if (along > 0.15f && along < 1.3f && perp < 0.06f && (hit < 0 || perp < bestPerp)) { bestPerp = perp; hit = KHand; }
             }
-            if (hit == KHand)
+            if (hit == KHand && sdh != null)
             {
-                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                hovered = hit; CrankStop(b, st); HornOff(b, st);
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", "HANDBRAKE");
                 float sc = Input.GetAxis("Mouse ScrollWheel");
-                if (sc != 0f) sdh.HandLatch = Mathf.Clamp01(sdh.HandLatch + Mathf.Sign(sc) * 0.25f);
-                if (Input.GetMouseButtonDown(0)) sdh.HandLatch = sdh.HandLatch > 0.5f ? 0f : 1f;
+                // (JD 08/11 : « clique gauche il se serre, clique droit il se dessere », comme dans le jeu de base -- conducteur, passager,
+                // a pied ; molette : vers l'avant serre, vers soi desserre)
+                bool pull = MDown() || sc > 0f, release = MRight() || sc < 0f;
+                // (copie menee par un autre : le levier d'ici ne freine rien -- serre ou desserre envoye a celui qui la mene, son levier suit)
+                if (b.Rb.isKinematic && driving != b)
+                {
+                    bool now = st.HandRemoteSet ? st.HandRemote : sdh.HandLatch > 0.5f, want = pull ? true : release ? false : now;
+                    if (want != now)
+                    {
+                        st.HandRemote = want; st.HandRemoteSet = true; st.HandAsk = want ? 1 : 0;
+                        Foley(b, want ? "handbrake_on" : "handbrake_off", b.BrakePivot != null ? b.BrakePivot.position : b.Car.transform.position, 1f);
+                        SendState(b, st); Log.Info("standalone : frein a main " + (want ? "serre" : "desserre") + " sur la copie, envoye");
+                    }
+                    return;
+                }
+                if (pull) sdh.HandLatch = 1f; else if (release) sdh.HandLatch = 0f;
                 return;
             }
-            if (hit >= KCrank0)
+            if (hit >= KCrank0 && hit < KCrank0 + 2)
             {
-                hovered = hit; CrankStop(b, st); SetHorn(b, st, false, true);
+                hovered = hit; CrankStop(b, st); HornOff(b, st);
                 Game.SetGlobalBool("GUIuse", true); Game.SetGlobal("GUIinteraction", "WINDOW");
                 // (molette comme les voitures du jeu : vers soi = vitre baissee ; un cran = 1/8 de la course)
                 int w = hit - KCrank0; float sc = qwAim >= 0 ? qwScroll : Input.GetAxis("Mouse ScrollWheel");
@@ -2013,29 +2092,33 @@ namespace MWCoop
                 if (sc != 0f) { st.WinPos[w] = Mathf.Clamp01(st.WinPos[w] - Mathf.Sign(sc) * 0.125f); st.WinLocalT[w] = Time.realtimeSinceStartup; SendState(b, st); }
                 return;
             }
-            if (hit < 0) { ClearHover(); CrankStop(b, st); SetHorn(b, st, false, true); return; }
+            if (hit < 0) { ClearHover(); CrankStop(b, st); HornOff(b, st); return; }
             hovered = hit;
             Game.SetGlobalBool("GUIuse", true);
             string ign = st.Key == null ? (st.EngineOn ? "ENGINE OFF" : "START ENGINE") : !st.KeyIn ? "INSERT KEY" : st.EngineOn ? "ENGINE OFF" : st.KeyPos == 0 ? "IGNITION" : "START ENGINE";
             Game.SetGlobal("GUIinteraction", hit == KIgnition ? ign : hit == KLights ? (st.LightsOn ? "LIGHTS OFF" : "LIGHTS ON") : hit == KHorn && st.ModelButtons ? "HAZARD LIGHTS" : "HORN");
             // (boutons du modele : le 4e est le bouton des warnings -- le klaxon reste au moyeu du volant)
-            if (hit == KHorn && st.ModelButtons) { SetHorn(b, st, false, true); if (Input.GetMouseButtonDown(0)) { st.Hazard = !st.Hazard; SendState(b, st); Log.Info("standalone : warnings " + (st.Hazard ? "allumes" : "eteints")); } return; }
+            if (hit == KHorn && st.ModelButtons) { HornOff(b, st); if (MDown()) { st.Hazard = !st.Hazard; SendState(b, st); Log.Info("standalone : warnings " + (st.Hazard ? "allumes" : "eteints")); } return; }
             // klaxon : bouton orange ou moyeu du volant, tant que le clic est tenu (comme le bouton du jeu)
-            if (hit == KHorn || hit == KWheelHub) { SetHorn(b, st, Input.GetMouseButton(0), true); return; }
-            SetHorn(b, st, false, true);
-            if (hit == KLights) { if (Input.GetMouseButtonDown(0)) { st.LightsOn = !st.LightsOn; st.HighBeam = false; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints")); } return; }
+            if (hit == KHorn || hit == KWheelHub)
+            {
+                if (Input.GetMouseButton(0) || tDown) { st.HornMine = true; SetHorn(b, st, true, true); } else HornOff(b, st);
+                return;
+            }
+            HornOff(b, st);
+            if (hit == KLights) { if (MDown()) { st.LightsOn = !st.LightsOn; st.HighBeam = false; SendState(b, st); Log.Info("standalone : phares " + (st.LightsOn ? "allumes" : "eteints")); } return; }
             // cle (comme la Satsuma) : clic = mise ; clic = contact ; relacher puis clic tenu = demarreur ; moteur tournant, clic = cle
             // ramenee, moteur coupe ; clic droit moteur coupe = contact coupe, puis cle retiree
             if (st.Key != null)
             {
-                if (!st.KeyIn) { if (Input.GetMouseButtonDown(0)) { st.KeyIn = true; st.KeyPos = 0; SendState(b, st); Log.Info("standalone : cle mise"); } return; }
+                if (!st.KeyIn) { if (MDown()) { st.KeyIn = true; st.KeyPos = 0; SendState(b, st); Log.Info("standalone : cle mise"); } return; }
                 if (!st.EngineOn && Input.GetMouseButtonDown(1)) { CrankStop(b, st); if (st.KeyPos > 0) st.KeyPos = 0; else st.KeyIn = false; SendState(b, st); Log.Info("standalone : " + (st.KeyIn ? "contact coupe" : "cle retiree")); return; }
-                if (st.EngineOn) { if (Input.GetMouseButtonDown(0)) { st.KeyPos = 0; SetEngine(b, false); } return; }
-                if (st.KeyPos == 0) { if (Input.GetMouseButtonDown(0)) { st.KeyPos = 1; st.KeyWait = true; SendState(b, st); Log.Info("standalone : contact mis"); } return; }
+                if (st.EngineOn) { if (MDown()) { st.KeyPos = 0; SetEngine(b, false); } return; }
+                if (st.KeyPos == 0) { if (MDown()) { st.KeyPos = 1; st.KeyWait = true; SendState(b, st); Log.Info("standalone : contact mis"); } return; }
                 if (st.KeyWait) { if (Input.GetMouseButton(0)) return; st.KeyWait = false; }
             }
             // contact : clic moteur tournant = arret ; moteur coupe, clic tenu = demarreur, le moteur prend apres 0,9 s
-            if (st.EngineOn) { if (Input.GetMouseButtonDown(0)) SetEngine(b, false); return; }
+            if (st.EngineOn) { if (MDown()) SetEngine(b, false); return; }
             if (Input.GetMouseButton(0))
             {
                 if (st.CrankT < 0f) { st.CrankT = Time.time; if (b.Sound != null) b.Sound.ExternalStarter(true, false); }
@@ -2840,6 +2923,143 @@ namespace MWCoop
             UnityEngine.Object.Destroy(go);
         }
         static bool cFrein, cSeatShots, cMirrorShots, cBeltDone, cPlanche; static int cHeat; static float cHeatLog;
+
+        // [Test] StandaloneRapports=1 (avec Autotest=standalonecoop, JD 08/11 : « syncronisé les rapport afficher sur les tableaux de bords
+        // des voitures addons ») : l'hote au volant a l'arret, des que l'invite est assis (95 s au plus), engage R, N, 1..n toutes les
+        // 3 s (embrayage enfonce, freins serres), puis roule comme avant. Chaque joueur note chaque rapport de sa boite et ce que montre sa
+        // planche (l'invite : aussi le rapport recu) ; photo de la planche de ses yeux en 3e.
+        // [Test] StandaloneCommandes=1 (avec Autotest=standalonecoop, JD 08/11 : « que l'ont puisse faire toutes les actions dans une voiture
+        // ... meme si ont est pas assis en conducteur ou passager ... sauf le volant et les pedales ») : l'hote au volant a l'arret (moteur,
+        // phares) note chaque changement de l'etat de sa voiture ; l'invite, assis passager, actionne toutes les 3 s un bouton (bouton choisi
+        // sans viser, clic simule -- tKnob, tDown) : phares, warnings ou klaxon, radio, frein a main serre puis desserre, moyeu du volant
+        // (refuse), essuie-glaces, cle (moteur coupe) ; puis il descend, se poste dehors cote passager, portiere fermee : phares (refuse) ;
+        // portiere ouverte : phares (accepte).
+        static int cmdStep = -1; static float cmdAt; static string cmdSeen = "";
+        static string CmdState(VazCar.Built b, State st)
+        {
+            var d = b.Axis as StandaloneDriver;
+            return "moteur " + (st.EngineOn ? 1 : 0) + ", phares " + (st.LightsOn ? 1 : 0) + ", warnings " + (st.Hazard ? 1 : 0) + ", klaxon " + (st.HornOn ? 1 : 0) + ", radio " + st.RadioCh
+                   + ", essuie " + (st.WipersOn ? 1 : 0) + ", cle " + (st.KeyIn ? 1 : 0) + "/" + st.KeyPos + ", frein a main " + (b.Rb.isKinematic ? (st.HandRemote ? "1 (recu)" : "0 (recu)") : d != null ? d.HandLatch.ToString("F0") : "?")
+                   + ", portiere passager " + (st.DoorOpen != null && st.DoorOpen.Length > 1 && st.DoorOpen[1] ? "ouverte" : "fermee");
+        }
+        static void CommandsTest(VazCar.Built b, State st, bool host, float t, GameObject pl)
+        {
+            if (host)
+            {
+                if (cStep < 3 || driving != b) return;
+                string s = CmdState(b, st);
+                if (s != cmdSeen) { cmdSeen = s; Log.Info("standalone : commandes, hote voit : " + s); }
+                return;
+            }
+            if (cStep < 3 || pl == null) return;
+            if (cmdStep < 0) { cmdStep = 0; cmdAt = t + 5f; Log.Info("standalone : commandes, invite assis " + (Seats.SeatedCar == b.Car.transform) + " : " + CmdState(b, st)); return; }
+            if (t < cmdAt) return;
+            // (resultat du pas d'avant, puis le suivant)
+            if (cmdStep > 0)
+            {
+                Log.Info("standalone : commandes, invite apres le pas " + cmdStep + " (a portee " + Reach(b, st) + ", bouton " + (tKnob >= 0 ? "PAS PRIS" : "pris") + ") : " + CmdState(b, st));
+                tKnob = -1; tDown = false; tRight = false;
+            }
+            cmdAt = t + 3f; cmdStep++;
+            string what;
+            switch (cmdStep)
+            {
+                case 1: tKnob = KLights; what = "phares"; break;
+                case 2: tKnob = KHorn; what = st.ModelButtons ? "warnings" : "klaxon"; break;
+                case 3: tKnob = KRadio; what = st.HasRadio ? "radio" : "radio (pas de poste)"; break;
+                case 4: tKnob = KHand; what = "frein a main, clic gauche (serre)"; break;
+                case 5: tKnob = KHand; tRight = true; what = "frein a main, clic droit (desserre)"; break;
+                case 6: tKnob = KWheelHub; what = "moyeu du volant (doit etre refuse)"; break;
+                case 7: tKnob = KStalk; what = st.Stalk != null || st.HasWiperBtn ? "essuie-glaces" : "essuie-glaces (pas de commande)"; break;
+                case 8: tKnob = KIgnition; what = "cle (moteur coupe)"; break;
+                case 9:
+                    {
+                        Log.Info("standalone : commandes, invite descend : " + Seats.TestLeave());
+                        float sx = -Mathf.Sign(b.M.Head.x);
+                        if (st.DoorOpen != null && st.DoorOpen.Length > 1 && st.DoorOpen[1] && st.Doors[1] != null) ToggleDoor(b, st, 1);
+                        var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                        pl.transform.position = b.Car.transform.TransformPoint(new Vector3(st.Cabin.center.x + sx * (st.Cabin.extents.x + 0.45f), 0.3f, st.Cabin.center.z));
+                        if (cc != null) cc.enabled = true;
+                        what = "poste dehors cote passager, portiere fermee"; break;
+                    }
+                case 10: tKnob = KLights; what = "phares de dehors, portiere fermee (doit etre refuse)"; break;
+                case 11:
+                    {
+                        // (ecarte de 2,5 m avant d'ouvrir : la portiere qui s'ouvre dans le joueur l'envoyait en l'air sur My Summer Car)
+                        float sx = -Mathf.Sign(b.M.Head.x); var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                        pl.transform.position = b.Car.transform.TransformPoint(new Vector3(st.Cabin.center.x + sx * (st.Cabin.extents.x + 2.5f), 0.3f, st.Cabin.center.z));
+                        if (cc != null) cc.enabled = true;
+                        if (st.Doors[1] != null && !st.DoorOpen[1]) ToggleDoor(b, st, 1); what = "ecarte, portiere passager ouverte"; break;
+                    }
+                case 12:
+                    {
+                        // (revenu dans l'ouverture, en arriere de la charniere)
+                        float sx = -Mathf.Sign(b.M.Head.x); var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                        pl.transform.position = b.Car.transform.TransformPoint(new Vector3(st.Cabin.center.x + sx * (st.Cabin.extents.x + 0.45f), 0.3f, st.Cabin.center.z - 0.2f));
+                        if (cc != null) cc.enabled = true;
+                        what = "revenu dehors, portiere ouverte"; break;
+                    }
+                case 13: tKnob = KLights; what = "phares de dehors, portiere ouverte"; break;
+                case 14: Photo(b, "commandes-dehors", b.Car.transform.InverseTransformPoint(PlayerCam() != null ? PlayerCam().position : pl.transform.position), st.T.Yeux + new Vector3(0f, -0.2f, 0.4f), 50f); what = "photo"; break;
+                default: cmdStep = 99; cmdAt = float.MaxValue; Log.Info("standalone : commandes fini (invite)"); return;
+            }
+            tDown = tKnob >= 0 && !tRight;
+            Transform pc = PlayerCam();
+            Log.Info("standalone : commandes, invite pas " + cmdStep + " : " + what + (pc != null ? " (yeux " + b.Car.transform.InverseTransformPoint(pc.position).ToString("F2") + ")" : ""));
+        }
+
+        static int cGearI = -1, cGearSeen = -99; static float cGearAt, cGearSeenAt; static bool cGearLogged, cGearShot;
+        static string GearLabel(VazCar.Built b, int g)
+        {
+            if (b.Dt == null || b.Dt.gearRatios == null || g < 0) return "?";
+            int n = Array.IndexOf(b.Dt.gearRatios, 0f);
+            return g == n ? "N" : g < n ? "R" : (g - n).ToString();
+        }
+        // (ce que montre la planche : afficheur sept segments -- dernier rapport dessine -- ou ecran LCD -- rapport tire de sa cle)
+        static string DashGear(VazCar.Built b, State st)
+        {
+            if (st.GearTex != null) return (st.GearLit ? "" : "eteint ") + GearLabel(b, st.GearShown);
+            if (st.LcdTex != null && st.LcdKey >= 0) { int gi = st.LcdKey / 1000 % 1000 - 3; return "LCD " + (gi == -1 ? "N" : gi == -2 ? "R" : gi >= 1 ? gi.ToString() : "eteint"); }
+            return "sans afficheur";
+        }
+        static Vector3 DashAt(VazCar.Built b, State st)
+        {
+            Transform q = st.LcdR != null ? st.LcdR.transform : b.Body.Find("rapport");
+            if (q == null && st.Tacho != null) q = st.Tacho.Needle;
+            return q != null ? b.Car.transform.InverseTransformPoint(q.position) : st.T.Yeux + Vector3.forward;
+        }
+        static void GearsTest(VazCar.Built b, State st, bool host, float t)
+        {
+            if (host && driving == b && cStep == 3 && t > 48f && cGearI < b.Dt.gearRatios.Length && t >= cGearAt)
+            {
+                bool seated = false;
+                for (int id = 0; id < 16 && !seated; id++)
+                {
+                    Transform tc; Vector3 hd; string cn;
+                    if (id != Net.Session.LocalId && Seats.RemoteSeat(id, out tc, out hd, out cn) && tc != null && (tc == b.Car.transform || tc.IsChildOf(b.Car.transform))) seated = true;
+                }
+                if (!seated && t < 95f) return;
+                var d = (StandaloneDriver)b.Axis;
+                if (cGearI < 0) Log.Info("standalone : rapports, hote : " + (seated ? "invite assis" : "PAS D'INVITE ASSIS a 95 s") + ", " + b.Dt.gearRatios.Length + " positions");
+                cGearI++; cGearAt = t + (cGearI == 0 ? 2f : 3f);
+                if (cGearI >= b.Dt.gearRatios.Length) { d.Gear = Array.IndexOf(b.Dt.gearRatios, 0f); d.Clutch = 0f; d.Brake = 0f; Log.Info("standalone : rapports, hote : fini, point mort"); return; }
+                d.Keys = false; d.Throttle = 0f; d.Brake = 1f; d.Handbrake = 1f; d.Clutch = 1f; d.Gear = cGearI;
+            }
+            if (cStep < 3 || (host && driving != b)) return;
+            if (b.Dt.gear != cGearSeen) { cGearSeen = b.Dt.gear; cGearSeenAt = t; cGearLogged = false; }
+            if (cGearLogged || t < cGearSeenAt + 0.6f) return;   // (planche redessinee depuis, et l'invite a recu)
+            cGearLogged = true;
+            GameObject pl = Game.PlayerGo;
+            string g = GearLabel(b, b.Dt.gear);
+            Log.Info("standalone : rapports, " + (host ? "hote (conducteur)" : "invite (" + (pl != null && pl.transform.IsChildOf(b.Car.transform) ? "assis" : "DEHORS") + ")")
+                     + " : boite " + g + ", planche " + DashGear(b, st) + ", contact " + (st.EngineOn ? "moteur" : st.KeyPos > 0 ? "mis" : "COUPE")
+                     + (host ? "" : ", recu " + GearLabel(b, VehicleSync.RemoteGear(b.Car.transform)) + ", copie " + (b.Rb.isKinematic ? "cinematique" : "PHYSIQUE ICI")));
+            if (g == "3" && !cGearShot)
+            {
+                cGearShot = true; Transform pc = PlayerCam();
+                Photo(b, "rapport-" + (host ? "hote" : "invite") + "-" + b.M.Folder, pc != null ? b.Car.transform.InverseTransformPoint(pc.position) : st.T.Yeux, DashAt(b, st), 28f);
+            }
+        }
         // (console du chauffage vue du milieu de l'habitacle, entre les sieges, avec une lampe le temps des photos)
         static void HeatShots(VazCar.Built b, State st, string tag)
         {
@@ -3464,8 +3684,12 @@ namespace MWCoop
                 }
                 cSon++;
             }
-            if (host && cStep == 3 && t > 75f && t < 76.5f) SetHorn(b, st, true, true);
-            if (host && cStep == 3 && t > 78f && !(portTest && !cDoorSeen && t < 115f))
+            bool gearTest = b != null && st != null && b.Dt != null && b.Dt.gearRatios != null && Config.GetInt("Test", "StandaloneRapports", 0) != 0;
+            if (gearTest) GearsTest(b, st, host, t);
+            bool cmdTest = b != null && st != null && Config.GetInt("Test", "StandaloneCommandes", 0) != 0;
+            if (cmdTest) CommandsTest(b, st, host, t, pl);
+            if (host && cStep == 3 && t > 75f && t < 76.5f && !cmdTest) SetHorn(b, st, true, true);
+            if (host && cStep == 3 && t > 78f && !(portTest && !cDoorSeen && t < 115f) && !(gearTest && cGearI < b.Dt.gearRatios.Length) && !cmdTest)
             {
                 cStep = 4; cAt = t; SetHorn(b, st, false, true); var d = (StandaloneDriver)b.Axis; d.Keys = false; d.Handbrake = 0f; d.Gear = 2; d.Throttle = 0.6f;
                 // ([Test] StandaloneFrein=1 : frein a main serre au levier les 2,5 premieres secondes, gaz ouverts -- puis desserre)
