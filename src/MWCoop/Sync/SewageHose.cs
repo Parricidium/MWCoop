@@ -926,7 +926,7 @@ namespace MWCoop
             {
                 if (s == null) continue;
                 Vector3 sp = s.transform.position, dh = sp - w; dh.y = 0f;
-                if (Mathf.Abs(sp.y - gw) > 0.5f) continue;
+                if (Mathf.Abs(sp.y - gw) > 0.5f || dh.magnitude > 2.5f) continue;   // (pres de la fosse seulement -- y7 : un maillon a 8 m, sur le camion)
                 if (dh.magnitude < best) { best = dh.magnitude; rim = sp; }
             }
             Vector3 dir = rim - w; dir.y = 0f; dir = dir.sqrMagnitude > 0.01f ? dir.normalized : Vector3.right;
