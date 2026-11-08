@@ -35,7 +35,7 @@ namespace MWCoop
     // au premier message (plus d'enchainement local), le morceau est retrouve dans la liste du disque (Radio/CD, meme liste
     // chez tous : Contenu), rang et disque recopies dans ses variables. (L'afficheur « track 05 » du lecteur, ecrit par cet
     // automate, ne bouge plus chez l'invite.)
-    public static class Radio
+    public static partial class Radio
     {
         static AudioSource[] ch;              // Channel1, Folk
         // (canal du jeu, pour un poste qui n'est pas un poste du jeu : voiture de la quete -- StandaloneCar.RadioTick)
@@ -50,6 +50,7 @@ namespace MWCoop
             found = muted = false; ch = null; upd = null; clips = null; nextFind = 0;
             ghosts.Clear(); realT = null; fetch = null; lastSet = false; winK = null; winUntil = 0f;
             cds.Clear(); nextCdFind = 0f; cdRoot = null; beatRecv.Clear(); tbStep = 0; tbLog = 0f;
+            PostesLevelLoaded();
         }
 
         static bool Find()
@@ -473,7 +474,7 @@ namespace MWCoop
         // joue pas dans ce poste-la, va a la copie de ce poste ; le vrai est remis comme avant.
         public static void BeforeRemote()
         {
-            inRemote = found && realT != null && fetch != null;
+            inRemote = !Multi && found && realT != null && fetch != null;   // (plusieurs postes : chaque poste suit ses automates, RadioPostes)
             if (inRemote) remoteBase = Take();
         }
 
@@ -552,6 +553,7 @@ namespace MWCoop
         static void Watch(float now)
         {
             if (realT == null || fetch == null) return;
+            if (Multi) { MultiWatch(now); return; }   // (plusieurs radios en meme temps, RadioPostes.cs)
             if (!lastSet) { last = Take(); lastSet = true; }
             KeepParent(now);
             Snap cur = Take();
@@ -623,6 +625,7 @@ namespace MWCoop
         {
             float now = Time.realtimeSinceStartup;
             beatRecv[who] = key;
+            if (Multi) return;   // (plusieurs postes : copies selon l'etat des postes, pas selon le battement)
             for (int i = ghosts.Count - 1; i >= 0; i--)
             {
                 Ghost g = ghosts[i];

@@ -376,6 +376,7 @@ namespace MWCoop
                 }
                 case "acc": return VehicleSync.TestKey(u.Car.name, "Test");         // (contact : « Test » allume Electrics, puis « ACC on » et le demarreur)
                 case "accok": return VehicleSync.TestKey(u.Car.name, "Shut off");   // (cle relachee : contact mis)
+                case "coupe": return VehicleSync.TestKey(u.Car.name, "Motor OFF");  // (contact coupe : poste sans courant, Not work)
                 case "relache": return VehicleSync.TestKeyEvent(u.Car.name, "FINISHED");   // (souris relachee sur « Motor starting », comme le jeu : la transition part, le relachement est envoye)
                 case "ejecte": if (u.Player != null) u.Player.SendEvent("STOP CD"); Set(u.Disc, "Eject"); break;
                 default: return "geste inconnu " + what;
@@ -408,7 +409,7 @@ namespace MWCoop
                       .Append(" vol ").Append(a.volume.ToString("F2")).Append(a.mute ? " coupe" : "").Append(" clip ").Append(a.clip != null ? a.clip.name : "-").Append(" ; ");
                 }
             }
-            sb.Append(Radio.CdTestState());
+            sb.Append(Radio.CdTestState()).Append(" ; ").Append(Radio.PostesState());
             return sb.ToString();
         }
     }

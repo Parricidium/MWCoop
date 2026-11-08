@@ -2339,6 +2339,7 @@ namespace MWCoop
                 case "@pvp": if (!Session.IsHost) Pvp.OnAllowed(r.Bool()); break;
                 case "@kupla": if (!Session.IsHost) Kupla.OnBubbles(r.Bool()); break;   // (27/10 : bulles co-op, decidees par l'hote)
                 case "@poste": Radio.OnBeat(who, r.Str()); break;
+                case "@postes": Radio.OnPostes(who, r); break;
                 case "@resync": PlayerSync.OnResyncRequest(who); break;
                 case "@marqueur": Markers.OnMessage(who, r); break;   // marqueur partage d'un joueur (pose, deplace, retire)   // invite -> hote : tout l'etat, comme a l'arrivee (menu F10, SYNCHRO)
                 case "@emit": Particles.OnMessage(who, r); break;
