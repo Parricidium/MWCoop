@@ -669,66 +669,121 @@ namespace MWCoop
         // le jeu d'origine). Ici, juste apres la diffusion : chaque ES2Auto allume, a maillage et a fichier, ecrit comme
         // ES2Auto.SaveMesh (etiquette « <uniqueTag>mesh »), un seul ES2Writer par fichier ; le maillage lu par sharedMesh (.mesh en
         // creerait une copie, et la tole garderait l'ancien). Rien du lot des actions (Begin / End) n'est touche.
-        // [Test] SauveMaillages=0 : comme avant.
-        static System.Type autoType;
-        static FieldInfo autoMesh, autoFile, autoTag;
+        // Ecrit avec les reglages de l'ES2Auto (ES2Writer.Create(fichier, settings) : drapeaux du maillage -- normales, UV, UV2,
+        // tangentes, sous-maillages, peau, couleurs -- ecrits avec lui), un ES2Writer par fichier et par reglages identiques ; un
+        // ES2Auto chiffre est laisse (ecrit en quittant, comme avant). Ses autres donnees (position, collisionneurs...) restent
+        // ecrites en quittant : notees au journal a la premiere sauvegarde. Revue de [MWC], 08/11.
+        // [Test] SauveMaillages=0 : comme avant. [Test] SauveMaillagesRef=1 : ensuite, chaque ES2Auto ecrit aussi par lui-meme
+        // (ES2Auto.Save) dans <fichier>-ref.txt -- les deux fichiers comparables etiquette par etiquette (run/es2/es2cmp.py).
+        static System.Type autoType, settingsType;
+        static FieldInfo autoMesh, autoFile, autoTag, autoSettings, autoEncrypt;
+        static FieldInfo[] autoParts, sigFields;
+        static MethodInfo create2, autoSave;
         static int meshLogs;
+        static bool partsLogged;
+        static readonly string[] PartNames = { "savePosition", "saveRotation", "saveScale", "saveSphereCollider", "saveBoxCollider", "saveCapsuleCollider", "saveMeshCollider" };
+        static readonly string[] SigNames = { "saveNormals", "saveUV", "saveUV2", "saveTangents", "saveSubmeshes", "saveSkinning", "saveColors", "encrypt", "saveLocation", "format", "optimizeMode" };
+        class MeshGroup { public string File; public object Settings; public readonly List<Entry> List = new List<Entry>(); public readonly List<Object> Autos = new List<Object>(); }
+
+        static bool AutoInit()
+        {
+            if (autoType != null) return true;
+            System.Type t = writerType.Assembly.GetType("ES2Auto"), st = writerType.Assembly.GetType("ES2Settings");
+            if (t == null || st == null) { Log.Warn("sauvegarde en jeu : ES2Auto ou ES2Settings introuvable, maillages des toles pas ecrits"); return false; }
+            autoMesh = t.GetField("saveMesh"); autoFile = t.GetField("saveFile"); autoTag = t.GetField("uniqueTag");
+            autoSettings = t.GetField("settings"); autoEncrypt = t.GetField("encrypt");
+            autoSave = t.GetMethod("Save", BindingFlags.Public | BindingFlags.Instance, null, System.Type.EmptyTypes, null);
+            create2 = writerType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string), st }, null);
+            autoParts = new FieldInfo[PartNames.Length];
+            for (int i = 0; i < PartNames.Length; i++) autoParts[i] = t.GetField(PartNames[i]);
+            sigFields = new FieldInfo[SigNames.Length];
+            for (int i = 0; i < SigNames.Length; i++) sigFields[i] = st.GetField(SigNames[i]);
+            if (autoMesh == null || autoFile == null || autoTag == null) { Log.Warn("sauvegarde en jeu : ES2Auto different, maillages des toles pas ecrits"); return false; }
+            autoType = t; settingsType = st;
+            return true;
+        }
+
+        static string Signature(object settings)
+        {
+            if (settings == null || sigFields == null) return "-";
+            var sb = new System.Text.StringBuilder();
+            foreach (FieldInfo f in sigFields) sb.Append(f != null ? System.Convert.ToString(f.GetValue(settings)) : "?").Append('|');
+            return sb.ToString();
+        }
+
         public static void SaveMeshes()
         {
             if (Config.GetInt("Test", "SauveMaillages", 1) == 0) return;
             try
             {
-                if (!Es2()) return;
-                if (autoType == null)
-                {
-                    autoType = writerType.Assembly.GetType("ES2Auto");
-                    if (autoType != null) { autoMesh = autoType.GetField("saveMesh"); autoFile = autoType.GetField("saveFile"); autoTag = autoType.GetField("uniqueTag"); }
-                    if (autoType == null || autoMesh == null || autoFile == null || autoTag == null)
-                    {
-                        autoType = null;
-                        Log.Warn("sauvegarde en jeu : ES2Auto introuvable ou different, maillages des toles pas ecrits");
-                        return;
-                    }
-                }
+                if (!Es2() || !AutoInit()) return;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var byFile = new Dictionary<string, List<Entry>>();
-                int n = 0;
+                var groups = new Dictionary<string, MeshGroup>();
+                var parts = new System.Text.StringBuilder();
+                int n = 0, enc = 0, bad = 0;
                 foreach (Object o in Object.FindObjectsOfType(autoType))
                 {
-                    var b = o as Behaviour;
-                    if (b == null || !b.enabled || !(bool)autoMesh.GetValue(o)) continue;
-                    string file = autoFile.GetValue(o) as string;
-                    if (string.IsNullOrEmpty(file)) continue;
-                    string tag = autoTag.GetValue(o) as string;
-                    if (string.IsNullOrEmpty(tag)) tag = b.gameObject.name;   // (comme ES2Auto.GetFullFilename)
-                    MeshFilter mf = b.GetComponent<MeshFilter>();
-                    Mesh m = mf != null ? mf.sharedMesh : null;
-                    if (m == null) continue;
-                    List<Entry> l;
-                    if (!byFile.TryGetValue(file, out l)) byFile[file] = l = new List<Entry>();
-                    l.Add(new Entry { Tag = tag + "mesh", Value = m });
-                    n++;
+                    try
+                    {
+                        var b = o as Behaviour;
+                        if (b == null || !b.enabled || !(bool)autoMesh.GetValue(o)) continue;
+                        string file = autoFile.GetValue(o) as string;
+                        if (string.IsNullOrEmpty(file)) continue;
+                        if (autoEncrypt != null && (bool)autoEncrypt.GetValue(o)) { enc++; continue; }
+                        string tag = autoTag.GetValue(o) as string;
+                        if (string.IsNullOrEmpty(tag)) tag = b.gameObject.name;   // (comme ES2Auto.GetFullFilename)
+                        MeshFilter mf = b.GetComponent<MeshFilter>();
+                        Mesh m = mf != null ? mf.sharedMesh : null;   // (== d'Unity : un maillage detruit vaut null)
+                        if (m == null) { bad++; continue; }
+                        object st = autoSettings != null ? autoSettings.GetValue(o) : null;
+                        string key = file + "#" + Signature(st);
+                        MeshGroup g;
+                        if (!groups.TryGetValue(key, out g)) groups[key] = g = new MeshGroup { File = file, Settings = st };
+                        g.List.Add(new Entry { Tag = tag + "mesh", Value = m });
+                        g.Autos.Add(o);
+                        n++;
+                        if (!partsLogged)
+                        {
+                            parts.Append(" ; ").Append(Recon.Path(b.transform)).Append(" (").Append(tag).Append("mesh");
+                            for (int i = 0; i < autoParts.Length; i++) if (autoParts[i] != null && (bool)autoParts[i].GetValue(o)) parts.Append(", ").Append(PartNames[i]);
+                            parts.Append(')');
+                        }
+                    }
+                    catch (System.Exception e) { bad++; if (meshLogs++ < 6) Log.Warn("sauvegarde en jeu : maillage d'une tole : " + e.GetType().Name + " " + e.Message); }
                 }
                 int fallback = 0;
                 var sb = new System.Text.StringBuilder();
-                foreach (KeyValuePair<string, List<Entry>> kv in byFile)
+                foreach (MeshGroup g in groups.Values)
                 {
-                    if (!WriteAll(kv.Key, kv.Value)) { fallback++; foreach (Entry e in kv.Value) WriteAll(kv.Key, new List<Entry> { e }); }
-                    sb.Append(kv.Key).Append(' ').Append(kv.Value.Count).Append(", ");
+                    if (!WriteAll(g.File, g.List, g.Settings)) { fallback++; foreach (Entry e in g.List) WriteAll(g.File, new List<Entry> { e }, g.Settings); }
+                    sb.Append(g.File).Append(' ').Append(g.List.Count).Append(", ");
                 }
+                long ms = sw.ElapsedMilliseconds;
                 if (n > 0 || meshLogs++ < 3)
-                    Log.Info("sauvegarde en jeu : " + n + " maillage(s) de toles ecrit(s) en " + sw.ElapsedMilliseconds + " ms"
-                             + (sb.Length > 0 ? " : " + sb.ToString().TrimEnd(' ', ',') : "") + (fallback > 0 ? " ; " + fallback + " fichier(s) ecrit(s) un par un" : ""));
+                    Log.Info("sauvegarde en jeu : " + n + " maillage(s) de toles ecrit(s) en " + ms + " ms (" + groups.Count + " ecriture(s))"
+                             + (sb.Length > 0 ? " : " + sb.ToString().TrimEnd(' ', ',') : "") + (fallback > 0 ? " ; " + fallback + " ecriture(s) refaite(s) une par une" : "")
+                             + (enc > 0 ? " ; " + enc + " chiffre(s) laisse(s)" : "") + (bad > 0 ? " ; " + bad + " sans maillage" : ""));
+                if (!partsLogged && n > 0) { partsLogged = true; Log.Info("sauvegarde en jeu : ES2Auto a maillage" + parts); }
+                if (Config.Testing && Config.GetInt("Test", "SauveMaillagesRef", 0) != 0 && autoSave != null)
+                    foreach (MeshGroup g in groups.Values)
+                        foreach (Object o in g.Autos)
+                        {
+                            string was = autoFile.GetValue(o) as string;
+                            try { autoFile.SetValue(o, System.IO.Path.GetFileNameWithoutExtension(was) + "-ref" + System.IO.Path.GetExtension(was)); autoSave.Invoke(o, null); }
+                            catch (System.Exception e) { Log.Warn("sauvegarde en jeu : reference ES2Auto : " + (e.InnerException ?? e).Message); }
+                            finally { autoFile.SetValue(o, was); }
+                        }
             }
             catch (System.Exception e) { Log.Warn("sauvegarde en jeu : maillages des toles : " + e.GetType().Name + " " + e.Message); }
         }
 
-        static bool WriteAll(string file, List<Entry> list)
+        static bool WriteAll(string file, List<Entry> list, object settings = null)
         {
             object w = null;
             try
             {
-                w = create.Invoke(null, new object[] { file });
+                // (settings : ceux d'un ES2Auto, SaveMeshes -- sinon les reglages par defaut, comme toujours)
+                w = settings != null && create2 != null ? create2.Invoke(null, new object[] { file, settings }) : create.Invoke(null, new object[] { file });
                 foreach (Entry e in list)
                 {
                     object v = e.T != null ? (object)e.T : e.Value;
