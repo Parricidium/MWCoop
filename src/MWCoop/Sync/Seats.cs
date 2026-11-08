@@ -759,8 +759,9 @@ namespace MWCoop
                 // camera a 1,40 m, et accroupi elle reste a 0,85 m -- au-dessus du pavillon (le corps, 0,5 m, reste dans l'habitacle). Sous un
                 // toit plus bas que des yeux debout, on descend donc DEHORS, a cote de la portiere de sa place (cote libre, sinon l'autre),
                 // comme le conducteur ; sans place dehors, sur place comme avant. Voitures ouvertes, ridelles, cabines hautes : sur place.
-                // [Test] SortieDehors=0 : comme avant.
-                if (was != null && was.CarT != null && !was.Bed && Config.GetInt("Test", "SortieDehors", 1) != 0)
+                // Coupe par defaut depuis le 08/11 (Menos, MWC 1.15.76 : « why i'm getting teleported outside of the car? ») : debout sur
+                // place comme avant ; [Test] SortieDehors=1 : sortie dehors.
+                if (was != null && was.CarT != null && !was.Bed && Config.GetInt("Test", "SortieDehors", 0) != 0)
                 {
                     float roof = RoofHeight();
                     if (roof < StandEye)
