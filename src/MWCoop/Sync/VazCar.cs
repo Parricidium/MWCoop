@@ -365,6 +365,9 @@ namespace MWCoop
             m.Sp = Delta8.Sp.Copy(); m.Sp.Name = "M3 E30 Gr. A"; m.Sp.Power = 300f; m.Sp.PowerRpm = 8200f; m.Sp.Torque = 290f; m.Sp.TorqueRpm = 6500f;
             m.Sp.MaxRpm = 9000f; m.Sp.Mass = 1100f; m.Sp.Com = 0.52f;
             m.Sp.Rwd = true; m.Sp.RearGrip = 1.12f; m.Sp.HandbrakeSlide = 0.5f; m.Sp.AntiRollFront = 24000f; m.Sp.AntiRollRear = 12000f; m.Sp.YawDamp = 0.6f; m.Sp.ComDrop = 0.04f;
+            // (levier du frein a main, frein.p205 -- JD 08/11 « Oui, levier Quattro » : celui de la Sport Quattro Rallyworld, sur le tunnel
+            // cote conducteur derriere le levier de vitesse ; pivot a l'arriere, poignee vers l'avant)
+            m.BrakePivot = new Vector3(-0.03f, 0.457f, 0.20f); m.BrakeGrip = new Vector3(-0.03f, 0.479f, 0.31f); m.BrakeAngle = 1.3f;
             return m;
         }
         // Fiat 131 Gr. 4 de Rallyworld (JD 04/11 : « remplacer la VAZ par celle ci ») : standalone sur les deux jeux, dossier MWCoopiat131 livre
@@ -378,6 +381,8 @@ namespace MWCoop
             m.Folder = "fiat131"; m.Name = "Fiad 131"; m.Head = new Vector3(-0.315f, 1.09f, -0.12f); m.Engine = new Vector3(0f, 0.55f, 1.35f);
             m.Sp = M3e30.Sp.Copy(); m.Sp.Name = "Fiat 131 Gr. 4"; m.Sp.Power = 238f; m.Sp.PowerRpm = 8000f; m.Sp.Torque = 226f; m.Sp.TorqueRpm = 5250f;
             m.Sp.MaxRpm = 8500f; m.Sp.Mass = 1020f; m.Sp.Com = 0.50f; m.Sp.Final = 4.875f; m.Sp.Gears = new[] { -2.671f, 0f, 2.654f, 1.895f, 1.568f, 1.244f, 1f };
+            // (levier du frein a main du modele, int_handbrake -> frein.p205, JD 08/11 : pivot a l'arriere, poignee vers l'avant)
+            m.BrakePivot = new Vector3(-0.0227f, 0.423f, 0.114f); m.BrakeGrip = new Vector3(-0.0227f, 0.53f, 0.33f); m.BrakeAngle = 1f;
             return m;
         }
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),

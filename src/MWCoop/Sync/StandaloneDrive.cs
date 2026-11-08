@@ -2958,6 +2958,12 @@ namespace MWCoop
             if (cmdStep > 0)
             {
                 Log.Info("standalone : commandes, invite apres le pas " + cmdStep + " (a portee " + Reach(b, st) + ", bouton " + (tKnob >= 0 ? "PAS PRIS" : "pris") + ") : " + CmdState(b, st));
+                // (levier du frein a main vu de la place passager, serre puis desserre -- leviers de la M3 et de la Fiad, JD 08/11)
+                if ((cmdStep == 4 || cmdStep == 5) && b.BrakePivot != null && PlayerCam() != null)
+                {
+                    Log.Info("standalone : commandes, levier du frein a main " + b.BrakePivot.localEulerAngles.ToString("F0"));
+                    Photo(b, cmdStep == 4 ? "frein-serre" : "frein-desserre", b.Car.transform.InverseTransformPoint(PlayerCam().position), b.M.BrakeGrip, 40f);
+                }
                 tKnob = -1; tDown = false; tRight = false;
             }
             cmdAt = t + 3f; cmdStep++;

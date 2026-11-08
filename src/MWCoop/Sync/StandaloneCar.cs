@@ -667,7 +667,12 @@ namespace MWCoop
                 if (hb != b.Handbraking || now >= st.NextGrip) { b.Handbraking = hb; st.NextGrip = now + 0.25f; st.T.Grip(b, hb); }
                 if (b.Flaps != null) b.Flaps.Update();
                 if (b.Antennas != null) b.Antennas.Update();
-                if (b.BrakePivot != null && dr != null) b.BrakePivot.localRotation = Quaternion.AngleAxis(-Mathf.Clamp01(dr.handbrakeInput) * 20f * b.M.BrakeAngle, Vector3.right);
+                // (copie menee ailleurs : l'etat recu du conducteur -- son entree, figee a l'arret, gardait le levier serre chez l'invite, essai du 08/11)
+                if (b.BrakePivot != null && dr != null)
+                {
+                    float hv = b.Rb != null && b.Rb.isKinematic && st.HandRemoteSet ? (st.HandRemote ? 1f : 0f) : Mathf.Clamp01(dr.handbrakeInput);
+                    b.BrakePivot.localRotation = Quaternion.AngleAxis(-hv * 20f * b.M.BrakeAngle, Vector3.right);
+                }
                 if (dr != null && b.Dt.rpm > 300f && (dr.handbrakeInput > 0.05f || (dr.brakeInput > 0.2f && b.Dt.rpm < 2000f))) Disengage(b.Dt);
                 Drive(b, st);
             }
