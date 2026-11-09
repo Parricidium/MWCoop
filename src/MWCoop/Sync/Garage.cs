@@ -908,12 +908,39 @@ namespace MWCoop
         // (bosses deja dedans) -- en decalages, ces bosses-la etaient posees deux fois chez lui, et une reparation ne les otait pas.
         // En positions, le maillage final est le meme chez tous. Position hors de +-32 m (16 bits) : decalage, comme avant.
         // [Test] TolesPositions=0 : decalages, comme avant.
-        static int DentHead(CarDmg c, Dent d) { return 16 + System.Text.Encoding.UTF8.GetByteCount(c.Car) + System.Text.Encoding.UTF8.GetByteCount(d.Key); }
+        static int DentHead(CarDmg c, Dent d) { return 16 + System.Text.Encoding.UTF8.GetByteCount(c.Car) + System.Text.Encoding.UTF8.GetByteCount(d.Key) + System.Text.Encoding.UTF8.GetByteCount(PartRef(d)); }
+        // Piece d'une tole (objet suivi par Props : pare-chocs, porte, capot...) : « cle|chemin dans la piece », sinon "". Joint a chaque lot de
+        // sommets : chez l'autre, la tole est retrouvee par sa piece quand sa cle ne dit plus rien -- piece tombee ici et pas encore la-bas
+        // (ou l'inverse), rangee sous la voiture chez l'un, plus chez l'autre (essai pp2 du 09/11 : bosse envoyee sous la cle de la voiture
+        // 11 s apres la casse, « introuvable » chez l'invite).
+        static string PartRef(Dent d)
+        {
+            if (!LoosePieces || d.D == null) return "";
+            Rigidbody prb = d.Body != null ? d.Body : d.D.GetComponentInParent<Rigidbody>();
+            string pk = prb != null ? Props.KeyOf(prb.gameObject) : null;
+            return pk != null ? pk + "|" + VehicleSync.RelPath(prb.transform, d.D.transform) : "";
+        }
+        static Dent DentByPart(string pref)
+        {
+            int bar = pref.IndexOf('|');
+            if (bar <= 0) return null;
+            string pk = pref.Substring(0, bar), rel = pref.Substring(bar + 1).TrimStart('/');
+            GameObject go = Props.ObjectOf(pk);
+            Transform t = go == null ? null : rel.Length == 0 ? go.transform : go.transform.Find(rel);
+            Deformable df = t != null ? t.GetComponent<Deformable>() : null;
+            if (df == null) return null;
+            foreach (CarDmg c in dmg.Values) foreach (Dent x in c.Dents) if (x.D == df) return x;
+            CarDmg lc;
+            if (!dmg.TryGetValue(LooseKey, out lc)) { lc = new CarDmg { Car = LooseKey, Loose = true }; dmg[LooseKey] = lc; }
+            var nd = new Dent { Key = "p" + pk + VehicleSync.RelPath(go.transform, df.transform) + "#0", D = df, Body = go.GetComponent<Rigidbody>() };
+            lc.Dents.Add(nd);
+            return nd;
+        }
         static NetWriter DentWriter(CarDmg c, Dent d, Vector3[] v, Vector3[] bs, List<int> idx, int k, int n)
         {
             bool pos = Config.GetInt("Test", "TolesPositions", 1) != 0;
             for (int j = 0; j < n && pos; j++) { Vector3 p = v[idx[k + j]]; if (Mathf.Abs(p.x) > 32f || Mathf.Abs(p.y) > 32f || Mathf.Abs(p.z) > 32f) pos = false; }
-            var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8((pos ? T_DENTPOS : T_DENT) | RELIABLE).Str(c.Car).Str(d.Key).U16(v.Length).U8(n);
+            var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8((pos ? T_DENTPOS : T_DENT) | RELIABLE).Str(c.Car).Str(d.Key).Str(PartRef(d)).U16(v.Length).U8(n);
             for (int j = 0; j < n; j++)
             {
                 int i = idx[k + j];
@@ -936,7 +963,7 @@ namespace MWCoop
             if (c != null) foreach (Dent x in c.Dents) if (x.Key == key) return x;
             return null;
         }
-        static float rescanOnMissAt;
+        static float rescanOnMissAt; static int partFound;
 
         static void OnGlass(int who, NetReader r)
         {
@@ -967,7 +994,7 @@ namespace MWCoop
 
         static void OnDent(int who, NetReader r, bool pos)
         {
-            string car = r.Str(), key = r.Str();
+            string car = r.Str(), key = r.Str(), pref = r.Str();
             int count = r.U16(), n = r.U8();
             var idx = new int[n]; var off = new Vector3[n];
             for (int j = 0; j < n; j++)
@@ -983,6 +1010,11 @@ namespace MWCoop
                 rescanOnMissAt = Time.realtimeSinceStartup + 1f;
                 ScanDamage();
                 c = DmgOf(car); d = FindDent(c, key);
+            }
+            if ((d == null || d.D == null) && pref.Length > 0)
+            {
+                d = DentByPart(pref);
+                if (d != null && partFound++ < 20) Log.Info("atelier : tole " + car + key + " retrouvee par sa piece " + pref + (d.Key != key ? " (ici " + d.Key + ")" : ""));
             }
             if (d == null || d.D == null || fVerts == null || fBase == null) { Warn("tole " + car + key + " introuvable ici"); return; }
             Fresh(car, d);
