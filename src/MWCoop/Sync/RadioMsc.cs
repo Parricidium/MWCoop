@@ -379,6 +379,7 @@ namespace MWCoop
                 case "coupe": return VehicleSync.TestKey(u.Car.name, "Motor OFF");  // (contact coupe : poste sans courant, Not work)
                 case "relache": return VehicleSync.TestKeyEvent(u.Car.name, "FINISHED");   // (souris relachee sur « Motor starting », comme le jeu : la transition part, le relachement est envoye)
                 case "ejecte": if (u.Player != null) u.Player.SendEvent("STOP CD"); Set(u.Disc, "Eject"); break;
+                case "chanson": return Radio.TestLocalSong((int)x);   // (chanson importee x sur le vrai canal local, quel que soit le poste -- dossier #59)
                 default: return "geste inconnu " + what;
             }
             return u.Car.name + " " + what + " -> " + Describe(u) + " (molette " + u.Vol.ActiveStateName + ")";
@@ -409,7 +410,7 @@ namespace MWCoop
                       .Append(" vol ").Append(a.volume.ToString("F2")).Append(a.mute ? " coupe" : "").Append(" clip ").Append(a.clip != null ? a.clip.name : "-").Append(" ; ");
                 }
             }
-            sb.Append(Radio.CdTestState()).Append(" ; ").Append(Radio.PostesState());
+            sb.Append(Radio.CdTestState()).Append(" ; ").Append(Radio.PostesState()).Append(" ; ").Append(Radio.SuiviState());
             return sb.ToString();
         }
     }

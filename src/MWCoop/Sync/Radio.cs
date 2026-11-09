@@ -49,7 +49,7 @@ namespace MWCoop
         {
             found = muted = false; ch = null; upd = null; clips = null; nextFind = 0;
             ghosts.Clear(); realT = null; fetch = null; lastSet = false; winK = null; winUntil = 0f;
-            cds.Clear(); nextCdFind = 0f; cdRoot = null; beatRecv.Clear(); tbStep = 0; tbLog = 0f;
+            cds.Clear(); nextCdFind = 0f; cdRoot = null; beatRecv.Clear(); tbStep = 0; tbLog = 0f; songLogs = 0;
             PostesLevelLoaded();
         }
 
@@ -387,6 +387,7 @@ namespace MWCoop
             public Transform K; public GameObject Go; public AudioSource[] Ch; public PlayMakerFSM Fetch; public int Who; public float Born;
             // Chanson importee (flux WWW) : un seul lecteur a la fois -- la copie charge son propre exemplaire.
             public string[] SongKey = new string[2]; public WWW[] SongWww = new WWW[2]; public AudioClip[] SongClip = new AudioClip[2];
+            public bool[] SongSeek = new bool[2]; public float[] SongSeekAt = new float[2];   // (exemplaire qui se positionne ; dernier recalage)
         }
         struct Snap { public Transform Parent; public Vector3 LP; public Quaternion LR; public bool On, M1, MF, St; }
         static readonly List<Ghost> ghosts = new List<Ghost>();
@@ -466,6 +467,7 @@ namespace MWCoop
 
         static void Kill(Ghost g, string why)
         {
+            DropSongs(g);
             if (g.Go != null) Object.Destroy(g.Go);
             ghosts.Remove(g);
             Log.Info("radio : poste de " + (g.K != null ? g.K.name : "?") + " " + why);
@@ -583,14 +585,14 @@ namespace MWCoop
                     // Chanson importee (Radio/trackN.ogg, lue en flux) : un seul lecteur a la fois -- la jouer aussi ici arretait
                     // le vrai canal, que le jeu croyait fini : morceau suivant, et ainsi de suite jusqu'a une pub (retour d'un
                     // joueur, 0.75.35 : « plusieurs radios allumees : que des pubs »). La copie joue son propre exemplaire,
-                    // charge depuis le fichier, depuis le debut (un flux ne se positionne pas).
+                    // charge depuis le fichier, a la position du vrai (OwnSong).
                     string key = src.clip != null && src.clip.name.Length == 0 ? ClipKey(src.clip) : null;
                     if (key != null && key.StartsWith("#chanson:"))
                     {
                         OwnSong(g, c, key, src, dst);
                         continue;
                     }
-                    if (g.SongKey[c] != null) { g.SongKey[c] = null; g.SongWww[c] = null; g.SongClip[c] = null; }
+                    if (g.SongKey[c] != null) DropSong(g, c, dst);
                     if (dst.clip != src.clip) { dst.clip = src.clip; if (src.clip != null) dst.time = Mathf.Min(src.time, src.clip.length - 0.05f); }
                     if (src.isPlaying && !dst.isPlaying && dst.clip != null && dst.gameObject.activeInHierarchy) { dst.Play(); dst.time = src.time; }
                     else if (!src.isPlaying && dst.isPlaying) dst.Stop();
@@ -641,11 +643,18 @@ namespace MWCoop
             }
         }
 
+        // Copie d'une chanson importee : son propre exemplaire, charge depuis le fichier. (Dossier #59, Say my name 09/11 : un exemplaire lu en
+        // flux ne se positionne pas -- la copie d'un poste rallume repartait du debut du morceau pendant que le vrai continuait. Exemplaire
+        // compresse en memoire, qui se positionne : la copie rejoint le morceau a la position du vrai, et s'y recale si elle s'en ecarte de plus
+        // de 1,5 s. Pas encore essaye en jeu -- la copie etait en pause, loin de l'auditeur : [Test] RadioCopieCalee=1 pour l'essayer ; par
+        // defaut en flux, depuis le debut, comme avant.)
+        static int songLogs;
         static void OwnSong(Ghost g, int c, string key, AudioSource src, AudioSource dst)
         {
             if (g.SongKey[c] != key)
             {
-                g.SongKey[c] = key; g.SongClip[c] = null; g.SongWww[c] = null;
+                DropSong(g, c, dst);
+                g.SongKey[c] = key;
                 int i;
                 string file = int.TryParse(key.Substring(9), out i) ? Contenu.SongFile(i) : null;
                 if (file != null) g.SongWww[c] = new WWW("file:///" + file);
@@ -654,15 +663,52 @@ namespace MWCoop
             }
             if (g.SongWww[c] != null && g.SongWww[c].isDone)
             {
-                try { g.SongClip[c] = g.SongWww[c].GetAudioClip(false, true, AudioType.OGGVORBIS); } catch (System.Exception e) { Log.Warn("radio : " + e.Message); }
+                try
+                {
+                    AudioClip own = null;
+                    if (Config.GetInt("Test", "RadioCopieCalee", 0) != 0)
+                    {
+                        own = g.SongWww[c].GetAudioClipCompressed(false, AudioType.OGGVORBIS);
+                        if (own != null && own.length <= 0f) { Object.Destroy(own); own = null; }
+                    }
+                    g.SongSeek[c] = own != null;
+                    if (own == null) own = g.SongWww[c].GetAudioClip(false, true, AudioType.OGGVORBIS);
+                    g.SongClip[c] = own;
+                    if (songLogs++ < 30) Log.Info("radio : copie de " + (g.K != null ? g.K.name : "?") + ", " + key + " chargee (" + (own != null ? own.loadType + ", " + own.length.ToString("F0") + " s" : "rien")
+                                                  + ", fichier " + (g.SongWww[c].bytesDownloaded >> 10) + " Ko)");
+                }
+                catch (System.Exception e) { Log.Warn("radio : " + e.Message); }
                 g.SongWww[c] = null;
             }
-            AudioClip own = g.SongClip[c];
-            if (own == null) return;
-            if (dst.clip != own) dst.clip = own;
-            if (src.isPlaying && !dst.isPlaying && dst.gameObject.activeInHierarchy) dst.Play();
+            AudioClip clip = g.SongClip[c];
+            if (clip == null) return;
+            if (dst.clip != clip) dst.clip = clip;
+            float now = Time.realtimeSinceStartup;
+            if (src.isPlaying && !dst.isPlaying && dst.gameObject.activeInHierarchy)
+            {
+                dst.Play();
+                if (g.SongSeek[c]) { dst.time = Mathf.Clamp(src.time, 0f, Mathf.Max(0f, clip.length - 0.05f)); g.SongSeekAt[c] = now + 2f; }
+                if (songLogs++ < 30) Log.Info("radio : copie de " + (g.K != null ? g.K.name : "?") + ", " + key + (g.SongSeek[c] ? " a " + src.time.ToString("F1") + " s comme le vrai" : " depuis le debut (flux)") + " (" + clip.loadType + ", " + clip.length.ToString("F0") + " s)");
+            }
             else if (!src.isPlaying && dst.isPlaying) dst.Stop();
+            else if (g.SongSeek[c] && dst.isPlaying && now >= g.SongSeekAt[c] && Mathf.Abs(dst.time - src.time) > 1.5f)
+            {
+                g.SongSeekAt[c] = now + 5f;
+                if (songLogs++ < 30) Log.Info("radio : copie de " + (g.K != null ? g.K.name : "?") + ", " + key + " recalee de " + dst.time.ToString("F1") + " a " + src.time.ToString("F1") + " s");
+                dst.time = Mathf.Clamp(src.time, 0f, Mathf.Max(0f, clip.length - 0.05f));
+            }
         }
+
+        // Exemplaire de chanson importee d'une copie, libere : la copie change de morceau ou s'arrete (il restait en memoire jusqu'au niveau suivant).
+        static void DropSong(Ghost g, int c, AudioSource dst)
+        {
+            AudioClip old = g.SongClip[c];
+            g.SongKey[c] = null; g.SongWww[c] = null; g.SongClip[c] = null; g.SongSeek[c] = false;
+            if (old == null) return;
+            if (dst != null && dst.clip == old) { if (dst.isPlaying) dst.Stop(); dst.clip = null; }
+            Object.Destroy(old);
+        }
+        static void DropSongs(Ghost g) { for (int c = 0; c < 2; c++) DropSong(g, c, g.Ch != null && c < g.Ch.Length ? g.Ch[c] : null); }
 
         // Essai [Test] Autotest=radioflux : une chanson importee (Radio/trackN.ogg, flux WWW) jouee par une source A, puis a
         // 45 s par une source B en meme temps (comme le vrai canal et la copie d'un poste) : A continue-t-elle ?
@@ -678,6 +724,35 @@ namespace MWCoop
             ch[1].clip = c; ch[1].Play();
             return "canal folk d'ici : chanson importee 0";
         }
+        // Essai (mscradio, geste chanson=n, dossier #59) : le vrai canal local d'ici joue la chanson importee n (lue en flux, comme le jeu).
+        public static string TestLocalSong(int n)
+        {
+            System.Collections.ArrayList songs = Songs();
+            AudioClip c = songs != null && n >= 0 && n < songs.Count ? songs[n] as AudioClip : null;
+            if (c == null || ch == null || ch[0] == null) return "pas de chanson importee " + n + " (" + (songs != null ? songs.Count : -1) + " importee(s))";
+            ch[0].clip = c; ch[0].Play();
+            return "canal local d'ici : chanson importee " + n + " (" + c.loadType + ", " + c.length.ToString("F0") + " s)";
+        }
+
+        // Essais (mscradio, RadioSuivi) : ou joue le vrai jeu de canaux, morceau et position de son canal local, et des copies.
+        public static string SuiviState()
+        {
+            var sb = new System.Text.StringBuilder("vrai sous ");
+            sb.Append(realT != null && realT.parent != null ? (Off(Take()) ? "RADIO (eteint)" : KeyOf(realT.parent).name) : "-");
+            AudioSource a = ch != null ? ch[0] : null;
+            sb.Append(", local ").Append(a != null && a.clip != null ? "'" + ClipKey(a.clip) + "' " + a.time.ToString("F1") + " s" + (a.isPlaying ? " joue" : " arrete") : "-");
+            sb.Append(" fetch [").Append(fetch != null ? fetch.ActiveStateName + (fetch.enabled ? "" : " coupe") : "-").Append("] maj [")
+              .Append(upd != null && upd[0] != null ? upd[0].ActiveStateName + (upd[0].enabled ? "" : " coupe") : "-").Append("]");
+            foreach (Ghost g in ghosts)
+            {
+                AudioSource d = g.Ch != null && g.Ch.Length > 0 ? g.Ch[0] : null;
+                sb.Append(" ; copie ").Append(g.K != null ? g.K.name : "?").Append(" : ")
+                  .Append(d != null && d.clip != null ? "'" + (g.SongKey[0] ?? d.clip.name) + "'" + (g.SongKey[0] != null ? (g.SongSeek[0] ? " calee" : " flux") : "") + " " + d.time.ToString("F1") + " s" + (d.isPlaying ? " joue" : " arrete") : "-");
+            }
+            sb.Append(" ; tas ").Append(System.GC.GetTotalMemory(false) >> 20).Append(" Mo");   // (memoire du processus : 0 dans le Mono du jeu -- relevee de l'exterieur)
+            return sb.ToString();
+        }
+
         public static void TestStream(float t)
         {
             if (t < 40f) return;

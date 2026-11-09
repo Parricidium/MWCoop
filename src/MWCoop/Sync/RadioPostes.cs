@@ -43,6 +43,7 @@ namespace MWCoop
             public PlayMakerFSM F; public Transform K; public bool Bad;
             public readonly List<string> OnStates = new List<string>(), OffStates = new List<string>();
             public readonly List<FsmGameObject> Parents = new List<FsmGameObject>();
+            public readonly Dictionary<string, List<FsmStateAction>> OffActs = new Dictionary<string, List<FsmStateAction>>();   // (actions OFF de chaque etat « eteint »)
         }
         static readonly Dictionary<PlayMakerFSM, Ctrl> ctrls = new Dictionary<PlayMakerFSM, Ctrl>();
         static readonly HashSet<string> hooked = new HashSet<string>();
@@ -67,6 +68,7 @@ namespace MWCoop
         static void PostesLevelLoaded()
         {
             postes.Clear(); ctrls.Clear(); hooked.Clear(); notCtrl.Clear(); nextCtrlScan = 0f; offPost = null; offAt = -10f; hostListAt = -10f; nextPostes = 0f; postLogs = 0;
+            offMuted.Clear(); livePost = null; liveTo = null;
             measAt = 0f; measMs = 0.0; measMax = 0.0; measN = 0;
         }
 
@@ -139,7 +141,11 @@ namespace MWCoop
                             if (et.fsmName == null || et.fsmName.Value != "Fetch") continue;
                             object ev = Field(a, "sendEvent");
                             string en = ev is FsmString ? ((FsmString)ev).Value : ev is FsmEvent ? ((FsmEvent)ev).Name : null;
-                            if (en == "OFF" && !c.OffStates.Contains(s.Name)) c.OffStates.Add(s.Name);
+                            if (en != "OFF") continue;
+                            if (!c.OffStates.Contains(s.Name)) c.OffStates.Add(s.Name);
+                            List<FsmStateAction> offs;
+                            if (!c.OffActs.TryGetValue(s.Name, out offs)) c.OffActs[s.Name] = offs = new List<FsmStateAction>();
+                            if (!offs.Contains(a)) offs.Add(a);
                         }
                     }
                     if (c.Bad) break;
@@ -197,7 +203,10 @@ namespace MWCoop
                 // [Test] RadioRallumagePrend=1 : comme avant.)
                 bool keepRule = p.On ? Config.GetInt("Test", "RadioMolettePrend", 0) == 0 : !RawOnOff;
                 if (keepRule && Off(Take()) == false && realT.parent != null && KeyOf(realT.parent) != k)
-                { keepBase = Take(); keepPost = p; keepAt = now; keepTurnOn = !p.On; }
+                {
+                    keepBase = Take(); keepPost = p; keepAt = now; keepTurnOn = !p.On;
+                    if (RallumageRepris) SnapChannels(now);   // (dossier #59 : morceau et position du vrai jeu juste avant l'allumage, rendus par KeepHolder)
+                }
                 // (en tete de l'etat : le SetParent du jeu suit ; deux postes allumes dans la meme image ont chacun leur « allume »)
                 if (!p.On) { p.OnAt = now; if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " allume (" + c.F.FsmName + " « " + state + " »)"); }
                 p.On = true; p.ByHost = false;
@@ -206,13 +215,91 @@ namespace MWCoop
             else if (kind == 1)
             {
                 offBase = Take(); offPost = p; offAt = now;
-                SnapChannels();
+                SnapChannels(now);
+                bool held = !Off(offBase) && offBase.Parent != null && KeyOf(offBase.Parent) == k;
+                string kept = !RawOnOff && OffRetenu && !Off(offBase) && offBase.Parent != null ? HoldOff(c, state, p, held, now) : null;
                 // (poste qui a le vrai jeu de canaux : apres son « eteint », le vrai jeu passe a un autre poste allume -- HandOver)
-                if (!RawOnOff && !Off(offBase) && offBase.Parent != null && KeyOf(offBase.Parent) == k) { handPost = p; handBase = offBase; handAt = now; }
-                if (p.On && postLogs++ < 200) Log.Info("radio : " + p.K.name + " eteint (" + c.F.FsmName + " « " + state + " »)");
+                if (kept == null && !RawOnOff && held) { handPost = p; handBase = offBase; handAt = now; }
+                if (p.On && postLogs++ < 200) Log.Info("radio : " + p.K.name + " eteint (" + c.F.FsmName + " « " + state + " »)" + (kept ?? ""));
                 p.On = false; p.ByHost = false; p.OffAt = now;
             }
-            else StrayOff(now);
+            else { UnmuteOff(); StrayOff(now); }
+        }
+
+        // (dossier #59, Say my name 09/11 : « la radio perso -- chansons importees -- eteinte puis rallumee dans la HAYOSIKO : toutes les radios
+        // passent au morceau suivant ». L'« eteint » d'un poste envoyait OFF aux canaux du jeu meme quand ce poste n'avait pas le vrai jeu de
+        // canaux (sa copie jouait) : le jeu les arretait, puis StrayOff / HandOver les remettaient au meme morceau et a la meme position
+        // (dossier #57) -- sauf une chanson importee, lue en flux, qui ne se positionne pas : le jeu tirait le morceau suivant, et toutes les
+        // copies suivaient. Ce OFF peut etre retenu (ses actions eteintes pour ce passage, remises juste apres) : poste sans le vrai jeu
+        // -> rien ne s'arrete ; poste qui l'a, un autre poste allume -> le vrai jeu y passe sans s'arreter (HandOverLive) ; aucun autre poste
+        // allume -> OFF laisse au jeu, la radio se tait. Essais sa59/sb59 : l'« eteint » n'arretait pas la chanson -- le vrai coupable est
+        // l'allumage (KeepHolder, ResumeChannels) ; retenue gardee pour essai seulement : [Test] RadioOffRetenu=1.)
+        static int offRetenu = -1;
+        static bool OffRetenu { get { if (offRetenu < 0) offRetenu = Config.GetInt("Test", "RadioOffRetenu", 0) != 0 ? 1 : 0; return offRetenu == 1; } }
+        static readonly List<FsmStateAction> offMuted = new List<FsmStateAction>();
+        static Poste livePost, liveTo; static float liveAt = -10f;
+
+        static string HoldOff(Ctrl c, string state, Poste p, bool held, float now)
+        {
+            List<FsmStateAction> acts;
+            // (hors partie a plusieurs, MultiWatch ne tourne pas : rien ne remettrait le vrai jeu de canaux -- OFF laisse au jeu)
+            if (!Session.Active || !PlayerSync.InGame || !c.OffActs.TryGetValue(state, out acts) || acts.Count == 0) return null;
+            Poste to = null;
+            if (held)
+            {
+                foreach (Poste q in postes.Values) if (q != p && q.K != null && q.On && q.Speaker != null && (to == null || q.OnAt > to.OnAt)) to = q;
+                if (to == null) return null;   // (plus aucun autre poste allume : la radio se tait, comme dans le jeu)
+            }
+            else
+            {
+                to = PosteOf(KeyOf(offBase.Parent), false);
+                if (to == null || to == p || !(to.On || to.ByHost)) return null;
+            }
+            foreach (FsmStateAction a in acts) if (a != null && a.Enabled) { a.Enabled = false; offMuted.Add(a); }
+            if (held) { livePost = p; liveTo = to; liveAt = now; return ", OFF retenu"; }   // (HandOverLive, a l'image suivante, dit ou il passe)
+            offPost = null;   // (rien a remettre : StrayOff n'a plus a jouer)
+            string res = ", OFF retenu : " + to.K.name + " continue";
+            if (p.On) return res + " (" + Playing(Take()) + ")";   // (premier « eteint » : journal de PostEvent)
+            if (postLogs++ < 200) Log.Info("radio : « eteint » de " + p.K.name + " retenu : " + to.K.name + " continue (" + Playing(Take()) + ")");
+            return res;
+        }
+
+        static void UnmuteOff()
+        {
+            if (offMuted.Count == 0) return;
+            foreach (FsmStateAction a in offMuted) if (a != null) a.Enabled = true;
+            offMuted.Clear();
+        }
+
+        // Poste qui avait le vrai jeu de canaux eteint, son OFF retenu : le vrai jeu passe tel quel (meme morceau, meme position, il joue) a
+        // l'autre poste allume, avec la station de celui-ci.
+        static void HandOverLive(float now)
+        {
+            if (livePost == null) return;
+            Poste was = livePost, to = liveTo; livePost = null; liveTo = null;
+            if (realT == null || fetch == null) return;
+            Snap cur = Take();
+            if (Off(cur) || cur.Parent == null || KeyOf(cur.Parent) != was.K) return;   // (deja parti ailleurs, ou coupe autrement)
+            if (to == null || to.K == null || !to.On || to.Speaker == null || now - liveAt > 0.6f)
+            {
+                fetch.SendEvent("OFF");   // (l'autre poste s'est eteint entre-temps : le OFF retenu est rendu au jeu, la radio se tait)
+                if (postLogs++ < 200) Log.Info("radio : " + was.K.name + " eteint : plus d'autre poste allume, OFF rendu au jeu");
+                return;
+            }
+            Snap s = cur; s.Parent = to.Speaker; s.LP = Vector3.zero; s.LR = Quaternion.identity; s.On = true;
+            if (to.HasFlags) { s.M1 = to.Flags.M1; s.MF = to.Flags.MF; s.St = to.Flags.St; }
+            Restore(s);
+            fetch.SendEvent("FETCH");
+            last = Take(); lastSet = true;
+            if (postLogs++ < 200) Log.Info("radio : " + was.K.name + " eteint : le vrai jeu de canaux passe a " + to.K.name + " sans s'arreter (" + Station(s, true) + ", " + Playing(s) + ")");
+        }
+
+        // Ce que fait entendre le vrai jeu de canaux sur sa station : morceau et position (journal).
+        static string Playing(Snap s)
+        {
+            int c = !s.M1 ? 0 : !s.MF ? 1 : -1;
+            AudioSource a = c >= 0 && ch != null && c < ch.Length ? ch[c] : null;
+            return a == null || a.clip == null ? "rien" : "'" + ClipKey(a.clip) + "' a " + a.time.ToString("F0") + " s" + (a.isPlaying ? "" : ", arrete");
         }
 
         // OFF d'un poste qui n'avait pas le vrai jeu de canaux : chez le jeu, il eteignait celui qui l'avait -- remis.
@@ -255,48 +342,57 @@ namespace MWCoop
             if (postLogs++ < 200) Log.Info("radio : " + was.K.name + " eteint : le vrai jeu de canaux passe a " + to.K.name + " (" + Station(s, true) + res + ")");
         }
 
-        // Morceau et position des canaux juste avant un « eteint » (SnapChannels), rendus apres (ResumeChannels) si le jeu les a arretes
-        // ou changes -- au rallumage, le jeu passait au morceau suivant. (Chanson importee lue en flux : pas de position, laissee au jeu.)
+        // Morceau et position des canaux juste avant un « eteint » ou un allumage (SnapChannels), rendus apres (ResumeChannels) si le jeu les a
+        // arretes ou changes -- au rallumage, le jeu passait au morceau suivant. (Chanson importee lue en flux : pas de position, laissee au jeu.
+        // Dossier #59 : sur My Summer Car, les chansons importees sont chargees entieres -- DecompressOnLoad, essai sa59 -- elles se positionnent
+        // et sont reprises aussi ; [Test] RadioRepriseImportee=0 : jamais, comme avant.)
         static readonly AudioClip[] offClip = new AudioClip[2]; static readonly float[] offTime = new float[2]; static readonly bool[] offPlay = new bool[2];
-        static void SnapChannels()
+        static float snapAt = -10f;
+        static void SnapChannels(float now)
         {
+            snapAt = now;
             for (int c = 0; c < 2; c++)
             {
                 AudioSource a = ch != null && c < ch.Length ? ch[c] : null;
                 offClip[c] = a != null ? a.clip : null; offTime[c] = a != null ? a.time : 0f; offPlay[c] = a != null && a.isPlaying;
             }
         }
+        static bool CantResume(AudioClip clip)
+        {
+            if (clip.name.Length > 0) return false;
+            return Config.GetInt("Test", "RadioRepriseImportee", 1) == 0 || clip.loadType == AudioClipLoadType.Streaming;
+        }
+        // (dossier #59, essais sa59/sb59 : a l'allumage d'un poste pendant qu'un autre a le vrai jeu -- KeepHolder --, le canal local s'arretait
+        // sur la chanson importee et ne repartait plus ; il est repris au meme morceau, a la meme position. [Test] RadioRallumageRepris=0 : comme avant.)
+        static bool RallumageRepris { get { return Config.GetInt("Test", "RadioRallumageRepris", 1) != 0; } }
         static string ResumeChannels(float now)
         {
             if (ch == null) return "";
             int n = 0;
-            for (int c = 0; c < 2 && c < ch.Length; c++)
-            {
-                AudioSource a = ch[c]; AudioClip clip = offClip[c];
-                if (a == null || clip == null || !offPlay[c] || clip.name.Length == 0) continue;
-                if (a.clip == clip && a.isPlaying) continue;
-                a.clip = clip;
-                a.Play();
-                a.time = Mathf.Min(offTime[c] + Mathf.Max(0f, now - offAt), clip.length - 0.05f);
-                n++;
-            }
+            for (int c = 0; c < 2 && c < ch.Length; c++) if (ResumeOne(c, now)) n++;
             resumeUntil = now + 1.2f;   // (le jeu coupe parfois les canaux une image apres son « eteint » -- essai rc57 : surveille encore 1,2 s)
             return n > 0 ? ", " + n + " canal(aux) repris au meme morceau" : "";
+        }
+        // Canal c rendu a son morceau et a sa position d'avant : arrete, change, ou relance du debut (essai sh59 : relance a 0 une fraction de
+        // seconde apres la reprise, la meme chanson rejouait du debut pendant 0,5 s -- l'ecart de position compte aussi, au-dela de 1 s).
+        static bool ResumeOne(int c, float now)
+        {
+            AudioSource a = ch[c]; AudioClip clip = offClip[c];
+            if (a == null || clip == null || !offPlay[c] || CantResume(clip)) return false;
+            float want = Mathf.Min(offTime[c] + Mathf.Max(0f, now - snapAt), clip.length - 0.05f);
+            if (a.clip == clip && a.isPlaying && Mathf.Abs(a.time - want) < 1f) return false;
+            if (a.clip != clip) a.clip = clip;
+            if (!a.isPlaying) a.Play();
+            a.time = want;
+            return true;
         }
         static float resumeUntil = -10f; static int resumeLogs;
         static void ResumeWatch(float now)
         {
             if (now > resumeUntil || ch == null) return;
             int n = 0;
-            for (int c = 0; c < 2 && c < ch.Length; c++)
-            {
-                AudioSource a = ch[c]; AudioClip clip = offClip[c];
-                if (a == null || clip == null || !offPlay[c] || clip.name.Length == 0 || (a.clip == clip && a.isPlaying)) continue;
-                a.clip = clip; a.Play();
-                a.time = Mathf.Min(offTime[c] + Mathf.Max(0f, now - offAt), clip.length - 0.05f);
-                n++;
-            }
-            if (n > 0 && resumeLogs++ < 20) Log.Info("radio : " + n + " canal(aux) coupe(s) apres un « eteint », repris au meme morceau (" + (now - offAt).ToString("F2") + " s apres)");
+            for (int c = 0; c < 2 && c < ch.Length; c++) if (ResumeOne(c, now)) n++;
+            if (n > 0 && resumeLogs++ < 20) Log.Info("radio : " + n + " canal(aux) coupe(s) apres un « eteint » ou un allumage, repris au meme morceau (" + (now - snapAt).ToString("F2") + " s apres)");
         }
 
         // Molette (volume, station) d'un poste allume qui jouait en copie : le vrai jeu de canaux, parti dans ce poste, est remis a celui qui
@@ -313,18 +409,21 @@ namespace MWCoop
             if (h == null || h == p || !(h.On || h.ByHost)) return;   // (l'ancien n'est plus allume : ce poste garde le vrai jeu)
             p.Flags = cur; p.HasFlags = true;
             Restore(keepBase);
-            fetch.SendEvent("FETCH");
+            if (Config.GetInt("Test", "RadioGardeFetch", 1) != 0) fetch.SendEvent("FETCH");   // ([Test] RadioGardeFetch=0 : essai, sans FETCH)
+            string res = RallumageRepris ? ResumeChannels(now) : "";
             last = Take(); lastSet = true;
             if (p.G != null) Flags(p.G, p.Flags);
-            if (postLogs++ < 200) Log.Info("radio : " + (keepTurnOn ? "allumage" : "molette") + " de " + p.K.name + " (" + Station(p.Flags, true) + ") : le vrai jeu de canaux reste a " + h.K.name);
+            if (postLogs++ < 200) Log.Info("radio : " + (keepTurnOn ? "allumage" : "molette") + " de " + p.K.name + " (" + Station(p.Flags, true) + ") : le vrai jeu de canaux reste a " + h.K.name + res);
         }
 
         static void MultiWatch(float now)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool rescanned = ScanCtrls(now);
+            UnmuteOff();   // (OFF retenu : actions remises meme si l'etat n'est pas alle jusqu'au bout)
             StrayOff(now);
             HandOver(now);
+            HandOverLive(now);
             if (!RawOnOff) ResumeWatch(now);
             KeepHolder(now);
             KeepParent(now);
@@ -376,13 +475,14 @@ namespace MWCoop
         {
             var go = (GameObject)Object.Instantiate(realT.gameObject);
             go.name = "MWCoop-RadioCopie";
-            foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName != "Fetch") f.enabled = false;   // (tirage des morceaux : celui du vrai)
+            bool cf = Config.GetInt("Test", "RadioCopieFetch", 1) != 0;
+            foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName != "Fetch" || !cf) f.enabled = false;   // (tirage des morceaux : celui du vrai)
             go.transform.parent = p.Speaker; go.transform.localPosition = Vector3.zero; go.transform.localRotation = Quaternion.identity;
             var g = new Ghost { K = p.K, Go = go, Who = -1, Fetch = Game.FsmOn(go, "Fetch"), Born = Time.realtimeSinceStartup };
             Transform c1 = go.transform.Find("Channel1"), fk = go.transform.Find("Folk");
             g.Ch = new[] { c1 != null ? c1.GetComponent<AudioSource>() : null, fk != null ? fk.GetComponent<AudioSource>() : null };
             foreach (AudioSource a in g.Ch) if (a != null) a.Stop();
-            if (g.Fetch != null) { g.Fetch.enabled = true; if (p.HasFlags) Flags(g, p.Flags); g.Fetch.SendEvent("FETCH"); }
+            if (g.Fetch != null && cf) { g.Fetch.enabled = true; if (p.HasFlags) Flags(g, p.Flags); g.Fetch.SendEvent("FETCH"); }   // ([Test] RadioCopieFetch=0 : essai, Fetch de la copie coupe)
             ghosts.Add(g);
             p.Far = false;
             if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " joue en copie (" + Recon.Path(p.Speaker) + ", " + Station(p.Flags, p.HasFlags) + (p.ByHost ? ", allume chez l'hote" : "") + ")");
@@ -393,6 +493,7 @@ namespace MWCoop
         {
             if (p.G != null)
             {
+                DropSongs(p.G);
                 if (p.G.Go != null) Object.Destroy(p.G.Go);
                 ghosts.Remove(p.G);
                 p.G = null;
@@ -430,7 +531,7 @@ namespace MWCoop
                 if (!wantVoice) { if (dst.isPlaying) dst.Stop(); continue; }
                 string key = src.clip != null && src.clip.name.Length == 0 ? ClipKey(src.clip) : null;
                 if (key != null && key.StartsWith("#chanson:")) { OwnSong(g, c, key, src, dst); continue; }
-                if (g.SongKey[c] != null) { g.SongKey[c] = null; g.SongWww[c] = null; g.SongClip[c] = null; }
+                if (g.SongKey[c] != null) DropSong(g, c, dst);
                 if (dst.clip != src.clip) { dst.clip = src.clip; if (src.clip != null) dst.time = Mathf.Min(src.time, src.clip.length - 0.05f); }
                 if (src.isPlaying && !dst.isPlaying && dst.clip != null) { dst.Play(); dst.time = src.time; }
                 else if (!src.isPlaying && dst.isPlaying) dst.Stop();
@@ -563,6 +664,36 @@ namespace MWCoop
                      + (realT != null && realT.parent != null ? Recon.Path(realT.parent) : "-") + " ; " + all + " sources qui jouent dans la scene ; radio "
                      + (measN > 0 ? (measMs / measN).ToString("F3") : "-") + " ms par image en moyenne, " + measMax.ToString("F2") + " ms au plus");
             measMs = 0.0; measMax = 0.0; measN = 0;
+        }
+
+        // Essais (mscradio, [Test] RadioVidage=t, dossier #59) : automates du jeu de canaux (Fetch, Update de Channel1 et Folk) et des postes
+        // de la SATSUMA et de la HAYOSIKO, etat par etat (actions, transitions) et variables.
+        public static void TestDump()
+        {
+            if (realT == null || fetch == null) { Log.Info("autotest : radio, vidage : pas de canaux"); return; }
+            DumpFsm("Fetch", fetch);
+            if (upd != null) { DumpFsm("Channel1::Update", upd[0]); if (upd.Length > 1) DumpFsm("Folk::Update", upd[1]); }
+            var seen = new HashSet<PlayMakerFSM>();
+            foreach (Ctrl c in ctrls.Values)
+            {
+                if (c.Bad || c.F == null || !seen.Add(c.F)) continue;
+                Transform k = KeyOf(c.F.transform);
+                if (k == null || !(k.name.StartsWith("SATSUMA") || k.name.StartsWith("HAYOSIKO") || k.name.StartsWith("radio("))) continue;
+                DumpFsm(Recon.Path(c.F.transform) + "::" + c.F.FsmName, c.F);
+            }
+        }
+        static void DumpFsm(string label, PlayMakerFSM f)
+        {
+            if (f == null) { Log.Info("autotest : radio, vidage " + label + " : absent"); return; }
+            Log.Info("autotest : radio, vidage " + label + " [" + f.ActiveStateName + "]" + (f.enabled ? "" : " (coupe)"));
+            foreach (FsmState st in f.Fsm.States)
+            {
+                var tr = new System.Text.StringBuilder();
+                foreach (FsmTransition x in st.Transitions) tr.Append(' ').Append(x.EventName).Append("->").Append(x.ToState);
+                Log.Info("autotest :   " + Jobs.DumpActions(f, st.Name) + " ; transitions" + tr);
+            }
+            foreach (FsmTransition gt in f.FsmGlobalTransitions) Log.Info("autotest :   globale " + gt.EventName + " -> " + gt.ToState);
+            foreach (NamedVariable v in f.FsmVariables.GetAllNamedVariables()) Log.Info("autotest :   var " + v.Name + " = " + v);
         }
 
         // Essais : etat des postes (allume, copie, station, distance).

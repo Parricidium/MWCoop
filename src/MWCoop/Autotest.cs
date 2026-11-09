@@ -1363,6 +1363,7 @@ namespace MWCoop
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
         static float etatAt, frNext;
         static int radioStep, radioLog, dmStep, dmKey, dmPush;
+        static float radioSuiviAt; static bool radioDumped;
         static bool capRel, capProbe; static int capHote;
         static float dmLog, lvLog, dmPushLog; static bool dmMoved, dmArret; static int dmRoule, dmCrash; static float dmCrashLog; static bool dmCrashEtat; static bool dmTuyau, liqDone; static int liqLog, lvStep;
 
@@ -4020,6 +4021,18 @@ namespace MWCoop
                         Log.Info("autotest : mscradio, releve " + radioLog + " : " + RadioMsc.TestState());
                         MscEtat();
                     }
+                    // ([Test] RadioSuivi=a,b, dossier #59 : de a a b s, toutes les 0,5 s, morceau et position du vrai canal local et des copies)
+                    string[] su = Config.Get("Test", "RadioSuivi", "").Split(',');
+                    float sa, sb2;
+                    if (su.Length == 2 && float.TryParse(su[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out sa)
+                        && float.TryParse(su[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out sb2) && t > sa && t < sb2 && t >= radioSuiviAt)
+                    {
+                        radioSuiviAt = t + Config.GetFloat("Test", "RadioSuiviPas", 0.5f);
+                        Log.Info("autotest : mscradio, suivi " + Radio.SuiviState());
+                    }
+                    // ([Test] RadioVidage=t, dossier #59 : a t s, automates du jeu de canaux et des postes au journal)
+                    float rv = Config.GetFloat("Test", "RadioVidage", 0f);
+                    if (rv > 0f && t > rv && !radioDumped) { radioDumped = true; Radio.TestDump(); }
                 }
                 // ([Test] Autotest=mscradiodump : automates de l'autoradio / du lecteur CD / du haut-parleur de la SATSUMA, liste puis vidage)
                 if (mode == "mscradiodump" && t > 40f && step == 0)
