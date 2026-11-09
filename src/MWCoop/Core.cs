@@ -22,6 +22,14 @@ namespace MWCoop
             Application.runInBackground = true;   // (hote en Alt-Tab : plus de paquets pendant 15 s -> delai depasse chez les invites ; relecture du 15/10)
             SaveTransfer.CopyPlayerOptions();
             Session.Start();
+            // ([Test] VoitureExterne=<dossier> : voiture d'un autre mod declaree au demarrage comme le ferait ce mod -- CoopApi.AddCar, cle =
+            // nom du dossier, definition.txt dedans ; essais caches sans MSCLoader)
+            string ve = Config.Get("Test", "VoitureExterne", "");
+            if (ve.Length > 0)
+            {
+                try { CoopApi.AddCar(System.IO.Path.GetFileName(ve.TrimEnd('\\', '/')), ve, System.IO.File.ReadAllText(System.IO.Path.Combine(ve, "definition.txt"))); }
+                catch (System.Exception e) { Log.Warn("essai : voiture externe " + ve + " : " + e.Message); }
+            }
         }
 
         void FixedUpdate()
