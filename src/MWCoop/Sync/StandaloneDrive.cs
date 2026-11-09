@@ -3037,7 +3037,7 @@ namespace MWCoop
                     if (b.Rb.GetComponent<CarHits.Watch>() == null) b.Rb.gameObject.AddComponent<CarHits.Watch>();
                     crashMaxH = crashMaxV = 0f; mFly = 0f; CarHits.Touches = 0; CarHits.TouchMax = 0f; mLog = 0f;
                     mStep = 31; mAt = t;
-                    Log.Info("standalone : point, depart en " + p0.ToString("F1") + " cap " + r.eulerAngles.y.ToString("F0") + " a " + (v * 3.6f).ToString("F0") + " km/h, caisse " + (Config.GetInt("Test", "CaisseRampe", 1) != 0 ? "a patins" : "plate (avant)"));
+                    Log.Info("standalone : point, " + (Config.GetInt("Test", "PointCorde", 0) != 0 ? "ligne droite de JD, " : "") + "depart en " + p0.ToString("F1") + " cap " + r.eulerAngles.y.ToString("F0") + " a " + (v * 3.6f).ToString("F0") + " km/h, caisse " + (Config.GetInt("Test", "CaisseRampe", 1) != 0 ? "a patins" : "plate (avant)"));
                     break;
                 }
                 case 31:
@@ -3051,7 +3051,11 @@ namespace MWCoop
                     Vector3 fw = Vector3.ProjectOnPlane(ct.forward, Vector3.up).normalized, rt = Vector3.Cross(Vector3.up, fw), look = pos + fw * 14f;
                     Vector3 refDir = along < -14f ? (PtZ - pos).normalized : fw;
                     bool found = false; Vector3 aim = Vector3.zero; float bestAng = float.MaxValue; int run = int.MinValue;
-                    for (int i = -10; i <= 11; i++)
+                    // ([Test] PointCorde=1 : la ligne droite de JD, sans suivre la route -- 123 m en 3,3 s, sa vitesse moyenne sur la corde
+                    // est celle de son choc : il est alle presque tout droit, et la route tourne vers 98 m)
+                    bool corde = Config.GetInt("Test", "PointCorde", 0) != 0;
+                    if (corde) { found = true; aim = along < -5f ? PtZ : pos + dir * 20f; }
+                    else for (int i = -10; i <= 11; i++)
                     {
                         string nm; float gy;
                         bool road = i <= 10 && Ground(look + rt * i, b, out nm, out gy) && nm.ToLower().Contains("road");
