@@ -73,7 +73,7 @@ namespace MWCoop
             lifts.Clear(); liftKnown.Clear(); owned.Clear(); loaders.Clear(); loaderKnown.Clear();
             dmg.Clear(); lifted.Clear(); corrected.Clear(); snapshots.Clear(); dmgSend.Clear();
             gen = -1; liftScans = 0; dmgIdx = 0; tStep = 0; tAt = 0; tLog = 0; testFsm = null; testOff.Clear();
-            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false; probeReload = false;
+            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false; probeReload = false; probePiece = false; probePieceWarned = false;
             dentOutMsgs = dentOutVerts = dentInMsgs = 0; dentOutBytes = 0; dentWinAt = 0; dentWinBytes = dentPeakBytes = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
@@ -198,7 +198,7 @@ namespace MWCoop
             while (budget > 0 && q.Car < q.Cars.Count)
             {
                 CarDmg c = q.Cars[q.Car];
-                if (c.Root == null || q.Dent >= c.Dents.Count) { q.Car++; q.Dent = 0; q.At = 0; continue; }
+                if ((c.Root == null && !c.Loose) || q.Dent >= c.Dents.Count) { q.Car++; q.Dent = 0; q.At = 0; continue; }
                 Dent d = c.Dents[q.Dent];
                 var v = d.D != null ? fVerts.GetValue(d.D) as Vector3[] : null;
                 var bs = d.D != null ? fBase.GetValue(d.D) as Vector3[] : null;
@@ -646,13 +646,36 @@ namespace MWCoop
         }
 
         // ================================================================ degats
-        class Dent { public string Key; public Deformable D; public Vector3[] Arr, Snap; }
+        class Dent { public string Key; public Deformable D; public Vector3[] Arr, Snap; public Rigidbody Body; }   // (Body : piece detachee)
         class Glass { public string Key; public GameObject Coll; public bool Had; }
         class Bend { public string Key; public Transform T; public Quaternion Snap; }
         class CarDmg
         {
-            public string Car; public Transform Root;
+            public string Car; public Transform Root; public bool Loose;   // (Loose : toles des pieces detachees, pas de voiture)
             public List<Dent> Dents = new List<Dent>(); public List<Glass> Glasses = new List<Glass>(); public List<Bend> Bends = new List<Bend>();
+        }
+
+        // Toles des pieces detachees de leur voiture (pare-chocs arrache, porte tombee, capot pose par terre...) : hors des voitures,
+        // suivies par la cle de leur piece (Props, la meme chez tous), groupe « *pieces ». Avant : la piece tombee quittait la voiture,
+        // ses bosses n'etaient plus suivies et chez l'autre, « tole introuvable ici » -- la bosse perdue (essai t8 du 08/11 ; demande de
+        // JD, 09/11). Fait foi : le dernier joueur qui a deplace la piece, sinon l'hote ; ailleurs, les bosses locales sont defaites
+        // (UndoDent), comme sur la copie d'une voiture conduite par un autre. [Test] TolesPieces=0 : comme avant.
+        const string LooseKey = "*pieces";
+        static bool LoosePieces { get { return Config.GetInt("Test", "TolesPieces", 1) != 0; } }
+        static bool LooseCopy(Dent d)
+        {
+            if (d.Body == null) return false;
+            float age;
+            if (Props.MovedByOther(d.Body.gameObject, out age)) return true;
+            return !Session.IsHost && !Props.MovedHere(d.Body.gameObject);
+        }
+        // Piece arrachee, demontee ou montee (Parts) : toles relevees tout de suite (avant : au plus tard 20 s apres -- les bosses de ce
+        // temps-la partaient sous une cle que l'autre n'avait plus).
+        public static void RescanSoon()
+        {
+            if (nextScan < 0) return;
+            float soon = Time.realtimeSinceStartup + 0.5f;
+            if (nextScan > soon) nextScan = soon;
         }
         static readonly Dictionary<string, CarDmg> dmg = new Dictionary<string, CarDmg>();
 
@@ -719,10 +742,33 @@ namespace MWCoop
                 dmg[car] = c;
                 nd += c.Dents.Count; ng += c.Glasses.Count; nb += c.Bends.Count;
             }
-            if (!dmgLogged || nd + ng + nb != dmgLast)
+            int nl = 0;
+            if (LoosePieces)
             {
-                dmgLogged = true; dmgLast = nd + ng + nb;
-                Log.Info("atelier : degats suivis sur " + dmg.Count + " vehicules : " + nd + " toles deformables, " + ng + " vitres, " + nb + " pivots de train");
+                CarDmg oldL;
+                dmg.TryGetValue(LooseKey, out oldL);
+                var lc = new CarDmg { Car = LooseKey, Loose = true };
+                var seenL = new Dictionary<string, int>();
+                foreach (Deformable d in Object.FindObjectsOfType<Deformable>())
+                {
+                    if (d == null || VehicleSync.CarRoot(d.transform) != null) continue;   // (encore sur une voiture, ou dedans : suivie avec elle)
+                    Rigidbody prb = d.GetComponentInParent<Rigidbody>();
+                    string pk = prb != null ? Props.KeyOf(prb.gameObject) : null;
+                    if (pk == null) continue;   // (pas un objet suivi : la meme cle chez l'autre n'est pas sure)
+                    string key = Rank(seenL, "p" + pk + VehicleSync.RelPath(prb.transform, d.transform));
+                    Dent o = null;
+                    if (oldL != null) foreach (Dent x in oldL.Dents) if (x.Key == key && x.D == d) { o = x; break; }
+                    if (o != null) o.Body = prb;
+                    lc.Dents.Add(o ?? new Dent { Key = key, D = d, Body = prb });
+                }
+                if (lc.Dents.Count > 0 || oldL != null) dmg[LooseKey] = lc;
+                nl = lc.Dents.Count;
+            }
+            if (!dmgLogged || nd + ng + nb + nl * 1000 != dmgLast)
+            {
+                dmgLogged = true; dmgLast = nd + ng + nb + nl * 1000;
+                Log.Info("atelier : degats suivis sur " + (dmg.Count - (dmg.ContainsKey(LooseKey) ? 1 : 0)) + " vehicules : " + nd + " toles deformables, " + ng + " vitres, " + nb + " pivots de train"
+                         + (nl > 0 ? " ; " + nl + " tole(s) de piece(s) detachee(s)" : ""));
             }
         }
         static bool dmgLogged;
@@ -738,6 +784,15 @@ namespace MWCoop
             if (dmgList.Count == 0) return;
             if (dmgIdx >= dmgList.Count) dmgIdx = 0;
             CarDmg c = dmgList[dmgIdx++];
+            if (c.Loose)
+            {
+                foreach (Dent d in c.Dents)
+                {
+                    if (d.D == null || d.Body == null) continue;
+                    budget = LooseCopy(d) && !RepairedHere(d) ? UndoDent(c, d) : PollDent(c, d, remote, budget);
+                }
+                return;
+            }
             if (c.Root == null) return;
             foreach (Glass g in c.Glasses)
             {
@@ -874,8 +929,14 @@ namespace MWCoop
         static CarDmg DmgOf(string car)
         {
             CarDmg c;
-            return dmg.TryGetValue(car, out c) && c.Root != null ? c : null;
+            return dmg.TryGetValue(car, out c) && (c.Root != null || c.Loose) ? c : null;
         }
+        static Dent FindDent(CarDmg c, string key)
+        {
+            if (c != null) foreach (Dent x in c.Dents) if (x.Key == key) return x;
+            return null;
+        }
+        static float rescanOnMissAt;
 
         static void OnGlass(int who, NetReader r)
         {
@@ -915,8 +976,14 @@ namespace MWCoop
                 off[j] = new Vector3((short)r.U16(), (short)r.U16(), (short)r.U16()) * 0.001f;
             }
             CarDmg c = DmgOf(car);
-            Dent d = null;
-            if (c != null) foreach (Dent x in c.Dents) if (x.Key == key) { d = x; break; }
+            Dent d = FindDent(c, key);
+            if ((d == null || d.D == null) && LoosePieces && Time.realtimeSinceStartup >= rescanOnMissAt)
+            {
+                // (piece qui vient de tomber, ou d'etre montee, chez l'autre : toles relevees tout de suite, puis nouvel essai)
+                rescanOnMissAt = Time.realtimeSinceStartup + 1f;
+                ScanDamage();
+                c = DmgOf(car); d = FindDent(c, key);
+            }
             if (d == null || d.D == null || fVerts == null || fBase == null) { Warn("tole " + car + key + " introuvable ici"); return; }
             Fresh(car, d);
             var v = fVerts.GetValue(d.D) as Vector3[];
@@ -1080,7 +1147,7 @@ namespace MWCoop
         // [Test] TolesChocTotal=<s> (conducteur) : a cet instant, tous les sommets de toutes les toles de la voiture enfonces de 2 cm
         //   (pire choc possible : ce que le reseau doit porter).
         static float probeAt;
-        static bool probeSaved, probeShock, probeReload;
+        static bool probeSaved, probeShock, probeReload, probePiece, probePieceWarned;
         static void DentProbe(float t)
         {
             float sa = Config.GetFloat("Test", "TolesSauveA", 0f);
@@ -1130,6 +1197,47 @@ namespace MWCoop
                     }
                     Log.Info("autotest : toles, choc total sur " + c.Car + " : " + nt + " toles, " + nv + " sommets enfonces de 2 cm");
                 }
+            // ([Test] TolesPieceChoc=<s> : a cet instant -- ou des qu'il y en a une --, chaque tole d'une piece detachee dont on fait foi ici :
+            // 40 sommets enfonces de 3 cm. Attendu chez l'autre : « deformee par #… » sous « *pieces », plus « introuvable ici ».)
+            float pc = Config.GetFloat("Test", "TolesPieceChoc", 0f);
+            if (pc > 0f && !probePiece && t > pc && fVerts != null && mUpdateMesh != null)
+            {
+                // (pieces detachees a moins de TolesPieceRayon m -- 30 -- de la voiture d'essai : cherchees ici directement, hors des groupes,
+                // pour que TolesPieces=0 montre l'ancien comportement : la bosse faite, jamais envoyee)
+                Vector3 at = Vector3.zero; bool hasAt = false;
+                foreach (CarDmg cc in dmg.Values) if (!cc.Loose && cc.Root != null && cc.Car.StartsWith(want)) { at = cc.Root.position; hasAt = true; break; }
+                float ray = Config.GetFloat("Test", "TolesPieceRayon", 30f);
+                var found = new List<Dent>();
+                foreach (Deformable dd in Object.FindObjectsOfType<Deformable>())
+                {
+                    if (dd == null || VehicleSync.CarRoot(dd.transform) != null) continue;
+                    if (hasAt && (dd.transform.position - at).sqrMagnitude > ray * ray) continue;
+                    Rigidbody prb = dd.GetComponentInParent<Rigidbody>();
+                    string pk = prb != null ? Props.KeyOf(prb.gameObject) : null;
+                    if (pk == null) continue;
+                    found.Add(new Dent { Key = pk + VehicleSync.RelPath(prb.transform, dd.transform), D = dd, Body = prb });
+                }
+                if (found.Count > 0)
+                {
+                    probePiece = true;
+                    int nt = 0, nv = 0;
+                    var names = new List<string>();
+                    foreach (Dent d in found)
+                    {
+                        if (d.D == null || LooseCopy(d)) continue;
+                        Fresh(LooseKey, d);
+                        var v = fVerts.GetValue(d.D) as Vector3[];
+                        if (v == null) continue;
+                        int n = Mathf.Min(40, v.Length);
+                        for (int i = 0; i < n; i++) v[i] -= (v[i].sqrMagnitude > 1e-6f ? v[i].normalized : Vector3.up) * 0.03f;
+                        ColorsGuard(d.D);
+                        try { mUpdateMesh.Invoke(d.D, null); } catch (System.Exception e) { Log.Info("autotest : toles, piece detachee, " + d.Key + " : " + (e.InnerException ?? e).GetType().Name); }
+                        nt++; nv += n; names.Add(d.Key);
+                    }
+                    Log.Info("autotest : toles, choc sur pieces detachees : " + nt + " tole(s), " + nv + " sommets enfonces de 3 cm (" + string.Join(", ", names.ToArray()) + ")");
+                }
+                else if (!probePieceWarned) { probePieceWarned = true; Log.Info("autotest : toles, choc sur pieces detachees : aucune piece detachee suivie ici pour l'instant (attente)"); }
+            }
             float every = Config.GetFloat("Test", "TolesEmpreinte", 0f);
             float now = Time.realtimeSinceStartup;
             if (every <= 0f || now < probeAt) return;
@@ -1137,18 +1245,27 @@ namespace MWCoop
             Log.Info("autotest : toles, bosses envoyees ici : " + dentOutMsgs + " messages, " + dentOutVerts + " sommets, " + dentOutBytes + " octets (pic "
                      + dentPeakBytes + " o/s, en " + (Config.GetInt("Test", "TolesPositions", 1) != 0 ? "positions" : "decalages") + ") ; recues : " + dentInMsgs + " messages, " + dentsIn + " sommets");
             dentPeakBytes = 0;
+            Vector3 carAt = Vector3.zero; bool hasCar = false;
+            foreach (CarDmg cc in dmg.Values) if (!cc.Loose && cc.Root != null && cc.Car.StartsWith(want)) { carAt = cc.Root.position; hasCar = true; break; }
+            float pieceRay = Config.GetFloat("Test", "TolesPieceRayon", 30f);
             foreach (CarDmg c in dmg.Values)
             {
-                if (c.Root == null || !c.Car.StartsWith(want)) continue;
-                Rigidbody rb = c.Root.GetComponent<Rigidbody>();
-                Transform dl = c.Root.Find("DeformLogic");
-                PlayMakerFSM lf = dl != null ? dl.GetComponent<PlayMakerFSM>() : null;
-                Log.Info("autotest : toles " + c.Car + " (" + (Session.IsHost ? "hote" : "invite") + ") : DeformLogic " + (lf != null ? lf.ActiveStateName : "?")
-                         + ", vitesse lue " + (rb != null ? rb.velocity.magnitude.ToString("F2") + (rb.isKinematic ? " (cinematique)" : "") : "?")
-                         + (VehicleSync.RemotelyDriven(c.Root) ? ", copie conduite ailleurs" : "") + ", " + c.Dents.Count + " toles");
+                bool lp = c.Loose && Config.GetInt("Test", "TolesPiecesReleve", 0) != 0;   // ([Test] TolesPiecesReleve=1 : les pieces detachees aussi, a moins de TolesPieceRayon m)
+                if (!lp && (c.Root == null || !c.Car.StartsWith(want))) continue;
+                if (lp) Log.Info("autotest : toles " + c.Car + " (" + (Session.IsHost ? "hote" : "invite") + ") : " + c.Dents.Count + " tole(s) de pieces detachees");
+                else
+                {
+                    Rigidbody rb = c.Root.GetComponent<Rigidbody>();
+                    Transform dl = c.Root.Find("DeformLogic");
+                    PlayMakerFSM lf = dl != null ? dl.GetComponent<PlayMakerFSM>() : null;
+                    Log.Info("autotest : toles " + c.Car + " (" + (Session.IsHost ? "hote" : "invite") + ") : DeformLogic " + (lf != null ? lf.ActiveStateName : "?")
+                             + ", vitesse lue " + (rb != null ? rb.velocity.magnitude.ToString("F2") + (rb.isKinematic ? " (cinematique)" : "") : "?")
+                             + (VehicleSync.RemotelyDriven(c.Root) ? ", copie conduite ailleurs" : "") + ", " + c.Dents.Count + " toles");
+                }
                 foreach (Dent d in c.Dents)
                 {
                     if (d.D == null) continue;
+                    if (lp && hasCar && (d.D.transform.position - carAt).sqrMagnitude > pieceRay * pieceRay) continue;
                     MeshFilter mf = d.D.meshFilter;
                     Mesh shown = mf != null ? mf.sharedMesh : null;
                     double sx = 0, sy = 0, sz = 0;

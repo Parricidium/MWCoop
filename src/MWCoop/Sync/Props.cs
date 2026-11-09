@@ -1082,6 +1082,14 @@ namespace MWCoop
             age = Time.realtimeSinceStartup - p.RemoteAt;
             return true;
         }
+        // Ce joueur-ci est-il le dernier a avoir deplace l'objet ? Faux pour un objet inconnu ou que personne n'a deplace.
+        // (Garage : les bosses d'une piece detachee font foi chez celui qui l'a deplacee en dernier, sinon chez l'hote.)
+        public static bool MovedHere(GameObject go)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            Prop p;
+            return rb != null && byBody.TryGetValue(rb, out p) && p.LocalAt > 0f && p.LocalAt >= p.RemoteAt;
+        }
 
         // Objet que ce joueur-ci va cacher ou deplacer lui-meme (vetement porte par un autre) : plus suivi ni colle,
         // rendu a sa physique d'avant.

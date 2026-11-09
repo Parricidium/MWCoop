@@ -905,6 +905,7 @@ namespace MWCoop
             PlayMakerFSM data = Game.FsmOn(part, "Data");
             FsmInt aid = data != null ? data.FsmVariables.FindFsmInt("AssemblyID") : null;
             Log.Info((install ? "montage : " : breakoff ? "casse : " : "demontage : ") + id + " sur " + p.Key + ((flags & 2) != 0 ? " (choc il y a " + CarHits.ImpactAgo(VehicleSync.CarRoot(p.Fsm.transform)).ToString("F1") + " s)" : ""));
+            Garage.RescanSoon();   // (ses toles changent de groupe : voiture <-> pieces detachees)
             VehicleSync.CalmAfterPart(p.Fsm.transform);   // (sursaut de la physique au montage : la voiture garee ne s'envole pas)
             // + pose dans le repere du point de montage : chez l'autre, la piece est posee la ou elle est par rapport a SA
             // voiture (posee a la pose du monde d'ici, elle entrait dans la carrosserie d'une copie a peine decalee, et la
@@ -1006,6 +1007,7 @@ namespace MWCoop
             if (install) Freshen(part, p.Fsm, id);   // ses vis, avant les tours de cle de l'autre
             else Props.HoldFromRemote(part, who);   // (tenue le temps que ses poses de chute arrivent : pas ejectee par la physique d'ici)
             Log.Info("piece " + id + (install ? " montee sur " : breakoff ? " cassee de " : " demontee de ") + key + " (joueur #" + who + ")" + (install ? " [parent " + (part.transform.parent != null ? part.transform.parent.name : "aucun") + ", local " + part.transform.localPosition.ToString("F2") + "]" : ""));
+            Garage.RescanSoon();   // (ses toles changent de groupe : voiture <-> pieces detachees)
         }
 
         // Montee = le point de montage la tient (sa variable Installed + ActivePart). La variable
