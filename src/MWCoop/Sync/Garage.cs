@@ -1206,7 +1206,19 @@ namespace MWCoop
             {
                 probeBreak = true;
                 string pt = Config.Get("Test", "TolesPiecePoint", "SATSUMA(557kg, 248)/Body/trigger_bumper_front");
-                Log.Info("autotest : toles, piece cassee pour l'essai : " + pt + " -> " + Parts.TestBreakPoint(pt));
+                string res = Parts.TestBreakPoint(pt);
+                if (res.StartsWith("point inconnu"))
+                {
+                    // (My Summer Car : pas de points dans Parts -- l'attache de la piece a sa voiture lachee comme par un choc : FixedJoint presque
+                    // incassable -> 1 N, le jeu la detache a l'etape de physique suivante, comme au pare-chocs arrache de l'essai t8.
+                    // [Test] TolesPieceCle : la piece, cle Props)
+                    string pk = Config.Get("Test", "TolesPieceCle", "w:db:Database/DatabaseBody/Bumper_Front");
+                    GameObject part = Props.ObjectOf(pk);
+                    int nj = 0;
+                    if (part != null) foreach (FixedJoint fj in part.GetComponents<FixedJoint>()) { fj.breakForce = 1f; fj.breakTorque = 1f; nj++; }
+                    res += " ; attache lachee : " + (part == null ? "piece " + pk + " introuvable" : nj + " joint(s) de " + part.name);
+                }
+                Log.Info("autotest : toles, piece cassee pour l'essai : " + pt + " -> " + res);
             }
             float pc = Config.GetFloat("Test", "TolesPieceChoc", 0f);
             if (pc > 0f && !probePiece && t > pc && fVerts != null && mUpdateMesh != null)
