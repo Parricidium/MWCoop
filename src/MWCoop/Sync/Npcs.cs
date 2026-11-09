@@ -204,6 +204,13 @@ namespace MWCoop
             if (root == "TRAFFIC" && !path.StartsWith("TRAFFIC/Police/Cop")) return true;
             if (root == "HUMANS" && path.StartsWith("HUMANS/Randomizer")) return true;
             if (!rt.gameObject.activeInHierarchy && !(root == "COPS" && Game.FindAny("COPS") == rt.gameObject)) return true;
+            // Proprio d'une fosse septique (JOBS/HouseShitN/LOD/ShitNPC/Man, My Winter Car) : sa logique ('Anims') paie chaque joueur chez lui --
+            // 'Anim' joue le clip du geste jusqu'au bout (PlayAnimation : clip eteint, ou ClampForever au-dela de sa longueur), puis
+            // 'Wait player' sort l'enveloppe. Suivi, le clip de l'hote restait allume chez l'invite, son instant borne a la fin : le geste ne
+            // finissait jamais, client fige bras tendu, enveloppe jamais sortie ; seul l'hote pouvait etre paye (dossier #58, 08/11 :
+            // « я не могу взять » a 0,7 m du client). Chacun le sien (assis sur sa chaise, seuls ses gestes different).
+            // [Test] FosseCorpsSuivi=1 : comme avant. (My Summer Car, ShitMan : a voir avec [MSC].)
+            if (!Game.Msc && path.Contains("/ShitNPC/") && Config.GetInt("Test", "FosseCorpsSuivi", 0) == 0) return true;
             if (!underChar)
                 for (Transform t = ch; t != null; t = t.parent) if (t.GetComponent("CarDynamics") != null) return true;   // conducteurs
             return false;

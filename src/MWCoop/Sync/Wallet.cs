@@ -1596,6 +1596,221 @@ namespace MWCoop
             return "enveloppe d'essai " + e.Key + " suivie (" + (Replay.Owner(f) ?? "libre") + ")";
         }
 
+        // ---------------------------------------------------------------- essai paiefosse (dossier #58)
+        // [Test] Autotest=paiefosse (2 joueurs ; [Test] PaieFosseMaison=3) : la paie d'une fosse septique prise par l'invite
+        // (dossier #58, 08/11 : l'invite devant le client « я не могу взять », l'hote prend l'enveloppe et lui donne l'argent).
+        // T = 40 s apres l'arrivee de l'autre. T : l'hote passe la commande (niveau 4,95, ORDERTAKEN -> Full, rejoue chez
+        // l'invite). T+3 : chacun pres de la maison, client allume chez les deux ([Test] PaieFossePres=0 : l'hote reste ou il
+        // est). T+15 : l'hote (autorite des fosses, GIFU garee) vide la fosse (0,3 -> Pay). De T+5 a T+45, chacun note a chaque
+        // changement l'etat de la fosse, les gestes du client et l'enveloppe. T+28 : l'invite se place a 0,6 m devant SON
+        // enveloppe, l'hote a 2,5 m sur le cote. T+30 : chacun sonde, d'un meme oeil virtuel (0,6 m devant l'enveloppe, 1,6 m
+        // au-dessus du sol), puis l'invite de sa camera, ce que le rayon du survol (MousePickEvent de 'Wait player', memes
+        // calques et portee) touche avant l'enveloppe. T+33 : l'invite la prend comme un clic ('Wait button' puis USE). T+40 :
+        // argent et enveloppe chez chacun. Attendu : l'invite paye, l'enveloppe de l'hote retiree. Rien que de l'essai.
+        static int pfStep, pfLogs; static float pfAt; static string pfLast; static Vector3 pfDir;
+        static int PfHouse { get { return Config.GetInt("Test", "PaieFosseMaison", 3); } }
+        static string PfWell { get { int m = PfHouse; return "JOBS/HouseShit" + m + "/WasteWell_2000litre/Shit/Level" + (Game.Msc ? m.ToString() : "") + "/ShitLevelTrigger"; } }
+        static string PfMan { get { int m = PfHouse; return "JOBS/HouseShit" + m + "/LOD/ShitNPC/" + (Game.Msc ? "ShitMan" + m : "Man"); } }
+        static Transform Deep(Transform t, string n)
+        {
+            if (t.name == n) return t;
+            for (int i = 0; i < t.childCount; i++) { Transform r = Deep(t.GetChild(i), n); if (r != null) return r; }
+            return null;
+        }
+        static Transform PfPay() { GameObject man = Game.FindAny(PfMan); return man != null ? Deep(man.transform, "PayMoney") : null; }
+        static string PfF(FsmFloat f) { return f != null ? f.Value.ToString("F2") : "?"; }
+        static string PfB(FsmBool b) { return b != null ? (b.Value ? "1" : "0") : "?"; }
+        static string PfCash() { FsmFloat c = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney"); return c != null ? c.Value.ToString("F0") : "?"; }
+
+        static string PfState(bool withLevel)
+        {
+            GameObject wg = Game.FindAny(PfWell), man = Game.FindAny(PfMan);
+            PlayMakerFSM lv = wg != null ? Game.FsmOn(wg, "Level") : null, an = man != null ? Game.FsmOn(man, "Anims") : null;
+            Transform pay = PfPay();
+            PlayMakerFSM use = pay != null ? Game.FsmOn(pay.gameObject, "Use") : null;
+            return "fosse " + (lv != null ? lv.ActiveStateName : "?") + (withLevel ? " niveau " + PfF(lv != null ? lv.FsmVariables.FindFsmFloat("ShitLevel") : null) : "")
+                 + " commande " + PfB(lv != null ? lv.FsmVariables.FindFsmBool("Called") : null)
+                 + ", client " + (man == null ? "introuvable" : man.activeInHierarchy ? "LA" : "absent") + " gestes " + (an != null ? an.ActiveStateName + (an.enabled ? "" : " (arrete)") : "?")
+                 + " Money " + PfB(an != null ? an.FsmVariables.FindFsmBool("Money") : null) + " prix " + PfF(an != null ? an.FsmVariables.FindFsmFloat("Price") : null)
+                 + ", enveloppe " + (pay == null ? "introuvable" : (pay.gameObject.activeInHierarchy ? "TENDUE" : "rangee") + " etat " + (use != null ? use.ActiveStateName : "?")
+                    + " Money " + PfF(use != null ? use.FsmVariables.FindFsmFloat("Money") : null));
+        }
+
+        // Pose le joueur d'ici en (x, z), sur le premier sol sous lui qui n'est pas le client ni sa chaise.
+        static string PfPlace(Vector3 at)
+        {
+            GameObject pl = Game.PlayerGo, npc = Game.FindAny("JOBS/HouseShit" + PfHouse + "/LOD/ShitNPC");
+            if (pl == null) return "pas de joueur";
+            Vector3 top = new Vector3(at.x, at.y + 40f, at.z);
+            RaycastHit[] hits = Physics.RaycastAll(top, Vector3.down, 90f, ~(1 << 2));
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            float y = at.y;
+            foreach (RaycastHit h in hits)
+            {
+                if (h.collider.isTrigger || (npc != null && h.transform.IsChildOf(npc.transform)) || h.transform.IsChildOf(pl.transform)) continue;
+                y = h.point.y; break;
+            }
+            var cc = pl.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            pl.transform.position = new Vector3(at.x, y + 0.3f, at.z);
+            if (cc != null) cc.enabled = true;
+            return "pose en " + pl.transform.position.ToString("F2");
+        }
+
+        // Ce que le rayon du survol de l'enveloppe touche, d'un oeil donne (memes calques et portee que son MousePickEvent).
+        static string PfRay(Vector3 eye, string who)
+        {
+            Transform pay = PfPay();
+            if (pay == null) return who + " : enveloppe introuvable";
+            PlayMakerFSM use = Game.FsmOn(pay.gameObject, "Use");
+            var sb = new System.Text.StringBuilder(who + " : enveloppe " + (pay.gameObject.activeInHierarchy ? "tendue" : "rangee") + " (" + (use != null ? use.ActiveStateName : "?") + ") en " + pay.position.ToString("F2"));
+            float reach = 1f; int mask = -5;
+            FsmState wp = use != null ? use.Fsm.GetState("Wait player") : null;
+            FsmStateAction[] acts = null;
+            if (wp != null && wp.IsInitialized) try { acts = wp.Actions; } catch { }   // (automate jamais demarre : actions pas chargees)
+            if (acts == null) sb.Append(", automate pas demarre (survol inconnu, 1 m pris)");
+            if (acts != null)
+                foreach (FsmStateAction a in acts)
+                {
+                    var mp = a as HutongGames.PlayMaker.Actions.MousePickEvent;
+                    if (mp == null) continue;
+                    reach = mp.rayDistance != null ? mp.rayDistance.Value : reach;
+                    int m = 0; var ls = new List<string>();
+                    if (mp.layerMask != null) foreach (FsmInt l in mp.layerMask) if (l != null) { m |= 1 << l.Value; ls.Add(l.Value.ToString()); }
+                    bool inv = mp.invertMask != null && mp.invertMask.Value;
+                    if (inv) m = ~m;
+                    mask = m == 0 ? -5 : m;
+                    sb.Append(", survol ").Append(reach.ToString("F2")).Append(" m, calques [").Append(string.Join(",", ls.ToArray())).Append(']').Append(inv ? " inverses" : "");
+                    break;
+                }
+            Collider pc = pay.GetComponent<Collider>();
+            Vector3 target = pc != null ? pc.bounds.center : pay.position, d = target - eye;
+            float len = d.magnitude;
+            sb.Append(", oeil a ").Append(len.ToString("F2")).Append(" m").Append(len > reach ? " (HORS DE PORTEE)" : "");
+            RaycastHit[] hits = Physics.RaycastAll(eye, d / Mathf.Max(len, 1e-4f), len + 0.3f, mask);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            sb.Append(", touche :");
+            if (hits.Length == 0) sb.Append(" rien");
+            for (int i = 0; i < hits.Length && i < 8; i++)
+            {
+                Collider c = hits[i].collider;
+                sb.Append(i == 0 ? " " : " | ").Append(c == pc ? "ENVELOPPE" : Recon.Path(c.transform)).Append(" a ").Append(hits[i].distance.ToString("F2"))
+                  .Append(" (calque ").Append(c.gameObject.layer).Append(c.isTrigger ? ", declencheur" : "").Append(')');
+            }
+            return sb.ToString();
+        }
+
+        static void TestSepticPay(float t)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (pfStep == 0 && Jobs.OtherInGame(40f)) { pfStep = 1; pfAt = now; }
+            if (pfStep == 0) return;
+            float k = now - pfAt;
+            GameObject wg = Game.FindAny(PfWell), man = Game.FindAny(PfMan);
+            PlayMakerFSM lv = wg != null ? Game.FsmOn(wg, "Level") : null;
+            FsmFloat level = lv != null ? lv.FsmVariables.FindFsmFloat("ShitLevel") : null;
+            if (pfStep == 1)
+            {
+                pfStep = 2;
+                object rht = null;
+                var pr = typeof(Physics).GetProperty("raycastsHitTriggers") ?? typeof(Physics).GetProperty("queriesHitTriggers");
+                if (pr != null) try { rht = pr.GetValue(null, null); } catch { }
+                Log.Info("autotest : paiefosse, debut (" + (Session.IsHost ? "hote" : "invite") + ", maison " + PfHouse + ", rayons sur declencheurs " + (rht ?? "?") + ") : " + PfState(true));
+                if (Session.IsHost && lv != null && level != null) { level.Value = 4.95f; lv.SendEvent("ORDERTAKEN"); Log.Info("autotest : paiefosse, commande passee -> " + lv.ActiveStateName); }
+                // (comme dans le jeu : la commande se prend loin de la maison, le client n'apparait qu'a l'arrivee -- a l'allumage de la
+                // maison, 'Availability' regarde la commande. Joueurs d'essai deja pres de la maison : eloignes a plus de 150 m d'abord.)
+                if (man != null) Log.Info("autotest : paiefosse, " + (Session.IsHost ? "hote" : "invite") + " eloigne : " + PfPlace(man.transform.position + new Vector3(Session.IsHost ? -175f : -170f, 0f, 112f)));
+            }
+            if (pfStep == 2 && k > 5f)
+            {
+                GameObject lod = Game.FindAny("JOBS/HouseShit" + PfHouse + "/LOD");
+                Log.Info("autotest : paiefosse, maison " + (lod == null ? "introuvable" : lod.activeSelf ? "ENCORE ALLUMEE" : "eteinte") + " loin d'elle, " + PfState(false));
+                pfStep = 21;
+            }
+            if (pfStep == 21 && k > 6f)
+            {
+                pfStep = 3;
+                Transform pay = PfPay();
+                pfDir = man != null && pay != null ? pay.position - man.transform.position : Vector3.zero;
+                pfDir.y = 0f;
+                if (pfDir.sqrMagnitude < 0.01f && man != null) { pfDir = man.transform.forward; pfDir.y = 0f; }
+                pfDir = pfDir.sqrMagnitude > 1e-4f ? pfDir.normalized : Vector3.forward;
+                Vector3 side = new Vector3(pfDir.z, 0f, -pfDir.x);
+                if (man == null) Log.Info("autotest : paiefosse, client introuvable : " + PfMan);
+                else if (!Session.IsHost) Log.Info("autotest : paiefosse, invite pres de la maison : " + PfPlace(man.transform.position + pfDir * 2.5f));
+                else if (Config.GetInt("Test", "PaieFossePres", 1) != 0) Log.Info("autotest : paiefosse, hote pres de la maison : " + PfPlace(man.transform.position + side * 3f));
+            }
+            if (pfStep >= 3 && pfStep < 9 && k > 5f && k < 46f)
+            {
+                string s = PfState(false);
+                if (s != pfLast && pfLogs < 40) { pfLast = s; pfLogs++; Log.Info("autotest : paiefosse +" + k.ToString("F1") + " s : " + PfState(true)); }
+            }
+            if (pfStep == 3 && k > 15f)
+            {
+                pfStep = 4;
+                if (Session.IsHost && level != null) { level.Value = 0.3f; Log.Info("autotest : paiefosse, fosse videe ici (" + lv.ActiveStateName + ")"); }
+            }
+            if (pfStep == 4 && k > 28f)
+            {
+                pfStep = 5;
+                Transform pay = PfPay();
+                if (man != null && pay != null)
+                {
+                    Vector3 side = new Vector3(pfDir.z, 0f, -pfDir.x);
+                    if (!Session.IsHost) Log.Info("autotest : paiefosse, invite devant l'enveloppe : " + PfPlace(pay.position + pfDir * 0.6f));
+                    else if (Config.GetInt("Test", "PaieFossePres", 1) != 0) Log.Info("autotest : paiefosse, hote sur le cote : " + PfPlace(man.transform.position + side * 2.5f));
+                }
+            }
+            if (pfStep == 5 && k > 30f)
+            {
+                pfStep = 6;
+                Transform pay = PfPay();
+                if (pay != null)
+                {
+                    Vector3 eye = pay.position + pfDir * 0.6f; eye.y = pay.position.y;
+                    RaycastHit g; if (Physics.Raycast(eye + Vector3.up * 2f, Vector3.down, out g, 6f, ~(1 << 2))) eye.y = g.point.y;
+                    eye.y += 1.6f;
+                    Log.Info("autotest : paiefosse, sonde " + PfRay(eye, "oeil virtuel " + (Session.IsHost ? "hote" : "invite")));
+                    Camera cam = Game.MainCam;
+                    if (!Session.IsHost && cam != null) Log.Info("autotest : paiefosse, sonde " + PfRay(cam.transform.position, "camera de l'invite " + cam.name));
+                    // (photos : de l'oeil virtuel vers l'enveloppe, et de cote ; dumps/tuyau-<hote|invite>-paiefosse-*.png)
+                    Collider pc = pay.GetComponent<Collider>();
+                    Vector3 aim = pc != null ? pc.bounds.center : pay.position;
+                    SewageHose.Shot("-paiefosse-oeil", eye, aim);
+                    if (man != null) SewageHose.Shot("-paiefosse-cote", man.transform.position + new Vector3(pfDir.z, 0f, -pfDir.x) * 2.5f + pfDir * 1.5f + Vector3.up * 1.8f, man.transform.position + Vector3.up * 0.8f);
+                }
+                GameObject chair = Game.FindAny("JOBS/HouseShit" + PfHouse + "/LOD/ShitNPC/ChairPlastic/CrouchTriggerPlus");
+                Collider cc = chair != null ? chair.GetComponent<Collider>() : null;
+                Log.Info("autotest : paiefosse, siege ajoute sur la chaise du client : " + (chair == null ? "aucun" : (chair.activeInHierarchy ? "allume" : "eteint") + ", calque " + chair.layer + (cc != null ? ", " + cc.GetType().Name + (cc.isTrigger ? " declencheur" : "") + " " + cc.bounds.size.ToString("F2") : "")));
+            }
+            if (pfStep == 6 && k > 33f)
+            {
+                pfStep = 7;
+                if (!Session.IsHost)
+                {
+                    Transform pay = PfPay();
+                    PlayMakerFSM use = pay != null ? Game.FsmOn(pay.gameObject, "Use") : null;
+                    FsmState wb = use != null ? use.Fsm.GetState("Wait button") : null;
+                    if (use == null || !pay.gameObject.activeInHierarchy || wb == null) Log.Info("autotest : paiefosse, l'invite ne peut pas prendre : enveloppe " + (pay == null ? "introuvable" : pay.gameObject.activeInHierarchy ? "sans 'Wait button'" : "rangee"));
+                    else
+                    {
+                        string before = use.ActiveStateName, m0 = PfCash();
+                        var off = new List<FsmStateAction>();
+                        foreach (FsmStateAction a in wb.Actions) if (a != null && a.Enabled && a.GetType().Name == "MousePickEvent") { a.Enabled = false; off.Add(a); }
+                        try { Game.SetState(use, "Wait button"); use.SendEvent("USE"); }
+                        finally { foreach (FsmStateAction a in off) a.Enabled = true; }
+                        Log.Info("autotest : paiefosse, l'invite prend l'enveloppe comme un clic (" + before + " -> " + use.ActiveStateName + "), liquide " + m0 + " -> " + PfCash());
+                    }
+                }
+            }
+            if (pfStep == 7 && k > 36f)
+            {
+                pfStep = 8;
+                if (man != null) SewageHose.Shot("-paiefosse-apres", man.transform.position + new Vector3(pfDir.z, 0f, -pfDir.x) * 2.5f + pfDir * 1.5f + Vector3.up * 1.8f, man.transform.position + Vector3.up * 0.8f);
+            }
+            if (pfStep == 8 && k > 40f) { pfStep = 9; Log.Info("autotest : paiefosse, fin (" + (Session.IsHost ? "hote" : "invite") + ") : liquide " + PfCash() + ", " + PfState(true)); }
+        }
+
         // Essais (Autotest) 'revenu' : a 25 s, etat ; a 30 s (l'hote attend en plus un invite en partie depuis
         // 20 s, porte-monnaie pret), le monde verse ici l'aide au logement de la semaine, chez l'hote comme
         // chez l'invite (comme chaque vendredi) ; 10 s plus tard, les interets du jour ; 22 s apres, etat.
@@ -1607,6 +1822,7 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode == "ferraille" && ready) { TestScrap(t); return; }
+            if (mode == "paiefosse") { TestSepticPay(t); return; }
             if (mode != "revenu" || !ready) return;
             float now = Time.realtimeSinceStartup;
             if (testStep == 0 && t > 25f) { testStep = 1; Log.Info("autotest : revenu, avant : " + State()); }
