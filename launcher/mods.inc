@@ -86,6 +86,26 @@ static bool MscLinkMods(const std::wstring &m, const std::wstring &target)
     TestLog("mscloader de MWCoop : jonction Mods impossible (erreur %lu)", GetLastError());
     return false;
 }
+// Chemin pour doorstop_config.ini (dossier #60, 09/11) : UnityDoorstop et notre chargeur lisent ce fichier sans BOM par
+// GetPrivateProfileStringW, donc dans la page de code de Windows ; ecrit en UTF-8, un nom d'utilisateur Windows en cyrillique
+// (C:\Users\пк) devenait « C:\Users\РїРє » et MSCLoader ne se chargeait jamais. D'abord le chemin court 8.3 (ASCII pur : sur
+// aussi pour le Mono d'Unity 5) ; sinon le chemin dans la page de code de Windows s'il y passe sans perte ; sinon (8.3 coupe et
+// lettres hors de la page de code) l'UTF-8 d'avant, et lossy vrai. allowShort faux : essais seulement.
+static std::string DoorstopPath(const std::wstring &p, bool *lossy = NULL, bool allowShort = true)
+{
+    if (lossy) *lossy = false;
+    auto ascii = [](const std::wstring &s) { for (wchar_t c : s) if (c >= 128) return false; return true; };
+    if (ascii(p)) return Narrow(p, CP_UTF8);
+    if (allowShort) {
+        wchar_t s[1024]; DWORD n = GetShortPathNameW(p.c_str(), s, 1024);
+        if (n > 0 && n < 1024 && ascii(s)) return Narrow(s, CP_UTF8);
+    }
+    BOOL used = FALSE;
+    int n = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, p.c_str(), (int)p.size(), NULL, 0, NULL, &used);
+    if (n > 0 && !used) { std::string a(n, '\0'); WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, p.c_str(), (int)p.size(), &a[0], n, NULL, NULL); return a; }
+    if (lossy) *lossy = true;
+    return Narrow(p, CP_UTF8);
+}
 // Doorstop d'une copie de lancement : notre winhttp.dll, et un doorstop_config.ini vers notre dossier. guest : la copie de
 // l'invite (Mods de la copie : ceux de l'hote) ; sinon le dossier des mods de l'officiel (GF : la jonction Mods de la copie).
 static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
@@ -118,8 +138,12 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
         else TestLog("mscloader de MWCoop : MSCLoader.Preloader.dll impossible dans Managed (erreur %lu) : MSCLoader 1.4 risque de ne charger aucun mod", GetLastError());
     }
     std::wstring ini = m + L"doorstop_config.ini", managed = pack + L"Managed";
-    std::string t = "[General]\r\nenabled=" + std::string(enabled ? "true" : "false") + "\r\ntarget_assembly=" + Narrow(managed + L"\\MSCLoader.Preloader.dll", CP_UTF8)
-                  + "\r\nredirect_output_log=true\r\nignore_disable_switch=true\r\n\r\n[UnityMono]\r\ndll_search_path_override=" + Narrow(managed, CP_UTF8)
+    bool l1, l2;
+    std::string target = DoorstopPath(managed + L"\\MSCLoader.Preloader.dll", &l1), search = DoorstopPath(managed, &l2);
+    if (target != Narrow(managed + L"\\MSCLoader.Preloader.dll", CP_UTF8) || l1 || l2)   // (chemin pas en ASCII : on note ce qui est ecrit)
+        LaunchLog("mscloader de MWCoop : chemin non ASCII, doorstop_config.ini vise %s%s", Narrow(Widen(target, CP_ACP), CP_UTF8).c_str(), l1 || l2 ? " (ni chemin court ni page de code : MSCLoader risque de ne pas se charger)" : "");
+    std::string t = "[General]\r\nenabled=" + std::string(enabled ? "true" : "false") + "\r\ntarget_assembly=" + target
+                  + "\r\nredirect_output_log=true\r\nignore_disable_switch=true\r\n\r\n[UnityMono]\r\ndll_search_path_override=" + search
                   + "\r\n\r\n[MSCLoader]\r\nmods=" + Narrow(kind) + "\r\nskipIntro=" + Narrow(intro) + "\r\nskipConfigScreen=" + Narrow(cfg) + "\r\n";
     SetFileAttributesW(ini.c_str(), FILE_ATTRIBUTE_NORMAL);
     HANDLE f = CreateFileW(ini.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -1227,6 +1251,20 @@ static int MscSepSelfTest(const wchar_t *log)
     std::wstring m = MscCopyDir();
     say("copie de lancement, dossier a part", PrepareMirror(m) && MscOwnApply(m, true, false) && SameDirTarget(m + L"Mods", b));
     say("doorstop : mods=GF", read(m + L"doorstop_config.ini").find("mods=GF") != std::string::npos);
+    {   // (dossier #60) relu comme Doorstop et notre chargeur (GetPrivateProfileStringW, fichier sans BOM) : les deux chemins existent
+        wchar_t ta[1024] = L"", ds[1024] = L"";
+        GetPrivateProfileStringW(L"General", L"target_assembly", L"", ta, 1024, (m + L"doorstop_config.ini").c_str());
+        GetPrivateProfileStringW(L"UnityMono", L"dll_search_path_override", L"", ds, 1024, (m + L"doorstop_config.ini").c_str());
+        bool nonAscii = false; for (wchar_t ch : pack) if (ch >= 128) nonAscii = true;
+        say(std::string("doorstop relu : cible presente (LOCALAPPDATA ") + (nonAscii ? "non ASCII" : "ASCII") + ")", ta[0] && GetFileAttributesW(ta) != INVALID_FILE_ATTRIBUTES && GetFileAttributesW(ds) != INVALID_FILE_ATTRIBUTES);
+        bool asc = true; for (const wchar_t *q = ta; *q; q++) if (*q >= 128) asc = false;
+        bool shortAsc = GetShortPathNameW(pack.c_str(), ds, 1024) > 0; for (const wchar_t *q = ds; *q; q++) if (*q >= 128) shortAsc = false;
+        say(std::string("doorstop relu : cible en ASCII quand un chemin court ASCII existe (") + (shortAsc ? "il existe" : "pas de chemin court ASCII") + ")", asc || !shortAsc);
+        bool lo = false;
+        say("DoorstopPath : chemin ASCII inchange", DoorstopPath(L"C:\\Jeux\\My Summer Car\\x.dll", &lo) == "C:\\Jeux\\My Summer Car\\x.dll" && !lo);
+        std::string acp = DoorstopPath(pack, &lo, false);   // (sans chemin court : la page de code, ou perte signalee)
+        say(std::string("DoorstopPath sans chemin court : ") + (lo ? "perte signalee (lettres hors de la page de code)" : "page de code relue a l'identique"), lo ? nonAscii : Widen(acp, CP_ACP) == pack);
+    }
     say("par la copie : le mod copie", read(m + L"Mods\\Alpha.dll") == "alpha");
     MscSepSet(false);
     say("coupe : retour au dossier du solo", !_wcsicmp(MscModsDir().c_str(), solo.c_str()) && PrepareMirror(m) && MscOwnApply(m, true, false) && SameDirTarget(m + L"Mods", a));
