@@ -1,0 +1,15 @@
+PLACES 1
+# outil des places (09/11/2026 17:53:22) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture standalone-bx4tc
+conducteur
+corps conducteur 0 0 0.041
+place 0 passager 0.41 1.13 0.013 0 0.38 0.85
+os 0 HeadPivot -0.37555 0.39961 0.68576 0.47855
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left 0.13726 -0.40398 0.56368 -0.70727
+os 0 shoulder_right 0.16931 -0.4029 -0.66305 0.60776
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464

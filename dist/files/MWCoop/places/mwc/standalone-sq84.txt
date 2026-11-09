@@ -1,0 +1,15 @@
+PLACES 1
+# outil des places (09/11/2026 17:41:07) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture standalone-sq84
+conducteur
+place 0 passager 0.44 1.21 -0.3 0 0.38 0.85
+os 0 arm_left 0.05472 -0.1696 0.70847 -0.68287
+os 0 arm_right -0.0954 -0.375 -0.51166 0.76712
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left -0.02588 -0.42588 0.254 -0.86801
+os 0 shoulder_right 0.10574 -0.47866 -0.20565 0.847
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464

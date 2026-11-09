@@ -1,0 +1,17 @@
+PLACES 1
+# outil des places (09/11/2026 17:40:46) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture standalone-r5maxi
+conducteur
+place 0 passager 0.39 0.98 -0.22 0 0.38 0.85
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 knee_left -0.00649 0.02432 0.36799 0.92949
+os 0 knee_right -0.04092 -0.00549 0.28066 0.95892
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left 0.13475 -0.40483 0.55928 -0.71075
+os 0 shoulder_right 0.22725 -0.51685 -0.53047 0.63232
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+os 0 thig_left 0.07344 -0.65763 -0.73524 -0.14681
+os 0 thig_right -0.09979 0.65917 0.73921 0.09545

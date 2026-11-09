@@ -1,0 +1,17 @@
+PLACES 1
+# outil des places (09/11/2026 17:40:33) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu msc
+voiture standalone-evo3
+conducteur
+place 0 passager 0.42 0.939 -0.001 0 0.38 0.85
+os 0 arm_left 0.04885 -0.17139 0.68457 -0.70683
+os 0 arm_right 0.02737 -0.16105 -0.69833 0.69688
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left -0.02588 -0.42588 0.254 -0.86801
+os 0 shoulder_right 0.28371 -0.40452 -0.49901 0.71194
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01918 -0.03311 -0.25918 0.96507
+os 0 thig_left 0.09696 -0.65458 -0.7295 -0.17307
+os 0 thig_right -0.12551 0.65476 0.73491 0.12431

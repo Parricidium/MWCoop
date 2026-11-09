@@ -1,0 +1,20 @@
+PLACES 1
+# outil des places (09/11/2026 17:52:21) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu mwc
+voiture standalone-fiat131
+conducteur
+place 0 passager 0.385 1.12 -0.0201 0 0.38 0.85
+os 0 HeadPivot -0.7579 0.46403 0.36344 0.2796
+os 0 arm_right -0.13538 -0.38067 -0.33358 0.85175
+os 0 collar_left 0.10817 0.80756 -0.00398 0.57976
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 head 0.81507 -0.45286 -0.27957 0.22894
+os 0 knee_left -0.00656 0.0243 0.36528 0.93056
+os 0 knee_right -0.04104 -0.0045 0.30362 0.9519
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left 0.13369 -0.40518 0.55742 -0.71221
+os 0 shoulder_right 0.23552 -0.42991 -0.43455 0.75556
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+os 0 thig_left 0.07344 -0.65763 -0.73524 -0.14681
+os 0 thig_right -0.09979 0.65917 0.73921 0.09545

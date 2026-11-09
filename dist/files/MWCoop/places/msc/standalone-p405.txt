@@ -1,0 +1,24 @@
+PLACES 1
+# outil des places (09/11/2026 17:55:13) -- repere de la voiture : x droite, y haut, z avant ; cap en degres
+jeu msc
+voiture standalone-p405
+conducteur
+place 0 passager 0.37 0.9387 -0.21 0 0.38 0.85
+os 0 HeadPivot -0.34725 0.41029 0.68936 0.48566
+os 0 arm_left -0.0421 -0.39436 0.26566 -0.87871
+os 0 arm_right -0.00967 -0.13237 0.10305 0.98578
+os 0 collar_left 0.10812 0.80131 -0.00514 0.58838
+os 0 collar_right -0.10828 -0.8084 -0.00397 0.57857
+os 0 finger_left 0.0418 0.6767 0.46425 0.56991
+os 0 fingers_right 0.35805 -0.59797 0.44612 0.56143
+os 0 hand_left 0.16778 -0.09556 0.03824 0.98044
+os 0 hand_right 0.03055 0.06699 0.02516 0.99697
+os 0 knee_left 0.01445 0.02061 0.94851 0.31575
+os 0 knee_right -0.0409 -0.00564 0.27701 0.95998
+os 0 pelvis 0.62098 0.31893 -0.32837 0.63627
+os 0 shoulder_left 0.0372 -0.41934 0.78247 -0.45882
+os 0 shoulder_right 0.39712 -0.29273 -0.58066 0.64764
+os 0 spine_middle -0.00003 0.00057 -0.04964 0.99877
+os 0 spine_upper -0.01819 -0.03532 -0.26055 0.96464
+os 0 thig_left 0.37504 -0.54518 -0.57898 -0.47635
+os 0 thig_right -0.04354 0.92841 0.34493 0.13104
