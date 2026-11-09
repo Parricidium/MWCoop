@@ -285,6 +285,10 @@ namespace MWCoop
                         }
                 }
             }
+            // (voitures addons standalone, JD 09/11 : « les jambes du conducteur comme dans l'outil » -- avec un fichier, le conducteur suit
+            // l'outil meme sans ligne a lui : pose de base et yeux du poste, sans l'ajustement au siege de My Summer Car qui reculait le
+            // bassin et menait les pieds a l'assise et aux pedales)
+            if (f.Car != null && f.Car.StartsWith("standalone-")) f.Driver.Lines = true;
             return ok ? f : null;
         }
 
