@@ -1229,6 +1229,54 @@ namespace MWCoop
         // (freinage : elles s'ouvrent, acceleration : elles se ferment), rebondissent en butee a 70 degres, se verrouillent en revenant
         // a 1 degre ; le joueur a pied les pousse (il ne peut pas les traverser, la portiere s'ecarte devant lui). Voiture menee
         // ailleurs (corps cinematique) : ouverte / fermee selon l'etat recu. Hayon et plage : animes vers leur position.
+        // Portiere qui pivote dans le joueur d'ici a pied (JD 09/11 : « la portiere qui projette un joueur debout ») : elle ne pivote pas par la
+        // physique (rotation posee chaque image, la copie d'une voiture menee ailleurs comme la voiture d'ici) ; entree dans la capsule du
+        // joueur, le CharacterController l'en sortait d'un coup -- souvent par le haut -- et le CharacterMotor du jeu prenait ce deplacement
+        // pour une vitesse : joueur envoye a ~100 m sur My Summer Car (essai des commandes du 08/11, invite poste dans la course de la
+        // portiere de la copie). Les portieres du jeu sont des corps sur charniere (HingeJoint) : elles butent sur le joueur. Ici : angle
+        // borne pour que la portiere (droite de la charniere a son bord, epaisseur comprise) n'entre jamais dans la capsule -- elle s'arrete
+        // sur lui, a l'ouverture comme a la fermeture, et repart quand il s'ecarte. Portiere = sa boite du modele (fermee, celle de la boite
+        // joueur « joueur_portiere »), tournee autour de la charniere ; joueur = sa capsule (rayon, hauteur).
+        static float DoorBlock(VazCar.Built b, State st, int i, float s, float from, float to, GameObject pl)
+        {
+            if (pl == null || Mathf.Abs(to - from) < 1e-4f) return to;
+            var cc = pl.GetComponent<CharacterController>();
+            Vector3 sc = pl.transform.lossyScale;
+            Vector3 cw = cc != null ? pl.transform.TransformPoint(cc.center) : pl.transform.position;
+            float rc = (cc != null ? cc.radius * Mathf.Max(Mathf.Abs(sc.x), Mathf.Abs(sc.z)) : 0.3f) + 0.03f;
+            float half = cc != null ? Mathf.Max(cc.height * 0.5f * Mathf.Abs(sc.y), rc) : 0.9f;
+            Vector3 hp = st.Doors[i].localPosition, pp = b.Body.InverseTransformPoint(cw);
+            Bounds db = DoorShape(st, i);
+            if (pp.y + half < db.min.y || pp.y - half > db.max.y) return to;
+            float d0 = DoorGap(db, hp, pp, s, from), d1 = DoorGap(db, hp, pp, s, to);
+            if (d1 >= rc) return to;                       // (rien a l'arrivee -- pas de portiere assez rapide pour le traverser en une image)
+            if (d0 < rc) return d1 > d0 ? to : from;       // (deja dedans : seulement ce qui l'en eloigne)
+            float lo = from, hi = to;                       // (premier contact entre les deux : on s'arrete juste avant)
+            for (int k = 0; k < 10; k++) { float mid = (lo + hi) * 0.5f; if (DoorGap(db, hp, pp, s, mid) >= rc) lo = mid; else hi = mid; }
+            return lo;
+        }
+        // (distance horizontale du point a la boite de la portiere tournee de a degres autour de la charniere : on tourne le point en sens inverse)
+        static float DoorGap(Bounds db, Vector3 hp, Vector3 pp, float s, float a)
+        {
+            Vector3 q = Quaternion.Euler(0f, -s * a, 0f) * (pp - hp) + hp;
+            float dx = Mathf.Max(db.min.x - q.x, 0f, q.x - db.max.x), dz = Mathf.Max(db.min.z - q.z, 0f, q.z - db.max.z);
+            return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+        // (boite de la portiere fermee ; sans boite du modele : 20 cm d'epaisseur, longueur double de la charniere au centre)
+        static Bounds DoorShape(State st, int i)
+        {
+            Bounds db = st.DoorBox[i];
+            if (db.size.y > 0.3f) return db;
+            Vector3 hp = st.Doors[i].localPosition, c = st.DoorCenter[i];
+            return new Bounds(new Vector3(c.x, hp.y, c.z), new Vector3(0.2f, 1.4f, Mathf.Max(0.6f, 2f * Mathf.Abs(c.z - hp.z))));
+        }
+        // (longueur de la portiere : de la charniere a son point le plus loin, portiere fermee)
+        static float DoorReach(State st, int i)
+        {
+            Vector3 hp = st.Doors[i].localPosition; Bounds db = DoorShape(st, i); float r = 0f;
+            foreach (float x in new[] { db.min.x, db.max.x }) foreach (float z in new[] { db.min.z, db.max.z }) r = Mathf.Max(r, new Vector2(x - hp.x, z - hp.z).magnitude);
+            return Mathf.Clamp(r, 0.5f, 2.2f);
+        }
         static void DoorAnim(VazCar.Built b, State st)
         {
             if (st.Doors == null) return;
@@ -1243,18 +1291,20 @@ namespace MWCoop
             }
             GameObject pl = Game.PlayerGo;
             bool afoot = pl != null && driving == null && !Seats.Seated;
+            bool guardOn = Config.GetInt("Test", "PortiereGarde", 1) != 0;   // ([Test] PortiereGarde=0 : comme avant, pour comparer)
             for (int i = 0; i < 2; i++)
             {
                 if (st.Doors[i] == null) continue;
                 float s = i == 0 ? 1f : -1f;
                 if (!phys)
                 {
-                    float want = st.DoorOpen[i] ? 70f : 0f;
-                    st.DoorAngle[i] = Mathf.MoveTowards(st.DoorAngle[i], want, 220f * dt);
+                    float want = st.DoorOpen[i] ? 70f : 0f, prev = st.DoorAngle[i];
+                    st.DoorAngle[i] = Mathf.MoveTowards(prev, want, 220f * dt);
+                    if (afoot && guardOn) st.DoorAngle[i] = DoorBlock(b, st, i, s, prev, st.DoorAngle[i], pl);   // (copie : elle s'arrete sur le joueur d'ici)
                 }
                 else if (st.DoorOpen[i])
                 {
-                    float a = st.DoorAngle[i], vel = st.DoorVel[i];
+                    float a = st.DoorAngle[i], vel = st.DoorVel[i], prev = a;
                     vel += -Mathf.Clamp(acc.z, -30f, 30f) * 22f * dt;
                     vel *= Mathf.Exp(-2.2f * dt);
                     a += vel * dt;
@@ -1265,12 +1315,14 @@ namespace MWCoop
                     {
                         Vector3 hp = st.Doors[i].localPosition, pp = b.Body.InverseTransformPoint(pl.transform.position);
                         float wx = pp.x - hp.x, wz = pp.z - hp.z, r = Mathf.Sqrt(wx * wx + wz * wz);
-                        if (r > 0.2f && r < 1.15f && Mathf.Abs(pp.y - hp.y) < 1.2f)
+                        if (r > 0.2f && r < (guardOn ? DoorReach(st, i) + 0.35f : 1.15f) && Mathf.Abs(pp.y - hp.y) < 1.2f)
                         {
                             float pa = Mathf.Atan2(-s * wx, -wz) * Mathf.Rad2Deg, m = Mathf.Rad2Deg * 0.32f / r;
                             if (pa > -10f && pa < a && a - pa < m) { a = Mathf.Min(70f, pa + m); vel = Mathf.Max(vel, 0f); }
                             else if (pa >= a && pa - a < m) { a = Mathf.Max(0f, pa - m); vel = Mathf.Min(vel, 0f); }
                         }
+                        // (et jamais dans sa capsule, quelle que soit sa vitesse : arretee sur lui)
+                        if (guardOn) { float g = DoorBlock(b, st, i, s, prev, a, pl); if (g != a) { a = g; vel = 0f; } }
                     }
                     if (a <= 1f && vel <= 0f)
                     {
@@ -2942,7 +2994,7 @@ namespace MWCoop
         // sans viser, clic simule -- tKnob, tDown) : phares, warnings ou klaxon, radio, frein a main serre puis desserre, moyeu du volant
         // (refuse), essuie-glaces, cle (moteur coupe) ; puis il descend, se poste dehors cote passager, portiere fermee : phares (refuse) ;
         // portiere ouverte : phares (accepte).
-        static int cmdStep = -1; static float cmdAt; static string cmdSeen = "";
+        static int cmdStep = -1; static float cmdAt; static string cmdSeen = ""; static float cmdY0 = -9999f, cmdYMax, cmdDoorMax;
         static string CmdState(VazCar.Built b, State st)
         {
             var d = b.Axis as StandaloneDriver;
@@ -2961,11 +3013,20 @@ namespace MWCoop
             }
             if (cStep < 3 || pl == null) return;
             if (cmdStep < 0) { cmdStep = 0; cmdAt = t + 5f; Log.Info("standalone : commandes, invite assis " + (Seats.SeatedCar == b.Car.transform) + " : " + CmdState(b, st)); return; }
+            // ([Test] PortiereDansJoueur=1, JD 09/11 : invite poste DANS la course de la portiere passager qui s'ouvre -- hauteur du joueur et
+            // angle de la portiere suivis a chaque image ; avant la garde : envoye a ~100 m sur My Summer Car)
+            if (cmdStep == 11 && cmdY0 > -9000f) { cmdYMax = Mathf.Max(cmdYMax, pl.transform.position.y - cmdY0); if (st.DoorAngle != null && st.DoorAngle.Length > 1) cmdDoorMax = Mathf.Max(cmdDoorMax, st.DoorAngle[1]); }
             if (t < cmdAt) return;
             // (resultat du pas d'avant, puis le suivant)
             if (cmdStep > 0)
             {
                 Log.Info("standalone : commandes, invite apres le pas " + cmdStep + " (a portee " + Reach(b, st) + ", bouton " + (tKnob >= 0 ? "PAS PRIS" : "pris") + ") : " + CmdState(b, st));
+                if (cmdStep == 11 && cmdY0 > -9000f)
+                {
+                    Log.Info("standalone : commandes, portiere dans le joueur : hauteur du joueur au plus +" + cmdYMax.ToString("F2") + " m, portiere ouverte au plus de " + cmdDoorMax.ToString("F0") + " degres"
+                             + (cmdYMax > 1.0f ? " -- ECHEC : joueur projete" : " -- OK, pas projete"));
+                    cmdY0 = -9999f;
+                }
                 // (levier du frein a main vu de la place passager, serre puis desserre -- leviers de la M3 et de la Fiad, JD 08/11)
                 if ((cmdStep == 4 || cmdStep == 5) && b.BrakePivot != null && PlayerCam() != null)
                 {
@@ -2999,11 +3060,19 @@ namespace MWCoop
                 case 10: tKnob = KLights; what = "phares de dehors, portiere fermee (doit etre refuse)"; break;
                 case 11:
                     {
-                        // (ecarte de 2,5 m avant d'ouvrir : la portiere qui s'ouvre dans le joueur l'envoyait en l'air sur My Summer Car)
-                        float sx = -Mathf.Sign(b.M.Head.x); var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
-                        pl.transform.position = b.Car.transform.TransformPoint(new Vector3(st.Cabin.center.x + sx * (st.Cabin.extents.x + 2.5f), 0.3f, st.Cabin.center.z));
-                        if (cc != null) cc.enabled = true;
-                        if (st.Doors[1] != null && !st.DoorOpen[1]) ToggleDoor(b, st, 1); what = "ecarte, portiere passager ouverte"; break;
+                        // (ecarte de 2,5 m avant d'ouvrir : la portiere qui s'ouvre dans le joueur l'envoyait en l'air sur My Summer Car ;
+                        // [Test] PortiereDansJoueur=1 : au contraire, poste a 45 cm du flanc, au milieu de la portiere -- elle doit s'arreter sur lui)
+                        // ([Test] PortiereDansJoueur=2 : laisse ou le pas 9 l'a poste -- 45 cm du flanc, milieu de l'habitacle : la place de l'essai du 08/11)
+                        int dansMode = Config.GetInt("Test", "PortiereDansJoueur", 0); bool dans = dansMode != 0;
+                        float sx = -Mathf.Sign(b.M.Head.x); var cc = pl.GetComponent<CharacterController>();
+                        if (dansMode != 2)
+                        {
+                            if (cc != null) cc.enabled = false;
+                            pl.transform.position = b.Car.transform.TransformPoint(new Vector3(st.Cabin.center.x + sx * (st.Cabin.extents.x + (dans ? 0.45f : 2.5f)), 0.3f, dans && st.Doors[1] != null ? st.DoorCenter[1].z : st.Cabin.center.z));
+                            if (cc != null) cc.enabled = true;
+                        }
+                        if (dans) { cmdY0 = pl.transform.position.y; cmdYMax = 0f; cmdDoorMax = 0f; }
+                        if (st.Doors[1] != null && !st.DoorOpen[1]) ToggleDoor(b, st, 1); what = dans ? "poste dans la course de la portiere, portiere passager ouverte" : "ecarte, portiere passager ouverte"; break;
                     }
                 case 12:
                     {
