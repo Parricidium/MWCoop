@@ -589,6 +589,21 @@ namespace MWCoop
             return true;
         }
 
+        // Etat rejoue comme si l'automate l'avait pris lui-meme (dossier #58, 08/11 : « ERREUR message Job » quand un invite sort un article
+        // d'un sac). SetState appelle Fsm.SwitchState de l'exterieur : un evenement lance par une action de l'etat (IntCompare...) n'est pas
+        // « envoye par l'automate » (EventData.SentByFsm), Fsm.DoTransition change donc d'etat tout de suite (UpdateStateChanges), puis l'etat
+        // quitte joue quand meme ses actions restantes (GetSubstring sur un nom de 4 lettres : exception). Ici, comme Fsm.ProcessEvent :
+        // l'automate sur la pile d'execution (FsmExecutionStack) le temps du changement -- ses transitions sont differees, ActivateActions
+        // s'arrete a la premiere, et la boucle de l'automate (UpdateStateChanges) enchaine comme en jeu. Faux : etat absent.
+        public static bool SetStateOwn(PlayMakerFSM f, string state)
+        {
+            if (f == null || !SwitchLater(f, state)) return false;
+            HutongGames.PlayMaker.FsmExecutionStack.PushFsm(f.Fsm);
+            try { f.Fsm.UpdateStateChanges(); }
+            finally { HutongGames.PlayMaker.FsmExecutionStack.PopFsm(); }
+            return true;
+        }
+
         // Variable propre a l'automate (pas une globale). FsmVariables.GetVariable cherche aussi dans les globales :
         // un test "GetVariable(n) == null" ne reconnait jamais PlayerMoney, PlayerStop, GUI*... (vu au bar : l'invite
         // payait la biere de l'hote).

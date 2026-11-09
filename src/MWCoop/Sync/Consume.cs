@@ -317,7 +317,8 @@ namespace MWCoop
         {
             if (mode != "sac-un") return;
             if (pickBefore == null && t > 5f) { pickBefore = new HashSet<string>(byId.Keys); }
-            if (Session.IsHost) { if (t > 30f && pickStep == 0) { pickStep = 1; Log.Info("autotest : sac-un, " + Shop.TestBuyTwo("Cigarettes", 2, "Sausages", 2)); } return; }
+            // ([Test] SacUnA / SacUnB : les deux produits ; « Milk », nom de moins de 5 lettres, passe par le ITEMS anticipe de 'State 7', dossier #58)
+            if (Session.IsHost) { if (t > 30f && pickStep == 0) { pickStep = 1; Log.Info("autotest : sac-un, " + Shop.TestBuyTwo(Config.Get("Test", "SacUnA", "Cigarettes"), 2, Config.Get("Test", "SacUnB", "Sausages"), 2)); } return; }
             if (pickBefore == null) return;
             if (pickBag == null)
                 foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
@@ -356,11 +357,15 @@ namespace MWCoop
             try
             {
                 cur.Value = bagF.gameObject; ri.Value = index; prod.Value = count;
-                Game.SetState(sp, "State 7");
+                // (dossier #58 : 'State 7' renvoie ITEMS des que le nom est court -- « Milk » -- avant son GetSubstring ; force de l'exterieur,
+                // il partait aussitot vers 'State 15' puis jouait quand meme le GetSubstring : exception, « ERREUR message Job » chez l'hote.
+                // Rejoue comme l'automate le ferait lui-meme, voir Game.SetStateOwn. [Test] SacEtatDirect=1 : comme avant.)
+                if (Config.GetInt("Test", "SacEtatDirect", 0) != 0) Game.SetState(sp, "State 7");
+                else Game.SetStateOwn(sp, "State 7");
             }
             finally { Applying = false; Replay.Depth--; }
             SoonScan();
-            Log.Info("consommables : sac " + id + " : " + product + " (case " + index + ") sorti comme chez #" + who + " (" + (count - 1) + " restant(s) dans la case)");
+            Log.Info("consommables : sac " + id + " : " + product + " (case " + index + ") sorti comme chez #" + who + " (" + (count - 1) + " restant(s) dans la case, distributeur " + sp.ActiveStateName + ")");
         }
 
         static void OnRemotePickMsc(int who, PlayMakerFSM sp, PlayMakerFSM bagF, string id, string slot)

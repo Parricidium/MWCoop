@@ -1637,9 +1637,10 @@ namespace MWCoop
         }
 
         // Pose le joueur d'ici en (x, z), sur le premier sol sous lui qui n'est pas le client ni sa chaise.
-        static string PfPlace(Vector3 at)
+        static string PfPlace(Vector3 at) { return PfPlace(at, Game.FindAny("JOBS/HouseShit" + PfHouse + "/LOD/ShitNPC")); }
+        static string PfPlace(Vector3 at, GameObject npc)
         {
-            GameObject pl = Game.PlayerGo, npc = Game.FindAny("JOBS/HouseShit" + PfHouse + "/LOD/ShitNPC");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return "pas de joueur";
             Vector3 top = new Vector3(at.x, at.y + 40f, at.z);
             RaycastHit[] hits = Physics.RaycastAll(top, Vector3.down, 90f, ~(1 << 2));
@@ -1658,9 +1659,9 @@ namespace MWCoop
         }
 
         // Ce que le rayon du survol de l'enveloppe touche, d'un oeil donne (memes calques et portee que son MousePickEvent).
-        static string PfRay(Vector3 eye, string who)
+        static string PfRay(Vector3 eye, string who) { return PfRay(eye, who, PfPay()); }
+        static string PfRay(Vector3 eye, string who, Transform pay)
         {
-            Transform pay = PfPay();
             if (pay == null) return who + " : enveloppe introuvable";
             PlayMakerFSM use = Game.FsmOn(pay.gameObject, "Use");
             var sb = new System.Text.StringBuilder(who + " : enveloppe " + (pay.gameObject.activeInHierarchy ? "tendue" : "rangee") + " (" + (use != null ? use.ActiveStateName : "?") + ") en " + pay.position.ToString("F2"));
@@ -1718,13 +1719,14 @@ namespace MWCoop
                 Log.Info("autotest : paiefosse, debut (" + (Session.IsHost ? "hote" : "invite") + ", maison " + PfHouse + ", rayons sur declencheurs " + (rht ?? "?") + ") : " + PfState(true));
                 if (Session.IsHost && lv != null && level != null) { level.Value = 4.95f; lv.SendEvent("ORDERTAKEN"); Log.Info("autotest : paiefosse, commande passee -> " + lv.ActiveStateName); }
                 // (comme dans le jeu : la commande se prend loin de la maison, le client n'apparait qu'a l'arrivee -- a l'allumage de la
-                // maison, 'Availability' regarde la commande. Joueurs d'essai deja pres de la maison : eloignes a plus de 150 m d'abord.)
-                if (man != null) Log.Info("autotest : paiefosse, " + (Session.IsHost ? "hote" : "invite") + " eloigne : " + PfPlace(man.transform.position + new Vector3(Session.IsHost ? -175f : -170f, 0f, 112f)));
+                // maison, 'Availability' regarde la commande. Joueurs d'essai deja pres de la maison : eloignes a plus de 150 m d'abord.
+                // [Test] PaieFosseLoin=0 : restes pres de la maison, commande passee sous leurs yeux -- client absent avant Jobs.SepticOwners.)
+                if (man != null && Config.GetInt("Test", "PaieFosseLoin", 1) != 0) Log.Info("autotest : paiefosse, " + (Session.IsHost ? "hote" : "invite") + " eloigne : " + PfPlace(man.transform.position + new Vector3(Session.IsHost ? -175f : -170f, 0f, 112f)));
             }
             if (pfStep == 2 && k > 5f)
             {
                 GameObject lod = Game.FindAny("JOBS/HouseShit" + PfHouse + "/LOD");
-                Log.Info("autotest : paiefosse, maison " + (lod == null ? "introuvable" : lod.activeSelf ? "ENCORE ALLUMEE" : "eteinte") + " loin d'elle, " + PfState(false));
+                Log.Info("autotest : paiefosse, maison " + (lod == null ? "introuvable" : lod.activeSelf ? "allumee" : "eteinte") + " a +5 s, " + PfState(false));
                 pfStep = 21;
             }
             if (pfStep == 21 && k > 6f)

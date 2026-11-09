@@ -2178,6 +2178,33 @@ namespace MWCoop
             }
         }
 
+        // Proprio d'une fosse absent alors que la commande est passee (dossier #58, 09/11) : le jeu ne regarde la commande qu'a l'allumage
+        // de la maison ('Availability' de ShitNPC, a moins de 150 m) -- en solo, on prend la commande au telephone, loin. En coop, le joueur
+        // deja pres de la maison quand un autre la prend (ORDERTAKEN rejoue, Called vrai) ne voyait pas le client tant qu'il n'etait pas
+        // reparti puis revenu. Chaque seconde : maison allumee ici, commande passee, client eteint, 'Availability' au repos ('State 1') ->
+        // 'Check level' refait comme a l'allumage, une fois par commande. [Test] FosseProprioRevu=0 : comme avant.
+        static float nextOwnerLook;
+        static readonly HashSet<int> ownerTried = new HashSet<int>();
+        static void SepticOwners(float now)
+        {
+            if (Game.Msc || !Session.Active || now < nextOwnerLook) return;
+            nextOwnerLook = now + 1f;
+            if (Config.GetInt("Test", "FosseProprioRevu", 1) == 0) return;
+            for (int n = 1; n <= 5; n++)
+            {
+                GameObject npc = Game.FindAny("JOBS/HouseShit" + n + "/LOD/ShitNPC");
+                PlayMakerFSM lv = Game.FindFsm("JOBS/HouseShit" + n + "/WasteWell_2000litre/Shit/Level/ShitLevelTrigger", "Level");
+                FsmBool called = lv != null ? lv.FsmVariables.FindFsmBool("Called") : null;
+                if (npc == null || !npc.activeInHierarchy || called == null || !called.Value) { ownerTried.Remove(n); continue; }
+                Transform man = npc.transform.Find("Man");
+                PlayMakerFSM av = Game.FsmOn(npc, "Availability");
+                if (man == null || av == null || man.gameObject.activeSelf || av.ActiveStateName != "State 1" || ownerTried.Contains(n)) continue;
+                ownerTried.Add(n);
+                Game.SetStateOwn(av, "Check level");
+                Log.Info("fosse : commande de HouseShit" + n + " passee, maison deja allumee ici : client " + (man.gameObject.activeSelf ? "montre" : "TOUJOURS ABSENT") + " (" + av.ActiveStateName + ")");
+            }
+        }
+
         static int reprise = -1, fixLogs;
         public static bool HoseReprise { get { if (reprise < 0) reprise = Config.GetInt("Test", "TuyauReprise", 1); return reprise != 0; } }
         static readonly List<Well> wellFix = new List<Well>();
@@ -2412,6 +2439,7 @@ namespace MWCoop
             CheckWaiting(now);
             if (wellFix.Count > 0) FixWells();
             WellJournal(now);
+            SepticOwners(now);
             if (!specialsScanned) return;
             if (now >= nextSpecialWait && (creatorsWaiting.Count > 0 || wellsWaiting.Count > 0))
             {
