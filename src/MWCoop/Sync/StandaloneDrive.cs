@@ -3043,7 +3043,7 @@ namespace MWCoop
             catch (Exception e) { Log.Warn("standalone : photo " + name + " : " + e.Message); }
             UnityEngine.Object.Destroy(go);
         }
-        static bool cFrein, cSeatShots, cMirrorShots, cBeltDone, cPlanche; static int cHeat; static float cHeatLog;
+        static bool cFrein, cSeatShots, cMirrorShots, cBeltDone, cPlanche, cPhotoCond; static int cHeat; static float cHeatLog;
 
         // [Test] StandaloneRapports=1 (avec Autotest=standalonecoop, JD 08/11 : « syncronisé les rapport afficher sur les tableaux de bords
         // des voitures addons ») : l'hote au volant a l'arret, des que l'invite est assis (95 s au plus), engage R, N, 1..n toutes les
@@ -3491,6 +3491,61 @@ namespace MWCoop
                 return;
             }
         }
+        // Pose d'un conducteur distant, au format du releve de l'outil des places ([Test] PlacesPoses=<dossier> : pose-<cle>-c.json, racine et
+        // noeuds locaux, repere de la voiture) -- essais des jambes du conducteur, JD 09/11
+        static void DumpDriverPose(Avatar a, Transform car, string key)
+        {
+            string pd = Config.Get("Test", "PlacesPoses", "");
+            if (pd.Length == 0 || a == null || a.Root == null || car == null) return;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            System.Func<float, string> F = x => x.ToString("R", ci);
+            System.Func<Vector3, string> V = v => "[" + F(v.x) + "," + F(v.y) + "," + F(v.z) + "]";
+            System.Func<Quaternion, string> Q = q => "[" + F(q.x) + "," + F(q.y) + "," + F(q.z) + "," + F(q.w) + "]";
+            Transform r = a.Root.transform;
+            var sb = new System.Text.StringBuilder("{\"cle\":\"" + key + "\",\"place\":\"c\",\"racine\":{\"p\":" + V(car.InverseTransformPoint(r.position)) + ",\"q\":" + Q(Quaternion.Inverse(car.rotation) * r.rotation) + "},\"noeuds\":{");
+            var seen = new HashSet<string>(); int n = 0;
+            foreach (Transform x in r.GetComponentsInChildren<Transform>())
+            {
+                if (x == r || !seen.Add(x.name)) continue;
+                sb.Append(n++ > 0 ? "," : "").Append('"').Append(x.name.Replace("\"", "")).Append("\":{\"p\":").Append(V(x.localPosition)).Append(",\"q\":").Append(Q(x.localRotation)).Append('}');
+            }
+            sb.Append("}}");
+            string safe = System.Text.RegularExpressions.Regex.Replace(key, "[^A-Za-z0-9_-]", "_");
+            try { System.IO.Directory.CreateDirectory(pd); System.IO.File.WriteAllText(System.IO.Path.Combine(pd, "pose-" + safe + "-c.json"), sb.ToString()); Log.Info("essai : pose du conducteur ecrite (" + key + ")"); }
+            catch (System.Exception ex) { Log.Warn("essai : pose du conducteur : " + ex.Message); }
+        }
+
+        // ([Test] PhotoConducteurVoiture=<debut du nom>, JD 09/11 : jambes des conducteurs comme dans l'outil des places, voitures du jeu aussi) :
+        // un conducteur distant assis depuis 8 s dans cette voiture -> photos (depuis la place passager, contre la portiere, par la vitre)
+        // et sa pose ; une fois. Appele chaque image par StandaloneCar.Update.
+        static float pcSince = -1f; static bool pcDone;
+        static void TestPhotoConducteur()
+        {
+            if (pcDone) return;
+            string want = Config.Get("Test", "PhotoConducteurVoiture", "");
+            if (want.Length == 0) { pcDone = true; return; }
+            foreach (Avatar a in PlayerSync.Avatars)
+            {
+                if (a.Root == null || a.Player == null || !a.InVehicle || Seats.RemoteSeatIndex(a.Player.Id) >= 0) continue;
+                string cn = VehicleSync.RemoteCarName(a.Player.Id);
+                Transform ct = VehicleSync.RemoteCarTransform(a.Player.Id);
+                if (cn == null || ct == null || !cn.StartsWith(want)) continue;
+                float now = Time.realtimeSinceStartup;
+                if (pcSince < 0f) { pcSince = now; return; }
+                if (now < pcSince + 8f) return;
+                pcDone = true;
+                Vector3 e;
+                if (!Seats.DriverHead(ct, out e)) e = ct.InverseTransformPoint(a.Root.transform.position) + new Vector3(0f, 1.2f, 0f);
+                string tag = "-" + System.Text.RegularExpressions.Regex.Replace(cn.Split('(')[0], "[^A-Za-z0-9_-]", "_");
+                SewageHose.Shot("-conducteur-passager" + tag, ct.TransformPoint(new Vector3(-e.x, e.y + 0.02f, e.z - 0.1f)), ct.TransformPoint(new Vector3(e.x + 0.05f, e.y - 0.8f, e.z + 0.55f)));
+                SewageHose.Shot("-conducteur-portiere" + tag, ct.TransformPoint(new Vector3(e.x - 0.42f, e.y - 0.4f, e.z + 0.2f)), ct.TransformPoint(new Vector3(e.x + 0.1f, e.y - 0.65f, e.z + 0.35f)));
+                SewageHose.Shot("-conducteur-vitre" + tag, ct.TransformPoint(new Vector3(e.x - 1.6f, e.y - 0.1f, e.z + 0.2f)), ct.TransformPoint(new Vector3(e.x, e.y - 0.4f, e.z + 0.2f)));
+                Log.Info("essai : photos du conducteur dans " + cn + " (yeux " + e.ToString("F2") + ")");
+                DumpDriverPose(a, ct, SeatFiles.KeyOf(cn));
+                return;
+            }
+        }
+
         public static void CoopTest(float t)
         {
             if (!Net.Session.Active) return;
@@ -3591,6 +3646,23 @@ namespace MWCoop
             }
             // ([Test] StandaloneCeinturePassager=1 : l'invite boucle sa ceinture 1 s apres s'etre assis -- photos de l'hote avec la ceinture)
             if (!host && cStep >= 3 && !cBeltDone && t > 45f && Config.GetInt("Test", "StandaloneCeinturePassager", 0) != 0) { cBeltDone = true; Log.Info("standalone : coop, invite : " + Seats.TestStandaloneBelt()); }
+            // ([Test] StandalonePhotoConducteur=1, JD 09/11 : jambes du conducteur comme dans l'outil des places -- l'invite assis, a 54 s :
+            // portiere conducteur ouverte sur sa copie seulement, photos du conducteur (l'hote) par la portiere, de l'arriere gauche et depuis
+            // la place passager)
+            if (!host && cStep >= 3 && !cPhotoCond && t > 54f && b != null && st != null && Config.GetInt("Test", "StandalonePhotoConducteur", 0) != 0)
+            {
+                cPhotoCond = true;
+                if (st.Doors != null && st.Doors[0] != null) { st.DoorOpen[0] = true; st.DoorAngle[0] = 75f; st.DoorVel[0] = 0f; DoorAnim(b, st); }
+                Vector3 e = st.T.Yeux;
+                Photo(b, "conducteur-porte", new Vector3(e.x - 1.6f, e.y - 0.2f, e.z + 0.3f), new Vector3(e.x, e.y - 0.6f, e.z + 0.3f), 60f);
+                Photo(b, "conducteur-arriere", new Vector3(e.x - 1.3f, e.y - 0.25f, e.z - 0.9f), new Vector3(e.x, e.y - 0.65f, e.z + 0.45f), 60f);
+                Photo(b, "conducteur-passager", new Vector3(-e.x, e.y + 0.02f, e.z - 0.1f), new Vector3(e.x + 0.05f, e.y - 0.8f, e.z + 0.55f), 75f);
+                Log.Info("standalone : coop, invite : photos du conducteur (" + car.name + ", yeux " + e.ToString("F2") + ")");
+                // (et sa pose, au format du releve de l'outil -- [Test] PlacesPoses=<dossier>)
+                foreach (Avatar a in PlayerSync.Avatars)
+                    if (a.Root != null && a.Player != null && (a.Root.transform.position - car.position).sqrMagnitude <= 9f && Seats.RemoteSeatIndex(a.Player.Id) < 0)
+                        DumpDriverPose(a, car, Vaz.SeatKey(car.name) ?? car.name);
+            }
             // ([Test] StandalonePortierePassager=1, desync du 02/11 : l'invite assis (StandalonePlace=-1 : reste a pied sur la piste) ouvre
             // la portiere passager de sa copie 3 s apres, la referme 7 s apres (meme chemin que le clic), angle toutes les 0,5 s jusqu'a
             // 11 s ; l'hote, au volant a l'arret, note chaque changement de la portiere et ne roule qu'apres l'avoir vue refermee (115 s au

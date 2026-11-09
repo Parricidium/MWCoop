@@ -650,6 +650,7 @@ namespace MWCoop
         static KeyCode reloadKey = KeyCode.None;
         public static void Update()
         {
+            TestPhotoConducteur();   // ([Test] PhotoConducteurVoiture : essais seulement)
             if (cars.Count == 0) return;
             float now = Time.realtimeSinceStartup;
             if (reloadKey == KeyCode.None) { try { reloadKey = (KeyCode)Enum.Parse(typeof(KeyCode), Config.Get("Test", "StandaloneTouche", "F9"), true); } catch { reloadKey = KeyCode.F9; } }
