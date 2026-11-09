@@ -1106,7 +1106,7 @@ static Bitmap *AddonPic(const Addon &a)
     // (apercus integres au lanceur, launcher.rc 40-47 -- JD 28/10, puis 03/11 pour les voitures Rallyworld : « bien centrer et cadrer ces images ... pour les deux
     // versions MSC et MWC » : avant ceux du paquet et du catalogue, sur les deux jeux)
     static const struct { const wchar_t *key; int res; } kAddonPicRes[] = {
-        { L"fiat131", 40 }, { L"r5maxi", 41 }, { L"evo3", 42 }, { L"t16", 43 }, { L"t16e2", 44 }, { L"imp96", 45 }, { L"sq84", 46 }, { L"delta8", 47 }, { L"m3e30", 48 }, { L"bx4tc", 49 } };
+        { L"fiat131", 40 }, { L"r5maxi", 41 }, { L"evo3", 42 }, { L"t16", 43 }, { L"t16e2", 44 }, { L"imp96", 45 }, { L"sq84", 46 }, { L"delta8", 47 }, { L"m3e30", 48 }, { L"bx4tc", 49 }, { L"p405", 50 } };
     for (const auto &e : kAddonPicRes)
         if (a.key == e.key)
             if (Bitmap *b = LoadPngRes(e.res)) return g_addonPics[a.key] = b;

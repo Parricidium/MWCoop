@@ -31,6 +31,7 @@
 47 RCDATA "apercus\\delta8.jpg"
 48 RCDATA "apercus\\m3e30.jpg"
 49 RCDATA "apercus\\bx4tc.jpg"
+50 RCDATA "apercus\\p405.jpg"
 // 60, 61 : logos officiels de RallyWorld (boussole Gravel, carre RallyWorld), fournis par eux a JD le 03/11 (AVIF
 // convertis en PNG) : page RallyWorld (rallyworld.inc)
 60 RCDATA "rallyworld\\gravel.png"

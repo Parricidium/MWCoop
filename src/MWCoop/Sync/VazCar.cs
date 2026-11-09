@@ -128,6 +128,7 @@ namespace MWCoop
         public const int ModelM3 = 15;   // (BMW M3 E30 Gr. A de Rallyworld, JD 04/11 : pas publiee avant l'essai de JD et d'alex_tor)
         public const int ModelFiat = 16;   // (Fiat 131 Gr. 4 de Rallyworld, JD 04/11 : REMPLACE la VAZ-2108, livree avec le mod)
         public const int ModelBx = 17;   // (Citroen BX 4TC Gr. B de Rallyworld, JD 08/11 : pas publiee avant l'essai de JD)
+        public const int ModelP405 = 18;   // (Peugeot 405 T16 Pikes Peak de Rallyworld, JD 09/11 : « Peujot 405 T16 », categorie Hillclimb)
         public static int StandaloneOf(int copy) { return copy == ModelVaz ? ModelFiat : copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
         public static int CopyOf(int id) { return id == ModelR5S ? ModelR5 : id >= ModelEvoS && id <= ModelT16bS ? id - ModelR5S : id; }
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
@@ -403,8 +404,25 @@ namespace MWCoop
             m.BrakePivot = new Vector3(-0.035f, 0.43f, 0.0f); m.BrakeGrip = new Vector3(-0.035f, 0.452f, 0.11f); m.BrakeAngle = 1.3f;
             return m;
         }
+        // Peugeot 405 T16 Pikes Peak de Rallyworld (JD 09/11 : « Peujot 405 T16 », categorie Hillclimb) : standalone neuve sur les deux jeux,
+        // dossier p405, INTEGRALE, moteur central arriere ; poste et reglages de la BX (Delta) ; yeux d'apres DRIVEREYES du modele (pivot de
+        // tete 18 cm derriere, comme la BX) ; 1,9 l turbo : 600 ch a 7 500 tr/min, 735 N.m a 5 500, 8 000 maxi, 880 kg, 49 % sur l'avant ;
+        // boite (6 rapports) et pont de data/drivetrain.ini. Un seul siege dans le modele.
+        public static readonly Model P405 = P405Model();
+        static Model P405Model()
+        {
+            var m = Bx4tc.CloneAs(ModelP405, null);
+            m.Folder = "p405"; m.Name = "405 T16"; m.Head = new Vector3(-0.30f, 1.07f, -0.31f); m.Engine = new Vector3(0f, 0.65f, -1.2f);
+            m.Sp = Bx4tc.Sp.Copy(); m.Sp.Name = "405 T16 Pikes Peak"; m.Sp.Power = 600f; m.Sp.PowerRpm = 7500f; m.Sp.Torque = 735f; m.Sp.TorqueRpm = 5500f;
+            m.Sp.MaxRpm = 8000f; m.Sp.Mass = 880f; m.Sp.Com = 0.49f; m.Sp.Final = 4.40f;
+            m.Sp.Gears = new[] { -3.818f, 0f, 2.30f, 1.75f, 1.35f, 1.20f, 1.10f, 0.95f };
+            // (levier du frein a main : pas dans le modele -- celui de la Sport Quattro Rallyworld, comme la BX et la M3, a droite du levier de
+            // vitesse sur le tunnel (le siege va jusqu'au milieu) ; pivot a l'arriere, poignee vers l'avant)
+            m.BrakePivot = new Vector3(0.07f, 0.42f, 0.0f); m.BrakeGrip = new Vector3(0.07f, 0.442f, 0.11f); m.BrakeAngle = 1.3f;
+            return m;
+        }
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
-                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30, Fiat131, Bx4tc };   // (rempli : Vaz2108 au constructeur statique)
+                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30, Fiat131, Bx4tc, P405 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Models[Base]; }
         // voiture de base, livree avec le mod : la Fiat (la VAZ seulement si ses fichiers manquent et ceux de la VAZ sont la)
         public static int Base { get { return StandaloneCar.Ready(ModelVaz) ? ModelFiat : ModelVaz; } }

@@ -213,7 +213,7 @@ static void DrawRallyPage(Graphics &g)
     static const C cars[] = { { L"Subaru Impreza 555", L"Subaro Imprezza 95", false }, { L"Peugeot 205 T16 Evo 2", L"Peujot 205 T16 Ebo 2", false },
                               { L"Audi Sport Quattro", L"Audy Sport Quatro", false }, { L"Lancia Delta Evo II", L"Lancha Delta Ebo II", false },
                               { L"BMW M3 E30", L"BMV M3 E30", false }, { L"Citroën BX 4TC", L"Sitroen BX 4TC", false },
-                              { L"Fiat 131 Abarth", L"Fiad 131", true } };
+                              { L"Peugeot 405 T16 Pikes Peak", L"Peujot 405 T16", false }, { L"Fiat 131 Abarth", L"Fiad 131", true } };   // (405 : JD 09/11)
     const int nCars = (int)(sizeof(cars) / sizeof(cars[0])), rowsCars = (nCars + 1) / 2;
     {
         RectF k(x0, y, W, 88.0f + rowsCars * 70.0f);
