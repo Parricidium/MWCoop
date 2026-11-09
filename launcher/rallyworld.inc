@@ -207,23 +207,28 @@ static void DrawRallyPage(Graphics &g)
         y += ch + 16;
     }
 
-    // leurs voitures dans MWCoop (Addons, publiees le 04/11 apres le test d'alex_tor ; nom de la carte d'addon a droite)
+    // leurs voitures dans MWCoop (Addons, publiees le 04/11 apres le test d'alex_tor ; nom de la carte d'addon a droite). Puis la M3 E30
+    // et la BX 4TC (Addons) et la Fiat 131 (F10, gratuite) -- 09/11, [Directives]. Deux colonnes, autant de rangees que de voitures.
+    struct C { const wchar_t *n, *addon; bool f10; };
+    static const C cars[] = { { L"Subaru Impreza 555", L"Subaro Imprezza 95", false }, { L"Peugeot 205 T16 Evo 2", L"Peujot 205 T16 Ebo 2", false },
+                              { L"Audi Sport Quattro", L"Audy Sport Quatro", false }, { L"Lancia Delta Evo II", L"Lancha Delta Ebo II", false },
+                              { L"BMW M3 E30", L"BMV M3 E30", false }, { L"Citroën BX 4TC", L"Sitroen BX 4TC", false },
+                              { L"Fiat 131 Abarth", L"Fiad 131", true } };
+    const int nCars = (int)(sizeof(cars) / sizeof(cars[0])), rowsCars = (nCars + 1) / 2;
     {
-        RectF k(x0, y, W, 228);
+        RectF k(x0, y, W, 88.0f + rowsCars * 70.0f);
         RwBox(g, k, RwCard(), 16);
         Title(g, T(L"Leurs voitures dans MWCoop", L"Their cars in MWCoop"), RectF(k.X + 22, k.Y + 20, k.Width - 44, 26), 18, kInk);
         Text(g, T(L"Portées dans My Winter Car et My Summer Car, avec leur accord · ta couleur et ta livrée, comme les autres addons", L"Ported to My Winter Car and My Summer Car, with their agreement · your colour and your livery, like the other add-ons"),
              RectF(k.X + 22, k.Y + 46, k.Width - 44, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
-        struct C { const wchar_t *n, *addon; } cars[4] = { { L"Subaru Impreza 555", L"Subaro Imprezza 95" }, { L"Peugeot 205 T16 Evo 2", L"Peujot 205 T16 Ebo 2" },
-                                                        { L"Audi Sport Quattro", L"Audy Sport Quatro" }, { L"Lancia Delta Evo II", L"Lancha Delta Ebo II" } };
         float cw = floorf((k.Width - 44 - 12) / 2);
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < nCars; i++) {
             RectF t(k.X + 22 + (i % 2) * (cw + 12), k.Y + 78 + (i / 2) * 70, cw, 60);
             RwBox(g, t, RwInner(), 12);
             RwBox(g, RectF(t.X + 12, t.Y + 10, 40, 40), WithA(kRwRed, 0.18f), 10);
             Icon(g, IC_CAR, t.X + 32, t.Y + 30, 22, kRwRed, 2.0f);
             Text(g, cars[i].n, RectF(t.X + 64, t.Y + 9, t.Width - 76, 22), 14, FontStyleBold, kInk, StringAlignmentNear);
-            wchar_t sub[160]; swprintf_s(sub, T(L"Dans Addons : %s", L"In Add-ons: %s"), cars[i].addon);
+            wchar_t sub[160]; swprintf_s(sub, cars[i].f10 ? T(L"Dans F10, gratuite : %s", L"In F10, free: %s") : T(L"Dans Addons : %s", L"In Add-ons: %s"), cars[i].addon);
             Text(g, sub, RectF(t.X + 64, t.Y + 31, t.Width - 76, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         }
         y += k.Height + 16;

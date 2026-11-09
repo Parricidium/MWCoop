@@ -498,6 +498,7 @@ static const wchar_t *const kAr[][2] = {
     { L"It lights up by itself at night", L"يضيء وحده ليلًا" },
     { L"Backspace: remove the nearest note (80 m away at most). L: the lamp, which lights up by itself in the dark. Keys can be changed: Settings > Keys.", L"Backspace: إزالة أقرب ملاحظة (على بعد 80 م على الأكثر). L: المصباح، الذي يضيء وحده في الظلام. يمكن تغيير المفاتيح: الإعدادات > المفاتيح." },
     { L"At night, you hold the lamp in your right hand, pointed at the page. The other players see the real page (your notebook is sent to them), the lamp and its beam.", L"في الليل تمسك المصباح بيدك اليمنى موجّهًا نحو الصفحة. يرى اللاعبون الآخرون الصفحة الحقيقية (يُرسل إليهم دفترك)، والمصباح وشعاعه." },
+    { L"In F10, free: %s", L"في F10، مجانًا: %s" },
     { L"if private", L"إذا كانت خاصة" },
     { L"Yes", L"نعم" },
     { L"No", L"لا" },

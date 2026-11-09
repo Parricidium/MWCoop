@@ -2878,6 +2878,7 @@ static const wchar_t *const kRu[][2] = {
     { L"It lights up by itself at night", L"Ночью включается сам" },
     { L"Backspace: remove the nearest note (80 m away at most). L: the lamp, which lights up by itself in the dark. Keys can be changed: Settings > Keys.", L"Backspace: убрать ближайшую заметку (не дальше 80 м). L: фонарик, который сам включается в темноте. Клавиши меняются: Настройки > Клавиши." },
     { L"At night, you hold the lamp in your right hand, pointed at the page. The other players see the real page (your notebook is sent to them), the lamp and its beam.", L"Ночью ты держишь фонарик в правой руке, направленным на страницу. Другие игроки видят настоящую страницу (твой блокнот им отправляется), фонарик и его луч." },
+    { L"In F10, free: %s", L"В F10, бесплатно: %s" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
