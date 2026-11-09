@@ -158,7 +158,7 @@ namespace MWCoop
                 DestroyPreview();
                 if (pvNumber == hi && pvModel == sm && now < pvRetryAt) return;
                 pvNumber = hi; pvModel = sm; pvLivery = null;
-                try { pv = VazCar.BuildPreview(hi, Vaz.ColorOf(hi), Studio.PreviewLayer, out pvHold, VazCar.ModelOf(sm)); }
+                try { pv = VazCar.BuildPreview(hi, Vaz.PaintFor(hi, sm), Studio.PreviewLayer, out pvHold, VazCar.ModelOf(sm)); }
                 catch (System.Exception e) { Log.Warn("vaz (apercu) : n " + hi + " : " + e.Message); pv = null; }
                 if (pv == null) { pvRetryAt = now + 2f; return; }
                 Measure();

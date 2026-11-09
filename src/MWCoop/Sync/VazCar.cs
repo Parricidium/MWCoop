@@ -106,6 +106,7 @@ namespace MWCoop
                 }
             }
             public bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
+            public bool HasPaint; public Color Paint;   // (couleur propre -- voiture d'un autre mod, CoopApi.AddCar couleur= ; sinon celle du numero)
             public bool Retired;   // (retiree de la liste meme installee : ni F10 ni demande ; un ancien client qui la demande montre une VAZ)
             public bool QuestOnly; // (pas au F10 : seulement par une quete -- la Golf, QueteGolf)
             public string DirOverride;   // (fichiers ailleurs que dans addons : ceux tires de la DLL, QueteGolf)

@@ -162,7 +162,7 @@ namespace MWCoop
         /// default m3e30), nom, tete (x,y,z: driver's eyes, car frame), moteur (x,y,z), frein_pivot, frein_prise (x,y,z), frein_angle,
         /// puissance (hp), regime_puissance, couple (N.m), regime_couple, rupteur, masse (kg), avant (share of the weight on the front
         /// axle, 0..1), braquage (degrees), pont, rapports (reverse,neutral,1st,2nd,...), transmission (propulsion, traction or
-        /// integrale), yeux_bas (m).</para>
+        /// integrale), yeux_bas (m), couleur (r,g,b, 0..1 or 0..255: its own paint instead of the player's number colour).</para>
         /// <para>Every player of a session needs the same cars: their numbers follow the keys. A player without it sees the base car.
         /// Returns the car number (for <see cref="ShowF10Car"/>), or -1 when refused (the reason is in MWCoop's log).</para></summary>
         public static int AddCar(string key, string directory, string definition)
@@ -211,6 +211,8 @@ namespace MWCoop
                 foreach (string t in g.Split(',')) { float f; if (float.TryParse(t.Trim(), System.Globalization.NumberStyles.Float, ci, out f)) gl.Add(f); }
                 if (gl.Count >= 3) s0.Gears = gl.ToArray();
             }
+            Vector3 col = V("couleur", new Vector3(-1f, 0f, 0f));
+            if (col.x >= 0f) { if (col.x > 1f || col.y > 1f || col.z > 1f) col /= 255f; m.HasPaint = true; m.Paint = new Color(col.x, col.y, col.z, 1f); }
             string tr; if (v.TryGetValue("transmission", out tr)) { tr = tr.ToLowerInvariant(); s0.Rwd = tr == "propulsion"; s0.Fwd = tr == "traction"; }
             return VazCar.AddExternal(m);
         }

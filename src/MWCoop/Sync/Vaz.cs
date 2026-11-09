@@ -47,6 +47,8 @@ namespace MWCoop
 
         public static string ColorName(int n) { return n >= 1 && n <= Count ? Lang.T(NamesFr[n - 1], NamesEn[n - 1]) : "?"; }
         public static Color ColorOf(int n) { return n >= 1 && n <= Count ? Colors[n - 1] : Color.white; }
+        // (couleur d'une voiture : la sienne si son modele en a une -- voiture d'un autre mod, CoopApi.AddCar couleur= ; sinon celle du numero)
+        public static Color PaintFor(int n, int model) { VazCar.Model m = VazCar.ModelOf(model); return m != null && m.HasPaint ? m.Paint : ColorOf(n); }
 
         class Slot { public int Number, Model; public string Livery = ""; public Vector3 Pos; public float Yaw; }
         class Rent { public int Id, Number, Model = -1; public VazCar.Built Car; public float NextBuild; public int Tries; public int LiveryGen = -1; }
@@ -630,7 +632,7 @@ namespace MWCoop
                     try
                     {
                         Quaternion rot = Quaternion.Euler(0f, kv.Value.Yaw, 0f);
-                        Color paint = kv.Key == QueteGolf.Owner ? QueteGolf.Paint : ColorOf(r.Number);   // (voiture de la quete s21 : sa couleur, pas celle du numero)
+                        Color paint = kv.Key == QueteGolf.Owner ? QueteGolf.Paint : PaintFor(r.Number, r.Model);   // (voiture de la quete s21 : sa couleur, pas celle du numero)
                         r.Car = VazCar.ModelOf(r.Model).Standalone ? StandaloneCar.Build(Prefix + r.Number, r.Number, paint, kv.Value.Pos, rot, VazCar.ModelOf(VazCar.CopyOf(r.Model)))
                                                             : VazCar.Build(Prefix + r.Number, r.Number, paint, kv.Value.Pos, rot, VazCar.ModelOf(r.Model));
                     }

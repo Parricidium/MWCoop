@@ -629,7 +629,7 @@ namespace MWCoop
                 try
                 {
                     s.Number = VaPaint[i % VaPaint.Length];
-                    GameObject car = VazCar.BuildPreview(s.Number, Vaz.ColorOf(s.Number), 0, out s.Hold, VazCar.ModelOf(s.Model));
+                    GameObject car = VazCar.BuildPreview(s.Number, Vaz.PaintFor(s.Number, s.Model), 0, out s.Hold, VazCar.ModelOf(s.Model));
                     if (car == null) { L("garage : apercu impossible pour " + s.Name); continue; }
                     car.transform.SetParent(pivot, false);
                     car.transform.localPosition = Vector3.zero; car.transform.localRotation = Quaternion.identity;
