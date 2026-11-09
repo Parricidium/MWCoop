@@ -584,6 +584,7 @@ namespace MWCoop
                 AnimationClip c = FindClip(Clips[i, 1]);
                 // (My Summer Car n'a pas worker1_sitdown : passenger_anim1, le passager assis des voitures du jeu -- joueurs du 20/10)
                 if (c == null && Clips[i, 0] == "assis") c = FindClip("passenger_anim1");
+                if (Clips[i, 0] == "assis") sitClipLegs = c != null && c.name == "worker1_sitdown";   // (seul clip assis qui plie les jambes : voir ChairLegs)
                 if (c == null) { missing.Add(Clips[i, 1]); continue; }
                 Animation target = Clips[i, 2] == "collar_right" ? armR : Clips[i, 2] == "collar_left" ? armL : anim;
                 if (target == null) { missing.Add(Clips[i, 2]); continue; }
@@ -632,6 +633,51 @@ namespace MWCoop
             }
         }
 
+        // Assis sur une chaise, un banc, un canape, quand le clip assis ne plie pas les jambes (dossier #63, My Summer Car : « le personnage
+        // se tient debout sur les chaises du bar au lieu de s'asseoir »). passenger_anim1, le clip pris a la place de worker1_sitdown, est
+        // celui des passagers du bus : le jeu le joue sur leur os spine_middle (haut du corps seulement). Joue sur 'skeleton' de l'avatar,
+        // ses chemins ne menent a aucun os : l'avatar restait debout, pieds au sol, au milieu de la chaise. Bassin et jambes figes d'un PNJ
+        // assis sur une chaise du jeu : les ivrognes du bar de Teimo (STORE/LOD/ActivateBar/DrunksBar/Drunk1 et Drunk2 : cuisses a plat,
+        // chevilles au sol ; meme squelette, cuisses sous 'skeleton' comme chez l'avatar) ; a defaut, ceux d'un conducteur de la
+        // circulation. Le bassin et les chevilles sont ensuite mesures dans cette pose (LatePose) : Apply pose le bassin sur l'assise
+        // comme avant. [Test] AssisJambes=0 : comme avant.
+        static Dictionary<string, Quaternion> poseChair;
+        static bool chairPoseBuilt, sitClipLegs;   // (sitClipLegs : le clip assis plie les jambes -- worker1_sitdown, My Winter Car)
+        static readonly string[] ChairBones = { "pelvis", "thig_left", "knee_left", "ankle_left", "thig_right", "knee_right", "ankle_right" };
+
+        static void BuildChairPose()
+        {
+            chairPoseBuilt = true;
+            foreach (Transform t in Resources.FindObjectsOfTypeAll<Transform>())
+            {
+                if (t == null || t.gameObject.hideFlags != HideFlags.None || t.parent == null || t.parent.name != "DrunksBar" || !t.name.StartsWith("Drunk")) continue;
+                Transform pel = FindBone(t, "pelvis"), th = FindBone(t, "thig_left"), kn = FindBone(t, "knee_left"), an = FindBone(t, "ankle_left");
+                if (pel == null || th == null || kn == null || an == null || pel.parent == null || th.parent != pel.parent) continue;
+                // (bien assis : cuisse a peu pres a plat, tibia vers le bas)
+                if (Mathf.Abs(kn.position.y - th.position.y) > 0.15f || th.position.y - an.position.y < 0.3f) continue;
+                var d = new Dictionary<string, Quaternion>();
+                foreach (string n in ChairBones) { Transform b = FindBone(pel.parent, n); if (b != null) d[n] = b.localRotation; }
+                poseChair = d;
+                Log.Info("avatar : pose assise (chaise) prise sur " + Recon.Path(t) + " (genou " + (kn.position.y - th.position.y).ToString("F2") + " m sous la hanche, cheville " + (th.position.y - an.position.y).ToString("F2") + " m)");
+                return;
+            }
+            Dictionary<string, Quaternion> drv = DriverPose("GIFU");   // (camion : assis droit ; My Summer Car n'en a pas, celui de la voiture)
+            if (drv != null)
+            {
+                var d = new Dictionary<string, Quaternion>();
+                foreach (string n in ChairBones) { Quaternion q; if (drv.TryGetValue(n, out q)) d[n] = q; }
+                if (d.Count > 0) poseChair = d;
+            }
+            Log.Info("avatar : pose assise (chaise) : pas d'ivrogne du bar, " + (poseChair != null ? "jambes d'un conducteur" : "aucune"));
+        }
+
+        void ChairLegs()
+        {
+            if (!chairPoseBuilt) BuildChairPose();
+            if (poseChair == null) return;
+            foreach (KeyValuePair<string, Quaternion> kv in poseChair) { Transform b = Bone(kv.Key); if (b != null) b.localRotation = kv.Value; }
+        }
+
         static Dictionary<string, Quaternion> DriverPose(string car)
         {
             if (!posesBuilt) BuildDriverPoses();
@@ -644,6 +690,7 @@ namespace MWCoop
         public Transform HandBone(bool right) { return Bone(right ? "hand_right" : "hand_left"); }   // (lampe du carnet du copilote dans la main droite)
         public Transform HandRight { get { return Bone("hand_right"); } }
         public bool InVehicle { get { return inCar; } }
+        public bool OnChair { get { return chair; } }   // (assis sur un siege du jeu hors vehicule -- essais du dossier #63)
         // Outil en main (HandTools) : prises du manche (monde), dosage ; main gauche aussi pour un outil long.
         public float ToolW; public Vector3 ToolGripR, ToolGripL; public bool ToolTwo;
         public float ToolLean;   // coup d'outil (HandTools) : buste penche, degres (positif = en avant)
@@ -1015,6 +1062,8 @@ namespace MWCoop
                 return;
             }
             if ((f & PlayerSync.F_Sleep) != 0) return;
+            // Assis sur une chaise sans clip qui plie les jambes (My Summer Car, dossier #63) : bassin et jambes d'un PNJ assis.
+            if (chair && sitting && !crouching && !sitClipLegs && Config.GetInt("Test", "AssisJambes", 1) != 0) ChairLegs();
             // Accroupi (deux niveaux, comme le jeu) : voir Crouch.
             crouchW = Mathf.MoveTowards(crouchW, crouchDepth, Time.deltaTime * 3f);
             if (crouchW > 0.001f) Crouch(crouchW);
@@ -2039,6 +2088,15 @@ namespace MWCoop
                 Vector3 e = pv.position - g.Seat; e.y = 0f;
                 sb.Append(", sur le siege ").Append(g.Seat.ToString("F2")).Append(" sens ").Append(g.SeatYaw.ToString("F0"))
                   .Append(", bassin ").Append(pv.position.ToString("F2")).Append(" (ecart ").Append(e.magnitude.ToString("F2")).Append(" m)");
+                // (dossier #63 : hauteurs au-dessus du sol du siege, et avance dans son sens -- debout : genou sous le bassin ; assis : a sa hauteur, devant)
+                Quaternion inv = Quaternion.Inverse(Quaternion.Euler(0f, g.SeatYaw, 0f));
+                sb.Append(", au-dessus du sol : bassin ").Append((pv.position.y - g.Seat.y).ToString("F2"));
+                foreach (string n in new[] { "knee_right", "ankle_right" })
+                {
+                    Transform b = Bone(n);
+                    if (b != null) sb.Append(n == "knee_right" ? ", genou " : ", cheville ").Append((b.position.y - g.Seat.y).ToString("F2")).Append(" (").Append((inv * (b.position - pv.position)).z.ToString("F2")).Append(" devant)");
+                }
+                sb.Append(", assise ").Append(chairTop.ToString("F2")).Append(", jambes ").Append(sitClipLegs ? "clip" : Config.GetInt("Test", "AssisJambes", 1) == 0 ? "aucune (AssisJambes=0)" : poseChair != null ? "pose figee" : "pas de pose");
             }
             if (pee != null) { var pe = pee.GetComponent<ParticleEmitter>(); sb.Append(", jet ").Append(pe != null && pe.emit).Append(' ').Append(pe != null ? pe.particleCount : 0); }
             sb.Append(", racine ").Append(r.position.ToString("F2")).Append(" yaw ").Append(r.eulerAngles.y.ToString("F0")).Append(" incl ").Append(Mathf.DeltaAngle(0f, r.eulerAngles.x).ToString("F0"));

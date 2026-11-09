@@ -2028,6 +2028,7 @@ namespace MWCoop
             if (mode == "vaz" || mode == "vazcle") { Vaz.Test(mode, t); return; }   // (24/10 : voitures sur la Ruscko)
             if (mode == "vaztenue") { StandaloneCar.Test(t); VazTenue.Test(mode, t); return; }
             if (mode == "litparents") { ParentsBed.Test(t); return; }   // (suggestion 35 : lit des parents sur MSC)
+            if (mode == "assis-chaise") { Gestures.Test(mode, t); return; }   // (dossier #63 : l'hote pose sur une chaise du bar, [Test] Siege=STORE/LOD/GFX_Pub/chair_pub 2)
             if (mode == "standaloneroule") { StandaloneCar.Roll(t); return; }   // (pilote standalone, 28/10)
             if (mode == "standalonemonte") { StandaloneCar.MountTest(t); return; }
             if (mode == "quetevitres") { StandaloneCar.QuestWindowTest(t); return; }   // (vitres de la voiture de la quete, fichier de l'outil des places)
@@ -3831,7 +3832,7 @@ namespace MWCoop
                 if (mode == "fuiteconducteur") CarLeaks.Test(mode, t);
                 // ([Test] TestPos=x,y,z sur My Summer Car, pour ces essais de l'audit MSC 02/11 seulement : teleporte a 8 s, comme sur MWC)
                 if (!auditPosDone && t > 8f && Config.Get("Test", "TestPos", "").Length > 0
-                    && System.Array.IndexOf(new[] { "kilju", "kiljuremplir", "ventti", "ventti2", "nasse", "vitrine", "stop", "fleetpanier", "fleetcaisse", "mscct", "dancing", "amener" }, mode) >= 0)
+                    && System.Array.IndexOf(new[] { "kilju", "kiljuremplir", "ventti", "ventti2", "nasse", "vitrine", "stop", "fleetpanier", "fleetcaisse", "mscct", "dancing", "amener", "assis-chaise" }, mode) >= 0)
                 {
                     auditPosDone = true;
                     string[] c = Config.Get("Test", "TestPos", "").Split(',');

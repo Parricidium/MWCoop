@@ -83,7 +83,7 @@ namespace MWCoop
             stainsFsm = null; stains.Clear(); stainsClaimed = false;
             remote.Clear();
             loadedAt = Time.realtimeSinceStartup;
-            step = -1; testSeatAt = -1; testTrigger = null; forced = leftSeat = false; seatCheckAt = 0; drunkVar = null;
+            step = -1; testSeatAt = -1; testTrigger = null; forced = leftSeat = selfPhoto = false; seenSince = -1f; seenPhoto = 0; seatCheckAt = 0; drunkVar = null;
         }
 
         static bool FindLocal()
@@ -667,6 +667,15 @@ namespace MWCoop
                 if (actor) Log.Info("autotest : " + mode + " : acteur : " + LocalText());
                 foreach (Avatar a in PlayerSync.Avatars) Log.Info("autotest : " + mode + " : avatar " + a.Player.Name + " : " + a.GestureState());
             }
+            // (dossier #63 : l'observateur photographie l'avatar assis depuis 4 s -- ecran-assis-chaise-vu ; [Test] AssisPhotos=0 : pas de photo)
+            if (!actor && mode == "assis-chaise" && Config.GetInt("Test", "AssisPhotos", 1) != 0 && seenPhoto == 0)
+            {
+                bool on = false;
+                foreach (Avatar a in PlayerSync.Avatars) if (a.OnChair) on = true;
+                if (!on) seenSince = -1f;
+                else if (seenSince < 0f) seenSince = now;
+                else if (now - seenSince > 4f) { seenPhoto = 1; Autotest.CaptureSoon("assis-chaise-vu", 0f); Log.Info("autotest : assis-chaise : photo de l'avatar assis"); }
+            }
             if (!actor || t < start) return;
             if (mode == "assis-chaise") { TestSeat(t - start); return; }
             int k = (int)((t - start) / 6f);
@@ -780,6 +789,8 @@ namespace MWCoop
                 Log.Info("autotest : assis-chaise : acteur : declencheur pas entre (" + testTrigger.ActiveStateName + "), force en Press return");
                 Game.SetState(testTrigger, "Press return");
             }
+            // (acteur a la troisieme personne -- [Test] TroisiemePersonne=1 : son propre avatar, comme le joueur du dossier #63 -- photo a 10 s)
+            if (dt > 10f && !selfPhoto && ThirdPerson.HasBody) { selfPhoto = true; Autotest.CaptureSoon("assis-chaise-moi", 0f); Log.Info("autotest : assis-chaise : acteur : photo a la troisieme personne"); }
             if (dt > 30f && !leftSeat && testTrigger != null)
             {
                 leftSeat = true;
@@ -792,7 +803,8 @@ namespace MWCoop
 
         static PlayMakerFSM testTrigger;
         static float testRetry; static int testTries;
-        static bool forced, leftSeat;
+        static bool forced, leftSeat, selfPhoto;
+        static float seenSince = -1f; static int seenPhoto;
 
         static void Teleport(Vector3 p)
         {
