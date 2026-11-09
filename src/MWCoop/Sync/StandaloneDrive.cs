@@ -2781,11 +2781,12 @@ namespace MWCoop
         // puis frein, descend ; au sol a cote, CharacterController et PlayerStop rendus. Bilan : cycles reussis.
         static int mStep = -1, mCycle, mOk, mSide; static float mAt, mLog; static float mFly, mLeanAt;
         // (essai : voiture posee en p0, cap +z, joueur au volant ; entree remise a plus d'1 s pour que le choc compte tout de suite)
-        static void PlaceSeated(VazCar.Built b, State st, GameObject pl, Vector3 p0)
+        static void PlaceSeated(VazCar.Built b, State st, GameObject pl, Vector3 p0) { PlaceSeated(b, st, pl, p0, Quaternion.identity); }
+        static void PlaceSeated(VazCar.Built b, State st, GameObject pl, Vector3 p0, Quaternion r)
         {
             Transform ct = b.Car.transform;
             b.Rb.velocity = Vector3.zero; b.Rb.angularVelocity = Vector3.zero;
-            ct.position = p0; ct.rotation = Quaternion.identity; b.Rb.position = p0; b.Rb.rotation = Quaternion.identity;
+            ct.position = p0; ct.rotation = r; b.Rb.position = p0; b.Rb.rotation = r;
             st.DoorOpen[0] = st.DoorOpen[1] = false; st.DoorAngle[0] = st.DoorAngle[1] = 0f;
             if (st.Doors[0] != null) st.Doors[0].localRotation = Quaternion.identity; if (st.Doors[1] != null) st.Doors[1].localRotation = Quaternion.identity;
             if (driving != b)
@@ -2797,6 +2798,21 @@ namespace MWCoop
             }
             enteredAt = Time.realtimeSinceStartup - 2f;
         } static string mWhy; static bool mShot, mOthersAway;
+        // (point du choc mortel de JD dans la 405, 09/11 12:50 : voiture 3,3 s avant, point du choc ; essai [Test] StandalonePoint=1)
+        static readonly Vector3 PtA = new Vector3(882.5f, 0f, 1137.7f), PtZ = new Vector3(968.5f, 0f, 1050.2f);
+        // (sol sous p, du haut : premier collider plein qui n'est ni la voiture ni le joueur)
+        static bool Ground(Vector3 p, VazCar.Built b, out string name, out float y)
+        {
+            name = null; y = 0f; float best = float.MaxValue;
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(p.x, 300f, p.z), Vector3.down, 600f))
+            {
+                if (h.collider == null || h.collider.isTrigger || h.distance >= best) continue;
+                if (b.Car != null && h.collider.transform.IsChildOf(b.Car.transform)) continue;
+                if (Game.PlayerGo != null && h.collider.transform.IsChildOf(Game.PlayerGo.transform)) continue;
+                best = h.distance; name = h.collider.name; y = h.point.y;
+            }
+            return name != null;
+        }
         public static void MountTest(float t)
         {
             Test(t);
@@ -2826,7 +2842,7 @@ namespace MWCoop
             switch (mStep)
             {
                 case -1:
-                    VazTenue.MakeTrack(); mStep = 0; mAt = t; mCycle = 0; mOk = 0;
+                    VazTenue.MakeTrack(); mStep = Config.GetInt("Test", "StandalonePoint", 0) != 0 ? 30 : 0; mAt = t; mCycle = 0; mOk = 0;   // ([Test] StandalonePoint=1 : point reel)
                     if (!EngineRunning(b)) SetEngine(b, true);
                     break;
                 case 0:   // voiture posee, joueur dans la zone
@@ -2988,6 +3004,75 @@ namespace MWCoop
                     Log.Info("standalone : choc, bosses et saut OK, pas de mort (vitesse " + (b.Rb.velocity.magnitude * 3.6f).ToString("F0") + " km/h, saut jusqu'a " + mFly.ToString("F1") + " m, plus grand choc " + crashMaxH.ToString("F0") + " km/h a l'horizontale / " + crashMaxV.ToString("F0") + " a la verticale)");
                     mStep = 12; mAt = t;
                     break;
+                // ([Test] StandalonePoint=1, [Directives] 09/11 : au point reel du choc mortel de JD dans la 405, 12:50:13 -- a 12:50:09.8 la
+                // voiture en (882.5, -1.6, 1137.7), au choc (127 km/h perdus en un pas) en (968.5, -0.5, 1050.2), 3,3 s plus tard : ~135 km/h,
+                // cap ~135 degres, speciale de My Summer Car. Releve d'abord le sol sur la corde (collider touche et hauteur tous les 2 m),
+                // puis pose la voiture au depart, lancee a [Test] PointVitesse km/h (135), et la mene : vise le milieu de la route (collider
+                // "Road") 14 m devant, la branche la plus proche du point du choc ; gaz pour tenir la vitesse. Fin 25 m apres le point.)
+                case 30:
+                {
+                    if (driving == b) { d.Throttle = 0f; d.Brake = 1f; }
+                    if (e < 3f) break;
+                    Vector3 dir = (PtZ - PtA).normalized; float len = (PtZ - PtA).magnitude + 25f, lastY = float.NaN;
+                    var sb = new System.Text.StringBuilder();
+                    for (float s = 0f; s <= len; s += 2f)
+                    {
+                        string nm; float y;
+                        if (!Ground(PtA + dir * s, b, out nm, out y)) { nm = "rien"; y = float.NaN; }
+                        sb.Append(" ").Append(s.ToString("F0")).Append(":").Append(nm).Append(" ").Append(y.ToString("F2"));
+                        if (!float.IsNaN(lastY) && !float.IsNaN(y)) sb.Append(" (").Append(((y - lastY) * 50f).ToString("F0")).Append("%)");
+                        lastY = y;
+                        if (sb.Length > 500) { Log.Info("standalone : point, sol" + sb); sb.Length = 0; }
+                    }
+                    if (sb.Length > 0) Log.Info("standalone : point, sol" + sb);
+                    string n0; float y0, y1, y2;
+                    Ground(PtA, b, out n0, out y0); Ground(PtA - dir * 2f, b, out n0, out y1); Ground(PtA + dir * 2f, b, out n0, out y2);
+                    Vector3 p0 = new Vector3(PtA.x, y0 + 0.6f, PtA.z);
+                    Quaternion r = Quaternion.LookRotation(dir * 4f + Vector3.up * (y2 - y1), Vector3.up);
+                    PlaceSeated(b, st, pl, p0, r);
+                    float v = Config.GetFloat("Test", "PointVitesse", 135f) / 3.6f;
+                    d.Keys = false; d.Handbrake = 0f; d.Gear = 6; d.Throttle = 1f; d.Brake = 0f; d.Steer = 0f;
+                    b.Rb.velocity = ct.forward * v; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>()) w.angularVelocity = v / Mathf.Max(0.1f, w.radius);
+                    if (st.Sensor != null) st.Sensor.Reset();
+                    if (b.Rb.GetComponent<CarHits.Watch>() == null) b.Rb.gameObject.AddComponent<CarHits.Watch>();
+                    crashMaxH = crashMaxV = 0f; mFly = 0f; CarHits.Touches = 0; CarHits.TouchMax = 0f; mLog = 0f;
+                    mStep = 31; mAt = t;
+                    Log.Info("standalone : point, depart en " + p0.ToString("F1") + " cap " + r.eulerAngles.y.ToString("F0") + " a " + (v * 3.6f).ToString("F0") + " km/h, caisse " + (Config.GetInt("Test", "CaisseRampe", 1) != 0 ? "a patins" : "plate (avant)"));
+                    break;
+                }
+                case 31:
+                {
+                    Vector3 pos = new Vector3(ct.position.x, 0f, ct.position.z), dir = (PtZ - PtA).normalized;
+                    float along = Vector3.Dot(pos - PtZ, dir), toZ = Vector3.Distance(pos, PtZ);
+                    string tail = " (" + CarHits.Touches + " chocs de la caisse, le plus fort a " + (CarHits.TouchMax * 3.6f).ToString("F0") + " km/h ; plus grand choc a la tete " + crashMaxH.ToString("F0") + " km/h a l'horizontale / " + crashMaxV.ToString("F0") + " a la verticale)";
+                    if (driving != b) { Log.Info("standalone : point, ECHEC : mort en " + ct.position.ToString("F1") + ", " + toZ.ToString("F0") + " m du point du choc de JD" + tail); Log.Info("standalone : point fini"); mStep = 99; break; }
+                    float spd = b.Rb.velocity.magnitude;
+                    d.Throttle = spd * 3.6f < Config.GetFloat("Test", "PointVitesse", 135f) ? 1f : 0f; d.Brake = 0f;
+                    Vector3 fw = Vector3.ProjectOnPlane(ct.forward, Vector3.up).normalized, rt = Vector3.Cross(Vector3.up, fw), look = pos + fw * 14f;
+                    Vector3 refDir = along < -14f ? (PtZ - pos).normalized : fw;
+                    bool found = false; Vector3 aim = Vector3.zero; float bestAng = float.MaxValue; int run = int.MinValue;
+                    for (int i = -10; i <= 11; i++)
+                    {
+                        string nm; float gy;
+                        bool road = i <= 10 && Ground(look + rt * i, b, out nm, out gy) && nm.ToLower().Contains("road");
+                        if (road && run == int.MinValue) run = i;
+                        else if (!road && run != int.MinValue)
+                        {
+                            Vector3 c = look + rt * ((run + i - 1) * 0.5f); float ang = Vector3.Angle(c - pos, refDir);
+                            if (ang < bestAng) { bestAng = ang; aim = c; found = true; }
+                            run = int.MinValue;
+                        }
+                    }
+                    Vector3 to = found ? aim - pos : PtZ - pos;
+                    d.Steer = Mathf.Clamp(Vector3.Angle(fw, to) * Mathf.Sign(Vector3.Dot(rt, to)) / 10f, -1f, 1f);
+                    if (t - mLog > 0.5f)
+                    {
+                        mLog = t;
+                        Log.Info("standalone : point, " + e.ToString("F1") + " s en " + ct.position.ToString("F1") + " a " + (spd * 3.6f).ToString("F0") + " km/h, cap " + ct.eulerAngles.y.ToString("F0") + ", volant " + d.Steer.ToString("F2") + (found ? "" : ", PAS de route devant") + ", " + toZ.ToString("F0") + " m du point du choc");
+                    }
+                    if (along > 25f || e > 9f) { Log.Info("standalone : point, " + (along > 25f ? "OK, passe le point du choc de JD sans mort" : "pas arrive au point du choc en 9 s (" + toZ.ToString("F0") + " m)") + ", vitesse " + (spd * 3.6f).ToString("F0") + " km/h" + tail); Log.Info("standalone : point fini"); mStep = 99; }
+                    break;
+                }
                 case 12:   // mur a 60 km/h, de face : mort attendue
                 {
                     if (driving == b) { d.Throttle = 0f; d.Brake = 1f; }
