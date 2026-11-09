@@ -17,7 +17,7 @@ namespace MWCoop
     public static class CoopApi
     {
         /// <summary>API version: raised when something is added. Check it if you use a newer member.</summary>
-        public const int Version = 4;
+        public const int Version = 5;
 
         /// <summary>Largest payload of <see cref="Send"/> (reliable; it is split in packets and rebuilt on the other side).</summary>
         public const int MaxReliableBytes = 64 * 1024;
@@ -153,6 +153,67 @@ namespace MWCoop
         /// (degrees). The car the player already has is moved if it is the same model, else given back first. Works in solo and in
         /// co-op (a guest asks the host). False when refused (add-on off, unknown car, no free number: a message is shown).</summary>
         public static bool ShowF10Car(int carId, Vector3 position, float yaw) { return Vaz.RequestAt(carId, position, yaw); }
+
+        /// <summary>v5. Adds a car of your own to the F10 menu, with everything the add-on cars of MWCoop have (doors, belts, gauges,
+        /// lights, wipers, handbrake, seats, co-op sync). Call it while your mod loads, before the player enters the game world.
+        /// <para><paramref name="key"/>: short unique name (letters and digits); <paramref name="directory"/>: folder with the car files
+        /// in MWCoop's add-on format (carrosserie.p205, roue.p205, volant.p205, portiere_g/d.p205, textures, addon.ini for the name);
+        /// <paramref name="definition"/>: "name=value" lines -- base (key of the MWCoop car to take the cockpit and controls from,
+        /// default m3e30), nom, tete (x,y,z: driver's eyes, car frame), moteur (x,y,z), frein_pivot, frein_prise (x,y,z), frein_angle,
+        /// puissance (hp), regime_puissance, couple (N.m), regime_couple, rupteur, masse (kg), avant (share of the weight on the front
+        /// axle, 0..1), braquage (degrees), pont, rapports (reverse,neutral,1st,2nd,...), transmission (propulsion, traction or
+        /// integrale), yeux_bas (m).</para>
+        /// <para>Every player of a session needs the same cars: their numbers follow the keys. A player without it sees the base car.
+        /// Returns the car number (for <see cref="ShowF10Car"/>), or -1 when refused (the reason is in MWCoop's log).</para></summary>
+        public static int AddCar(string key, string directory, string definition)
+        {
+            string why = AddCarImpl(key, directory, definition);
+            if (why == null) { int id = VazCar.Models.Length - 1; foreach (VazCar.Model m in VazCar.Models) if (m != null && m.Folder == key) id = m.Id; Log.Info("api : voiture " + key + " ajoutee, n " + id + " (" + directory + ")"); return id; }
+            Log.Warn("api : voiture " + key + " refusee : " + why);
+            return -1;
+        }
+        static string AddCarImpl(string key, string directory, string definition)
+        {
+            if (string.IsNullOrEmpty(key) || key.Length > 24) return "cle vide ou trop longue";
+            foreach (char c in key) if (!char.IsLetterOrDigit(c)) return "cle : lettres et chiffres seulement";
+            if (string.IsNullOrEmpty(directory) || !System.IO.File.Exists(System.IO.Path.Combine(directory, "carrosserie.p205"))) return "pas de carrosserie.p205 dans " + directory;
+            var v = new Dictionary<string, string>();
+            foreach (string raw in (definition ?? "").Split('\n'))
+            {
+                string l = raw; int c = l.IndexOf('#'); if (c >= 0) l = l.Substring(0, c);
+                int eq = l.IndexOf('='); if (eq <= 0) continue;
+                v[l.Substring(0, eq).Trim().ToLowerInvariant()] = l.Substring(eq + 1).Trim();
+            }
+            string bk; if (!v.TryGetValue("base", out bk) || bk.Length == 0) bk = "m3e30";
+            VazCar.Model b = null;
+            foreach (VazCar.Model x in VazCar.Models) if (x != null && x.Folder == bk && x.Standalone && x.Sp != null && (b == null || x.Id > b.Id)) b = x;
+            if (b == null) return "voiture de base inconnue : " + bk;
+            VazCar.Model m = b.ExternalOf(key, directory);
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            System.Func<string, float, float> F = (k, d) => { string s; float f; return v.TryGetValue(k, out s) && float.TryParse(s, System.Globalization.NumberStyles.Float, ci, out f) ? f : d; };
+            System.Func<string, Vector3, Vector3> V = (k, d) =>
+            {
+                string s; if (!v.TryGetValue(k, out s)) return d;
+                string[] w = s.Split(','); float x, y, z;
+                return w.Length == 3 && float.TryParse(w[0], System.Globalization.NumberStyles.Float, ci, out x) && float.TryParse(w[1], System.Globalization.NumberStyles.Float, ci, out y)
+                       && float.TryParse(w[2], System.Globalization.NumberStyles.Float, ci, out z) ? new Vector3(x, y, z) : d;
+            };
+            string nom; if (v.TryGetValue("nom", out nom) && nom.Length > 0) { m.Name = nom; m.Sp.Name = nom; }
+            m.Head = V("tete", m.Head); m.Engine = V("moteur", m.Engine);
+            m.BrakePivot = V("frein_pivot", m.BrakePivot); m.BrakeGrip = V("frein_prise", m.BrakeGrip); m.BrakeAngle = F("frein_angle", m.BrakeAngle);
+            m.SoloEyeDrop = F("yeux_bas", m.SoloEyeDrop);
+            VazCar.Spec s0 = m.Sp;
+            s0.Power = F("puissance", s0.Power); s0.PowerRpm = F("regime_puissance", s0.PowerRpm); s0.Torque = F("couple", s0.Torque); s0.TorqueRpm = F("regime_couple", s0.TorqueRpm);
+            s0.MaxRpm = F("rupteur", s0.MaxRpm); s0.Mass = F("masse", s0.Mass); s0.Com = F("avant", s0.Com); s0.Steer = F("braquage", s0.Steer); s0.Final = F("pont", s0.Final);
+            string g; if (v.TryGetValue("rapports", out g))
+            {
+                var gl = new List<float>();
+                foreach (string t in g.Split(',')) { float f; if (float.TryParse(t.Trim(), System.Globalization.NumberStyles.Float, ci, out f)) gl.Add(f); }
+                if (gl.Count >= 3) s0.Gears = gl.ToArray();
+            }
+            string tr; if (v.TryGetValue("transmission", out tr)) { tr = tr.ToLowerInvariant(); s0.Rwd = tr == "propulsion"; s0.Fwd = tr == "traction"; }
+            return VazCar.AddExternal(m);
+        }
 
         // ------------------------------------------------------------ dessous (MWCoop)
         static class To { public const int All = 255; }

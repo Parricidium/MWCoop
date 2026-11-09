@@ -37,6 +37,15 @@ namespace MWCoop
             public int Copy { get { return CopyOf(Id); } }                // (standalone : numero de la copie dont elle reprend le modele)
             // meme modele (dossier, poste, tenue) sous un autre numero : la R5 standalone (StandaloneCar)
             public Model CloneAs(int id, string tag) { var m = (Model)MemberwiseClone(); m.Id = id; m.Tag = tag; return m; }
+            // (voiture d'un autre mod, CoopApi.AddCar : poste et commandes de celle-ci, son dossier ; nom, description et categorie relus dans
+            // son addon.ini, tenue de route a part)
+            public Model ExternalOf(string folder, string dir)
+            {
+                var m = (Model)MemberwiseClone();
+                m.Folder = folder; m.DirOverride = dir; m.Tag = null; m.name = folder; m.nameRead = false; m.desc = m.descEn = m.group = null;
+                m.Sp = Sp != null ? Sp.Copy() : null; m.Retired = false; m.QuestOnly = false;
+                return m;
+            }
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
             public KeyValuePair<string, Vector3>[] Controls;
             public Knob[] Knobs;              // boutons visibles poses sur le modele (commande du jeu dessous)
@@ -421,8 +430,29 @@ namespace MWCoop
             m.BrakePivot = new Vector3(0.07f, 0.42f, 0.0f); m.BrakeGrip = new Vector3(0.07f, 0.442f, 0.11f); m.BrakeAngle = 1.3f;
             return m;
         }
-        public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
-                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30, Fiat131, Bx4tc, P405 };   // (rempli : Vaz2108 au constructeur statique)
+        // (table des voitures, numero = rang ; celles d'autres mods -- CoopApi.AddCar -- ajoutees au bout, AddExternal)
+        public static Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
+                                          Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30, Fiat131, Bx4tc, P405 };   // (rempli : Vaz2108 au constructeur statique)
+        static readonly int builtinCount = Models.Length;
+        static readonly List<Model> external = new List<Model>();
+        // Voiture declaree par un autre mod (CoopApi.AddCar, v5 -- JD 09/11 : une voiture privee en .dll, avec tout ce qu'ont les addons) :
+        // standalone clonee d'une voiture du mod (poste, commandes, reglages), fichiers dans son dossier a elle. Ajoutees apres celles du mod,
+        // rangees par cle : le meme numero chez des joueurs qui ont les memes mods (un joueur qui ne l'a pas voit la voiture de base). Avant
+        // d'entrer dans le monde seulement. null : ajoutee, sinon la raison du refus.
+        public static string AddExternal(Model m)
+        {
+            if (m == null || string.IsNullOrEmpty(m.Folder)) return "cle vide";
+            if (PlayerSync.InGame) return "trop tard : la partie est commencee (ajouter la voiture au chargement du mod)";
+            foreach (Model x in Models) if (x != null && x.Folder == m.Folder) return "cle deja prise : " + m.Folder;
+            if (builtinCount + external.Count + 1 > 250) return "trop de voitures";
+            external.Add(m);
+            external.Sort((a, b) => string.CompareOrdinal(a.Folder, b.Folder));
+            var all = new Model[builtinCount + external.Count];
+            System.Array.Copy(Models, all, builtinCount);
+            for (int i = 0; i < external.Count; i++) { external[i].Id = builtinCount + i; all[builtinCount + i] = external[i]; }
+            Models = all;
+            return null;
+        }
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Models[Base]; }
         // voiture de base, livree avec le mod : la Fiat (la VAZ seulement si ses fichiers manquent et ceux de la VAZ sont la)
         public static int Base { get { return StandaloneCar.Ready(ModelVaz) ? ModelFiat : ModelVaz; } }

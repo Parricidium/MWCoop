@@ -63,6 +63,7 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 | `void RemoveMapPlace(string key)` | **v3.** Removes it. |
 | `string[] F10Cars()` | **v4.** Cars of the F10 menu installed here (the VAZ-2108 and the add-on cars), as `"id|name"`. Empty when the VAZ-2108 add-on is off. |
 | `bool ShowF10Car(int carId, Vector3 position, float yaw)` | **v4.** Takes the local player's F10 car `carId` and puts it at `position` (0.8 m above the ground), heading `yaw` degrees. The player's current F10 car is moved if it is the same model, else given back first. Solo and co-op. False when refused (a message is shown). |
+| `int AddCar(string key, string directory, string definition)` | **v5.** Adds a car of your own to the F10 menu, with everything the add-on cars have (doors, belts, gauges, lights, wipers, handbrake, seats, co-op sync). Call it while your mod loads. `directory`: the car files in MWCoop's add-on format; `definition`: `name=value` lines (`base`, `nom`, `tete`, `moteur`, `puissance`, `couple`, `masse`, `rapports`, `transmission`...). Every player of a session needs the same cars. Returns the car number, -1 when refused (reason in MWCoop's log). |
 
 Notes:
 
@@ -192,3 +193,4 @@ if (api != null && (int)api.GetField("Version").GetValue(null) >= 2)
 - **2** (MWCoop 1.11.0): parts shop: `ShopAvailable`, `AddShopItem`, `RemoveShopItem`.
 - **3** (MWCoop 1.15.5): map places: `AddMapPlace`, `RemoveMapPlace`.
 - **4** (MWCoop msc-1.15.25): F10 cars: `F10Cars`, `ShowF10Car`.
+- **5** (MWCoop msc-1.15.119): cars from other mods: `AddCar`.
