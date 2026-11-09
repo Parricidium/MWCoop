@@ -73,7 +73,7 @@ namespace MWCoop
             lifts.Clear(); liftKnown.Clear(); owned.Clear(); loaders.Clear(); loaderKnown.Clear();
             dmg.Clear(); lifted.Clear(); corrected.Clear(); snapshots.Clear(); dmgSend.Clear();
             gen = -1; liftScans = 0; dmgIdx = 0; tStep = 0; tAt = 0; tLog = 0; testFsm = null; testOff.Clear();
-            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false; probeReload = false; probePiece = false; probePieceWarned = false; probeBreak = false;
+            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false; probeReload = false; probePiece = false; probePieceWarned = false; probeBreak = false; breakPart = null;
             dentOutMsgs = dentOutVerts = dentInMsgs = 0; dentOutBytes = 0; dentWinAt = 0; dentWinBytes = dentPeakBytes = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
@@ -1148,6 +1148,7 @@ namespace MWCoop
         //   (pire choc possible : ce que le reseau doit porter).
         static float probeAt;
         static bool probeSaved, probeShock, probeReload, probePiece, probePieceWarned, probeBreak;
+        static GameObject breakPart; static float breakCheckAt;
         static void DentProbe(float t)
         {
             float sa = Config.GetFloat("Test", "TolesSauveA", 0f);
@@ -1215,10 +1216,22 @@ namespace MWCoop
                     string pk = Config.Get("Test", "TolesPieceCle", "w:db:Database/DatabaseBody/Bumper_Front");
                     GameObject part = Props.ObjectOf(pk);
                     int nj = 0;
-                    if (part != null) foreach (FixedJoint fj in part.GetComponents<FixedJoint>()) { fj.breakForce = 1f; fj.breakTorque = 1f; nj++; }
-                    res += " ; attache lachee : " + (part == null ? "piece " + pk + " introuvable" : nj + " joint(s) de " + part.name);
+                    Rigidbody prb2 = part != null ? part.GetComponent<Rigidbody>() : null;
+                    // (voiture garee endormie : l'attache ne subissait aucune force et ne rompait pas -- 2e essai pp du 09/11 ; corps reveilles,
+                    // petite poussee vers le bas ; si elle tient encore 1,5 s apres, otee, comme le jeu la voit disparaitre a la rupture)
+                    if (part != null) foreach (FixedJoint fj in part.GetComponents<FixedJoint>()) { fj.breakForce = 1f; fj.breakTorque = 1f; if (fj.connectedBody != null) fj.connectedBody.WakeUp(); nj++; }
+                    if (prb2 != null) { prb2.WakeUp(); if (!prb2.isKinematic) prb2.AddForce(Vector3.down * 2f, ForceMode.VelocityChange); }
+                    breakPart = part; breakCheckAt = Time.realtimeSinceStartup + 1.5f;
+                    res += " ; attache lachee : " + (part == null ? "piece " + pk + " introuvable" : nj + " joint(s) de " + part.name + (prb2 != null && prb2.isKinematic ? " (piece cinematique)" : ""));
                 }
                 Log.Info("autotest : toles, piece cassee pour l'essai : " + pt + " -> " + res);
+            }
+            if (breakPart != null && Time.realtimeSinceStartup >= breakCheckAt)
+            {
+                FixedJoint[] left = breakPart.GetComponents<FixedJoint>();
+                foreach (FixedJoint fj in left) Object.Destroy(fj);
+                Log.Info("autotest : toles, piece cassee pour l'essai, 1,5 s apres : " + (left.Length == 0 ? "attache rompue par la physique" : left.Length + " attache(s) encore la, otee(s)"));
+                breakPart = null;
             }
             float pc = Config.GetFloat("Test", "TolesPieceChoc", 0f);
             if (pc > 0f && !probePiece && t > pc && fVerts != null && mUpdateMesh != null)
