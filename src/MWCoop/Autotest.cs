@@ -6473,6 +6473,13 @@ namespace MWCoop
                 done = true;
                 Chat.Send("Salut, c'est " + Net.Session.Me.Name + " !");
             }
+            // [Test] CoopSauveA=t : sauvegarde coop demandee par l'hote a t s, une fois (essai de la boucle de sauvegarde, avec
+            // SauveLeve -- OSC 08/11).
+            if (!coopSaveAsked && Net.Session.IsHost)
+            {
+                float csa = Config.GetFloat("Test", "CoopSauveA", 0f);
+                if (csa > 0f && t > csa) { coopSaveAsked = true; Log.Info("autotest : sauvegarde coop demandee par l'hote"); Net.SaveTransfer.TestCoop("essai"); }
+            }
             // [Test] TestNourriture=Sausages : le jeu cree ce produit a 25 s (meme compteur, meme ID des deux cotes).
             string food = Config.Get("Test", "TestNourriture", "");
             if (food.Length > 0 && t > 25f && !foodMade)
@@ -7224,7 +7231,7 @@ namespace MWCoop
         }
 
         static int mscSonde;
-        static bool done, teleported, hourSet, sleepWatch, foodMade, watchLogged;
+        static bool done, teleported, hourSet, sleepWatch, foodMade, watchLogged, coopSaveAsked;
         static System.Collections.Generic.List<Rigidbody> rivParts;
         static bool rivNear; static int attVoisin, attAir; static float rivLog, cabGap, holdLog, attTry, attExitAt = 1e9f;
         static int holdN;

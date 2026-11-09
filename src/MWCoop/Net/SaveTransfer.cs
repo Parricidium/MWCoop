@@ -51,6 +51,12 @@ namespace MWCoop.Net
         static int lastHostLevel = -1;   // invite : niveau de l'hote vu au dernier passage
         static float backToMenuAt = -1, nextWaitToast;
         static bool wasInGame;           // invite : en partie au dernier passage
+        // Hote : sauvegarde en place qui a leve (pour l'envoi en cours ; pour la sauvegarde coop en cours) et reprises deja faites.
+        // Une reprise au plus, 3 s plus tard : dossier 23 (Kamixak, 31/10), une lecture du jeu qui avait leve pendant SAVEGAME
+        // passait au deuxieme essai ; une erreur qui revient a chaque fois (OSC 08/11) ne coute que deux gels, puis on continue.
+        static bool saveFailed;
+        static int saveRetries, coopRetries;
+        const int SaveRetryMax = 1;
 
         // Hote : un invite vient d'arriver ; sa sauvegarde partira des que possible.
         public static void Queue(Peer p)
@@ -68,7 +74,8 @@ namespace MWCoop.Net
             HostCoop(now);
             Pump();
             PendingNeeds(now);
-            if (!PlayerSync.InGame) { inGameSince = sendAt = -1; if (CarColor.NewGame) newGame = true; return; }
+            DropGone();
+            if (!PlayerSync.InGame) { inGameSince = sendAt = -1; saveFailed = false; saveRetries = 0; if (CarColor.NewGame) newGame = true; return; }
             if (inGameSince < 0)
             {
                 // L'hote (re)entre en jeu : chaque invite deja la recevra cette partie.
@@ -89,17 +96,28 @@ namespace MWCoop.Net
                     newGame = false;
                     Log.Info("sauvegarde : l'hote sauvegarde le monde actuel avant d'envoyer");
                     AnnouncePause(WaitingNames());
-                    Game.SaveInPlace();
-                    worldSavedAt = now;
-                    sendAt = now + 3f;
+                    SaveForSend(now);
                     return;
                 }
                 else if (now - worldSavedAt < SaveReuse && now - inGameSince >= 25f) Log.Info("sauvegarde : monde sauve il y a " + (now - worldSavedAt).ToString("F0") + " s, renvoye tel quel");
                 sendAt = now;
             }
             if (now < sendAt || Game.Saving) return;
+            if (saveFailed)
+            {
+                if (saveRetries < SaveRetryMax)
+                {
+                    saveRetries++;
+                    Log.Info("sauvegarde : nouvel essai de la sauvegarde en place (" + saveRetries + "/" + SaveRetryMax + ")");
+                    AnnouncePause(WaitingNames());
+                    SaveForSend(now);
+                    return;
+                }
+                Log.Warn("sauvegarde : la sauvegarde en place a encore echoue, les fichiers du disque partent tels quels");
+                saveFailed = false;
+            }
             if (!Settled()) { sendAt = now + 0.5f; return; }
-            sendAt = -1;
+            sendAt = -1; saveRetries = 0;
             // (un envoi qui leve sortait avant waiting.Clear() : l'hote resauvegardait a chaque image, jeu fige --
             // relecture du 15/10, #11)
             try
@@ -109,6 +127,34 @@ namespace MWCoop.Net
                         try { SendTo(p); Session.T.Grace(p, LoadGrace); } catch (Exception e) { Log.Error("sauvegarde : envoi a " + p + " impossible : " + e.Message); }
             }
             finally { waiting.Clear(); }
+        }
+
+        // Hote : sauvegarde en place pour un envoi. Marques posees AVANT l'appel : une sauvegarde qui levait (action du jeu ou d'un
+        // mod sur SAVEGAME, fichier abime, serveur sans carte graphique -- OSC 08/11 : SaveTexture) sortait avant elles, et la meme
+        // sauvegarde repartait a chaque image, sans fin, sans jamais envoyer (632 sauvegardes en 74 s, invite bloque au menu).
+        static void SaveForSend(float now)
+        {
+            worldSavedAt = now;
+            sendAt = now + 3f;
+            saveFailed = !TrySaveInPlace("envoi a " + WaitingNames());
+        }
+
+        // Hote : Game.SaveInPlace sans exception qui sorte ; faux si elle a leve (journal : l'exception entiere, une fois).
+        static bool TrySaveInPlace(string why)
+        {
+            try { Game.SaveInPlace(); return true; }
+            catch (Exception e) { Log.Error("sauvegarde en place (" + why + ") interrompue : " + e); return false; }
+        }
+
+        // Hote : invites partis avant l'envoi, retires de l'attente (sinon une sauvegarde en place, avec son gel, pour personne ; du
+        // temps de la boucle, elle continuait meme apres leur depart). Plus personne : l'envoi prevu est oublie, le prochain arrivant
+        // a sa propre sauvegarde, pas celle, peut-etre ancienne, faite pour un parti.
+        static void DropGone()
+        {
+            if (waiting.Count == 0) return;
+            for (int i = waiting.Count - 1; i >= 0; i--)
+                if (!Session.T.Peers.Contains(waiting[i])) { Log.Info("sauvegarde : " + waiting[i] + " parti avant l'envoi, retire de l'attente"); waiting.RemoveAt(i); }
+            if (waiting.Count == 0) { sendAt = -1; saveFailed = false; saveRetries = 0; }
         }
 
         static string WaitingNames()
@@ -647,7 +693,7 @@ namespace MWCoop.Net
             }
             coopSeq = (coopSeq + 1) & 0xFFFF;
             if (coopSeq == 0) coopSeq = 1;   // (0 : aucune comparaison en attente chez l'invite)
-            coopPhase = 1; coopAt = now + FlushDelay; coopBy = by; coopByHost = hostButton;
+            coopPhase = 1; coopAt = now + FlushDelay; coopBy = by; coopByHost = hostButton; coopRetries = 0;
             hostSave = null; guestSaves.Clear();
             Session.Broadcast(new NetWriter(CoopMsg).U8(K_START).U16(coopSeq).Str(by), true);
             Log.Info("sauvegarde coop #" + coopSeq + " demandee par " + by + " : ecriture dans " + FlushDelay + " s (derniers changements des invites)");
@@ -663,17 +709,23 @@ namespace MWCoop.Net
             if (coopPhase == 1)
             {
                 // Ecarts que l'audit voit en ce moment avec les invites (durables) : ils partent tels quels.
-                if (Audit.Desyncs.Count > 0)
+                if (Audit.Desyncs.Count > 0 && coopRetries == 0)
                 {
                     Log.Info("sauvegarde coop #" + coopSeq + " : " + Audit.Desyncs.Count + " ecart(s) durable(s) avec les invites selon l'audit :");
                     for (int i = 0; i < Audit.Desyncs.Count && i < 8; i++) Log.Info("  ecart audit : " + Audit.Desyncs[i]);
                 }
                 AnnouncePause(coopBy);
                 { int gel = Config.GetInt("Test", "SauveGelMs", 0); if (gel > 0) { Log.Info("autotest : ragdoll, hote : gel de " + gel + " ms"); System.Threading.Thread.Sleep(gel); } }   // (essai : gel de la sauvegarde d'un gros monde)
-                Game.SaveInPlace();
+                // (marques posees avant l'appel, une reprise au plus : comme SaveForSend -- OSC 08/11, coopPhase restait a 1 et la
+                // sauvegarde coop repartait a chaque image si SaveInPlace levait)
                 worldSavedAt = now;
-                Session.Broadcast(new NetWriter(CoopMsg).U8(K_NOW).U16(coopSeq).Bool(CompareOn), true);
                 coopPhase = 2; coopAt = now + 3f;
+                if (!TrySaveInPlace("sauvegarde coop #" + coopSeq))
+                {
+                    if (coopRetries < SaveRetryMax) { coopRetries++; coopPhase = 1; Log.Info("sauvegarde coop #" + coopSeq + " : nouvel essai dans 3 s (" + coopRetries + "/" + SaveRetryMax + ")"); return; }
+                    Log.Warn("sauvegarde coop #" + coopSeq + " : la sauvegarde en place a encore echoue, fichiers du disque gardes tels quels");
+                }
+                Session.Broadcast(new NetWriter(CoopMsg).U8(K_NOW).U16(coopSeq).Bool(CompareOn), true);
                 return;
             }
             if (!Settled()) { coopAt = now + 0.5f; return; }

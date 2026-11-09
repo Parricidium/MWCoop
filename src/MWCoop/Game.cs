@@ -135,9 +135,27 @@ namespace MWCoop
             bool profil = Config.Testing && Config.GetInt("Test", "SauveProfil", 0) != 0;
             if (profil) Log.Info("sauvegarde en jeu, profil : preparation " + sw0.ElapsedMilliseconds + " ms ; " + SaveBatchMsc.Probe(restore));
             long tBroad = sw0.ElapsedMilliseconds;
-            try { SaveBatchMsc.Begin(restore, setup); PlayMakerFSM.BroadcastEvent("SAVEGAME"); if (profil) Log.Info("sauvegarde en jeu, profil : diffusion de SAVEGAME " + (sw0.ElapsedMilliseconds - tBroad) + " ms"); }
+            bool broadcastDone = false;
+            try
+            {
+                SaveBatchMsc.Begin(restore, setup); PlayMakerFSM.BroadcastEvent("SAVEGAME");
+                // ([Test] SauveLeve=N : les N premieres sauvegardes en place levent ici, comme une action du jeu qui leve pendant SAVEGAME
+                // -- essai de la boucle de sauvegarde, OSC 08/11 ; 99 : a chaque fois)
+                if (Config.Testing && TestThrow()) throw new System.InvalidOperationException("essai : sauvegarde en place qui leve ([Test] SauveLeve)");
+                broadcastDone = true;
+                if (profil) Log.Info("sauvegarde en jeu, profil : diffusion de SAVEGAME " + (sw0.ElapsedMilliseconds - tBroad) + " ms");
+            }
             finally
             {
+                if (!broadcastDone)
+                {
+                    // Diffusion qui a leve : la suite apres ce bloc ne tourne pas. Automates remis dans 2,5 s comme d'habitude ; avant,
+                    // le restoreAt d'une sauvegarde d'avant les remettait a l'image suivante, Game.Saving retombait aussitot et
+                    // l'appelant relancait la meme sauvegarde a chaque image (OSC 08/11).
+                    afterSave = new Dictionary<PlayMakerFSM, string>();
+                    foreach (KeyValuePair<PlayMakerFSM, string> kv in restore) if (kv.Key != null) afterSave[kv.Key] = kv.Key.ActiveStateName;
+                    restoreAt = Time.realtimeSinceStartup + 2.5f;
+                }
                 if (held != null) held.ToState = heldTo; SaveBatchMsc.End(); RestoreSetup(false);
                 SaveBatchMsc.SaveMeshes();   // (maillages des toles : ES2Auto ne les ecrit qu'en quittant, et la remise des automates l'en empeche)
                 if (colliderOffs != null) foreach (HutongGames.PlayMaker.FsmStateAction a in colliderOffs) a.Enabled = true;
@@ -160,6 +178,14 @@ namespace MWCoop
             if (Config.Testing && Config.GetInt("Test", "SauveCopie", 0) != 0) SaveBatchMsc.TestCopy("enjeu" + (++testCopies));   // (essai : fichiers juste apres l'ecriture)
         }
         static int testCopies;
+        static int testThrows = -1;   // ([Test] SauveLeve : sauvegardes en place qui leveront encore)
+        static bool TestThrow()
+        {
+            if (testThrows < 0) testThrows = Config.GetInt("Test", "SauveLeve", 0);
+            if (testThrows <= 0) return false;
+            testThrows--;
+            return true;
+        }
 
         public static void Update()
         {
