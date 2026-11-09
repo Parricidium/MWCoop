@@ -280,7 +280,23 @@ namespace MWCoop
                 a.time = Mathf.Min(offTime[c] + Mathf.Max(0f, now - offAt), clip.length - 0.05f);
                 n++;
             }
+            resumeUntil = now + 1.2f;   // (le jeu coupe parfois les canaux une image apres son « eteint » -- essai rc57 : surveille encore 1,2 s)
             return n > 0 ? ", " + n + " canal(aux) repris au meme morceau" : "";
+        }
+        static float resumeUntil = -10f; static int resumeLogs;
+        static void ResumeWatch(float now)
+        {
+            if (now > resumeUntil || ch == null) return;
+            int n = 0;
+            for (int c = 0; c < 2 && c < ch.Length; c++)
+            {
+                AudioSource a = ch[c]; AudioClip clip = offClip[c];
+                if (a == null || clip == null || !offPlay[c] || clip.name.Length == 0 || (a.clip == clip && a.isPlaying)) continue;
+                a.clip = clip; a.Play();
+                a.time = Mathf.Min(offTime[c] + Mathf.Max(0f, now - offAt), clip.length - 0.05f);
+                n++;
+            }
+            if (n > 0 && resumeLogs++ < 20) Log.Info("radio : " + n + " canal(aux) coupe(s) apres un « eteint », repris au meme morceau (" + (now - offAt).ToString("F2") + " s apres)");
         }
 
         // Molette (volume, station) d'un poste allume qui jouait en copie : le vrai jeu de canaux, parti dans ce poste, est remis a celui qui
@@ -309,6 +325,7 @@ namespace MWCoop
             bool rescanned = ScanCtrls(now);
             StrayOff(now);
             HandOver(now);
+            if (!RawOnOff) ResumeWatch(now);
             KeepHolder(now);
             KeepParent(now);
             Snap cur = Take();
