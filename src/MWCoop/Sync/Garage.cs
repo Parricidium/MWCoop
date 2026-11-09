@@ -764,6 +764,7 @@ namespace MWCoop
                 if (lc.Dents.Count > 0 || oldL != null) dmg[LooseKey] = lc;
                 nl = lc.Dents.Count;
             }
+            if (Config.GetInt("Test", "TolesGroupesFrais", 1) != 0) dmgList.Clear();   // (PollDamage reprend les groupes de ce releve)
             if (!dmgLogged || nd + ng + nb + nl * 1000 != dmgLast)
             {
                 dmgLogged = true; dmgLast = nd + ng + nb + nl * 1000;
@@ -780,7 +781,17 @@ namespace MWCoop
         {
             bool remote = Session.RemoteCount > 0 && fVerts != null && fBase != null;
             int budget = 12;   // messages de tole par passage (le reste part au suivant)
-            if (dmgList.Count != dmg.Count || dmgIdx == 0) { dmgList.Clear(); dmgList.AddRange(dmg.Values); }
+            // Liste des groupes reprise a chaque tour complet et apres chaque releve (ScanDamage la vide). Avant (jusqu'au 09/11) : reprise
+            // seulement quand le nombre de groupes changeait -- le test dmgIdx == 0 ne passait jamais (remis a 0 puis aussitot avance) :
+            // une voiture relevee de nouveau, meme nombre de voitures, restait l'ancien groupe. Piece tombee encore suivie sous la cle de sa
+            // voiture : bosse envoyee sous cette cle chez l'hote, et chez l'invite passager de la voiture conduite par l'hote, la bosse
+            // recue defaite 29 ms apres (« cabossee sur la copie », essai pp1 du 09/11) ; piece montee depuis le releve jamais suivie.
+            // [Test] TolesGroupesFrais=0 : comme avant.
+            if (Config.GetInt("Test", "TolesGroupesFrais", 1) != 0)
+            {
+                if (dmgIdx >= dmgList.Count || dmgList.Count != dmg.Count) { dmgList.Clear(); dmgList.AddRange(dmg.Values); dmgIdx = 0; }
+            }
+            else if (dmgList.Count != dmg.Count || dmgIdx == 0) { dmgList.Clear(); dmgList.AddRange(dmg.Values); }
             if (dmgList.Count == 0) return;
             if (dmgIdx >= dmgList.Count) dmgIdx = 0;
             CarDmg c = dmgList[dmgIdx++];
