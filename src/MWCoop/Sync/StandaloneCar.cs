@@ -237,7 +237,18 @@ namespace MWCoop
             if (VazCar.ModelBounds(m, "carrosserie.p205", out bb))
             {
                 float floor = Mathf.Max(bb.min.y, inf["wheel_lf"].y - radius * 0.4f), belt = bb.min.y + bb.size.y * 0.55f;
-                Box(ct, bodyLayer, "boite_caisse", new Vector3(bb.center.x, (floor + belt) * 0.5f, bb.center.z), new Vector3(bb.size.x * 0.97f, belt - floor, bb.size.z * 0.97f));
+                // (bas de caisse sans frottement, bouts releves -- JD 09/11 18:57, mort a la reception d'un saut : le coin avant du pave, a plat
+                // sur la route, la frottait ou en accrochait le maillage et arretait la voiture d'un coup. Milieu sur 76 % de la longueur, avant
+                // et arriere sur 12 % chacun, leur dessous 8 cm plus haut au plus ; la face avant et arriere reste a la meme hauteur pour les murs)
+                float len = bb.size.z * 0.97f, mid = len * 0.76f, end = len * 0.12f, lift = Mathf.Min(0.08f, (belt - floor) * 0.3f);
+                if (Config.GetInt("Test", "CaisseGlisse", 1) == 0)   // (essais : l'ancien pave d'un bloc, frottement par defaut)
+                    Box(ct, bodyLayer, "boite_caisse", new Vector3(bb.center.x, (floor + belt) * 0.5f, bb.center.z), new Vector3(bb.size.x * 0.97f, belt - floor, len));
+                else
+                {
+                    SlideBox(Box(ct, bodyLayer, "boite_caisse", new Vector3(bb.center.x, (floor + belt) * 0.5f, bb.center.z), new Vector3(bb.size.x * 0.97f, belt - floor, mid)));
+                    foreach (float sgn in new[] { 1f, -1f })
+                        SlideBox(Box(ct, bodyLayer, sgn > 0f ? "boite_caisse_av" : "boite_caisse_ar", new Vector3(bb.center.x, (floor + lift + belt) * 0.5f, bb.center.z + sgn * (mid + end) * 0.5f), new Vector3(bb.size.x * 0.97f, belt - floor - lift, end)));
+                }
                 Box(ct, bodyLayer, "boite_habitacle", new Vector3(bb.center.x, (belt + bb.max.y) * 0.5f, bb.center.z - bb.size.z * 0.08f), new Vector3(bb.size.x * 0.8f, bb.max.y - belt, bb.size.z * 0.5f));
             }
             // (le joueur ne heurte pas ces boites -- JD 28/10, capture : il traversait la caisse ; les voitures du jeu ont pour lui des
@@ -305,6 +316,14 @@ namespace MWCoop
             return l;
         }
 
+        // (bas de caisse qui glisse sur le sol au lieu de freiner la voiture : sans frottement, le plus faible des deux l'emporte)
+        static PhysicMaterial slide;
+        static void SlideBox(BoxCollider c)
+        {
+            if (c == null) return;
+            if (slide == null) slide = new PhysicMaterial("MWCoop-caisse-glisse") { dynamicFriction = 0f, staticFriction = 0f, bounciness = 0f, frictionCombine = PhysicMaterialCombine.Minimum, bounceCombine = PhysicMaterialCombine.Minimum };
+            c.sharedMaterial = slide;
+        }
         static BoxCollider Box(Transform parent, int layer, string name, Vector3 center, Vector3 size)
         {
             var g = new GameObject(name);

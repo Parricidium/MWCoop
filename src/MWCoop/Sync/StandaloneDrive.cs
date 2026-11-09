@@ -1512,18 +1512,29 @@ namespace MWCoop
         public class ContactLog : MonoBehaviour
         {
             public Rigidbody Rb; public Transform Car;
-            struct Hit { public float At, Normal, Speed; public string Part, Other; public Vector3 N, Pos; }
-            readonly Hit[] ring = new Hit[6]; int ringN;
+            struct Hit { public float At, Normal, Speed; public string Part, Other; public Vector3 N, Pos; public bool Stay, Hard; }
+            readonly Hit[] ring = new Hit[8]; int ringN;
             float minuteAt; int minuteN;
-            void OnCollisionEnter(Collision c)
+            // (dernier vrai obstacle -- JD 09/11 18:57, mort a la reception d'un saut sans rien heurter : un contact dont la normale n'est pas
+            // tournee vers le haut (|n.y| < 0,8 : arbre, mur, rocher, voiture, talus pris de face) a 6 m/s au moins contre la surface)
+            public float HardAt = -10f; public string HardLine = "";
+            void OnCollisionEnter(Collision c) { Note(c, false); }
+            // (contact qui dure : la meme boite sur le meme collider -- la route -- ne fait pas de nouvelle entree ; le pas fatal du 09/11 18:57
+            // n'etait donc pas au journal. Note seulement s'il pousse fort : 2 m/s contre la surface)
+            void OnCollisionStay(Collision c) { Note(c, true); }
+            void Note(Collision c, bool stay)
             {
                 if (c == null || c.collider == null || c.contacts == null || c.contacts.Length == 0 || Car == null) return;
                 ContactPoint p = c.contacts[0];
-                float vn = Mathf.Abs(Vector3.Dot(c.relativeVelocity, p.normal));
-                var h = new Hit { At = Time.realtimeSinceStartup, Normal = vn, Speed = Rb != null ? Rb.velocity.magnitude : 0f,
+                float vn = 0f;
+                foreach (ContactPoint q in c.contacts) { float x = Mathf.Abs(Vector3.Dot(c.relativeVelocity, q.normal)); if (x > vn) { vn = x; p = q; } }
+                if (stay && vn < 2f) return;
+                bool hard = Mathf.Abs(p.normal.y) < 0.8f && vn >= 6f;
+                var h = new Hit { At = Time.time, Normal = vn, Speed = Rb != null ? Rb.velocity.magnitude : 0f,
                                   Part = p.thisCollider != null ? p.thisCollider.name : "?", Other = c.collider.name,
-                                  N = Car.InverseTransformDirection(p.normal), Pos = Car.InverseTransformPoint(p.point) };
+                                  N = Car.InverseTransformDirection(p.normal), Pos = Car.InverseTransformPoint(p.point), Stay = stay, Hard = hard };
                 ring[ringN++ % ring.Length] = h;
+                if (hard) { HardAt = Time.time; HardLine = Line(h); }
                 if (vn < 2f) return;
                 if (Time.realtimeSinceStartup - minuteAt > 60f) { minuteAt = Time.realtimeSinceStartup; minuteN = 0; }
                 if (minuteN++ >= 30) return;
@@ -1531,17 +1542,17 @@ namespace MWCoop
             }
             static string Line(Hit h)
             {
-                return h.Part + " touche " + h.Other + " a " + (h.Speed * 3.6f).ToString("F0") + " km/h (" + (h.Normal * 3.6f).ToString("F0") + " km/h contre la surface), normale " + h.N.ToString("F2") + ", point " + h.Pos.ToString("F2");
+                return h.Part + (h.Stay ? " (contact qui dure)" : "") + " touche " + h.Other + " a " + (h.Speed * 3.6f).ToString("F0") + " km/h (" + (h.Normal * 3.6f).ToString("F0") + " km/h contre la surface), normale " + h.N.ToString("F2") + ", point " + h.Pos.ToString("F2") + (h.Hard ? ", OBSTACLE" : "");
             }
-            public void Dump()
+            public void Dump(string why)
             {
                 int n = Mathf.Min(ringN, ring.Length);
                 for (int k = 1; k <= n; k++)
                 {
                     Hit h = ring[(ringN - k) % ring.Length];
-                    Log.Info("standalone : choc mortel, contact il y a " + (Time.realtimeSinceStartup - h.At).ToString("F2") + " s : " + Line(h));
+                    Log.Info("standalone : " + why + ", contact il y a " + (Time.time - h.At).ToString("F2") + " s : " + Line(h));
                 }
-                if (n == 0) Log.Info("standalone : choc mortel, aucun contact de la caisse note");
+                if (n == 0) Log.Info("standalone : " + why + ", aucun contact de la caisse note");
             }
         }
 
@@ -1559,14 +1570,27 @@ namespace MWCoop
             if (st.DriverBelted) lim *= 1.6f;   // (ceinture bouclee, comme le casque)
             if (h > crashMaxH) crashMaxH = h; if (v > crashMaxV) crashMaxV = v;
             if (h < lim) return false;
+            // (JD 09/11 18:57 : mort a la reception d'un saut, 105 km/h perdus sans rien heurter -- seul contact, le bas de caisse pose a plat sur
+            // la route. Une perte de vitesse ne tue que si un vrai obstacle a ete touche dans les 0,15 s ; un frottement ou un accroc sur le sol
+            // pris a plat ne tue plus. [Test] ChocObstacle=0 : comme avant, pour les essais)
+            if (Config.GetInt("Test", "ChocObstacle", 1) != 0 && st.Contacts != null && Time.time - st.Contacts.HardAt > 0.15f)
+            {
+                if (Time.realtimeSinceStartup >= softLogAt)
+                {
+                    softLogAt = Time.realtimeSinceStartup + 2f;
+                    Log.Info("standalone : choc sans obstacle, pas mortel : " + h.ToString("F0") + " km/h perdus a l'horizontale en un pas (" + v.ToString("F0") + " a la verticale, limite " + lim.ToString("F0") + ")");
+                    st.Contacts.Dump("choc sans obstacle");
+                }
+                return false;
+            }
             Log.Info("standalone : choc mortel, " + h.ToString("F0") + " km/h perdus a l'horizontale en un pas (" + v.ToString("F0") + " a la verticale, limite " + lim.ToString("F0") + ")");
-            if (st.Contacts != null) st.Contacts.Dump();
+            if (st.Contacts != null) st.Contacts.Dump("choc mortel");
             // (mort AVANT de sortir le joueur : le jeu lit la voiture conduite pour faire mourir ses passagers -- Respawn, @accident)
             Log.Info("standalone : " + Respawn.TestDie("Crash"));
             Exit(b, true);
             return true;
         }
-        static float crashMaxH, crashMaxV;   // (plus grands chocs vus au volant : essais)
+        static float crashMaxH, crashMaxV, softLogAt;   // (plus grands chocs vus au volant : essais ; journal des chocs sans obstacle)
 
         // Releve de la liaison du pivot de tete des voitures du jeu (comment le jeu decide la mort au volant)
         static void HeadJointProbe()
@@ -2799,7 +2823,16 @@ namespace MWCoop
             enteredAt = Time.realtimeSinceStartup - 2f;
         } static string mWhy; static bool mShot, mOthersAway;
         // (point du choc mortel de JD dans la 405, 09/11 12:50 : voiture 3,3 s avant, point du choc ; essai [Test] StandalonePoint=1)
-        static readonly Vector3 PtA = new Vector3(882.5f, 0f, 1137.7f), PtZ = new Vector3(968.5f, 0f, 1050.2f);
+        // ([Test] PointA=x,z / PointZ=x,z : autre point -- 2e mort de JD, 09/11 18:57, reception d'un saut sur SS1, depart (1754.6, -936.1),
+        // point (1563.2, -980.8))
+        static Vector3 PtA { get { return PtCfg("PointA", new Vector3(882.5f, 0f, 1137.7f)); } }
+        static Vector3 PtZ { get { return PtCfg("PointZ", new Vector3(968.5f, 0f, 1050.2f)); } }
+        static Vector3 PtCfg(string key, Vector3 def)
+        {
+            string[] w = Config.Get("Test", key, "").Split(',');
+            float x, z; var ci = System.Globalization.CultureInfo.InvariantCulture;
+            return w.Length == 2 && float.TryParse(w[0], System.Globalization.NumberStyles.Float, ci, out x) && float.TryParse(w[1], System.Globalization.NumberStyles.Float, ci, out z) ? new Vector3(x, 0f, z) : def;
+        }
         // (sol sous p, du haut : premier collider plein qui n'est ni la voiture ni le joueur)
         static bool Ground(Vector3 p, VazCar.Built b, out string name, out float y)
         {
@@ -3030,12 +3063,13 @@ namespace MWCoop
                     Vector3 p0 = new Vector3(PtA.x, y0 + 0.6f, PtA.z);
                     Quaternion r = Quaternion.LookRotation(dir * 4f + Vector3.up * (y2 - y1), Vector3.up);
                     PlaceSeated(b, st, pl, p0, r);
+                    if (Config.GetInt("Test", "PointCeinture", 0) != 0) st.DriverBelted = true;   // (ceinture bouclee : limite x1,6, comme JD le 09/11 18:57)
                     float v = Config.GetFloat("Test", "PointVitesse", 135f) / 3.6f;
                     d.Keys = false; d.Handbrake = 0f; d.Gear = 6; d.Throttle = 1f; d.Brake = 0f; d.Steer = 0f;
                     b.Rb.velocity = ct.forward * v; foreach (Wheel w in b.Car.GetComponentsInChildren<Wheel>()) w.angularVelocity = v / Mathf.Max(0.1f, w.radius);
                     if (st.Sensor != null) st.Sensor.Reset();
                     if (b.Rb.GetComponent<CarHits.Watch>() == null) b.Rb.gameObject.AddComponent<CarHits.Watch>();
-                    crashMaxH = crashMaxV = 0f; mFly = 0f; CarHits.Touches = 0; CarHits.TouchMax = 0f; mLog = 0f;
+                    crashMaxH = crashMaxV = 0f; mFly = 0f; mLog = 0f;
                     mStep = 31; mAt = t;
                     Log.Info("standalone : point, " + (Config.GetInt("Test", "PointCorde", 0) != 0 ? "ligne droite de JD, " : "") + "depart en " + p0.ToString("F1") + " cap " + r.eulerAngles.y.ToString("F0") + " a " + (v * 3.6f).ToString("F0") + " km/h, caisse " + (Config.GetInt("Test", "CaisseRampe", 1) != 0 ? "a patins" : "plate (avant)"));
                     break;
@@ -3044,7 +3078,7 @@ namespace MWCoop
                 {
                     Vector3 pos = new Vector3(ct.position.x, 0f, ct.position.z), dir = (PtZ - PtA).normalized;
                     float along = Vector3.Dot(pos - PtZ, dir), toZ = Vector3.Distance(pos, PtZ);
-                    string tail = " (" + CarHits.Touches + " chocs de la caisse, le plus fort a " + (CarHits.TouchMax * 3.6f).ToString("F0") + " km/h ; plus grand choc a la tete " + crashMaxH.ToString("F0") + " km/h a l'horizontale / " + crashMaxV.ToString("F0") + " a la verticale)";
+                    string tail = " (plus grand choc a la tete " + crashMaxH.ToString("F0") + " km/h a l'horizontale / " + crashMaxV.ToString("F0") + " a la verticale)";
                     if (driving != b) { Log.Info("standalone : point, ECHEC : mort en " + ct.position.ToString("F1") + ", " + toZ.ToString("F0") + " m du point du choc de JD" + tail); Log.Info("standalone : point fini"); mStep = 99; break; }
                     float spd = b.Rb.velocity.magnitude;
                     d.Throttle = spd * 3.6f < Config.GetFloat("Test", "PointVitesse", 135f) ? 1f : 0f; d.Brake = 0f;
