@@ -647,7 +647,9 @@ namespace MWCoop
         // flux ne se positionne pas -- la copie d'un poste rallume repartait du debut du morceau pendant que le vrai continuait. Exemplaire
         // compresse en memoire, qui se positionne : la copie rejoint le morceau a la position du vrai, et s'y recale si elle s'en ecarte de plus
         // de 1,5 s. Pas encore essaye en jeu -- la copie etait en pause, loin de l'auditeur : [Test] RadioCopieCalee=1 pour l'essayer ; par
-        // defaut en flux, depuis le debut, comme avant.)
+        // defaut charge comme avant (GetAudioClip en flux). Essai sl59 du 09/11 : sur My Summer Car, cet exemplaire « en flux » est en fait
+        // charge entier (DecompressOnLoad) et se positionne -- la copie se cale donc sur la position du vrai, comme pour un morceau du jeu ;
+        // seul un vrai flux (Streaming) repart encore du debut. [Test] RadioCopieFluxCalee=0 : depuis le debut, comme avant.)
         static int songLogs;
         static void OwnSong(Ghost g, int c, string key, AudioSource src, AudioSource dst)
         {
@@ -665,14 +667,19 @@ namespace MWCoop
             {
                 try
                 {
-                    AudioClip own = null;
+                    AudioClip own = null; bool seek = false;
                     if (Config.GetInt("Test", "RadioCopieCalee", 0) != 0)
                     {
                         own = g.SongWww[c].GetAudioClipCompressed(false, AudioType.OGGVORBIS);
                         if (own != null && own.length <= 0f) { Object.Destroy(own); own = null; }
+                        seek = own != null;
                     }
-                    g.SongSeek[c] = own != null;
-                    if (own == null) own = g.SongWww[c].GetAudioClip(false, true, AudioType.OGGVORBIS);
+                    if (own == null)
+                    {
+                        own = g.SongWww[c].GetAudioClip(false, true, AudioType.OGGVORBIS);
+                        seek = own != null && own.loadType != AudioClipLoadType.Streaming && Config.GetInt("Test", "RadioCopieFluxCalee", 1) != 0;
+                    }
+                    g.SongSeek[c] = seek;
                     g.SongClip[c] = own;
                     if (songLogs++ < 30) Log.Info("radio : copie de " + (g.K != null ? g.K.name : "?") + ", " + key + " chargee (" + (own != null ? own.loadType + ", " + own.length.ToString("F0") + " s" : "rien")
                                                   + ", fichier " + (g.SongWww[c].bytesDownloaded >> 10) + " Ko)");
