@@ -25,7 +25,7 @@ namespace MWCoop
         public static bool Quest { get { return Game.Msc || Config.GetInt("Test", "QueteMwc", 1) != 0; } }
         // copies passees en standalone sur My Winter Car aussi (JD 02/11 : « standalone partout » -- l'Imprezza, la 205 Ebo 2 et la Sport
         // Quatro (03/11), modeles de Rallyworld ; la Rihno 5 Maxi aussi, son ancien modele -- JD 03/11) ; [Test] StandaloneMwc=0 : les copies comme avant
-        public static bool OnMwc(int copy) { return !Game.Msc && (copy == VazCar.ModelImp || copy == VazCar.ModelT16b || copy == VazCar.ModelSq || copy == VazCar.ModelR5 || copy == VazCar.ModelDelta || copy == VazCar.ModelM3 || copy == VazCar.ModelVaz || copy == VazCar.ModelFiat) && Config.GetInt("Test", "StandaloneMwc", 1) != 0; }
+        public static bool OnMwc(int copy) { return !Game.Msc && (copy == VazCar.ModelImp || copy == VazCar.ModelT16b || copy == VazCar.ModelSq || copy == VazCar.ModelR5 || copy == VazCar.ModelDelta || copy == VazCar.ModelM3 || copy == VazCar.ModelVaz || copy == VazCar.ModelFiat || copy == VazCar.ModelBx) && Config.GetInt("Test", "StandaloneMwc", 1) != 0; }
         // copie remplacee par sa standalone ici : toutes (la R5 depuis le 29/10 midi, les autres validees par JD en jeu le 29/10 soir)
         public static bool Ready(int copy)
         {
@@ -79,6 +79,7 @@ namespace MWCoop
             public Transform[] Wipers = new Transform[3]; public Vector3[] WiperAxis = new Vector3[3]; public float[] WiperMax = new float[3];
             public float[] WiperRest = new float[3], WiperSign = { 1f, 1f, -1f };   // (angle du repos par rapport au modele, sens de la course)
             public float RearWiperA0;   // (balai de la lunette au repos, angle du composant de pluie : 0 vers le haut, +90 vers la gauche)
+            public bool[] WiperCourse = new bool[3];   // (course propre, infos.txt essuie_<k>_course -- monobalai du BX 4TC, JD 08/11 ; sinon 88 degres)
             public bool SndInit, HatchShut, WipersSnd, HandSent, HandRemote, HandRemoteSet; public bool[] DoorShut = new bool[2]; public float HandPrev = -1f, HandSndT = -10f, WiperSndT = -10f; public AudioSource WiperSrc;   // (sons du jeu : portieres, hayon, frein a main, essuie-glaces, StandaloneDrive)
             public bool WipersOn; public float WiperPhase; public Transform Stalk; public Vector3 StalkAxis; public float StalkAngle;
             public bool HasWiperBtn; public Vector3 WiperBtn;   // (interrupteur d'essuie-glaces sans comodo, infos.txt bouton_essuie -- BMW M3 E30, JD 04/11)

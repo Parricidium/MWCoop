@@ -239,6 +239,8 @@ namespace MWCoop
                 var wi = new GameObject("pieces").transform; wi.SetParent(wp, false); wi.localPosition = -wc;
                 VazCar.AddModel(b, wi, wf);
                 st.Wipers[i] = wp; st.WiperAxis[i] = wa.normalized; st.WiperMax[i] = i == 2 ? RearSweep : 88f;
+                // (course propre -- monobalai du BX 4TC, JD 08/11 : couche a droite, il balaie jusqu'au montant gauche)
+                Vector3 wco; if (i < 2 && inf.TryGetValue("essuie_" + wk[i] + "_course", out wco) && wco.x > 10f && wco.x < 200f) { st.WiperMax[i] = wco.x; st.WiperCourse[i] = true; }
                 if (i == 2)
                 {
                     // (JD 31/10, video : le balai de la lunette « descend sur le hayon » au retour, trace en miroir -- dans le modele, bras en
@@ -2318,6 +2320,12 @@ namespace MWCoop
                         Vector3 pv = ct.InverseTransformPoint(st.Wipers[w].position);
                         RF(c2, "wiper" + (w + 1)).SetValue(c2, new Vector2(Mathf.Clamp01(1f - (pv.x - lo[0].x) / Mathf.Max(0.1f, hi[0].x - lo[0].x)), 0f));
                         RF(c2, "wiper" + (w + 1) + "Length").SetValue(c2, reachOf(w, 0));
+                        if (st.WiperCourse[w])
+                        {
+                            // (course propre : du repos couche a droite, -90 dans le composant, jusqu'a -90 + course -- monobalai du BX 4TC)
+                            float a0 = -90f, a1 = a0 + st.WiperMax[w];
+                            RF(c2, "wiper" + (w + 1) + "MaxAngle").SetValue(c2, (a1 - a0) * 0.5f); RF(c2, "wiper" + (w + 1) + "AngleOffset").SetValue(c2, (a0 + a1) * 0.5f);
+                        }
                     }
                     c2.gameObject.SetActive(true);
                     st.Rain = c2;

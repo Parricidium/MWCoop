@@ -127,6 +127,7 @@ namespace MWCoop
         public const int ModelDelta = 14;
         public const int ModelM3 = 15;   // (BMW M3 E30 Gr. A de Rallyworld, JD 04/11 : pas publiee avant l'essai de JD et d'alex_tor)
         public const int ModelFiat = 16;   // (Fiat 131 Gr. 4 de Rallyworld, JD 04/11 : REMPLACE la VAZ-2108, livree avec le mod)
+        public const int ModelBx = 17;   // (Citroen BX 4TC Gr. B de Rallyworld, JD 08/11 : pas publiee avant l'essai de JD)
         public static int StandaloneOf(int copy) { return copy == ModelVaz ? ModelFiat : copy == ModelR5 ? ModelR5S : copy >= ModelEvo && copy <= ModelT16b ? ModelR5S + copy : -1; }
         public static int CopyOf(int id) { return id == ModelR5S ? ModelR5 : id >= ModelEvoS && id <= ModelT16bS ? id - ModelR5S : id; }
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
@@ -385,8 +386,25 @@ namespace MWCoop
             m.BrakePivot = new Vector3(-0.0227f, 0.423f, 0.114f); m.BrakeGrip = new Vector3(-0.0227f, 0.53f, 0.33f); m.BrakeAngle = 1f;
             return m;
         }
+        // Citroen BX 4TC Gr. B de Rallyworld (JD 08/11 : « avec les memes regles que les autres ») : standalone neuve sur les deux jeux,
+        // dossier bx4tc, INTEGRALE ; poste et reglages de rallye de la Delta ; yeux d'apres DRIVEREYES du modele (pivot de tete 20 cm
+        // derriere, comme la Fiat) ; 2,1 l turbo : 380 ch a 7 000 tr/min, 460 N.m a 5 250, 7 500 maxi, 1 150 kg, 50 % sur l'avant, braquage
+        // 36 ; boite et pont de data/drivetrain.ini
+        public static readonly Model Bx4tc = BxModel();
+        static Model BxModel()
+        {
+            var m = Delta8.CloneAs(ModelBx, null);
+            m.Folder = "bx4tc"; m.Name = "BX 4TC"; m.Head = new Vector3(-0.34f, 1.10f, -0.22f); m.Engine = new Vector3(0f, 0.55f, 1.55f);
+            m.Sp = Delta8.Sp.Copy(); m.Sp.Name = "BX 4TC Gr. B"; m.Sp.Power = 380f; m.Sp.PowerRpm = 7000f; m.Sp.Torque = 460f; m.Sp.TorqueRpm = 5250f;
+            m.Sp.MaxRpm = 7500f; m.Sp.Mass = 1150f; m.Sp.Com = 0.50f; m.Sp.Steer = 36f; m.Sp.Final = 4.857f;
+            m.Sp.Gears = new[] { -3.153f, 0f, 3.307f, 2.25f, 1.631f, 1.227f, 0.96f };
+            // (levier du frein a main : pas dans le modele -- JD 08/11 « Oui, levier Quattro » : celui de la Sport Quattro Rallyworld, sur le
+            // tunnel cote conducteur derriere le levier de vitesse ; pivot a l'arriere, poignee vers l'avant)
+            m.BrakePivot = new Vector3(-0.035f, 0.43f, 0.0f); m.BrakeGrip = new Vector3(-0.035f, 0.452f, 0.11f); m.BrakeAngle = 1.3f;
+            return m;
+        }
         public static readonly Model[] Models = { null, Evo3, T16, Imp96, Sq84, T16b, R5, R5S, Evo3.CloneAs(ModelEvoS, null), T16.CloneAs(ModelT16S, null),
-                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30, Fiat131 };   // (rempli : Vaz2108 au constructeur statique)
+                                                   Imp96.CloneAs(ModelImpS, null), Sq84.CloneAs(ModelSqS, null), T16b.CloneAs(ModelT16bS, null), Golf83, Delta8, M3e30, Fiat131, Bx4tc };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Models[Base]; }
         // voiture de base, livree avec le mod : la Fiat (la VAZ seulement si ses fichiers manquent et ceux de la VAZ sont la)
         public static int Base { get { return StandaloneCar.Ready(ModelVaz) ? ModelFiat : ModelVaz; } }
