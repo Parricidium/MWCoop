@@ -2882,7 +2882,7 @@ namespace MWCoop
                         if (mCycle == 0)
                         {
                             // (cadrans de pres, aiguilles tenues a 100 km/h et 4 000 tr/min : sens et graduations verifiables)
-                            st.LightsOn = true; gaugeFreeze = true; st.Speedo.Set(100f); st.Tacho.Set(4000f);
+                            st.LightsOn = true; gaugeFreeze = true; if (st.Speedo != null) st.Speedo.Set(100f); if (st.Tacho != null) st.Tacho.Set(4000f);   // (la 405 n'a pas de compteur de vitesse)
                             eyesSaved = st.T.Yeux; st.T.Yeux = new Vector3(-0.295f, 0.735f, 0.36f);
                             Autotest.CaptureSoon("standalone-cadrans", 0.4f);
                         }
