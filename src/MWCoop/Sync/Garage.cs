@@ -73,7 +73,7 @@ namespace MWCoop
             lifts.Clear(); liftKnown.Clear(); owned.Clear(); loaders.Clear(); loaderKnown.Clear();
             dmg.Clear(); lifted.Clear(); corrected.Clear(); snapshots.Clear(); dmgSend.Clear();
             gen = -1; liftScans = 0; dmgIdx = 0; tStep = 0; tAt = 0; tLog = 0; testFsm = null; testOff.Clear();
-            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false; probeReload = false; probePiece = false; probePieceWarned = false;
+            tolesWarned.Clear(); probeAt = 0; probeSaved = false; probeShock = false; probeReload = false; probePiece = false; probePieceWarned = false; probeBreak = false;
             dentOutMsgs = dentOutVerts = dentInMsgs = 0; dentOutBytes = 0; dentWinAt = 0; dentWinBytes = dentPeakBytes = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
@@ -1147,7 +1147,7 @@ namespace MWCoop
         // [Test] TolesChocTotal=<s> (conducteur) : a cet instant, tous les sommets de toutes les toles de la voiture enfonces de 2 cm
         //   (pire choc possible : ce que le reseau doit porter).
         static float probeAt;
-        static bool probeSaved, probeShock, probeReload, probePiece, probePieceWarned;
+        static bool probeSaved, probeShock, probeReload, probePiece, probePieceWarned, probeBreak;
         static void DentProbe(float t)
         {
             float sa = Config.GetFloat("Test", "TolesSauveA", 0f);
@@ -1199,6 +1199,15 @@ namespace MWCoop
                 }
             // ([Test] TolesPieceChoc=<s> : a cet instant -- ou des qu'il y en a une --, chaque tole d'une piece detachee dont on fait foi ici :
             // 40 sommets enfonces de 3 cm. Attendu chez l'autre : « deformee par #… » sous « *pieces », plus « introuvable ici ».)
+            // ([Test] TolesPieceCasse=<s> (hote) : a cet instant, la piece du point TolesPiecePoint -- pare-chocs avant de la SATSUMA par defaut --
+            // cassee comme par un choc (Parts.TestBreakPoint) : une piece detachee a coup sur, sans dependre d'un accident.)
+            float pb = Config.GetFloat("Test", "TolesPieceCasse", 0f);
+            if (pb > 0f && !probeBreak && t > pb && Session.IsHost)
+            {
+                probeBreak = true;
+                string pt = Config.Get("Test", "TolesPiecePoint", "SATSUMA(557kg, 248)/Body/trigger_bumper_front");
+                Log.Info("autotest : toles, piece cassee pour l'essai : " + pt + " -> " + Parts.TestBreakPoint(pt));
+            }
             float pc = Config.GetFloat("Test", "TolesPieceChoc", 0f);
             if (pc > 0f && !probePiece && t > pc && fVerts != null && mUpdateMesh != null)
             {
