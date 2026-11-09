@@ -192,8 +192,12 @@ namespace MWCoop
                 // deja allume qui joue en copie : il prenait le vrai jeu a celui qui l'avait, qui repartait sur une copie neuve. Le vrai est remis
                 // a son poste juste apres l'etat (KeepHolder) ; la copie de ce poste prend sa station, et son Fetch suit deja le volume de son
                 // haut-parleur. [Test] RadioMolettePrend=1 : comme avant.)
-                if (p.On && Off(Take()) == false && realT.parent != null && KeyOf(realT.parent) != k && Config.GetInt("Test", "RadioMolettePrend", 0) == 0)
-                { keepBase = Take(); keepPost = p; keepAt = now; }
+                // (dossier #57, Say my name 08/11 : le meme « Check tune » sert a ALLUMER un poste. Allume pendant qu'un autre poste allume a le vrai
+                // jeu de canaux, il le lui prenait et Fetch repartait ; ce poste-ci garde maintenant une copie qui rejoint le morceau du moment.
+                // [Test] RadioRallumagePrend=1 : comme avant.)
+                bool keepRule = p.On ? Config.GetInt("Test", "RadioMolettePrend", 0) == 0 : !RawOnOff;
+                if (keepRule && Off(Take()) == false && realT.parent != null && KeyOf(realT.parent) != k)
+                { keepBase = Take(); keepPost = p; keepAt = now; keepTurnOn = !p.On; }
                 // (en tete de l'etat : le SetParent du jeu suit ; deux postes allumes dans la meme image ont chacun leur « allume »)
                 if (!p.On) { p.OnAt = now; if (postLogs++ < 200) Log.Info("radio : " + p.K.name + " allume (" + c.F.FsmName + " « " + state + " »)"); }
                 p.On = true; p.ByHost = false;
@@ -202,6 +206,9 @@ namespace MWCoop
             else if (kind == 1)
             {
                 offBase = Take(); offPost = p; offAt = now;
+                SnapChannels();
+                // (poste qui a le vrai jeu de canaux : apres son « eteint », le vrai jeu passe a un autre poste allume -- HandOver)
+                if (!RawOnOff && !Off(offBase) && offBase.Parent != null && KeyOf(offBase.Parent) == k) { handPost = p; handBase = offBase; handAt = now; }
                 if (p.On && postLogs++ < 200) Log.Info("radio : " + p.K.name + " eteint (" + c.F.FsmName + " « " + state + " »)");
                 p.On = false; p.ByHost = false; p.OffAt = now;
             }
@@ -218,13 +225,67 @@ namespace MWCoop
             if (h == null || h == was || !(h.On || h.ByHost)) return;
             Restore(offBase);
             fetch.SendEvent("FETCH");
+            string res = RawOnOff ? "" : ResumeChannels(now);
             last = Take(); lastSet = true;
-            if (postLogs++ < 200) Log.Info("radio : « eteint » de " + was.K.name + " ne coupe plus " + h.K.name + " (vrai jeu de canaux remis)");
+            if (postLogs++ < 200) Log.Info("radio : « eteint » de " + was.K.name + " ne coupe plus " + h.K.name + " (vrai jeu de canaux remis" + res + ")");
+        }
+
+        // (dossier #57, Say my name 08/11 : « quand mon ami eteint puis rallume la radio de la HAYOSIKO, le morceau suivant demarre sur toutes les
+        // radios ». Le poste qui avait le vrai jeu de canaux s'eteint : le jeu coupe les canaux, et les copies des autres postes allumes, qui les
+        // suivent, se taisaient ; au rallumage, Fetch repartait sur le morceau suivant, partout. Le vrai jeu passe ici a un autre poste allume --
+        // le dernier allume --, meme morceau a la meme position ; sa copie s'arrete. [Test] RadioRallumagePrend=1 : comme avant.)
+        static int rawOnOff = -1;
+        static bool RawOnOff { get { if (rawOnOff < 0) rawOnOff = Config.GetInt("Test", "RadioRallumagePrend", 0) != 0 ? 1 : 0; return rawOnOff == 1; } }
+        static Snap handBase; static Poste handPost; static float handAt = -10f;
+        static void HandOver(float now)
+        {
+            if (handPost == null) return;
+            if (now - handAt > 0.6f || realT == null || fetch == null) { handPost = null; return; }
+            if (!Off(Take())) return;   // (pas encore coupe dans cette image)
+            Poste was = handPost; handPost = null;
+            Poste to = null;
+            foreach (Poste q in postes.Values) if (q != was && q.K != null && q.On && q.Speaker != null && (to == null || q.OnAt > to.OnAt)) to = q;
+            if (to == null) return;   // (plus aucun poste allume : la radio se tait, comme dans le jeu)
+            Snap s = handBase; s.Parent = to.Speaker; s.LP = Vector3.zero; s.LR = Quaternion.identity; s.On = true;
+            if (to.HasFlags) { s.M1 = to.Flags.M1; s.MF = to.Flags.MF; s.St = to.Flags.St; }
+            Restore(s);
+            fetch.SendEvent("FETCH");
+            string res = ResumeChannels(now);
+            last = Take(); lastSet = true;
+            if (postLogs++ < 200) Log.Info("radio : " + was.K.name + " eteint : le vrai jeu de canaux passe a " + to.K.name + " (" + Station(s, true) + res + ")");
+        }
+
+        // Morceau et position des canaux juste avant un « eteint » (SnapChannels), rendus apres (ResumeChannels) si le jeu les a arretes
+        // ou changes -- au rallumage, le jeu passait au morceau suivant. (Chanson importee lue en flux : pas de position, laissee au jeu.)
+        static readonly AudioClip[] offClip = new AudioClip[2]; static readonly float[] offTime = new float[2]; static readonly bool[] offPlay = new bool[2];
+        static void SnapChannels()
+        {
+            for (int c = 0; c < 2; c++)
+            {
+                AudioSource a = ch != null && c < ch.Length ? ch[c] : null;
+                offClip[c] = a != null ? a.clip : null; offTime[c] = a != null ? a.time : 0f; offPlay[c] = a != null && a.isPlaying;
+            }
+        }
+        static string ResumeChannels(float now)
+        {
+            if (ch == null) return "";
+            int n = 0;
+            for (int c = 0; c < 2 && c < ch.Length; c++)
+            {
+                AudioSource a = ch[c]; AudioClip clip = offClip[c];
+                if (a == null || clip == null || !offPlay[c] || clip.name.Length == 0) continue;
+                if (a.clip == clip && a.isPlaying) continue;
+                a.clip = clip;
+                a.Play();
+                a.time = Mathf.Min(offTime[c] + Mathf.Max(0f, now - offAt), clip.length - 0.05f);
+                n++;
+            }
+            return n > 0 ? ", " + n + " canal(aux) repris au meme morceau" : "";
         }
 
         // Molette (volume, station) d'un poste allume qui jouait en copie : le vrai jeu de canaux, parti dans ce poste, est remis a celui qui
         // l'avait ; la station que l'etat vient de poser devient celle de la copie de ce poste.
-        static Snap keepBase; static Poste keepPost; static float keepAt = -10f;
+        static Snap keepBase; static Poste keepPost; static float keepAt = -10f; static bool keepTurnOn;
         static void KeepHolder(float now)
         {
             if (keepPost == null) return;
@@ -239,7 +300,7 @@ namespace MWCoop
             fetch.SendEvent("FETCH");
             last = Take(); lastSet = true;
             if (p.G != null) Flags(p.G, p.Flags);
-            if (postLogs++ < 200) Log.Info("radio : molette de " + p.K.name + " (" + Station(p.Flags, true) + ") : le vrai jeu de canaux reste a " + h.K.name);
+            if (postLogs++ < 200) Log.Info("radio : " + (keepTurnOn ? "allumage" : "molette") + " de " + p.K.name + " (" + Station(p.Flags, true) + ") : le vrai jeu de canaux reste a " + h.K.name);
         }
 
         static void MultiWatch(float now)
@@ -247,6 +308,7 @@ namespace MWCoop
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool rescanned = ScanCtrls(now);
             StrayOff(now);
+            HandOver(now);
             KeepHolder(now);
             KeepParent(now);
             Snap cur = Take();
