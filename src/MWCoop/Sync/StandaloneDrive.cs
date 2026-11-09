@@ -1516,7 +1516,8 @@ namespace MWCoop
             readonly Hit[] ring = new Hit[8]; int ringN;
             float minuteAt; int minuteN;
             // (dernier vrai obstacle -- JD 09/11 18:57, mort a la reception d'un saut sans rien heurter : un contact dont la normale n'est pas
-            // tournee vers le haut (|n.y| < 0,8 : arbre, mur, rocher, voiture, talus pris de face) a 6 m/s au moins contre la surface)
+            // tournee vers le haut (|n.y| < 0,8 : arbre, mur, rocher, voiture, talus pris de face), ou du haut de l'habitacle (tonneau), a 6 m/s
+            // au moins contre la surface)
             public float HardAt = -10f; public string HardLine = "";
             void OnCollisionEnter(Collision c) { Note(c, false); }
             // (contact qui dure : la meme boite sur le meme collider -- la route -- ne fait pas de nouvelle entree ; le pas fatal du 09/11 18:57
@@ -1529,7 +1530,7 @@ namespace MWCoop
                 float vn = 0f;
                 foreach (ContactPoint q in c.contacts) { float x = Mathf.Abs(Vector3.Dot(c.relativeVelocity, q.normal)); if (x > vn) { vn = x; p = q; } }
                 if (stay && vn < 2f) return;
-                bool hard = Mathf.Abs(p.normal.y) < 0.8f && vn >= 6f;
+                bool hard = (Mathf.Abs(p.normal.y) < 0.8f || (p.thisCollider != null && p.thisCollider.name == "boite_habitacle")) && vn >= 6f;   // (habitacle : toit qui tape le sol, tonneau -- mortel comme avant)
                 var h = new Hit { At = Time.time, Normal = vn, Speed = Rb != null ? Rb.velocity.magnitude : 0f,
                                   Part = p.thisCollider != null ? p.thisCollider.name : "?", Other = c.collider.name,
                                   N = Car.InverseTransformDirection(p.normal), Pos = Car.InverseTransformPoint(p.point), Stay = stay, Hard = hard };
@@ -2827,6 +2828,20 @@ namespace MWCoop
         // point (1563.2, -980.8))
         static Vector3 PtA { get { return PtCfg("PointA", new Vector3(882.5f, 0f, 1137.7f)); } }
         static Vector3 PtZ { get { return PtCfg("PointZ", new Vector3(968.5f, 0f, 1050.2f)); } }
+        static int mWp; static List<Vector3> chemin; static string cheminTxt;
+        static List<Vector3> Chemin()
+        {
+            string txt = Config.Get("Test", "PointChemin", "");
+            if (chemin != null && txt == cheminTxt) return chemin;
+            cheminTxt = txt; chemin = new List<Vector3>();
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (string q in txt.Split('|'))
+            {
+                string[] w = q.Split(','); float x, z;
+                if (w.Length == 2 && float.TryParse(w[0], System.Globalization.NumberStyles.Float, ci, out x) && float.TryParse(w[1], System.Globalization.NumberStyles.Float, ci, out z)) chemin.Add(new Vector3(x, 0f, z));
+            }
+            return chemin;
+        }
         static Vector3 PtCfg(string key, Vector3 def)
         {
             string[] w = Config.Get("Test", key, "").Split(',');
@@ -3070,7 +3085,7 @@ namespace MWCoop
                     if (st.Sensor != null) st.Sensor.Reset();
                     if (b.Rb.GetComponent<CarHits.Watch>() == null) b.Rb.gameObject.AddComponent<CarHits.Watch>();
                     crashMaxH = crashMaxV = 0f; mFly = 0f; mLog = 0f;
-                    mStep = 31; mAt = t;
+                    mStep = 31; mAt = t; mWp = 0;
                     Log.Info("standalone : point, " + (Config.GetInt("Test", "PointCorde", 0) != 0 ? "ligne droite de JD, " : "") + "depart en " + p0.ToString("F1") + " cap " + r.eulerAngles.y.ToString("F0") + " a " + (v * 3.6f).ToString("F0") + " km/h, caisse " + (Config.GetInt("Test", "CaisseRampe", 1) != 0 ? "a patins" : "plate (avant)"));
                     break;
                 }
@@ -3089,6 +3104,14 @@ namespace MWCoop
                     // est celle de son choc : il est alle presque tout droit, et la route tourne vers 98 m)
                     bool corde = Config.GetInt("Test", "PointCorde", 0) != 0;
                     if (corde) { found = true; aim = along < -5f ? PtZ : pos + dir * 20f; }
+                    else if (Chemin().Count > 1)
+                    {
+                        // ([Test] PointChemin=x,z|x,z|... : points du trace de la speciale, suivis dans l'ordre -- la route tourne, la corde n'y est pas)
+                        List<Vector3> wp = Chemin();
+                        while (mWp < wp.Count - 1 && (Vector3.Distance(pos, wp[mWp]) < 14f || Vector3.Dot(wp[mWp] - pos, fw) < 0f)) mWp++;
+                        found = true; aim = wp[mWp];
+                        if (mWp == wp.Count - 1 && Vector3.Dot(wp[mWp] - pos, fw) < 0f) aim = pos + fw * 20f;
+                    }
                     else for (int i = -10; i <= 11; i++)
                     {
                         string nm; float gy;
