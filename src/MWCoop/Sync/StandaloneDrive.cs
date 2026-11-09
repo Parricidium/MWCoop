@@ -1503,10 +1503,53 @@ namespace MWCoop
             }
         }
 
+        // Journal des contacts de la caisse (JD 09/11 : « en rallye sur les petites routes, une collision comme si je tapais un arbre alors
+        // que ce sont juste des petites bosses ») -- rien ne change a la conduite, seulement le journal : a chaque nouveau contact notable
+        // de la voiture conduite ici (vitesse le long de la normale > 2 m/s), la piece de NOTRE voiture qui touche (boite_caisse,
+        // boite_habitacle, portiere...), ce qu'elle touche, la normale dans le repere de la voiture (y : vers le haut, z : vers l'avant),
+        // la vitesse, la position et le cap ; 30 lignes par minute au plus. Au choc mortel, les 6 derniers contacts (meme ceux sous le
+        // seuil), pour savoir ce qui a tue.
+        public class ContactLog : MonoBehaviour
+        {
+            public Rigidbody Rb; public Transform Car;
+            struct Hit { public float At, Normal, Speed; public string Part, Other; public Vector3 N, Pos; }
+            readonly Hit[] ring = new Hit[6]; int ringN;
+            float minuteAt; int minuteN;
+            void OnCollisionEnter(Collision c)
+            {
+                if (c == null || c.collider == null || c.contacts == null || c.contacts.Length == 0 || Car == null) return;
+                ContactPoint p = c.contacts[0];
+                float vn = Mathf.Abs(Vector3.Dot(c.relativeVelocity, p.normal));
+                var h = new Hit { At = Time.realtimeSinceStartup, Normal = vn, Speed = Rb != null ? Rb.velocity.magnitude : 0f,
+                                  Part = p.thisCollider != null ? p.thisCollider.name : "?", Other = c.collider.name,
+                                  N = Car.InverseTransformDirection(p.normal), Pos = Car.InverseTransformPoint(p.point) };
+                ring[ringN++ % ring.Length] = h;
+                if (vn < 2f) return;
+                if (Time.realtimeSinceStartup - minuteAt > 60f) { minuteAt = Time.realtimeSinceStartup; minuteN = 0; }
+                if (minuteN++ >= 30) return;
+                Log.Info("standalone : contact, " + Line(h) + ", voiture en " + Car.position.ToString("F0") + " cap " + Car.eulerAngles.y.ToString("F0"));
+            }
+            static string Line(Hit h)
+            {
+                return h.Part + " touche " + h.Other + " a " + (h.Speed * 3.6f).ToString("F0") + " km/h (" + (h.Normal * 3.6f).ToString("F0") + " km/h contre la surface), normale " + h.N.ToString("F2") + ", point " + h.Pos.ToString("F2");
+            }
+            public void Dump()
+            {
+                int n = Mathf.Min(ringN, ring.Length);
+                for (int k = 1; k <= n; k++)
+                {
+                    Hit h = ring[(ringN - k) % ring.Length];
+                    Log.Info("standalone : choc mortel, contact il y a " + (Time.realtimeSinceStartup - h.At).ToString("F2") + " s : " + Line(h));
+                }
+                if (n == 0) Log.Info("standalone : choc mortel, aucun contact de la caisse note");
+            }
+        }
+
         static bool Crash(VazCar.Built b, State st)
         {
             CrashSensor s = st.Sensor;
             if (s == null) { s = st.Sensor = b.Car.AddComponent<CrashSensor>(); s.Rb = b.Rb; s.Head = b.M.Head; }
+            if (st.Contacts == null && b.Rb != null) { st.Contacts = b.Rb.gameObject.AddComponent<ContactLog>(); st.Contacts.Rb = b.Rb; st.Contacts.Car = b.Car.transform; }
             float h = s.MaxH * 3.6f, v = s.MaxV * 3.6f;
             s.MaxH = s.MaxV = 0f;
             if (b.Rb.isKinematic || Time.realtimeSinceStartup - enteredAt < 1f) return false;
@@ -1517,6 +1560,7 @@ namespace MWCoop
             if (h > crashMaxH) crashMaxH = h; if (v > crashMaxV) crashMaxV = v;
             if (h < lim) return false;
             Log.Info("standalone : choc mortel, " + h.ToString("F0") + " km/h perdus a l'horizontale en un pas (" + v.ToString("F0") + " a la verticale, limite " + lim.ToString("F0") + ")");
+            if (st.Contacts != null) st.Contacts.Dump();
             // (mort AVANT de sortir le joueur : le jeu lit la voiture conduite pour faire mourir ses passagers -- Respawn, @accident)
             Log.Info("standalone : " + Respawn.TestDie("Crash"));
             Exit(b, true);
@@ -2752,12 +2796,29 @@ namespace MWCoop
                 Enter(b, st);
             }
             enteredAt = Time.realtimeSinceStartup - 2f;
-        } static string mWhy; static bool mShot;
+        } static string mWhy; static bool mShot, mOthersAway;
         public static void MountTest(float t)
         {
             Test(t);
             if (mStep == 99 || cars.Count == 0 || cars[0].Car == null) return;
-            VazCar.Built b = cars[0]; State st; if (!states.TryGetValue(b, out st)) return;
+            VazCar.Built b = cars[0];
+            // (voiture d'essai, StandaloneEssai=1 : celle-la seulement -- sur My Summer Car, la voiture de la quete posee d'office est la
+            // premiere de la liste ; essai du 09/11 fausse : la mauvaise voiture conduite, la voiture d'essai apparue devant elle. On attend
+            // la voiture d'essai et les autres sont rangees loin de la piste.)
+            if (Config.GetInt("Test", "StandaloneEssai", 0) != 0)
+            {
+                VazCar.Built tb = null; foreach (VazCar.Built c in cars) if (c.Car != null && c.Car.name.StartsWith(Prefix)) { tb = c; break; }
+                if (tb == null) return;
+                if (!mOthersAway)
+                {
+                    mOthersAway = true; int n = 0;
+                    foreach (VazCar.Built c in cars)
+                        if (c != tb && c.Car != null && c.Rb != null) { c.Rb.velocity = Vector3.zero; c.Rb.isKinematic = true; c.Car.transform.position = new Vector3(2500f + 20f * n++, VazTenue.TrackY + 50f, 2500f); }
+                    if (n > 0) Log.Info("standalone : essai, " + n + " autre(s) voiture(s) rangee(s) loin de la piste");
+                }
+                b = tb;
+            }
+            State st; if (!states.TryGetValue(b, out st)) return;
             var d = (StandaloneDriver)b.Axis;
             GameObject pl = Game.PlayerGo; if (pl == null) return;
             float e = t - mAt;

@@ -53,6 +53,7 @@ namespace MWCoop
             public Bounds Cabin; public Bounds DriverDoor; public bool HasCabin, MaskDone;
             public Bounds[] DoorBox = new Bounds[2]; public float WheelVis;   // (portieres : boites ; volant visible lisse)
             public CrashSensor Sensor;   // (choc mortel, mesure a chaque pas de physique)
+            public ContactLog Contacts;   // (journal des contacts de la caisse, JD 09/11)
             public AudioSource Horn; public bool HornOn;   // (klaxon : son du CarHorn de la voiture du jeu)
             public Transform Key; public Vector3 KeyAxis; public bool KeyIn, KeyWait; public int KeyPos; public float KeyAngle;   // (cle de contact du modele, StandaloneDrive)
             public Material ClockMat; public Texture2D ClockTex; public int ClockShown = -2; public bool ClockLit;   // (montre digitale, StandaloneDrive)
@@ -774,7 +775,9 @@ namespace MWCoop
             Vector3 fw = Vector3.ProjectOnPlane(p.forward, Vector3.up).normalized;
             Vector3 at = p.position + fw * 6f + Vector3.up * 1f;
             if (at.y < -4f) at.y = -3f;
-            VazCar.Built tb = Build(Prefix, 7, new Color(0.9f, 0.9f, 0.92f), at, Quaternion.LookRotation(fw), VazCar.R5);
+            // ([Test] StandaloneModele=n : une autre voiture que la R5)
+            int tm = Config.GetInt("Test", "StandaloneModele", 0);
+            VazCar.Built tb = Build(Prefix, 7, new Color(0.9f, 0.9f, 0.92f), at, Quaternion.LookRotation(fw), tm > 0 ? VazCar.ModelOf(tm) : VazCar.R5);
             if (tb != null) SetEngine(tb, true);   // (moteur tournant : le banc compare en prise, comme la copie)
         }
 
