@@ -193,4 +193,4 @@ if (api != null && (int)api.GetField("Version").GetValue(null) >= 2)
 - **2** (MWCoop 1.11.0): parts shop: `ShopAvailable`, `AddShopItem`, `RemoveShopItem`.
 - **3** (MWCoop 1.15.5): map places: `AddMapPlace`, `RemoveMapPlace`.
 - **4** (MWCoop msc-1.15.25): F10 cars: `F10Cars`, `ShowF10Car`.
-- **5** (MWCoop msc-1.15.119): cars from other mods: `AddCar`.
+- **5** (MWCoop msc-1.15.122): cars from other mods: `AddCar`.
