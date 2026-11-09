@@ -35,20 +35,45 @@ namespace MWCoop
         public string File;
         public DateTime Stamp;
         int fixes;
+        // (Seats.EyeFromPivotMsc / EyeFromPivotMwc sans le decalage lateral : depart des yeux de toutes les standalone, et ancien depart de
+        // My Winter Car, reconnu dans un tenue.ini jamais regle -- JD 09/11)
+        static readonly Vector3 EyeMsc = new Vector3(0f, 0.03f, 0.10f), EyeMwcOld = new Vector3(0f, -0.03f, 0.27f);
 
         // ---------------------------------------------------------------- lecture
         public static StandaloneTenue Load(VazCar.Model m)
         {
-            // (yeux : pivot de tete + hauteur et avance de EyeFromPivot du jeu, sans son decalage lateral -- 7 cm vers le centre sur
-            // MSC : JD 28/10, « la place conducteur est mal centree par rapport a son vrai siege »)
-            var t = new StandaloneTenue { File = Path.Combine(m.Dir, "tenue.ini"), Yeux = m.Head + new Vector3(0f, Seats.EyeFromPivot.y, Seats.EyeFromPivot.z), EntreeZ = m.Head.z };
+            // (yeux : pivot de tete + hauteur et avance de EyeFromPivot, sans son decalage lateral -- 7 cm vers le centre sur MSC : JD 28/10,
+            // « la place conducteur est mal centree par rapport a son vrai siege ». Ceux de My Summer Car sur les deux jeux -- JD 09/11,
+            // « aligne » : memes modeles, meme poste, celui de l'outil des places ; My Winter Car partait avant de son EyeFromPivot, 17 cm
+            // plus en avant et 6 cm plus bas. La voiture de la quete garde le sien : son fichier de places MWC est regle sur ce poste)
+            Vector3 efp = m.QuestOnly ? Seats.EyeFromPivot : EyeMsc;
+            var t = new StandaloneTenue { File = Path.Combine(m.Dir, "tenue.ini"), Yeux = m.Head + new Vector3(0f, efp.y, efp.z), EntreeZ = m.Head.z };
             if (VazCar.CopyOf(m.Id) != VazCar.ModelR5) t.FromSpec(m.Sp);   // (la R5 garde ses valeurs d'origine, celles de la classe)
             t.Yeux.y -= m.SoloEyeDrop;
             try
             {
                 if (!System.IO.File.Exists(t.File)) { System.IO.File.WriteAllText(t.File, t.Text(), new UTF8Encoding(true)); Log.Info("standalone : " + t.File + " cree (valeurs de la " + m.Name + " copie)"); }
                 t.Stamp = System.IO.File.GetLastWriteTimeUtc(t.File);
+                Vector3 start = t.Yeux;
                 t.Parse(System.IO.File.ReadAllLines(t.File, Encoding.UTF8));
+                // (tenue.ini de My Winter Car cree avant le 09/11 et jamais regle : ses yeux sont encore l'ancien depart -> le nouveau, trois
+                // lignes reecrites, le reste du fichier tel quel ; des yeux regles a la main ne bougent pas)
+                Vector3 old = m.Head + new Vector3(0f, EyeMwcOld.y - m.SoloEyeDrop, EyeMwcOld.z);
+                if (!Game.Msc && !m.QuestOnly && Mathf.Abs(t.Yeux.x - old.x) < 0.002f && Mathf.Abs(t.Yeux.y - old.y) < 0.002f && Mathf.Abs(t.Yeux.z - old.z) < 0.002f)
+                {
+                    string[] ls = System.IO.File.ReadAllLines(t.File, Encoding.UTF8);
+                    for (int i = 0; i < ls.Length; i++)
+                    {
+                        string k = ls[i].TrimStart();
+                        if (k.StartsWith("YeuxX=")) ls[i] = "YeuxX=" + N(start.x);
+                        else if (k.StartsWith("YeuxY=")) ls[i] = "YeuxY=" + N(start.y);
+                        else if (k.StartsWith("YeuxZ=")) ls[i] = "YeuxZ=" + N(start.z);
+                    }
+                    System.IO.File.WriteAllText(t.File, string.Join("\r\n", ls) + "\r\n", new UTF8Encoding(true));
+                    t.Stamp = System.IO.File.GetLastWriteTimeUtc(t.File);
+                    Log.Info("standalone : " + m.Name + " : yeux du conducteur " + t.Yeux.ToString("F3") + " (ancien depart de My Winter Car) -> " + start.ToString("F3") + " (comme My Summer Car), tenue.ini reecrit");
+                    t.Yeux = start;
+                }
             }
             catch (Exception e) { Log.Warn("standalone : tenue.ini : " + e.Message + " -- valeurs de depart"); }
             return t;
