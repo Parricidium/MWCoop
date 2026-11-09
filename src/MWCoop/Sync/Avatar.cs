@@ -608,7 +608,17 @@ namespace MWCoop
                 string path = Recon.Path(t);
                 found.Add(new KeyValuePair<int, Transform>(path.StartsWith("TRAFFIC") ? 0 : (path.Contains("RACE") || Game.Msc && path.StartsWith("RALLY")) ? 2 : 1, t));
             }
-            found.Sort((a, b) => a.Key.CompareTo(b.Key));
+            // (ordre fixe -- JD 09/11, « les jambes du conducteur comme dans l'outil des places » : l'ordre de FindObjectsOfTypeAll change d'une
+            // partie a l'autre ; sur My Winter Car la pose venait tantot de la VICTRO, tantot de la LAMORE, genoux 13 a 22 degres plus plies
+            // que dans l'outil. La VICTRO d'abord (celle de l'export de l'outil, sur les deux jeux), puis par chemin)
+            found.Sort((a, b) =>
+            {
+                int c = a.Key.CompareTo(b.Key);
+                if (c != 0) return c;
+                string pa = Recon.Path(a.Value), pb = Recon.Path(b.Value);
+                c = (pa.Contains("/VICTRO/") ? 0 : 1).CompareTo(pb.Contains("/VICTRO/") ? 0 : 1);
+                return c != 0 ? c : string.CompareOrdinal(pa, pb);
+            });
             foreach (KeyValuePair<int, Transform> kv in found)
             {
                 Transform t = kv.Value, sk = FindBone(t, "pelvis").parent;
