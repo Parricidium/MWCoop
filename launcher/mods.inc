@@ -112,7 +112,7 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
 {
     std::wstring pack = MscPackDir(), dll = m + L"winhttp.dll";
     SetFileAttributesW(dll.c_str(), FILE_ATTRIBUTE_NORMAL);
-    if (!CopyFileW((pack + L"winhttp.dll").c_str(), dll.c_str(), FALSE)) { TestLog("mscloader de MWCoop : winhttp.dll impossible dans la copie (erreur %lu)", GetLastError()); return false; }
+    if (!CopyFileW((pack + L"winhttp.dll").c_str(), dll.c_str(), FALSE)) { LaunchLog("mscloader de MWCoop : winhttp.dll impossible dans la copie (erreur %lu)", GetLastError()); return false; }
     wchar_t kind[16] = L"GF", intro[16] = L"false", cfg[16] = L"false";
     if (FileExists(MscIni())) {
         if (!guest && !MscSepOn()) GetPrivateProfileStringW(L"MSCLoader", L"mods", L"GF", kind, 16, MscIni().c_str());
@@ -135,7 +135,7 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
     std::wstring pre = m + GM().data + L"\\Managed\\MSCLoader.Preloader.dll";
     if (!FileExists(pre)) {
         if (CopyFileW((pack + L"Managed\\MSCLoader.Preloader.dll").c_str(), pre.c_str(), TRUE)) TestLog("mscloader de MWCoop : MSCLoader.Preloader.dll pose dans Managed du jeu (lu par MSCLoader 1.4)");
-        else TestLog("mscloader de MWCoop : MSCLoader.Preloader.dll impossible dans Managed (erreur %lu) : MSCLoader 1.4 risque de ne charger aucun mod", GetLastError());
+        else LaunchLog("mscloader de MWCoop : MSCLoader.Preloader.dll impossible dans Managed (erreur %lu) : MSCLoader 1.4 risque de ne charger aucun mod", GetLastError());
     }
     std::wstring ini = m + L"doorstop_config.ini", managed = pack + L"Managed";
     bool l1, l2;
@@ -147,7 +147,7 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
                   + "\r\n\r\n[MSCLoader]\r\nmods=" + Narrow(kind) + "\r\nskipIntro=" + Narrow(intro) + "\r\nskipConfigScreen=" + Narrow(cfg) + "\r\n";
     SetFileAttributesW(ini.c_str(), FILE_ATTRIBUTE_NORMAL);
     HANDLE f = CreateFileW(ini.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (f == INVALID_HANDLE_VALUE) { TestLog("mscloader de MWCoop : doorstop_config.ini impossible (erreur %lu)", GetLastError()); return false; }
+    if (f == INVALID_HANDLE_VALUE) { LaunchLog("mscloader de MWCoop : doorstop_config.ini impossible (erreur %lu)", GetLastError()); return false; }
     DWORD n; WriteFile(f, t.data(), (DWORD)t.size(), &n, NULL); CloseHandle(f);
     TestLog("mscloader de MWCoop : copie %ls, %s, mods %ls", m.c_str(), enabled ? "active" : "coupe", kind);
     return true;
@@ -1272,6 +1272,24 @@ static int MscSepSelfTest(const wchar_t *log)
     MscSepSet(true);
     say("reactive : a nouveau le dossier a part", PrepareMirror(m) && MscOwnApply(m, true, false) && SameDirTarget(m + L"Mods", b));
     say("originaux toujours intacts", read(solo + L"Alpha.dll") == "alpha" && read(other + L"hors.dll") == "hors");
+    {   // (dossier #60) un echec de la copie de lancement laisse sa raison dans lanceur.log
+        std::wstring ll = std::wstring(log) + L".lanceur.log", keep = g_launcherLog;
+        DeleteFileW(ll.c_str());
+        g_launcherLog = ll;
+        put(g_gameDir + L"verrou.dll", "v1");
+        bool first = PrepareMirror(m);
+        put(g_gameDir + L"verrou.dll", "v2 plus longue");
+        HANDLE lk = CreateFileW((m + L"verrou.dll").c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        bool failed = lk != INVALID_HANDLE_VALUE && !PrepareMirror(m);
+        if (lk != INVALID_HANDLE_VALUE) CloseHandle(lk);
+        std::string t = read(ll);
+        say("copie de lancement : fichier pris -> echec", first && failed);
+        say("copie de lancement : raison dans lanceur.log", t.find("copie de lancement : verrou.dll impossible (erreur 32 : fichier pris") != std::string::npos);
+        say("copie de lancement : refaite une fois le fichier libre", PrepareMirror(m) && read(m + L"verrou.dll") == "v2 plus longue");
+        DeleteFileW((g_gameDir + L"verrou.dll").c_str());
+        say("copie de lancement : DLL retiree du jeu, retiree de la copie", PrepareMirror(m) && !FileExists(m + L"verrou.dll"));
+        g_launcherLog = keep;
+    }
     FILE *o = _wfopen(log, L"ab");
     if (o) { fprintf(o, "%s\r\n", bad ? "ECHEC" : "TOUT OK"); fclose(o); }
     return bad ? 1 : 0;

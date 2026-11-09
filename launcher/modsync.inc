@@ -1500,12 +1500,13 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
         if (IsJunction(dst)) RemoveDirectoryW(dst.c_str());   // (la jonction seule ; jamais ce qu'elle montre)
         else if (GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) return true;   // vrai dossier : laisse
         if (MakeJunction(dst, target)) return true;
-        LaunchLog("copie de l'invite : jonction %ls impossible (erreur %lu)", n.c_str(), GetLastError());
+        DWORD e = GetLastError();
+        LaunchLog("copie de l'invite : jonction %s impossible (erreur %lu)", Narrow(n, CP_UTF8).c_str(), e);
         return false;
     };
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((g_gameDir + L"*").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return false;
+    if (h == INVALID_HANDLE_VALUE) { LaunchLog("copie de l'invite : dossier du jeu illisible (erreur %lu)", GetLastError()); return false; }
     bool ok = true, hadMods = false;
     do {
         std::wstring n = fd.cFileName;
@@ -1518,7 +1519,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
             std::wstring target = isMods && mods ? coop.substr(0, coop.size() - 1) : hostRoot(n) ? cont + n : src;
             ok = link(n, target) && ok;
         } else if (CopyKind(n) && !SameFile(src, dst)) {
-            if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { LaunchLog("copie de l'invite : %ls impossible (erreur %lu)", n.c_str(), GetLastError()); ok = false; }
+            if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { DWORD e = GetLastError(); LaunchLog("copie de l'invite : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); ok = false; }
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);

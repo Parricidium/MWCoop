@@ -3382,6 +3382,8 @@ static bool SameFile(const std::wstring &a, const std::wstring &b)
 }
 
 // Prepare la copie (fichiers recopies s'ils ont change, jonctions creees si absentes). Faux si impossible.
+// Chaque echec est ecrit dans lanceur.log avec sa raison (dossier #60, 09/11 : des parties parties du dossier du jeu, sans
+// le mod, sans qu'on sache pourquoi -- la raison n'allait qu'au journal des essais et a la barre d'etat).
 // Tout ce qui est pose a cote du jeu suit : l'exe, toutes les DLL et tous les .ini (MSCLoader : winhttp.dll de
 // UnityDoorstop et doorstop_config.ini ; BepInEx...), et chaque dossier en jonction (Mods, Updates de MSCLoader...).
 // Une DLL ou un .ini retire du jeu (MSCLoader desinstalle) est retire de la copie.
@@ -3440,10 +3442,10 @@ static bool ModLink(const std::wstring &m)
     DWORD at = GetFileAttributesW(dst.c_str());
     if (at != INVALID_FILE_ATTRIBUTES) {
         if (SameDirTarget(dst, target)) return true;
-        if (!(at & FILE_ATTRIBUTE_REPARSE_POINT)) { TestLog("copie de lancement : MWCoop est un vrai dossier, laisse (%ls)", dst.c_str()); return false; }
+        if (!(at & FILE_ATTRIBUTE_REPARSE_POINT)) { LaunchLog("copie de lancement : MWCoop est un vrai dossier, laisse (%s)", Narrow(dst, CP_UTF8).c_str()); return false; }
         RemoveDirectoryW(dst.c_str());   // (la jonction seule ; jamais ce qu'elle montre)
     }
-    if (!MakeJunction(dst, target)) { TestLog("copie de lancement : jonction MWCoop impossible (erreur %lu)", GetLastError()); return false; }
+    if (!MakeJunction(dst, target)) { LaunchLog("copie de lancement : jonction MWCoop impossible (erreur %lu)", GetLastError()); return false; }
     TestLog("copie de lancement : MWCoop -> %ls", target.c_str());
     return true;
 }
@@ -3452,7 +3454,7 @@ static bool PrepareMirror(const std::wstring &m)
     SHCreateDirectoryExW(NULL, m.c_str(), NULL);
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((g_gameDir + L"*").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) { TestLog("copie de lancement : dossier du jeu illisible (erreur %lu)", GetLastError()); return false; }
+    if (h == INVALID_HANDLE_VALUE) { LaunchLog("copie de lancement : dossier du jeu illisible (erreur %lu)", GetLastError()); return false; }
     do {
         std::wstring n = fd.cFileName;
         if (n == L"." || n == L"..") continue;
@@ -3472,13 +3474,13 @@ static bool PrepareMirror(const std::wstring &m)
                 else {
                     wchar_t stamp[32]; SYSTEMTIME st; GetLocalTime(&st);
                     swprintf_s(stamp, L".ancien-%04d%02d%02d-%02d%02d%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-                    if (!MoveFileW(dst.c_str(), (dst + stamp).c_str())) { TestLog("copie de lancement : %ls n'est pas celui du jeu et ne peut etre renomme (erreur %lu)", n.c_str(), GetLastError()); continue; }
+                    if (!MoveFileW(dst.c_str(), (dst + stamp).c_str())) { DWORD e = GetLastError(); LaunchLog("copie de lancement : %s n'est pas celui du jeu et ne peut etre renomme (erreur %lu)", Narrow(n, CP_UTF8).c_str(), e); continue; }
                     TestLog("copie de lancement : %ls n'etait pas celui du jeu, renomme %ls%ls", n.c_str(), n.c_str(), stamp);
                 }
             }
-            if (!MakeJunction(dst, src)) { TestLog("copie de lancement : jonction %ls impossible (erreur %lu)", n.c_str(), GetLastError()); FindClose(h); return false; }
+            if (!MakeJunction(dst, src)) { DWORD e = GetLastError(); LaunchLog("copie de lancement : jonction %s impossible (erreur %lu)", Narrow(n, CP_UTF8).c_str(), e); FindClose(h); return false; }
         } else if (CopyKind(n) && !SameFile(src, dst)) {
-            if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { TestLog("copie de lancement : %ls impossible (erreur %lu)", n.c_str(), GetLastError()); FindClose(h); return false; }
+            if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { DWORD e = GetLastError(); LaunchLog("copie de lancement : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); FindClose(h); return false; }
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
@@ -4215,10 +4217,10 @@ static void Launch(int mode, const char *partie = NULL)
     else ownMsc = ownMsc && syncKind;
     if (syncKind && !mirror.empty()) {   // invite d'un salon : sa copie de lancement (Mods -> les mods de l'hote)
         if (PrepareGuestCopy(mirror, syncKind == 2) && (!ownMsc || MscOwnApply(mirror, syncKind == 2, true))) { exe = mirror + GM().exe; runDir = mirror; }
-        else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part sans les mods de l'h\u00F4te", L"Could not prepare the launch copy: the game starts without the host's mods"));
+        else { LaunchLog("copie de l'invite impossible : le jeu part de son dossier, sans les mods de l'hote"); SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part sans les mods de l'h\u00F4te", L"Could not prepare the launch copy: the game starts without the host's mods")); }
     } else if (!mirror.empty()) {
         if (PrepareMirror(mirror) && (!ownMsc || MscOwnApply(mirror, true, false))) { exe = mirror + GM().exe; runDir = mirror; g_launchedFromCopy = !ownMsc && mirror == MirrorDir(); }
-        else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de son dossier (le mod ou MSCLoader risquent de ne pas se charger)", L"Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)"));
+        else { LaunchLog("copie de lancement impossible : le jeu part de son dossier (le mod ou MSCLoader risquent de ne pas se charger)"); SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de son dossier (le mod ou MSCLoader risquent de ne pas se charger)", L"Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)")); }
     }
     if (mscOff) MscOffInCopy(runDir);
     // Lanceur demarre par Steam (option de lancement "<MWCoop.exe>" %command%) : l'overlay de Steam y est injecte et
