@@ -96,6 +96,7 @@ namespace MWCoop
             public Dictionary<Joint, Vector2> JointsLater;   // attaches rendues cassables a SettleUntil seulement
             public float NextLog;
             public float KinLostLog; public int KinLost;
+            public List<FsmStateAction> KinMuted;   // copie : actions des automates de la voiture qui la remettaient en physique, eteintes (dossier #61)
             public Drivetrain Dt;
             public int RemoteGear = -1;         // rapport engage chez son conducteur (-1 : pas recu -- remorquage, ancienne version)
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
@@ -2038,6 +2039,47 @@ namespace MWCoop
                 }
             }
             Log.Warn("voiture " + c.Key + " copie remise en physique par un autre code (" + c.KinLost + " fois) : refigee ; automate du jeu en cause :" + (sb.Length > 0 ? sb.ToString() : " aucun trouve"));
+            MuteKinActions(c);   // (automate initialise depuis le debut de la copie : eteint lui aussi)
+        }
+
+        // (dossier #61, 29.30 09/11 : « capot, ailes, portieres et coffre de la SATSUMA bizarres chez l'hote quand son ami conduit » -- 69
+        // remises en physique de la copie en 30 min par SATSUMA/PlayerTrigger « Wait for player », a chaque sortie d'un joueur de la cabine.
+        // Refigee aussitot (KinLost), la copie gardait pourtant chaque fois ses ouvrants -- capot, coffre, portieres -- decales de 2 a 3 cm
+        // (essai fc61 : passager qui descend, une remise en physique, ouvrants a 20-29 mm de leur place jusqu'a la fin). Pendant la copie, les
+        // actions SetIsKinematic des automates de la voiture qui visent sa caisse sont eteintes : elle ne repasse plus en physique. Rendues a
+        // la fin de la copie. [Test] CopieSansPhysique=0 : comme avant (refigee apres coup).)
+        static int kinMuteLogs;
+        static void MuteKinActions(Car c)
+        {
+            if (Config.GetInt("Test", "CopieSansPhysique", 1) == 0 || c.T == null || c.Body == null) return;
+            if (c.KinMuted == null) c.KinMuted = new List<FsmStateAction>();
+            GameObject body = c.Body.gameObject;
+            int added = 0;
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (f == null || f.Fsm == null || !f.Fsm.Initialized || f.FsmStates == null) continue;
+                foreach (FsmState st in f.FsmStates)
+                {
+                    if (st == null || st.Actions == null) continue;
+                    foreach (FsmStateAction a in st.Actions)
+                    {
+                        var k = a as HutongGames.PlayMaker.Actions.SetIsKinematic;
+                        if (k == null || !k.Enabled || k.isKinematic == null || (!k.isKinematic.UseVariable && k.isKinematic.Value)) continue;   // (« cinematique vrai » laisse : sans effet sur une copie)
+                        GameObject target = k.gameObject == null ? null : k.gameObject.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : k.gameObject.GameObject != null ? k.gameObject.GameObject.Value : null;
+                        if (target != body) continue;
+                        k.Enabled = false; c.KinMuted.Add(k); added++;
+                    }
+                }
+            }
+            if (added > 0 && kinMuteLogs++ < 20) Log.Info("voiture " + c.Key + " copie : " + added + " action(s) du jeu qui la remettaient en physique eteinte(s) pendant la copie");
+        }
+        static void UnmuteKinActions(Car c)
+        {
+            if (c.KinMuted == null || c.KinMuted.Count == 0) return;
+            int n = 0;
+            foreach (FsmStateAction a in c.KinMuted) if (a != null) { a.Enabled = true; n++; }
+            c.KinMuted.Clear();
+            if (kinMuteLogs++ < 20) Log.Info("voiture " + c.Key + " reprise : " + n + " action(s) du jeu qui la remettent en physique rendue(s)");
         }
 
         // BOAT a la fin de la copie (audit MSC 02/11) : pas de Drivetrain, donc pas de reprise a chaud (HotStart) ; « Sound Engine »
@@ -2116,6 +2158,7 @@ namespace MWCoop
             {
                 c.WasKinematic = c.Body.isKinematic;
                 c.Body.isKinematic = true;
+                MuteKinActions(c);   // (dossier #61 : plus remise en physique par ses automates pendant la copie)
                 // Copie deplacee au pas de physique (FixedUpdate) : interpolee pour le rendu, elle et ses pieces
                 // articulees (banquette, coffre, portieres) -- sans cela, a-coups a 50 Hz chez le passager et
                 // pieces qui tremblent en roulant.
@@ -2150,6 +2193,7 @@ namespace MWCoop
                 // (roues et transmission verifiees avant le premier pas de physique : des amortissements NaN figes pendant la copie
                 // faisaient partir la voiture en vrille des la reprise, 21/10)
                 if (c.Dt != null) { int nf = SanFields(c); if (nf > 0) Log.Warn("voiture " + c.Key + " reprise : " + nf + " valeur(s) non finie(s) des roues ou de la transmission corrigee(s) avant la physique"); }
+                UnmuteKinActions(c);   // (dossier #61 : automates de la voiture rendus tels quels)
                 c.Body.isKinematic = c.WasKinematic;
                 if (!c.Body.isKinematic)
                 {
@@ -2405,6 +2449,45 @@ namespace MWCoop
                 if (d > 3f && far++ < 6) sb.Append(" ATTACHE ").Append(j.GetType().Name).Append(' ').Append(j.name).Append("->").Append(j.connectedBody.name).Append(" d").Append(d.ToString("F1")).Append(';');
             }
             return sb.ToString() + " (" + n + " corps, " + odd + " a part, " + far + " attaches loin)";
+        }
+
+        // Essais ([Test] SondeFigees=s, dossier #61 : « capot, ailes, portieres et coffre de la SATSUMA bizarres chez l'hote quand l'ami
+        // conduit ») : la voiture (copie ou non, remise en physique combien de fois) et chacune de ses pieces figees, ouvrants et pieces
+        // attachees -- cinematique ou non, sous la voiture ou non, ecart du transform a la pose notee au debut de la copie (mm, degres),
+        // ecart de la pose physique a son transform, vitesse.
+        public static string FrozenProbe(string name)
+        {
+            Car c = null;
+            foreach (Car x in cars) if (x.Body != null && x.Key.StartsWith(name)) { c = x; break; }
+            if (c == null) return "pas de voiture " + name;
+            Transform root = c.Body.transform;
+            var sb = new System.Text.StringBuilder(c.Key + (c.Kinematic ? " copie" : " pas copie") + (c.Body.isKinematic ? ", corps cinematique" : ", corps PHYSIQUE")
+                + ", remise en physique " + c.KinLost + " fois, " + (c.Frozen != null ? c.Frozen.Count : 0) + " figees, v " + c.Body.velocity.magnitude.ToString("F1") + " ;");
+            int n = 0, odd = 0;
+            float worst = 0f; string worstName = "-";
+            foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (rb == null || rb == c.Body) continue;
+                bool frozen = c.Frozen != null && c.Frozen.ContainsKey(rb), door = CarDoors.IsDoorBody(rb), fixedJ = rb.GetComponent<FixedJoint>() != null;
+                if (!frozen && !door && !fixedJ) continue;
+                n++;
+                float mm = -1f, deg = 0f;
+                Pose o;
+                if (c.Offsets != null && c.Offsets.TryGetValue(rb, out o))
+                {
+                    Vector3 wp = root.position + root.rotation * o.P; Quaternion wr = root.rotation * o.R;
+                    mm = (rb.transform.position - wp).magnitude * 1000f; deg = Quaternion.Angle(rb.transform.rotation, wr);
+                }
+                float phys = (rb.position - rb.transform.position).magnitude * 1000f;
+                bool off = mm > 20f || deg > 2f || phys > 20f || (frozen && !rb.isKinematic) || !rb.transform.IsChildOf(c.T);
+                if (mm > worst) { worst = mm; worstName = rb.name; }
+                if (!off && Config.GetInt("Test", "SondeFigeesTout", 0) == 0) continue;
+                odd++;
+                sb.Append(' ').Append(rb.name).Append(frozen ? " [figee]" : door ? " [ouvrant]" : " [attachee]").Append(rb.isKinematic ? " cin" : " phys v" + rb.velocity.magnitude.ToString("F1"))
+                  .Append(rb.transform.IsChildOf(c.T) ? "" : " HORS VOITURE").Append(mm >= 0f ? " ecart " + mm.ToString("F0") + " mm " + deg.ToString("F1") + " deg" : " pas de pose notee")
+                  .Append(phys > 20f ? ", physique a " + phys.ToString("F0") + " mm" : "").Append(';');
+            }
+            return sb.ToString() + " (" + n + " pieces, " + odd + " a part ; plus grand ecart " + worst.ToString("F0") + " mm : " + worstName + ")";
         }
 
         // Voiture tout juste reprise (voir SetKinematic) : vitesse verticale et rotation bridees ; puis attaches rendues.
@@ -4305,6 +4388,56 @@ namespace MWCoop
             if (a == null || a.Body == null) return car + " introuvable";
             PlaceCar(a, to, rot.eulerAngles.y);   // (comme /voiture : pieces et chargement suivent)
             return a.Key + " posee en " + to.ToString("F1");
+        }
+
+        // Essais (dossier #61, [Test] VoitureSurRoute=t) : la voiture posee sur la route la plus proche -- sol dont le collider s'appelle
+        // Asphalt, AsphaltRoad, Road, Road2, DirtRoad ou Gravel, cherche en cercles de 20 a 400 m --, tournee dans le sens ou la route va le
+        // plus loin tout droit (au moins 30 m). Dans la sauvegarde d'essai, la SATSUMA est au garage : poussee, elle butait contre ses murs.
+        public static string TestPlaceOnRoad(string car)
+        {
+            Car a = cars.Find(x => x.Key.StartsWith(car));
+            if (a == null || a.Body == null) return car + " introuvable";
+            Vector3 c0 = a.Body.position;
+            for (float r = 20f; r <= 400f; r += 20f)
+            {
+                int steps = Mathf.Max(12, (int)(r / 6f));
+                for (int i = 0; i < steps; i++)
+                {
+                    float ang = i * 2f * Mathf.PI / steps;
+                    RaycastHit h;
+                    if (!RoadAt(c0 + new Vector3(Mathf.Cos(ang) * r, 0f, Mathf.Sin(ang) * r), out h)) continue;
+                    float bestLen = 0f; Vector3 bestDir = Vector3.forward;
+                    for (int d = 0; d < 16; d++)
+                    {
+                        float da = d * Mathf.PI / 8f;
+                        Vector3 dir = new Vector3(Mathf.Cos(da), 0f, Mathf.Sin(da));
+                        float len = 0f;
+                        for (float s = 3f; s <= 60f; s += 3f) { RaycastHit h2; if (!RoadAt(h.point + dir * s, out h2)) break; len = s; }
+                        if (len > bestLen) { bestLen = len; bestDir = dir; }
+                    }
+                    if (bestLen < 30f) continue;   // (bout de route trop court : virage, croisement, bord)
+                    Vector3 to = h.point + Vector3.up * 0.6f;
+                    float yaw = Quaternion.LookRotation(bestDir).eulerAngles.y;
+                    PlaceCar(a, to, yaw);
+                    return a.Key + " posee sur la route (" + h.collider.name + ") en " + to.ToString("F1") + ", cap " + yaw.ToString("F0") + ", " + bestLen.ToString("F0") + " m droit devant, a " + r.ToString("F0") + " m de sa place";
+                }
+            }
+            return a.Key + " : pas de route a moins de 400 m";
+        }
+        static readonly string[] RoadSoils = { "Asphalt", "AsphaltRoad", "Road", "Road2", "DirtRoad", "Gravel" };
+        static bool RoadAt(Vector3 p, out RaycastHit best)
+        {
+            best = new RaycastHit();
+            float bd = float.MaxValue; bool found = false;
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(p.x, p.y + 150f, p.z), Vector3.down, 400f))
+            {
+                if (h.collider == null || h.collider.isTrigger || h.distance >= bd) continue;
+                bd = h.distance; best = h; found = true;
+            }
+            if (!found) return false;
+            string n = best.collider.name;
+            foreach (string s in RoadSoils) if (n == s) return true;
+            return false;
         }
         public static string TestPlaceBehind(string car, string target, float gap)
         {

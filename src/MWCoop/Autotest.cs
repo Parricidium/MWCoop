@@ -1361,7 +1361,7 @@ namespace MWCoop
         // (scratchpad etat-diff.py) : ce qui diverge apres un chargement, un montage, une casse, un reglage. Seulement ce que le jeu
         // sauvegarde ou qui tient dans le temps : entrees Database (booleens, flottants, entiers de 'Data'), serrage et crans de chaque
         // piece (BoltCheck), roues (Use), peinture, usure moteur (MechanicalWear), pare-brise, compteur.)
-        static float etatAt, frNext;
+        static float etatAt, frNext, sondeFigeesAt; static bool surRouteDone;
         static int radioStep, radioLog, dmStep, dmKey, dmPush;
         static float radioSuiviAt; static bool radioDumped;
         static bool capRel, capProbe; static int capHote;
@@ -1965,11 +1965,18 @@ namespace MWCoop
             if (d > 25f && serLog == 0) { serLog = 1; Log.Info("autotest : serrage " + Fluids.TestScrew(sc)); }
         }
 
-        static float psProbeAt;
+        static float psProbeAt; static int psIdx;
         // [Test] PassagerSortie=s : descendre a s secondes, penche ou pas (PassagerPenche), puis se rasseoir 6 s apres : a sa place, droit, jamais a travers la portiere.
+        // ([Test] PassagerSorties=s1,s2,... -- dossier #61 : descendre et se rasseoir a chacun de ces instants, l'un apres l'autre.)
         static void PassagerSortieTest(string mode, float t)
         {
+            string[] many = Config.Get("Test", "PassagerSorties", "").Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries);
             float ps = Config.GetFloat("Test", "PassagerSortie", 0f);
+            if (many.Length > 0)
+            {
+                if (step == 4 && psIdx + 1 < many.Length) { psIdx++; step = 1; psProbeAt = 0f; }   // (rassis : sortie suivante)
+                float.TryParse(many[Mathf.Min(psIdx, many.Length - 1)], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out ps);
+            }
             if (mode != "passager" || ps <= 0f || step < 1) return;
             string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
             Rigidbody b = VehicleSync.Body(car);
@@ -1987,6 +1994,20 @@ namespace MWCoop
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
             // passager, sonde des places.
             CameraKnobs(t);
+            // ([Test] SondeFigees=s, dossier #61 : toutes les s secondes apres 20 s, la voiture TestVoiture et ses pieces figees, ouvrants, attachees)
+            float sfp = Config.GetFloat("Test", "SondeFigees", 0f);
+            if (sfp > 0f && t > 20f && Time.realtimeSinceStartup >= sondeFigeesAt)
+            {
+                sondeFigeesAt = Time.realtimeSinceStartup + sfp;
+                Log.Info("autotest : figees " + VehicleSync.FrozenProbe(Config.Get("Test", "TestVoiture", "SATSUMA")));
+            }
+            // ([Test] VoitureSurRoute=t, dossier #61 : a t s, l'hote pose TestVoiture sur la route la plus proche, dans le sens de la route)
+            float vsr = Config.GetFloat("Test", "VoitureSurRoute", 0f);
+            if (vsr > 0f && t > vsr && !surRouteDone && Net.Session.IsHost)
+            {
+                surRouteDone = true;
+                Log.Info("autotest : " + VehicleSync.TestPlaceOnRoad(Config.Get("Test", "TestVoiture", "SATSUMA")));
+            }
             // (tchat et HUD, communs aux deux jeux : bulles, deplacement a la souris -- 06/11)
             if (mode == "tchat") { Menu.Test(mode, t); if (t > 12f && !done) { done = true; Chat.Send("Salut, c'est " + Net.Session.Me.Name + " !"); } return; }
             // (24/10, pommeau sorti dans Avatar.KnobPoint par [MWC]) [Test] PassageVitesse=1 : le conducteur passe 1, 2, 3 a 40/43/46 s ;
