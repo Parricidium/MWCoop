@@ -145,26 +145,48 @@ namespace MWCoop
         public static string PoseKey(Place p, string car) { return p == null || p.Pose == null ? car : p.Pose == "camion" ? "GIFU" : ""; }
 
         // Relecture si le dossier a change (date et taille de chaque fichier).
+        // Fichiers a lire : ceux du mod (MWCoop\places\<jeu>), puis ceux livres dans le dossier d'une voiture d'un autre mod
+        // (<dossier>\places\<jeu>, CoopApi.AddCar -- JD 10/11 : les places d'une voiture privee partent avec son mod, pas par une mise a
+        // jour de MWCoop). Meme voiture dans deux fichiers : le plus recent gagne (l'outil des places ecrit les deux).
+        public static List<string> FilesOf(string local, string sub)
+        {
+            var list = new List<string>();
+            if (Directory.Exists(local)) list.AddRange(Directory.GetFiles(local, "*.txt"));
+            try
+            {
+                foreach (string d in VazCar.ExternalDirs())
+                {
+                    string x = Path.Combine(Path.Combine(d, sub), Game.Msc ? "msc" : "mwc");
+                    if (Directory.Exists(x)) list.AddRange(Directory.GetFiles(x, "*.txt"));
+                }
+            }
+            catch (Exception e) { Log.Warn(sub + " : dossiers des voitures d'autres mods : " + e.Message); }
+            list.Sort(StringComparer.OrdinalIgnoreCase);
+            return list;
+        }
+        public static bool Newer(string p, string than) { return than == null || File.GetLastWriteTimeUtc(p) > File.GetLastWriteTimeUtc(than); }
         static void Check()
         {
             float now = Time.realtimeSinceStartup;
             if (now < nextCheck) return;
             nextCheck = now + 2f;
-            string dir = Dir, s = "";
-            string[] list = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.txt") : new string[0];
-            Array.Sort(list, StringComparer.OrdinalIgnoreCase);
-            foreach (string p in list) { var fi = new FileInfo(p); s += fi.Name + fi.Length + fi.LastWriteTimeUtc.Ticks + ";"; }
+            string s = "";
+            List<string> list = FilesOf(Dir, "places");
+            foreach (string p in list) { var fi = new FileInfo(p); s += fi.FullName + fi.Length + fi.LastWriteTimeUtc.Ticks + ";"; }
             if (s == stamp) return;
             stamp = s;
             files.Clear();
+            var from = new Dictionary<string, string>();
             foreach (string p in list)
             {
                 try
                 {
                     CarFile f = Read(p);
                     if (f == null || f.Car == null) { Log.Warn("places : " + Path.GetFileName(p) + " illisible (pas de PLACES 1 / voiture)"); continue; }
-                    files[f.Car] = f;
-                    Log.Info("places : " + f.Car + " lues dans " + Path.GetFileName(p) + " (" + f.Places.Count + " places" + (f.Driver.Lines ? " + conducteur" : "") + Belts(f) + ", empreinte " + f.Hash + ")");
+                    string had; from.TryGetValue(f.Car, out had);
+                    if (had != null && !Newer(p, had)) { Log.Info("places : " + f.Car + " : " + p + " plus ancien que " + had + ", garde l'autre"); continue; }
+                    files[f.Car] = f; from[f.Car] = p;
+                    Log.Info("places : " + f.Car + " lues dans " + (p.StartsWith(Dir) || !Path.IsPathRooted(p) ? Path.GetFileName(p) : p) + " (" + f.Places.Count + " places" + (f.Driver.Lines ? " + conducteur" : "") + Belts(f) + ", empreinte " + f.Hash + ")");
                 }
                 catch (Exception e) { Log.Warn("places : " + Path.GetFileName(p) + " : " + e.Message); }
             }

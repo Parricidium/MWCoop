@@ -61,20 +61,22 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (now < nextCheck) return;
             nextCheck = now + 2f;
-            string dir = Dir, s = "";
-            string[] list = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.txt") : new string[0];
-            Array.Sort(list, StringComparer.OrdinalIgnoreCase);
-            foreach (string p in list) { var fi = new FileInfo(p); s += fi.Name + fi.Length + fi.LastWriteTimeUtc.Ticks + ";"; }
+            string s = "";
+            List<string> list = SeatFiles.FilesOf(Dir, "vitres");   // (et le dossier d'une voiture d'un autre mod, JD 10/11)
+            foreach (string p in list) { var fi = new FileInfo(p); s += fi.FullName + fi.Length + fi.LastWriteTimeUtc.Ticks + ";"; }
             if (s == stamp) return;
             stamp = s;
             files.Clear();
+            var from = new Dictionary<string, string>();
             foreach (string p in list)
             {
                 try
                 {
                     CarFile f = Read(p);
                     if (f == null || f.Car == null) { Log.Warn("vitres : " + Path.GetFileName(p) + " illisible (pas de VITRES 1 / voiture)"); continue; }
-                    files[f.Car] = f;
+                    string had; from.TryGetValue(f.Car, out had);
+                    if (had != null && !SeatFiles.Newer(p, had)) continue;
+                    files[f.Car] = f; from[f.Car] = p;
                     Log.Info("vitres : " + f.Car + " : " + f.Glasses.Count + " vitre(s) lue(s) dans " + Path.GetFileName(p));
                 }
                 catch (Exception e) { Log.Warn("vitres : " + Path.GetFileName(p) + " : " + e.Message); }

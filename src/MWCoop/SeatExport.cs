@@ -234,7 +234,10 @@ namespace MWCoop
                     to.Append('}');
                 }
             }
-            var sb = new StringBuilder("{\"cle\":" + S(key) + ",\"nom\":" + S(name) + ",\"sorte\":" + S(kind) + ",\"objets\":[" + objs + "],\"ceintures\":[" + beltObjs + "]");
+            // (voiture d'un autre mod -- CoopApi.AddCar : son dossier, ou l'outil enregistre aussi ses places et ses vitres, JD 10/11)
+            VazCar.Built ext = StandaloneCar.Find(car.gameObject);
+            string extDir = ext != null && VazCar.IsExternal(ext.M) ? ext.M.Dir : null;
+            var sb = new StringBuilder("{\"cle\":" + S(key) + ",\"nom\":" + S(name) + ",\"sorte\":" + S(kind) + (extDir != null ? ",\"dossier\":" + S(extDir) : "") + ",\"objets\":[" + objs + "],\"ceintures\":[" + beltObjs + "]");
             string att = BeltAnchors(car);
             if (att != null) sb.Append(",\"attaches\":").Append(att);
             sb.Append(",\"matieres\":[");

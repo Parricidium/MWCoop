@@ -455,6 +455,14 @@ namespace MWCoop
             return null;
         }
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Models[Base]; }
+        // (voitures d'autres mods : leurs dossiers -- fichiers de places et de vitres livres avec le mod, SeatFiles / VitreFiles ; JD 10/11)
+        public static bool IsExternal(Model m) { return m != null && external.Contains(m); }
+        public static List<string> ExternalDirs()
+        {
+            var l = new List<string>();
+            foreach (Model m in external) if (!string.IsNullOrEmpty(m.DirOverride) && Directory.Exists(m.DirOverride)) l.Add(m.DirOverride);
+            return l;
+        }
         // voiture de base, livree avec le mod : la Fiat (la VAZ seulement si ses fichiers manquent et ceux de la VAZ sont la)
         public static int Base { get { return StandaloneCar.Ready(ModelVaz) ? ModelFiat : ModelVaz; } }
         // addon installe ici (la VAZ l'est toujours)
