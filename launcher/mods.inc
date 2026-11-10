@@ -1288,6 +1288,26 @@ static int MscSepSelfTest(const wchar_t *log)
         say("copie de lancement : refaite une fois le fichier libre", PrepareMirror(m) && read(m + L"verrou.dll") == "v2 plus longue");
         DeleteFileW((g_gameDir + L"verrou.dll").c_str());
         say("copie de lancement : DLL retiree du jeu, retiree de la copie", PrepareMirror(m) && !FileExists(m + L"verrou.dll"));
+        // (dossier #62) fichier du jeu en lecture seule : copie possible, remplacee quand il change, retiree quand il disparait
+        std::wstring ro = g_gameDir + L"changelog.txt";
+        SetFileAttributesW(ro.c_str(), FILE_ATTRIBUTE_NORMAL);
+        put(ro, "1.0 lecture seule");
+        SetFileAttributesW(ro.c_str(), FILE_ATTRIBUTE_READONLY);
+        bool r1 = PrepareMirror(m) && read(m + L"changelog.txt") == "1.0 lecture seule";
+        DWORD a1 = GetFileAttributesW((m + L"changelog.txt").c_str());
+        say("lecture seule : copie faite, sans la lecture seule dans la copie", r1 && a1 != INVALID_FILE_ATTRIBUTES && !(a1 & FILE_ATTRIBUTE_READONLY));
+        SetFileAttributesW((m + L"changelog.txt").c_str(), FILE_ATTRIBUTE_READONLY);   // (copie faite par un lanceur d'avant)
+        SetFileAttributesW(ro.c_str(), FILE_ATTRIBUTE_NORMAL);
+        put(ro, "1.1 changee dans le jeu");
+        SetFileAttributesW(ro.c_str(), FILE_ATTRIBUTE_READONLY);
+        bool r2 = PrepareMirror(m);
+        say("lecture seule dans la copie : remplacee quand le jeu change (avant : erreur 5)", r2 && read(m + L"changelog.txt") == "1.1 changee dans le jeu" && read(ll).find("changelog.txt impossible") == std::string::npos);
+        put(g_gameDir + L"seule.dll", "s");
+        PrepareMirror(m);
+        SetFileAttributesW((m + L"seule.dll").c_str(), FILE_ATTRIBUTE_READONLY);
+        DeleteFileW((g_gameDir + L"seule.dll").c_str());
+        say("lecture seule dans la copie : retiree quand le jeu ne l'a plus", PrepareMirror(m) && !FileExists(m + L"seule.dll"));
+        SetFileAttributesW(ro.c_str(), FILE_ATTRIBUTE_NORMAL);
         g_launcherLog = keep;
     }
     FILE *o = _wfopen(log, L"ab");

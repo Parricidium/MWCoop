@@ -3381,6 +3381,31 @@ static bool SameFile(const std::wstring &a, const std::wstring &b)
     return x.nFileSizeLow == y.nFileSizeLow && x.nFileSizeHigh == y.nFileSizeHigh && CompareFileTime(&x.ftLastWriteTime, &y.ftLastWriteTime) == 0;
 }
 
+// Un fichier recopie dans une copie de lancement. CopyFileW garde les attributs : un fichier du jeu en lecture seule (jeu
+// installe depuis une archive) l'etait aussi dans la copie, et des qu'il changeait dans le jeu, la copie refusait de le
+// remplacer (erreur 5) -- chaque partie partait alors du dossier du jeu, sans le mod (dossier #62, 10/11 : changelog.txt).
+// La lecture seule est levee avant et apres la copie ; encore refuse : l'ancien est mis de cote (renomme, jamais efface).
+static bool CopyIntoLaunchCopy(const std::wstring &src, const std::wstring &dst, DWORD *err)
+{
+    DWORD a = GetFileAttributesW(dst.c_str());
+    if (a != INVALID_FILE_ATTRIBUTES && (a & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))) SetFileAttributesW(dst.c_str(), FILE_ATTRIBUTE_NORMAL);
+    BOOL ok = CopyFileW(src.c_str(), dst.c_str(), FALSE);
+    DWORD e = ok ? 0 : GetLastError();
+    if (!ok && e == ERROR_ACCESS_DENIED && a != INVALID_FILE_ATTRIBUTES) {
+        wchar_t stamp[32]; SYSTEMTIME st; GetLocalTime(&st);
+        swprintf_s(stamp, L".ancien-%04d%02d%02d-%02d%02d%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        std::wstring name = dst.substr(dst.find_last_of(L'\\') + 1);
+        if (MoveFileW(dst.c_str(), (dst + stamp).c_str())) {
+            LaunchLog("copie de lancement : %s refuse (erreur 5), l'ancien mis de cote (%s%s)", Narrow(name, CP_UTF8).c_str(), Narrow(name, CP_UTF8).c_str(), Narrow(stamp, CP_UTF8).c_str());
+            ok = CopyFileW(src.c_str(), dst.c_str(), FALSE);
+            e = ok ? 0 : GetLastError();
+        }
+    }
+    if (ok) { DWORD b = GetFileAttributesW(dst.c_str()); if (b != INVALID_FILE_ATTRIBUTES && (b & FILE_ATTRIBUTE_READONLY)) SetFileAttributesW(dst.c_str(), b & ~FILE_ATTRIBUTE_READONLY); }
+    if (err) *err = e;
+    return ok != FALSE;
+}
+
 // Prepare la copie (fichiers recopies s'ils ont change, jonctions creees si absentes). Faux si impossible.
 // Chaque echec est ecrit dans lanceur.log avec sa raison (dossier #60, 09/11 : des parties parties du dossier du jeu, sans
 // le mod, sans qu'on sache pourquoi -- la raison n'allait qu'au journal des essais et a la barre d'etat).
@@ -3480,7 +3505,8 @@ static bool PrepareMirror(const std::wstring &m)
             }
             if (!MakeJunction(dst, src)) { DWORD e = GetLastError(); LaunchLog("copie de lancement : jonction %s impossible (erreur %lu)", Narrow(n, CP_UTF8).c_str(), e); FindClose(h); return false; }
         } else if (CopyKind(n) && !SameFile(src, dst)) {
-            if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { DWORD e = GetLastError(); LaunchLog("copie de lancement : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); FindClose(h); return false; }
+            DWORD e = 0;
+            if (!CopyIntoLaunchCopy(src, dst, &e)) { LaunchLog("copie de lancement : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); FindClose(h); return false; }
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
@@ -3489,7 +3515,7 @@ static bool PrepareMirror(const std::wstring &m)
         do {
             std::wstring n = fd.cFileName;
             if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !CopyKind(n)) continue;
-            if (GetFileAttributesW((g_gameDir + n).c_str()) == INVALID_FILE_ATTRIBUTES) { DeleteFileW((m + n).c_str()); TestLog("copie de lancement : %ls retire", n.c_str()); }
+            if (GetFileAttributesW((g_gameDir + n).c_str()) == INVALID_FILE_ATTRIBUTES) { SetFileAttributesW((m + n).c_str(), FILE_ATTRIBUTE_NORMAL); DeleteFileW((m + n).c_str()); TestLog("copie de lancement : %ls retire", n.c_str()); }
         } while (FindNextFileW(h, &fd));
         FindClose(h);
     }
@@ -4261,6 +4287,12 @@ static void Launch(int mode, const char *partie = NULL)
         std::string dlls;
         if (fh != INVALID_HANDLE_VALUE) { do { dlls += " " + Narrow(fd.cFileName, CP_UTF8) + "(" + std::to_string(fd.nFileSizeLow) + ")"; } while (FindNextFileW(fh, &fd)); FindClose(fh); }
         DebugLog("DLL du depart :%s", dlls.c_str());
+        // Fichiers a la racine du jeu que la copie de lancement ne reprend pas (ni exe, ni DLL, ni .ini) : un jeu qui marche
+        // de son dossier mais se fige depuis la copie peut en avoir besoin (dossier #62, 10/11 : jeu non Steam).
+        std::string rest;
+        fh = FindFirstFileW((g_gameDir + L"*").c_str(), &fd);
+        if (fh != INVALID_HANDLE_VALUE) { do { if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !CopyKind(fd.cFileName)) rest += " " + Narrow(fd.cFileName, CP_UTF8) + "(" + std::to_string(fd.nFileSizeLow) + (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY ? ", lecture seule" : "") + ")"; } while (FindNextFileW(fh, &fd)); FindClose(fh); }
+        DebugLog("racine du jeu, hors de la copie :%s", rest.empty() ? " (rien)" : rest.c_str());
     }
     if (!IsWine() && ShellRunFromDesktop(exe, args, runDir)) {
         LaunchLog("jeu lance par le bureau de Windows, avec ses arguments");

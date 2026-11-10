@@ -1519,7 +1519,8 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
             std::wstring target = isMods && mods ? coop.substr(0, coop.size() - 1) : hostRoot(n) ? cont + n : src;
             ok = link(n, target) && ok;
         } else if (CopyKind(n) && !SameFile(src, dst)) {
-            if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { DWORD e = GetLastError(); LaunchLog("copie de l'invite : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); ok = false; }
+            DWORD e = 0;
+            if (!CopyIntoLaunchCopy(src, dst, &e)) { LaunchLog("copie de l'invite : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); ok = false; }
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
@@ -1532,7 +1533,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
         do {
             std::wstring n = fd.cFileName;
             if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !CopyKind(n)) continue;
-            if (GetFileAttributesW((g_gameDir + n).c_str()) == INVALID_FILE_ATTRIBUTES) DeleteFileW((m + n).c_str());
+            if (GetFileAttributesW((g_gameDir + n).c_str()) == INVALID_FILE_ATTRIBUTES) { SetFileAttributesW((m + n).c_str(), FILE_ATTRIBUTE_NORMAL); DeleteFileW((m + n).c_str()); }
         } while (FindNextFileW(h, &fd));
         FindClose(h);
     }
