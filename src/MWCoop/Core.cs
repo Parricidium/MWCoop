@@ -30,6 +30,7 @@ namespace MWCoop
                 try { CoopApi.AddCar(System.IO.Path.GetFileName(ve.TrimEnd('\\', '/')), ve, System.IO.File.ReadAllText(System.IO.Path.Combine(ve, "definition.txt"))); }
                 catch (System.Exception e) { Log.Warn("essai : voiture externe " + ve + " : " + e.Message); }
             }
+            CoopApi.AddRememberedForExport();   // (export des places, sans MSCLoader : les voitures des autres mods d'apres leur note)
         }
 
         void FixedUpdate()

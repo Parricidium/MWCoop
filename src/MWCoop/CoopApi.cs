@@ -168,9 +168,49 @@ namespace MWCoop
         public static int AddCar(string key, string directory, string definition)
         {
             string why = AddCarImpl(key, directory, definition);
-            if (why == null) { int id = VazCar.Models.Length - 1; foreach (VazCar.Model m in VazCar.Models) if (m != null && m.Folder == key) id = m.Id; Log.Info("api : voiture " + key + " ajoutee, n " + id + " (" + directory + ")"); return id; }
+            if (why == null) { int id = VazCar.Models.Length - 1; foreach (VazCar.Model m in VazCar.Models) if (m != null && m.Folder == key) id = m.Id; Log.Info("api : voiture " + key + " ajoutee, n " + id + " (" + directory + ")"); Remember(key, directory, definition); return id; }
             Log.Warn("api : voiture " + key + " refusee : " + why);
             return -1;
+        }
+
+        // Voitures declarees par d'autres mods, notees dans MWCoop\voitures-externes\<cle>.txt (ligne « dossier=... » puis la definition) :
+        // l'export des places tourne sans MSCLoader, leur mod ne s'y charge pas -- MWCoop les y declare lui-meme d'apres cette note, pour
+        // que l'outil des places les montre (JD 10/11 : une voiture de mod absente de la liste de l'outil). Jamais en partie : la, c'est
+        // le mod qui decide.
+        static string KnownDir { get { return System.IO.Path.Combine(Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", "voitures-externes"); } }
+        static void Remember(string key, string directory, string definition)
+        {
+            if (SeatExport.Active) return;
+            try
+            {
+                string t = "dossier=" + directory + "\n" + (definition ?? "").Replace("\r", "");
+                string f = System.IO.Path.Combine(KnownDir, key + ".txt");
+                if (System.IO.File.Exists(f) && System.IO.File.ReadAllText(f) == t) return;
+                System.IO.Directory.CreateDirectory(KnownDir);
+                System.IO.File.WriteAllText(f, t, new System.Text.UTF8Encoding(false));
+            }
+            catch (Exception e) { Log.Warn("api : voiture " + key + " : note pour l'export des places (" + e.Message + ")"); }
+        }
+        internal static void AddRememberedForExport()
+        {
+            if (!SeatExport.Active || !System.IO.Directory.Exists(KnownDir)) return;
+            foreach (string f in System.IO.Directory.GetFiles(KnownDir, "*.txt"))
+            {
+                string key = System.IO.Path.GetFileNameWithoutExtension(f);
+                try
+                {
+                    bool have = false; foreach (VazCar.Model m in VazCar.Models) if (m != null && m.Folder == key) have = true;
+                    if (have) continue;
+                    string t = System.IO.File.ReadAllText(f).Replace("\r", "");
+                    int nl = t.IndexOf('\n'); string first = nl < 0 ? t : t.Substring(0, nl);
+                    if (!first.StartsWith("dossier=")) { Log.Warn("export des places : " + f + " illisible"); continue; }
+                    string dir = first.Substring(8).Trim();
+                    if (!System.IO.Directory.Exists(dir)) { Log.Info("export des places : voiture " + key + " notee, mais son dossier n'existe plus (" + dir + ")"); continue; }
+                    Log.Info("export des places : voiture " + key + " d'un autre mod reprise de sa note");
+                    AddCar(key, dir, nl < 0 ? "" : t.Substring(nl + 1));
+                }
+                catch (Exception e) { Log.Warn("export des places : voiture " + key + " (" + e.Message + ")"); }
+            }
         }
         static string AddCarImpl(string key, string directory, string definition)
         {
