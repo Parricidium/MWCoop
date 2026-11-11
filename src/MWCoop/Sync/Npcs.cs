@@ -146,6 +146,7 @@ namespace MWCoop
             public float BlendUntil; public Vector3 BlendPos; public Quaternion BlendRot;
             public Rule[] Rules; public PlayMakerFSM[] RuleFsms;
             public bool Engaged; public float EngagedAt, ClaimAt;
+            public List<LODGroup> Lods;                                     // suiveur : distances d'affichage tenues au plus pres (dossier #65)
             public Vector3 HoldAt; public float HeldSince; public List<Transform> Phones;   // voix (Voices)
         }
         static readonly Dictionary<int, Npc> byId = new Dictionary<int, Npc>();
@@ -953,7 +954,40 @@ namespace MWCoop
             n.Held = true; n.Dry = false; n.BlendUntil = 0f; anyHeld = true;
             n.HoldAt = n.Char.position; n.HeldSince = Time.realtimeSinceStartup;   // place d'ici, avant la premiere pose recue
             Mute(n);
-            if (++held <= 20) Log.Info("PNJ : " + Name(n) + " suit #" + n.Sender + (n.Muted.Count > 0 ? " (" + n.Muted.Count + " automates coupes)" : ""));
+            ForceLods(n);
+            if (++held <= 20) Log.Info("PNJ : " + Name(n) + " suit #" + n.Sender + (n.Muted.Count > 0 ? " (" + n.Muted.Count + " automates coupes)" : "")
+                                       + (n.Lods != null ? ", " + n.Lods.Count + " LODGroup tenu(s) au plus pres" : ""));
+        }
+
+        // Passager du jeu mene par un autre joueur (regle Drives : auto-stoppeurs de My Summer Car, client du taxi) : chez celui qui le suit,
+        // seul le corps (Char) monte dans la voiture ; l'objet du PNJ reste la ou sa logique d'ici l'a laisse (Jokke : KILJUGUY/HikerPivot/
+        // JokkeHiker2, au point de ramassage). Son LODGroup, sur cet objet, mesure la distance de la camera a ce point-la et non au corps :
+        // la voiture a peine partie, le jeu cessait de dessiner le passager -- vu chez le conducteur seulement (dossier #65, 10/11 : « Jokke
+        // apparait quelques secondes puis disparait » chez l'hote assis a cote). Pendant le suivi, ces LODGroup sont tenus au niveau le
+        // plus proche (ForceLOD 0), rendus a leur distance quand le PNJ revient a sa logique. [Test] PassagerLod=0 : comme avant.
+        static void ForceLods(Npc n)
+        {
+            if (n.Lods != null || !Rides(n) || Config.GetInt("Test", "PassagerLod", 1) == 0) return;
+            var l = new List<LODGroup>();
+            Transform stop = n.Root != null ? n.Root.parent : null;
+            for (Transform t = n.Char; t != null && t != stop; t = t.parent) { LODGroup g = t.GetComponent<LODGroup>(); if (g != null) l.Add(g); }
+            foreach (LODGroup g in n.Char.GetComponentsInChildren<LODGroup>(true)) if (!l.Contains(g)) l.Add(g);
+            if (l.Count == 0) return;
+            foreach (LODGroup g in l) g.ForceLOD(0);
+            n.Lods = l;
+        }
+
+        static bool Rides(Npc n)
+        {
+            if (n.Rules != null) foreach (Rule r in n.Rules) if (r.Drives != null) return true;
+            return false;
+        }
+
+        static void UnforceLods(Npc n)
+        {
+            if (n.Lods == null) return;
+            foreach (LODGroup g in n.Lods) if (g != null) g.ForceLOD(-1);
+            n.Lods = null;
         }
 
         // Client : toute sa logique locale coupee (sauf ce qu'un joueur provoque) et ses corps rigides figes, le
@@ -971,6 +1005,13 @@ namespace MWCoop
                 if (!n.Whole && (whole ? WorldFsms.PlayerCaused(f) : !(f.FsmName == "Logic" && f.gameObject.name.StartsWith("Phone")))) continue;
                 f.enabled = false; n.Muted.Add(f);
             }
+            // Passager du jeu mene par un autre joueur : son capteur de choc (Char/HumanTriggerCrime :: CarHit) coupe ici. Son corps, pose dans
+            // la copie de la voiture, touchait le CarCollider de celle-ci : renverse pour le jeu d'ici -- pantin, DEATH a JOBS/Mummola, la
+            // grand-mere detruite chez le passager 5 s apres etre montee (dossier #65, essai sc65 11/11). Un vrai choc (sur la route, avant ou
+            // apres le trajet) part de chez son auteur et se rejoue ici (HitRoots). [Test] PassagerChoc=0 : comme avant.
+            if (Rides(n) && Config.GetInt("Test", "PassagerChoc", 1) != 0)
+                foreach (PlayMakerFSM f in n.Char.GetComponentsInChildren<PlayMakerFSM>(true))
+                    if (f.enabled && f.FsmName == "CarHit" && !n.Muted.Contains(f)) { f.enabled = false; n.Muted.Add(f); }
             if (!whole) return;
             foreach (Rigidbody rb in scope.GetComponentsInChildren<Rigidbody>(true))
                 if (!rb.isKinematic && !InRagdoll(rb.transform, scope)) { rb.isKinematic = true; n.Frozen.Add(rb); }
@@ -995,6 +1036,7 @@ namespace MWCoop
         {
             n.Held = false; n.Dry = false; n.Count = 0;
             Unmute(n);
+            UnforceLods(n);
             if (n.Shown) Unshow(n);
             if (n == watch) fluHas = false;
             n.BlendPos = n.Char.localPosition; n.BlendRot = n.Char.localRotation; n.BlendUntil = now + BlendTime;
@@ -1303,10 +1345,10 @@ namespace MWCoop
         }
 
         // Chaque couche : nom:clip@instant(poids), instant ramene a [0,1[ pour un clip en boucle.
-        public static string State(string part)
+        public static string State(string part) { Npc n = Find(part); return n == null ? "? (" + part + " non suivi)" : StateOf(n); }
+
+        static string StateOf(Npc n)
         {
-            Npc n = Find(part);
-            if (n == null) return "? (" + part + " non suivi)";
             var sb = new System.Text.StringBuilder(n.Path);
             sb.Append(n.Char.gameObject.activeInHierarchy ? " actif" : " inactif").Append(" en ").Append(n.Char.position.ToString("F2"));
             if (n.Moved != null) sb.Append(", ").Append(n.Moved.name).Append(" en ").Append(n.Moved.position.ToString("F2"));
@@ -1388,33 +1430,82 @@ namespace MWCoop
         // 'Which car' -> 'Satsuma' -> 'Towards pick point' -> 'Open door' (rangee dans la voiture). Les deux notent toutes les 2 s de
         // 20 a 80 s la grand-mere et sa distance a la GetInPivot de LEUR SATSUMA. Attendu : invite « engage ici (Logic Open door...) »
         // et « mene par #1 » ; hote « PNJ : ...GrannyHiker... confie a #1 » puis « suit #1 », a moins de 1,5 m de la GetInPivot.
+        // (dossier #65, 11/11) [Test] StopPnj=jokke : Jokke qui appelle de la ville (KILJUGUY/HikerPivot/JokkeHiker2 :: Logic mis en 'Activate'
+        // chez chacun a 25 s, corps allume a son point de ramassage ; a 36 s l'invite pose l'objet qui marche, KILJUGUY/HikerPivot, sur la
+        // GetInPivot). [Test] StopPassager=p : l'hote s'assied a la place p de la voiture a 34 s (passager, comme le joueur du #65).
+        // [Test] StopFin=s : notes jusqu'a s (80) ; chaque note dit aussi le corps (rendu actif / dessine), la distance de la camera au
+        // LODGroup de l'objet du PNJ et au corps. [Test] StopCaptures=s1,s2 : a ces instants, la camera regarde le PNJ et capture
+        // (dumps\stop-<role>-t<s>.png).
         static void TestHike(float t)
         {
-            Npc n = Find("ChurchGrandma/GrannyHiker/");
+            bool jk = Config.Get("Test", "StopPnj", "grand-mere") == "jokke";
+            string part = jk ? "HikerPivot/JokkeHiker2/" : "ChurchGrandma/GrannyHiker/", walkerPath = jk ? "KILJUGUY/HikerPivot" : "ChurchGrandma";
+            // (le corps sous Char, pas le pantin d'accident Char/RagDollCar qui a aussi son bodymesh)
+            Npc n = null;
+            foreach (Npc x in all) if (x.Char != null && x.Char.name == "Char" && x.Path.Contains(part)) { n = x; break; }
             PlayMakerFSM logic = n != null && n.Root != null ? Game.FsmOn(n.Root.gameObject, "Logic") : null;
             string car = Config.Get("Test", "StopVoiture", "SATSUMA");
             if (testStep == 0 && t > 25f)
             {
                 testStep = 1;
-                if (logic != null) logic.SendEvent("HIKE");
-                Log.Info("autotest stop (" + Role + ") : HIKE -> " + (logic != null ? logic.ActiveStateName : "grand-mere introuvable (regles " + (HikersMsc ? "actives" : "coupees") + ")"));
+                if (logic != null)
+                {
+                    if (!jk) logic.SendEvent("HIKE");
+                    else { Replay.Depth++; try { Game.SetState(logic, "Activate"); } finally { Replay.Depth--; } }
+                }
+                Log.Info("autotest stop (" + Role + ") : " + (jk ? "Activate" : "HIKE") + " -> " + (logic != null ? logic.ActiveStateName : part + " introuvable (regles " + (HikersMsc ? "actives" : "coupees") + ")"));
             }
             if (!Session.IsHost && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest stop : invite a la voiture : " + (VehicleSync.TestEnter(car, false) ?? car + " introuvable")); }
             if (!Session.IsHost && testStep == 2 && t > 32f) { testStep = 3; Log.Info("autotest stop : invite au volant : " + (VehicleSync.TestEnter(car, true) ?? car + " introuvable")); }
+            int place = Config.GetInt("Test", "StopPassager", -1);
+            if (Session.IsHost && place >= 0 && testStep == 1 && t > 34f) { testStep = 2; Log.Info("autotest stop : hote passager : " + Seats.TestSit(car, place)); }
             Transform pivot = null;
             GameObject cg = Game.FindAny(car.StartsWith("SATSUMA") ? "SATSUMA(557kg, 248)/GetInPivot" : car + "/GetInPivot");
             if (cg != null) pivot = cg.transform;
             if (!Session.IsHost && testStep == 3 && t > 36f)
             {
                 testStep = 4;
-                GameObject walker = Game.FindAny("ChurchGrandma");
+                GameObject walker = Game.FindAny(walkerPath);
                 if (walker != null && pivot != null) walker.transform.position = pivot.position;
-                Log.Info("autotest stop : grand-mere posee sur la GetInPivot (" + (walker != null && pivot != null ? "ok" : "walker ou GetInPivot introuvable") + "), Logic " + (logic != null ? logic.ActiveStateName : "-")
+                Log.Info("autotest stop : " + walkerPath + " pose sur la GetInPivot (" + (walker != null && pivot != null ? "ok" : "walker ou GetInPivot introuvable") + "), Logic " + (logic != null ? logic.ActiveStateName : "-")
                          + ", voiture menee ici " + (VehicleSync.LocalLeadRoot != null ? VehicleSync.LocalLeadRoot.name : "aucune"));
             }
-            if (t < 20f || t > 80f || !Every2s(t)) return;
+            foreach (string s in Config.Get("Test", "StopCaptures", "").Split(','))
+            {
+                float at;
+                if (!float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out at) || t < at - 1f || t > at + 1.5f || n == null) continue;
+                LookAt(n.Char.position + Vector3.up * 0.6f);
+                if (t < at || lastShot >= at) continue;
+                lastShot = at;
+                string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+                System.IO.Directory.CreateDirectory(dir);
+                string png = System.IO.Path.Combine(dir, "stop-" + Role + "-t" + ((int)at).ToString("000") + ".png");
+                Application.CaptureScreenshot(png);
+                Log.Info("autotest stop (" + Role + ") : capture " + png + " ; " + Drawn(n));
+            }
+            if (t < 20f || t > Config.GetFloat("Test", "StopFin", 80f) || !Every2s(t)) return;
             string d = n != null && pivot != null ? (n.Char.position - pivot.position).magnitude.ToString("F2") + " m" : "-";
-            Log.Info("autotest stop (" + Role + ") : " + State("ChurchGrandma/GrannyHiker/") + " ; a " + d + " de la GetInPivot");
+            Log.Info("autotest stop (" + Role + ") : " + (n != null ? StateOf(n) : "? (" + part + " non suivi)") + " ; a " + d + " de la GetInPivot ; " + (n != null ? Drawn(n) : "-"));
+        }
+
+        // Essais (#65) : le corps est-il dessine ? (rendu actif, vu par une camera), distance de la camera au corps et a chaque LODGroup de l'objet.
+        static string Drawn(Npc n)
+        {
+            var sb = new System.Text.StringBuilder("corps ");
+            SkinnedMeshRenderer smr = null;
+            foreach (SkinnedMeshRenderer r in n.Char.GetComponentsInChildren<SkinnedMeshRenderer>(true)) if (r.name.StartsWith("bodymesh") && r.transform.parent == n.Char) { smr = r; break; }
+            sb.Append(smr == null ? "sans bodymesh" : (smr.enabled && smr.gameObject.activeInHierarchy ? "actif" : "inactif") + (smr.isVisible ? ", dessine" : ", pas dessine"));
+            Transform cam = PlayerSync.LocalCamera;
+            if (cam == null) return sb.ToString();
+            sb.Append(", camera a ").Append((cam.position - n.Char.position).magnitude.ToString("F1")).Append(" m");
+            Transform stop = n.Root != null ? n.Root.parent : null;
+            for (Transform t = n.Char; t != null && t != stop; t = t.parent)
+            {
+                LODGroup g = t.GetComponent<LODGroup>();
+                if (g != null) sb.Append(", LODGroup ").Append(t.name).Append(" a ").Append((cam.position - t.TransformPoint(g.localReferencePoint)).magnitude.ToString("F1")).Append(" m");
+            }
+            sb.Append(n.Lods != null ? ", tenu au plus pres" : ", a sa distance");
+            return sb.ToString();
         }
 
         public static void Test(string mode, float t)
