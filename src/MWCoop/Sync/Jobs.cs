@@ -2205,6 +2205,39 @@ namespace MWCoop
             }
         }
 
+        // Client du bois absent apres une teleportation (dossier #66, 11/11 : « on livre le bois et l'ami ne voit pas le client »). L'automate
+        // NPCWood::LOD du jeu ne montre le client qu'a un joueur a plus de 50 m ('Distance 2' -> 'State 4' : il n'apparait pas sous ses yeux) ;
+        // il repart de 'Distance' a chaque allumage de la maison (JOBS/HouseWoodN::LOD, a 200 m). On y arrive d'ordinaire par la route : la
+        // maison s'allume a 200 m, le client avec. Teleporte pres de la maison (« aller vers ce joueur », « faire venir » de l'hote : 1,5 m
+        // derriere lui), le joueur restait sous les 50 m : client jamais montre chez lui, alors que l'autre le voyait et prenait la paie.
+        // Dans les 10 s qui suivent une teleportation d'ici : automate en 'Distance 2' a moins de 50 m -> 'State 4' (client montre, comme
+        // en revenant de plus loin). [Test] BoisApresTeleport=0 : comme avant.
+        static float nextWoodLook;
+        static readonly Dictionary<int, float> woodShownAt = new Dictionary<int, float>();
+        static void WoodCallers(float now)
+        {
+            if (Game.Msc || !Session.Active || now < nextWoodLook) return;
+            nextWoodLook = now + 0.5f;
+            if (now - Menu.LastTeleport > 10f || Config.GetInt("Test", "BoisApresTeleport", 1) == 0) return;
+            Transform me = Game.PlayerT;
+            if (me == null) return;
+            for (int n = 1; n <= 5; n++)
+            {
+                float at;
+                if (woodShownAt.TryGetValue(n, out at) && at == Menu.LastTeleport) continue;
+                GameObject npc = Game.FindAny("JOBS/HouseWood" + n + "/LOD/NPCWood") ?? Game.FindAny("JOBS/HouseWood" + n + "/LOD/CarPos/NPCWood");
+                if (npc == null || !npc.activeInHierarchy) continue;
+                PlayMakerFSM lod = Game.FsmOn(npc, "LOD");
+                if (lod == null || !lod.enabled || lod.ActiveStateName != "Distance 2") continue;
+                float d = Vector3.Distance(me.position, npc.transform.position);
+                if (d >= 50f) continue;
+                woodShownAt[n] = Menu.LastTeleport;
+                Game.SetStateOwn(lod, "State 4");
+                FsmGameObject ch = lod.FsmVariables.FindFsmGameObject("Char");
+                Log.Info("bois : client de HouseWood" + n + " montre apres une teleportation a " + d.ToString("F0") + " m (" + lod.ActiveStateName + ", client " + (ch != null && ch.Value != null && ch.Value.activeSelf ? "allume" : "TOUJOURS ETEINT") + ")");
+            }
+        }
+
         static int reprise = -1, fixLogs;
         public static bool HoseReprise { get { if (reprise < 0) reprise = Config.GetInt("Test", "TuyauReprise", 1); return reprise != 0; } }
         static readonly List<Well> wellFix = new List<Well>();
@@ -2440,6 +2473,7 @@ namespace MWCoop
             if (wellFix.Count > 0) FixWells();
             WellJournal(now);
             SepticOwners(now);
+            WoodCallers(now);
             if (!specialsScanned) return;
             if (now >= nextSpecialWait && (creatorsWaiting.Count > 0 || wellsWaiting.Count > 0))
             {
@@ -2856,10 +2890,53 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=boisteleporte (dossier #66, 2 joueurs, de jour -- Triche=/heure 12) : a BoisCommandeA s (30), chacun met
+        // JOBS/HouseWood[BoisMaison] (4)::Logic en 'Activate order' (commande passee : client NPCWood allume) ; a BoisTeleA s (45), l'invite
+        // ([Test] BoisTeleporte=1 : celui qui le fait) est teleporte a 3 m du client par Menu.TeleportTo, le regard sur lui, photo 8 s apres
+        // (ecran-bois-teleporte). Chacun note toutes les 2 s des 35 s : NPCWood, son LOD, le client, la distance.
+        static int wtStep; static float wtLogAt, wtTeleAt = -1f;
+        static int HourNow() { FsmInt h = FsmVariables.GlobalVariables.FindFsmInt("GlobalHour"); return h != null ? h.Value : -1; }
+        static void TestWoodTeleport(float t)
+        {
+            int n = Config.GetInt("Test", "BoisMaison", 4);
+            GameObject npc = Game.FindAny("JOBS/HouseWood" + n + "/LOD/NPCWood");
+            if (wtStep == 0 && t > Config.GetFloat("Test", "BoisCommandeA", 30f))
+            {
+                wtStep = 1;
+                PlayMakerFSM lg = Game.FindFsm("JOBS/HouseWood" + n + "/WoodJob" + n + "Point", "Logic");
+                bool ok = lg != null && Game.SetState(lg, "Activate order");
+                Log.Info("autotest : boisteleporte, commande HouseWood" + n + " -> " + (lg != null ? lg.ActiveStateName : "pas d'automate") + (ok ? "" : " (refuse)") + ", heure " + HourNow());
+            }
+            bool mover = Config.GetInt("Test", "BoisTeleporte", Session.IsHost ? 0 : 1) != 0;
+            if (wtStep == 1 && mover && t > Config.GetFloat("Test", "BoisTeleA", 45f) && npc != null)
+            {
+                wtStep = 2; wtTeleAt = t;
+                Vector3 at = npc.transform.position + new Vector3(3f, 0.5f, 0f);
+                Menu.TeleportTo(at + new Vector3(0f, 0f, 1.5f), 0f, "client du bois (essai)");   // (TeleportTo recule de 1,5 m selon le cap)
+            }
+            if (wtStep == 2 && wtTeleAt > 0f && t > wtTeleAt + 1f && npc != null)
+            {
+                GameObject p = Game.PlayerGo; Transform cam = p != null ? p.transform.Find("Pivot/AnimPivot/Camera/FPSCamera") : null;
+                if (p != null && cam != null) Autotest.AimAt(p, cam, npc.transform.position + Vector3.up * 1.2f);
+                if (t > wtTeleAt + 8f) { wtStep = 3; Autotest.CaptureSoon("bois-teleporte", 0f); Log.Info("autotest : boisteleporte, photo"); }
+            }
+            if (t > 35f && Time.realtimeSinceStartup >= wtLogAt)
+            {
+                wtLogAt = Time.realtimeSinceStartup + 2f;
+                PlayMakerFSM lod = npc != null ? Game.FsmOn(npc, "LOD") : null;
+                FsmGameObject ch = lod != null ? lod.FsmVariables.FindFsmGameObject("Char") : null;
+                Transform me = Game.PlayerT;
+                Log.Info("autotest : boisteleporte, NPCWood " + (npc == null ? "absent" : npc.activeInHierarchy ? "allume" : "eteint") + ", LOD " + (lod != null ? lod.ActiveStateName : "-")
+                         + ", client " + (ch != null && ch.Value != null ? (ch.Value.activeInHierarchy ? "VISIBLE" : "cache") : "-") + ", a " + (npc != null && me != null ? Vector3.Distance(me.position, npc.transform.position).ToString("F0") : "?") + " m"
+                         + ", heure " + HourNow());
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "cle" || mode == "vazcle") { TestKey(t); return; }
             if (mode == "boucle") { TestBoucle(t); return; }
+            if (mode == "boisteleporte") { TestWoodTeleport(t); return; }
             if (mode == "atteler") { TestAtteler(t); return; }
             if (mode == "fendeuse" || mode == "fendeuse2" || mode == "benne" || mode == "benne2" || mode == "taxi-commandes" || mode == "boitegants")
             {
