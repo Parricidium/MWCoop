@@ -3419,6 +3419,21 @@ static bool CopyKind(const std::wstring &n)
     for (auto &c : ext) c = towlower(c);
     return ext == L".dll" || ext == L".ini" || !_wcsicmp(n.c_str(), GM().exe) || !_wcsicmp(n.c_str(), L"changelog.txt");
 }
+// Les autres petits fichiers a cote du jeu suivent aussi (dossier #62, 11/11) : un jeu hors de Steam peut charger, depuis
+// la racine, un steam_api64.dll qui lit a son tour des fichiers poses a cote de lui (steam_api64.rne : sans lui dans la copie,
+// SteamAPI_Init echouait et la partie se figeait au chargement, alors que le meme jeu marchait de son dossier). Pas les
+// journaux, ni un autre .exe, ni steam_appid.txt (ecrit par la copie), ni un gros fichier (plus de 32 Mo). Un echec ne bloque pas la copie.
+static bool CopyAlso(const WIN32_FIND_DATAW &fd)
+{
+    if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || CopyKind(fd.cFileName)) return false;
+    if (fd.nFileSizeHigh || fd.nFileSizeLow > 32u * 1024 * 1024) return false;
+    std::wstring n = fd.cFileName;
+    if (!_wcsicmp(n.c_str(), L"steam_appid.txt") || !_wcsicmp(n.c_str(), L"output_log.txt")) return false;
+    size_t dot = n.find_last_of(L'.');
+    std::wstring ext = dot == std::wstring::npos ? L"" : n.substr(dot);
+    for (auto &c : ext) c = towlower(c);
+    return ext != L".log" && ext != L".tmp" && ext != L".exe";   // (.exe : MWCoop.exe ou un installateur, pas le jeu)
+}
 // Deux chemins menent-ils au meme dossier (jonction suivie) ?
 static std::wstring FinalDir(const std::wstring &p)
 {
@@ -3507,6 +3522,10 @@ static bool PrepareMirror(const std::wstring &m)
         } else if (CopyKind(n) && !SameFile(src, dst)) {
             DWORD e = 0;
             if (!CopyIntoLaunchCopy(src, dst, &e)) { LaunchLog("copie de lancement : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); FindClose(h); return false; }
+        } else if (CopyAlso(fd) && !SameFile(src, dst)) {
+            DWORD e = 0;
+            if (CopyIntoLaunchCopy(src, dst, &e)) LaunchLog("copie de lancement : %s recopie (fichier a cote du jeu)", Narrow(n, CP_UTF8).c_str());
+            else LaunchLog("copie de lancement : %s impossible (erreur %lu), la copie part sans lui", Narrow(n, CP_UTF8).c_str(), e);
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
@@ -4287,11 +4306,11 @@ static void Launch(int mode, const char *partie = NULL)
         std::string dlls;
         if (fh != INVALID_HANDLE_VALUE) { do { dlls += " " + Narrow(fd.cFileName, CP_UTF8) + "(" + std::to_string(fd.nFileSizeLow) + ")"; } while (FindNextFileW(fh, &fd)); FindClose(fh); }
         DebugLog("DLL du depart :%s", dlls.c_str());
-        // Fichiers a la racine du jeu que la copie de lancement ne reprend pas (ni exe, ni DLL, ni .ini) : un jeu qui marche
+        // Fichiers a la racine du jeu que la copie de lancement ne reprend pas (journaux, gros fichiers...) : un jeu qui marche
         // de son dossier mais se fige depuis la copie peut en avoir besoin (dossier #62, 10/11 : jeu non Steam).
         std::string rest;
         fh = FindFirstFileW((g_gameDir + L"*").c_str(), &fd);
-        if (fh != INVALID_HANDLE_VALUE) { do { if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !CopyKind(fd.cFileName)) rest += " " + Narrow(fd.cFileName, CP_UTF8) + "(" + std::to_string(fd.nFileSizeLow) + (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY ? ", lecture seule" : "") + ")"; } while (FindNextFileW(fh, &fd)); FindClose(fh); }
+        if (fh != INVALID_HANDLE_VALUE) { do { if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !CopyKind(fd.cFileName) && !CopyAlso(fd)) rest += " " + Narrow(fd.cFileName, CP_UTF8) + "(" + std::to_string(fd.nFileSizeLow) + (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY ? ", lecture seule" : "") + ")"; } while (FindNextFileW(fh, &fd)); FindClose(fh); }
         DebugLog("racine du jeu, hors de la copie :%s", rest.empty() ? " (rien)" : rest.c_str());
     }
     if (!IsWine() && ShellRunFromDesktop(exe, args, runDir)) {

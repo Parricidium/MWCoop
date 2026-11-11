@@ -1521,6 +1521,9 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
         } else if (CopyKind(n) && !SameFile(src, dst)) {
             DWORD e = 0;
             if (!CopyIntoLaunchCopy(src, dst, &e)) { LaunchLog("copie de l'invite : %s impossible (erreur %lu%s)", Narrow(n, CP_UTF8).c_str(), e, e == ERROR_SHARING_VIOLATION ? " : fichier pris, un jeu encore ouvert ?" : ""); ok = false; }
+        } else if (CopyAlso(fd) && !SameFile(src, dst)) {   // (petits fichiers a cote du jeu : dossier #62)
+            DWORD e = 0;
+            if (!CopyIntoLaunchCopy(src, dst, &e)) LaunchLog("copie de l'invite : %s impossible (erreur %lu), la copie part sans lui", Narrow(n, CP_UTF8).c_str(), e);
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);

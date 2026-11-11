@@ -1308,6 +1308,33 @@ static int MscSepSelfTest(const wchar_t *log)
         DeleteFileW((g_gameDir + L"seule.dll").c_str());
         say("lecture seule dans la copie : retiree quand le jeu ne l'a plus", PrepareMirror(m) && !FileExists(m + L"seule.dll"));
         SetFileAttributesW(ro.c_str(), FILE_ATTRIBUTE_NORMAL);
+        // (dossier #62, 11/11) les autres petits fichiers a cote du jeu suivent (steam_api64.rne d'un jeu hors de Steam),
+        // pas les journaux ni un gros fichier ; steam_appid.txt reste celui de la copie
+        put(g_gameDir + L"steam_api64.rne", "original");
+        SetFileAttributesW((g_gameDir + L"steam_api64.rne").c_str(), FILE_ATTRIBUTE_READONLY);
+        put(g_gameDir + L"controls.txt", "touches");
+        put(g_gameDir + L"output_log.txt", "journal");
+        put(g_gameDir + L"essai.log", "journal");
+        put(g_gameDir + L"steam_appid.txt", "999");
+        {
+            HANDLE big = CreateFileW((g_gameDir + L"gros.bin").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (big != INVALID_HANDLE_VALUE) { LARGE_INTEGER sz; sz.QuadPart = 33ll * 1024 * 1024; SetFilePointerEx(big, sz, NULL, FILE_BEGIN); SetEndOfFile(big); CloseHandle(big); }
+        }
+        bool c3 = PrepareMirror(m);
+        DWORD a3 = GetFileAttributesW((m + L"steam_api64.rne").c_str());
+        say("racine : steam_api64.rne et controls.txt suivent (lecture seule levee)", c3 && read(m + L"steam_api64.rne") == "original" && read(m + L"controls.txt") == "touches" && a3 != INVALID_FILE_ATTRIBUTES && !(a3 & FILE_ATTRIBUTE_READONLY));
+        say("racine : ni journaux, ni gros fichier ; steam_appid.txt de la copie", !FileExists(m + L"output_log.txt") && !FileExists(m + L"essai.log") && !FileExists(m + L"gros.bin") && read(m + L"steam_appid.txt") == Narrow(GM().appid));
+        say("racine : raison dans lanceur.log", read(ll).find("steam_api64.rne recopie (fichier a cote du jeu)") != std::string::npos);
+        {
+            HANDLE lk2 = CreateFileW((m + L"controls.txt").c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            put(g_gameDir + L"controls.txt", "touches changees");
+            bool c4 = lk2 != INVALID_HANDLE_VALUE && PrepareMirror(m);
+            if (lk2 != INVALID_HANDLE_VALUE) CloseHandle(lk2);
+            say("racine : un fichier a cote pris ne bloque pas la copie", c4 && read(ll).find("controls.txt impossible (erreur 32), la copie part sans lui") != std::string::npos);
+            say("racine : recopie une fois libre", PrepareMirror(m) && read(m + L"controls.txt") == "touches changees");
+        }
+        SetFileAttributesW((g_gameDir + L"steam_api64.rne").c_str(), FILE_ATTRIBUTE_NORMAL);
+        for (const wchar_t *f : { L"steam_api64.rne", L"controls.txt", L"output_log.txt", L"essai.log", L"steam_appid.txt", L"gros.bin" }) DeleteFileW((g_gameDir + f).c_str());
         g_launcherLog = keep;
     }
     FILE *o = _wfopen(log, L"ab");
