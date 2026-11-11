@@ -3828,6 +3828,7 @@ namespace MWCoop
                 if (mode == "ventti" || mode == "ventti2" || mode == "nasse") Machines.Test(mode, t);
                 if (mode == "vitrine") Vitrines.Test(mode, t);
                 if (mode == "stop") Npcs.Test(mode, t);
+                if (mode == "suski") Suski.Test(mode, t);   // (#65 suite : Suski, releve)
                 if (mode == "vidange" || mode == "plein") Fluids.TestFill(mode, t);
                 if (mode == "fuiteconducteur") CarLeaks.Test(mode, t);
                 // ([Test] TestPos=x,y,z sur My Summer Car, pour ces essais de l'audit MSC 02/11 seulement : teleporte a 8 s, comme sur MWC)
