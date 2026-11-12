@@ -1996,6 +1996,7 @@ namespace MWCoop
             // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
             // passager, sonde des places.
             CameraKnobs(t);
+            NewHud.Test(mode, t);   // (pastille [Hud], [MWC] ef36b328 : [Test] PastilleEssai=1 -- essayee aussi sur My Summer Car)
             // ([Test] SondeFigees=s, dossier #61 : toutes les s secondes apres 20 s, la voiture TestVoiture et ses pieces figees, ouvrants, attachees)
             float sfp = Config.GetFloat("Test", "SondeFigees", 0f);
             if (sfp > 0f && t > 20f && Time.realtimeSinceStartup >= sondeFigeesAt)
