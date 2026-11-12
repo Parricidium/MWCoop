@@ -1052,6 +1052,11 @@ namespace MWCoop
             { "no note within 80 m", "нет заметки ближе 80 м" },
             { "note removed", "заметка удалена" },
             { "CO-DRIVER NOTES", "ЗАМЕТКИ ШТУРМАНА" },
+            { "MWCoop badge (top left)", "Значок MWCoop (вверху слева)" },
+            { "Follows F2", "По F2" },
+            { "Always", "Всегда" },
+            { "Hidden", "Скрыт" },
+            { "Follows F2: hidden with the game's HUD", "По F2: скрывается вместе с HUD игры" },
         };
     }
 }

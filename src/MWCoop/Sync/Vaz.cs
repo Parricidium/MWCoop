@@ -469,6 +469,13 @@ namespace MWCoop
             if (!Enabled && rents.Count == 0 && wanted.Count == 0) return;   // (VAZ coupee, aucune sortie : rien a chaque image -- demande de Menor 25/10)
             float now = Time.realtimeSinceStartup;
             foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null && !StandaloneCar.Owns(r.Car)) VazCar.Tick(r.Car, now);   // (standalone : StandaloneCar.Update)
+            // (prechauffage : un fichier par image du modele de la prochaine voiture a construire, VazCar.WarmStep -- Discord 12/11)
+            foreach (KeyValuePair<int, Slot> kv in wanted)
+            {
+                Rent pr; if (rents.TryGetValue(kv.Key, out pr) && pr.Car != null && pr.Car.Car != null) continue;
+                VazCar.Model wm = FilesOf(BuildModel(kv.Value));
+                if (!VazCar.Warmed(wm)) { VazCar.WarmStep(wm); break; }
+            }
             if (now < nextTick) return;
             nextTick = now + 0.5f;
             if (EvoLivery.Poll(MineModel)) MyLiveryChanged();
@@ -624,7 +631,7 @@ namespace MWCoop
             {
                 Rent r;
                 if (!rents.TryGetValue(kv.Key, out r)) { r = new Rent { Id = kv.Key, Number = kv.Value.Number }; rents[kv.Key] = r; }
-                if ((r.Car == null || r.Car.Car == null) && now >= r.NextBuild && r.Tries < 5)
+                if ((r.Car == null || r.Car.Car == null) && now >= r.NextBuild && r.Tries < 5 && VazCar.Warmed(FilesOf(BuildModel(kv.Value))))
                 {
                     r.NextBuild = now + 2f; r.Tries++;
                     r.Model = BuildModel(kv.Value); r.LiveryGen = -1;
@@ -642,6 +649,9 @@ namespace MWCoop
                 Livery(r, kv.Value);
             }
         }
+
+        // Modele dont les fichiers servent a construire la voiture (standalone : celui qu'elle copie, comme dans Reconcile).
+        static VazCar.Model FilesOf(int model) { return VazCar.ModelOf(model).Standalone ? VazCar.ModelOf(VazCar.CopyOf(model)) : VazCar.ModelOf(model); }
 
         // Modele construit ici pour cette place : l'Evo si l'extension est la, sinon la VAZ.
         // (R5 standalone sans le reglage de test ici : la R5 copie, meme couleur et meme numero)

@@ -772,6 +772,12 @@ namespace MWCoop
                     }
                 }
             }
+            // Sous un toit plus bas que des yeux debout, encore dans l'habitacle : on reste accroupi a hauteur d'assise, comme le conducteur
+            // qui sort de sa place (Menos, Discord 12/11 : « make the passenger seats stay seated like the driver » -- le passager se relevait,
+            // la vue au-dessus du toit). « Get out » du jeu joue a son entree (proprietes du moteur du joueur rendues) puis « Crouched 2 »
+            // avant qu'il ne remonte la camera : elle reste ou elle etait, assise ; la touche accroupi relevera le joueur. Sans toit bas, ou
+            // sorti dehors ([Test] SortieDehors=1) : debout comme avant. [Test] SortieAccroupi=0 : comme avant.
+            bool low = player != null && where.Length == 0 && was != null && was.CarT != null && !was.Bed && Config.GetInt("Test", "SortieAccroupi", 1) != 0 && RoofHeight() < StandEye;
             InCar(false);
             if (controller != null) controller.enabled = true;
             if (player != null) Motor(true);
@@ -780,6 +786,13 @@ namespace MWCoop
             pivot = null;
             LeanRemove();
             crouchCheckAt = Time.realtimeSinceStartup + 0.6f;
+            if (low && crouch != null && crouch.Fsm.GetState("Get out") != null && crouch.Fsm.GetState("Crouched 2") != null)
+            {
+                Game.SetState(crouch, "Get out");
+                Game.SetState(crouch, "Crouched 2");
+                crouchCheckAt = -1f;
+                where = "accroupi sous le toit a " + RoofHeight().ToString("F2") + " m (" + crouch.ActiveStateName + ")";
+            }
             Log.Info("passager : sorti" + (where.Length > 0 ? " (" + where + ")" : ""));
             SendSeat("", -1, Vector3.zero);
         }

@@ -628,6 +628,59 @@ namespace MWCoop
             if (t != null) { m.mainTexture = t; Log.Info("vaz : " + (b.Car != null ? b.Car.name : "?") + " porte le numero " + n); }
         }
 
+        // Prechauffage d'un modele (Discord 12/11, Menos : « saccade a l'entree en partie ») : la voiture de la quete s21, une VAZ ou un
+        // standalone etaient construits en une image (688 ms chez la joueuse du #66, dont ~300 ms a lire maillages, textures et sons).
+        // Avant la construction, Vaz.Update lit un fichier par image (maillages .p205, puis les textures de leurs matieres, puis les
+        // sons de sons.txt) dans les caches que la construction relit ensuite. [Test] VazPrechauffe=0 : comme avant.
+        static readonly Dictionary<int, Queue<string>> warmTodo = new Dictionary<int, Queue<string>>();
+        static readonly HashSet<int> warmDone = new HashSet<int>();
+        static readonly Dictionary<int, float> warmStart = new Dictionary<int, float>();
+        public static bool Warmed(Model m) { return m == null || warmDone.Contains(m.Id) || Config.GetInt("Test", "VazPrechauffe", 1) == 0; }
+        // Pour les autres modules (garage de location, VuokraamoRakennus -- [Addons] 12/11) : une lecture de fichier par appel ; vrai quand tout
+        // le modele est en cache (la construction ne lit plus rien). A appeler image par image avant BuildPreview / Build.
+        public static bool Prewarm(Model m) { WarmStep(m); return Warmed(m); }
+        public static void WarmStep(Model m)
+        {
+            if (Warmed(m)) return;
+            Model was = cur; cur = m;
+            try
+            {
+                Queue<string> todo;
+                if (!warmTodo.TryGetValue(m.Id, out todo))
+                {
+                    todo = new Queue<string>();
+                    if (Directory.Exists(m.Dir)) foreach (string f in Directory.GetFiles(m.Dir, "*.p205")) todo.Enqueue("m|" + Path.GetFileName(f));
+                    todo.Enqueue("t|");   // (textures : apres les maillages, qui declarent leurs matieres)
+                    string sons = Path.Combine(Path.Combine(m.Dir, "sons"), "sons.txt");
+                    if (File.Exists(sons))
+                        foreach (string l in File.ReadAllLines(sons))
+                        {
+                            string[] p = l.Split(new[] { ' ', '\t' }, System.StringSplitOptions.RemoveEmptyEntries);
+                            if (p.Length >= 3) todo.Enqueue("s|" + Path.Combine(Path.Combine(m.Dir, "sons"), p[0]));
+                        }
+                    warmTodo[m.Id] = todo; warmStart[m.Id] = Time.realtimeSinceStartup;
+                }
+                if (todo.Count == 0)
+                {
+                    warmDone.Add(m.Id);
+                    Log.Info("vaz : " + m.Name + " prechauffee (maillages, textures, sons) en " + (Time.realtimeSinceStartup - warmStart[m.Id]).ToString("F1") + " s, un fichier par image");
+                    return;
+                }
+                string it = todo.Dequeue();
+                if (it.StartsWith("m|")) Load(it.Substring(2));
+                else if (it == "t|")
+                {
+                    var names = new HashSet<string>();
+                    foreach (KeyValuePair<string, MatDef> kv in matDefs) if (kv.Key.StartsWith(m.Folder + "|") && !string.IsNullOrEmpty(kv.Value.Tex)) names.Add(kv.Value.Tex);
+                    foreach (string n in names) todo.Enqueue("x|" + n);
+                }
+                else if (it.StartsWith("x|")) Tex(it.Substring(2));
+                else if (it.StartsWith("s|")) VazSound.Prewarm(it.Substring(2));
+            }
+            catch (System.Exception e) { warmDone.Add(m.Id); Log.Warn("vaz : prechauffage de " + m.Name + " arrete (" + e.Message + ") : construction directe"); }
+            finally { cur = was; }
+        }
+
         static Texture2D Tex(string name, bool clamp = false)
         {
             if (string.IsNullOrEmpty(name)) return null;

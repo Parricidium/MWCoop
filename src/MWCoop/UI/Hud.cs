@@ -23,15 +23,20 @@ namespace MWCoop
         {
             float now = Time.realtimeSinceStartup;
             // Statut en haut a gauche : pastille discrete (point vert : relie a l'hote).
-            string head = Lang.Name + " " + Version.Text;   // (MSCoop sur My Summer Car)
-            if (Session.Active) head += "  \u00B7  " + Lang.Status(Session.Status) + "  \u00B7  " + Lang.Players(Session.Players.Count);
-            float ph = Style.Px(28), tw = Style.Width(head, 14, false);
-            var hr = new Rect(Style.Px(10), Style.Px(8), tw + Style.Px(44), ph);
-            Style.Round(hr, ph / 2, pill);
-            bool linked = Session.Active && (Session.IsHost || Session.HostConnected);
-            float dd = Style.Px(8);
-            Style.Round(new Rect(hr.x + Style.Px(13), hr.center.y - dd / 2, dd, dd), dd / 2, !Session.Active ? Style.Dim : linked ? Style.Good : Style.Warn);
-            Style.Text(new Rect(hr.x + Style.Px(30), hr.y, tw + Style.Px(10), ph), head, 14, TextAnchor.MiddleLeft, Kit.Soft, false);
+            // ([Hud] Pastille : 0 suit F2 -- cachee quand le jeu cache son HUD --, 1 toujours, 2 cachee ; Menos et 29.30, Discord 12/11)
+            int pm = HudSettings.Get("Pastille");
+            if (pm == 1 || pm == 0 && NewHud.GameHudVisible)
+            {
+                string head = Lang.Name + " " + Version.Text;   // (MSCoop sur My Summer Car)
+                if (Session.Active) head += "  \u00B7  " + Lang.Status(Session.Status) + "  \u00B7  " + Lang.Players(Session.Players.Count);
+                float ph = Style.Px(28), tw = Style.Width(head, 14, false);
+                var hr = new Rect(Style.Px(10), Style.Px(8), tw + Style.Px(44), ph);
+                Style.Round(hr, ph / 2, pill);
+                bool linked = Session.Active && (Session.IsHost || Session.HostConnected);
+                float dd = Style.Px(8);
+                Style.Round(new Rect(hr.x + Style.Px(13), hr.center.y - dd / 2, dd, dd), dd / 2, !Session.Active ? Style.Dim : linked ? Style.Good : Style.Warn);
+                Style.Text(new Rect(hr.x + Style.Px(30), hr.y, tw + Style.Px(10), ph), head, 14, TextAnchor.MiddleLeft, Kit.Soft, false);
+            }
 
             // Messages : pilules empilees, entree en glissant, sortie en fondu.
             toasts.RemoveAll(t => t.Until < now);

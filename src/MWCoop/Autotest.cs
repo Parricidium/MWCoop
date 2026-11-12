@@ -1965,7 +1965,7 @@ namespace MWCoop
             if (d > 25f && serLog == 0) { serLog = 1; Log.Info("autotest : serrage " + Fluids.TestScrew(sc)); }
         }
 
-        static float psProbeAt; static int psIdx;
+        static float psProbeAt; static int psIdx; static bool psShot;
         // [Test] PassagerSortie=s : descendre a s secondes, penche ou pas (PassagerPenche), puis se rasseoir 6 s apres : a sa place, droit, jamais a travers la portiere.
         // ([Test] PassagerSorties=s1,s2,... -- dossier #61 : descendre et se rasseoir a chacun de ces instants, l'un apres l'autre.)
         static void PassagerSortieTest(string mode, float t)
@@ -1985,6 +1985,8 @@ namespace MWCoop
             if (t > ps && step == 1) { step = 2; Log.Info("autotest : passager, avant de descendre " + b.transform.InverseTransformPoint(pl.position).ToString("F3") + " ; " + Seats.TestProbe(b.transform) + " ; " + Seats.TestLeave()); psProbeAt = t; }
             // (dossier #54 : toutes les 0,2 s pendant 5 s apres la sortie -- position, controleur, Crouch, toit)
             if (step >= 2 && psProbeAt > 0f && t >= psProbeAt && t < ps + 5f) { psProbeAt = t + 0.2f; Log.Info("autotest : passager, sortie +" + (t - ps).ToString("F1") + " s : " + Seats.TestProbe(b.transform)); }
+            // ([Test] PassagerSortieCapture=1 -- Menos 12/11 : la vue du passager 2 s apres sa sortie, ecran-passager-sortie)
+            if (step == 2 && t > ps + 2f && !psShot && Config.GetInt("Test", "PassagerSortieCapture", 0) != 0) { psShot = true; CaptureSoon("passager-sortie", 0f); }
             if (t > ps + 1f && step == 2) { step = 3; Log.Info("autotest : passager, descendu " + b.transform.InverseTransformPoint(pl.position).ToString("F3") + ", parent " + (pl.parent != null ? pl.parent.name : "aucun") + ", haut " + pl.up.ToString("F2")); }
             if (t > ps + 6f && step == 3) { step = 4; Log.Info("autotest : passager, rassis : " + Seats.TestSit(car, Config.GetInt("Test", "TestPlace", 0))); }
         }

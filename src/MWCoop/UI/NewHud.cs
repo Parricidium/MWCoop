@@ -135,6 +135,9 @@ namespace MWCoop
             return t < 20f ? Lang.T("gelé", "freezing") : t < 40f ? Lang.T("froid", "cold") : t < 85f ? Lang.T("bien", "fine") : Lang.T("chaud", "hot");
         }
 
+        // HUD du jeu visible (pas cache par F2) -- pastille MWCoop de Hud.Draw, reglage [Hud] Pastille « suit F2 ». Hors partie : vrai.
+        public static bool GameHudVisible { get { return !PlayerSync.InGame || hudRoot == null || GameShows(); } }
+
         // Le jeu montrerait-il son HUD ? (GUI, sa camera, la ligne du HUD)
         static bool GameShows()
         {
@@ -723,8 +726,21 @@ namespace MWCoop
         // les 6 s avec une capture : Carte, Anneaux, Bandeau, Carte 125 % en haut a droite couleur Aurore, Vanilla ; tout remis a
         // la fin (style Vanilla, personnalisation par defaut).
         static int tStep;
+        // [Test] PastilleEssai=1 (Discord 12/11, avec n'importe quel Autotest) : a 25 s capture (HUD du jeu montre), a 27 s GUI/HUD
+        // eteint comme F2, capture a 28,5 s, rallume a 31 s ; journal : pastille dessinee ou non ([Hud] Pastille, GameHudVisible).
+        static int pStep;
+        static void TestPastille(float t)
+        {
+            if (Config.GetInt("Test", "PastilleEssai", 0) == 0 || hudRoot == null) return;
+            if (pStep == 0 && t > 25f) { pStep = 1; Log.Info("autotest : pastille, HUD du jeu montre " + GameHudVisible + ", reglage " + HudSettings.Get("Pastille")); Autotest.CaptureSoon("pastille-hud", 0f); }
+            if (pStep == 1 && t > 27f) { pStep = 2; hudRoot.SetActive(false); }
+            if (pStep == 2 && t > 28.5f) { pStep = 3; Log.Info("autotest : pastille, HUD du jeu cache (comme F2) : montre " + GameHudVisible + ", reglage " + HudSettings.Get("Pastille")); Autotest.CaptureSoon("pastille-f2", 0f); }
+            if (pStep == 3 && t > 31f) { pStep = 4; hudRoot.SetActive(true); Log.Info("autotest : pastille, HUD du jeu rallume : montre " + GameHudVisible); }
+        }
+
         public static void Test(string mode, float t)
         {
+            TestPastille(t);
             if (mode != "hud") return;
             if (t > 22f && tStep == 0)
             {

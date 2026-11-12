@@ -468,6 +468,8 @@ namespace MWCoop
             }
         }
 
+        public static void Prewarm(string path) { Wav(path); }   // (VazCar.WarmStep : un son par image avant la construction)
+
         // WAV PCM 16 bits (mono ou stereo) -> AudioClip (partage par toutes les VAZ)
         static AudioClip Wav(string path)
         {

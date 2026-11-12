@@ -54,6 +54,9 @@ namespace MWCoop
             O("Alertes", "Alertes en haut de l'écran", "Alerts at the top of the screen", 1, 3, null, null, null,
               Game.Msc ? "Très faim, épuisé… pour vous et vos amis" : "Très faim, épuisé, gelé… pour vous et vos amis",
               Game.Msc ? "Very hungry, exhausted… for you and your friends" : "Very hungry, exhausted, freezing… for you and your friends"),
+            // Pastille MWCoop en haut a gauche (Hud.Draw ; Menos et 29.30, Discord 12/11) : suit F2 (cachee quand le jeu cache son HUD), toujours, ou cachee.
+            O("Pastille", "Pastille MWCoop (en haut à gauche)", "MWCoop badge (top left)", 0, 3, new[] { 0, 1, 2 }, new[] { "Suit F2", "Toujours", "Cachée" }, new[] { "Follows F2", "Always", "Hidden" },
+              "Suit F2 : cachée avec le HUD du jeu", "Follows F2: hidden with the game's HUD"),
             // Menus du mod (F10 et petits panneaux, refonte du 18/10) : taille et place, reglees dans F10 > Graphismes.
             O("Menu", "Taille du menu", "Menu size", 100, 9, new[] { 85, 100, 120 }, new[] { "Petit", "Normal", "Grand" }, new[] { "Small", "Normal", "Large" },
               "Le menu F10 et les petits panneaux (triches, porte-monnaie, tchat)", "The F10 menu and the small panels (cheats, wallet, chat)"),
