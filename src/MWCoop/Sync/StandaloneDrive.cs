@@ -55,6 +55,8 @@ namespace MWCoop
             axisRaw = t.GetMethod("GetAxisRaw", new[] { typeof(string) });
             buttonDown = t.GetMethod("GetButtonDown", new[] { typeof(string) });
             buttonHeld = t.GetMethod("GetButton", new[] { typeof(string) });
+            keyDefined = t.GetMethod("IsKeyDefined", new[] { typeof(string) });
+            keyText = t.GetMethod("GetText", new[] { typeof(string), typeof(int) });
             // (noms des touches et axes du jeu que lit la standalone : definis dans cInput ?)
             MethodInfo ax = t.GetMethod("IsAxisDefined", new[] { typeof(string) }), kd = t.GetMethod("IsKeyDefined", new[] { typeof(string) });
             var sb = new System.Text.StringBuilder("standalone : cInput");
@@ -92,11 +94,60 @@ namespace MWCoop
         static MethodInfo buttonHeld;
         // ([Test] : touche tenue / appuyee simulee -- la touche du jeu ne se simule pas autrement)
         static string simHeld = "", simDown = "";
+        // Les deux jeux n'ont pas les memes actions (MSC : HighBeam ; MWC : HiBeamToggle, LightsOff, LightsDrive...) : une action absente
+        // n'est jamais lue (cInput s'en plaindrait a chaque image). Bound : action definie ET une touche dessus (StartEngine n'a pas de
+        // touche par defaut, ni dans MSC ni dans MWC -- Донской 09/11 : « le demarreur a la touche ne marche pas »). Relu toutes les 5 s
+        // (le joueur peut changer ses touches dans les options du jeu).
+        static MethodInfo keyDefined, keyText;
+        static readonly Dictionary<string, bool> keyDef = new Dictionary<string, bool>(), keyBound = new Dictionary<string, bool>();
+        static float keyBoundAt = -10f;
+        static bool Defined(string n)
+        {
+            Cin();
+            if (keyDefined == null) return buttonDown != null;
+            bool v;
+            if (!keyDef.TryGetValue(n, out v)) { try { v = (bool)keyDefined.Invoke(null, new object[] { n }); } catch { v = false; } keyDef[n] = v; }
+            return v;
+        }
+        static bool Bound(string n)
+        {
+            if (!Defined(n)) return false;
+            if (keyText == null) return true;
+            if (Time.realtimeSinceStartup - keyBoundAt > 5f) { keyBound.Clear(); keyBoundAt = Time.realtimeSinceStartup; }
+            bool v;
+            if (!keyBound.TryGetValue(n, out v))
+            {
+                v = false;
+                try { for (int i = 1; i <= 2 && !v; i++) { string s = keyText.Invoke(null, new object[] { n, i }) as string; v = !string.IsNullOrEmpty(s) && s != "None"; } }
+                catch { v = true; }
+                keyBound[n] = v;
+            }
+            return v;
+        }
+        // Demarreur : StartEngine du jeu s'il a une touche, sinon Ignition (MWC), sinon une touche a nous : [Touches] Demarreur (Y par defaut).
+        static KeyCode starterKey = KeyCode.None; static string starterFrom;
+        static string StarterAction() { return Bound("StartEngine") ? "StartEngine" : Bound("Ignition") ? "Ignition" : null; }
+        static KeyCode StarterKey()
+        {
+            if (starterKey == KeyCode.None)
+            {
+                string s = Config.Get("Touches", "Demarreur", "Y");
+                try { starterKey = (KeyCode)Enum.Parse(typeof(KeyCode), s, true); } catch { starterKey = KeyCode.Y; }
+            }
+            return starterKey;
+        }
+        static void StarterLog()
+        {
+            string a = StarterAction(), f = a != null ? "touche du jeu " + a : "touche " + StarterKey() + " ([Touches] Demarreur ; StartEngine du jeu sans touche)";
+            if (f != starterFrom) { starterFrom = f; Log.Info("standalone : demarreur sur " + f); }
+        }
+        static bool StarterHeld() { if (simHeld == "StartEngine") return true; string a = StarterAction(); return a != null ? Held(a) : Input.GetKey(StarterKey()); }
+        static bool StarterDown() { if (simDown == "StartEngine") return true; string a = StarterAction(); return a != null ? Down(a) : Input.GetKeyDown(StarterKey()); }
         public static bool Held(string n)
         {
             if (simHeld == n) return true;
             Cin();
-            if (buttonHeld == null) return false;
+            if (buttonHeld == null || !Defined(n)) return false;
             try { return (bool)buttonHeld.Invoke(null, new object[] { n }); } catch { return false; }
         }
         public static bool Down(string n)
@@ -104,6 +155,7 @@ namespace MWCoop
             if (simDown == n) return true;
             Cin();
             if (buttonDown == null) return n == "DrivingMode" && Input.GetKeyDown(KeyCode.Return);
+            if (!Defined(n)) return false;
             try { return (bool)buttonDown.Invoke(null, new object[] { n }); } catch { return false; }
         }
 
@@ -151,7 +203,9 @@ namespace MWCoop
                     if (ks != null) g.GetComponent<MeshRenderer>().sharedMaterial = new Material(ks) { color = kn.Col, name = "bouton_" + i };
                 }
             // phares : deux projecteurs aux feux avant du modele
-            var heads = new List<Light>();
+            // (pleins phares : un second projecteur par phare, plus serre, plus loin, presque a l'horizontale, ajoute au croisement --
+            // Донской 09/11 : « je ne vois pas les pleins phares », la portee seule ne se voyait pas)
+            var heads = new List<Light>(); var highs = new List<Light>();
             foreach (string n in new[] { "headlight_l", "headlight_r" })
             {
                 Vector3 p;
@@ -163,8 +217,14 @@ namespace MWCoop
                 Light l = lg.gameObject.AddComponent<Light>();
                 HeadBeam(l, false); l.enabled = false;
                 heads.Add(l);
+                var hg = new GameObject("plein").transform;
+                hg.SetParent(lg, false);
+                hg.localRotation = Quaternion.Euler(-3.5f, 0f, 0f);
+                Light h = hg.gameObject.AddComponent<Light>();
+                HighBeamLight(h); h.enabled = false;
+                highs.Add(h);
             }
-            st.Heads = heads.ToArray();
+            st.Heads = heads.ToArray(); st.HighHeads = highs.ToArray();
             // portieres sur charniere (JD 28/10 : « les portes ne s'ouvrent pas ») : pivot au point de charniere du modele (infos.txt
             // door_dside_f / door_pside_f, arete avant), axe vertical, la portiere du modele accrochee dessous ; clic pour ouvrir (Doors)
             st.Doors = new Transform[2]; st.DoorCenter = new Vector3[2]; st.DoorOpen = new bool[2]; st.DoorAngle = new float[2];
@@ -881,9 +941,16 @@ namespace MWCoop
         {
             if (Menu.ChatOpen || Menu.Open) return;
             Vector3 dash = b.Car.transform.TransformPoint(st.T.Yeux + new Vector3(0f, -0.2f, 0.45f));
-            if (Down("HighBeam"))
+            // (MSC : HighBeam (L) : phares, pleins phares, eteints. MWC n'a pas HighBeam : LightsDrive (L) allume / eteint, HiBeamToggle
+            // (virgule) pleins phares oui / non, LightsOff eteint, LightsPark allume)
+            bool cycle = Down("HighBeam"), lDrive = Down("LightsDrive"), lHigh = Down("HiBeamToggle"), lOff = Down("LightsOff"), lPark = Down("LightsPark");
+            if (cycle || lDrive || lHigh || lOff || lPark)
             {
-                if (!st.LightsOn) { st.LightsOn = true; st.HighBeam = false; } else if (!st.HighBeam) st.HighBeam = true; else { st.LightsOn = false; st.HighBeam = false; }
+                if (lOff) { st.LightsOn = false; st.HighBeam = false; }
+                else if (lPark) { st.LightsOn = true; st.HighBeam = false; }
+                else if (lDrive) { st.LightsOn = !st.LightsOn; st.HighBeam = false; }
+                else if (lHigh) { st.HighBeam = !st.LightsOn || !st.HighBeam; st.LightsOn = true; }
+                else if (!st.LightsOn) { st.LightsOn = true; st.HighBeam = false; } else if (!st.HighBeam) st.HighBeam = true; else { st.LightsOn = false; st.HighBeam = false; }
                 Foley(b, "dash_button", dash, 0.6f); SendState(b, st);
                 Log.Info("standalone : phares " + (!st.LightsOn ? "eteints" : st.HighBeam ? "pleins phares" : "allumes") + " (touche)");
             }
@@ -900,12 +967,13 @@ namespace MWCoop
                 Foley(b, "dash_button", dash, 0.6f); SendState(b, st);
                 Log.Info("standalone : clignotant " + st.Turn + ", warnings " + st.Hazard + " (touche)");
             }
-            bool held = Held("StartEngine");
+            StarterLog();
+            bool held = StarterHeld();
             if (!held) st.StartLatch = false;
             if (st.EngineOn)
             {
                 st.KeyCrank = false;
-                if (Down("StartEngine") && !st.StartLatch) { st.StartLatch = true; st.KeyPos = 0; SetEngine(b, false); }
+                if (StarterDown() && !st.StartLatch) { st.StartLatch = true; st.KeyPos = 0; SetEngine(b, false); }
                 return;
             }
             if (held && !st.StartLatch)
@@ -2711,6 +2779,13 @@ namespace MWCoop
             l.type = LightType.Spot; l.cullingMask = BeamMask; l.renderMode = LightRenderMode.ForcePixel;
             l.spotAngle = 50f; l.range = high ? 200f : 50f; l.intensity = high ? 4f : 3f; l.color = new Color(1f, 0.902f, 0.581f);
         }
+        // (faisceau des pleins phares, en plus du croisement : 0,5 degre sous l'horizontale, 30 degres, 250 m, force 6)
+        static void HighBeamLight(Light l)
+        {
+            l.type = LightType.Spot; l.cullingMask = BeamMask; l.renderMode = LightRenderMode.ForcePixel;
+            l.spotAngle = 30f; l.range = 250f; l.intensity = 6f; l.color = new Color(1f, 0.95f, 0.8f);
+        }
+        static void HighOn(State st, bool on) { if (st.HighHeads != null) foreach (Light h in st.HighHeads) if (h != null) h.enabled = on; }
         // ([Test] PharesPhoto=1 : memes vues, de jour puis de nuit, voiture face aux arbres puis dos a eux : phares eteints, ancien reglage,
         // nouveau, pleins phares, et lumieres copiees d'une voiture du jeu au meme endroit)
         static int headStep; static float headAt;
@@ -2756,8 +2831,9 @@ namespace MWCoop
             both("1-ancien");
             foreach (Light l in mine) if (l != null) HeadBeam(l, false);
             both("2-nouveau");
-            foreach (Light l in mine) if (l != null) HeadBeam(l, true);
+            HighOn(st, true);
             both("3-pleins");
+            HighOn(st, false);
             own(false);
             foreach (string pre in new[] { "BeamShort", "BeamLong" })
             {
@@ -2778,6 +2854,7 @@ namespace MWCoop
                 foreach (GameObject g in clones) UnityEngine.Object.DestroyImmediate(g);
             }
             foreach (Light l in mine) if (l != null) { HeadBeam(l, false); l.enabled = st.LightsOn; }
+            HighOn(st, st.LightsOn && st.HighBeam);
         }
         static void Lamps(VazCar.Built b, State st)
         {
@@ -2788,7 +2865,8 @@ namespace MWCoop
             if (b.LampsInit && f == b.FrontOn && br == b.BrakeOn && rv == b.ReverseOn && blink == st.BlinkShown && high == st.HighShown && st.Turn == st.TurnShown) return;
             b.LampsInit = true; b.FrontOn = f; b.RearOn = f; b.BrakeOn = br; b.ReverseOn = rv; st.BlinkShown = blink; st.HighShown = high; st.TurnShown = st.Turn;
             // (pleins phares : plus loin et plus serres)
-            if (st.Heads != null) foreach (Light l in st.Heads) if (l != null) { l.enabled = f; HeadBeam(l, high); }
+            if (st.Heads != null) foreach (Light l in st.Heads) if (l != null) { l.enabled = f; HeadBeam(l, false); }
+            HighOn(st, high);
             foreach (KeyValuePair<MeshRenderer, string> kv in b.Lamps)
             {
                 if (kv.Key == null) continue;
