@@ -839,8 +839,10 @@ namespace MWCoop
             p.transform.position = target;
             if (cc != null) cc.enabled = true;
             Log.Info("teleporte vers " + who);
+            LastTeleport = Time.realtimeSinceStartup;
             Open = false;
         }
+        public static float LastTeleport = -100f;   // (derniere teleportation du joueur local -- Jobs.WoodCallers, dossier #66)
 
         // Hote : exclure demande deux clics (le 2e dans les 4 s) ; le 1er le dit dans la ligne.
         static int kickArmed = -1;

@@ -199,6 +199,7 @@ namespace MWCoop
 
         static string WorldKey(Rigidbody rb)
         {
+            if (Suski.Owns(rb)) return null;   // (pantin de Suski : mene par Suski.cs, porte d'un bloc)
             string k;
             if (worldKeys.TryGetValue(rb.gameObject, out k)) return k;
             Transform t = rb.transform;
