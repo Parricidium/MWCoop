@@ -76,6 +76,7 @@ namespace MWCoop
             foreach (UnityEngine.Object o in vaBaked) if (o != null) UnityEngine.Object.Destroy(o);
             vaBaked.Clear();
             stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0; vaClick = 0; vaAim = false; vaObjDone = false; vaMeshes = null; vaDeskColl = null; vaWasOpen = false; vaShutAt = -10f; vaColl = null; vaInner = null; vaDyno = null; vaBaseColl = null; vaRent = 0; vaSaved = vaGiven = vaMineLogged = false; vaHall = null; vaLampDone = false; vaLampUntil = 0f;
+            vaSteps.Clear(); vaStep = 0; vaTimes.Length = 0;
         }
 
         // prix de location : d'apres le rapport puissance / poids (mk, arrondi a 10) ; [Vuokraamo] Hinta_<dossier>=n
@@ -206,17 +207,60 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- construction
+        // Une etape par image (Menos, Discord 12/11 : « Remove lag when game enters » ; 3,2 s de gel quand tout le garage, ses 8 voitures
+        // et la tole des murs se faisaient dans la meme image) : BuildVuokra prepare la liste, Kauppa.Update en joue une par image
+        // (VuokraStep). [Test] BoutiqueEtapes=0 : tout d'un coup comme avant.
+        static readonly List<KeyValuePair<string, Action>> vaSteps = new List<KeyValuePair<string, Action>>();
+        static int vaStep;
+        static readonly System.Text.StringBuilder vaTimes = new System.Text.StringBuilder();
         static void BuildVuokra()
         {
+            vaSteps.Clear(); vaStep = 0; vaTimes.Length = 0;
             GameObject bg = Game.FindAny("REPAIRSHOP/Building");
             if (bg == null) { L("garage : REPAIRSHOP/Building absent"); return; }
             vaSource = bg.transform;
             stands.Clear(); stands.AddRange(VuokraCatalog());
             if (stands.Count == 0) { L("garage : aucune voiture de rallye"); return; }
-            VuokraMaterials();
-
+            Step("matieres", VuokraMaterials);
+            Step("halle", VuokraFrame);
+            Step("coque", VuokraShell);
+            Step("portes", VuokraDoors);
+            Step("sol", VuokraFloor);
+            Step("enseigne", VuokraSign);
+            Step("parvis", () => VuokraApron(Quaternion.Euler(0f, vaYaw, 0f)));
+            Step("details", VuokraDetails);
+            Step("bureau", VuokraOffice);
+            Step("banc", VuokraDyno);
+            Step("ponts", VuokraLift);
+            for (int i = 0; i < stands.Count && i < VaSlots.Length; i++) { int k = i; Step("voiture " + i, () => VuokraCar(k)); }
+            Step("vendeur", () => { if (stands.Count > VaSlots.Length) L("garage : " + (stands.Count - VaSlots.Length) + " voiture(s) au menu seulement"); VuokraVendor(); });
+            Step("decor", VuokraRealDecor);
+            Step("lumieres", VuokraLights);
+            Step("fin", () => L("garage construit en " + vuokra.transform.position.ToString("F1") + ", plancher " + vaFloor.ToString("F2") + ", " + stands.Count + " voitures, etapes (ms) :" + vaTimes));
+        }
+        static void Step(string name, Action a) { vaSteps.Add(new KeyValuePair<string, Action>(name, a)); }
+        // (une etape ; vrai quand le garage est fini, ou rien a faire)
+        static bool VuokraStep()
+        {
+            if (vaStep >= vaSteps.Count) return true;
+            KeyValuePair<string, Action> st = vaSteps[vaStep++];
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try { st.Value(); }
+            catch (Exception e)
+            {
+                L("garage : " + st.Key + " : " + e);
+                // (sans halle, rien d'autre ne tient)
+                if (vuokra == null) { vaStep = vaSteps.Count; return true; }
+            }
+            vaTimes.Append(" ").Append(st.Key).Append(" ").Append(sw.Elapsed.TotalMilliseconds.ToString("F0"));
+            return vaStep >= vaSteps.Count;
+        }
+        static float vaYaw;
+        static void VuokraFrame()
+        {
             Vector3 c; float oy; string fl;
             OsatFrame(out c, out oy, out fl);
+            vaYaw = oy;
             Quaternion q = Quaternion.Euler(0f, oy, 0f);
             Vector3 centre = c + q * new Vector3(Config.GetFloat("Vuokraamo", "X", VaAtX), 0f, Config.GetFloat("Vuokraamo", "Z", VaAtZ));
             Quaternion turn = Quaternion.FromToRotation(SrcOut, q * Vector3.forward);
@@ -237,20 +281,6 @@ namespace MWCoop
             var hg = new GameObject("va_halli"); hg.transform.SetParent(vuokra.transform, false);
             hg.transform.localPosition = HallP(0f, 0f, 0f); hg.transform.localRotation = HallR(0f);
             vaHall = hg.transform;
-            VuokraShell();
-            VuokraDoors();
-            VuokraFloor();
-            VuokraSign();
-            VuokraApron(q);
-            VuokraDetails();
-            VuokraOffice();
-            VuokraDyno();
-            VuokraLift();
-            VuokraCars();
-            VuokraVendor();
-            VuokraRealDecor();
-            VuokraLights();
-            L("garage construit en " + vuokra.transform.position.ToString("F1") + ", plancher " + vaFloor.ToString("F2") + ", " + stands.Count + " voitures");
         }
 
         static GameObject VaPart(string name, Mesh mesh, Material[] ms, Vector3 pos, Quaternion rot, Vector3 scale)
@@ -613,10 +643,10 @@ namespace MWCoop
             L("garage : ponts du jeu, dessus a " + vaLiftTop.ToString("F2") + " et " + vaLift2Top.ToString("F2") + " m, sol " + RealFloor(11.4f, 10.4f).ToString("F2") + " et " + RealFloor(16f, 11.4f).ToString("F2"));
         }
 
-        static void VuokraCars()
+        // (une voiture du garage : apercu du F10 sur sa place)
+        static void VuokraCar(int i)
         {
             Transform t = vuokra.transform;
-            for (int i = 0; i < stands.Count && i < VaSlots.Length; i++)
             {
                 Stand s = stands[i]; Slot sl = VaSlots[i];
                 var pivot = new GameObject("va_paikka_" + s.Folder).transform;
@@ -630,7 +660,7 @@ namespace MWCoop
                 {
                     s.Number = VaPaint[i % VaPaint.Length];
                     GameObject car = VazCar.BuildPreview(s.Number, Vaz.PaintFor(s.Number, s.Model), 0, out s.Hold, VazCar.ModelOf(s.Model));
-                    if (car == null) { L("garage : apercu impossible pour " + s.Name); continue; }
+                    if (car == null) { L("garage : apercu impossible pour " + s.Name); return; }
                     car.transform.SetParent(pivot, false);
                     car.transform.localPosition = Vector3.zero; car.transform.localRotation = Quaternion.identity;
                     // (pieces a moins de 8 m : les pieces vides d'un addon ont des bornes a l'origine du monde)
@@ -640,7 +670,7 @@ namespace MWCoop
                         if ((r.bounds.center - pivot.position).sqrMagnitude > 64f) continue;
                         if (!any) { bb = r.bounds; any = true; } else bb.Encapsulate(r.bounds);
                     }
-                    if (!any) continue;
+                    if (!any) return;
                     // (sur ses roues : le bas des roues, pas le plus bas de la voiture -- bavettes, spoiler -- JD 06/11 : « pour pas qu'elle vole »)
                     float wheels = float.MaxValue;
                     foreach (Renderer r in car.GetComponentsInChildren<Renderer>(true))
@@ -674,7 +704,6 @@ namespace MWCoop
                 }
                 catch (Exception e) { L("garage : voiture " + s.Name + " : " + e.Message); }
             }
-            if (stands.Count > VaSlots.Length) L("garage : " + (stands.Count - VaSlots.Length) + " voiture(s) au menu seulement");
         }
 
         static GameObject VaBox(Vector3 c, Vector3 s, string mat, bool collide = false) { GameObject g = SaPrim(vaHall, PrimitiveType.Cube, c, s, mats[mat], null, collide); g.name = "va_" + mat; return g; }

@@ -32,7 +32,8 @@ namespace MWCoop
 
         static float buildAt = -1;
         // Une construction par image (JD, 03/11 : boutique, musee et cinema faits d'un coup, 0,8 s de gel ~11 s apres le chargement) :
-        // etape 1 boutique, 2 musee, 3 cinema, 4 magasin de pieces ; [Test] BoutiqueEtapes=0 : tout dans la meme image comme avant.
+        // etape 1 boutique, 2 musee, 3 cinema, 4 magasin de pieces, 5 garage de location (lui-meme une etape par image : VuokraStep) ;
+        // [Test] BoutiqueEtapes=0 : tout dans la meme image comme avant.
         static int buildStage;
         static double buildMs;
         static bool offLogged;
@@ -100,14 +101,18 @@ namespace MWCoop
                             // magasin de pieces CARDINAL VARAOSAT (JD, 23/10)
                             if (OsatOn) try { if (!ShopOn && !Ajouts.Museum && !KinoOn) Materials(); BuildOsat(); } catch (Exception e) { L("magasin de pieces : " + e); }
                             else L("magasin de pieces coupe (ajouts COOP : lanceur, ou choix de l'hote)");
-                // garage de location RALLI-VUOKRAAMO (JD, 06/11), a gauche du Cardinal
-                if (VuokraOn) try { BuildVuokra(); } catch (Exception e) { L("garage : " + e); }
+                            // garage de location RALLI-VUOKRAAMO (JD, 06/11), a gauche du Cardinal : liste de ses etapes
+                            if (VuokraOn) try { BuildVuokra(); } catch (Exception e) { L("garage : " + e); }
+                            break;
+                        case 5:
+                            // garage : une etape par image (VuokraStep)
+                            if (!VuokraStep()) { if (atOnce) continue; buildMs += sw.Elapsed.TotalMilliseconds; return; }
                             break;
                     }
                     buildStage++;
-                } while (atOnce && buildStage <= 4);
+                } while (atOnce && buildStage <= 5);
                 buildMs += sw.Elapsed.TotalMilliseconds;
-                if (buildStage <= 4) return;
+                if (buildStage <= 5) return;
                 built = true;
                 L("construite en " + buildMs.ToString("F0") + " ms" + (atOnce ? "" : " (une construction par image)"));
                 t0 = now;
