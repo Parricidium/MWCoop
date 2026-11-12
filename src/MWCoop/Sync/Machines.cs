@@ -1081,7 +1081,10 @@ namespace MWCoop
                 if (on && now >= nextPowerSend && Session.RemoteCount > 0) SendPower(now);
                 if (named < 0 && compDiffAt <= 0f) SnapshotComputer();
             }
-            if (named > 0) MirrorTick(on); else ApplyRemoteScreen(on);
+            // (ordinateur partage, PcShare -- 12/11 : un seul utilisateur, son ecran vu en direct par les joueurs proches) : la copie immobile
+            // de l'ecran d'ici s'efface ; l'annonce de l'allumage et du jeu lance reste. [Test] PcPartage=0 : copie comme avant.
+            if (PcShare.Active) { if (mirroring) StopMirror(false); }
+            else if (named > 0) MirrorTick(on); else ApplyRemoteScreen(on);
             string prog = on ? ActiveProgram() : "";
             if (prog != program)
             {

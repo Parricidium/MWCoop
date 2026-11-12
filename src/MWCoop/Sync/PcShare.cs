@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -24,9 +24,10 @@ namespace MWCoop
         public const int K_USE = 10, K_OWNER = 11, K_IMG = 12;
         const int Chunk = 1000, None = 255;
         const float NearDist = 8f;
-        // (My Winter Car : pas encore branche ni essaye -- Machines.Computer y copie deja l'ecran ; [MWC] l'ouvrira avec [Test] PcPartageMwc=1
-        // puis en changeant ce defaut, apres ses essais)
-        static bool On { get { return Config.GetInt("Test", "PcPartage", 1) != 0 && (Game.Msc || Config.GetInt("Test", "PcPartageMwc", 0) != 0); } }
+        // (My Winter Car : branche le 12/11 par [MWC] -- essais pa2, pb, pc02 ; Machines.Computer y efface sa copie immobile tant que ce module est
+        // actif. [Test] PcPartageMwc=0 : My Winter Car seul comme avant)
+        public static bool Active { get { return On; } }   // (Machines.Computer, My Winter Car : sa copie immobile de l'ecran s'efface)
+        static bool On { get { return Config.GetInt("Test", "PcPartage", 1) != 0 && (Game.Msc || Config.GetInt("Test", "PcPartageMwc", 1) != 0); } }
         static int W { get { return Config.GetInt("Test", "PcLargeur", 256); } }
         static int H { get { return Config.GetInt("Test", "PcHauteur", 192); } }
 
@@ -35,7 +36,7 @@ namespace MWCoop
         static FsmStateAction keyDown;   // 'Press return' : GetButtonDown DrivingMode
         static Camera cam;
         static Renderer screenR; static int screenIdx = -1;
-        static Material screenMat; static Texture screenOrig;
+        static Material screenMat; static Texture screenOrig; static Material[] screenShared;
         static int owner = None;
         static bool usingHere, keyCut, shown, atSeatToasted;
         static float nextFind, nextOwnerSend, nextImg, lastImgAt, nextStat, toastAt;
@@ -48,7 +49,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            root = seat = null; trigger = null; keyDown = null; cam = null; screenR = null; screenIdx = -1; screenMat = null; screenOrig = null;
+            root = seat = null; trigger = null; keyDown = null; cam = null; screenR = null; screenIdx = -1; screenMat = null; screenOrig = null; screenShared = null; nextScreen = 0f;
             owner = None; usingHere = keyCut = shown = false; nextFind = nextOwnerSend = nextImg = lastImgAt = nextStat = toastAt = 0f;
             inFrame = -1; inBuf = null; bytesOut = bytesIn = 0; framesOut = framesIn = framesSkipped = 0; bytesTo.Clear();
             testStep = 0; testNext = 0f; lastShot = 0f;
@@ -65,24 +66,40 @@ namespace MWCoop
             if (s != null) { seat = s; trigger = Game.FsmOn(s.gameObject, "PlayerTrigger"); }
             Transform c = root.Find("SYSTEM/Camera");
             if (c != null) cam = c.GetComponent<Camera>();
-            // ecran du moniteur : materiau dont le nom ou la texture dit « screen » / « 386_video » / « tv_off »
-            Transform sys = root.Find("SYSTEM");
-            foreach (Renderer rr in root.GetComponentsInChildren<Renderer>(true))
-            {
-                if (sys != null && rr.transform.IsChildOf(sys)) continue;
-                Material[] ms = rr.sharedMaterials;
-                for (int i = 0; i < ms.Length; i++)
-                {
-                    Material m = ms[i];
-                    if (m == null) continue;
-                    string n = m.name.ToLowerInvariant(), tn = m.mainTexture != null ? m.mainTexture.name.ToLowerInvariant() : "";
-                    if (n.Contains("screen") || tn.Contains("386_video") || tn.Contains("tv_off")) { screenR = rr; screenIdx = i; break; }
-                }
-                if (screenR != null) break;
-            }
+            FindScreen();
             FindKey();
             Log.Info("ordinateur partage : " + Recon.Path(root) + ", place " + (trigger != null ? trigger.ActiveStateName : "introuvable") + ", camera " + (cam != null ? (cam.targetTexture != null ? cam.targetTexture.name + " " + cam.targetTexture.width + "x" + cam.targetTexture.height : "sans texture") : "introuvable")
                      + ", ecran " + (screenR != null ? Recon.Path(screenR.transform) + "#" + screenIdx + " (" + screenR.sharedMaterials[screenIdx].name + ")" : "introuvable") + ", touche " + (keyDown != null ? "trouvee" : "introuvable"));
+        }
+
+        // Ecran du moniteur : materiau dont le nom ou la texture dit « screen » / « 386_video » / « tv_off », hors SYSTEM. (My Winter Car : le
+        // moniteur 386MONITOR n'est sous COMPUTER -- PosHome/TRI_Monitor ou PosApart -- qu'une fois achete et pose : recherche refaite toutes
+        // les 5 s tant qu'il n'y est pas, et s'il en sort.)
+        static float nextScreen;
+        static void FindScreen()
+        {
+            if (root == null || screenR != null && screenR.transform.IsChildOf(root)) return;
+            if (shown) Unshow();
+            screenR = null; screenIdx = -1; screenMat = null; screenShared = null;
+            Transform sys = root.Find("SYSTEM");
+            // (deux passes : d'abord le vrai ecran -- texture 386_video / tv_off, ou materiau 386_screen --, puis un nom en « screen » ; sur My
+            // Winter Car la vitre du moniteur, 386_lens, porte tv_screenpattern et passait avant l'ecran, essai pa 12/11)
+            for (int pass = 0; pass < 2 && screenR == null; pass++)
+                foreach (Renderer rr in root.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (sys != null && rr.transform.IsChildOf(sys)) continue;
+                    Material[] ms = rr.sharedMaterials;
+                    for (int i = 0; i < ms.Length; i++)
+                    {
+                        Material m = ms[i];
+                        if (m == null) continue;
+                        string n = m.name.ToLowerInvariant(), tn = m.mainTexture != null ? m.mainTexture.name.ToLowerInvariant() : "";
+                        bool strict = tn.Contains("386_video") || tn.Contains("tv_off") || n.StartsWith("386_screen");
+                        if (strict || pass == 1 && n.Contains("screen")) { screenR = rr; screenIdx = i; break; }
+                    }
+                    if (screenR != null) break;
+                }
+            if (screenR != null && Session.Active) Log.Info("ordinateur partage : ecran " + Recon.Path(screenR.transform) + "#" + screenIdx + " (" + screenR.sharedMaterials[screenIdx].name + ")");
         }
 
         // Touche de 'Press return' : seulement une fois l'automate initialise (place eteinte tant que l'ordinateur n'est pas monte : lire
@@ -107,6 +124,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (root == null) { if (now < nextFind) return; nextFind = now + 5f; Resolve(); if (root == null) return; }
             if (keyDown == null && now >= nextFind) { nextFind = now + 2f; FindKey(); }
+            if (now >= nextScreen) { nextScreen = now + 5f; FindScreen(); }
             bool inUse = trigger != null && trigger.ActiveStateName == "Play";
             if (inUse != usingHere)
             {
@@ -187,6 +205,7 @@ namespace MWCoop
             NearPlayers();
             if (near.Count == 0) return;
             byte[] jpg = Capture();
+            TestDump("envoyee", jpg);
             if (jpg == null) return;
             frameOut++;
             int parts = (jpg.Length + Chunk - 1) / Chunk;
@@ -250,7 +269,23 @@ namespace MWCoop
             var all = new byte[len]; int at = 0;
             foreach (byte[] b in inBuf) { System.Buffer.BlockCopy(b, 0, all, at, b.Length); at += b.Length; }
             inBuf = null;
+            TestDump("recue", all);
             Show(all);
+        }
+
+        // (essais, [Test] PcImageA=s : l'image envoyee / recue la plus proche de s secondes de jeu, enregistree telle quelle -- dumps\pc-<envoyee|recue>.jpg)
+        static bool dumpedOut, dumpedIn;
+        static void TestDump(string what, byte[] jpg)
+        {
+            if (jpg == null || !Config.Testing) return;
+            float at = Config.GetFloat("Test", "PcImageA", 0f);
+            if (at <= 0f || Time.timeSinceLevelLoad < at) return;
+            bool outgoing = what == "envoyee";
+            if (outgoing ? dumpedOut : dumpedIn) return;
+            if (outgoing) dumpedOut = true; else dumpedIn = true;
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps"); System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, "pc-" + what + ".jpg"), jpg);
+            Log.Info("autotest pc : image " + what + " enregistree (" + jpg.Length + " o)");
         }
 
         static bool IsNewer(int a, int b) { return (short)(a - b) > 0; }
@@ -263,6 +298,7 @@ namespace MWCoop
             if (!view.LoadImage(jpg)) return;
             if (!shown)
             {
+                screenShared = screenR.sharedMaterials;   // (rendus tels quels a la fin : le jeu change la texture du materiau partage, 386_screen)
                 Material[] ms = screenR.materials;   // (instances : le materiau partage du jeu n'est pas touche)
                 screenMat = ms[screenIdx]; screenOrig = screenMat.mainTexture;
                 shown = true;
@@ -276,6 +312,10 @@ namespace MWCoop
         {
             shown = false;
             if (screenMat != null) screenMat.mainTexture = screenOrig;
+            // (le moniteur reprend le materiau partage du jeu : sinon il gardait l'instance, et l'allumage / l'extinction du jeu -- qui change
+            // la texture de 386_screen -- ne s'y voyait plus)
+            if (screenR != null && screenShared != null) screenR.sharedMaterials = screenShared;
+            screenMat = null; screenShared = null;
             Log.Info("ordinateur partage : plus d'image, ecran rendu ici");
         }
 
@@ -328,7 +368,8 @@ namespace MWCoop
             if (root == null) Resolve();
             if (root == null) return;
             bool user = (Config.Get("Test", "PcUtilisateur", "invite") == "hote") == Session.IsHost;
-            if (testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest pc : " + TestPowerUp()); }
+            if (testStep == 0 && t > 20f) { testStep = Game.Msc ? 1 : 5; Log.Info("autotest pc : " + (Game.Msc ? TestPowerUp() : TestInstallMwc())); }
+            if (testStep == 5 && t > 22f) { testStep = 1; root = null; Resolve(); Log.Info("autotest pc : " + TestPowerMwc()); }
             if (user && testStep == 1 && t > 30f) { testStep = 2; Sit("utilisateur"); }
             if (!user && testStep == 1 && t > 32f) { testStep = 2; StandNear(); }
             if (!user && testStep == 2 && t > 45f) { testStep = 3; Sit("autre (doit etre refuse)"); }
@@ -365,11 +406,66 @@ namespace MWCoop
         static void StandNear()
         {
             if (seat == null) return;
+            // (My Winter Car : devant l'ecran, a 1,2 m, un peu de cote de la place -- les photos de l'essai pa2 montraient le dos du moniteur)
+            if (!Game.Msc && screenR != null)
+            {
+                Vector3 sc = screenR.bounds.center, to = seat.position - sc; to.y = 0f;
+                if (to.sqrMagnitude > 0.01f) { Vector3 side = Vector3.Cross(Vector3.up, to.normalized); Autotest.PutPlayer(sc + to.normalized * 1.2f + side * 0.5f + Vector3.up * 0.2f); Log.Info("autotest pc : l'autre se pose devant l'ecran"); return; }
+            }
             Autotest.PutPlayer(seat.position + seat.right * 1.6f + Vector3.up * 0.3f);
             Log.Info("autotest pc : l'autre se pose pres de l'ordinateur");
         }
 
         // (essai) l'ordinateur monte (Database/DatabaseComputer/* Installed) et allume (ButtonPower :: Use 'ON' si l'etat existe)
+        // (essai, My Winter Car : copies d'essai seulement) les trois pieces de la brocante (FleaMarketProducts/Disable/386CASE, 386MONITOR,
+        // 386PERIPHERALS) posees comme par le joueur -- automate Data de COMPUTER/PosHome/TRI_* en 'Install 2' avec la piece (ActivePart), sous
+        // Replay (le module des pieces ne l'envoie pas : chacun pose les siennes) -- puis courant et interrupteur (386CASE/Functions/ButtonPower
+        // 'Use' : PowerOn, Fuse, HouseElectricity, 'ON'). Pose a une image, allumage a la suivante (Test, testStep 1 -> 5).
+        static string TestInstallMwc()
+        {
+            var sb = new System.Text.StringBuilder();
+            Replay.Depth++;
+            try
+            {
+                foreach (string[] pp in new[] { new[] { "386CASE", "TRI_Case" }, new[] { "386MONITOR", "TRI_Monitor" }, new[] { "386PERIPHERALS", "TRI_Peripherals" } })
+                {
+                    PlayMakerFSM tri = Game.FindFsm("COMPUTER/PosHome/" + pp[1], "Data");
+                    FsmBool ins = tri != null ? tri.FsmVariables.FindFsmBool("Installed") : null;
+                    if (tri == null) { sb.Append(pp[1]).Append(" introuvable, "); continue; }
+                    if (ins != null && ins.Value) { sb.Append(pp[0]).Append(" deja pose, "); continue; }
+                    GameObject part = null;
+                    foreach (Transform t in Resources.FindObjectsOfTypeAll<Transform>()) if (t.name == pp[0] && t.gameObject.hideFlags == HideFlags.None && t.parent != null && t.GetComponent<PlayMakerFSM>() != null) { part = t.gameObject; break; }
+                    if (part == null) { sb.Append(pp[0]).Append(" introuvable, "); continue; }
+                    tri.FsmVariables.GetFsmGameObject("ActivePart").Value = part;
+                    Game.SetState(tri, "Install 2");
+                    sb.Append(pp[0]).Append(" pose (").Append(tri.ActiveStateName).Append("), ");
+                }
+            }
+            finally { Replay.Depth--; }
+            return sb.ToString();
+        }
+
+        static string TestPowerMwc()
+        {
+            PlayMakerFSM use = null;
+            foreach (Object o in Game.FsmsNamed("Use"))
+            {
+                var f = o as PlayMakerFSM;
+                // (la boite pose sous TRI_Case change de nom : l'interrupteur est celui qui a PowerOn, sous COMPUTER de preference)
+                if (f == null || f.hideFlags != HideFlags.None || f.gameObject.name != "ButtonPower" || f.FsmVariables.FindFsmBool("PowerOn") == null) continue;
+                if (use == null || root != null && f.transform.IsChildOf(root)) use = f;
+            }
+            if (use == null) return "interrupteur introuvable";
+            FsmBool po = use.FsmVariables.FindFsmBool("PowerOn"), fu = use.FsmVariables.FindFsmBool("Fuse");
+            if (po != null) po.Value = true;
+            if (fu != null) fu.Value = true;
+            Game.SetGlobalBool("HouseElectricity", true);
+            Game.SetState(use, "ON");
+            Transform sys = root != null ? root.Find("SYSTEM") : null;
+            return "interrupteur " + use.ActiveStateName + " (" + Recon.Path(use.transform) + "), SYSTEM " + (sys != null && sys.gameObject.activeInHierarchy ? "allume" : "eteint") + ", place " + (trigger != null ? trigger.ActiveStateName : "-")
+                   + ", camera " + (cam != null ? (cam.gameObject.activeInHierarchy ? "allumee" : "eteinte") : "-");
+        }
+
         static string TestPowerUp()
         {
             var sb = new System.Text.StringBuilder();
