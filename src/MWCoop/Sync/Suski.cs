@@ -327,8 +327,10 @@ namespace MWCoop
         // ---------------------------------------------------------------- messages
         public static void OnMessage(Peer from, NetReader r)
         {
-            if (!On) return;
             int kind = r.U8();
+            // Canal « monde » generique (Msg.Suski == Msg.MondeGenerique) : sortes 10-12 = ordinateur partage (PcShare), pas Suski.
+            if (kind >= PcShare.K_USE && kind <= PcShare.K_IMG) { PcShare.OnMessage(kind, from, r, null); return; }
+            if (!On) return;
             switch (kind)
             {
                 case K_STATE:

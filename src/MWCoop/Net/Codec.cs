@@ -152,6 +152,8 @@ namespace MWCoop.Net
         Talk = 54,        // vocal de proximite : paquet de voix compresse par Steam (Voice) ; l'hote relaie
         Knob = 52,        // commande tenue d'un vehicule (starter, frein a main) : valeur de celui qui la tient (Knobs)
         Loading = 55,
-        Suski = 56,       // Suski (My Summer Car) : etat decide par l'hote, pose du pantin par son meneur, prise, note lue (Suski)     // hote -> invites : il va charger un niveau, son silence est a tolerer N s (U8) (Session.AnnounceLoading)
+        Suski = 56,       // canal « monde » generique (nom historique) : sortes 0-3 Suski (pantin, etat, prise, note) ; 10-12 ordinateur partage
+                          // (PcShare : utilisateur, proprietaire, image). Un mod de la meme NetVersion qui ne connait pas une sorte l'ignore.
+        MondeGenerique = 56,   // (meme valeur : a utiliser pour tout nouveau module qui passe par ce canal)     // hote -> invites : il va charger un niveau, son silence est a tolerer N s (U8) (Session.AnnounceLoading)
     }
 }

@@ -257,6 +257,7 @@ namespace MWCoop
             new Mod("rayons", Stock.Update),
             new Mod("PNJ", Npcs.Update),
             new Mod("suski", Suski.Update),
+            new Mod("ordinateur partage", PcShare.Update),
             new Mod("voitures garees", Parked.Update),
             new Mod("monde (automates)", WorldFsms.Update),
             new Mod("trafic", Traffic.Update),
@@ -456,6 +457,7 @@ namespace MWCoop
             Drinks.OnLevelLoaded();
             Stock.OnLevelLoaded();
             Npcs.OnLevelLoaded();
+            PcShare.OnLevelLoaded();
             Parked.OnLevelLoaded();
             WorldFsms.OnLevelLoaded();
             Traffic.OnLevelLoaded();
@@ -504,7 +506,7 @@ namespace MWCoop
                                     CarColor.OnLevelLoaded, CustomPaint.OnLevelLoaded, Ajouts.OnLevelLoaded, Gfx.OnLevelLoaded,
                                     // (19/10 : trafic et PNJ, boulots, argent et magasins)
                                     CopySounds.OnLevelLoaded, Wallet.OnLevelLoaded, Shop.OnLevelLoaded, Stock.OnLevelLoaded, Drinks.OnLevelLoaded,
-                                    FuelPrices.OnLevelLoaded, Npcs.OnLevelLoaded, Suski.OnLevelLoaded, Traffic.OnLevelLoaded, LogPiles.OnLevelLoaded, Jobs.OnLevelLoaded,
+                                    FuelPrices.OnLevelLoaded, Npcs.OnLevelLoaded, Suski.OnLevelLoaded, PcShare.OnLevelLoaded, Traffic.OnLevelLoaded, LogPiles.OnLevelLoaded, Jobs.OnLevelLoaded,
                                     // (19/10 : mecanique -- pieces et vis (PartsMsc.cs), objets, peinture, reglages, liquides, atelier, remorquage)
                                     Parts.OnLevelLoaded, Props.OnLevelLoaded, Paint.OnLevelLoaded, Settings.OnLevelLoaded, Fluids.OnLevelLoaded,
                                     Consume.OnLevelLoaded, ItemFsms.OnLevelLoaded, Tow.OnLevelLoaded, Garage.OnLevelLoaded,
@@ -540,6 +542,7 @@ namespace MWCoop
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
             "voitures", "portieres", "tableaux de bord", "passagers", "sommeil", "lit des parents", "difficulte",
+            "ordinateur partage",   // (12/11 : un seul utilisateur, ecran vu des autres -- PcShare.cs)
             "suski",   // (11/11 : pantin de Suski, accident de la KYLAJANI -- Suski.cs, My Summer Car seulement)
             "radio",   // (22/10 : canaux RadioChannels et lecteur CDPlayer de la SATSUMA, memes automates que MWC)
             // 22/10 (JD : « fait tout ») : modules generiques (ils balaient les automates et les objets, sans chemin de MWC) --

@@ -3830,7 +3830,8 @@ namespace MWCoop
                 if (mode == "ventti" || mode == "ventti2" || mode == "nasse") Machines.Test(mode, t);
                 if (mode == "vitrine") Vitrines.Test(mode, t);
                 if (mode == "stop") Npcs.Test(mode, t);
-                if (mode == "suski") Suski.Test(mode, t);   // (#65 suite : Suski, releve)
+                if (mode == "suski") Suski.Test(mode, t);
+                if (mode == "pc") PcShare.Test(mode, t);   // (ordinateur partage, 12/11)   // (#65 suite : Suski, releve)
                 if (mode == "foin") Props.Test(mode, t);   // (balles de foin sur le plateau du KEKMET, 29.30 10/11)
                 if (mode == "vidange" || mode == "plein") Fluids.TestFill(mode, t);
                 if (mode == "fuiteconducteur") CarLeaks.Test(mode, t);
