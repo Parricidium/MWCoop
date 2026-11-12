@@ -76,7 +76,7 @@ namespace MWCoop
             foreach (UnityEngine.Object o in vaBaked) if (o != null) UnityEngine.Object.Destroy(o);
             vaBaked.Clear();
             stands.Clear(); vuokra = null; vaSource = null; vaLooked = false; VuokraOpen = false; saMenu = null; vaVendor = null; vaVendorCol = null; vaTest = 0; vaClick = 0; vaAim = false; vaObjDone = false; vaMeshes = null; vaDeskColl = null; vaWasOpen = false; vaShutAt = -10f; vaColl = null; vaInner = null; vaDyno = null; vaBaseColl = null; vaRent = 0; vaSaved = vaGiven = vaMineLogged = false; vaHall = null; vaLampDone = false; vaLampUntil = 0f;
-            vaSteps.Clear(); vaStep = 0; vaTimes.Length = 0;
+            vaSteps.Clear(); vaStep = 0; vaTimes.Length = 0; vaStepTotal = vaStepMax = 0; vaStepCalls = 0;
         }
 
         // prix de location : d'apres le rapport puissance / poids (mk, arrondi a 10) ; [Vuokraamo] Hinta_<dossier>=n
@@ -209,8 +209,10 @@ namespace MWCoop
         // ---------------------------------------------------------------- construction
         // Une etape par image (Menos, Discord 12/11 : « Remove lag when game enters » ; 3,2 s de gel quand tout le garage, ses 8 voitures
         // et la tole des murs se faisaient dans la meme image) : BuildVuokra prepare la liste, Kauppa.Update en joue une par image
-        // (VuokraStep). [Test] BoutiqueEtapes=0 : tout d'un coup comme avant.
-        static readonly List<KeyValuePair<string, Action>> vaSteps = new List<KeyValuePair<string, Action>>();
+        // (VuokraStep). Avant chaque voiture, ses fichiers (.p205, textures, sons) lus un par image dans les caches de VazCar (VazCar.Prewarm) :
+        // une voiture faite d'un coup coutait encore 235 a 629 ms. [Test] BoutiqueEtapes=0 : tout d'un coup comme avant.
+        static readonly List<KeyValuePair<string, Func<bool>>> vaSteps = new List<KeyValuePair<string, Func<bool>>>();
+        static double vaStepTotal, vaStepMax; static int vaStepCalls;
         static int vaStep;
         static readonly System.Text.StringBuilder vaTimes = new System.Text.StringBuilder();
         static void BuildVuokra()
@@ -232,27 +234,41 @@ namespace MWCoop
             Step("bureau", VuokraOffice);
             Step("banc", VuokraDyno);
             Step("ponts", VuokraLift);
-            for (int i = 0; i < stands.Count && i < VaSlots.Length; i++) { int k = i; Step("voiture " + i, () => VuokraCar(k)); }
+            for (int i = 0; i < stands.Count && i < VaSlots.Length; i++)
+            {
+                int k = i;
+                StepUntil("fichiers " + i, () => VazCar.Prewarm(VazCar.ModelOf(stands[k].Model)));
+                Step("voiture " + i, () => VuokraCar(k));
+            }
             Step("vendeur", () => { if (stands.Count > VaSlots.Length) L("garage : " + (stands.Count - VaSlots.Length) + " voiture(s) au menu seulement"); VuokraVendor(); });
             Step("decor", VuokraRealDecor);
             Step("lumieres", VuokraLights);
             Step("fin", () => L("garage construit en " + vuokra.transform.position.ToString("F1") + ", plancher " + vaFloor.ToString("F2") + ", " + stands.Count + " voitures, etapes (ms) :" + vaTimes));
         }
-        static void Step(string name, Action a) { vaSteps.Add(new KeyValuePair<string, Action>(name, a)); }
-        // (une etape ; vrai quand le garage est fini, ou rien a faire)
+        static void Step(string name, Action a) { vaSteps.Add(new KeyValuePair<string, Func<bool>>(name, () => { a(); return true; })); }
+        // (etape rejouee une fois par image jusqu'a vrai)
+        static void StepUntil(string name, Func<bool> f) { vaSteps.Add(new KeyValuePair<string, Func<bool>>(name, f)); }
+        // (un appel par image ; vrai quand le garage est fini, ou rien a faire)
         static bool VuokraStep()
         {
             if (vaStep >= vaSteps.Count) return true;
-            KeyValuePair<string, Action> st = vaSteps[vaStep++];
+            KeyValuePair<string, Func<bool>> st = vaSteps[vaStep];
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            try { st.Value(); }
+            bool done = true;
+            try { done = st.Value(); }
             catch (Exception e)
             {
                 L("garage : " + st.Key + " : " + e);
                 // (sans halle, rien d'autre ne tient)
                 if (vuokra == null) { vaStep = vaSteps.Count; return true; }
             }
-            vaTimes.Append(" ").Append(st.Key).Append(" ").Append(sw.Elapsed.TotalMilliseconds.ToString("F0"));
+            double ms = sw.Elapsed.TotalMilliseconds;
+            vaStepTotal += ms; vaStepMax = Math.Max(vaStepMax, ms); vaStepCalls++;
+            if (!done) return false;
+            // (journal : temps de l'etape ; rejouee : total / plus long appel x nombre d'images)
+            vaTimes.Append(" ").Append(st.Key).Append(" ").Append(vaStepCalls > 1 ? vaStepTotal.ToString("F0") + "/" + vaStepMax.ToString("F0") + "x" + vaStepCalls : vaStepTotal.ToString("F0"));
+            vaStepTotal = vaStepMax = 0; vaStepCalls = 0;
+            vaStep++;
             return vaStep >= vaSteps.Count;
         }
         static float vaYaw;
