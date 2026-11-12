@@ -117,7 +117,7 @@ export class Edition {
     return this.local.get(idx);
   }
 
-  modelUrl(f) { return "https://projets.local/" + encodeURIComponent(this.dossier) + "/modeles/" + encodeURIComponent(f); }
+  modelUrl(f) { return (window.ediProjets || "https://projets.local/") + encodeURIComponent(this.dossier) + "/modeles/" + encodeURIComponent(f); }
 
   loadModel(rec, node) {
     const ext = rec.src.fichier.split(".").pop().toLowerCase();
@@ -1504,7 +1504,7 @@ export class Edition {
     return mat;
   }
   habitUrl(h) {
-    if (h.k === "img") return "https://projets.local/" + encodeURIComponent(this.dossier) + "/" + h.f.split("/").map(encodeURIComponent).join("/");
+    if (h.k === "img") return (window.ediProjets || "https://projets.local/") + encodeURIComponent(this.dossier) + "/" + h.f.split("/").map(encodeURIComponent).join("/");
     if (h.k === "tex") return this.v.texUrl(h.t);
     const m = this.v.info.matieres[h.mi];
     return m && m.t >= 0 ? this.v.texUrl(m.t) : "";

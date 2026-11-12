@@ -32,10 +32,79 @@ namespace EditeurCarte
             if (Environment.GetEnvironmentVariable("EDITEUR_HORS_ECRAN") == "1") { StartPosition = FormStartPosition.Manual; Location = new Point(-4000, 100); ShowInTaskbar = false; }   // (essais : jamais sur l'ecran du joueur)
             Padding = new Padding(Grip);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            if (Program.Browser) { Load += (s, e) => StartBrowser(Environment.GetEnvironmentVariable("MWCOOP_WINE") != null ? "MWCOOP_WINE" : "Wine ou --navigateur"); return; }
             web.Dock = DockStyle.Fill;
             web.DefaultBackgroundColor = Color.FromArgb(0x1a, 0x1a, 0x1a);
             Controls.Add(web);
             Load += async (s, e) => await InitWeb();
+        }
+
+        // ---------------------------------------------------------------- mode navigateur (LocalServer)
+        // Sans WebView2 (Linux / Proton, ou runtime absent) : la page s'ouvre dans le navigateur du joueur ; cette fenetre devient un petit
+        // panneau (« ouvert dans ton navigateur », rouvrir, copier l'adresse, fermer) qui garde le programme en vie et porte ses boites
+        // de dialogue (choisir l'exe, importer un modele ou une image).
+        LocalServer server;
+        Label urlLabel;
+
+        void StartBrowser(string why)
+        {
+            if (server != null) return;
+            Program.Browser = true;
+            if (Controls.Contains(web)) { Controls.Remove(web); try { web.Dispose(); } catch { } }
+            string ui = Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "ui");
+            Directory.CreateDirectory(Games.CacheRoot);
+            Directory.CreateDirectory(Projects.Root);
+            server = new LocalServer(ui, Games.CacheRoot, Projects.Root, body =>
+            {
+                try { BeginInvoke(new Action(() => { Dictionary<string, object> m; try { m = json.Deserialize<Dictionary<string, object>>(body); } catch { return; } if (m != null) OnPage(m, null); })); }
+                catch (InvalidOperationException) { }
+            });
+            string f = Environment.GetEnvironmentVariable("EDITEUR_URL_FICHIER");   // (essais : l'adresse pour le navigateur d'essai)
+            if (!string.IsNullOrEmpty(f)) try { File.WriteAllText(f, server.Url); } catch { }
+
+            string l = (Program.LangArg ?? System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName).ToLowerInvariant();
+            Func<string, string, string, string, string> L = (fr, en, ru, ar) => l == "fr" ? fr : l == "ru" ? ru : l == "ar" ? ar : en;
+            SuspendLayout();
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            Padding = new Padding(16);
+            MinimumSize = Size.Empty;
+            ClientSize = new Size(540, 190);
+            if (StartPosition == FormStartPosition.CenterScreen) CenterToScreen();
+            ForeColor = Color.FromArgb(0xee, 0xee, 0xee);
+            Font = new Font("Segoe UI", 10f);
+            if (l == "ar") { RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; }
+            var t1 = new Label { AutoSize = false, Location = new Point(16, 14), Size = new Size(508, 26), Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                                 Text = L("L'éditeur de carte est ouvert dans ton navigateur.", "The map editor is open in your web browser.", "Редактор карты открыт в вашем браузере.", "محرر الخريطة مفتوح في متصفحك.") };
+            var t2 = new Label { AutoSize = false, Location = new Point(16, 44), Size = new Size(508, 22),
+                                 Text = L("Garde cette fenêtre ouverte tant que tu t'en sers.", "Keep this window open while you use it.", "Не закрывайте это окно, пока работаете в редакторе.", "أبقِ هذه النافذة مفتوحة طوال استخدامك للمحرر.") };
+            urlLabel = new Label { AutoSize = false, Location = new Point(16, 72), Size = new Size(508, 22), ForeColor = Color.FromArgb(0x9a, 0x9a, 0x9a), Text = "http://127.0.0.1:" + server.Port + "/…", RightToLeft = RightToLeft.No };
+            Func<string, int, Button> B = (text, x) => new Button { Text = text, Location = new Point(x, 130), Size = new Size(164, 34), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(0x33, 0x33, 0x33), ForeColor = ForeColor };
+            Button open = B(L("Rouvrir dans le navigateur", "Open in the browser again", "Открыть в браузере снова", "افتحه في المتصفح مرة أخرى"), 16);
+            Button copy = B(L("Copier l'adresse", "Copy the address", "Скопировать адрес", "انسخ العنوان"), 188);
+            Button quit = B(L("Fermer l'éditeur", "Close the editor", "Закрыть редактор", "أغلق المحرر"), 360);
+            open.Click += (s, e) => OpenBrowser();
+            copy.Click += (s, e) => { try { Clipboard.SetText(server.Url); } catch { } };
+            quit.Click += (s, e) => Close();
+            Controls.AddRange(new Control[] { t1, t2, urlLabel, open, copy, quit });
+            ResumeLayout();
+            OpenBrowser();
+            System.Diagnostics.Trace.WriteLine("editeur : mode navigateur (" + why + ") " + server.Url);
+        }
+
+        void OpenBrowser()
+        {
+            if (Environment.GetEnvironmentVariable("EDITEUR_SANS_NAVIGATEUR") == "1") return;   // (essais : le navigateur d'essai ouvre l'adresse)
+            try { Process.Start(new ProcessStartInfo(server.Url) { UseShellExecute = true }); }
+            catch { if (urlLabel != null) urlLabel.Text = server.Url; }   // (pas de navigateur par defaut : l'adresse a copier)
+        }
+
+        // (boites de dialogue en mode navigateur : la fenetre du programme passe devant le navigateur le temps du choix)
+        void Front(bool on)
+        {
+            if (server == null) return;
+            if (on) { if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal; TopMost = true; Activate(); }
+            else TopMost = false;
         }
 
         protected override CreateParams CreateParams
@@ -68,7 +137,7 @@ namespace EditeurCarte
         protected override void WndProc(ref Message m)
         {
             const int WM_NCHITTEST = 0x84;
-            if (m.Msg == WM_NCHITTEST && WindowState == FormWindowState.Normal)
+            if (m.Msg == WM_NCHITTEST && WindowState == FormWindowState.Normal && server == null && !Program.Browser)
             {
                 Point p = PointToClient(new Point((short)(m.LParam.ToInt64() & 0xFFFF), (short)((m.LParam.ToInt64() >> 16) & 0xFFFF)));
                 int c = Grip * 2;
@@ -91,9 +160,7 @@ namespace EditeurCarte
             }
             catch (Exception e)
             {
-                MessageBox.Show(this, "WebView2 (Microsoft Edge) est introuvable sur ce PC.\n\nInstalle « Microsoft Edge WebView2 Runtime » depuis le site de Microsoft, puis relance l'éditeur.\n\n(" + e.Message + ")",
-                                "Éditeur de carte", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                Close();
+                StartBrowser("WebView2 : " + e.Message);   // (pas de WebView2 : la page dans le navigateur, plus de message d'erreur)
                 return;
             }
             CoreWebView2 w = web.CoreWebView2;
@@ -122,7 +189,8 @@ namespace EditeurCarte
         {
             if (IsDisposed) return;
             if (InvokeRequired) { try { BeginInvoke(new Action(() => Post(msg))); } catch (InvalidOperationException) { } return; }   // (fil de la preparation)
-            if (web.CoreWebView2 == null) return;
+            if (server != null) { server.Send(json.Serialize(msg)); return; }
+            if (web.IsDisposed || web.CoreWebView2 == null) return;
             web.CoreWebView2.PostWebMessageAsJson(json.Serialize(msg));
         }
 
@@ -131,16 +199,22 @@ namespace EditeurCarte
         {
             Dictionary<string, object> m;
             try { m = json.Deserialize<Dictionary<string, object>>(e.WebMessageAsJson); } catch { return; }
+            string dropped = null;
+            if (S(m, "type") == "deposer" && e.AdditionalObjects != null)   // (fichier glisse sur la fenetre : chemin donne par WebView2)
+                foreach (object o in e.AdditionalObjects) { var f = o as CoreWebView2File; if (f != null) { dropped = f.Path; break; } }
+            OnPage(m, dropped);
+        }
+
+        // (messages de la page, par WebView2 ou par le serveur local ; dropped : fichier glisse, WebView2 seulement)
+        void OnPage(Dictionary<string, object> m, string dropped)
+        {
             string type = S(m, "type");
             switch (type)
             {
                 case "pret": SendState(); break;
-                case "fenetre": Window(S(m, "action")); break;
+                case "fenetre": if (server == null) Window(S(m, "action")); break;
                 case "choisirExe": PickExe(S(m, "jeu")); break;
-                case "deposer":   // fichier glisse sur la fenetre (chemin donne par WebView2)
-                    if (e.AdditionalObjects != null)
-                        foreach (object o in e.AdditionalObjects) { var f = o as CoreWebView2File; if (f != null) { CheckPick(S(m, "jeu"), f.Path); break; } }
-                    break;
+                case "deposer": if (dropped != null) CheckPick(S(m, "jeu"), dropped); break;
                 case "verifier": CheckPick(S(m, "jeu"), S(m, "chemin")); break;
                 case "valider": Validate(S(m, "jeu"), S(m, "chemin"), m.ContainsKey("retenir") && m["retenir"] is bool && (bool)m["retenir"]); break;
                 case "reessayer": SendState(); break;
@@ -243,7 +317,8 @@ namespace EditeurCarte
                 d.Filter = g.Exe + "|" + g.Exe + "|Programmes (*.exe)|*.exe";
                 d.FileName = g.Exe;
                 d.CheckFileExists = true;
-                if (d.ShowDialog(this) == DialogResult.OK) CheckPick(id, d.FileName);
+                Front(true); bool ok = d.ShowDialog(this) == DialogResult.OK; Front(false);
+                if (ok) CheckPick(id, d.FileName);
             }
         }
 
@@ -288,7 +363,8 @@ namespace EditeurCarte
                 d.Title = "Modèle 3D";
                 d.Filter = "Modèles 3D (*.glb, *.gltf, *.fbx, *.obj)|*.glb;*.gltf;*.fbx;*.obj";
                 d.CheckFileExists = true;
-                if (d.ShowDialog(this) != DialogResult.OK) return;
+                Front(true); DialogResult res = d.ShowDialog(this); Front(false);
+                if (res != DialogResult.OK) return;
                 string f = null, err = null;
                 try { f = Projects.ImportModel(dossier, d.FileName); } catch (Exception e) { err = e.Message; }
                 Post(new Dictionary<string, object> { { "type", "modele" }, { "fichier", f ?? "" }, { "nom", Path.GetFileNameWithoutExtension(d.FileName) }, { "erreur", err ?? (f == null ? "copie" : "") } });
@@ -303,7 +379,8 @@ namespace EditeurCarte
                 d.Title = "Image";
                 d.Filter = "Images (*.png, *.jpg, *.jpeg, *.bmp, *.webp)|*.png;*.jpg;*.jpeg;*.bmp;*.webp";
                 d.CheckFileExists = true;
-                if (d.ShowDialog(this) != DialogResult.OK) return;
+                Front(true); DialogResult res = d.ShowDialog(this); Front(false);
+                if (res != DialogResult.OK) return;
                 string f = null, err = null;
                 try { f = Projects.ImportImage(dossier, d.FileName); } catch (Exception e) { err = e.Message; }
                 Post(new Dictionary<string, object> { { "type", "image" }, { "fichier", f ?? "" }, { "erreur", err ?? (f == null ? "copie" : "") } });

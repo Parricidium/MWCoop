@@ -4,7 +4,15 @@ import { Edition } from "./edition.js";
 
 const $ = id => document.getElementById(id);
 const host = window.chrome && window.chrome.webview;
-const send = m => host ? host.postMessage(m) : window.essaiSend && window.essaiSend(m);
+// mode navigateur (Linux / Proton, sans WebView2 : LocalServer.cs) : page servie par le programme sous /<jeton>/ ; envoi POST <jeton>/api,
+// une file pour garder l'ordre des messages ; reception par le flux <jeton>/evenements
+const NAV = !host && /^\/[0-9a-f]{32}\/$/.test(location.pathname.replace(/[^/]*$/, ""));
+const ROOT = NAV ? location.pathname.replace(/[^/]*$/, "") : "";
+let navQueue = Promise.resolve();
+const navSend = m => { const body = JSON.stringify(m); navQueue = navQueue.then(() => fetch(ROOT + "api", { method: "POST", body }).catch(() => { })); };
+const send = m => host ? host.postMessage(m) : NAV ? navSend(m) : window.essaiSend && window.essaiSend(m);
+window.ediProjets = host ? "https://projets.local/" : NAV ? ROOT + "projets/" : "/projets/";   // (edition.js : modeles et images des projets)
+if (NAV) document.documentElement.classList.add("nav");   // (sur <html> : body.className est remis a zero par les fenetres de la page)
 let state = null;          // dernier etat recu (jeux trouves, cartes preparees)
 let pick = null;           // fenetre « introuvable » : { jeu, verif }
 let prepGame = null;
@@ -127,7 +135,7 @@ window.addEventListener("drop", e => {
   e.preventDefault();
   $("ix-drop").classList.remove("over");
   if (!pick || !e.dataTransfer.files.length) return;
-  host && host.postMessageWithAdditionalObjects({ type: "deposer", jeu: pick.jeu }, e.dataTransfer.files);
+  host && host.postMessageWithAdditionalObjects({ type: "deposer", jeu: pick.jeu }, e.dataTransfer.files);   // (mode navigateur : pas de chemin, zone cachee)
 });
 
 const ICON_OK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
@@ -218,7 +226,7 @@ async function openMap(id, projet) {
   $("title").textContent = projet ? projet.data.nom + " · " + g.nom : T("carteDe", g.nom);
   $("st-jeu").textContent = g.nom + (g.version ? " " + g.version : "");
   show("visite");
-  viewer = new Viewer({ canvas: $("c3d"), game: id, base: (host ? "https://carte.local/" : "/carte/") + id + "/", ui: {
+  viewer = new Viewer({ canvas: $("c3d"), game: id, base: (host ? "https://carte.local/" : NAV ? ROOT + "carte/" : "/carte/") + id + "/", ui: {
     loading: $("loading"), loadingText: $("loading-t"), layers: $("layers"), sel: $("sel"), hints: $("hints"), speed: $("speed"),
     pos: $("st-pos"), obj: $("st-obj"), fps: $("st-fps"), lieu: $("st-lieu"),
     persp: $("v-persp"), top: $("v-dessus"), home: $("v-joueur"), esc } });
@@ -361,5 +369,13 @@ function onHostMessage(e) {
 }
 applyI18n();
 if (host) send({ type: "pret" });
+else if (NAV) {
+  // (le programme ferme -- sa petite fenetre, ou le lanceur : le flux tombe et ne revient pas ; un message, une fois)
+  const es = new EventSource(ROOT + "evenements");
+  let opened = false, lost = null;
+  es.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } onHostMessage({ data: m }); };
+  es.onopen = () => { clearTimeout(lost); lost = null; if (!opened) { opened = true; send({ type: "pret" }); } };
+  es.onerror = () => { if (opened && !lost) lost = setTimeout(() => { es.close(); toast(T("programmeFerme")); }, 4000); };
+}
 else import("./essai.js").then(m => m.start({ onMessage: data => window.dispatchEvent(new MessageEvent("essai", { data })) }));   // (page ouverte dans un navigateur : essais sans le programme)
 window.addEventListener("essai", e => onHostMessage({ data: e.data }));
