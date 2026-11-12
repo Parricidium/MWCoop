@@ -559,6 +559,11 @@ IP / VPN network, then enter the host's address (address:port if their port isn'
 In the lobby: the options chosen by the host (read-only) and yours (voice, faces, map, host's files), for this lobby only.	في الردهة: الخيارات التي اختارها المضيف (للقراءة فقط) وخياراتك (الصوت، الوجوه، الخريطة، ملفات المضيف)، لهذه الردهة فقط.
 Lobby full: the number chosen by the host (8 by default, 16 at most), host included.	الردهة ممتلئة: العدد الذي اختاره المضيف (8 افتراضياً، 16 كحد أقصى) بما فيهم المضيف.
 \"Wrong session code\": the lobby is private, ask the host for the code (they copy it with one click in their lobby).	«رمز الجلسة غير صحيح»: الردهة خاصة، اطلب الرمز من المضيف (ينسخه بنقرة واحدة في ردهته).
+MWCoop badge (top left)	شارة MWCoop (أعلى اليسار)
+Follows F2	يتبع F2
+Always	دائمًا
+Hidden	مخفية
+Follows F2: hidden with the game's HUD	يتبع F2: تُخفى مع واجهة اللعبة
 See others' markers	رؤية علامات الآخرين
 Shared marker (tap: place, hold: remove)	علامة مشتركة (ضغطة: وضع، ضغط مطوّل: إزالة)
 Marker	علامة

@@ -8683,6 +8683,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)
         else if (st == L"reglages-cle") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-lanceur"); g_setContentH = 2000; g_scroll[g_tab] = 2000; }   // (carte Acces reserve, en bas de la colonne de gauche)
+        else if (st == L"reglages-hud-bas") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-hud"); g_setContentH = 2000; g_scroll[g_tab] = 450; }   // (carte Coop du HUD : Equipe, Alertes, Pastille)
         else if (st == L"reglages-triches") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-coop"); g_gfxVal["Triches"] = 1; g_gfxVal["TrichesHote"] = 1; }   // (carte Regles, triches autorisees)
         else if (st == L"reglages-coop-invite") { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(L"reglages-coop"); g_lobby = LB_GUEST; }   // (ajouts : « Réglé par l'hôte », JD 28/10)
         else if (!wcsncmp(st.c_str(), L"reglages-", 9)) { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(st); }   // reglages-jeu|image|son|coop|touches|theme|lanceur|recherche

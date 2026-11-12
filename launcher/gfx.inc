@@ -206,6 +206,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "JaugeJour", L"Jour", L"Day", 1, {}, {}, {}, 0, 18, "Hud" },
         { "Equipe", L"Panneau Équipe", L"Team panel", 1, {}, {}, {}, 0, 19, "Hud" },
         { "Alertes", L"Alertes en haut de l'écran", L"Alerts at the top of the screen", 1, {}, {}, {}, 0, 19, "Hud" },
+        // Pastille MWCoop en haut a gauche du jeu ([MWC] ef36b328, Discord 12/11) : 0 suit F2 (cachee avec le HUD du jeu), 1 toujours, 2 cachee
+        { "Pastille", L"Pastille MWCoop (en haut à gauche)", L"MWCoop badge (top left)", 0, { 0, 1, 2 }, { L"Suit F2", L"Toujours", L"Cachée" }, { L"Follows F2", L"Always", L"Hidden" }, 0, 19, "Hud" },
         // Coop, rangees par type (demande de JD, 10/10) : 6 voix, 7 visages, 8 partie et partage, 9 touches.
         { "Vocal", L"Vocal de proximité", L"Proximity voice", 1, {}, {}, {}, 0, 6, "Coop" },
         { "VocalPortee", L"Portée de la voix", L"Voice range", 35, { 15, 25, 35, 50, 80 },
@@ -741,6 +743,7 @@ static const SetItem kSetItems[] = {
     { 25, SI_GFX, "Equipe", NULL, NULL, L"Les jauges des autres joueurs, en petit", L"The other players' gauges, small" },
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé, gelé… toi et tes amis", L"Very hungry, exhausted, freezing… you and your friends", 0, 1 },
     { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé… toi et tes amis", L"Very hungry, exhausted… you and your friends", 0, 2 },   // (pas de froid dans My Summer Car)
+    { 25, SI_GFX, "Pastille", NULL, NULL, L"Suit F2 : cachée avec le HUD du jeu", L"Follows F2: hidden with the game's HUD" },
     // Acces reserve (outil des places, cle d'acces signee par JD, 26/10) : l'ID a lui envoyer, la cle recue (explication : son etat)
     { 26, SI_X, "cle", L"Clé d'accès", L"Access key", NULL, NULL },
     { 27, SI_X, "interface", L"Interface", L"Interface", L"La nouvelle (Soft UI), ou l'ancienne · le lanceur redémarre", L"The new one (Soft UI), or the previous one · the launcher restarts" },
