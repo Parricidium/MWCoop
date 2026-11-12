@@ -6,17 +6,17 @@ using UnityEngine;
 namespace MWCoop
 {
     // Images importees (demande de JD, 10/10 -- « comme Arx Fatalis ») : le joueur importe une image dans le lanceur (onglet
-    // TENUE : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg, peintes sur le gabarit de la texture du jeu) et
+    // TENUE : %LOCALAPPDATA%\MWCoop\visage-<jeu>.jpg, haut-<jeu>.jpg, pantalon-<jeu>.jpg, peintes sur le gabarit de la texture du jeu) et
     // choisit « Visage perso » / « Haut perso » / « Pantalon perso » dans la liste ([Coop] Visage / Apparence / Pantalon =
     // "perso"). Dans la chaine d'apparence la partie devient "perso_<empreinte>" (visage), "persoh_" (haut), "persop_"
     // (pantalon) ; chez les autres, l'image est demandee (@visage?) a qui l'a, recue par morceaux (@visagep, fiables, 900
     // octets), gardee en cache (%LOCALAPPDATA%\MWCoop\visages\<empreinte>.jpg) et posee sur une copie de la matiere du jeu
     // (char_face01, char_shirt01, char_pants01, comme les tenues offertes). [Coop] VoirVisages=0 : celles des autres non.
     // Gabarits (ExportTemplate) : la texture du jeu, et la meme avec le trace des coutures (UV) de la partie du corps des
-    // PNJ, ecrites dans %LOCALAPPDATA%\MWCoop (gabarit-visage.png, gabarit-haut.png, gabarit-pantalon.png, et *-jeu.png).
-    // My Summer Car (19/10) : memes images et memes gabarits pour les deux jeux (corps des PNJ identiques : memes UV ; patrons
-    // char_face01 / char_shirt01 / char_pants01 presents dans MSC) ; seule la texture du jeu sous le trace vient du dernier jeu
-    // qui a ecrit les gabarits (une fois par version du mod).
+    // PNJ, ecrites dans %LOCALAPPDATA%\MWCoop (gabarit-visage-<jeu>.png, gabarit-haut-<jeu>.png, gabarit-pantalon-<jeu>.png, et *-jeu-<jeu>.png).
+    // My Summer Car (19/10) : corps des PNJ identiques (memes UV ; patrons char_face01 / char_shirt01 / char_pants01 presents
+    // dans MSC). Depuis le 12/11 (retour d'un joueur) : une image et un gabarit par jeu (<jeu> = mwc ou msc, PersoFiles), pour
+    // porter une chemise sur MSC et un manteau sur MWC ; les anciennes images communes sont reprises une fois pour chaque jeu.
     public static class CustomFace
     {
         public const int Face = 0, Shirt = 1, Pants = 2;
@@ -38,7 +38,19 @@ namespace MWCoop
         // ([Test] RacineVisages : un dossier par instance d'essai, qui partagent sinon le meme LOCALAPPDATA)
         static string Root { get { string o = Config.Get("Test", "RacineVisages", ""); return o.Length > 0 ? o : Path.Combine(System.Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? ".", "MWCoop"); } }
         static string CacheDir { get { return Path.Combine(Root, "visages"); } }
-        static string MyFile(int k) { return Path.Combine(Root, FileName[k] + ".jpg"); }
+        // une image par jeu (visage-mwc.jpg, haut-msc.jpg... : PersoFiles), les anciennes communes reprises une fois
+        static string Gid { get { return PersoFiles.GameId(Game.Msc); } }
+        static bool migrated;
+        static string MyFile(int k)
+        {
+            if (!migrated)
+            {
+                migrated = true;
+                int n = PersoFiles.Migrate(Root, Gid, FileName);
+                if (n > 0) Log.Info("image perso : " + n + " ancienne(s) image(s) commune(s) reprise(s) pour ce jeu (" + Gid + ")");
+            }
+            return PersoFiles.Image(Root, FileName[k], Gid);
+        }
         static string CacheFile(string hash) { return Path.Combine(CacheDir, hash + ".jpg"); }
 
         public static int KindOf(string name)
@@ -159,11 +171,12 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- gabarits
-        // Une fois par version du mod : pour le visage, le haut et le pantalon, la texture du jeu (<partie>-jeu.png) et la
-        // meme avec le trace des triangles de cette partie du corps des PNJ, en rouge (gabarit-<partie>.png).
+        // Une fois par version du mod et par jeu : pour le visage, le haut et le pantalon, la texture du jeu
+        // (<partie>-jeu-<jeu>.png) et la meme avec le trace des triangles de cette partie du corps des PNJ, en rouge
+        // (gabarit-<partie>-<jeu>.png).
         public static void ExportTemplate()
         {
-            string tag = Path.Combine(Root, "gabarits.version");
+            string tag = PersoFiles.TemplateTag(Root, Gid);
             try { if (File.Exists(tag) && File.ReadAllText(tag) == Version.Text) return; } catch { }
             SkinnedMeshRenderer body = null;
             foreach (SkinnedMeshRenderer s in Resources.FindObjectsOfTypeAll(typeof(SkinnedMeshRenderer)))
@@ -193,7 +206,7 @@ namespace MWCoop
             try
             {
                 Directory.CreateDirectory(Root);
-                File.WriteAllBytes(Path.Combine(Root, FileName[k] + "-jeu.png"), tex.EncodeToPNG());
+                File.WriteAllBytes(PersoFiles.GameTexture(Root, FileName[k], Gid), tex.EncodeToPNG());
                 int tris = 0, sub = -1;
                 if (body != null)
                 {
@@ -209,7 +222,7 @@ namespace MWCoop
                         for (int j = 0; j < 3; j++) Line(tex, uv[t[i + j]], uv[t[i + (j + 1) % 3]], red);
                     tex.Apply();
                 }
-                File.WriteAllBytes(Path.Combine(Root, "gabarit-" + FileName[k] + ".png"), tex.EncodeToPNG());
+                File.WriteAllBytes(PersoFiles.Template(Root, FileName[k], Gid), tex.EncodeToPNG());
                 Log.Info(FileName[k] + " perso : gabarit ecrit (" + w + "x" + h + ", sous-maillage " + sub + ", " + tris + " triangles) dans " + Root);
                 ok = true;
             }

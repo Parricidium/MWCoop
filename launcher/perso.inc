@@ -33,12 +33,46 @@ static void TileBmpFree() { for (auto &kv : g_tileBmp) delete kv.second; g_tileB
 enum { PF_HAT, PF_GLASSES, PF_HAIR, PF_FACE, PF_SHIRT, PF_PANTS, PF_BODY, PF_COUNT };
 static const char *kPersoKey[PF_COUNT] = { "Chapeau", "Lunettes", "Cheveux", "Visage", "Apparence", "Pantalon", "Corps" };
 
-// Images importees (demande de JD, 10/10) : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg ; choisies dans la
-// liste de leur partie ("perso" : « Visage perso », « Haut perso », « Pantalon perso »), montrees en direct par l'apercu
-// (matiere "#perso-<n>"), et par le mod aux autres joueurs (Sync\CustomFace.cs).
+// Images importees (demande de JD, 10/10) : %LOCALAPPDATA%\MWCoop\visage-<jeu>.jpg, haut-<jeu>.jpg, pantalon-<jeu>.jpg ;
+// choisies dans la liste de leur partie ("perso" : « Visage perso », « Haut perso », « Pantalon perso »), montrees en direct
+// par l'apercu (matiere "#perso-<n>"), et par le mod aux autres joueurs (Sync\CustomFace.cs).
+// Une image par jeu (<jeu> = mwc ou msc ; retour d'un joueur, 12/11 : une chemise sur MSC, un manteau sur MWC, et le manteau
+// remplacait la chemise). Les anciennes images communes (visage.jpg, haut.jpg, pantalon.jpg) sont recopiees une fois pour
+// chaque jeu (marqueur perso-<jeu>.migre), sans ecraser ; l'ancienne reste pour un mod plus ancien. Meme regle dans le mod
+// (Sync\PersoFiles.cs). Gabarits aussi par jeu (gabarit-<partie>-<jeu>.png, <partie>-jeu-<jeu>.png), sinon les anciens.
 enum { PI_FACE, PI_SHIRT, PI_PANTS };
 static const wchar_t *kPersoImg[3] = { L"visage", L"haut", L"pantalon" };
-static std::wstring PersoImgFile(int k) { return LocalDir() + kPersoImg[k] + L".jpg"; }
+static bool g_persoMigrated[2];
+static int PersoImgMigrate(int game)
+{
+    if (g_persoMigrated[game]) return -1;
+    g_persoMigrated[game] = true;
+    std::wstring dir = LocalDir(), mark = dir + L"perso-" + kGames[game].id + L".migre";
+    if (dir.empty() || FileExists(mark)) return -1;
+    int n = 0;
+    bool fail = false;
+    for (int k = 0; k < 3; k++) {
+        std::wstring old = dir + kPersoImg[k] + L".jpg", now = dir + kPersoImg[k] + L"-" + kGames[game].id + L".jpg";
+        if (!FileExists(old) || FileExists(now)) continue;
+        if (CopyFileW(old.c_str(), now.c_str(), TRUE)) { n++; SetFileAttributesW(now.c_str(), FILE_ATTRIBUTE_NORMAL); continue; }
+        DWORD e = GetLastError();
+        if (!FileExists(now)) { fail = true; LaunchLog("image perso : %ls.jpg pas reprise pour %ls (erreur %lu), nouvel essai au prochain lancement", kPersoImg[k], kGames[game].id, e); }
+    }
+    if (!fail) {
+        HANDLE h = CreateFileW(mark.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h != INVALID_HANDLE_VALUE) { DWORD w = 0; WriteFile(h, "1", 1, &w, NULL); CloseHandle(h); }
+    }
+    if (n) LaunchLog("image perso : %d ancienne(s) image(s) commune(s) reprise(s) pour %ls", n, kGames[game].id);
+    return n;
+}
+static std::wstring PersoImgFile(int k) { PersoImgMigrate(g_game); return LocalDir() + kPersoImg[k] + L"-" + GM().id + L".jpg"; }
+// Gabarit (trace = true) ou texture du jeu sous l'image, ecrits par le mod : ceux de ce jeu, sinon les anciens communs.
+static std::wstring PersoTplFile(int k, bool trace)
+{
+    std::wstring d = LocalDir(), now = trace ? d + L"gabarit-" + kPersoImg[k] + L"-" + GM().id + L".png" : d + kPersoImg[k] + L"-jeu-" + GM().id + L".png";
+    if (FileExists(now)) return now;
+    return trace ? d + L"gabarit-" + kPersoImg[k] + L".png" : d + kPersoImg[k] + L"-jeu.png";
+}
 static bool PersoImgHas(int k) { return FileExists(PersoImgFile(k)); }
 static int PersoImgOf(int f) { return f == PF_FACE ? PI_FACE : f == PF_SHIRT ? PI_SHIRT : f == PF_PANTS ? PI_PANTS : -1; }
 static int PersoPartOf(int k) { return k == PI_FACE ? PF_FACE : k == PI_SHIRT ? PF_SHIRT : PF_PANTS; }

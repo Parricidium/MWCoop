@@ -8563,6 +8563,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return rc;
     }
+    // /testpersojeu <journal> : une image perso par jeu (tenue.inc), dans un dossier de jeu jetable seulement.
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/testpersojeu")) {
+        int rc = PersoJeuSelfTest(argv[2]);
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // /testtenues <journal> : tenues enregistrees (lecture, ecriture, mise), dans un dossier de jeu jetable seulement.
     if (argc >= 3 && !_wcsicmp(argv[1], L"/testtenues")) {
         int rc = OutfitSelfTest(argv[2]);

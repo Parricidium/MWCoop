@@ -414,9 +414,9 @@ static void DrawSkinGhost(Graphics &g, float cx, float top, float k)
     g.FillPath(&b, &bp);
 }
 
-// ---- images importees (page PERSONNAGE) : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg, a la taille de la texture du
+// ---- images importees (page PERSONNAGE) : %LOCALAPPDATA%\MWCoop\visage-<jeu>.jpg, haut-<jeu>.jpg, pantalon-<jeu>.jpg (une par jeu), a la taille de la texture du
 // jeu (gabarit) ; choisies dans la liste de leur partie ("perso", perso.inc), montrees aux autres par le mod (CustomFace).
-// Gabarits : ecrits par le mod au 1er passage en jeu de chaque version (gabarit-visage.png, gabarit-haut.png, gabarit-pantalon.png).
+// Gabarits : ecrits par le mod au 1er passage en jeu de chaque version (gabarit-visage-<jeu>.png..., par jeu depuis le 12/11 ; sinon les anciens communs).
 // La bande « Mes images » (onglet Visage) suit g_lookZone (0 visage, 1 haut, 2 pantalon) ; les tuiles « Mon visage / haut /
 // pantalon » des grilles lancent l'import quand l'image n'est pas la.
 static bool EncoderClsid(const wchar_t *mime, CLSID *out);
@@ -489,6 +489,7 @@ static Bitmap *PersoThumb(int k)
     }
     return g_persoThumb[k];
 }
+static bool PersoImportFrom(int k, const std::wstring &file, std::wstring &why);
 static void FaceImport()
 {
     int k = PersoImgZone();
@@ -506,13 +507,22 @@ static void FaceImport()
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
     if (!GetOpenFileNameW(&of)) return;
     std::wstring why;
+    if (!PersoImportFrom(k, file, why)) {
+        LaunchLog("image perso : echec (%ls)", why.c_str());
+        std::wstring msg = std::wstring(T(L"Cette image n'a pas pu être lue : ", L"This image could not be read: ")) + why + L".";
+        MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
+    }
+}
+// Import sans boite de dialogue (aussi pour /testpersojeu) : l'image de la partie k pour le jeu choisi seulement.
+static bool PersoImportFrom(int k, const std::wstring &file, std::wstring &why)
+{
     Bitmap *src = LoadAnyImage(file, &why);
     bool ok = false;
     if (src) {
         // taille de la texture du jeu (gabarit ecrit par le mod), sinon celle des PNJ (visage 512 x 256)
         int W = 512, H = k == PI_FACE ? 256 : 512;
-        Bitmap *game = LoadAnyImage(LocalDir() + kPersoImg[k] + L"-jeu.png", NULL);
-        if (Bitmap *tpl = game ? game : LoadAnyImage(LocalDir() + L"gabarit-" + kPersoImg[k] + L".png", NULL)) {
+        Bitmap *game = LoadAnyImage(PersoTplFile(k, false), NULL);
+        if (Bitmap *tpl = game ? game : LoadAnyImage(PersoTplFile(k, true), NULL)) {
             W = (int)tpl->GetWidth(); H = (int)tpl->GetHeight();
             if (tpl != game) delete tpl;
         }
@@ -532,21 +542,17 @@ static void FaceImport()
         CreateDirectoryW(LocalDir().c_str(), NULL);
         ok = EncoderClsid(L"image/jpeg", &jpg) && dst.Save(PersoImgFile(k).c_str(), &jpg, &ep) == Ok;
         if (!ok) why = T(L"enregistrement impossible", L"can't save it");
-        LaunchLog("image perso importee (%ls) : %dx%d", kPersoImg[k], W, H);
+        LaunchLog("image perso importee (%ls, %ls) : %dx%d", kPersoImg[k], GM().id, W, H);
     }
     delete src;
     PersoImgChanged(k);
     if (ok) { PersoSet(PersoPartOf(k), "perso"); g_skinAnnounce = true; g_skinChangeT = GetTickCount(); }   // (choisie : montree en direct)
-    else {
-        LaunchLog("image perso : echec (%ls)", why.c_str());
-        std::wstring msg = std::wstring(T(L"Cette image n'a pas pu être lue : ", L"This image could not be read: ")) + why + L".";
-        MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
-    }
+    return ok;
 }
 static void FaceTemplate()
 {
     int k = PersoImgZone();
-    std::wstring t = LocalDir() + L"gabarit-" + kPersoImg[k] + L".png";
+    std::wstring t = PersoTplFile(k, true);
     if (FileExists(t)) { std::wstring a = L"/select,\"" + t + L"\""; ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL); return; }
     MessageBoxW(g_wnd, T(L"Les gabarits sont créés par le mod : lance une partie (solo suffit) et reste ~20 s en jeu avec cette version, puis reviens ici.\n\n"
                          L"Chacun montre la texture du jeu (visage, haut ou pantalon) avec ses coutures : peins par-dessus en gardant la taille, puis importe.",
@@ -554,14 +560,16 @@ static void FaceTemplate()
                          L"Each shows the game's texture (face, top or pants) with its seams: paint over it keeping the size, then import."),
                 L"MWCoop", MB_ICONINFORMATION | MB_OK);
 }
-static void FaceRemove()
+static void PersoImgRemove(int k);
+static void FaceRemove() { PersoImgRemove(PersoImgZone()); }
+static void PersoImgRemove(int k)   // (l'image de ce jeu seulement)
 {
-    int k = PersoImgZone(), f = PersoPartOf(k);
+    int f = PersoPartOf(k);
     DeleteFileW(PersoImgFile(k).c_str());
     if (PersoGet(f) == "perso") PersoSet(f, f == PF_SHIRT ? DefaultShirt() : "");
     PersoImgChanged(k);
     g_skinAnnounce = true;
-    LaunchLog("image perso retiree (%ls)", kPersoImg[k]);
+    LaunchLog("image perso retiree (%ls, %ls)", kPersoImg[k], GM().id);
 }
 // Visage importe en 0.69-0.70 (montre d'office, [Coop] VisagePerso) : maintenant choisi dans la liste -- repris une fois.
 static void PersoMigrate()
@@ -571,6 +579,103 @@ static void PersoMigrate()
     if (!PersoImgHas(PI_FACE) || GetPrivateProfileIntA("Coop", "VisagePerso", 1, ModIniA().c_str()) == 0 || !PersoGet(PF_FACE).empty()) return;
     PersoSet(PF_FACE, "perso");
     LaunchLog("visage importe : choisi dans la liste (Visage perso)");
+}
+
+// /testpersojeu <journal> : une image perso par jeu (retour d'un joueur, 12/11), reprise des anciennes communes, import et
+// retrait sur un seul jeu, gabarits par jeu. Dans un dossier de jeu jetable seulement (LOCALAPPDATA a cote).
+static int PersoJeuSelfTest(const wchar_t *log)
+{
+    DeleteFileW(log);
+    int bad = 0;
+    auto say = [&](const std::string &l, bool good) {
+        FILE *o = _wfopen(log, L"ab");
+        if (o) { fprintf(o, "%s %s\r\n", l.c_str(), good ? "ok" : "ECHEC"); fclose(o); }
+        if (!good) bad++;
+    };
+    std::wstring parent = g_dir.substr(0, g_dir.find_last_of(L'\\', g_dir.size() - 2) + 1), L = LocalDir();
+    if (g_gameDir.empty() || _wcsicmp(g_gameDir.c_str(), g_dir.c_str()) || L.empty() || _wcsnicmp(L.c_str(), parent.c_str(), parent.size())) { say("refuse : dossier de jeu jetable et LOCALAPPDATA a cote obligatoires", false); return 3; }
+    int keepGame = g_game;
+    CreateDirectoryW(L.c_str(), NULL);
+    CLSID png;
+    if (!EncoderClsid(L"image/png", &png)) { say("encodeur PNG", false); return 1; }
+    // image unie (r, g, b) de 64 x 64
+    auto solid = [&](const std::wstring &f, BYTE r, BYTE g2, BYTE b) { Bitmap bm(64, 64, PixelFormat24bppRGB); { Graphics gg(&bm); gg.Clear(Color(255, r, g2, b)); } return bm.Save(f.c_str(), &png, NULL) == Ok; };
+    // couleur dominante d'une image : 'r', 'g', 'b' ou '?'
+    auto hue = [&](const std::wstring &f) { Bitmap *b = LoadAnyImage(f, NULL); char c = '?'; if (b) { Color px; b->GetPixel(b->GetWidth() / 2, b->GetHeight() / 2, &px); int r = px.GetR(), g2 = px.GetG(), bl = px.GetB(); c = r > 150 && g2 < 90 && bl < 90 ? 'r' : g2 > 150 && r < 90 && bl < 90 ? 'g' : bl > 150 && r < 90 && g2 < 90 ? 'b' : '?'; delete b; } return c; };
+    auto file = [&](int k, int game) { return L + kPersoImg[k] + L"-" + kGames[game].id + L".jpg"; };
+    auto clean = [&]() {
+        for (int k = 0; k < 3; k++) {
+            DeleteFileW((L + kPersoImg[k] + L".jpg").c_str());
+            for (int gm = 0; gm < 2; gm++) { DeleteFileW(file(k, gm).c_str()); DeleteFileW((L + kPersoImg[k] + L"-jeu-" + kGames[gm].id + L".png").c_str()); DeleteFileW((L + L"gabarit-" + kPersoImg[k] + L"-" + kGames[gm].id + L".png").c_str()); }
+            DeleteFileW((L + kPersoImg[k] + L"-jeu.png").c_str()); DeleteFileW((L + L"gabarit-" + kPersoImg[k] + L".png").c_str());
+        }
+        for (int gm = 0; gm < 2; gm++) DeleteFileW((L + L"perso-" + kGames[gm].id + L".migre").c_str());
+        g_persoMigrated[0] = g_persoMigrated[1] = false;
+    };
+    auto setGame = [&](int gm) { g_game = gm; for (int k = 0; k < 3; k++) PersoImgChanged(k); };
+    clean();
+    std::wstring tmp = parent + L"persojeu-essai\\";
+    CreateDirectoryW(tmp.c_str(), NULL);
+
+    // 1. ancien joueur : haut.jpg (rouge) et pantalon.jpg (rouge) communs ; un pantalon-msc.jpg (vert) deja la n'est pas ecrase
+    solid(L + L"haut.jpg", 220, 20, 20);
+    solid(L + L"pantalon.jpg", 220, 20, 20);
+    solid(file(PI_PANTS, GAME_MSC), 20, 220, 20);
+    setGame(GAME_MWC);
+    say("reprise MWC : haut-mwc.jpg = l'ancien haut", PersoImgHas(PI_SHIRT) && hue(file(PI_SHIRT, GAME_MWC)) == 'r');
+    say("reprise MWC : marqueur ecrit, rien pour MSC encore", FileExists(L + L"perso-mwc.migre") && !FileExists(file(PI_SHIRT, GAME_MSC)) && !FileExists(L + L"perso-msc.migre"));
+    setGame(GAME_MSC);
+    say("reprise MSC : haut-msc.jpg = l'ancien haut", PersoImgHas(PI_SHIRT) && hue(file(PI_SHIRT, GAME_MSC)) == 'r');
+    say("reprise MSC : pantalon-msc.jpg deja la garde", hue(file(PI_PANTS, GAME_MSC)) == 'g');
+    say("reprise : pas de visage invente", !PersoImgHas(PI_FACE) && !FileExists(file(PI_FACE, GAME_MWC)));
+    say("reprise : l'ancien haut.jpg reste (mod plus ancien)", FileExists(L + L"haut.jpg"));
+
+    // 2. chemise (bleue) sur MSC, manteau (vert) sur MWC : chacun garde le sien
+    std::wstring chemise = tmp + L"chemise.png", manteau = tmp + L"manteau.png", why;
+    solid(chemise, 20, 20, 220);
+    solid(manteau, 20, 220, 20);
+    setGame(GAME_MSC);
+    say("import MSC : chemise", PersoImportFrom(PI_SHIRT, chemise, why) && hue(file(PI_SHIRT, GAME_MSC)) == 'b');
+    say("import MSC : haut MWC intact", hue(file(PI_SHIRT, GAME_MWC)) == 'r');
+    setGame(GAME_MWC);
+    say("import MWC : manteau", PersoImportFrom(PI_SHIRT, manteau, why) && hue(file(PI_SHIRT, GAME_MWC)) == 'g');
+    say("import MWC : la chemise de MSC reste", hue(file(PI_SHIRT, GAME_MSC)) == 'b');
+    say("l'ancien haut.jpg pas touche", hue(L + L"haut.jpg") == 'r');
+
+    // 3. retrait sur MWC : MSC garde sa chemise, l'ancien haut ne revient pas (marqueur)
+    PersoImgRemove(PI_SHIRT);
+    g_persoMigrated[GAME_MWC] = false;
+    say("retrait MWC : plus de haut MWC, pas de reprise", !PersoImgHas(PI_SHIRT) && !FileExists(file(PI_SHIRT, GAME_MWC)));
+    setGame(GAME_MSC);
+    say("retrait MWC : chemise MSC toujours la", PersoImgHas(PI_SHIRT) && hue(file(PI_SHIRT, GAME_MSC)) == 'b');
+
+    // 4. gabarits : ceux du jeu, sinon les anciens communs
+    solid(L + L"haut-jeu.png", 220, 20, 20);
+    solid(L + L"gabarit-haut.png", 220, 20, 20);
+    setGame(GAME_MSC);
+    say("gabarit : l'ancien tant que le mod n'a pas ecrit celui du jeu", PersoTplFile(PI_SHIRT, true) == L + L"gabarit-haut.png" && PersoTplFile(PI_SHIRT, false) == L + L"haut-jeu.png");
+    solid(L + L"haut-jeu-msc.png", 20, 20, 220);
+    solid(L + L"gabarit-haut-msc.png", 20, 20, 220);
+    say("gabarit : celui de MSC sur MSC", PersoTplFile(PI_SHIRT, true) == L + L"gabarit-haut-msc.png" && PersoTplFile(PI_SHIRT, false) == L + L"haut-jeu-msc.png");
+    setGame(GAME_MWC);
+    say("gabarit : pas celui de MSC sur MWC", PersoTplFile(PI_SHIRT, true) == L + L"gabarit-haut.png");
+
+    // 5. ancien fichier pris pendant la reprise : pas de marqueur, reprise au passage suivant
+    clean();
+    solid(L + L"visage.jpg", 220, 20, 20);
+    HANDLE lk = CreateFileW((L + L"visage.jpg").c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    setGame(GAME_MWC);
+    bool had = PersoImgHas(PI_FACE);
+    say("ancien visage pris : pas repris, pas de marqueur", lk != INVALID_HANDLE_VALUE && !had && !FileExists(L + L"perso-mwc.migre"));
+    if (lk != INVALID_HANDLE_VALUE) CloseHandle(lk);
+    g_persoMigrated[GAME_MWC] = false;
+    say("ancien visage libre : repris au passage suivant", PersoImgHas(PI_FACE) && FileExists(L + L"perso-mwc.migre"));
+
+    clean();
+    DeleteFileW(chemise.c_str()); DeleteFileW(manteau.c_str()); RemoveDirectoryW(tmp.c_str());
+    setGame(keepGame);
+    say(bad ? "RESULTAT : ECHEC" : "TOUT OK", bad == 0);
+    return bad ? 1 : 0;
 }
 
 // ---------------------------------------------------------------- page PERSONNAGE (maquette validee le 17/10)
