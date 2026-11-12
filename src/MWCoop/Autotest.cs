@@ -3831,6 +3831,7 @@ namespace MWCoop
                 if (mode == "vitrine") Vitrines.Test(mode, t);
                 if (mode == "stop") Npcs.Test(mode, t);
                 if (mode == "suski") Suski.Test(mode, t);   // (#65 suite : Suski, releve)
+                if (mode == "foin") Props.Test(mode, t);   // (balles de foin sur le plateau du KEKMET, 29.30 10/11)
                 if (mode == "vidange" || mode == "plein") Fluids.TestFill(mode, t);
                 if (mode == "fuiteconducteur") CarLeaks.Test(mode, t);
                 // ([Test] TestPos=x,y,z sur My Summer Car, pour ces essais de l'audit MSC 02/11 seulement : teleporte a 8 s, comme sur MWC)

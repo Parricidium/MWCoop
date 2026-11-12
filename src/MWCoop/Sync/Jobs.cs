@@ -2015,6 +2015,16 @@ namespace MWCoop
             Log.Info("attelage du plateau : " + Recon.Path(hitchHook.transform) + " [" + hitchHook.ActiveStateName + "], detelage " + (hitchRemove != null ? "trouve" : "absent"));
         }
 
+        // Essais (Autotest=foin) : attele le plateau au KEKMET comme le jeu (Hook::Distance 'Attach trailer') ; l'etat du plateau.
+        public static string TestHitch()
+        {
+            nextHitchFind = 0f; FindHitch();
+            if (hitchHook == null) return "crochet introuvable";
+            Game.SetState(hitchHook, "Attach trailer");
+            return "Attach trailer -> crochet " + hitchHook.ActiveStateName + ", plateau " + (hitchDetach != null ? hitchDetach.ActiveStateName : "?");
+        }
+        public static bool TestHitched() { return hitchHook != null && HitchAttached(); }
+
         // (l'etat du plateau fait foi : le crochet de l'invite peut rester sur Initialize)
         static bool HitchAttached() { return hitchDetach != null ? hitchDetach.ActiveStateName == "State 5" : hitchHook.ActiveStateName == "State 3"; }
 

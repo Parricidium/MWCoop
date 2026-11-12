@@ -1681,6 +1681,7 @@ namespace MWCoop
             if (mode == "sacs") { TestSandbags(t); return; }
             if (mode == "pub") { TestPub(t); return; }
             if (mode == "souscarte") { TestUnderMap(t); return; }
+            if (mode == "foin") { TestHay(t); return; }
             bool push = mode == "coffre-pousse";
             if (mode != "coffre-objets" && mode != "coffre-objets-invite" && !push) return;
             string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
@@ -1715,6 +1716,57 @@ namespace MWCoop
                 }
             }
             if (car != null && t > 20f && t < 60f && t - testLog >= 1f) { testLog = t; Log.Info("autotest : dans " + name + " : " + InCar(car)); }
+        }
+
+        // [Test] Autotest=foin (balles de foin, 29.30 10/11 : « sur la remorque du tracteur elles se teleportent et tombent si le conducteur
+        // n'est pas celui qui les a chargees ») : l'hote pose le KEKMET sur la route (12 s), attele le plateau (14 s, comme le jeu : Attach
+        // trailer), pose a 20 s les balles [Test] FoinBalles (haybale01;haybale02) sur le plateau (comme s'il les avait chargees) ; [Test]
+        // FoinConducteur (invite) monte au volant du KEKMET a 15/22 s et le pousse de 25 a 37 s (2 m/s2 jusqu'a [Test] FoinVitesse 6 m/s, freine
+        // de meme). Chacun note chaque seconde de 20 a 60 s la pose des balles dans le repere du plateau (InCar) et leur hauteur.
+        static int hayStep; static float hayLog, hayWit; static bool hayPlaced; static Rigidbody hayGround, hayPetit;
+        static void TestHay(float t)
+        {
+            Rigidbody tractor = VehicleSync.Body("KEKMET"), bed = VehicleSync.Body("FLATBED");
+            bool driver = Session.IsHost == (Config.Get("Test", "FoinConducteur", "invite") == "hote");
+            if (Session.IsHost && hayStep == 0 && t > 12f) { hayStep = 1; Log.Info("autotest : foin, " + VehicleSync.TestPlaceOnRoad("KEKMET")); }
+            if (Session.IsHost && hayStep == 1 && t > 14f) { hayStep = 2; Log.Info("autotest : foin, attelage : " + Jobs.TestHitch()); }
+            if (driver && t > 15f && hayStep < 10) { hayStep = 10 + hayStep; Log.Info("autotest : foin, " + VehicleSync.TestEnter("KEKMET", false)); }
+            if (driver && t > 22f && hayStep >= 10 && hayStep < 20) { hayStep = 20; Log.Info("autotest : foin, volant -> " + VehicleSync.TestEnter("KEKMET", true)); }
+            if (driver && tractor != null && t > 25f && t < 37f)
+            {
+                Vector3 f = tractor.transform.forward; f.y = 0;
+                float v = Mathf.Min(Config.GetFloat("Test", "FoinVitesse", 6f), Mathf.Min((t - 25f) * 2f, (37f - t) * 2f));
+                tractor.velocity = f.normalized * v + Vector3.up * Mathf.Min(tractor.velocity.y, 0f);
+            }
+            if (Session.IsHost && bed != null && t > 20f && !hayPlaced)
+            {
+                hayPlaced = true;
+                string[] keys = Config.Get("Test", "FoinBalles", "haybale01;haybale02").Split(';');
+                for (int i = 0; i < keys.Length; i++)
+                {
+                    string id = FindKey(keys[i].Trim());
+                    Log.Info("autotest : foin, " + (id != null ? TestPlace(id, bed, new Vector3(0f, 1.2f, -0.6f + i * 1.3f)) : keys[i] + " pas suivi"));
+                }
+                // Temoins : [Test] FoinSol (haybale03) au sol a 3,5 m du plateau -- jamais « dans » le FLATBED ; [Test] FoinPetit (gasoline) sur le
+                // plateau -- dedans, comme avant.
+                string g = FindKey(Config.Get("Test", "FoinSol", "haybale03"));
+                Rigidbody gb = g != null ? BodyOf(g) : null;
+                if (gb != null) { gb.transform.position = bed.position + bed.transform.right * 3.5f + Vector3.up * 1.5f; gb.velocity = Vector3.zero; Log.Info("autotest : foin, temoin au sol " + g); hayGround = gb; }
+                string sm = FindKey(Config.Get("Test", "FoinPetit", "gasoline"));
+                if (sm != null) { Log.Info("autotest : foin, temoin petit : " + TestPlace(sm, bed, new Vector3(0.6f, 1.0f, -1.6f))); hayPetit = BodyOf(sm); }
+            }
+            if (t > 21f && t < 60f && t - hayWit >= 2f && (hayGround != null || hayPetit != null))
+            {
+                hayWit = t;
+                Rigidbody ug = hayGround != null ? VehicleSync.CarUnder(hayGround) : null, up = hayPetit != null ? VehicleSync.CarUnder(hayPetit) : null;
+                Log.Info("autotest : foin, temoins : balle au sol sous " + (hayGround == null ? "-" : ug != null ? ug.name : "rien") + " (" + (hayGround != null ? hayGround.position.ToString("F1") : "-") + ")"
+                         + ", petit sous " + (hayPetit == null ? "-" : up != null ? up.name : "rien") + (hayPetit != null && bed != null ? " en " + (Quaternion.Inverse(bed.rotation) * (hayPetit.position - bed.position)).ToString("F2") + " (plateau)" + (hayPetit.isKinematic ? ", cinematique" : "") : ""));
+            }
+            if (bed != null && t > 20f && t < 60f && t - hayLog >= 1f)
+            {
+                hayLog = t;
+                Log.Info("autotest : foin, plateau " + bed.position.ToString("F1") + " a " + (bed.velocity.magnitude * 3.6f).ToString("F0") + " km/h, attele " + Jobs.TestHitched() + " ; " + InCar(bed));
+            }
         }
 
         static Vector3 ParseVec(string s)

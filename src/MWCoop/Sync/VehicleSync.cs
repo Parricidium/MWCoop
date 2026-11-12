@@ -1893,7 +1893,20 @@ namespace MWCoop
             Car jc = JointCar(item, at);
             if (jc != null) { u.Car = jc.Body; return u.Car; }
             float best = float.MaxValue;
-            foreach (RaycastHit h in Physics.RaycastAll(item.worldCenterOfMass + Vector3.up * 0.25f, Vector3.down, 0.85f, ~0))
+            // Rayon jusqu'a 0,35 m sous le bas de l'objet (au moins 0,85 m depuis 0,25 m au-dessus du centre de masse). Avant : 0,85 m
+            // seulement -- une balle de foin (1,2 a 1,5 m de haut, centre a plus de 0,6 m du plateau) n'etait jamais vue « dans » le
+            // FLATBED : le conducteur ne la transportait pas, elle restait a la physique de celui qui l'avait chargee, sur sa copie du
+            // plateau qui avance par poses, et tombait chez tous (29.30, 10/11 ; essai fo1). [Test] RayonSousObjet=0 : comme avant.
+            Vector3 from = item.worldCenterOfMass + Vector3.up * 0.25f;
+            float reach = 0.85f;
+            if (Config.GetInt("Test", "RayonSousObjet", 1) != 0)
+            {
+                float minY = float.MaxValue;
+                foreach (Collider c in item.GetComponentsInChildren<Collider>())
+                    if (c != null && c.enabled && !c.isTrigger && c.attachedRigidbody == item) minY = Mathf.Min(minY, c.bounds.min.y);
+                if (minY < float.MaxValue) reach = Mathf.Clamp(from.y - minY + 0.35f, 0.85f, 4f);
+            }
+            foreach (RaycastHit h in Physics.RaycastAll(from, Vector3.down, reach, ~0))
             {
                 Collider col = h.collider;
                 if (col == null || col.isTrigger || h.distance >= best) continue;
