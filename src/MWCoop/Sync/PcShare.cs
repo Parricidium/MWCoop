@@ -37,7 +37,7 @@ namespace MWCoop
         static Renderer screenR; static int screenIdx = -1;
         static Material screenMat; static Texture screenOrig;
         static int owner = None;
-        static bool usingHere, keyCut, shown;
+        static bool usingHere, keyCut, shown, atSeatToasted;
         static float nextFind, nextOwnerSend, nextImg, lastImgAt, nextStat, toastAt;
         static RenderTexture small; static Texture2D grab, view;
         static ushort frameOut;
@@ -133,7 +133,10 @@ namespace MWCoop
             bool cut = owner != None && owner != Session.LocalId;
             if (keyDown != null && keyDown.Enabled == cut) keyDown.Enabled = !cut;
             if (cut != keyCut) { keyCut = cut; Log.Info("ordinateur partage : " + (cut ? "occupe par " + NameOf(owner) + " : place fermee ici" : "libre : place ouverte ici")); }
-            if (cut && trigger != null && trigger.ActiveStateName == "Press return" && now >= toastAt) { toastAt = now + 4f; Hud.Toast(Lang.T("Ordinateur occupé par ", "Computer in use by ") + NameOf(owner)); }
+            // « occupe » une seule fois en arrivant devant la place ('Press return'), plus rien tant qu'on y reste (pc2 : toutes les 4 s, 3 lignes)
+            bool atSeat = trigger != null && trigger.ActiveStateName == "Press return";
+            if (cut && atSeat && !atSeatToasted) Hud.Toast(Lang.T("Ordinateur occupé par ", "Computer in use by ") + NameOf(owner));
+            atSeatToasted = atSeat && (cut || atSeatToasted);
             if (usingHere && owner == Session.LocalId) SendImage(now);
             if (shown && now - lastImgAt > 2f) Unshow();
             if (now >= nextStat && (framesOut > 0 || framesIn > 0)) { nextStat = now + 10f; Stats(); }
