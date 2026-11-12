@@ -24,7 +24,9 @@ namespace MWCoop
         public const int K_USE = 10, K_OWNER = 11, K_IMG = 12;
         const int Chunk = 1000, None = 255;
         const float NearDist = 8f;
-        static bool On { get { return Config.GetInt("Test", "PcPartage", 1) != 0; } }
+        // (My Winter Car : pas encore branche ni essaye -- Machines.Computer y copie deja l'ecran ; [MWC] l'ouvrira avec [Test] PcPartageMwc=1
+        // puis en changeant ce defaut, apres ses essais)
+        static bool On { get { return Config.GetInt("Test", "PcPartage", 1) != 0 && (Game.Msc || Config.GetInt("Test", "PcPartageMwc", 0) != 0); } }
         static int W { get { return Config.GetInt("Test", "PcLargeur", 256); } }
         static int H { get { return Config.GetInt("Test", "PcHauteur", 192); } }
 
