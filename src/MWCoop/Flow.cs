@@ -77,9 +77,26 @@ namespace MWCoop
             if (menuSince < 0) menuSince = Time.realtimeSinceStartup;
             HookMenuButtons();
             if (pending == null) pending = Decide();
+            if (pending == null) WhyWaiting();
             if (pending == null || Time.realtimeSinceStartup - menuSince < 2f) return;
             if (Contenu.MenuBusy) return;   // (import des musiques en cours : CD vides = CD absents de la partie)
             if (pending == "continuer") Continue(); else NewGame();
+        }
+
+        // Invite au menu, connecte, qui n'entre pas en partie (dossier #67, 12/11 : sauvegarde de l'hote recue, hote en jeu, invite reste au menu
+        // 2 min sans rien au journal) : toutes les 10 s, ce qui manque pour entrer -- hote connu, son niveau, transfert fini, sauvegarde ecrite,
+        // deja parti, numero local, joueurs connus.
+        static float whyAt;
+        static void WhyWaiting()
+        {
+            if (!Session.Active || Session.IsHost || !Session.HostConnected || Time.realtimeSinceStartup < whyAt) return;
+            whyAt = Time.realtimeSinceStartup + 10f;
+            PlayerInfo host = Session.Host;
+            var ids = new System.Text.StringBuilder();
+            foreach (PlayerInfo pi in Session.Players.Values) ids.Append(' ').Append(pi.Id).Append(pi.Local ? "(moi)" : "").Append(':').Append(pi.Level);
+            Log.Info("menu (invite) : en attente -- hote " + (host == null ? "inconnu" : "niveau " + host.Level + (host.StateTime > 0 ? ", etat il y a " + (Time.realtimeSinceStartup - host.StateTime).ToString("F1") + " s" : ", aucun etat recu"))
+                     + ", transfert " + (SaveTransfer.Done ? "fini" : "pas fini") + ", sauvegarde " + (SaveTransfer.Received ? "ecrite" : SaveTransfer.HostHasSave ? "NON ecrite" : "aucune")
+                     + (guestStarted ? ", deja parti" : "") + ", numero local " + Session.LocalId + ", joueurs" + ids);
         }
 
         // Que faire au menu ? Invite : suivre l'hote. Tests : [Test] Continuer / NouvellePartie.

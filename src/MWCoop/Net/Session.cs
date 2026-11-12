@@ -77,6 +77,8 @@ namespace MWCoop.Net
             // millisecondes -- un invite dont le 1er essai echouait (hote pas encore pret) ne se connectait plus jamais.
             var t = new Transport { NetVersion = NetVersion, Now = Time.realtimeSinceStartup };
             t.OnConnected += Connected;
+            t.AcceptToken = Config.GetInt("Test", "AccepteJeton", 1) != 0;
+            t.OnStaleAccept += id => Log.Warn("connexion : acceptation perimee de l'hote (numero " + id + ", demande d'avant) ignoree -- on attend celle de cette demande");
             t.OnDisconnected += Disconnected;
             t.OnMessage += Message;
             t.OnRejected += r =>
@@ -150,6 +152,7 @@ namespace MWCoop.Net
                 Active = true;
                 IsHost = false;
                 Status = "connexion a " + address + ":" + port + "...";
+                if (Config.GetInt("Test", "AccepteFantome", 0) > 0) { Log.Info("essai : acceptation perimee simulee (numero " + Config.GetInt("Test", "AccepteFantome", 0) + ")"); T.TestStaleAccept(Config.GetInt("Test", "AccepteFantome", 0)); }
                 Log.Info("connexion a " + address + ":" + port + " (tampon de reception " + (T.Link is UdpLink ? ((UdpLink)T.Link).RecvBuffer / 1024 : -1) + " Ko)");
             }
             catch (Exception e) { Status = "erreur : " + e.Message; Log.Error("invite : " + e); retryAt = Time.realtimeSinceStartup + 5f; }

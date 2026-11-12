@@ -18,6 +18,7 @@ namespace MWCoop
             dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0 || Config.Get("Test", "VidageCibles", "").Length > 0;
             Log.Info("jeu : " + Game.Name);
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
+            ThirdPartyMods();
             Log.Info("sauvegardes : " + Application.persistentDataPath);
             Application.runInBackground = true;   // (hote en Alt-Tab : plus de paquets pendant 15 s -> delai depasse chez les invites ; relecture du 15/10)
             SaveTransfer.CopyPlayerOptions();
@@ -31,6 +32,40 @@ namespace MWCoop
                 catch (System.Exception e) { Log.Warn("essai : voiture externe " + ve + " : " + e.Message); }
             }
             CoopApi.AddRememberedForExport();   // (export des places, sans MSCLoader : les voitures des autres mods d'apres leur note)
+        }
+
+        // Mods tiers vus au demarrage (dossier #67, 12/11 : WreckMP, un autre mod multijoueur, charge par doorstop chez les deux joueurs, dossier
+        // « sans mods ») : cible de doorstop_config.ini a cote du jeu, et DLL de mods multijoueur connus dans mysummercar_Data\Managed (ou
+        // mywintercar_Data). Une ligne au journal, rien d'autre.
+        static void ThirdPartyMods()
+        {
+            try
+            {
+                string data = Application.dataPath, root = System.IO.Path.GetDirectoryName(data);
+                var found = new System.Collections.Generic.List<string>();
+                string ini = System.IO.Path.Combine(root, "doorstop_config.ini");
+                if (System.IO.File.Exists(ini))
+                    foreach (string l in System.IO.File.ReadAllLines(ini))
+                    {
+                        string t = l.Trim();
+                        if ((t.StartsWith("targetAssembly") || t.StartsWith("target_assembly")) && t.IndexOf('=') > 0)
+                        {
+                            string v = t.Substring(t.IndexOf('=') + 1).Trim();
+                            if (v.Length > 0 && !found.Contains("doorstop -> " + v)) found.Add("doorstop -> " + v);
+                        }
+                    }
+                string managed = System.IO.Path.Combine(data, "Managed");
+                if (System.IO.Directory.Exists(managed))
+                    foreach (string f in System.IO.Directory.GetFiles(managed, "*.dll"))
+                    {
+                        string n = System.IO.Path.GetFileName(f);
+                        if (n.StartsWith("WreckMP", System.StringComparison.OrdinalIgnoreCase) || n.IndexOf("Multiplayer", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            || n.StartsWith("MSCMP", System.StringComparison.OrdinalIgnoreCase) || n.StartsWith("BeerMP", System.StringComparison.OrdinalIgnoreCase))
+                            found.Add(n);
+                    }
+                Log.Info("mods tiers au demarrage : " + (found.Count > 0 ? string.Join(", ", found.ToArray()) + (found.Exists(x => x.IndexOf("WreckMP", System.StringComparison.OrdinalIgnoreCase) >= 0) ? " -- WreckMP : autre mod multijoueur, a desactiver avec MWCoop" : "") : "aucun (doorstop ni mod multijoueur connu)"));
+            }
+            catch (System.Exception e) { Log.Warn("mods tiers au demarrage : " + e.Message); }
         }
 
         void FixedUpdate()

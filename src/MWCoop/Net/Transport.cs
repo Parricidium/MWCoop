@@ -64,6 +64,13 @@ namespace MWCoop.Net
         // (Roster, U8(from.Id) des modules), valait 0 : les autres le prenaient pour l'hote). Tourniquet 1..255 a partir de
         // nextId, sans un numero porte par un pair present ; aucun libre : refuse. [Test] NumerosRecycles=0 : comme avant.
         public bool RecycleIds = true;
+        // T_ACCEPT perime (dossier #67, 12/11) : en Steam, l'invite qui n'a pas de reponse en 15 s (hote pas encore pret) recree son transport
+        // (nouveau jeton) et redemande ; l'hote avait accepte la 1re demande (#1) puis remplace ce pair par la 2e (#2). Le T_ACCEPT de la
+        // 1re, livre en retard par Steam, arrivait avant celui de la 2e : l'invite se croyait #1, l'hote le tenait pour #2 -- puis rien ne
+        // se faisait (invite reste au menu, sauvegarde recue). L'hote ajoute desormais le jeton de la demande au T_ACCEPT ; l'invite ignore
+        // un T_ACCEPT d'un autre jeton. Un hote d'avant (sans jeton) : comme avant. AcceptToken=false ([Test] AccepteJeton=0) : comme avant.
+        public bool AcceptToken = true;
+        public event Action<int> OnStaleAccept;   // invite : numero d'un T_ACCEPT d'un autre jeton, ignore
         public void FirstId(int id) { if (id > 0) nextId = id; }   // ([Test] PremierNumero : essai du passage de 255 a 1)
 
         int FreeId()
@@ -172,6 +179,20 @@ namespace MWCoop.Net
             Buffer.BlockCopy(BitConverter.GetBytes(token), 0, body, 4, 4);
             Buffer.BlockCopy(BitConverter.GetBytes(instance), 0, body, 8, 4);
             return Build(T_CONNECT, body);
+        }
+
+        // Essais (#67, [Test] AccepteFantome=N) : invite -- un T_ACCEPT perime (numero N, autre jeton) recu juste apres sa demande, comme celui
+        // que Steam livrait en retard.
+        public void TestStaleAccept(int id)
+        {
+            Peer p = Peers.Count > 0 ? Peers[0] : null;
+            if (p == null) return;
+            var body = new byte[8];
+            Buffer.BlockCopy(BitConverter.GetBytes(id), 0, body, 0, 4);
+            Buffer.BlockCopy(BitConverter.GetBytes(token + 1), 0, body, 4, 4);
+            byte[] pkt = Build(T_ACCEPT, body);
+            Buffer.BlockCopy(pkt, 0, buf, 0, pkt.Length);
+            Handle(p, p.End, T_ACCEPT, pkt.Length);
         }
 
         public void Close()
@@ -403,7 +424,10 @@ namespace MWCoop.Net
                     p = AddPeer(ep); p.Id = id; p.Token = tok; p.Instance = inst;
                 }
                 p.LastHeard = Now;
-                SendRaw(p, Build(T_ACCEPT, BitConverter.GetBytes(p.Id)));
+                var acc = new byte[8];
+                Buffer.BlockCopy(BitConverter.GetBytes(p.Id), 0, acc, 0, 4);
+                Buffer.BlockCopy(BitConverter.GetBytes(p.Token), 0, acc, 4, 4);
+                SendRaw(p, Build(T_ACCEPT, acc));
                 if (!p.Accepted) { p.Accepted = true; if (OnConnected != null) OnConnected(p); }
                 return;
             }
@@ -413,6 +437,11 @@ namespace MWCoop.Net
             {
                 case T_ACCEPT:
                     if (p.Accepted) return;
+                    if (AcceptToken && n >= 11 && BitConverter.ToUInt32(buf, 7) != token)
+                    {
+                        if (OnStaleAccept != null) OnStaleAccept(n >= 7 ? BitConverter.ToInt32(buf, 3) : -1);
+                        return;
+                    }
                     p.Accepted = true;
                     LocalId = n >= 7 ? BitConverter.ToInt32(buf, 3) : -1;
                     if (OnConnected != null) OnConnected(p);
